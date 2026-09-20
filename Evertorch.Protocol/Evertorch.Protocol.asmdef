@@ -1,0 +1,16 @@
+{
+  "name": "Evertorch.Protocol",
+  "rootNamespace": "Evertorch.Protocol",
+  "references": [
+    "Evertorch.Game"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": false,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": true
+}

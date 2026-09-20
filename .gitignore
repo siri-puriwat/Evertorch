@@ -1,0 +1,41 @@
+# Local-only internal discussions and private project notes.
+/_Evertorch-Private/
+/CLAUDE.local.md
+
+# Rider, Visual Studio, and per-user settings.
+.idea/
+.vs/
+*.DotSettings.user
+*.suo
+*.user
+*.userprefs
+
+# .NET build output.
+**/[Bb]in/
+**/[Oo]bj/
+/artifacts/
+
+# Unity-generated data for the nested client project.
+/Evertorch.Client/.utmp/
+/Evertorch.Client/[Ll]ibrary/
+/Evertorch.Client/[Tt]emp/
+/Evertorch.Client/[Ll]ogs/
+/Evertorch.Client/[Uu]ser[Ss]ettings/
+/Evertorch.Client/[Bb]uild/
+/Evertorch.Client/[Bb]uilds/
+/Evertorch.Client/[Mm]emoryCaptures/
+/Evertorch.Client/[Rr]ecordings/
+/Evertorch.Client/*.csproj
+/Evertorch.Client/*.sln
+/Evertorch.Client/*.slnx
+/Evertorch.Client/Assets/Plugins/Editor/JetBrains*
+
+# Generated Unity and crash artifacts.
+*.pidb
+*.pdb
+*.mdb
+*.opendb
+*.VC.db
+mono_crash.*
+sysinfo.txt
+InitTestScene*.unity*

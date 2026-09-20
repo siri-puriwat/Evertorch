@@ -1,0 +1,10 @@
+{
+  "name": "com.evertorch.protocol",
+  "version": "0.1.0",
+  "displayName": "Evertorch Protocol",
+  "description": "Transport-neutral Evertorch message contracts.",
+  "unity": "6000.3",
+  "dependencies": {
+    "com.evertorch.game": "0.1.0"
+  }
+}

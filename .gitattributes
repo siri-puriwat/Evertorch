@@ -1,0 +1,21 @@
+* text=auto eol=lf
+
+# C# and structured project files.
+*.cs text diff=csharp eol=lf
+*.csproj text eol=lf
+*.props text eol=lf
+*.targets text eol=lf
+*.json text eol=lf
+*.asmdef text eol=lf
+*.meta text eol=lf
+
+# Unity YAML uses text serialization and Unity Smart Merge when configured.
+*.unity text merge=unityyamlmerge eol=lf
+*.prefab text merge=unityyamlmerge eol=lf
+*.asset text merge=unityyamlmerge eol=lf
+*.mat text merge=unityyamlmerge eol=lf
+*.anim text merge=unityyamlmerge eol=lf
+*.controller text merge=unityyamlmerge eol=lf
+*.mixer text merge=unityyamlmerge eol=lf
+*.mask text merge=unityyamlmerge eol=lf
+
