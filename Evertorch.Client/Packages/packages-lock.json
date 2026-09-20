@@ -17,6 +17,20 @@
       },
       "hash": "30d22075093d1d35dfb0091c1c7550e9ad948577"
     },
+    "com.evertorch.game": {
+      "version": "file:../../Evertorch.Game",
+      "depth": 0,
+      "source": "local",
+      "dependencies": {}
+    },
+    "com.evertorch.protocol": {
+      "version": "file:../../Evertorch.Protocol",
+      "depth": 0,
+      "source": "local",
+      "dependencies": {
+        "com.evertorch.game": "0.1.0"
+      }
+    },
     "com.unity.addressables": {
       "version": "2.10.3",
       "depth": 0,
