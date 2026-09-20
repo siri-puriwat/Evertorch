@@ -1,0 +1,8 @@
+id: skill.basic_attack
+displayName: Basic Attack
+targetType: enemy
+damageType: physical
+server:
+  range: 1.8125
+client:
+  icon: skill_basic_attack

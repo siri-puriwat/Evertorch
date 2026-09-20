@@ -1,0 +1,10 @@
+id: item.consumable.minor_health
+displayName: Minor Health Potion
+type: consumable
+stackLimit: 50
+server:
+  weight: 3918
+  sellPrice: 73220
+client:
+  icon: item_minor_health
+  model: pickup_minor_health

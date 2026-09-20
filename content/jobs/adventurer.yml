@@ -1,0 +1,13 @@
+id: job.adventurer
+displayName: Adventurer
+server:
+  startingStats: { str: 5, agi: 5, vit: 5, int: 5, dex: 5, luk: 5 }
+  health: { base: 60, perLevel: 8 }
+  spirit: { base: 20, perLevel: 3 }
+  unarmedAttackSpeedPenalty: 44
+  movement:
+    baseSpeed: 5.0
+  startingMap: map.training_ground
+  basicAttack: skill.basic_attack
+client:
+  prefab: character_adventurer

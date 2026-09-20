@@ -8,4 +8,8 @@
     <ProjectReference Include="..\..\Evertorch.Tools\Evertorch.Tools.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Include="Fixtures\**" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

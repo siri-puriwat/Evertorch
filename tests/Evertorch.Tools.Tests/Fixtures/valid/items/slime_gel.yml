@@ -1,0 +1,10 @@
+id: item.material.slime_gel
+displayName: Slime Gel
+type: material
+stackLimit: 999
+server:
+  weight: 3917
+  sellPrice: 73219
+client:
+  icon: item_slime_gel
+  model: pickup_slime_gel

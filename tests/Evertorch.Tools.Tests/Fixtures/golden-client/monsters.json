@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "definitions": [
+    {
+      "id": "monster.training_slime",
+      "displayName": "Training Slime",
+      "level": 1,
+      "prefab": "monster_training_slime",
+      "icon": "monster_training_slime_icon"
+    }
+  ]
+}

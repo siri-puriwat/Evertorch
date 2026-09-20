@@ -1,0 +1,14 @@
+id: map.training_ground
+displayName: Training Ground
+server:
+  spawnPoint:
+    position: { x: 3.4375, y: 0.0, z: -7.5625 }
+    facing: { x: 0.0, z: 1.0 }
+  monsterSpawns:
+    - monster: monster.training_slime
+      center: { x: 12.6875, y: 0.0, z: 14.3125 }
+      radius: 6.875
+      count: 4
+      respawnMs: 86421
+client:
+  scene: map_training_ground

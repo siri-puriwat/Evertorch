@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "definitions": [
+    {
+      "id": "skill.basic_attack",
+      "displayName": "Basic Attack",
+      "targetType": "enemy",
+      "icon": "skill_basic_attack"
+    }
+  ]
+}

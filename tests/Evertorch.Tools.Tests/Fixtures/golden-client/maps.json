@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "definitions": [
+    {
+      "id": "map.training_ground",
+      "displayName": "Training Ground",
+      "scene": "map_training_ground"
+    }
+  ]
+}

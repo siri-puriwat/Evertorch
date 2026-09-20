@@ -1,0 +1,25 @@
+id: monster.training_slime
+displayName: Training Slime
+level: 1
+stats:
+  hp: 50
+  physicalAttack: 7
+  physicalDefense: 2
+  hit: 155
+  flee: 102
+movement:
+  baseSpeed: 4.0
+combat:
+  attackRange: 1.5
+  attackIntervalMs: 1200
+ai:
+  behavior: passive
+  perceptionRadius: 6.0
+  leashRadius: 12.0
+drops:
+  - item: item.material.slime_gel
+    chance: 0.70
+    amount: { min: 1, max: 2 }
+client:
+  prefab: monster_training_slime
+  icon: monster_training_slime_icon

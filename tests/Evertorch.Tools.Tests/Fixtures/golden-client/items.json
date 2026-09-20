@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "definitions": [
+    {
+      "id": "item.consumable.minor_health",
+      "displayName": "Minor Health Potion",
+      "type": "consumable",
+      "stackLimit": 50,
+      "icon": "item_minor_health",
+      "model": "pickup_minor_health"
+    },
+    {
+      "id": "item.material.slime_gel",
+      "displayName": "Slime Gel",
+      "type": "material",
+      "stackLimit": 999,
+      "icon": "item_slime_gel",
+      "model": "pickup_slime_gel"
+    }
+  ]
+}

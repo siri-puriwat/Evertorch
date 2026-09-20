@@ -25,12 +25,38 @@ function Get-SourceHashes {
     return $hashes
 }
 
+function Get-ContentPackageHashes([string] $directory) {
+    $hashes = @{}
+    foreach ($file in Get-ChildItem -Path $directory -Recurse -File) {
+        $relative = $file.FullName.Substring($directory.Length)
+        $hashes[$relative] = (Get-FileHash -Algorithm SHA256 -Path $file.FullName).Hash
+    }
+    return $hashes
+}
+
 Push-Location $root
 try {
     Invoke-Step 'Restore tools' { dotnet tool restore }
     Invoke-Step 'Restore packages' { dotnet restore $solution }
     Invoke-Step 'Build' { dotnet build $solution -c Release --no-restore }
     Invoke-Step 'Test' { dotnet test $solution -c Release --no-build }
+
+    # Canonical content must validate, and building it twice must give byte-identical packages.
+    $tools = Join-Path $root 'artifacts/bin/Evertorch.Tools/release/Evertorch.Tools.dll'
+    $contentOutput = Join-Path $root 'artifacts/content'
+    Invoke-Step 'Content build' { dotnet $tools content build }
+    $firstBuild = Get-ContentPackageHashes $contentOutput
+    Invoke-Step 'Content rebuild' { dotnet $tools content build }
+    $secondBuild = Get-ContentPackageHashes $contentOutput
+
+    $drifted = @($firstBuild.Keys + $secondBuild.Keys | Sort-Object -Unique |
+        Where-Object { $firstBuild[$_] -ne $secondBuild[$_] })
+    if ($firstBuild.Count -eq 0 -or $drifted.Count -gt 0) {
+        Write-Host 'FAILED: content packages are missing or differ between two builds of the same input:'
+        $drifted | ForEach-Object { Write-Host "  $_" }
+        exit 1
+    }
+
     Invoke-Step 'Code style' { dotnet format style $solution --no-restore --verify-no-changes }
     Invoke-Step 'Analyzers' { dotnet format analyzers $solution --no-restore --verify-no-changes }
 

@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "definitions": [
+    {
+      "id": "job.adventurer",
+      "displayName": "Adventurer",
+      "prefab": "character_adventurer"
+    }
+  ]
+}
