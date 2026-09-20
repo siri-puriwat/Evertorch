@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 
 namespace Evertorch.Game
@@ -9,13 +10,15 @@ public sealed class MapDefinition
         string displayName,
         WorldPosition spawnPosition,
         WorldDirection spawnFacing,
-        IReadOnlyList<MonsterSpawn> monsterSpawns)
+        IReadOnlyList<MonsterSpawn> monsterSpawns,
+        NavigationGrid navigation)
     {
         Id = id;
         DisplayName = displayName;
         SpawnPosition = spawnPosition;
         SpawnFacing = spawnFacing;
         MonsterSpawns = monsterSpawns;
+        Navigation = navigation ?? throw new ArgumentNullException(nameof(navigation));
     }
 
     public MapDefinitionId Id { get; }
@@ -27,5 +30,7 @@ public sealed class MapDefinition
     public WorldDirection SpawnFacing { get; }
 
     public IReadOnlyList<MonsterSpawn> MonsterSpawns { get; }
+
+    public NavigationGrid Navigation { get; }
 }
 }

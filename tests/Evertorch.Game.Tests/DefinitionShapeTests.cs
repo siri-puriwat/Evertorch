@@ -1,3 +1,4 @@
+using System;
 using NUnit.Framework;
 
 namespace Evertorch.Game.Tests
@@ -122,23 +123,40 @@ public sealed class DefinitionShapeTests
             6.0,
             4,
             8000);
+        NavigationGrid navigation = TestGrids.FromRows("..", "..");
         MapDefinition map = new MapDefinition(
             new MapDefinitionId("map.training_ground"),
             "Training Ground",
             new WorldPosition(1f, 2f, 3f),
             new WorldDirection(0f, 1f),
-            new[] { spawn });
+            new[] { spawn },
+            navigation);
 
         Assert.That(map.Id.Value, Is.EqualTo("map.training_ground"));
         Assert.That(map.DisplayName, Is.EqualTo("Training Ground"));
         Assert.That(map.SpawnPosition, Is.EqualTo(new WorldPosition(1f, 2f, 3f)));
         Assert.That(map.SpawnFacing, Is.EqualTo(new WorldDirection(0f, 1f)));
         Assert.That(map.MonsterSpawns, Is.EqualTo(new[] { spawn }));
+        Assert.That(map.Navigation, Is.SameAs(navigation));
         Assert.That(spawn.Monster.Value, Is.EqualTo("monster.training_slime"));
         Assert.That(spawn.Center, Is.EqualTo(new WorldPosition(12f, 0f, 12f)));
         Assert.That(spawn.Radius, Is.EqualTo(6.0));
         Assert.That(spawn.Count, Is.EqualTo(4));
         Assert.That(spawn.RespawnMs, Is.EqualTo(8000));
+    }
+
+    [Test]
+    public void MapDefinition_WithoutNavigation_Throws()
+    {
+        Action create = () => _ = new MapDefinition(
+            new MapDefinitionId("map.training_ground"),
+            "Training Ground",
+            default,
+            new WorldDirection(0f, 1f),
+            new MonsterSpawn[0],
+            null!);
+
+        Assert.That(create, Throws.ArgumentNullException);
     }
 }
 }

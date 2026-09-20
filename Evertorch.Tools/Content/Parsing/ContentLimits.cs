@@ -15,5 +15,11 @@ internal static class ContentLimits
     public const double MaxDistance = 10_000d;
     public const double MaxCoordinate = 100_000d;
     public const double MaxSpeed = 100d;
+    public const double MaxCellSize = 100d;
+    public const double MaxAgentRadius = 10d;
+    public const double MaxStepHeight = 100d;
+
+    // Generated packages name each distinct cell kind with one letter.
+    public const int MaxLegendEntries = 52;
 }
 }

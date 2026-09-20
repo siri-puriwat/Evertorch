@@ -100,6 +100,7 @@ internal static class ServerProjection
             }
 
             writer.WriteEndArray();
+            NavigationJson.Write(writer, map.Navigation);
             writer.WriteEndObject();
         }
 

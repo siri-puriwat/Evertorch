@@ -12,9 +12,18 @@ public sealed class NavigationGrid
     public const int MaxCellsPerAxis = 512;
 
     /// <summary>
+    /// Longest single displacement anything may test with <see cref="CanStep"/>. Longer moves are split, so a body
+    /// can never pass through something thinner than this.
+    /// </summary>
+    public const float MaxMoveStep = 0.25f;
+
+    /// <summary>
     /// Longest distance between two positions checked by <see cref="HasLineOfSight"/>.
     /// </summary>
     public const float LineOfSightStep = 0.125f;
+
+    // Keeps a ramp clear of the step-height limit by a margin, so rounding cannot stall a body halfway up.
+    private const float RampSlopeMargin = 0.9f;
 
     private readonly NavigationCell[] m_cells;
 
@@ -59,6 +68,15 @@ public sealed class NavigationGrid
             throw new ArgumentException("The cell count must equal columns × rows.", nameof(cells));
         }
 
+        float maxRampSlope = MaxRampSlope(agentRadius, maxStepHeight);
+        foreach (NavigationCell cell in cells)
+        {
+            if (cell.IsWalkable && Math.Abs(cell.HeightAtMax - cell.HeightAtMin) / cellSize > maxRampSlope)
+            {
+                throw new ArgumentException("A ramp is too steep for the agent radius and step height.", nameof(cells));
+            }
+        }
+
         Columns = columns;
         Rows = rows;
         CellSize = cellSize;
@@ -87,6 +105,15 @@ public sealed class NavigationGrid
     /// Largest sudden change in ground height a body may cross. Taller edges block like walls, from both sides.
     /// </summary>
     public float MaxStepHeight { get; }
+
+    /// <summary>
+    /// The steepest ramp (rise over run) a grid accepts. The step-height rule compares ground heights across a
+    /// body's footprint and across one move, so a ramp must rise less than one step height over either distance.
+    /// </summary>
+    public static float MaxRampSlope(float agentRadius, float maxStepHeight)
+    {
+        return RampSlopeMargin * maxStepHeight / Math.Max(agentRadius, MaxMoveStep);
+    }
 
     public NavigationCell GetCell(int column, int row)
     {

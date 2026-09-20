@@ -175,6 +175,30 @@ internal sealed class PackageObjectReader
         return readers;
     }
 
+    public IReadOnlyList<string> RequiredStringArray(string name)
+    {
+        List<string> values = new List<string>();
+        if (!TryGet(name, JsonValueKind.Array, "an array", out JsonElement value))
+        {
+            return values;
+        }
+
+        int index = 0;
+        foreach (JsonElement item in value.EnumerateArray())
+        {
+            if (item.ValueKind != JsonValueKind.String)
+            {
+                m_problems.Add(m_file + ": " + Combine(name) + "[" + index + "]: must be a string");
+                return new List<string>();
+            }
+
+            values.Add(item.GetString() ?? string.Empty);
+            index++;
+        }
+
+        return values;
+    }
+
     /// <summary>
     /// Call after every expected property has been read.
     /// </summary>

@@ -4,7 +4,116 @@
     {
       "id": "map.training_ground",
       "displayName": "Training Ground",
-      "scene": "map_training_ground"
+      "scene": "map_training_ground",
+      "navigation": {
+        "cellSize": 1,
+        "originX": -20,
+        "originZ": -20,
+        "agentRadius": 0.3,
+        "maxStepHeight": 0.4,
+        "columns": 40,
+        "rows": 40,
+        "legend": [
+          {
+            "symbol": "a",
+            "surface": "wall",
+            "axis": "none",
+            "heightAtMin": 0,
+            "heightAtMax": 0
+          },
+          {
+            "symbol": "b",
+            "surface": "floor",
+            "axis": "none",
+            "heightAtMin": 0,
+            "heightAtMax": 0
+          },
+          {
+            "symbol": "c",
+            "surface": "npcMarker",
+            "axis": "none",
+            "heightAtMin": 0,
+            "heightAtMax": 0
+          },
+          {
+            "symbol": "d",
+            "surface": "gate",
+            "axis": "none",
+            "heightAtMin": 0,
+            "heightAtMax": 0
+          },
+          {
+            "symbol": "e",
+            "surface": "obstacle",
+            "axis": "none",
+            "heightAtMin": 0,
+            "heightAtMax": 0
+          },
+          {
+            "symbol": "f",
+            "surface": "floor",
+            "axis": "z",
+            "heightAtMin": 0,
+            "heightAtMax": 0.5
+          },
+          {
+            "symbol": "g",
+            "surface": "floor",
+            "axis": "z",
+            "heightAtMin": 0.5,
+            "heightAtMax": 1
+          },
+          {
+            "symbol": "h",
+            "surface": "floor",
+            "axis": "none",
+            "heightAtMin": 1,
+            "heightAtMax": 1
+          }
+        ],
+        "cellRows": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "abbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba",
+          "abbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba",
+          "abbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba",
+          "abbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba",
+          "abbbbbbbbbbbbbbbbbbbbbbbbbbbbbaaabbbbbba",
+          "abbbbbbbbbbbbbbbbbbbbbbbbbbbbbababbbbbba",
+          "abbbbbbbbbbbbbbbbbbbbbbbbbbbbbaaabbbbbba",
+          "abbbbbbbbbbbbbabbbbbbbbbbbbbbbbbbbbbbbba",
+          "abbbbbbbbbbbbbabbbbbbbbbbbbbbbbbbbbbbbba",
+          "abbbbbbbbbbbbbabbbbbbbbbbbbbbbbbbbbbbbba",
+          "abbbbbbbbbbbbbabbbbbbbbbbbbbbbbbbbbbbbba",
+          "abbbbbbbbbbbbbabbbbbbbbbbbbbbbbbbbbbbbba",
+          "abbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba",
+          "abbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba",
+          "abbbbbbbbbbbbbabbbbbbbbbbbbbbbbbbbbbbbba",
+          "abbbbbbbbbbbbbabbbcbbbbbbbbbbbbbbbbbbbba",
+          "abbbbbbbbbbbbbabbbbbbbbbbbbbbbbbbbbbbbba",
+          "abbbbbbbbbbbbbabbbbbbbbbbbbbbbbbbbbbbbba",
+          "abbbbbbbbbbbbbabbbbbbbbbbbbbbbbbbbbbbbbd",
+          "abbbbbbbbbbbbbabbbbbbbbbbbbbbbbbbbbbbbbd",
+          "abbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba",
+          "abbbbbbbbbbbbbbbbbbbbbbbbbeebbbbbbbbbbba",
+          "abbbbbbbbbbbbbbbbbbbbbbbbbeebbbbbbbbbbba",
+          "abbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba",
+          "abbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba",
+          "abbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba",
+          "abbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba",
+          "abbbbbffbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba",
+          "abbbbbggbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba",
+          "abbbhhhhhhbbbbbbbbbbbbbbbbbbbbbbbbbbbbba",
+          "abbbhhhhhhbbbbbbbbbbbbbbbbbbbbbbbbbbbbba",
+          "abbbhhhhhhbbbbbbbbbbbbbbbbbbbbbbbbbbbbba",
+          "abbbhhhhhhbbbbbbbbbbbbbbbbbbbbbbbbbbbbba",
+          "abbbhhhhhhbbbbbbbbbbbbbbbbbbbbbbbbbbbbba",
+          "abbbhhhhhhbbbbbbbbbbbbbbbbbbbbbbbbbbbbba",
+          "abbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba",
+          "abbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba",
+          "abbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        ]
+      }
     }
   ]
 }

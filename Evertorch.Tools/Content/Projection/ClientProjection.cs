@@ -67,6 +67,9 @@ internal static class ClientProjection
             writer.WriteString("id", map.Id.Value);
             writer.WriteString("displayName", map.DisplayName);
             writer.WriteString("scene", authored.Scene);
+
+            // Geometry, not a secret: the client needs it to path optimistically and to predict collisions.
+            NavigationJson.Write(writer, map.Navigation);
             writer.WriteEndObject();
         }
 

@@ -269,6 +269,59 @@ public sealed class YamlFieldReader
         return readers;
     }
 
+    public IReadOnlyList<YamlFieldReader> RequiredMappingSequence(string key)
+    {
+        if (Find(key) == null)
+        {
+            ReportMissing(key);
+            return new List<YamlFieldReader>();
+        }
+
+        return OptionalMappingSequence(key);
+    }
+
+    /// <summary>
+    /// Elements are returned as written. Each one's line is kept under <c>key[index]</c> for
+    /// <see cref="ReportField"/>. A missing or malformed sequence yields an empty list and one diagnostic.
+    /// </summary>
+    public IReadOnlyList<string> RequiredStringSequence(string key)
+    {
+        List<string> values = new List<string>();
+        YamlNode? node = Find(key);
+        if (node == null)
+        {
+            ReportMissing(key);
+            return values;
+        }
+
+        if (!(node is YamlSequenceNode sequence))
+        {
+            Report(key, node, "must be a sequence");
+            return values;
+        }
+
+        for (int index = 0; index < sequence.Children.Count; index++)
+        {
+            string elementPath = string.Format(CultureInfo.InvariantCulture, "{0}[{1}]", PathOf(key), index);
+            YamlNode element = sequence.Children[index];
+            if (!(element is YamlScalarNode scalar))
+            {
+                AddDiagnostic(elementPath, element, "must be a single value");
+                return new List<string>();
+            }
+
+            m_fieldLines[elementPath] = LineOf(element);
+            values.Add(scalar.Value ?? string.Empty);
+        }
+
+        return values;
+    }
+
+    public bool Has(string key)
+    {
+        return Find(key) != null;
+    }
+
     /// <summary>Reports every key nothing asked for, here and in every nested mapping that was read.</summary>
     public void ReportUnknownFields()
     {
@@ -300,8 +353,18 @@ public sealed class YamlFieldReader
     /// <summary>Reports a problem found by comparing fields that were each valid on their own.</summary>
     public void ReportField(string key, string message)
     {
+        if (m_isPlaceholder)
+        {
+            return;
+        }
+
         string fieldPath = PathOf(key);
-        m_fieldLines.TryGetValue(fieldPath, out int line);
+        if (!m_fieldLines.TryGetValue(fieldPath, out int line))
+        {
+            // The field is absent, so point at the mapping that should have held it.
+            line = LineOf(m_node);
+        }
+
         m_diagnostics.Add(new ContentDiagnostic(m_file, fieldPath, line, message));
     }
 

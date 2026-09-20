@@ -296,7 +296,9 @@ public static class ServerContentLoader
             : null;
     }
 
-    private static MonsterDefinition? ReadMonster(PackageObjectReader entry, MonsterDefinitionId id,
+    private static MonsterDefinition? ReadMonster(
+        PackageObjectReader entry,
+        MonsterDefinitionId id,
         List<string> problems)
     {
         int problemsBefore = problems.Count;
@@ -464,11 +466,27 @@ public static class ServerContentLoader
             monsterSpawns.Add(new MonsterSpawn(monster, center, radius, count, respawnMs));
         }
 
+        NavigationGrid? navigation = NavigationPackageReader.Read(entry, problems);
         entry.ReportUnexpectedProperties();
+        if (problems.Count != problemsBefore || navigation == null)
+        {
+            return null;
+        }
 
-        return problems.Count == problemsBefore
-            ? new MapDefinition(id, displayName, spawnPosition, spawnFacing, monsterSpawns.AsReadOnly())
-            : null;
+        // Players are placed here on entry, so a spawn point the grid rejects would strand every new session.
+        if (!navigation.CanOccupy(spawnPosition.X, spawnPosition.Z))
+        {
+            spawnPoint!.Report("position", "is not a place the navigation grid lets an agent stand");
+            return null;
+        }
+
+        return new MapDefinition(
+            id,
+            displayName,
+            spawnPosition,
+            spawnFacing,
+            monsterSpawns.AsReadOnly(),
+            navigation);
     }
 
     private static WorldPosition ReadPosition(PackageObjectReader? position)

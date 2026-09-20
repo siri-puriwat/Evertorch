@@ -76,6 +76,88 @@ public sealed class ServerContentLoaderTests
     }
 
     [Test]
+    public void Load_ForRepositoryContent_RebuildsTheSameNavigationGridTheToolsAuthored()
+    {
+        ContentPipelineResult pipeline = ContentPipeline.Run(PackageFixture.RepositoryContentDirectory);
+        MapDefinition authoredMap = pipeline.Content.Maps.Single().Definition;
+        NavigationGrid authored = authoredMap.Navigation;
+
+        NavigationGrid loaded = ServerContentLoader.Load(PackageFixture.BuildRepositoryPackage())
+            .Maps[authoredMap.Id]
+            .Navigation;
+
+        Assert.That(loaded.Columns, Is.EqualTo(authored.Columns));
+        Assert.That(loaded.Rows, Is.EqualTo(authored.Rows));
+        Assert.That(loaded.CellSize, Is.EqualTo(authored.CellSize));
+        Assert.That(loaded.OriginX, Is.EqualTo(authored.OriginX));
+        Assert.That(loaded.OriginZ, Is.EqualTo(authored.OriginZ));
+        Assert.That(loaded.AgentRadius, Is.EqualTo(authored.AgentRadius));
+        Assert.That(loaded.MaxStepHeight, Is.EqualTo(authored.MaxStepHeight));
+        for (int row = 0; row < authored.Rows; row++)
+        {
+            for (int column = 0; column < authored.Columns; column++)
+            {
+                Assert.That(loaded.GetCell(column, row), Is.EqualTo(authored.GetCell(column, row)));
+            }
+        }
+    }
+
+    [TestCase("\"columns\": 48", "\"columns\": 47", "navigation.cellRows[0]: has 48 symbols but columns is 47")]
+    [TestCase("\"rows\": 48", "\"rows\": 47", "navigation.cellRows: has 48 rows but rows is 47")]
+    [TestCase("\"columns\": 48", "\"columns\": 4800", "navigation.columns: a grid may have at most 512")]
+    [TestCase("\"surface\": \"wall\"", "\"surface\": \"lava\"", "navigation.legend[0].surface: unknown value")]
+    [TestCase("\"symbol\": \"b\"", "\"symbol\": \"a\"", "navigation.legend[1].symbol: 'a' appears more than once")]
+    [TestCase("\"symbol\": \"b\"", "\"symbol\": \"bb\"", "navigation.legend[1].symbol: must be a single")]
+    [TestCase("\"agentRadius\": 0.3", "\"agentRadius\": 0", "definitions[0].navigation: Agent radius must be positive")]
+    [TestCase("\"maxStepHeight\": 0.4", "\"maxStepHeight\": 0.01", "definitions[0].navigation: A ramp is too steep")]
+    [TestCase("\"originX\": -24", "\"originX\": \"west\"", "navigation.originX: must be a number")]
+    [TestCase("\"cellSize\": 1,", "\"cellSize\": 1,\n        \"bake\": true,", "navigation.bake: unknown property")]
+    public void Load_WithOneDefectInNavigation_ReportsExactlyThatDefect(
+        string oldText,
+        string newText,
+        string expectedProblem)
+    {
+        Dictionary<string, byte[]> files = PackageFixture.BuildRepositoryPackage();
+        PackageFixture.Replace(files, Maps, oldText, newText);
+
+        IReadOnlyList<string> problems = ProblemsOf(files);
+
+        Assert.That(problems, Has.Count.EqualTo(1), string.Join(" | ", problems));
+        Assert.That(problems[0], Does.StartWith("maps.json: ").And.Contain(expectedProblem));
+    }
+
+    [Test]
+    public void Load_WhenSpawnPointCannotBeStoodOn_Fails()
+    {
+        Dictionary<string, byte[]> files = PackageFixture.BuildRepositoryPackage();
+        PackageFixture.Replace(
+            files,
+            Maps,
+            "\"position\": {\n          \"x\": 0,",
+            "\"position\": {\n          \"x\": -23.9,");
+
+        Assert.That(
+            ProblemsOf(files),
+            Is.EqualTo(new[]
+            {
+                "maps.json: definitions[0].spawnPoint.position: is not a place the navigation grid lets an agent stand",
+            }));
+    }
+
+    [Test]
+    public void Load_WhenNavigationIsAbsent_Fails()
+    {
+        Dictionary<string, byte[]> files = PackageFixture.BuildRepositoryPackage();
+        PackageFixture.Replace(files, Maps, "\"navigation\": {", "\"geometry\": {");
+
+        IReadOnlyList<string> problems = ProblemsOf(files);
+
+        Assert.That(problems, Has.Exactly(1).Contains("definitions[0].navigation: required property is missing"));
+        Assert.That(problems, Has.Exactly(1).Contains("definitions[0].geometry: unknown property"));
+        Assert.That(problems, Has.Count.EqualTo(2));
+    }
+
+    [Test]
     public void Load_WhenManifestMissing_Fails()
     {
         Dictionary<string, byte[]> files = PackageFixture.BuildRepositoryPackage();
@@ -190,14 +272,20 @@ public sealed class ServerContentLoaderTests
             Is.EqualTo(new[] { "manifest.json: clientContentVersion: must be 16 lowercase hexadecimal digits" }));
     }
 
-    [TestCase(Items, "\"weight\": 1", "\"weight\": 1,\n      \"secret\": 7",
+    [TestCase(
+        Items,
+        "\"weight\": 1",
+        "\"weight\": 1,\n      \"secret\": 7",
         "items.json: definitions[0].secret: unknown")]
     [TestCase(Items, "      \"weight\": 1,\n", "", "items.json: definitions[0].weight: required property is missing")]
     [TestCase(Items, "\"stackLimit\": 999", "\"stackLimit\": \"999\"", "definitions[0].stackLimit: must be a whole")]
     [TestCase(Items, "\"stackLimit\": 999", "\"stackLimit\": 9.5", "definitions[0].stackLimit: must be a whole")]
     [TestCase(Items, "\"stackLimit\": 999", "\"stackLimit\": 0", "definitions[0].stackLimit: must be at least 1")]
     [TestCase(Items, "\"type\": \"material\"", "\"type\": \"Material\"", "definitions[0].type: unknown value")]
-    [TestCase(Jobs, "\"id\": \"job.adventurer\"", "\"id\": \"map.adventurer\"",
+    [TestCase(
+        Jobs,
+        "\"id\": \"job.adventurer\"",
+        "\"id\": \"map.adventurer\"",
         "id: 'map.adventurer' is not a valid ID")]
     [TestCase(Items, "\"weight\": 1", "\"weight\": 1,\n      \"weight\": 2", "weight: appears more than once")]
     [TestCase(Items, "\"definitions\": [", "\"more\": 1,\n  \"definitions\": [", "items.json: more: unknown property")]
@@ -209,7 +297,10 @@ public sealed class ServerContentLoaderTests
     [TestCase(Jobs, "\"agi\": 5", "\"agi\": -1", "jobs.json: definitions[0].startingStats.agi: must be at least 0")]
     [TestCase(Jobs, "\"luk\": 5", "\"luk\": 5,\n        \"cha\": 5", "startingStats.cha: unknown property")]
     [TestCase(Maps, "\"z\": 1\n        }", "\"z\": 0\n        }", "spawnPoint.facing: must not be the zero direction")]
-    [TestCase(Maps, "\"count\": 4", "\"count\": 0",
+    [TestCase(
+        Maps,
+        "\"count\": 4",
+        "\"count\": 0",
         "maps.json: definitions[0].monsterSpawns[0].count: must be at least")]
     public void Load_WithOneDefectInADataFile_ReportsExactlyThatDefect(
         string file,
