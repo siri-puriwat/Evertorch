@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Evertorch.Game\Evertorch.Game.csproj" />
+    <ProjectReference Include="..\..\Evertorch.Protocol\Evertorch.Protocol.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -29,6 +29,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Evertorch.Server.Tests", "t
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Evertorch.Tools.Tests", "tests\Evertorch.Tools.Tests\Evertorch.Tools.Tests.csproj", "{1EFC4254-206D-403B-9351-A0B3B7357A6A}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Evertorch.Architecture.Tests", "tests\Evertorch.Architecture.Tests\Evertorch.Architecture.Tests.csproj", "{ECA344CA-C0E4-4764-A0EE-DEBA428B84BD}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -183,6 +185,18 @@ Global
 		{1EFC4254-206D-403B-9351-A0B3B7357A6A}.Release|x64.Build.0 = Release|Any CPU
 		{1EFC4254-206D-403B-9351-A0B3B7357A6A}.Release|x86.ActiveCfg = Release|Any CPU
 		{1EFC4254-206D-403B-9351-A0B3B7357A6A}.Release|x86.Build.0 = Release|Any CPU
+		{ECA344CA-C0E4-4764-A0EE-DEBA428B84BD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{ECA344CA-C0E4-4764-A0EE-DEBA428B84BD}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{ECA344CA-C0E4-4764-A0EE-DEBA428B84BD}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{ECA344CA-C0E4-4764-A0EE-DEBA428B84BD}.Debug|x64.Build.0 = Debug|Any CPU
+		{ECA344CA-C0E4-4764-A0EE-DEBA428B84BD}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{ECA344CA-C0E4-4764-A0EE-DEBA428B84BD}.Debug|x86.Build.0 = Debug|Any CPU
+		{ECA344CA-C0E4-4764-A0EE-DEBA428B84BD}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{ECA344CA-C0E4-4764-A0EE-DEBA428B84BD}.Release|Any CPU.Build.0 = Release|Any CPU
+		{ECA344CA-C0E4-4764-A0EE-DEBA428B84BD}.Release|x64.ActiveCfg = Release|Any CPU
+		{ECA344CA-C0E4-4764-A0EE-DEBA428B84BD}.Release|x64.Build.0 = Release|Any CPU
+		{ECA344CA-C0E4-4764-A0EE-DEBA428B84BD}.Release|x86.ActiveCfg = Release|Any CPU
+		{ECA344CA-C0E4-4764-A0EE-DEBA428B84BD}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -194,5 +208,6 @@ Global
 		{90EDA898-1D80-4F0E-B4E4-C79651C2C3E1} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 		{7293AAC2-9191-479F-A52C-23908CCFB1BE} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 		{1EFC4254-206D-403B-9351-A0B3B7357A6A} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
+		{ECA344CA-C0E4-4764-A0EE-DEBA428B84BD} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 	EndGlobalSection
 EndGlobal
