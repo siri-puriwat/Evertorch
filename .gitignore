@@ -15,6 +15,9 @@
 **/[Oo]bj/
 /artifacts/
 
+# Local infrastructure secrets.
+/docker/.env
+
 # Unity-generated data for the nested client project.
 /Evertorch.Client/.utmp/
 /Evertorch.Client/[Ll]ibrary/
