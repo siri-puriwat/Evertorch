@@ -39,6 +39,9 @@ csharp_preserve_single_line_statements = false
 # Rider/ReSharper keeps namespace contents flush with the namespace declaration.
 resharper_csharp_indent_inside_namespace = false
 
+# Auto-property accessors stay on one line; statement blocks still do not.
+resharper_place_abstract_accessorholder_on_single_line = true
+
 # Interfaces use I + PascalCase.
 dotnet_naming_rule.interfaces_begin_with_i.severity = error
 dotnet_naming_rule.interfaces_begin_with_i.symbols = interfaces
