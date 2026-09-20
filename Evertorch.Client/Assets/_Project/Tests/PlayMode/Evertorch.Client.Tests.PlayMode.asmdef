@@ -1,0 +1,21 @@
+{
+  "name": "Evertorch.Client.Tests.PlayMode",
+  "rootNamespace": "Evertorch.Client.Tests.PlayMode",
+  "references": [
+    "Evertorch.Client",
+    "UnityEngine.TestRunner"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": true,
+  "precompiledReferences": [
+    "nunit.framework.dll"
+  ],
+  "autoReferenced": false,
+  "defineConstraints": [
+    "UNITY_INCLUDE_TESTS"
+  ],
+  "versionDefines": [],
+  "noEngineReferences": false
+}

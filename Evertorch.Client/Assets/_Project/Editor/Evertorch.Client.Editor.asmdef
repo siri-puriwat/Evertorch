@@ -1,0 +1,18 @@
+{
+  "name": "Evertorch.Client.Editor",
+  "rootNamespace": "Evertorch.Client.Editor",
+  "references": [
+    "Evertorch.Client"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": false,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false
+}
