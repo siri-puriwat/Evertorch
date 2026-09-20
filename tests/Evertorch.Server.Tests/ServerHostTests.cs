@@ -76,6 +76,7 @@ public sealed class ServerHostTests
     {
         using TemporaryDirectory root = new TemporaryDirectory();
         root.Write("appsettings.json", "{ \"Simulation\": { \"TickRate\": 0 } }");
+        WriteValidContent(root);
         List<string> log = new List<string>();
         HostApplicationBuilder builder = ServerHost.CreateBuilder(new string[0], root.Path);
         builder.Services.AddSingleton<ITickPhase>(new RecordingPhase(TickPhase.Movement, "tick", log));
@@ -90,6 +91,7 @@ public sealed class ServerHostTests
     public void Stop_WhileSimulationRuns_JoinsSimulationThread()
     {
         using TemporaryDirectory root = new TemporaryDirectory();
+        WriteValidContent(root);
         using ManualResetEventSlim ticked = new ManualResetEventSlim();
         HostApplicationBuilder builder = ServerHost.CreateBuilder(new string[0], root.Path);
         builder.Services.AddSingleton<ITickPhase>(
@@ -109,9 +111,30 @@ public sealed class ServerHostTests
     }
 
     [Test]
+    public void Dispose_WithoutStop_EndsSimulationThread()
+    {
+        using TemporaryDirectory root = new TemporaryDirectory();
+        WriteValidContent(root);
+        using ManualResetEventSlim ticked = new ManualResetEventSlim();
+        HostApplicationBuilder builder = ServerHost.CreateBuilder(new string[0], root.Path);
+        builder.Services.AddSingleton<ITickPhase>(
+            new RecordingPhase(TickPhase.Movement, "tick", new List<string>(), _ => ticked.Set()));
+        IHost host = builder.Build();
+        ServerLifetimeService lifetime = host.Services.GetRequiredService<ServerLifetimeService>();
+
+        host.Start();
+        bool didTick = ticked.Wait(SignalTimeout);
+        host.Dispose();
+
+        Assert.That(didTick, Is.True);
+        Assert.That(lifetime.IsSimulationRunning, Is.False);
+    }
+
+    [Test]
     public void Simulation_WhenPhaseThrows_StopsApplicationAndReportsFault()
     {
         using TemporaryDirectory root = new TemporaryDirectory();
+        WriteValidContent(root);
         HostApplicationBuilder builder = ServerHost.CreateBuilder(new string[0], root.Path);
         builder.Services.AddSingleton<ITickPhase>(
             new RecordingPhase(
@@ -128,6 +151,60 @@ public sealed class ServerHostTests
 
         Assert.That(isStopping, Is.True);
         Assert.That(host.Services.GetRequiredService<ServerLifetimeService>().HasFaulted, Is.True);
+    }
+
+    [Test]
+    public void Start_WhenContentPackageIsMissing_FailsBeforeSimulationStarts()
+    {
+        using TemporaryDirectory root = new TemporaryDirectory();
+        List<string> log = new List<string>();
+        HostApplicationBuilder builder = ServerHost.CreateBuilder(new string[0], root.Path);
+        builder.Services.AddSingleton<ITickPhase>(new RecordingPhase(TickPhase.Movement, "tick", log));
+        using IHost host = builder.Build();
+        Action start = () => host.Start();
+
+        Assert.That(start, Throws.InstanceOf<ContentLoadException>());
+        Assert.That(log, Is.Empty);
+    }
+
+    [Test]
+    public void Start_WhenContentPackageIsInvalid_FailsBeforeSimulationStarts()
+    {
+        using TemporaryDirectory root = new TemporaryDirectory();
+        Dictionary<string, byte[]> files = PackageFixture.BuildRepositoryPackage();
+        PackageFixture.ReplaceWithoutManifest(files, "jobs.json", "\"baseSpeed\": 5", "\"baseSpeed\": 500");
+        PackageFixture.WriteTo(System.IO.Path.Combine(root.Path, "content", "server"), files);
+        List<string> log = new List<string>();
+        HostApplicationBuilder builder = ServerHost.CreateBuilder(new string[0], root.Path);
+        builder.Services.AddSingleton<ITickPhase>(new RecordingPhase(TickPhase.Movement, "tick", log));
+        using IHost host = builder.Build();
+        Action start = () => host.Start();
+
+        Assert.That(start, Throws.InstanceOf<ContentLoadException>().With.Message.Contains("jobs.json"));
+        Assert.That(log, Is.Empty);
+    }
+
+    [Test]
+    public void Start_WithConfiguredPackagePath_LoadsContentFromThere()
+    {
+        using TemporaryDirectory root = new TemporaryDirectory();
+        using TemporaryDirectory package = new TemporaryDirectory();
+        PackageFixture.WriteTo(package.Path, PackageFixture.BuildRepositoryPackage());
+        string[] args = { "--Content:ServerPackagePath=" + package.Path };
+        using IHost host = ServerHost.CreateBuilder(args, root.Path).Build();
+
+        host.Start();
+        ServerContent content = host.Services.GetRequiredService<ServerContent>();
+        host.StopAsync().GetAwaiter().GetResult();
+
+        Assert.That(content.Maps, Is.Not.Empty);
+    }
+
+    private static void WriteValidContent(TemporaryDirectory root)
+    {
+        PackageFixture.WriteTo(
+            System.IO.Path.Combine(root.Path, "content", "server"),
+            PackageFixture.BuildRepositoryPackage());
     }
 
     private static SimulationOptions ReadOptions(IHost host)

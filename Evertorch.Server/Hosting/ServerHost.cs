@@ -1,3 +1,5 @@
+using System;
+using System.IO;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -26,6 +28,15 @@ public static class ServerHost
             .Bind(builder.Configuration.GetSection(SimulationOptions.SectionName))
             .ValidateOnStart();
         builder.Services.AddSingleton<IValidateOptions<SimulationOptions>, SimulationOptionsValidator>();
+        builder.Services
+            .AddOptions<ContentOptions>()
+            .Bind(builder.Configuration.GetSection(ContentOptions.SectionName))
+            .ValidateOnStart();
+        builder.Services.AddSingleton<IValidateOptions<ContentOptions>, ContentOptionsValidator>();
+
+        // Resolved while the lifetime service is constructed, so a bad package stops the host before any thread or
+        // socket exists.
+        builder.Services.AddSingleton(services => LoadContent(services, contentRootPath));
 
         builder.Services.AddSingleton<IMonotonicClock, StopwatchClock>();
         builder.Services.AddSingleton<ITickObserver, TickLogObserver>();
@@ -35,6 +46,12 @@ public static class ServerHost
         builder.Services.AddHostedService(services => services.GetRequiredService<ServerLifetimeService>());
 
         return builder;
+    }
+
+    private static ServerContent LoadContent(IServiceProvider services, string contentRootPath)
+    {
+        ContentOptions options = services.GetRequiredService<IOptions<ContentOptions>>().Value;
+        return ServerContentLoader.LoadFromDirectory(Path.GetFullPath(options.ServerPackagePath, contentRootPath));
     }
 }
 }

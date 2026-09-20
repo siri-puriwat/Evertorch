@@ -6,6 +6,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\Evertorch.Server\Evertorch.Server.csproj" />
+    <!-- Test-only: builds real packages so the server reader is proven against the actual writer. -->
+    <ProjectReference Include="..\..\Evertorch.Tools\Evertorch.Tools.csproj" />
   </ItemGroup>
 
 </Project>
