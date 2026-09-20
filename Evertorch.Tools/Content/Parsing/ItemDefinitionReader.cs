@@ -5,7 +5,7 @@ namespace Evertorch.Tools
 {
 internal static class ItemDefinitionReader
 {
-    public static ItemDefinition? Read(
+    public static AuthoredItem? Read(
         YamlFieldReader root,
         List<ContentDiagnostic> diagnostics,
         ISet<string> declaredIds)
@@ -39,16 +39,8 @@ internal static class ItemDefinitionReader
             return null;
         }
 
-        return new ItemDefinition(
-            root.ToSource(),
-            id,
-            displayName,
-            type,
-            stackLimit,
-            weight,
-            sellPrice,
-            icon,
-            model);
+        ItemDefinition definition = new ItemDefinition(id, displayName, type, stackLimit, weight, sellPrice);
+        return new AuthoredItem(root.ToSource(), definition, icon, model);
     }
 }
 }

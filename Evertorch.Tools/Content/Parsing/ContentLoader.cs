@@ -20,11 +20,11 @@ public static class ContentLoader
 
     public static ContentSet Load(string contentRoot, List<ContentDiagnostic> diagnostics)
     {
-        List<ItemDefinition> items = new List<ItemDefinition>();
-        List<MonsterDefinition> monsters = new List<MonsterDefinition>();
-        List<SkillDefinition> skills = new List<SkillDefinition>();
-        List<JobDefinition> jobs = new List<JobDefinition>();
-        List<MapDefinition> maps = new List<MapDefinition>();
+        List<AuthoredItem> items = new List<AuthoredItem>();
+        List<AuthoredMonster> monsters = new List<AuthoredMonster>();
+        List<AuthoredSkill> skills = new List<AuthoredSkill>();
+        List<AuthoredJob> jobs = new List<AuthoredJob>();
+        List<AuthoredMap> maps = new List<AuthoredMap>();
         HashSet<string> declaredIds = new HashSet<string>(StringComparer.Ordinal);
 
         if (!Directory.Exists(contentRoot))

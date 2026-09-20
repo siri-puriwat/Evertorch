@@ -10,30 +10,30 @@ namespace Evertorch.Tools
 public sealed class ContentSet
 {
     public ContentSet(
-        IEnumerable<ItemDefinition> items,
-        IEnumerable<MonsterDefinition> monsters,
-        IEnumerable<SkillDefinition> skills,
-        IEnumerable<JobDefinition> jobs,
-        IEnumerable<MapDefinition> maps,
+        IEnumerable<AuthoredItem> items,
+        IEnumerable<AuthoredMonster> monsters,
+        IEnumerable<AuthoredSkill> skills,
+        IEnumerable<AuthoredJob> jobs,
+        IEnumerable<AuthoredMap> maps,
         IEnumerable<string> declaredIds)
     {
-        Items = items.OrderBy(item => item.Id.Value, StringComparer.Ordinal).ToList();
-        Monsters = monsters.OrderBy(monster => monster.Id.Value, StringComparer.Ordinal).ToList();
-        Skills = skills.OrderBy(skill => skill.Id.Value, StringComparer.Ordinal).ToList();
-        Jobs = jobs.OrderBy(job => job.Id.Value, StringComparer.Ordinal).ToList();
-        Maps = maps.OrderBy(map => map.Id.Value, StringComparer.Ordinal).ToList();
+        Items = items.OrderBy(item => item.Definition.Id.Value, StringComparer.Ordinal).ToList();
+        Monsters = monsters.OrderBy(monster => monster.Definition.Id.Value, StringComparer.Ordinal).ToList();
+        Skills = skills.OrderBy(skill => skill.Definition.Id.Value, StringComparer.Ordinal).ToList();
+        Jobs = jobs.OrderBy(job => job.Definition.Id.Value, StringComparer.Ordinal).ToList();
+        Maps = maps.OrderBy(map => map.Definition.Id.Value, StringComparer.Ordinal).ToList();
         DeclaredIds = new HashSet<string>(declaredIds, StringComparer.Ordinal);
     }
 
-    public IReadOnlyList<ItemDefinition> Items { get; }
+    public IReadOnlyList<AuthoredItem> Items { get; }
 
-    public IReadOnlyList<MonsterDefinition> Monsters { get; }
+    public IReadOnlyList<AuthoredMonster> Monsters { get; }
 
-    public IReadOnlyList<SkillDefinition> Skills { get; }
+    public IReadOnlyList<AuthoredSkill> Skills { get; }
 
-    public IReadOnlyList<JobDefinition> Jobs { get; }
+    public IReadOnlyList<AuthoredJob> Jobs { get; }
 
-    public IReadOnlyList<MapDefinition> Maps { get; }
+    public IReadOnlyList<AuthoredMap> Maps { get; }
 
     /// <summary>
     /// Every valid ID some file declared, including files rejected for another error. A reference to one of these

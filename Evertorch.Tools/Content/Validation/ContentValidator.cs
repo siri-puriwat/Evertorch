@@ -11,38 +11,47 @@ public static class ContentValidator
 {
     public static void Validate(ContentSet content, List<ContentDiagnostic> diagnostics)
     {
-        HashSet<string> items = CollectIds(content.Items, item => item.Id.Value, item => item.Source, diagnostics);
+        HashSet<string> items = CollectIds(
+            content.Items,
+            item => item.Definition.Id.Value,
+            item => item.Source,
+            diagnostics);
         HashSet<string> monsters = CollectIds(
             content.Monsters,
-            monster => monster.Id.Value,
+            monster => monster.Definition.Id.Value,
             monster => monster.Source,
             diagnostics);
         HashSet<string> skills = CollectIds(
             content.Skills,
-            skill => skill.Id.Value,
+            skill => skill.Definition.Id.Value,
             skill => skill.Source,
             diagnostics);
-        HashSet<string> maps = CollectIds(content.Maps, map => map.Id.Value, map => map.Source, diagnostics);
-        CollectIds(content.Jobs, job => job.Id.Value, job => job.Source, diagnostics);
+        HashSet<string> maps = CollectIds(content.Maps, map => map.Definition.Id.Value, map => map.Source, diagnostics);
+        CollectIds(content.Jobs, job => job.Definition.Id.Value, job => job.Source, diagnostics);
 
         foreach (HashSet<string> known in new[] { items, monsters, skills, maps })
         {
             known.UnionWith(content.DeclaredIds);
         }
 
-        foreach (MonsterDefinition monster in content.Monsters)
+        foreach (AuthoredMonster monster in content.Monsters)
         {
-            for (int index = 0; index < monster.Drops.Count; index++)
+            for (int index = 0; index < monster.Definition.Drops.Count; index++)
             {
                 string fieldPath = string.Format(CultureInfo.InvariantCulture, "drops[{0}].item", index);
-                RequireReference(items, monster.Drops[index].Item.Value, "item", monster.Source, fieldPath,
+                RequireReference(
+                    items,
+                    monster.Definition.Drops[index].Item.Value,
+                    "item",
+                    monster.Source,
+                    fieldPath,
                     diagnostics);
             }
         }
 
-        foreach (MapDefinition map in content.Maps)
+        foreach (AuthoredMap map in content.Maps)
         {
-            for (int index = 0; index < map.MonsterSpawns.Count; index++)
+            for (int index = 0; index < map.Definition.MonsterSpawns.Count; index++)
             {
                 string fieldPath = string.Format(
                     CultureInfo.InvariantCulture,
@@ -50,7 +59,7 @@ public static class ContentValidator
                     index);
                 RequireReference(
                     monsters,
-                    map.MonsterSpawns[index].Monster.Value,
+                    map.Definition.MonsterSpawns[index].Monster.Value,
                     "monster",
                     map.Source,
                     fieldPath,
@@ -58,10 +67,12 @@ public static class ContentValidator
             }
         }
 
-        foreach (JobDefinition job in content.Jobs)
+        foreach (AuthoredJob job in content.Jobs)
         {
-            RequireReference(maps, job.StartingMap.Value, "map", job.Source, "server.startingMap", diagnostics);
-            RequireReference(skills, job.BasicAttack.Value, "skill", job.Source, "server.basicAttack", diagnostics);
+            RequireReference(maps, job.Definition.StartingMap.Value, "map", job.Source, "server.startingMap",
+                diagnostics);
+            RequireReference(skills, job.Definition.BasicAttack.Value, "skill", job.Source, "server.basicAttack",
+                diagnostics);
         }
     }
 

@@ -5,7 +5,7 @@ namespace Evertorch.Tools
 {
 internal static class SkillDefinitionReader
 {
-    public static SkillDefinition? Read(
+    public static AuthoredSkill? Read(
         YamlFieldReader root,
         List<ContentDiagnostic> diagnostics,
         ISet<string> declaredIds)
@@ -37,7 +37,8 @@ internal static class SkillDefinitionReader
             return null;
         }
 
-        return new SkillDefinition(root.ToSource(), id, displayName, targetType, damageType, range, icon);
+        SkillDefinition definition = new SkillDefinition(id, displayName, targetType, damageType, range);
+        return new AuthoredSkill(root.ToSource(), definition, icon);
     }
 }
 }

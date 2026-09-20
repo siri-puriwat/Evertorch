@@ -1,11 +1,8 @@
-using Evertorch.Game;
-
-namespace Evertorch.Tools
+namespace Evertorch.Game
 {
 public sealed class JobDefinition
 {
     public JobDefinition(
-        DefinitionSource source,
         JobDefinitionId id,
         string displayName,
         PrimaryStats startingStats,
@@ -16,10 +13,8 @@ public sealed class JobDefinition
         int unarmedAttackSpeedPenalty,
         double baseSpeed,
         MapDefinitionId startingMap,
-        SkillDefinitionId basicAttack,
-        string prefab)
+        SkillDefinitionId basicAttack)
     {
-        Source = source;
         Id = id;
         DisplayName = displayName;
         StartingStats = startingStats;
@@ -31,10 +26,7 @@ public sealed class JobDefinition
         BaseSpeed = baseSpeed;
         StartingMap = startingMap;
         BasicAttack = basicAttack;
-        Prefab = prefab;
     }
-
-    public DefinitionSource Source { get; }
 
     public JobDefinitionId Id { get; }
 
@@ -52,12 +44,11 @@ public sealed class JobDefinition
 
     public int UnarmedAttackSpeedPenalty { get; }
 
+    /// <summary>World units per second before any movement rule is applied.</summary>
     public double BaseSpeed { get; }
 
     public MapDefinitionId StartingMap { get; }
 
     public SkillDefinitionId BasicAttack { get; }
-
-    public string Prefab { get; }
 }
 }

@@ -1,6 +1,4 @@
-using Evertorch.Game;
-
-namespace Evertorch.Tools
+namespace Evertorch.Game
 {
 public sealed class MonsterDrop
 {

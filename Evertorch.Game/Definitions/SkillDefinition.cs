@@ -1,28 +1,20 @@
-using Evertorch.Game;
-
-namespace Evertorch.Tools
+namespace Evertorch.Game
 {
 public sealed class SkillDefinition
 {
     public SkillDefinition(
-        DefinitionSource source,
         SkillDefinitionId id,
         string displayName,
         SkillTargetType targetType,
         SkillDamageType damageType,
-        double range,
-        string icon)
+        double range)
     {
-        Source = source;
         Id = id;
         DisplayName = displayName;
         TargetType = targetType;
         DamageType = damageType;
         Range = range;
-        Icon = icon;
     }
-
-    public DefinitionSource Source { get; }
 
     public SkillDefinitionId Id { get; }
 
@@ -32,8 +24,7 @@ public sealed class SkillDefinition
 
     public SkillDamageType DamageType { get; }
 
+    /// <summary>World units.</summary>
     public double Range { get; }
-
-    public string Icon { get; }
 }
 }

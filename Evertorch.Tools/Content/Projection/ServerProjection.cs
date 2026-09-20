@@ -24,8 +24,9 @@ internal static class ServerProjection
     private static void WriteItems(Utf8JsonWriter writer, ContentSet content)
     {
         BeginFile(writer);
-        foreach (ItemDefinition item in content.Items)
+        foreach (AuthoredItem authored in content.Items)
         {
+            ItemDefinition item = authored.Definition;
             writer.WriteStartObject();
             writer.WriteString("id", item.Id.Value);
             writer.WriteString("displayName", item.DisplayName);
@@ -42,8 +43,9 @@ internal static class ServerProjection
     private static void WriteJobs(Utf8JsonWriter writer, ContentSet content)
     {
         BeginFile(writer);
-        foreach (JobDefinition job in content.Jobs)
+        foreach (AuthoredJob authored in content.Jobs)
         {
+            JobDefinition job = authored.Definition;
             writer.WriteStartObject();
             writer.WriteString("id", job.Id.Value);
             writer.WriteString("displayName", job.DisplayName);
@@ -72,8 +74,9 @@ internal static class ServerProjection
     private static void WriteMaps(Utf8JsonWriter writer, ContentSet content)
     {
         BeginFile(writer);
-        foreach (MapDefinition map in content.Maps)
+        foreach (AuthoredMap authored in content.Maps)
         {
+            MapDefinition map = authored.Definition;
             writer.WriteStartObject();
             writer.WriteString("id", map.Id.Value);
             writer.WriteString("displayName", map.DisplayName);
@@ -106,8 +109,9 @@ internal static class ServerProjection
     private static void WriteMonsters(Utf8JsonWriter writer, ContentSet content)
     {
         BeginFile(writer);
-        foreach (MonsterDefinition monster in content.Monsters)
+        foreach (AuthoredMonster authored in content.Monsters)
         {
+            MonsterDefinition monster = authored.Definition;
             writer.WriteStartObject();
             writer.WriteString("id", monster.Id.Value);
             writer.WriteString("displayName", monster.DisplayName);
@@ -144,8 +148,9 @@ internal static class ServerProjection
     private static void WriteSkills(Utf8JsonWriter writer, ContentSet content)
     {
         BeginFile(writer);
-        foreach (SkillDefinition skill in content.Skills)
+        foreach (AuthoredSkill authored in content.Skills)
         {
+            SkillDefinition skill = authored.Definition;
             writer.WriteStartObject();
             writer.WriteString("id", skill.Id.Value);
             writer.WriteString("displayName", skill.DisplayName);

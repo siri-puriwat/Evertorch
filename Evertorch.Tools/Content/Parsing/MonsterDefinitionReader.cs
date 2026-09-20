@@ -5,7 +5,7 @@ namespace Evertorch.Tools
 {
 internal static class MonsterDefinitionReader
 {
-    public static MonsterDefinition? Read(
+    public static AuthoredMonster? Read(
         YamlFieldReader root,
         List<ContentDiagnostic> diagnostics,
         ISet<string> declaredIds)
@@ -59,8 +59,7 @@ internal static class MonsterDefinitionReader
             return null;
         }
 
-        return new MonsterDefinition(
-            root.ToSource(),
+        MonsterDefinition definition = new MonsterDefinition(
             id,
             displayName,
             level,
@@ -75,9 +74,8 @@ internal static class MonsterDefinitionReader
             behavior,
             perceptionRadius,
             leashRadius,
-            drops,
-            prefab,
-            icon);
+            drops);
+        return new AuthoredMonster(root.ToSource(), definition, prefab, icon);
     }
 
     private static MonsterDrop ReadDrop(YamlFieldReader drop)

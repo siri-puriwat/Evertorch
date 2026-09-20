@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Text.Json;
+using Evertorch.Game;
 
 namespace Evertorch.Tools
 {
@@ -24,15 +25,16 @@ internal static class ClientProjection
     private static void WriteItems(Utf8JsonWriter writer, ContentSet content)
     {
         BeginFile(writer);
-        foreach (ItemDefinition item in content.Items)
+        foreach (AuthoredItem authored in content.Items)
         {
+            ItemDefinition item = authored.Definition;
             writer.WriteStartObject();
             writer.WriteString("id", item.Id.Value);
             writer.WriteString("displayName", item.DisplayName);
             writer.WriteString("type", EnumText.Of(item.Type));
             writer.WriteNumber("stackLimit", item.StackLimit);
-            writer.WriteString("icon", item.Icon);
-            writer.WriteString("model", item.Model);
+            writer.WriteString("icon", authored.Icon);
+            writer.WriteString("model", authored.Model);
             writer.WriteEndObject();
         }
 
@@ -42,12 +44,13 @@ internal static class ClientProjection
     private static void WriteJobs(Utf8JsonWriter writer, ContentSet content)
     {
         BeginFile(writer);
-        foreach (JobDefinition job in content.Jobs)
+        foreach (AuthoredJob authored in content.Jobs)
         {
+            JobDefinition job = authored.Definition;
             writer.WriteStartObject();
             writer.WriteString("id", job.Id.Value);
             writer.WriteString("displayName", job.DisplayName);
-            writer.WriteString("prefab", job.Prefab);
+            writer.WriteString("prefab", authored.Prefab);
             writer.WriteEndObject();
         }
 
@@ -57,12 +60,13 @@ internal static class ClientProjection
     private static void WriteMaps(Utf8JsonWriter writer, ContentSet content)
     {
         BeginFile(writer);
-        foreach (MapDefinition map in content.Maps)
+        foreach (AuthoredMap authored in content.Maps)
         {
+            MapDefinition map = authored.Definition;
             writer.WriteStartObject();
             writer.WriteString("id", map.Id.Value);
             writer.WriteString("displayName", map.DisplayName);
-            writer.WriteString("scene", map.Scene);
+            writer.WriteString("scene", authored.Scene);
             writer.WriteEndObject();
         }
 
@@ -72,14 +76,15 @@ internal static class ClientProjection
     private static void WriteMonsters(Utf8JsonWriter writer, ContentSet content)
     {
         BeginFile(writer);
-        foreach (MonsterDefinition monster in content.Monsters)
+        foreach (AuthoredMonster authored in content.Monsters)
         {
+            MonsterDefinition monster = authored.Definition;
             writer.WriteStartObject();
             writer.WriteString("id", monster.Id.Value);
             writer.WriteString("displayName", monster.DisplayName);
             writer.WriteNumber("level", monster.Level);
-            writer.WriteString("prefab", monster.Prefab);
-            writer.WriteString("icon", monster.Icon);
+            writer.WriteString("prefab", authored.Prefab);
+            writer.WriteString("icon", authored.Icon);
             writer.WriteEndObject();
         }
 
@@ -89,13 +94,14 @@ internal static class ClientProjection
     private static void WriteSkills(Utf8JsonWriter writer, ContentSet content)
     {
         BeginFile(writer);
-        foreach (SkillDefinition skill in content.Skills)
+        foreach (AuthoredSkill authored in content.Skills)
         {
+            SkillDefinition skill = authored.Definition;
             writer.WriteStartObject();
             writer.WriteString("id", skill.Id.Value);
             writer.WriteString("displayName", skill.DisplayName);
             writer.WriteString("targetType", EnumText.Of(skill.TargetType));
-            writer.WriteString("icon", skill.Icon);
+            writer.WriteString("icon", authored.Icon);
             writer.WriteEndObject();
         }
 

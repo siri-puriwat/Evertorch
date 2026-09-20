@@ -5,7 +5,7 @@ namespace Evertorch.Tools
 {
 internal static class MapDefinitionReader
 {
-    public static MapDefinition? Read(
+    public static AuthoredMap? Read(
         YamlFieldReader root,
         List<ContentDiagnostic> diagnostics,
         ISet<string> declaredIds)
@@ -49,14 +49,8 @@ internal static class MapDefinitionReader
             return null;
         }
 
-        return new MapDefinition(
-            root.ToSource(),
-            id,
-            displayName,
-            spawnPosition,
-            spawnFacing,
-            monsterSpawns,
-            scene);
+        MapDefinition definition = new MapDefinition(id, displayName, spawnPosition, spawnFacing, monsterSpawns);
+        return new AuthoredMap(root.ToSource(), definition, scene);
     }
 
     private static MonsterSpawn ReadSpawn(YamlFieldReader spawn)

@@ -5,7 +5,7 @@ namespace Evertorch.Tools
 {
 internal static class JobDefinitionReader
 {
-    public static JobDefinition? Read(
+    public static AuthoredJob? Read(
         YamlFieldReader root,
         List<ContentDiagnostic> diagnostics,
         ISet<string> declaredIds)
@@ -64,8 +64,7 @@ internal static class JobDefinitionReader
             return null;
         }
 
-        return new JobDefinition(
-            root.ToSource(),
+        JobDefinition definition = new JobDefinition(
             id,
             displayName,
             new PrimaryStats(str, agi, vit, intelligence, dex, luk),
@@ -76,8 +75,8 @@ internal static class JobDefinitionReader
             unarmedAttackSpeedPenalty,
             baseSpeed,
             startingMap,
-            basicAttack,
-            prefab);
+            basicAttack);
+        return new AuthoredJob(root.ToSource(), definition, prefab);
     }
 }
 }

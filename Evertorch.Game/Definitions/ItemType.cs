@@ -1,4 +1,4 @@
-namespace Evertorch.Tools
+namespace Evertorch.Game
 {
 public enum ItemType
 {

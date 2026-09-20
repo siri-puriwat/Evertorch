@@ -1,12 +1,10 @@
 using System.Collections.Generic;
-using Evertorch.Game;
 
-namespace Evertorch.Tools
+namespace Evertorch.Game
 {
 public sealed class MonsterDefinition
 {
     public MonsterDefinition(
-        DefinitionSource source,
         MonsterDefinitionId id,
         string displayName,
         int level,
@@ -21,11 +19,8 @@ public sealed class MonsterDefinition
         MonsterBehavior behavior,
         double perceptionRadius,
         double leashRadius,
-        IReadOnlyList<MonsterDrop> drops,
-        string prefab,
-        string icon)
+        IReadOnlyList<MonsterDrop> drops)
     {
-        Source = source;
         Id = id;
         DisplayName = displayName;
         Level = level;
@@ -41,11 +36,7 @@ public sealed class MonsterDefinition
         PerceptionRadius = perceptionRadius;
         LeashRadius = leashRadius;
         Drops = drops;
-        Prefab = prefab;
-        Icon = icon;
     }
-
-    public DefinitionSource Source { get; }
 
     public MonsterDefinitionId Id { get; }
 
@@ -63,6 +54,7 @@ public sealed class MonsterDefinition
 
     public int Flee { get; }
 
+    /// <summary>World units per second before any movement rule is applied.</summary>
     public double BaseSpeed { get; }
 
     public double AttackRange { get; }
@@ -76,9 +68,5 @@ public sealed class MonsterDefinition
     public double LeashRadius { get; }
 
     public IReadOnlyList<MonsterDrop> Drops { get; }
-
-    public string Prefab { get; }
-
-    public string Icon { get; }
 }
 }

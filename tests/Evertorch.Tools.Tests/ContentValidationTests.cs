@@ -40,12 +40,16 @@ public sealed class ContentValidationTests
         ContentPipelineResult result = ContentPipeline.Run(contentRoot);
 
         Assert.That(result.Diagnostics.Select(diagnostic => diagnostic.ToString()), Is.Empty);
-        Assert.That(result.Content.Maps.Select(map => map.Id.Value), Does.Contain("map.training_ground"));
-        Assert.That(result.Content.Jobs.Select(job => job.Id.Value), Does.Contain("job.adventurer"));
-        Assert.That(result.Content.Monsters.Select(monster => monster.Id.Value),
+        Assert.That(result.Content.Maps.Select(map => map.Definition.Id.Value), Does.Contain("map.training_ground"));
+        Assert.That(result.Content.Jobs.Select(job => job.Definition.Id.Value), Does.Contain("job.adventurer"));
+        Assert.That(result.Content.Monsters.Select(monster => monster.Definition.Id.Value),
             Does.Contain("monster.training_slime"));
-        Assert.That(result.Content.Items.Select(item => item.Id.Value), Does.Contain("item.material.slime_gel"));
-        Assert.That(result.Content.Skills.Select(skill => skill.Id.Value), Does.Contain("skill.basic_attack"));
+        Assert.That(
+            result.Content.Items.Select(item => item.Definition.Id.Value),
+            Does.Contain("item.material.slime_gel"));
+        Assert.That(
+            result.Content.Skills.Select(skill => skill.Definition.Id.Value),
+            Does.Contain("skill.basic_attack"));
     }
 
     [TestCase(Potion, "id: item.consumable.minor_health", "id: Item.Consumable.MinorHealth", "id", "not a valid ID")]
