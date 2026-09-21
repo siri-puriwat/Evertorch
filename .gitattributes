@@ -9,6 +9,9 @@
 *.asmdef text eol=lf
 *.meta text eol=lf
 
+# Windows batch files misparse labels and blocks with LF line endings.
+*.cmd text eol=crlf
+
 # Unity YAML uses text serialization and Unity Smart Merge when configured.
 *.unity text merge=unityyamlmerge eol=lf
 *.prefab text merge=unityyamlmerge eol=lf
