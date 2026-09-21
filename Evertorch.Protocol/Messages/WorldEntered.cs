@@ -77,13 +77,13 @@ public sealed class WorldEntered
     public int GetEncodedLength()
     {
         return sizeof(ushort)
-               + WireText.GetEncodedLength(Map.Value, ProtocolLimits.MaxDefinitionIdBytes)
-               + sizeof(uint)
-               + sizeof(long)
-               + sizeof(uint)
-               + (3 * sizeof(float))
-               + (2 * sizeof(float))
-               + sizeof(float);
+            + WireText.GetEncodedLength(Map.Value, ProtocolLimits.MaxDefinitionIdBytes)
+            + sizeof(uint)
+            + sizeof(long)
+            + sizeof(uint)
+            + (3 * sizeof(float))
+            + (2 * sizeof(float))
+            + sizeof(float);
     }
 
     public int Write(Span<byte> destination)

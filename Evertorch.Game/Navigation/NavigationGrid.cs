@@ -243,8 +243,8 @@ public sealed class NavigationGrid
         }
 
         return TrySampleHeight(fromX, fromZ, out float fromHeight)
-               && TrySampleHeight(toX, toZ, out float toHeight)
-               && Math.Abs(toHeight - fromHeight) <= MaxStepHeight;
+            && TrySampleHeight(toX, toZ, out float toHeight)
+            && Math.Abs(toHeight - fromHeight) <= MaxStepHeight;
     }
 
     /// <summary>

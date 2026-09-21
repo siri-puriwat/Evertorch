@@ -53,7 +53,7 @@ internal sealed class WorldOptionsValidator : IValidateOptions<WorldOptions>
         if (value < minimum || value > maximum)
         {
             failures.Add(WorldOptions.SectionName + ":" + key + " must be between " + minimum + " and " + maximum +
-                         ".");
+                ".");
         }
     }
 

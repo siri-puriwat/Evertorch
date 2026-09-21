@@ -68,7 +68,7 @@ public sealed class RenewalCombatRules : ICombatRules
             : RollMonsterAttack(context) + context.StatusAttack;
 
         long reduced = (raw * (DefenseScale + context.HardDefense) / (DefenseScale + (10L * context.HardDefense)))
-                       - context.SoftDefense;
+            - context.SoftDefense;
         long amount = Math.Max(1, reduced);
         if (context.IsCritical)
         {

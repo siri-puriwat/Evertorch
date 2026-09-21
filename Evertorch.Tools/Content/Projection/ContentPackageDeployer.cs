@@ -108,10 +108,10 @@ public static class ContentPackageDeployer
             using JsonDocument document = JsonDocument.Parse(File.ReadAllBytes(manifestPath));
             JsonElement root = document.RootElement;
             return root.ValueKind == JsonValueKind.Object
-                   && root.TryGetProperty("schemaVersion", out JsonElement _)
-                   && root.TryGetProperty("clientContentVersion", out JsonElement _)
-                   && root.TryGetProperty("files", out JsonElement files)
-                   && files.ValueKind == JsonValueKind.Array;
+                && root.TryGetProperty("schemaVersion", out JsonElement _)
+                && root.TryGetProperty("clientContentVersion", out JsonElement _)
+                && root.TryGetProperty("files", out JsonElement files)
+                && files.ValueKind == JsonValueKind.Array;
         }
         catch (JsonException)
         {

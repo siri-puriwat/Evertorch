@@ -36,7 +36,7 @@ internal static class ForbiddenDependencies
     public static bool IsForbiddenForSharedAssembly(string dependencyName)
     {
         return ExactNames.Contains(dependencyName, StringComparer.OrdinalIgnoreCase)
-               || Prefixes.Any(prefix => dependencyName.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
+            || Prefixes.Any(prefix => dependencyName.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
     }
 }
 }

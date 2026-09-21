@@ -77,7 +77,7 @@ public sealed class SessionManager : ITickPhase
         m_tickRate = (uint)simulation.Value.TickRate;
 
         long timeoutTicks = ((long)network.Value.HandshakeTimeoutMs * simulation.Value.TickRate) /
-                            MillisecondsPerSecond;
+            MillisecondsPerSecond;
         m_handshakeTimeoutTicks = (uint)Math.Max(1L, timeoutTicks);
     }
 

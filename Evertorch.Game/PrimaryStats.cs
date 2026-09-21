@@ -48,11 +48,11 @@ public readonly struct PrimaryStats : IEquatable<PrimaryStats>
     public bool Equals(PrimaryStats other)
     {
         return Str == other.Str
-               && Agi == other.Agi
-               && Vit == other.Vit
-               && Int == other.Int
-               && Dex == other.Dex
-               && Luk == other.Luk;
+            && Agi == other.Agi
+            && Vit == other.Vit
+            && Int == other.Int
+            && Dex == other.Dex
+            && Luk == other.Luk;
     }
 
     public override bool Equals(object? obj)

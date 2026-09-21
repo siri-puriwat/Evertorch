@@ -48,9 +48,9 @@ public readonly struct AttackTiming : IEquatable<AttackTiming>
     public bool Equals(AttackTiming other)
     {
         return Interval == other.Interval
-               && Windup == other.Windup
-               && Impact == other.Impact
-               && Recovery == other.Recovery;
+            && Windup == other.Windup
+            && Impact == other.Impact
+            && Recovery == other.Recovery;
     }
 
     public override bool Equals(object? obj)

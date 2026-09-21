@@ -100,7 +100,7 @@ public sealed class ConvergenceTests
         rig.ConnectAll();
         int entered = rig.AdvanceUntil(
             () => mover.Connection.State == ClientConnectionState.InWorld
-                  && watcher.Connection.State == ClientConnectionState.InWorld,
+                && watcher.Connection.State == ClientConnectionState.InWorld,
             EnterWorldLimitMs);
         Assert.That(entered, Is.GreaterThanOrEqualTo(0));
 
@@ -131,8 +131,8 @@ public sealed class ConvergenceTests
 
         // The predicted position alone would not do: prediction is local, so it is the same whatever the link loses.
         return client.World.Predictor.Position + " server " + rig.Server.PlayerOf(client.Loopback.Connection).Position
-               + " dropped " + client.Link.Dropped + " reordered " + client.Link.Reordered + " stale "
-               + client.World.StaleSnapshots + " ack " + client.World.Predictor.LastAcknowledgedSequence;
+            + " dropped " + client.Link.Dropped + " reordered " + client.Link.Reordered + " stale "
+            + client.World.StaleSnapshots + " ack " + client.World.Predictor.LastAcknowledgedSequence;
     }
 
     private static void EnterWorld(ClientServerRig rig, SimulatedClient client)
@@ -174,7 +174,7 @@ public sealed class ConvergenceTests
     {
         int converged = rig.AdvanceUntil(
             () => client.World.Predictor.PendingCount == 0
-                  && client.DistanceTo(rig.Server.PlayerOf(client.Loopback.Connection).Position) <= ConvergedDistance,
+                && client.DistanceTo(rig.Server.PlayerOf(client.Loopback.Connection).Position) <= ConvergedDistance,
             ConvergenceLimitMs,
             simulated => simulated.Controller!.SetManualDirection(0f, 0f));
         float distance = client.DistanceTo(rig.Server.PlayerOf(client.Loopback.Connection).Position);

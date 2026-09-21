@@ -50,10 +50,10 @@ public sealed class ClientHello
     public int GetEncodedLength()
     {
         return sizeof(ushort)
-               + sizeof(ushort)
-               + WireText.GetEncodedLength(ClientBuildVersion, ProtocolLimits.MaxBuildVersionBytes)
-               + sizeof(uint)
-               + WireText.GetEncodedLength(SessionToken, ProtocolLimits.MaxSessionTokenBytes);
+            + sizeof(ushort)
+            + WireText.GetEncodedLength(ClientBuildVersion, ProtocolLimits.MaxBuildVersionBytes)
+            + sizeof(uint)
+            + WireText.GetEncodedLength(SessionToken, ProtocolLimits.MaxSessionTokenBytes);
     }
 
     public int Write(Span<byte> destination)

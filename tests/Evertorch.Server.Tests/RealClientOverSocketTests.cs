@@ -73,7 +73,7 @@ public sealed class RealClientOverSocketTests
             connection,
             ticker,
             () => world.Predictor.PendingCount == 0
-                  && admin.GetPlayers().Any(player => Distance(player.Position, world.Predictor.Position) <= 1e-3f));
+                && admin.GetPlayers().Any(player => Distance(player.Position, world.Predictor.Position) <= 1e-3f));
 
         WorldPosition predicted = world.Predictor.Position;
         string serverView = string.Join(", ", admin.GetPlayers().Select(player => player.Position.ToString()));

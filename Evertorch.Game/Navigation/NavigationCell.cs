@@ -69,9 +69,9 @@ public readonly struct NavigationCell : IEquatable<NavigationCell>
     public bool Equals(NavigationCell other)
     {
         return Surface == other.Surface
-               && Axis == other.Axis
-               && HeightAtMin.Equals(other.HeightAtMin)
-               && HeightAtMax.Equals(other.HeightAtMax);
+            && Axis == other.Axis
+            && HeightAtMin.Equals(other.HeightAtMin)
+            && HeightAtMax.Equals(other.HeightAtMax);
     }
 
     public override bool Equals(object? obj)

@@ -25,7 +25,7 @@ public sealed class CompatibilityOptions
     public bool Accepts(string clientBuildVersion)
     {
         return string.Equals(clientBuildVersion, ServerBuildVersion, StringComparison.Ordinal)
-               || AdditionalClientBuildVersions.Contains(clientBuildVersion);
+            || AdditionalClientBuildVersions.Contains(clientBuildVersion);
     }
 }
 
@@ -38,7 +38,7 @@ internal sealed class CompatibilityOptionsValidator : IValidateOptions<Compatibi
         {
             failures.Add(
                 CompatibilityOptions.SectionName + ":ServerBuildVersion must be 1 to "
-                                                 + ProtocolLimits.MaxBuildVersionBytes + " bytes of UTF-8.");
+                + ProtocolLimits.MaxBuildVersionBytes + " bytes of UTF-8.");
         }
 
         if (options.AdditionalClientBuildVersions == null
@@ -46,7 +46,7 @@ internal sealed class CompatibilityOptionsValidator : IValidateOptions<Compatibi
         {
             failures.Add(
                 CompatibilityOptions.SectionName + ":AdditionalClientBuildVersions entries must be 1 to "
-                                                 + ProtocolLimits.MaxBuildVersionBytes + " bytes of UTF-8.");
+                + ProtocolLimits.MaxBuildVersionBytes + " bytes of UTF-8.");
         }
 
         return failures.Count == 0 ? ValidateOptionsResult.Success : ValidateOptionsResult.Fail(failures);
@@ -55,7 +55,7 @@ internal sealed class CompatibilityOptionsValidator : IValidateOptions<Compatibi
     private static bool IsSendable(string? value)
     {
         return !string.IsNullOrEmpty(value)
-               && Encoding.UTF8.GetByteCount(value) <= ProtocolLimits.MaxBuildVersionBytes;
+            && Encoding.UTF8.GetByteCount(value) <= ProtocolLimits.MaxBuildVersionBytes;
     }
 }
 }

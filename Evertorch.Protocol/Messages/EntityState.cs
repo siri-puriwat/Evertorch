@@ -9,10 +9,10 @@ namespace Evertorch.Protocol
 public readonly struct EntityState
 {
     public const int EncodedLength = sizeof(long)
-                                     + (3 * sizeof(float))
-                                     + (2 * sizeof(float))
-                                     + (3 * sizeof(float))
-                                     + sizeof(ushort);
+        + (3 * sizeof(float))
+        + (2 * sizeof(float))
+        + (3 * sizeof(float))
+        + sizeof(ushort);
 
     public EntityState(
         EntityId entity,

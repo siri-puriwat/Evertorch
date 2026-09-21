@@ -39,9 +39,9 @@ public readonly struct MoveIntent : IEquatable<MoveIntent>
     public bool Equals(MoveIntent other)
     {
         return Sequence == other.Sequence
-               && ClientTick == other.ClientTick
-               && DirectionX.Equals(other.DirectionX)
-               && DirectionZ.Equals(other.DirectionZ);
+            && ClientTick == other.ClientTick
+            && DirectionX.Equals(other.DirectionX)
+            && DirectionZ.Equals(other.DirectionZ);
     }
 
     public override bool Equals(object? obj)

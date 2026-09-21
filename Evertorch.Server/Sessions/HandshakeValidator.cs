@@ -75,11 +75,11 @@ public sealed class HandshakeValidator
         {
             char character = token[index];
             bool isAllowed = (character >= 'a' && character <= 'z')
-                             || (character >= 'A' && character <= 'Z')
-                             || (character >= '0' && character <= '9')
-                             || character == '_'
-                             || character == '-'
-                             || character == '.';
+                || (character >= 'A' && character <= 'Z')
+                || (character >= '0' && character <= '9')
+                || character == '_'
+                || character == '-'
+                || character == '.';
             if (!isAllowed)
             {
                 return false;

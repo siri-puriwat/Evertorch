@@ -327,8 +327,8 @@ public sealed class MovementAbuseTests
                 NavigationCell upper = grid.GetCell(column, row);
                 NavigationCell lower = grid.GetCell(column, row - 1);
                 bool isLedge = upper.IsWalkable && lower.IsWalkable
-                                                && upper.Axis == RampAxis.None && lower.Axis == RampAxis.None
-                                                && upper.HeightAtMin - lower.HeightAtMin > grid.MaxStepHeight;
+                    && upper.Axis == RampAxis.None && lower.Axis == RampAxis.None
+                    && upper.HeightAtMin - lower.HeightAtMin > grid.MaxStepHeight;
                 if (isLedge && grid.GetCell(column, row + 1) == upper)
                 {
                     WorldPosition center = grid.GetCellCenter(column, row + 1);

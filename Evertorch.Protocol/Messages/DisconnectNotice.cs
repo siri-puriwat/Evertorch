@@ -38,8 +38,8 @@ public sealed class DisconnectNotice
     public int GetEncodedLength()
     {
         return sizeof(ushort)
-               + sizeof(byte)
-               + WireText.GetEncodedLength(Message, ProtocolLimits.MaxNoticeMessageBytes);
+            + sizeof(byte)
+            + WireText.GetEncodedLength(Message, ProtocolLimits.MaxNoticeMessageBytes);
     }
 
     public int Write(Span<byte> destination)

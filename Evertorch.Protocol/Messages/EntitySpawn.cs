@@ -70,12 +70,12 @@ public sealed class EntitySpawn
     public int GetEncodedLength()
     {
         return sizeof(ushort)
-               + sizeof(long)
-               + sizeof(byte)
-               + WireText.GetEncodedLength(DefinitionId, ProtocolLimits.MaxDefinitionIdBytes)
-               + (3 * sizeof(float))
-               + (2 * sizeof(float))
-               + sizeof(ushort);
+            + sizeof(long)
+            + sizeof(byte)
+            + WireText.GetEncodedLength(DefinitionId, ProtocolLimits.MaxDefinitionIdBytes)
+            + (3 * sizeof(float))
+            + (2 * sizeof(float))
+            + sizeof(ushort);
     }
 
     public int Write(Span<byte> destination)

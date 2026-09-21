@@ -296,6 +296,7 @@ public static class ClientContentParser
 
     // JsonUtility binds by field name, so these fields carry the package's JSON spelling instead of the usual
     // naming. Each has an initializer because nothing but JsonUtility ever assigns them.
+    // ReSharper disable InconsistentNaming, RedundantDefaultMemberInitializer
     [Serializable]
     private sealed class ManifestDto
     {
@@ -350,5 +351,6 @@ public static class ClientContentParser
         public float heightAtMin = 0f;
         public float heightAtMax = 0f;
     }
+    // ReSharper restore InconsistentNaming, RedundantDefaultMemberInitializer
 }
 }

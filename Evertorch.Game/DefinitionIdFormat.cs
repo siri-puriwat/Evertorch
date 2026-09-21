@@ -43,9 +43,9 @@ internal static class DefinitionIdFormat
     private static bool IsSegmentCharacter(char character)
     {
         return (character >= 'a' && character <= 'z')
-               || (character >= '0' && character <= '9')
-               || character == '_'
-               || character == '-';
+            || (character >= '0' && character <= '9')
+            || character == '_'
+            || character == '-';
     }
 }
 }

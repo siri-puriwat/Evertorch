@@ -385,9 +385,9 @@ public sealed class YamlFieldReader
         foreach (char character in value)
         {
             bool isAllowed = (character >= 'a' && character <= 'z')
-                             || (character >= '0' && character <= '9')
-                             || character == '_'
-                             || character == '-';
+                || (character >= '0' && character <= '9')
+                || character == '_'
+                || character == '-';
             if (!isAllowed)
             {
                 return false;

@@ -63,11 +63,11 @@ public sealed class ServerHello
     public int GetEncodedLength()
     {
         return sizeof(ushort)
-               + sizeof(ushort)
-               + WireText.GetEncodedLength(ServerBuildVersion, ProtocolLimits.MaxBuildVersionBytes)
-               + sizeof(uint)
-               + sizeof(uint)
-               + sizeof(long);
+            + sizeof(ushort)
+            + WireText.GetEncodedLength(ServerBuildVersion, ProtocolLimits.MaxBuildVersionBytes)
+            + sizeof(uint)
+            + sizeof(uint)
+            + sizeof(long);
     }
 
     public int Write(Span<byte> destination)
