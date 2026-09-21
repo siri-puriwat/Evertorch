@@ -5,6 +5,7 @@
     "Evertorch.Client",
     "Evertorch.Game",
     "Evertorch.Protocol",
+    "Unity.InputSystem",
     "UnityEngine.TestRunner",
     "UnityEditor.TestRunner",
     "Unity.RenderPipelines.Core.Runtime",
