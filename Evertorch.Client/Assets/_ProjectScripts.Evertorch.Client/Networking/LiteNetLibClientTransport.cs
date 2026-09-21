@@ -27,6 +27,9 @@ public sealed class LiteNetLibClientTransport : IClientTransport, IDisposable
             IPv6Enabled = false,
             UnsyncedEvents = false,
             DisconnectTimeout = disconnectTimeoutMilliseconds,
+
+            // The protocol never fragments, so a peer announcing a fragmented message is not speaking it.
+            MaxFragmentsCount = 1,
         };
     }
 

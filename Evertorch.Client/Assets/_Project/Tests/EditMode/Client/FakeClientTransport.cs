@@ -18,10 +18,17 @@ internal sealed class FakeClientTransport : IClientTransport
 
     public int DisconnectCalls { get; private set; }
 
+    public bool ThrowOnConnect { get; set; }
+
     public List<SentMessage> Sent { get; } = new List<SentMessage>();
 
     public void Connect(string host, int port)
     {
+        if (ThrowOnConnect)
+        {
+            throw new InvalidOperationException("The client socket could not be opened.");
+        }
+
         Host = host;
         Port = port;
     }

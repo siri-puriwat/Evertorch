@@ -58,6 +58,13 @@ public sealed class NavigationGrid
             throw new ArgumentException("Agent radius must be positive and finite.", nameof(agentRadius));
         }
 
+        // Paths run between cell centres. A body wider than a cell cannot stand on the centre of any cell beside a
+        // wall, so places it could legally reach would have no route to them.
+        if (agentRadius > cellSize / 2f)
+        {
+            throw new ArgumentException("Agent radius must not exceed half the cell size.", nameof(agentRadius));
+        }
+
         if (!IsFinite(maxStepHeight) || maxStepHeight < 0f)
         {
             throw new ArgumentException("Maximum step height must be finite and not negative.", nameof(maxStepHeight));
@@ -105,6 +112,18 @@ public sealed class NavigationGrid
     /// Largest sudden change in ground height a body may cross. Taller edges block like walls, from both sides.
     /// </summary>
     public float MaxStepHeight { get; }
+
+    /// <summary>
+    /// The longest displacement the mover tests in one piece. Only the end of a piece is checked, so a piece must
+    /// not be longer than the body is wide from its centre: a longer one could land on the far side of a thin
+    /// wall, or of the point where two walls meet at a corner, without ever overlapping either.
+    /// </summary>
+    public float MoveStepLength => Math.Min(MaxMoveStep, AgentRadius);
+
+    /// <summary>
+    /// The spacing of the checks along a line of sight, bounded by the agent radius for the same reason.
+    /// </summary>
+    public float LineOfSightStepLength => Math.Min(LineOfSightStep, AgentRadius);
 
     /// <summary>
     /// The steepest ramp (rise over run) a grid accepts. The step-height rule compares ground heights across a
@@ -248,7 +267,7 @@ public sealed class NavigationGrid
             return false;
         }
 
-        int steps = Math.Max(1, (int)Math.Ceiling(length / LineOfSightStep));
+        int steps = Math.Max(1, (int)Math.Ceiling(length / LineOfSightStepLength));
 
         float previousX = from.X;
         float previousZ = from.Z;

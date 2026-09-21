@@ -32,6 +32,8 @@ public sealed class NavigationGridTests
     [TestCase(1, 1, float.NaN, 0.3f, 0.3f)]
     [TestCase(1, 1, 1f, 0f, 0.3f)]
     [TestCase(1, 1, 1f, float.PositiveInfinity, 0.3f)]
+    [TestCase(1, 1, 1f, 0.51f, 0.3f)]
+    [TestCase(1, 1, 0.5f, 0.3f, 0.3f)]
     [TestCase(1, 1, 1f, 0.3f, -0.1f)]
     [TestCase(1, 1, 1f, 0.3f, float.NaN)]
     public void Constructor_WithInvalidShape_Throws(
@@ -46,6 +48,16 @@ public sealed class NavigationGridTests
             _ = new NavigationGrid(columns, rows, cellSize, 0f, 0f, agentRadius, maxStepHeight, cells);
 
         Assert.That(create, Throws.ArgumentException);
+    }
+
+    [Test]
+    public void Constructor_WithAgentRadiusOfExactlyHalfACell_IsAccepted()
+    {
+        NavigationCell[] cells = { NavigationCell.Level(NavigationSurface.Floor, 0f) };
+
+        NavigationGrid grid = new NavigationGrid(1, 1, 1f, 0f, 0f, 0.5f, 0.3f, cells);
+
+        Assert.That(grid.AgentRadius, Is.EqualTo(0.5f));
     }
 
     [Test]

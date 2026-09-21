@@ -144,6 +144,30 @@ public sealed class ServerMovementTests
     }
 
     [Test]
+    public void Stop_ArrivingBehindABurst_IsNotKeptWaitingByABacklog()
+    {
+        TestServer server = new TestServer();
+        ConnectionId connection = server.EnterWorld(7);
+        PlayerEntity player = server.PlayerOf(connection);
+        float startX = player.Position.X;
+
+        for (uint sequence = 1; sequence <= 8; sequence++)
+        {
+            server.SendMove(connection, sequence, 1f, 0f);
+        }
+
+        server.SendStop(connection, 9);
+        server.Tick(3);
+        float afterBacklog = player.Position.X;
+        server.Tick(10);
+
+        // Only the newest three are kept: two moves and the stop.
+        Assert.That(afterBacklog - startX, Is.EqualTo(2f * player.MovementSpeed / TestServer.TickRate).Within(1e-4f));
+        Assert.That(player.Position.X, Is.EqualTo(afterBacklog), "stopped for good once the stop was applied");
+        Assert.That(server.PlayerOf(connection).StateFlags, Is.EqualTo(EntityStateFlags.None));
+    }
+
+    [Test]
     public void Inputs_WhenMissing_HoldLastDirectionUntilTimeoutThenStop()
     {
         TestServer server = new TestServer(inputHoldTimeoutMs: 250);

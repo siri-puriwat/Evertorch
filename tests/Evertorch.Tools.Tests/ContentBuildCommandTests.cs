@@ -187,6 +187,43 @@ public sealed class ContentBuildCommandTests
     }
 
     [Test]
+    public void Build_WithClientOutHoldingSomeoneElsesManifest_RefusesAndDeletesNothing()
+    {
+        using (ContentWorkspace workspace = new ContentWorkspace())
+        {
+            // The shape of a Unity Packages folder: a manifest.json that is not this tool's, beside a lock file.
+            Directory.CreateDirectory(workspace.ClientDirectory);
+            string manifest = Path.Combine(workspace.ClientDirectory, "manifest.json");
+            string lockFile = Path.Combine(workspace.ClientDirectory, "packages-lock.json");
+            File.WriteAllText(manifest, "{ \"dependencies\": { \"com.unity.ugui\": \"2.0.0\" } }");
+            File.WriteAllText(lockFile, "{ \"dependencies\": {} }");
+
+            int exitCode = BuildWithClientOut(workspace, out _, out string error);
+
+            Assert.That(exitCode, Is.EqualTo(1));
+            Assert.That(error, Does.Contain("Refusing to write into"));
+            Assert.That(File.ReadAllText(manifest), Does.Contain("com.unity.ugui"));
+            Assert.That(File.Exists(lockFile), Is.True);
+        }
+    }
+
+    [Test]
+    public void Build_WithClientOutLeftHalfWrittenByAnInterruptedCopy_CompletesIt()
+    {
+        using (ContentWorkspace workspace = new ContentWorkspace())
+        {
+            BuildWithClientOut(workspace, out _, out _);
+            File.Delete(Path.Combine(workspace.ClientDirectory, "manifest.json"));
+            File.Delete(Path.Combine(workspace.ClientDirectory, "skills.json"));
+
+            int exitCode = BuildWithClientOut(workspace, out _, out string error);
+
+            Assert.That(exitCode, Is.EqualTo(0), error);
+            Assert.That(Directory.GetFiles(workspace.ClientDirectory), Has.Length.EqualTo(6));
+        }
+    }
+
+    [Test]
     public void Build_WithClientOutAndInvalidContent_LeavesThePreviousCopyUntouched()
     {
         using (ContentWorkspace workspace = new ContentWorkspace())

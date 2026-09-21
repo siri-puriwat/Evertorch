@@ -53,6 +53,10 @@ public sealed class LossyTransport : IClientTransport
 
     public bool IsConnected => m_inner.IsConnected;
 
+    // With nothing to simulate and nothing waiting, the wrapper must cost nothing: no extra frame either way.
+    private bool IsTransparent =>
+        LatencyMilliseconds == 0 && JitterMilliseconds == 0 && LossPercent == 0 && ReorderPercent == 0;
+
     public int RoundTripMilliseconds => m_inner.RoundTripMilliseconds + (2 * LatencyMilliseconds);
 
     public void Connect(string host, int port)
@@ -69,7 +73,13 @@ public sealed class LossyTransport : IClientTransport
 
     public void Send(ProtocolChannel channel, MessageDelivery delivery, ReadOnlySpan<byte> payload)
     {
-        Hold(m_outbound, ref m_lastReliableOutbound, channel, delivery, payload);
+        if (IsTransparent && m_outbound.Count == 0)
+        {
+            m_inner.Send(channel, delivery, payload);
+            return;
+        }
+
+        Hold(m_outbound, ref m_lastReliableOutbound, m_nowSeconds(), channel, delivery, payload);
     }
 
     public void Poll(IClientTransportListener listener)
@@ -87,6 +97,7 @@ public sealed class LossyTransport : IClientTransport
         }
 
         m_capture.Listener = listener;
+        m_capture.Now = now;
         m_inner.Poll(m_capture);
         m_capture.Listener = null;
 
@@ -102,11 +113,12 @@ public sealed class LossyTransport : IClientTransport
     private void Hold(
         List<Held> queue,
         ref double lastReliable,
+        double now,
         ProtocolChannel channel,
         MessageDelivery delivery,
         ReadOnlySpan<byte> payload)
     {
-        double release = m_nowSeconds() + (LatencyMilliseconds / 1000.0);
+        double release = now + (LatencyMilliseconds / 1000.0);
         if (delivery == MessageDelivery.ReliableOrdered)
         {
             release = Math.Max(release, lastReliable);
@@ -185,6 +197,8 @@ public sealed class LossyTransport : IClientTransport
 
         public IClientTransportListener? Listener { get; set; }
 
+        public double Now { get; set; }
+
         public void OnConnected()
         {
             Listener?.OnConnected();
@@ -205,7 +219,8 @@ public sealed class LossyTransport : IClientTransport
                 MessageRouting.TryGetRoute(opcode, out ProtocolChannel _, out delivery);
             }
 
-            m_owner.Hold(m_owner.m_inbound, ref m_owner.m_lastReliableInbound, channel, delivery, payload);
+            // Stamped with the poll's own time, so a message with nothing to wait for is released by this poll.
+            m_owner.Hold(m_owner.m_inbound, ref m_owner.m_lastReliableInbound, Now, channel, delivery, payload);
         }
     }
 }

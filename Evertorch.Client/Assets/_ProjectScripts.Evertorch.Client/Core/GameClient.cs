@@ -56,6 +56,7 @@ public sealed class GameClient : MonoBehaviour
     private FollowCamera? m_camera;
     private DevelopmentOverlay? m_overlay;
     private Material? m_runtimeMaterial;
+    private string m_leaveReason = string.Empty;
 
     public string Host
     {
@@ -125,6 +126,8 @@ public sealed class GameClient : MonoBehaviour
         Connection?.Poll();
         if (m_world == null || m_driver == null || m_clock == null || m_controller == null)
         {
+            // A click made while there is no world to walk in is dropped, not saved up for the next one.
+            m_pointerSource?.TryTakeRequest(out Vector2 _);
             return;
         }
 
@@ -235,14 +238,16 @@ public sealed class GameClient : MonoBehaviour
             || map == null
             || !MapSceneResolver.TryResolve(map.SceneKey, out string sceneName))
         {
-            Status = "No scene is known for map " + world.Map.Value;
+            m_leaveReason = "No scene is known for map " + world.Map.Value;
             Disconnect();
             yield break;
         }
 
         Status = "Loading " + map.DisplayName;
         yield return SceneManager.LoadSceneAsync(sceneName, LoadSceneMode.Single);
-        if (Connection == null || Connection.World != world)
+
+        // The connection may have closed, or been replaced, while the scene was loading.
+        if (Connection == null || Connection.State != ClientConnectionState.InWorld || Connection.World != world)
         {
             yield break;
         }
@@ -334,7 +339,12 @@ public sealed class GameClient : MonoBehaviour
             return;
         }
 
-        if (connection.LocalError.Length > 0)
+        if (m_leaveReason.Length > 0)
+        {
+            Status = m_leaveReason;
+            m_leaveReason = string.Empty;
+        }
+        else if (connection.LocalError.Length > 0)
         {
             Status = connection.LocalError;
         }

@@ -101,6 +101,25 @@ public sealed class LiteNetLibServerTransportTests
     }
 
     [Test]
+    public void Payload_TooLargeForOneDatagram_IsDroppedByTheTransportBeforeAnythingIsReassembled()
+    {
+        using Harness harness = new Harness();
+        using TestNetClient client = ConnectedClient(harness, out ConnectionId _);
+        long malformedBefore = harness.Inbound.Malformed;
+
+        // The test client still fragments, as a hostile peer would; the server must refuse the pieces.
+        client.Send(new byte[5000], ProtocolChannel.Control, DeliveryMethod.ReliableOrdered);
+        client.Send(new byte[] { 0xFF, 0xFF }, ProtocolChannel.Control, DeliveryMethod.ReliableOrdered);
+
+        Assert.That(harness.WaitForEvent(out InboundEvent marker), Is.True, "the channel itself still works");
+        Assert.That(marker.Kind, Is.EqualTo(InboundEventKind.Malformed));
+        Assert.That(
+            harness.Inbound.Malformed,
+            Is.EqualTo(malformedBefore + 1),
+            "only the small marker reached the queue; the 5000-byte message was never put back together");
+    }
+
+    [Test]
     public void Send_ToConnection_ArrivesUnchangedOnItsRoutedChannelAndDelivery()
     {
         using Harness harness = new Harness();

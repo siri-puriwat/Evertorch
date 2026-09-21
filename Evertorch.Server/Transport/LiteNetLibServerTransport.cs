@@ -56,6 +56,12 @@ public sealed class LiteNetLibServerTransport : IServerTransport, INetEventListe
             EnableStatistics = true,
             DisconnectTimeout = m_options.DisconnectTimeoutMs,
 
+            // No protocol message needs more than one datagram. Left at the library's default, a peer that knows
+            // only the connection key could announce huge fragmented messages and make the server reserve memory
+            // for them before a single byte is checked. The same limit applies to sends, so a reliable message
+            // that outgrows one datagram fails loudly instead of fragmenting.
+            MaxFragmentsCount = 1,
+
             // Callbacks fire straight from the library's threads instead of waiting for a poll, which would add up
             // to a timer quantum of latency to every input.
             UnsyncedEvents = true,

@@ -63,7 +63,7 @@ public static class MovementModel
 
         float x = position.X;
         float z = position.Z;
-        int pieces = (int)Math.Ceiling(distance / NavigationGrid.MaxMoveStep);
+        int pieces = (int)Math.Ceiling(distance / grid.MoveStepLength);
         float pieceLength = distance / pieces;
         for (int piece = 0; piece < pieces; piece++)
         {

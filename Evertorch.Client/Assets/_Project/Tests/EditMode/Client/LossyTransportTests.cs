@@ -135,6 +135,36 @@ public sealed class LossyTransportTests
     }
 
     [Test]
+    public void WithNothingToSimulate_CostsNoExtraPollEitherWay()
+    {
+        double clock = 0.0;
+        FakeClientTransport inner = new FakeClientTransport();
+        LossyTransport lossy = new LossyTransport(inner, 1, () => clock += 0.001);
+        RecordingListener listener = new RecordingListener();
+
+        lossy.Send(ProtocolChannel.Input, MessageDelivery.UnreliableSequenced, Move(1));
+        int sentBeforeAnyPoll = inner.Sent.Count;
+        inner.Deliver(ProtocolChannel.State, Snapshot(1));
+        lossy.Poll(listener);
+
+        Assert.That(sentBeforeAnyPoll, Is.EqualTo(1), "outbound goes straight through");
+        Assert.That(listener.Payloads.Count, Is.EqualTo(1), "inbound arrives in the poll that received it");
+    }
+
+    [Test]
+    public void WhenLatencyIsSwitchedOff_MessagesAlreadyHeldStillGoOutFirst()
+    {
+        Rig rig = new Rig(1) { Lossy = { LatencyMilliseconds = 100 } };
+        rig.Lossy.Send(ProtocolChannel.Control, MessageDelivery.ReliableOrdered, new byte[] { 0x02, 0x00, 1 });
+
+        rig.Lossy.LatencyMilliseconds = 0;
+        rig.Lossy.Send(ProtocolChannel.Control, MessageDelivery.ReliableOrdered, new byte[] { 0x02, 0x00, 2 });
+        rig.AdvanceTo(0.2);
+
+        Assert.That(rig.Inner.Sent.Select(sent => sent.Payload[2]), Is.EqualTo(new byte[] { 1, 2 }));
+    }
+
+    [Test]
     public void RoundTrip_IncludesTheAddedLatencyBothWays()
     {
         Rig rig = new Rig(1) { Lossy = { LatencyMilliseconds = 75 } };

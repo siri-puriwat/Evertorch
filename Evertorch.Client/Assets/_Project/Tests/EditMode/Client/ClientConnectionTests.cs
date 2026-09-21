@@ -266,6 +266,37 @@ public sealed class ClientConnectionTests
     }
 
     [Test]
+    public void Connect_WhenTheTransportCannotStart_FailsCleanlyAndCanBeRetried()
+    {
+        Harness harness = new Harness();
+        harness.Transport.ThrowOnConnect = true;
+
+        harness.Connection.Connect("127.0.0.1", 7777);
+
+        Assert.That(harness.Connection.State, Is.EqualTo(ClientConnectionState.Disconnected));
+        Assert.That(harness.Connection.LocalError, Does.Contain("could not be started"));
+        Assert.That(harness.ClosedCount, Is.EqualTo(1));
+
+        harness.Transport.ThrowOnConnect = false;
+        harness.Connection.Connect("127.0.0.1", 7777);
+
+        Assert.That(harness.Connection.State, Is.EqualTo(ClientConnectionState.Connecting));
+        Assert.That(harness.Connection.LocalError, Is.Empty);
+    }
+
+    [Test]
+    public void Disconnect_ForgetsTheWorld()
+    {
+        Harness harness = new Harness();
+        harness.EnterWorld();
+
+        harness.Transport.DropConnection(TransportDisconnectCause.TimedOut, new byte[0]);
+        harness.Connection.Poll();
+
+        Assert.That(harness.Connection.World, Is.Null, "a closed connection must not look like a live world");
+    }
+
+    [Test]
     public void LocalError_NeverContainsTheSessionToken()
     {
         Harness missingMap = new Harness { HasMap = false };

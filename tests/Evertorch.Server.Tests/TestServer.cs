@@ -32,7 +32,7 @@ internal sealed class TestServer
         float interestCellSize = 16f,
         int interestNeighborRadius = 1,
         int inputHoldTimeoutMs = 250,
-        int maxQueuedInputs = 8,
+        int maxQueuedInputs = 3,
         int snapshotIntervalTicks = 1)
     {
         Content = RepositoryContent.Value;

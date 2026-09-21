@@ -29,9 +29,11 @@ public sealed class WorldOptions
     public int InputHoldTimeoutMs { get; set; } = 250;
 
     /// <summary>
-    /// Inputs kept per player for later ticks. When more arrive the oldest is discarded.
+    /// Inputs kept per player for later ticks. When more arrive the oldest is discarded. Kept small on purpose:
+    /// one input is consumed per tick and a moving client sends one per tick, so whatever backlog a burst leaves
+    /// never drains while the player keeps moving, and every queued input is 50 ms by which a stop comes late.
     /// </summary>
-    public int MaxQueuedInputs { get; set; } = 8;
+    public int MaxQueuedInputs { get; set; } = 3;
 
     /// <summary>
     /// How far, in ticks, a client's tick may wander from the offset first observed before it is measured anew.

@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
 using System.Threading;
 
 namespace Evertorch.Tools
@@ -56,8 +57,7 @@ public static class ContentPackageDeployer
     {
         string directory = Path.GetFullPath(clientDirectory);
         string manifest = Path.Combine(directory, ContentPackage.ManifestPath);
-        bool holdsJson = Directory.Exists(directory) && Directory.EnumerateFiles(directory, "*.json").Any();
-        if (holdsJson && !File.Exists(manifest))
+        if (Directory.Exists(directory) && !IsOwnOutput(client, directory, manifest))
         {
             throw new InvalidOperationException(
                 "Refusing to write into '" + directory + "': it holds JSON files but no generated content manifest.");
@@ -78,6 +78,45 @@ public static class ContentPackageDeployer
         }
 
         WritePackage(client, directory);
+    }
+
+    // With a manifest, the manifest decides. Without one the folder is either empty of JSON or an interrupted copy,
+    // which holds nothing but this package's own data files and can simply be completed.
+    private static bool IsOwnOutput(ContentPackage client, string directory, string manifest)
+    {
+        if (File.Exists(manifest))
+        {
+            return IsGeneratedClientManifest(manifest);
+        }
+
+        return Directory
+            .EnumerateFiles(directory, "*.json")
+            .All(existing => client.DataFiles.Any(file => file.Path == Path.GetFileName(existing)));
+    }
+
+    // A file that merely has the right name is not proof: Unity's own Packages folder holds a manifest.json too,
+    // and treating that folder as this tool's output would delete its other JSON files.
+    private static bool IsGeneratedClientManifest(string manifestPath)
+    {
+        if (!File.Exists(manifestPath))
+        {
+            return false;
+        }
+
+        try
+        {
+            using JsonDocument document = JsonDocument.Parse(File.ReadAllBytes(manifestPath));
+            JsonElement root = document.RootElement;
+            return root.ValueKind == JsonValueKind.Object
+                   && root.TryGetProperty("schemaVersion", out JsonElement _)
+                   && root.TryGetProperty("clientContentVersion", out JsonElement _)
+                   && root.TryGetProperty("files", out JsonElement files)
+                   && files.ValueKind == JsonValueKind.Array;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
     }
 
     private static void EnsureReplaceable(string output)

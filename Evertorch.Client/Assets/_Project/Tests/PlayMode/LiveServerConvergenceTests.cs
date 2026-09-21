@@ -5,8 +5,6 @@ using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Linq;
-using System.Net;
-using System.Net.Sockets;
 using System.Text.RegularExpressions;
 using Evertorch.Game;
 using NUnit.Framework;
@@ -55,18 +53,22 @@ public sealed class LiveServerConvergenceTests
         string repository = Path.GetFullPath(Path.Combine(Application.dataPath, "..", ".."));
         string serverDll = Path.Combine(repository, ServerDll);
         string serverContent = Path.Combine(repository, "artifacts", "content", "server");
-        ClientContent? content = LoadClientContent(out string contentError);
-        if (!File.Exists(serverDll) || !Directory.Exists(serverContent) || content == null)
+        bool hasClientPackage = HasClientPackage();
+        if (!File.Exists(serverDll) || !Directory.Exists(serverContent) || !hasClientPackage)
         {
             Assert.Inconclusive(
                 "Needs the built server, its content package, and the client package. Run scripts/verify.ps1 and "
-                + StreamingContentLoader.MissingPackageHint + " " + contentError);
+                + StreamingContentLoader.MissingPackageHint);
         }
 
-        int port = FindFreeUdpPort();
-        StartServer(serverDll, serverContent, port);
-        yield return WaitUntil(() => HasOutput("Listening for clients"), StartTimeoutSeconds);
-        Assert.That(HasOutput("Listening for clients"), Is.True, "server output: " + JoinOutput());
+        // A package that is present but refused is a defect, not a missing prerequisite.
+        ClientContent? content = LoadClientContent(out string contentError);
+        Assert.That(content, Is.Not.Null, contentError);
+
+        // The server picks its own free port, so nothing can take one between a probe and the bind.
+        StartServer(serverDll, serverContent);
+        yield return WaitUntil(() => TryReadListeningPort(out int _), StartTimeoutSeconds);
+        Assert.That(TryReadListeningPort(out int port), Is.True, "server output: " + JoinOutput());
 
         m_socket = new LiteNetLibClientTransport("evertorch", 5000);
         LossyTransport link = new LossyTransport(m_socket, 9, () => Time.realtimeSinceStartupAsDouble)
@@ -127,29 +129,23 @@ public sealed class LiveServerConvergenceTests
             + world.Smoother.LargestCorrection + " m, dropped " + link.Dropped + ", reordered " + link.Reordered);
     }
 
+    private static bool HasClientPackage()
+    {
+        return File.Exists(
+            Path.Combine(
+                Application.streamingAssetsPath,
+                StreamingContentLoader.FolderName,
+                ClientContentParser.ManifestFile));
+    }
+
     private static ClientContent? LoadClientContent(out string error)
     {
         string folder = Path.Combine(Application.streamingAssetsPath, StreamingContentLoader.FolderName);
-        string manifestPath = Path.Combine(folder, ClientContentParser.ManifestFile);
-        if (!File.Exists(manifestPath))
-        {
-            error = "No client package in StreamingAssets.";
-            return null;
-        }
-
-        byte[] manifest = File.ReadAllBytes(manifestPath);
+        byte[] manifest = File.ReadAllBytes(Path.Combine(folder, ClientContentParser.ManifestFile));
         Dictionary<string, byte[]> files = ClientContentParser
             .ReadFileList(manifest, out error)
             .ToDictionary(name => name, name => File.ReadAllBytes(Path.Combine(folder, name)));
         return ClientContentParser.Parse(manifest, files, out error);
-    }
-
-    private static int FindFreeUdpPort()
-    {
-        using (UdpClient probe = new UdpClient(new IPEndPoint(IPAddress.Loopback, 0)))
-        {
-            return ((IPEndPoint)probe.Client.LocalEndPoint).Port;
-        }
     }
 
     private static IEnumerator WaitUntil(Func<bool> condition, float timeoutSeconds)
@@ -184,12 +180,12 @@ public sealed class LiveServerConvergenceTests
         }
     }
 
-    private void StartServer(string serverDll, string serverContent, int port)
+    private void StartServer(string serverDll, string serverContent)
     {
         ProcessStartInfo start = new ProcessStartInfo
         {
             FileName = "dotnet",
-            Arguments = "\"" + serverDll + "\" --Network:Port=" + port
+            Arguments = "\"" + serverDll + "\" --Network:Port=0"
                 + " --DevelopmentAuthentication:Enabled=true"
                 + " --Content:ServerPackagePath=\"" + serverContent + "\"",
             WorkingDirectory = Path.GetDirectoryName(serverDll),
@@ -232,6 +228,26 @@ public sealed class LiveServerConvergenceTests
         {
             return string.Join(" / ", m_serverOutput);
         }
+    }
+
+    private bool TryReadListeningPort(out int port)
+    {
+        port = 0;
+        Regex listening = new Regex(@"Listening for clients on [^:]+:(\d+)");
+        lock (m_serverOutput)
+        {
+            foreach (string line in m_serverOutput)
+            {
+                Match match = listening.Match(line);
+                if (match.Success)
+                {
+                    port = int.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture);
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     private bool TryReadServerPosition(out float x, out float z)

@@ -67,7 +67,18 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
         }
 
         State = ClientConnectionState.Connecting;
-        m_transport.Connect(host, port);
+        try
+        {
+            m_transport.Connect(host, port);
+        }
+        catch (InvalidOperationException exception)
+        {
+            Fail("The connection could not be started: " + exception.Message);
+        }
+        catch (System.Net.Sockets.SocketException exception)
+        {
+            Fail("The connection could not be started: " + exception.Message);
+        }
     }
 
     public void Disconnect()
@@ -313,7 +324,9 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
             return;
         }
 
+        // A closed connection has no world. Anything still holding the old one must not mistake it for live.
         State = ClientConnectionState.Disconnected;
+        World = null;
         Closed?.Invoke();
     }
 }
