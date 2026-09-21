@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Threading;
+using Evertorch.Game;
 using Evertorch.Protocol;
 using Microsoft.Extensions.Options;
 
@@ -102,6 +103,22 @@ public sealed class InboundQueue
                 }
 
                 decoded = InboundEvent.ForEnterWorld(connection, request);
+                return true;
+            case MessageOpcode.MoveInput:
+                if (!MoveInput.TryRead(payload, out MoveInput move))
+                {
+                    return false;
+                }
+
+                decoded = InboundEvent.ForMove(connection, move.Intent);
+                return true;
+            case MessageOpcode.StopMovement:
+                if (!StopMovement.TryRead(payload, out StopMovement stop))
+                {
+                    return false;
+                }
+
+                decoded = InboundEvent.ForMove(connection, new MoveIntent(stop.Sequence, stop.ClientTick, 0f, 0f));
                 return true;
             default:
                 // A valid client message the server does not handle yet is treated like any other junk.

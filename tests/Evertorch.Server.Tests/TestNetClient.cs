@@ -64,6 +64,8 @@ internal sealed class TestNetClient : IDisposable
         m_peer!.Send(payload, (byte)channel, method);
     }
 
+    public int MaxUnreliablePayload => m_peer!.GetMaxSinglePacketSize(DeliveryMethod.Sequenced);
+
     public void Disconnect()
     {
         m_peer!.Disconnect();

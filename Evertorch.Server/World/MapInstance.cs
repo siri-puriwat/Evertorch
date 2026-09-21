@@ -37,6 +37,11 @@ public sealed class MapInstance
         return m_players.Remove(player.Id);
     }
 
+    public bool TryGetPlayer(EntityId entity, out PlayerEntity? player)
+    {
+        return m_players.TryGetValue(entity, out player);
+    }
+
     public bool Contains(EntityId entity)
     {
         return m_players.ContainsKey(entity);

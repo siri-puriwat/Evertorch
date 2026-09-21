@@ -16,7 +16,7 @@ public sealed class SessionHandshakeTests
 
         server.Tick();
 
-        InMemoryServerTransport.SentMessage sent = server.Transport.SentTo(connection).Single();
+        InMemoryServerTransport.SentMessage sent = server.Transport.ControlSentTo(connection).Single();
         Assert.That(ServerHello.TryRead(sent.Payload, out ServerHello? hello), Is.True);
         Assert.That(sent.Channel, Is.EqualTo(ProtocolChannel.Control));
         Assert.That(sent.Delivery, Is.EqualTo(MessageDelivery.ReliableOrdered));
@@ -146,7 +146,7 @@ public sealed class SessionHandshakeTests
 
         server.Tick();
 
-        Assert.That(server.Transport.OpcodesSentTo(connection), Is.EqualTo(new[] { MessageOpcode.ServerHello }));
+        Assert.That(server.Transport.ControlOpcodesSentTo(connection), Is.EqualTo(new[] { MessageOpcode.ServerHello }));
         Assert.That(server.SessionManager.IgnoredEvents, Is.EqualTo(1));
         Assert.That(server.Transport.Disconnects, Is.Empty);
     }
@@ -220,7 +220,7 @@ public sealed class SessionHandshakeTests
     {
         Assert.That(server.Transport.Disconnects, Does.ContainKey(connection));
         Assert.That(server.Transport.Disconnects[connection], Is.EqualTo(reason));
-        Assert.That(server.Transport.SentTo(connection), Is.Empty);
+        Assert.That(server.Transport.ControlSentTo(connection), Is.Empty);
         Assert.That(server.Sessions.TryGet(connection, out _), Is.False);
     }
 }

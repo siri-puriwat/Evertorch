@@ -21,6 +21,18 @@ public sealed class SharedNavigationTests
         "##########",
     };
 
+    private static readonly string[] Arena =
+    {
+        "############",
+        "#......^^^.#",
+        "#......^^^.#",
+        "#.....>^^^.#",
+        "#..........#",
+        "#....#.....#",
+        "#..........#",
+        "############",
+    };
+
     [Test]
     public void TryFindPath_ForReferenceRequest_MatchesGoldenWaypoints()
     {
@@ -91,14 +103,55 @@ public sealed class SharedNavigationTests
         Assert.That(MovementModel.NormalizeOrZero(0.0005f, 0f), Is.EqualTo(new WorldDirection(0f, 0f)));
     }
 
+    [Test]
+    public void Step_ForReferenceWalk_EndsWhereDotNetEnds()
+    {
+        NavigationGrid grid = Create(Arena);
+        WorldDirection north = new WorldDirection(0f, 1f);
+        WorldPosition position = new WorldPosition(2f, 0f, 2.5f);
+        WorldDirection[] legs = { new WorldDirection(1f, 1f), new WorldDirection(1f, 0f), new WorldDirection(0.2f, 1f) };
+
+        foreach (WorldDirection leg in legs)
+        {
+            for (int tick = 0; tick < 30; tick++)
+            {
+                position = MovementModel.Step(grid, position, north, leg, 5f, 0.05f).Position;
+            }
+        }
+
+        Assert.That(position.X, Is.EqualTo(6.694254f).Within(1e-5f));
+        Assert.That(position.Y, Is.EqualTo(0f).Within(1e-5f));
+        Assert.That(position.Z, Is.EqualTo(6.5658665f).Within(1e-5f));
+    }
+
+    [Test]
+    public void Step_UpTheRamp_ReachesThePlateauHeight()
+    {
+        NavigationGrid grid = Create(Arena);
+        WorldPosition position = new WorldPosition(5.5f, 0f, 4.5f);
+
+        for (int tick = 0; tick < 12; tick++)
+        {
+            position = MovementModel.Step(grid, position, default, new WorldDirection(1f, 0f), 5f, 0.05f).Position;
+        }
+
+        Assert.That(position.X, Is.GreaterThan(7f));
+        Assert.That(position.Y, Is.EqualTo(1f).Within(1e-5f));
+    }
+
     private static NavigationGrid CreateYard()
     {
-        int rows = Yard.Length;
-        int columns = Yard[0].Length;
+        return Create(Yard);
+    }
+
+    private static NavigationGrid Create(string[] northFirstRows)
+    {
+        int rows = northFirstRows.Length;
+        int columns = northFirstRows[0].Length;
         NavigationCell[] cells = new NavigationCell[rows * columns];
         for (int row = 0; row < rows; row++)
         {
-            string text = Yard[rows - 1 - row];
+            string text = northFirstRows[rows - 1 - row];
             for (int column = 0; column < columns; column++)
             {
                 cells[(row * columns) + column] = ToCell(text[column]);

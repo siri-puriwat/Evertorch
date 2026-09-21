@@ -53,9 +53,33 @@ internal sealed class InMemoryServerTransport : IOutboundMessages
         return m_sent.TryGetValue(connection, out List<SentMessage>? messages) ? messages : new List<SentMessage>();
     }
 
-    public IReadOnlyList<MessageOpcode> OpcodesSentTo(ConnectionId connection)
+    /// <summary>
+    /// The reliable stream only, which is what session and visibility tests reason about; snapshots flow every tick.
+    /// </summary>
+    public IReadOnlyList<SentMessage> ControlSentTo(ConnectionId connection)
     {
-        return SentTo(connection).Select(message => message.Opcode).ToArray();
+        return SentTo(connection).Where(message => message.Channel == ProtocolChannel.Control).ToArray();
+    }
+
+    public IReadOnlyList<MessageOpcode> ControlOpcodesSentTo(ConnectionId connection)
+    {
+        return ControlSentTo(connection).Select(message => message.Opcode).ToArray();
+    }
+
+    public IReadOnlyList<EntitySnapshot> SnapshotsSentTo(ConnectionId connection)
+    {
+        List<EntitySnapshot> snapshots = new List<EntitySnapshot>();
+        foreach (SentMessage message in SentTo(connection))
+        {
+            if (message.Opcode == MessageOpcode.EntitySnapshot
+                && EntitySnapshot.TryRead(message.Payload, out EntitySnapshot? snapshot)
+                && snapshot != null)
+            {
+                snapshots.Add(snapshot);
+            }
+        }
+
+        return snapshots;
     }
 
     public void ClearSent()

@@ -25,6 +25,11 @@ public sealed class ClientSession
     public PlayerEntity? Player { get; set; }
 
     /// <summary>
+    /// Present once the session is in the world.
+    /// </summary>
+    public PlayerInputState? Input { get; set; }
+
+    /// <summary>
     /// Entities this client has been told exist. Visibility changes are sent as the difference from this set.
     /// </summary>
     public HashSet<EntityId> KnownEntities { get; } = new HashSet<EntityId>();

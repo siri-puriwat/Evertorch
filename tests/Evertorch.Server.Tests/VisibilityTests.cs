@@ -18,11 +18,11 @@ public sealed class VisibilityTests
         ConnectionId second = server.EnterWorld(2);
 
         MessageOpcode[] expected = { MessageOpcode.ServerHello, MessageOpcode.WorldEntered, MessageOpcode.EntitySpawn };
-        Assert.That(server.Transport.OpcodesSentTo(second), Is.EqualTo(expected));
-        Assert.That(server.Transport.SentTo(second).Select(message => message.Channel),
+        Assert.That(server.Transport.ControlOpcodesSentTo(second), Is.EqualTo(expected));
+        Assert.That(server.Transport.ControlSentTo(second).Select(message => message.Channel),
             Is.All.EqualTo(ProtocolChannel.Control));
 
-        EntitySpawn.TryRead(server.Transport.SentTo(second).Last().Payload, out EntitySpawn? spawn);
+        EntitySpawn.TryRead(server.Transport.ControlSentTo(second).Last().Payload, out EntitySpawn? spawn);
         PlayerEntity firstPlayer = server.PlayerOf(first);
         Assert.That(spawn!.Entity, Is.EqualTo(firstPlayer.Id));
         Assert.That(spawn.Kind, Is.EqualTo(EntityKind.Player));
@@ -39,9 +39,9 @@ public sealed class VisibilityTests
 
         server.Tick(5);
 
-        MessageOpcode[] toFirst = server.Transport.OpcodesSentTo(first).ToArray();
+        MessageOpcode[] toFirst = server.Transport.ControlOpcodesSentTo(first).ToArray();
         Assert.That(toFirst.Count(opcode => opcode == MessageOpcode.EntitySpawn), Is.EqualTo(1));
-        EntitySpawn.TryRead(server.Transport.SentTo(first).Last().Payload, out EntitySpawn? spawn);
+        EntitySpawn.TryRead(server.Transport.ControlSentTo(first).Last().Payload, out EntitySpawn? spawn);
         Assert.That(spawn!.Entity, Is.EqualTo(server.PlayerOf(second).Id));
     }
 
@@ -53,7 +53,7 @@ public sealed class VisibilityTests
 
         server.Tick(3);
 
-        Assert.That(server.Transport.OpcodesSentTo(only), Has.None.EqualTo(MessageOpcode.EntitySpawn));
+        Assert.That(server.Transport.ControlOpcodesSentTo(only), Has.None.EqualTo(MessageOpcode.EntitySpawn));
     }
 
     [Test]
@@ -65,8 +65,8 @@ public sealed class VisibilityTests
 
         server.Tick(3);
 
-        Assert.That(server.Transport.OpcodesSentTo(near), Has.None.EqualTo(MessageOpcode.EntitySpawn));
-        Assert.That(server.Transport.OpcodesSentTo(far), Has.None.EqualTo(MessageOpcode.EntitySpawn));
+        Assert.That(server.Transport.ControlOpcodesSentTo(near), Has.None.EqualTo(MessageOpcode.EntitySpawn));
+        Assert.That(server.Transport.ControlOpcodesSentTo(far), Has.None.EqualTo(MessageOpcode.EntitySpawn));
     }
 
     [Test]
@@ -80,8 +80,8 @@ public sealed class VisibilityTests
         server.Place(far, 6f, 0.5f);
         server.Tick(4);
 
-        Assert.That(server.Transport.OpcodesSentTo(near), Is.EqualTo(new[] { MessageOpcode.EntitySpawn }));
-        Assert.That(server.Transport.OpcodesSentTo(far), Is.EqualTo(new[] { MessageOpcode.EntitySpawn }));
+        Assert.That(server.Transport.ControlOpcodesSentTo(near), Is.EqualTo(new[] { MessageOpcode.EntitySpawn }));
+        Assert.That(server.Transport.ControlOpcodesSentTo(far), Is.EqualTo(new[] { MessageOpcode.EntitySpawn }));
     }
 
     [Test]
@@ -96,11 +96,11 @@ public sealed class VisibilityTests
         server.Place(mover, 10f, 0.5f);
         server.Tick(2);
 
-        InMemoryServerTransport.SentMessage sent = server.Transport.SentTo(near).Single();
+        InMemoryServerTransport.SentMessage sent = server.Transport.ControlSentTo(near).Single();
         Assert.That(EntityDespawn.TryRead(sent.Payload, out EntityDespawn despawn), Is.True);
         Assert.That(despawn.Entity, Is.EqualTo(server.PlayerOf(mover).Id));
         Assert.That(despawn.Reason, Is.EqualTo(DespawnReason.OutOfRange));
-        Assert.That(server.Transport.OpcodesSentTo(mover), Is.EqualTo(new[] { MessageOpcode.EntityDespawn }));
+        Assert.That(server.Transport.ControlOpcodesSentTo(mover), Is.EqualTo(new[] { MessageOpcode.EntityDespawn }));
     }
 
     [Test]
@@ -116,7 +116,7 @@ public sealed class VisibilityTests
         server.Disconnect(leaver);
         server.Tick();
 
-        InMemoryServerTransport.SentMessage sent = server.Transport.SentTo(observer).Single();
+        InMemoryServerTransport.SentMessage sent = server.Transport.ControlSentTo(observer).Single();
         EntityDespawn.TryRead(sent.Payload, out EntityDespawn despawn);
         Assert.That(despawn.Entity.Value, Is.EqualTo(leaverEntity));
         Assert.That(despawn.Reason, Is.EqualTo(DespawnReason.Removed));
@@ -136,7 +136,7 @@ public sealed class VisibilityTests
         server.Place(mover, 6f, 0.5f);
         server.Tick();
 
-        Assert.That(server.Transport.OpcodesSentTo(near), Is.EqualTo(new[] { MessageOpcode.EntitySpawn }));
+        Assert.That(server.Transport.ControlOpcodesSentTo(near), Is.EqualTo(new[] { MessageOpcode.EntitySpawn }));
     }
 
     private static TestServer CreateServer()

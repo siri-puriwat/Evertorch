@@ -28,18 +28,29 @@ public sealed class ServerEndToEndTests
         EnterWorld(first, port, contentVersion, 1);
         EnterWorld(second, port, contentVersion, 2);
 
-        Assert.That(first.WaitFor(() => first.Received.Count >= 3), Is.True, "the first client never saw the second");
-        Assert.That(second.WaitFor(() => second.Received.Count >= 3), Is.True, "the second client never saw the first");
-        Assert.That(Opcodes(second).Take(3), Is.EqualTo(new[]
+        Assert.That(first.WaitFor(() => Control(first).Length >= 3), Is.True, "the first client never saw the second");
+        Assert.That(second.WaitFor(() => Control(second).Length >= 3), Is.True,
+            "the second client never saw the first");
+        Assert.That(Opcodes(Control(second)).Take(3), Is.EqualTo(new[]
         {
             MessageOpcode.ServerHello,
             MessageOpcode.WorldEntered,
             MessageOpcode.EntitySpawn,
         }));
-        Assert.That(Opcodes(first).Last(), Is.EqualTo(MessageOpcode.EntitySpawn));
-        WorldEntered.TryRead(second.Received[1].Payload, out WorldEntered? entered);
+        Assert.That(Opcodes(Control(first)).Last(), Is.EqualTo(MessageOpcode.EntitySpawn));
+        WorldEntered.TryRead(Control(second)[1].Payload, out WorldEntered? entered);
         Assert.That(entered!.Map, Is.EqualTo(new MapDefinitionId("map.training_ground")));
         Assert.That(entered.MovementSpeed, Is.EqualTo(5f));
+
+        Assert.That(second.WaitFor(() => Snapshots(second).Any(snapshot => snapshot.Entities.Count == 2)), Is.True);
+        EntitySnapshot both = Snapshots(second).Last(snapshot => snapshot.Entities.Count == 2);
+        Assert.That(
+            both.Entities[0].Entity,
+            Is.EqualTo(entered.LocalEntity),
+            "a client's own entity leads its snapshot");
+        Assert.That(
+            second.Received.Where(message => message.Channel == (byte)ProtocolChannel.State).Select(m => m.Method),
+            Is.All.EqualTo(DeliveryMethod.Sequenced));
 
         host.StopAsync().GetAwaiter().GetResult();
 
@@ -84,12 +95,12 @@ public sealed class ServerEndToEndTests
         client.Connect(port, "evertorch");
         Assert.That(client.WaitFor(() => client.IsConnected), Is.True, "the client did not connect");
         client.Send(Hello(contentVersion), ProtocolChannel.Control, DeliveryMethod.ReliableOrdered);
-        Assert.That(client.WaitFor(() => client.Received.Count >= 1), Is.True, "no ServerHello arrived");
+        Assert.That(client.WaitFor(() => Control(client).Length >= 1), Is.True, "no ServerHello arrived");
 
         byte[] request = new byte[EnterWorldRequest.EncodedLength];
         new EnterWorldRequest(new CharacterId(character)).Write(request);
         client.Send(request, ProtocolChannel.Control, DeliveryMethod.ReliableOrdered);
-        Assert.That(client.WaitFor(() => client.Received.Count >= 2), Is.True, "no WorldEntered arrived");
+        Assert.That(client.WaitFor(() => Control(client).Length >= 2), Is.True, "no WorldEntered arrived");
     }
 
     private static byte[] Hello(uint contentVersion)
@@ -104,9 +115,26 @@ public sealed class ServerEndToEndTests
         return payload;
     }
 
-    private static MessageOpcode[] Opcodes(TestNetClient client)
+    private static TestNetClient.ReceivedMessage[] Control(TestNetClient client)
+    {
+        return client.Received.Where(message => message.Channel == (byte)ProtocolChannel.Control).ToArray();
+    }
+
+    private static EntitySnapshot[] Snapshots(TestNetClient client)
     {
         return client.Received
+            .Where(message => message.Channel == (byte)ProtocolChannel.State)
+            .Select(message =>
+            {
+                EntitySnapshot.TryRead(message.Payload, out EntitySnapshot? snapshot);
+                return snapshot!;
+            })
+            .ToArray();
+    }
+
+    private static MessageOpcode[] Opcodes(TestNetClient.ReceivedMessage[] messages)
+    {
+        return messages
             .Select(message =>
             {
                 MessageRouting.TryReadOpcode(message.Payload, out MessageOpcode opcode);

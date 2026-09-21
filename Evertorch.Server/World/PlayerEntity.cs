@@ -38,6 +38,12 @@ public sealed class PlayerEntity
 
     public WorldDirection Facing { get; set; }
 
+    public float VelocityX { get; set; }
+
+    public float VelocityY { get; set; }
+
+    public float VelocityZ { get; set; }
+
     public EntityStateFlags StateFlags { get; set; }
 
     /// <summary>

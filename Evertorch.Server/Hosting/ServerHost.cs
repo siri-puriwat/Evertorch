@@ -60,7 +60,9 @@ public static class ServerHost
             services.GetRequiredService<LiteNetLibServerTransport>());
         builder.Services.AddSingleton<IOutboundMessages>(services => services.GetRequiredService<IServerTransport>());
         builder.Services.AddSingleton<ITickPhase, SessionManager>();
+        builder.Services.AddSingleton<ITickPhase, MovementSystem>();
         builder.Services.AddSingleton<ITickPhase, VisibilityPhase>();
+        builder.Services.AddSingleton<ITickPhase, SnapshotPhase>();
 
         builder.Services.AddSingleton<IMonotonicClock, StopwatchClock>();
         builder.Services.AddSingleton<ITickObserver, TickLogObserver>();

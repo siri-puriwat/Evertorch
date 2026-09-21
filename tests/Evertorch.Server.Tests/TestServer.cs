@@ -30,7 +30,10 @@ internal sealed class TestServer
         int handshakeTimeoutMs = 5000,
         int maxInboundEvents = 4096,
         float interestCellSize = 16f,
-        int interestNeighborRadius = 1)
+        int interestNeighborRadius = 1,
+        int inputHoldTimeoutMs = 250,
+        int maxQueuedInputs = 8,
+        int snapshotIntervalTicks = 1)
     {
         Content = RepositoryContent.Value;
         NetworkOptions network = new NetworkOptions
@@ -42,6 +45,9 @@ internal sealed class TestServer
         {
             InterestCellSize = interestCellSize,
             InterestNeighborRadius = interestNeighborRadius,
+            InputHoldTimeoutMs = inputHoldTimeoutMs,
+            MaxQueuedInputs = maxQueuedInputs,
+            SnapshotIntervalTicks = snapshotIntervalTicks,
         };
         DevelopmentAuthenticationOptions authentication = new DevelopmentAuthenticationOptions
         {
@@ -73,11 +79,14 @@ internal sealed class TestServer
             simulation,
             Options.Create(network),
             compatibility,
+            Options.Create(world),
             Log);
         m_pipeline = new TickPipeline(
             new ITickPhase[]
             {
+                new SnapshotPhase(Sessions, sender, Options.Create(world)),
                 new VisibilityPhase(Sessions, sender),
+                new MovementSystem(Sessions, Options.Create(world), simulation),
                 SessionManager,
                 new RecordingPhase(TickPhase.ApplyCommands, "test", new List<string>(), _ => RunAfterCommands()),
             });
@@ -157,6 +166,25 @@ internal sealed class TestServer
         byte[] payload = new byte[hello.GetEncodedLength()];
         hello.Write(payload);
         Inbound.OnPayload(connection, ProtocolChannel.Control, payload);
+    }
+
+    public void SendMove(ConnectionId connection, uint sequence, float directionX, float directionZ)
+    {
+        SendMove(connection, sequence, sequence, directionX, directionZ);
+    }
+
+    public void SendMove(ConnectionId connection, uint sequence, uint clientTick, float directionX, float directionZ)
+    {
+        byte[] payload = new byte[MoveInput.EncodedLength];
+        new MoveInput(new MoveIntent(sequence, clientTick, directionX, directionZ)).Write(payload);
+        Inbound.OnPayload(connection, ProtocolChannel.Input, payload);
+    }
+
+    public void SendStop(ConnectionId connection, uint sequence)
+    {
+        byte[] payload = new byte[StopMovement.EncodedLength];
+        new StopMovement(sequence, sequence).Write(payload);
+        Inbound.OnPayload(connection, ProtocolChannel.Input, payload);
     }
 
     public void SendEnterWorld(ConnectionId connection, long character)

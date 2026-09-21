@@ -1,3 +1,4 @@
+using Evertorch.Game;
 using Evertorch.Protocol;
 
 namespace Evertorch.Server
@@ -11,12 +12,14 @@ public readonly struct InboundEvent
         InboundEventKind kind,
         ConnectionId connection,
         ClientHello? hello,
-        EnterWorldRequest enterWorld)
+        EnterWorldRequest enterWorld,
+        MoveIntent intent)
     {
         Kind = kind;
         Connection = connection;
         Hello = hello;
         EnterWorld = enterWorld;
+        Intent = intent;
     }
 
     public InboundEventKind Kind { get; }
@@ -27,29 +30,36 @@ public readonly struct InboundEvent
 
     public EnterWorldRequest EnterWorld { get; }
 
+    public MoveIntent Intent { get; }
+
     public static InboundEvent Connected(ConnectionId connection)
     {
-        return new InboundEvent(InboundEventKind.Connected, connection, null, default);
+        return new InboundEvent(InboundEventKind.Connected, connection, null, default, default);
     }
 
     public static InboundEvent Disconnected(ConnectionId connection)
     {
-        return new InboundEvent(InboundEventKind.Disconnected, connection, null, default);
+        return new InboundEvent(InboundEventKind.Disconnected, connection, null, default, default);
     }
 
     public static InboundEvent Malformed(ConnectionId connection)
     {
-        return new InboundEvent(InboundEventKind.Malformed, connection, null, default);
+        return new InboundEvent(InboundEventKind.Malformed, connection, null, default, default);
     }
 
     public static InboundEvent ForHello(ConnectionId connection, ClientHello hello)
     {
-        return new InboundEvent(InboundEventKind.Hello, connection, hello, default);
+        return new InboundEvent(InboundEventKind.Hello, connection, hello, default, default);
     }
 
     public static InboundEvent ForEnterWorld(ConnectionId connection, EnterWorldRequest request)
     {
-        return new InboundEvent(InboundEventKind.EnterWorld, connection, null, request);
+        return new InboundEvent(InboundEventKind.EnterWorld, connection, null, request, default);
+    }
+
+    public static InboundEvent ForMove(ConnectionId connection, MoveIntent intent)
+    {
+        return new InboundEvent(InboundEventKind.Move, connection, null, default, intent);
     }
 }
 }

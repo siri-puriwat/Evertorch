@@ -117,6 +117,40 @@ public sealed class LiteNetLibServerTransportTests
     }
 
     [Test]
+    public void Send_OfTheLargestSnapshot_FitsOneUnreliableDatagramAndArrivesOnTheStateChannel()
+    {
+        using Harness harness = new Harness();
+        using TestNetClient client = ConnectedClient(harness, out ConnectionId connection);
+        EntitySnapshot largest = new EntitySnapshot(1, 1, new EntityState[EntitySnapshot.MaxEntities]);
+        byte[] payload = new byte[largest.GetEncodedLength()];
+        largest.Write(payload);
+
+        harness.Transport.Send(connection, payload);
+
+        Assert.That(client.MaxUnreliablePayload, Is.GreaterThanOrEqualTo(EntitySnapshot.MaxEncodedLength));
+        Assert.That(client.WaitFor(() => client.Received.Count == 1), Is.True);
+        Assert.That(client.Received[0].Payload, Is.EqualTo(payload));
+        Assert.That(client.Received[0].Channel, Is.EqualTo((byte)ProtocolChannel.State));
+        Assert.That(client.Received[0].Method, Is.EqualTo(DeliveryMethod.Sequenced));
+    }
+
+    [Test]
+    public void Payload_MoveInputOnTheInputChannel_IsDecodedAsAMoveEvent()
+    {
+        using Harness harness = new Harness();
+        using TestNetClient client = ConnectedClient(harness, out ConnectionId connection);
+        byte[] payload = new byte[MoveInput.EncodedLength];
+        new MoveInput(new MoveIntent(4, 8, 0f, 1f)).Write(payload);
+
+        client.Send(payload, ProtocolChannel.Input, DeliveryMethod.Sequenced);
+
+        Assert.That(harness.WaitForEvent(out InboundEvent move), Is.True);
+        Assert.That(move.Kind, Is.EqualTo(InboundEventKind.Move));
+        Assert.That(move.Connection, Is.EqualTo(connection));
+        Assert.That(move.Intent, Is.EqualTo(new MoveIntent(4, 8, 0f, 1f)));
+    }
+
+    [Test]
     public void Send_ToUnknownConnection_IsIgnored()
     {
         using Harness harness = new Harness();

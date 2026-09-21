@@ -16,7 +16,7 @@ public sealed class WorldEntryTests
 
         ConnectionId connection = server.EnterWorld(7);
 
-        InMemoryServerTransport.SentMessage sent = server.Transport.SentTo(connection).Last();
+        InMemoryServerTransport.SentMessage sent = server.Transport.ControlSentTo(connection).Last();
         Assert.That(WorldEntered.TryRead(sent.Payload, out WorldEntered? entered), Is.True);
         Assert.That(sent.Channel, Is.EqualTo(ProtocolChannel.Control));
         Assert.That(entered!.Map, Is.EqualTo(map.Id));
@@ -41,7 +41,7 @@ public sealed class WorldEntryTests
 
         ConnectionId connection = server.EnterWorld(7);
 
-        WorldEntered.TryRead(server.Transport.SentTo(connection).Last().Payload, out WorldEntered? entered);
+        WorldEntered.TryRead(server.Transport.ControlSentTo(connection).Last().Payload, out WorldEntered? entered);
         Assert.That(entered!.MovementSpeed, Is.EqualTo((float)job.BaseSpeed));
         Assert.That(server.PlayerOf(connection).MovementSpeed, Is.EqualTo((float)job.BaseSpeed));
         Assert.That(server.PlayerOf(connection).Job, Is.EqualTo(job.Id));
@@ -84,7 +84,7 @@ public sealed class WorldEntryTests
 
         server.Tick();
 
-        Assert.That(server.Transport.OpcodesSentTo(connection), Is.EqualTo(new[] { MessageOpcode.ServerHello }));
+        Assert.That(server.Transport.ControlOpcodesSentTo(connection), Is.EqualTo(new[] { MessageOpcode.ServerHello }));
         Assert.That(server.World.Maps.Single().Players, Is.Empty);
         Assert.That(server.SessionManager.IgnoredEvents, Is.EqualTo(1));
     }
@@ -102,7 +102,7 @@ public sealed class WorldEntryTests
         Assert.That(server.PlayerOf(connection).Id, Is.EqualTo(entity));
         Assert.That(server.World.Maps.Single().Players, Has.Count.EqualTo(1));
         Assert.That(
-            server.Transport.OpcodesSentTo(connection),
+            server.Transport.ControlOpcodesSentTo(connection),
             Is.EqualTo(new[] { MessageOpcode.ServerHello, MessageOpcode.WorldEntered }));
     }
 

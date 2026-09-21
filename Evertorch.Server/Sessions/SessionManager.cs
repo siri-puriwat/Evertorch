@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Evertorch.Game;
 using Evertorch.Protocol;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -48,6 +49,7 @@ public sealed class SessionManager : ITickPhase
     private readonly string m_serverBuildVersion;
     private readonly uint m_tickRate;
     private readonly uint m_handshakeTimeoutTicks;
+    private readonly int m_maxQueuedInputs;
     private readonly List<ClientSession> m_expired = new List<ClientSession>();
 
     public SessionManager(
@@ -60,8 +62,10 @@ public sealed class SessionManager : ITickPhase
         IOptions<SimulationOptions> simulation,
         IOptions<NetworkOptions> network,
         IOptions<CompatibilityOptions> compatibility,
+        IOptions<WorldOptions> worldOptions,
         ILogger<SessionManager> logger)
     {
+        m_maxQueuedInputs = worldOptions.Value.MaxQueuedInputs;
         m_inbound = inbound;
         m_sessions = sessions;
         m_handshake = handshake;
@@ -131,6 +135,9 @@ public sealed class SessionManager : ITickPhase
             case InboundEventKind.EnterWorld:
                 HandleEnterWorld(session, inboundEvent.EnterWorld, tick);
                 break;
+            case InboundEventKind.Move:
+                HandleMove(session, inboundEvent.Intent);
+                break;
             default:
                 IgnoredEvents++;
                 break;
@@ -188,6 +195,7 @@ public sealed class SessionManager : ITickPhase
         PlayerEntity player = m_world.SpawnPlayer(request.Character, session.Connection, out MapInstance map);
         session.Player = player;
         session.Map = map;
+        session.Input = new PlayerInputState(m_maxQueuedInputs);
         session.State = SessionState.InWorld;
         m_sessions.BindCharacter(session, request.Character);
 
@@ -202,6 +210,18 @@ public sealed class SessionManager : ITickPhase
                 player.Facing,
                 player.MovementSpeed));
         LogWorldEntered(m_logger, session.Connection.Value, request.Character.Value, player.Id.Value, null);
+    }
+
+    // Only queued here. The movement phase applies at most one input per tick, whatever arrives.
+    private void HandleMove(ClientSession session, MoveIntent intent)
+    {
+        if (session.State != SessionState.InWorld || session.Input == null)
+        {
+            IgnoredEvents++;
+            return;
+        }
+
+        session.Input.Queue.TryEnqueue(intent);
     }
 
     private void ExpireSilentConnections(uint tick)

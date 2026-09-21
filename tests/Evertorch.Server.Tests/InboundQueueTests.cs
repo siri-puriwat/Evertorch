@@ -139,7 +139,7 @@ public sealed class InboundQueueTests
         server.Tick();
 
         Assert.That(server.SessionManager.IgnoredEvents, Is.EqualTo(1));
-        Assert.That(server.Transport.SentTo(connection), Is.Empty);
+        Assert.That(server.Transport.ControlSentTo(connection), Is.Empty);
         Assert.That(server.Transport.Disconnects, Is.Empty);
         Assert.That(server.Sessions.TryGet(connection, out _), Is.True);
     }
@@ -170,7 +170,7 @@ public sealed class InboundQueueTests
 
         Assert.That(server.Transport.Disconnects[faulty], Is.EqualTo(DisconnectReason.InternalError));
         Assert.That(server.Sessions.TryGet(faulty, out _), Is.False);
-        Assert.That(server.Transport.OpcodesSentTo(healthy), Is.EqualTo(new[] { MessageOpcode.ServerHello }));
+        Assert.That(server.Transport.ControlOpcodesSentTo(healthy), Is.EqualTo(new[] { MessageOpcode.ServerHello }));
         Assert.That(server.Log.Entries.Count(entry => entry.Level == LogLevel.Error), Is.EqualTo(1));
         Assert.That(server.Log.Entries.Single(entry => entry.Level == LogLevel.Error).EventId.Name,
             Is.EqualTo("SessionFaulted"));
