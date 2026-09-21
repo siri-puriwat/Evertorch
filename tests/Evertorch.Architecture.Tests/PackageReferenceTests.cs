@@ -14,7 +14,7 @@ public sealed class PackageReferenceTests
             ["Evertorch.Protocol"] = new string[0],
             ["Evertorch.Rules"] = new string[0],
             ["Evertorch.Persistence"] = new string[0],
-            ["Evertorch.Server"] = new[] { "Microsoft.Extensions.Hosting" },
+            ["Evertorch.Server"] = new[] { "LiteNetLib", "Microsoft.Extensions.Hosting" },
             ["Evertorch.Tools"] = new[] { "YamlDotNet" },
         };
 

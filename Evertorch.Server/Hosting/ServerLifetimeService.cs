@@ -24,6 +24,7 @@ public sealed class ServerLifetimeService : IHostedService, IDisposable
             "Content loaded: server {ServerContentVersion}, client {ClientContentVersion}, {Maps} maps.");
 
     private readonly ServerContent m_content;
+    private readonly IServerTransport m_transport;
     private readonly FixedStepLoop m_loop;
     private readonly IHostApplicationLifetime m_lifetime;
     private readonly ILogger<ServerLifetimeService> m_logger;
@@ -32,13 +33,18 @@ public sealed class ServerLifetimeService : IHostedService, IDisposable
     private volatile bool m_hasFaulted;
     private bool m_isDisposed;
 
+    // The world is a parameter so that it exists, built from validated content, before anything can connect.
     public ServerLifetimeService(
         ServerContent content,
+        WorldSimulation world,
+        IServerTransport transport,
         FixedStepLoop loop,
         IHostApplicationLifetime lifetime,
         ILogger<ServerLifetimeService> logger)
     {
+        _ = world;
         m_content = content;
+        m_transport = transport;
         m_loop = loop;
         m_lifetime = lifetime;
         m_logger = logger;
@@ -65,20 +71,27 @@ public sealed class ServerLifetimeService : IHostedService, IDisposable
             IsBackground = false,
         };
         m_simulationThread.Start();
+
+        // Last, so no client is ever admitted by a server that is not simulating yet.
+        m_transport.Start();
         return Task.CompletedTask;
     }
 
     public async Task StopAsync(CancellationToken cancellationToken)
     {
+        // Stop admitting, let the tick in progress finish, then tell the remaining clients why they are dropped.
+        m_transport.CloseAdmission();
         m_stop.Cancel();
 
         Thread? thread = m_simulationThread;
-        if (thread == null)
+        if (thread != null)
         {
-            return;
+            await Task.Run(() => thread.Join(), CancellationToken.None)
+                .WaitAsync(cancellationToken)
+                .ConfigureAwait(false);
         }
 
-        await Task.Run(() => thread.Join(), CancellationToken.None).WaitAsync(cancellationToken).ConfigureAwait(false);
+        m_transport.Stop();
     }
 
     public void Dispose()

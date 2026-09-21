@@ -7,8 +7,11 @@ own license.
 
 | Package | Version | Used by | License | Project |
 | --- | --- | --- | --- | --- |
+| LiteNetLib | 2.1.4 | `Evertorch.Server` | MIT | <https://github.com/RevenantX/LiteNetLib> |
 | Microsoft.Extensions.Hosting | 10.0.12 | `Evertorch.Server` | MIT | <https://github.com/dotnet/runtime> |
 | YamlDotNet | 18.1.0 | `Evertorch.Tools` | MIT | <https://github.com/aaubry/YamlDotNet> |
+
+LiteNetLib is Copyright (c) Ruslan Pyrch.
 
 Microsoft.Extensions.Hosting is Copyright (c) .NET Foundation and Contributors.
 

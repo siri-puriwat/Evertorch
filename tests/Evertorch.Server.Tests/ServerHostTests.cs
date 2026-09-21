@@ -14,13 +14,16 @@ public sealed class ServerHostTests
 {
     private const string TickRateVariable = "Simulation__TickRate";
 
+    // A started host binds a socket; port 0 keeps tests from colliding with each other or a running server.
+    private static readonly string[] EphemeralPort = { "--Network:Port=0" };
+
     private static readonly TimeSpan SignalTimeout = TimeSpan.FromSeconds(10);
 
     [Test]
     public void CreateBuilder_WithoutConfigurationFiles_UsesTwentyHertz()
     {
         using TemporaryDirectory root = new TemporaryDirectory();
-        using IHost host = ServerHost.CreateBuilder(new string[0], root.Path).Build();
+        using IHost host = ServerHost.CreateBuilder(EphemeralPort, root.Path).Build();
 
         Assert.That(ReadOptions(host).TickRate, Is.EqualTo(20));
     }
@@ -30,7 +33,7 @@ public sealed class ServerHostTests
     {
         using TemporaryDirectory root = new TemporaryDirectory();
         root.Write("appsettings.json", "{ \"Simulation\": { \"TickRate\": 30 } }");
-        using IHost host = ServerHost.CreateBuilder(new string[0], root.Path).Build();
+        using IHost host = ServerHost.CreateBuilder(EphemeralPort, root.Path).Build();
 
         Assert.That(ReadOptions(host).TickRate, Is.EqualTo(30));
     }
@@ -43,7 +46,7 @@ public sealed class ServerHostTests
         Environment.SetEnvironmentVariable(TickRateVariable, "40");
         try
         {
-            using IHost host = ServerHost.CreateBuilder(new string[0], root.Path).Build();
+            using IHost host = ServerHost.CreateBuilder(EphemeralPort, root.Path).Build();
 
             Assert.That(ReadOptions(host).TickRate, Is.EqualTo(40));
         }
@@ -60,7 +63,7 @@ public sealed class ServerHostTests
         Environment.SetEnvironmentVariable(TickRateVariable, "40");
         try
         {
-            string[] args = { "--Simulation:TickRate=50" };
+            string[] args = { "--Simulation:TickRate=50", "--Network:Port=0" };
             using IHost host = ServerHost.CreateBuilder(args, root.Path).Build();
 
             Assert.That(ReadOptions(host).TickRate, Is.EqualTo(50));
@@ -78,7 +81,7 @@ public sealed class ServerHostTests
         root.Write("appsettings.json", "{ \"Simulation\": { \"TickRate\": 0 } }");
         WriteValidContent(root);
         List<string> log = new List<string>();
-        HostApplicationBuilder builder = ServerHost.CreateBuilder(new string[0], root.Path);
+        HostApplicationBuilder builder = ServerHost.CreateBuilder(EphemeralPort, root.Path);
         builder.Services.AddSingleton<ITickPhase>(new RecordingPhase(TickPhase.Movement, "tick", log));
         using IHost host = builder.Build();
         Action start = () => host.Start();
@@ -93,7 +96,7 @@ public sealed class ServerHostTests
         using TemporaryDirectory root = new TemporaryDirectory();
         WriteValidContent(root);
         using ManualResetEventSlim ticked = new ManualResetEventSlim();
-        HostApplicationBuilder builder = ServerHost.CreateBuilder(new string[0], root.Path);
+        HostApplicationBuilder builder = ServerHost.CreateBuilder(EphemeralPort, root.Path);
         builder.Services.AddSingleton<ITickPhase>(
             new RecordingPhase(TickPhase.Movement, "tick", new List<string>(), _ => ticked.Set()));
         using IHost host = builder.Build();
@@ -116,7 +119,7 @@ public sealed class ServerHostTests
         using TemporaryDirectory root = new TemporaryDirectory();
         WriteValidContent(root);
         using ManualResetEventSlim ticked = new ManualResetEventSlim();
-        HostApplicationBuilder builder = ServerHost.CreateBuilder(new string[0], root.Path);
+        HostApplicationBuilder builder = ServerHost.CreateBuilder(EphemeralPort, root.Path);
         builder.Services.AddSingleton<ITickPhase>(
             new RecordingPhase(TickPhase.Movement, "tick", new List<string>(), _ => ticked.Set()));
         IHost host = builder.Build();
@@ -135,7 +138,7 @@ public sealed class ServerHostTests
     {
         using TemporaryDirectory root = new TemporaryDirectory();
         WriteValidContent(root);
-        HostApplicationBuilder builder = ServerHost.CreateBuilder(new string[0], root.Path);
+        HostApplicationBuilder builder = ServerHost.CreateBuilder(EphemeralPort, root.Path);
         builder.Services.AddSingleton<ITickPhase>(
             new RecordingPhase(
                 TickPhase.Movement,
@@ -158,7 +161,7 @@ public sealed class ServerHostTests
     {
         using TemporaryDirectory root = new TemporaryDirectory();
         List<string> log = new List<string>();
-        HostApplicationBuilder builder = ServerHost.CreateBuilder(new string[0], root.Path);
+        HostApplicationBuilder builder = ServerHost.CreateBuilder(EphemeralPort, root.Path);
         builder.Services.AddSingleton<ITickPhase>(new RecordingPhase(TickPhase.Movement, "tick", log));
         using IHost host = builder.Build();
         Action start = () => host.Start();
@@ -175,7 +178,7 @@ public sealed class ServerHostTests
         PackageFixture.ReplaceWithoutManifest(files, "jobs.json", "\"baseSpeed\": 5", "\"baseSpeed\": 500");
         PackageFixture.WriteTo(System.IO.Path.Combine(root.Path, "content", "server"), files);
         List<string> log = new List<string>();
-        HostApplicationBuilder builder = ServerHost.CreateBuilder(new string[0], root.Path);
+        HostApplicationBuilder builder = ServerHost.CreateBuilder(EphemeralPort, root.Path);
         builder.Services.AddSingleton<ITickPhase>(new RecordingPhase(TickPhase.Movement, "tick", log));
         using IHost host = builder.Build();
         Action start = () => host.Start();
@@ -190,7 +193,7 @@ public sealed class ServerHostTests
         using TemporaryDirectory root = new TemporaryDirectory();
         using TemporaryDirectory package = new TemporaryDirectory();
         PackageFixture.WriteTo(package.Path, PackageFixture.BuildRepositoryPackage());
-        string[] args = { "--Content:ServerPackagePath=" + package.Path };
+        string[] args = { "--Content:ServerPackagePath=" + package.Path, "--Network:Port=0" };
         using IHost host = ServerHost.CreateBuilder(args, root.Path).Build();
 
         host.Start();

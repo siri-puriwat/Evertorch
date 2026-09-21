@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using Evertorch.Rules;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -38,6 +39,29 @@ public static class ServerHost
         // socket exists.
         builder.Services.AddSingleton(services => LoadContent(services, contentRootPath));
 
+        AddOptions<NetworkOptions, NetworkOptionsValidator>(builder, NetworkOptions.SectionName);
+        AddOptions<CompatibilityOptions, CompatibilityOptionsValidator>(builder, CompatibilityOptions.SectionName);
+        AddOptions<WorldOptions, WorldOptionsValidator>(builder, WorldOptions.SectionName);
+        builder.Services
+            .AddOptions<DevelopmentAuthenticationOptions>()
+            .Bind(builder.Configuration.GetSection(DevelopmentAuthenticationOptions.SectionName));
+
+        builder.Services.AddSingleton(TimeProvider.System);
+        builder.Services.AddSingleton<ICharacterRules, RenewalCharacterRules>();
+        builder.Services.AddSingleton<IMovementRules, RenewalMovementRules>();
+
+        builder.Services.AddSingleton<InboundQueue>();
+        builder.Services.AddSingleton<SessionRegistry>();
+        builder.Services.AddSingleton<HandshakeValidator>();
+        builder.Services.AddSingleton<WorldSimulation>();
+        builder.Services.AddSingleton<MessageSender>();
+        builder.Services.AddSingleton<LiteNetLibServerTransport>();
+        builder.Services.AddSingleton<IServerTransport>(services =>
+            services.GetRequiredService<LiteNetLibServerTransport>());
+        builder.Services.AddSingleton<IOutboundMessages>(services => services.GetRequiredService<IServerTransport>());
+        builder.Services.AddSingleton<ITickPhase, SessionManager>();
+        builder.Services.AddSingleton<ITickPhase, VisibilityPhase>();
+
         builder.Services.AddSingleton<IMonotonicClock, StopwatchClock>();
         builder.Services.AddSingleton<ITickObserver, TickLogObserver>();
         builder.Services.AddSingleton<TickPipeline>();
@@ -46,6 +70,14 @@ public static class ServerHost
         builder.Services.AddHostedService(services => services.GetRequiredService<ServerLifetimeService>());
 
         return builder;
+    }
+
+    private static void AddOptions<TOptions, TValidator>(HostApplicationBuilder builder, string sectionName)
+        where TOptions : class
+        where TValidator : class, IValidateOptions<TOptions>
+    {
+        builder.Services.AddOptions<TOptions>().Bind(builder.Configuration.GetSection(sectionName)).ValidateOnStart();
+        builder.Services.AddSingleton<IValidateOptions<TOptions>, TValidator>();
     }
 
     private static ServerContent LoadContent(IServiceProvider services, string contentRootPath)
