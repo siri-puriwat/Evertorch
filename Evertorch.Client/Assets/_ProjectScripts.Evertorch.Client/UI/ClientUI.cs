@@ -8,7 +8,7 @@ namespace Evertorch.Client
 /// <summary>
 /// Setup every client canvas shares, so that all screen-space UI scales the same way.
 /// </summary>
-public static class ClientUi
+public static class ClientUI
 {
     private static readonly Vector2 ReferenceResolution = new Vector2(1080f, 1920f);
 

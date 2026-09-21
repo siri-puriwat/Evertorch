@@ -78,8 +78,8 @@ public sealed class DevelopmentOverlay : MonoBehaviour
 
     private void Build(GameClient client)
     {
-        ClientUi.EnsureEventSystem(transform);
-        ClientUi.AddScreenCanvas(gameObject, SortingOrder);
+        ClientUI.EnsureEventSystem(transform);
+        ClientUI.AddScreenCanvas(gameObject, SortingOrder);
 
         GameObject panel = CreateUiObject("Panel", transform);
         Panel = (RectTransform)panel.transform;

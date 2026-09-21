@@ -63,11 +63,11 @@ public sealed class TouchControls : MonoBehaviour
 
     private void Build()
     {
-        m_eventSystem = ClientUi.EnsureEventSystem(transform);
+        m_eventSystem = ClientUI.EnsureEventSystem(transform);
 
         GameObject canvasObject = new GameObject("Canvas");
         canvasObject.transform.SetParent(transform, false);
-        ClientUi.AddScreenCanvas(canvasObject, 0);
+        ClientUI.AddScreenCanvas(canvasObject, 0);
 
         m_stickRoot = CreateImage("Stick", canvasObject.transform, StickSize, new Color(1f, 1f, 1f, 0.18f));
         StickArea = (RectTransform)m_stickRoot.transform;
