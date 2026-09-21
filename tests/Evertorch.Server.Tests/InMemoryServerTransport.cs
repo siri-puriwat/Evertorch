@@ -8,7 +8,7 @@ namespace Evertorch.Server.Tests
 /// <summary>
 /// Records what the server sends, per connection and in order, instead of putting it on a socket.
 /// </summary>
-internal sealed class InMemoryServerTransport : IOutboundMessages
+internal sealed class InMemoryServerTransport : IOutboundMessages, ITransportStatistics
 {
     private readonly Dictionary<ConnectionId, List<SentMessage>> m_sent =
         new Dictionary<ConnectionId, List<SentMessage>>();
@@ -41,6 +41,17 @@ internal sealed class InMemoryServerTransport : IOutboundMessages
         }
 
         messages.Add(new SentMessage(opcode, channel, delivery, payload.ToArray()));
+    }
+
+    public TransportStatistics GetStatistics()
+    {
+        return new TransportStatistics(1000, 2000, 10, 20, 3);
+    }
+
+    public bool TryGetRoundTripTime(ConnectionId connection, out int milliseconds)
+    {
+        milliseconds = 42;
+        return true;
     }
 
     public void Disconnect(ConnectionId connection, DisconnectReason reason, string message)

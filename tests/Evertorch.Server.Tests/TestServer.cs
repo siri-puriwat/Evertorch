@@ -81,9 +81,12 @@ internal sealed class TestServer
             compatibility,
             Options.Create(world),
             Log);
+        Metrics = new ServerMetrics(new TickLogObserver(new CapturingLogger<TickLogObserver>(), new FakeClock()));
+        Status = new StatusPublisher(Metrics, Inbound, Sessions, SessionManager, World, Transport, simulation);
         m_pipeline = new TickPipeline(
             new ITickPhase[]
             {
+                Status,
                 new SnapshotPhase(Sessions, sender, Options.Create(world)),
                 new VisibilityPhase(Sessions, sender),
                 new MovementSystem(Sessions, Options.Create(world), simulation),
@@ -104,6 +107,10 @@ internal sealed class TestServer
     public WorldSimulation World { get; }
 
     public SessionManager SessionManager { get; }
+
+    public ServerMetrics Metrics { get; }
+
+    public StatusPublisher Status { get; }
 
     public CapturingLogger<SessionManager> Log { get; }
 

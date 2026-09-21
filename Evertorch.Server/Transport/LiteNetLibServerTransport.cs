@@ -53,6 +53,7 @@ public sealed class LiteNetLibServerTransport : IServerTransport, INetEventListe
             ChannelsCount = MessageRouting.ChannelCount,
             AutoRecycle = true,
             IPv6Enabled = false,
+            EnableStatistics = true,
             DisconnectTimeout = m_options.DisconnectTimeoutMs,
 
             // Callbacks fire straight from the library's threads instead of waiting for a poll, which would add up
@@ -123,6 +124,29 @@ public sealed class LiteNetLibServerTransport : IServerTransport, INetEventListe
         // The notice rides in the disconnect packet itself, which the library retransmits, so it needs no channel.
         MarkClosedByServer(peer);
         m_manager.DisconnectPeer(peer, EncodeNotice(reason, message));
+    }
+
+    public TransportStatistics GetStatistics()
+    {
+        NetStatistics statistics = m_manager.Statistics;
+        return new TransportStatistics(
+            statistics.BytesReceived,
+            statistics.BytesSent,
+            statistics.PacketsReceived,
+            statistics.PacketsSent,
+            statistics.PacketLoss);
+    }
+
+    public bool TryGetRoundTripTime(ConnectionId connection, out int milliseconds)
+    {
+        if (m_peers.TryGetValue(connection, out NetPeer? peer))
+        {
+            milliseconds = peer.RoundTripTime;
+            return true;
+        }
+
+        milliseconds = 0;
+        return false;
     }
 
     public void Dispose()

@@ -4,7 +4,7 @@ namespace Evertorch.Server
 /// The network edge of the server. Implementations decode what arrives into the <see cref="InboundQueue"/> and
 /// never touch sessions or the world themselves.
 /// </summary>
-public interface IServerTransport : IOutboundMessages
+public interface IServerTransport : IOutboundMessages, ITransportStatistics
 {
     /// <summary>
     /// The port actually bound, which differs from the configured one when that is 0.

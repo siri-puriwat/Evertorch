@@ -59,13 +59,24 @@ public static class ServerHost
         builder.Services.AddSingleton<IServerTransport>(services =>
             services.GetRequiredService<LiteNetLibServerTransport>());
         builder.Services.AddSingleton<IOutboundMessages>(services => services.GetRequiredService<IServerTransport>());
-        builder.Services.AddSingleton<ITickPhase, SessionManager>();
+        builder.Services.AddSingleton<ITransportStatistics>(services =>
+            services.GetRequiredService<IServerTransport>());
+        builder.Services.AddSingleton<SessionManager>();
+        builder.Services.AddSingleton<ITickPhase>(services => services.GetRequiredService<SessionManager>());
         builder.Services.AddSingleton<ITickPhase, MovementSystem>();
         builder.Services.AddSingleton<ITickPhase, VisibilityPhase>();
         builder.Services.AddSingleton<ITickPhase, SnapshotPhase>();
+        builder.Services.AddSingleton<StatusPublisher>();
+        builder.Services.AddSingleton<ITickPhase>(services => services.GetRequiredService<StatusPublisher>());
+
+        builder.Services.AddSingleton<IAdminCommandService, AdminCommandService>();
+        builder.Services.AddSingleton<AdminConsole>();
+        builder.Services.AddHostedService<ConsoleCommandService>();
 
         builder.Services.AddSingleton<IMonotonicClock, StopwatchClock>();
-        builder.Services.AddSingleton<ITickObserver, TickLogObserver>();
+        builder.Services.AddSingleton<TickLogObserver>();
+        builder.Services.AddSingleton<ServerMetrics>();
+        builder.Services.AddSingleton<ITickObserver>(services => services.GetRequiredService<ServerMetrics>());
         builder.Services.AddSingleton<TickPipeline>();
         builder.Services.AddSingleton<FixedStepLoop>();
         builder.Services.AddSingleton<ServerLifetimeService>();

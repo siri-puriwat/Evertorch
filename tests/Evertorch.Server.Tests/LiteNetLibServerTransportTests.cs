@@ -212,6 +212,30 @@ public sealed class LiteNetLibServerTransportTests
     }
 
     [Test]
+    public void Statistics_AfterTraffic_ReportBytesBothWaysAndARoundTripForKnownConnections()
+    {
+        using Harness harness = new Harness();
+        using TestNetClient client = ConnectedClient(harness, out ConnectionId connection);
+        client.Send(Hello(), ProtocolChannel.Control, DeliveryMethod.ReliableOrdered);
+        Assert.That(harness.WaitForEvent(out InboundEvent _), Is.True);
+        byte[] despawn = new byte[EntityDespawn.EncodedLength];
+        new EntityDespawn(new EntityId(1), DespawnReason.Removed).Write(despawn);
+        harness.Transport.Send(connection, despawn);
+        Assert.That(client.WaitFor(() => client.Received.Count == 1), Is.True);
+
+        TransportStatistics statistics = harness.Transport.GetStatistics();
+        bool hasRoundTrip = harness.Transport.TryGetRoundTripTime(connection, out int milliseconds);
+        bool hasUnknownRoundTrip = harness.Transport.TryGetRoundTripTime(new ConnectionId(999), out int _);
+
+        Assert.That(statistics.BytesReceived, Is.GreaterThan(0));
+        Assert.That(statistics.BytesSent, Is.GreaterThan(0));
+        Assert.That(statistics.PacketsReceived, Is.GreaterThan(0));
+        Assert.That(hasRoundTrip, Is.True);
+        Assert.That(milliseconds, Is.InRange(0, 1000));
+        Assert.That(hasUnknownRoundTrip, Is.False);
+    }
+
+    [Test]
     public void Start_WhenPortIsTaken_Throws()
     {
         using Harness harness = new Harness();
