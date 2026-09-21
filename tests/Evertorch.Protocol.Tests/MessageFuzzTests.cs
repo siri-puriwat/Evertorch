@@ -64,6 +64,33 @@ public sealed class MessageFuzzTests
             Encode(new EntityDespawn(new EntityId(9), DespawnReason.OutOfRange)),
             payload => EntityDespawn.TryRead(payload, out EntityDespawn message) ? Encode(message) : null);
         yield return Case(
+            "MoveInput",
+            Encode(new MoveInput(new MoveIntent(3, 4, 0.6f, -0.8f))),
+            payload => MoveInput.TryRead(payload, out MoveInput message) ? Encode(message) : null);
+        yield return Case(
+            "StopMovement",
+            Encode(new StopMovement(3, 4)),
+            payload => StopMovement.TryRead(payload, out StopMovement message) ? Encode(message) : null);
+        yield return Case(
+            "EntitySnapshot",
+            Encode(
+                new EntitySnapshot(
+                    100,
+                    3,
+                    new[]
+                    {
+                        new EntityState(
+                            new EntityId(9),
+                            new WorldPosition(1f, 2f, 3f),
+                            new WorldDirection(0f, 1f),
+                            5f,
+                            0f,
+                            0f,
+                            EntityStateFlags.Moving),
+                        new EntityState(new EntityId(10), default, new WorldDirection(1f, 0f), 0f, 0f, 0f, 0),
+                    })),
+            payload => EntitySnapshot.TryRead(payload, out EntitySnapshot? message) ? Encode(message!) : null);
+        yield return Case(
             "DisconnectNotice",
             Encode(new DisconnectNotice(DisconnectReason.Kicked, "Bye")),
             payload => DisconnectNotice.TryRead(payload, out DisconnectNotice? message) ? Encode(message!) : null);
@@ -77,7 +104,7 @@ public sealed class MessageFuzzTests
 
         for (int iteration = 0; iteration < RandomPayloads; iteration++)
         {
-            byte[] payload = new byte[random.Next(0, 96)];
+            byte[] payload = new byte[random.Next(0, 128)];
             random.NextBytes(payload);
 
             // Half the payloads carry the right opcode, or nearly all of them would fail on the first two bytes.
@@ -165,6 +192,27 @@ public sealed class MessageFuzzTests
     private static byte[] Encode(DisconnectNotice message)
     {
         byte[] buffer = new byte[message.GetEncodedLength()];
+        message.Write(buffer);
+        return buffer;
+    }
+
+    private static byte[] Encode(EntitySnapshot message)
+    {
+        byte[] buffer = new byte[message.GetEncodedLength()];
+        message.Write(buffer);
+        return buffer;
+    }
+
+    private static byte[] Encode(MoveInput message)
+    {
+        byte[] buffer = new byte[MoveInput.EncodedLength];
+        message.Write(buffer);
+        return buffer;
+    }
+
+    private static byte[] Encode(StopMovement message)
+    {
+        byte[] buffer = new byte[StopMovement.EncodedLength];
         message.Write(buffer);
         return buffer;
     }

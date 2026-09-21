@@ -16,9 +16,9 @@ public sealed class MessageRoutingTests
     {
         string[] expected =
         {
-            "None=0x0000", "ClientHello=0x0001", "EnterWorldRequest=0x0002", "TargetEntity=0x0005",
-            "ServerHello=0x8001", "WorldEntered=0x8003", "EntitySpawn=0x8004", "EntityDespawn=0x8005",
-            "DisconnectNotice=0x8013",
+            "None=0x0000", "ClientHello=0x0001", "EnterWorldRequest=0x0002", "MoveInput=0x0003",
+            "StopMovement=0x0004", "TargetEntity=0x0005", "ServerHello=0x8001", "WorldEntered=0x8003",
+            "EntitySpawn=0x8004", "EntityDespawn=0x8005", "EntitySnapshot=0x8006", "DisconnectNotice=0x8013",
         };
 
         string[] actual = ((MessageOpcode[])Enum.GetValues(typeof(MessageOpcode)))
@@ -50,6 +50,19 @@ public sealed class MessageRoutingTests
         Assert.That(delivery, Is.EqualTo(MessageDelivery.ReliableOrdered));
     }
 
+    [TestCase(MessageOpcode.MoveInput, ProtocolChannel.Input)]
+    [TestCase(MessageOpcode.StopMovement, ProtocolChannel.Input)]
+    [TestCase(MessageOpcode.EntitySnapshot, ProtocolChannel.State)]
+    public void TryGetRoute_ForRealtimeMessages_IsUnreliableSequencedOnItsOwnChannel(
+        MessageOpcode opcode,
+        ProtocolChannel expectedChannel)
+    {
+        MessageRouting.TryGetRoute(opcode, out ProtocolChannel channel, out MessageDelivery delivery);
+
+        Assert.That(channel, Is.EqualTo(expectedChannel));
+        Assert.That(delivery, Is.EqualTo(MessageDelivery.UnreliableSequenced));
+    }
+
     [TestCase((ushort)0)]
     [TestCase((ushort)0x0006)]
     [TestCase((ushort)0x7FFF)]
@@ -64,6 +77,9 @@ public sealed class MessageRoutingTests
     [TestCase(MessageOpcode.ClientHello, true)]
     [TestCase(MessageOpcode.EnterWorldRequest, true)]
     [TestCase(MessageOpcode.TargetEntity, true)]
+    [TestCase(MessageOpcode.MoveInput, true)]
+    [TestCase(MessageOpcode.StopMovement, true)]
+    [TestCase(MessageOpcode.EntitySnapshot, false)]
     [TestCase(MessageOpcode.None, false)]
     [TestCase(MessageOpcode.ServerHello, false)]
     [TestCase(MessageOpcode.WorldEntered, false)]

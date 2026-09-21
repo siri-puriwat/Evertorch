@@ -26,6 +26,15 @@ public static class MessageRouting
             case MessageOpcode.EntityDespawn:
             case MessageOpcode.DisconnectNotice:
                 return true;
+            case MessageOpcode.MoveInput:
+            case MessageOpcode.StopMovement:
+                channel = ProtocolChannel.Input;
+                delivery = MessageDelivery.UnreliableSequenced;
+                return true;
+            case MessageOpcode.EntitySnapshot:
+                channel = ProtocolChannel.State;
+                delivery = MessageDelivery.UnreliableSequenced;
+                return true;
             default:
                 return false;
         }

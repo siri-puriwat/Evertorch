@@ -29,6 +29,7 @@ public sealed class ServerEndToEndTests
         EnterWorld(second, port, contentVersion, 2);
 
         Assert.That(first.WaitFor(() => first.Received.Count >= 3), Is.True, "the first client never saw the second");
+        Assert.That(second.WaitFor(() => second.Received.Count >= 3), Is.True, "the second client never saw the first");
         Assert.That(Opcodes(second).Take(3), Is.EqualTo(new[]
         {
             MessageOpcode.ServerHello,
