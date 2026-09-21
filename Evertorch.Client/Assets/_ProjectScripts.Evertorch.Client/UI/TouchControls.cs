@@ -2,7 +2,6 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem.OnScreen;
-using UnityEngine.InputSystem.UI;
 using UnityEngine.UI;
 
 namespace Evertorch.Client
@@ -15,9 +14,10 @@ public sealed class TouchControls : MonoBehaviour
 {
     public const string StickControlPath = "<Gamepad>/leftStick";
 
-    private const float StickRange = 90f;
-    private const float StickSize = 260f;
-    private const float KnobSize = 110f;
+    private const float StickRange = 51f;
+    private const float StickSize = 146f;
+    private const float KnobSize = 62f;
+    private const float StickInset = 129f;
 
     private readonly List<RaycastResult> m_raycastResults = new List<RaycastResult>();
     private GameObject? m_stickRoot;
@@ -63,30 +63,18 @@ public sealed class TouchControls : MonoBehaviour
 
     private void Build()
     {
-        m_eventSystem = EventSystem.current;
-        if (m_eventSystem == null)
-        {
-            GameObject eventSystem = new GameObject("EventSystem");
-            eventSystem.transform.SetParent(transform, false);
-            m_eventSystem = eventSystem.AddComponent<EventSystem>();
-            eventSystem.AddComponent<InputSystemUIInputModule>().AssignDefaultActions();
-        }
+        m_eventSystem = ClientUi.EnsureEventSystem(transform);
 
         GameObject canvasObject = new GameObject("Canvas");
         canvasObject.transform.SetParent(transform, false);
-        Canvas canvas = canvasObject.AddComponent<Canvas>();
-        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-        CanvasScaler scaler = canvasObject.AddComponent<CanvasScaler>();
-        scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-        scaler.referenceResolution = new Vector2(1920f, 1080f);
-        canvasObject.AddComponent<GraphicRaycaster>();
+        ClientUi.AddScreenCanvas(canvasObject, 0);
 
         m_stickRoot = CreateImage("Stick", canvasObject.transform, StickSize, new Color(1f, 1f, 1f, 0.18f));
         StickArea = (RectTransform)m_stickRoot.transform;
         StickArea.anchorMin = Vector2.zero;
         StickArea.anchorMax = Vector2.zero;
         StickArea.pivot = new Vector2(0.5f, 0.5f);
-        StickArea.anchoredPosition = new Vector2(230f, 230f);
+        StickArea.anchoredPosition = new Vector2(StickInset, StickInset);
 
         // The stick reads its control path when it is enabled, so the path has to be in place before that.
         GameObject knob = CreateImage("Knob", m_stickRoot.transform, KnobSize, new Color(1f, 1f, 1f, 0.55f));

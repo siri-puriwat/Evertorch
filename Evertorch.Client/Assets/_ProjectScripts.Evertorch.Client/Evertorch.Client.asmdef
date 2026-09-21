@@ -6,6 +6,7 @@
     "Evertorch.Protocol",
     "LiteNetLib",
     "Unity.InputSystem",
+    "Unity.TextMeshPro",
     "UnityEngine.UI"
   ],
   "includePlatforms": [],

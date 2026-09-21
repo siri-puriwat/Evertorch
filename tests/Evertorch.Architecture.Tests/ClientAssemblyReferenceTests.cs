@@ -24,7 +24,15 @@ public sealed class ClientAssemblyReferenceTests
         Assert.That(
             References(ClientAssembly),
             Is.EquivalentTo(
-                new[] { "Evertorch.Game", "Evertorch.Protocol", "LiteNetLib", "Unity.InputSystem", "UnityEngine.UI" }));
+                new[]
+                {
+                    "Evertorch.Game",
+                    "Evertorch.Protocol",
+                    "LiteNetLib",
+                    "Unity.InputSystem",
+                    "Unity.TextMeshPro",
+                    "UnityEngine.UI",
+                }));
         Assert.That(PrecompiledReferences(ClientAssembly), Is.Empty);
     }
 

@@ -106,8 +106,8 @@ public sealed class GameClient : MonoBehaviour
         Touch = TouchControls.Create();
         Touch.transform.SetParent(transform, false);
         Touch.SetVisible(Application.isMobilePlatform);
-        m_overlay = gameObject.AddComponent<DevelopmentOverlay>();
-        m_overlay.Bind(this);
+        m_overlay = DevelopmentOverlay.Create(this);
+        m_overlay.transform.SetParent(transform, false);
 
         yield return m_contentLoader.Load();
         if (m_contentLoader.Content == null)

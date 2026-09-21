@@ -5,9 +5,11 @@ using Evertorch.Game;
 using Evertorch.Protocol;
 using NUnit.Framework;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
 using UnityEngine.InputSystem.LowLevel;
 using UnityEngine.TestTools;
+using UnityEngine.UI;
 using EntityId = Evertorch.Game.EntityId;
 
 namespace Evertorch.Client.Tests.PlayMode
@@ -188,6 +190,73 @@ public sealed class SharedIntentPathTests : InputTestFixture
     }
 
     [UnityTest]
+    public IEnumerator Click_OnTheDevelopmentOverlay_IsNotAGroundClick()
+    {
+        Mouse mouse = InputSystem.AddDevice<Mouse>();
+        Rig rig = CreateRig();
+        DevelopmentOverlay overlay = rig.CreateOverlay();
+        yield return null;
+
+        ClickAt(mouse, CenterOf(overlay.Panel!));
+        PointerMoveResult result = rig.Tick();
+
+        Assert.That(result, Is.EqualTo(PointerMoveResult.OnControl));
+        Assert.That(rig.Controller.HasPath, Is.False);
+    }
+
+    [UnityTest]
+    public IEnumerator F1_HidesTheDevelopmentOverlay_SoItNoLongerTakesClicks()
+    {
+        Keyboard keyboard = InputSystem.AddDevice<Keyboard>();
+        Mouse mouse = InputSystem.AddDevice<Mouse>();
+        Rig rig = CreateRig();
+        DevelopmentOverlay overlay = rig.CreateOverlay();
+        yield return null;
+        Vector2 onPanel = CenterOf(overlay.Panel!);
+
+        // Queued without a manual update: the overlay polls "pressed this frame", so the press has to arrive in the
+        // input update of the frame whose Update reads it.
+        InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.F1));
+        yield return null;
+        SetKeys(keyboard);
+        ClickAt(mouse, onPanel);
+        PointerMoveResult result = rig.Tick();
+
+        Assert.That(overlay.IsVisible, Is.False);
+        Assert.That(result, Is.Not.EqualTo(PointerMoveResult.OnControl));
+    }
+
+    [UnityTest]
+    public IEnumerator OverlayButton_WhenTapped_IsNotLeftSelected()
+    {
+        // A selected control receives the UI navigate action, which shares WASD and the gamepad stick with movement.
+        // The tap goes through the UI event system, which ignores an unfocused application unless told otherwise.
+        InputSystem.settings.backgroundBehavior = InputSettings.BackgroundBehavior.IgnoreFocus;
+#if UNITY_EDITOR
+        InputSystem.settings.editorInputBehaviorInPlayMode =
+            InputSettings.EditorInputBehaviorInPlayMode.AllDeviceInputAlwaysGoesToGameView;
+#endif
+        Touchscreen touchscreen = InputSystem.AddDevice<Touchscreen>();
+        Rig rig = CreateRig();
+        DevelopmentOverlay overlay = rig.CreateOverlay();
+        yield return null;
+        Button[] buttons = overlay.GetComponentsInChildren<Button>();
+        Assert.That(buttons.Length, Is.EqualTo(1), "only Connect shows while disconnected");
+        bool isClicked = false;
+        buttons[0].onClick.AddListener(() => isClicked = true);
+        Vector2 onButton = CenterOf((RectTransform)buttons[0].transform);
+
+        BeginTouch(1, onButton, screen: touchscreen);
+        yield return null;
+        EndTouch(1, onButton, screen: touchscreen);
+        yield return null;
+        yield return null;
+
+        Assert.That(isClicked, Is.True, "the tap reached the button");
+        Assert.That(EventSystem.current.currentSelectedGameObject, Is.Null);
+    }
+
+    [UnityTest]
     public IEnumerator Click_OnAWall_IsRefusedAndSendsNothing()
     {
         Mouse mouse = InputSystem.AddDevice<Mouse>();
@@ -318,6 +387,11 @@ public sealed class SharedIntentPathTests : InputTestFixture
         return m_rig;
     }
 
+    private static Vector2 CenterOf(RectTransform rect)
+    {
+        return RectTransformUtility.WorldToScreenPoint(null, rect.TransformPoint(rect.rect.center));
+    }
+
     private static void AssertNear(WorldPosition actual, WorldPosition expected)
     {
         Assert.That(actual.X, Is.EqualTo(expected.X).Within(0.05f));
@@ -393,6 +467,18 @@ public sealed class SharedIntentPathTests : InputTestFixture
             m_created.Add(controls.gameObject);
             m_handler = new PointerMoveHandler(m_pointer, controls, null);
             return controls;
+        }
+
+        public DevelopmentOverlay CreateOverlay()
+        {
+            // Never activated, so the client neither loads content nor connects; the overlay only reads its state.
+            GameObject clientObject = new GameObject("TestClient");
+            clientObject.SetActive(false);
+            m_created.Add(clientObject);
+            DevelopmentOverlay overlay = DevelopmentOverlay.Create(clientObject.AddComponent<GameClient>());
+            m_created.Add(overlay.gameObject);
+            m_handler = new PointerMoveHandler(m_pointer, null, overlay);
+            return overlay;
         }
 
         public Vector2 ScreenPointOf(WorldPosition position)
