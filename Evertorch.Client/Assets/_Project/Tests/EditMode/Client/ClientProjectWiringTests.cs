@@ -37,7 +37,6 @@ public sealed class ClientProjectWiringTests
 
     [TestCase("Player/Move")]
     [TestCase("Player/MoveTo")]
-    [TestCase("Player/PointerPosition")]
     public void InputActions_HaveTheActionsTheClientBinds(string actionPath)
     {
         Assert.That(LoadActions().FindAction(actionPath), Is.Not.Null);

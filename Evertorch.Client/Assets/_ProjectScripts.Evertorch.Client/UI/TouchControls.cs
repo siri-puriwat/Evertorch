@@ -27,6 +27,8 @@ public sealed class TouchControls : MonoBehaviour
 
     public RectTransform? StickArea { get; private set; }
 
+    public RectTransform? Knob { get; private set; }
+
     public static TouchControls Create()
     {
         GameObject root = new GameObject("TouchControls");
@@ -67,7 +69,7 @@ public sealed class TouchControls : MonoBehaviour
             GameObject eventSystem = new GameObject("EventSystem");
             eventSystem.transform.SetParent(transform, false);
             m_eventSystem = eventSystem.AddComponent<EventSystem>();
-            eventSystem.AddComponent<InputSystemUIInputModule>();
+            eventSystem.AddComponent<InputSystemUIInputModule>().AssignDefaultActions();
         }
 
         GameObject canvasObject = new GameObject("Canvas");
@@ -93,6 +95,7 @@ public sealed class TouchControls : MonoBehaviour
         stick.controlPath = StickControlPath;
         stick.movementRange = StickRange;
         knob.SetActive(true);
+        Knob = (RectTransform)knob.transform;
     }
 
     private static GameObject CreateImage(string objectName, Transform parent, float size, Color color)

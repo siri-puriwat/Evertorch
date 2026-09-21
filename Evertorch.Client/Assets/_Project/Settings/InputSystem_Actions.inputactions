@@ -94,15 +94,6 @@
                     "processors": "",
                     "interactions": "",
                     "initialStateCheck": false
-                },
-                {
-                    "name": "PointerPosition",
-                    "type": "Value",
-                    "id": "e289ac49-3097-4036-a6c9-6f9bedcb420f",
-                    "expectedControlType": "Vector2",
-                    "processors": "",
-                    "interactions": "",
-                    "initialStateCheck": true
                 }
             ],
             "bindings": [
@@ -125,28 +116,6 @@
                     "processors": "",
                     "groups": ";Touch",
                     "action": "MoveTo",
-                    "isComposite": false,
-                    "isPartOfComposite": false
-                },
-                {
-                    "name": "",
-                    "id": "885e06e3-54b9-4eed-b1ad-01f8d766f0b8",
-                    "path": "<Mouse>/position",
-                    "interactions": "",
-                    "processors": "",
-                    "groups": ";Keyboard&Mouse",
-                    "action": "PointerPosition",
-                    "isComposite": false,
-                    "isPartOfComposite": false
-                },
-                {
-                    "name": "",
-                    "id": "df549018-2800-4c84-b94b-458e6fae4b0b",
-                    "path": "<Pen>/position",
-                    "interactions": "",
-                    "processors": "",
-                    "groups": ";Keyboard&Mouse",
-                    "action": "PointerPosition",
                     "isComposite": false,
                     "isPartOfComposite": false
                 },

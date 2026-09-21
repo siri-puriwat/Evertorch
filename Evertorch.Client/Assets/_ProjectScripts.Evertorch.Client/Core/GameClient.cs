@@ -45,6 +45,7 @@ public sealed class GameClient : MonoBehaviour
     private LiteNetLibClientTransport? m_socket;
     private ManualMoveSource? m_manualSource;
     private PointerMoveSource? m_pointerSource;
+    private PointerMoveHandler? m_pointerHandler;
     private MovementController? m_controller;
     private LocalPlayerDriver? m_driver;
     private FixedTickClock? m_clock;
@@ -288,44 +289,37 @@ public sealed class GameClient : MonoBehaviour
         InputActionAsset? actions = m_inputActions != null ? m_inputActions : InputSystem.actions;
         InputAction? move = actions?.FindAction("Player/Move");
         InputAction? moveTo = actions?.FindAction("Player/MoveTo");
-        InputAction? pointerPosition = actions?.FindAction("Player/PointerPosition");
-        if (move == null || moveTo == null || pointerPosition == null)
+        if (move == null || moveTo == null)
         {
-            Status = "The input actions asset lacks Player/Move, Player/MoveTo, or Player/PointerPosition.";
+            Status = "The input actions asset lacks Player/Move or Player/MoveTo.";
             Debug.LogError(Status);
             return;
         }
 
         m_manualSource = new ManualMoveSource(move);
-        m_pointerSource = new PointerMoveSource(moveTo, pointerPosition);
+        m_pointerSource = new PointerMoveSource(moveTo);
+        m_pointerHandler = new PointerMoveHandler(m_pointerSource, Touch, m_overlay);
     }
 
     private void HandlePointerRequest()
     {
-        if (m_pointerSource == null || !m_pointerSource.TryTakeRequest(out Vector2 screenPosition))
+        if (m_pointerHandler == null || m_world == null || m_controller == null)
         {
             return;
         }
 
-        Camera? mainCamera = Camera.main;
-        bool isOnUi = (Touch != null && Touch.IsOverControl(screenPosition))
-            || (m_overlay != null && m_overlay.Covers(screenPosition));
-        if (isOnUi || mainCamera == null || m_map == null || m_map.GroundCollider == null
-            || m_world == null || m_controller == null)
-        {
-            return;
-        }
-
-        if (!GroundPicker.TryPick(mainCamera, m_map.GroundCollider, screenPosition, out WorldPosition point))
-        {
-            return;
-        }
-
-        if (m_controller.TryMoveTo(m_world.Predictor.Position, point))
+        Collider? ground = m_map == null ? null : m_map.GroundCollider;
+        PointerMoveResult result = m_pointerHandler.Handle(
+            Camera.main,
+            ground,
+            m_controller,
+            m_world.Predictor.Position,
+            out WorldPosition point);
+        if (result == PointerMoveResult.Accepted)
         {
             m_marker?.ShowAccepted(m_controller.Path[m_controller.Path.Count - 1]);
         }
-        else
+        else if (result == PointerMoveResult.Refused)
         {
             m_marker?.ShowRefused(point);
         }
