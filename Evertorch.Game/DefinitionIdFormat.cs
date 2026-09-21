@@ -4,7 +4,7 @@ internal static class DefinitionIdFormat
 {
     public static bool IsValid(string? value, string kindPrefix)
     {
-        if (value == null || value.Length <= kindPrefix.Length + 1)
+        if (value == null || value.Length <= kindPrefix.Length + 1 || value.Length > DefinitionIdLimits.MaxLength)
         {
             return false;
         }

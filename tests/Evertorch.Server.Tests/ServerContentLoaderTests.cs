@@ -333,6 +333,19 @@ public sealed class ServerContentLoaderTests
     }
 
     [Test]
+    public void Load_WhenDefinitionIdIsLongerThanTheWireLimit_Fails()
+    {
+        Dictionary<string, byte[]> files = PackageFixture.BuildRepositoryPackage();
+        string tooLong = "job." + new string('a', 61);
+        PackageFixture.Replace(files, Jobs, "\"id\": \"job.adventurer\"", "\"id\": \"" + tooLong + "\"");
+
+        IReadOnlyList<string> problems = ProblemsOf(files);
+
+        Assert.That(problems, Has.Count.EqualTo(1));
+        Assert.That(problems[0], Does.Contain("jobs.json: definitions[0].id").And.Contain("is not a valid ID"));
+    }
+
+    [Test]
     public void Load_WhenDefinitionIsDuplicated_Fails()
     {
         Dictionary<string, byte[]> files = PackageFixture.BuildRepositoryPackage();

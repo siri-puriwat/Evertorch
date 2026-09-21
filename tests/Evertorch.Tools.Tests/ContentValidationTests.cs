@@ -55,6 +55,12 @@ public sealed class ContentValidationTests
     [TestCase(Potion, "id: item.consumable.minor_health", "id: Item.Consumable.MinorHealth", "id", "not a valid ID")]
     [TestCase(Potion, "id: item.consumable.minor_health", "id: item..minor_health", "id", "not a valid ID")]
     [TestCase(Potion, "id: item.consumable.minor_health", "id: monster.minor_health", "id", "expected 'item.'")]
+    [TestCase(
+        Potion,
+        "id: item.consumable.minor_health",
+        "id: item.consumable.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "id",
+        "64 characters at most")]
     [TestCase(Item, "stackLimit: 999\n", "", "stackLimit", "required field is missing")]
     [TestCase(Item, "stackLimit: 999", "stackLimit: 12.5", "stackLimit", "whole number")]
     [TestCase(Item, "stackLimit: 999", "stackLimit: \"999\"", "stackLimit", "whole number")]

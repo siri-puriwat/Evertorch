@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using Evertorch.Game;
 using YamlDotNet.Core;
 using YamlDotNet.RepresentationModel;
 
@@ -119,9 +120,10 @@ public sealed class YamlFieldReader
                 scalar,
                 string.Format(
                     CultureInfo.InvariantCulture,
-                    "'{0}' is not a valid ID; expected '{1}.' followed by lowercase dot-separated segments",
+                    "'{0}' is not a valid ID; expected '{1}.' followed by lowercase dot-separated segments, {2} characters at most",
                     scalar.Value,
-                    kindPrefix));
+                    kindPrefix,
+                    DefinitionIdLimits.MaxLength));
             return default;
         }
 
