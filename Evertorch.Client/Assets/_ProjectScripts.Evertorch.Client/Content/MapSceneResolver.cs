@@ -5,17 +5,24 @@ namespace Evertorch.Client
 /// </summary>
 public static class MapSceneResolver
 {
+    private const string TrainingGroundScene = "10_TrainingGround";
+
     public static bool TryResolve(string sceneKey, out string sceneName)
     {
         switch (sceneKey)
         {
             case "map_training_ground":
-                sceneName = "10_TrainingGround";
+                sceneName = TrainingGroundScene;
                 return true;
             default:
                 sceneName = string.Empty;
                 return false;
         }
+    }
+
+    public static bool IsMapScene(string sceneName)
+    {
+        return sceneName == TrainingGroundScene;
     }
 }
 }

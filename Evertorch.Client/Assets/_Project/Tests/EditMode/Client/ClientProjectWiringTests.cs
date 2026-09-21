@@ -29,6 +29,35 @@ public sealed class ClientProjectWiringTests
     }
 
     [Test]
+    public void BootstrapScene_IsTheFirstSceneInTheBuild()
+    {
+        string first = System.IO.Path.GetFileNameWithoutExtension(EditorBuildSettings.scenes[0].path);
+
+        Assert.That(first, Is.EqualTo(BootstrapRedirect.BootstrapScene));
+    }
+
+    [TestCase("10_TrainingGround", false, true)]
+    [TestCase("10_TrainingGround", true, false)]
+    [TestCase("00_Bootstrap", false, false)]
+    [TestCase("InitTestScene637000000000000000", false, false)]
+    public void BootstrapRedirect_OnlyAMapSceneWithoutAClientGoesBackToTheBootstrap(
+        string activeScene,
+        bool hasGameClient,
+        bool expected)
+    {
+        Assert.That(BootstrapRedirect.ShouldRedirect(activeScene, hasGameClient), Is.EqualTo(expected));
+    }
+
+    [Test]
+    public void MapSceneResolver_ResolvedScene_IsAMapScene()
+    {
+        MapSceneResolver.TryResolve("map_training_ground", out string sceneName);
+
+        Assert.That(MapSceneResolver.IsMapScene(sceneName), Is.True);
+        Assert.That(MapSceneResolver.IsMapScene(BootstrapRedirect.BootstrapScene), Is.False);
+    }
+
+    [Test]
     public void MapSceneResolver_UnknownKey_IsRefused()
     {
         Assert.That(MapSceneResolver.TryResolve("map_nowhere", out string sceneName), Is.False);
