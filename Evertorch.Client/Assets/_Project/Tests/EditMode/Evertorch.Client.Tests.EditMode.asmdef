@@ -2,6 +2,7 @@
   "name": "Evertorch.Client.Tests.EditMode",
   "rootNamespace": "Evertorch.Client.Tests.EditMode",
   "references": [
+    "Evertorch.Client",
     "Evertorch.Game",
     "Evertorch.Protocol",
     "UnityEngine.TestRunner",

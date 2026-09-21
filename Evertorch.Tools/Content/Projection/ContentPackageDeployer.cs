@@ -47,6 +47,39 @@ public static class ContentPackageDeployer
         DeleteIfPresent(previous);
     }
 
+    /// <summary>
+    /// Copies the client package into a directory another tool also writes to, such as a Unity
+    /// <c>StreamingAssets</c> folder. Files are replaced in place so that tool's own side files survive; the
+    /// manifest is removed first and written last, so an interrupted copy reads as incomplete, never as valid.
+    /// </summary>
+    public static void DeployClient(ContentPackage client, string clientDirectory)
+    {
+        string directory = Path.GetFullPath(clientDirectory);
+        string manifest = Path.Combine(directory, ContentPackage.ManifestPath);
+        bool holdsJson = Directory.Exists(directory) && Directory.EnumerateFiles(directory, "*.json").Any();
+        if (holdsJson && !File.Exists(manifest))
+        {
+            throw new InvalidOperationException(
+                "Refusing to write into '" + directory + "': it holds JSON files but no generated content manifest.");
+        }
+
+        Directory.CreateDirectory(directory);
+        if (File.Exists(manifest))
+        {
+            File.Delete(manifest);
+        }
+
+        foreach (string existing in Directory.GetFiles(directory, "*.json"))
+        {
+            if (client.DataFiles.All(file => file.Path != Path.GetFileName(existing)))
+            {
+                File.Delete(existing);
+            }
+        }
+
+        WritePackage(client, directory);
+    }
+
     private static void EnsureReplaceable(string output)
     {
         if (!Directory.Exists(output) || !Directory.EnumerateFileSystemEntries(output).Any())

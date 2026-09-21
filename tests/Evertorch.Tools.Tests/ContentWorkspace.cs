@@ -16,6 +16,7 @@ internal sealed class ContentWorkspace : IDisposable
         m_root = Path.Combine(Path.GetTempPath(), "evertorch-tools-tests", Guid.NewGuid().ToString("N"));
         ContentRoot = Path.Combine(m_root, "content");
         OutputDirectory = Path.Combine(m_root, "out");
+        ClientDirectory = Path.Combine(m_root, "client-copy", "GameData");
         CopyDirectory(Path.Combine(FixturesDirectory, "valid"), ContentRoot);
     }
 
@@ -24,6 +25,8 @@ internal sealed class ContentWorkspace : IDisposable
     public string ContentRoot { get; }
 
     public string OutputDirectory { get; }
+
+    public string ClientDirectory { get; }
 
     public void Replace(string relativePath, string oldText, string newText)
     {

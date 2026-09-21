@@ -24,6 +24,7 @@ public static class Program
 
         string? contentRoot = null;
         string? outputDirectory = null;
+        string? clientDirectory = null;
         for (int index = 2; index < args.Length; index += 2)
         {
             if (index + 1 >= args.Length)
@@ -40,6 +41,9 @@ public static class Program
                 case "--out":
                     outputDirectory = args[index + 1];
                     break;
+                case "--client-out":
+                    clientDirectory = args[index + 1];
+                    break;
                 default:
                     WriteUsage(error);
                     return UsageError;
@@ -47,6 +51,12 @@ public static class Program
         }
 
         bool isBuild = args[1] == "build";
+        if (!isBuild && clientDirectory != null)
+        {
+            WriteUsage(error);
+            return UsageError;
+        }
+
         if (contentRoot == null || (isBuild && outputDirectory == null))
         {
             string? repositoryRoot = FindRepositoryRoot(Directory.GetCurrentDirectory());
@@ -77,6 +87,10 @@ public static class Program
             try
             {
                 ContentPackageDeployer.Deploy(result.Packages, outputDirectory!);
+                if (clientDirectory != null)
+                {
+                    ContentPackageDeployer.DeployClient(result.Packages.Client, clientDirectory);
+                }
             }
             catch (InvalidOperationException exception)
             {
@@ -95,6 +109,10 @@ public static class Program
             }
 
             output.WriteLine("Content packages written to " + Path.GetFullPath(outputDirectory!));
+            if (clientDirectory != null)
+            {
+                output.WriteLine("Client package copied to " + Path.GetFullPath(clientDirectory));
+            }
         }
 
         output.WriteLine("Server content version: " + result.Packages.Server.Version);
@@ -122,7 +140,7 @@ public static class Program
     {
         error.WriteLine("Usage:");
         error.WriteLine("  Evertorch.Tools content validate [--content <dir>]");
-        error.WriteLine("  Evertorch.Tools content build [--content <dir>] [--out <dir>]");
+        error.WriteLine("  Evertorch.Tools content build [--content <dir>] [--out <dir>] [--client-out <dir>]");
     }
 }
 }

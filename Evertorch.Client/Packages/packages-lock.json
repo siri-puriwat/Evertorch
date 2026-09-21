@@ -31,6 +31,13 @@
         "com.evertorch.game": "0.1.0"
       }
     },
+    "com.revenantx.litenetlib": {
+      "version": "https://github.com/RevenantX/LiteNetLib.git?path=/LiteNetLib#2.1.4-upm",
+      "depth": 0,
+      "source": "git",
+      "dependencies": {},
+      "hash": "3bfa89948f6fa4e00c421f75cbd999e048f493d8"
+    },
     "com.unity.addressables": {
       "version": "2.10.3",
       "depth": 0,

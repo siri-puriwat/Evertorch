@@ -33,6 +33,10 @@
 /Evertorch.Client/*.slnx
 /Evertorch.Client/Assets/Plugins/Editor/JetBrains*
 
+# Client content package copied in by `Evertorch.Tools content build --client-out`.
+/Evertorch.Client/Assets/StreamingAssets/
+/Evertorch.Client/Assets/StreamingAssets.meta
+
 # Generated Unity and crash artifacts.
 *.pidb
 *.pdb

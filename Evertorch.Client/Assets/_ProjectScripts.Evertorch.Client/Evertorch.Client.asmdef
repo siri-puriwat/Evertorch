@@ -1,7 +1,13 @@
 {
   "name": "Evertorch.Client",
   "rootNamespace": "Evertorch.Client",
-  "references": [],
+  "references": [
+    "Evertorch.Game",
+    "Evertorch.Protocol",
+    "LiteNetLib",
+    "Unity.InputSystem",
+    "UnityEngine.UI"
+  ],
   "includePlatforms": [],
   "excludePlatforms": [],
   "allowUnsafeCode": false,

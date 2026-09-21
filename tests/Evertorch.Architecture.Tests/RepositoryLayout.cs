@@ -47,6 +47,20 @@ internal static class RepositoryLayout
         return ItemIncludes(projectName, "PackageReference").ToArray();
     }
 
+    public static string PackageVersion(string projectName, string packageName)
+    {
+        return XDocument.Load(ProjectFilePath(projectName))
+            .Descendants("PackageReference")
+            .Where(item => (string?)item.Attribute("Include") == packageName)
+            .Select(item => (string?)item.Attribute("Version") ?? string.Empty)
+            .Single();
+    }
+
+    public static string ClientFilePath(string relativePath)
+    {
+        return Path.Combine(RootDirectory, UnityProjectName, relativePath);
+    }
+
     private static IEnumerable<string> ItemIncludes(string projectName, string itemName)
     {
         XDocument project = XDocument.Load(ProjectFilePath(projectName));

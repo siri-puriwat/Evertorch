@@ -3,6 +3,10 @@
   "rootNamespace": "Evertorch.Client.Tests.PlayMode",
   "references": [
     "Evertorch.Client",
+    "Evertorch.Game",
+    "Evertorch.Protocol",
+    "Unity.InputSystem",
+    "Unity.InputSystem.TestFramework",
     "UnityEngine.TestRunner"
   ],
   "includePlatforms": [],
