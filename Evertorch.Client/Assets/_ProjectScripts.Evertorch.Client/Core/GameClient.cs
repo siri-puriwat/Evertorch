@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using Evertorch.Game;
@@ -95,8 +96,10 @@ public sealed class GameClient : MonoBehaviour
         DontDestroyOnLoad(gameObject);
         Application.runInBackground = true;
 
-        // A second client on the same machine needs its own character, or the server replaces the first session.
-        int suffix = Random.Range(1000, 9999);
+        // Every client on the machine, including each Multiplayer Play Mode window, needs its own character, or the
+        // server replaces the older session. A GUID is random per process, unlike a seeded draw two editors started
+        // together could share.
+        int suffix = 100000 + Math.Abs(Guid.NewGuid().GetHashCode() % 900000);
         Identity = "player" + suffix;
         Character = suffix;
 
@@ -200,7 +203,7 @@ public sealed class GameClient : MonoBehaviour
         m_socket?.Dispose();
         m_socket = new LiteNetLibClientTransport(ConnectionKey, DisconnectTimeoutMilliseconds);
         LossyTransport? previousLink = Link;
-        Link = new LossyTransport(m_socket, System.Environment.TickCount, () => Time.realtimeSinceStartupAsDouble);
+        Link = new LossyTransport(m_socket, Environment.TickCount, () => Time.realtimeSinceStartupAsDouble);
         if (previousLink != null)
         {
             Link.LatencyMilliseconds = previousLink.LatencyMilliseconds;
