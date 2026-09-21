@@ -76,6 +76,11 @@ public sealed class LocalPlayerDriver
         }
 
         bool isAcknowledged = unchecked((int)(predictor.LastAcknowledgedSequence - m_firstStopSequence)) >= 0;
+        if (isAcknowledged)
+        {
+            predictor.ForgetPendingStops();
+        }
+
         m_isStopOutstanding = !isAcknowledged;
         return m_isStopOutstanding;
     }

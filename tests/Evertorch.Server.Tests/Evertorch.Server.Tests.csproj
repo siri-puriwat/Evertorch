@@ -10,4 +10,15 @@
     <ProjectReference Include="..\..\Evertorch.Tools\Evertorch.Tools.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Test-only: the client's engine-free movement and protocol code, compiled from its Unity source folder so
+         that convergence is proven with the code the client runs rather than with a stand-in. -->
+    <Compile Include="..\..\Evertorch.Client\Assets\_ProjectScripts.Evertorch.Client\Core\FixedTickClock.cs"
+             Link="Client\Core\%(Filename)%(Extension)" />
+    <Compile Include="..\..\Evertorch.Client\Assets\_ProjectScripts.Evertorch.Client\Gameplay\*.cs"
+             Link="Client\Gameplay\%(Filename)%(Extension)" />
+    <Compile Include="..\..\Evertorch.Client\Assets\_ProjectScripts.Evertorch.Client\Networking\*.cs"
+             Link="Client\Networking\%(Filename)%(Extension)" />
+  </ItemGroup>
+
 </Project>

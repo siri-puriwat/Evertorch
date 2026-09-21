@@ -10,7 +10,7 @@ namespace Evertorch.Client
 /// The only client code that knows LiteNetLib. Events are raised from <see cref="Poll"/>, so everything above it
 /// runs on Unity's main thread.
 /// </summary>
-public sealed class LiteNetLibClientTransport : IClientTransport, INetEventListener, IDisposable
+public sealed class LiteNetLibClientTransport : IClientTransport, IDisposable
 {
     private readonly NetManager m_manager;
     private readonly string m_connectionKey;
@@ -20,7 +20,7 @@ public sealed class LiteNetLibClientTransport : IClientTransport, INetEventListe
     public LiteNetLibClientTransport(string connectionKey, int disconnectTimeoutMilliseconds)
     {
         m_connectionKey = connectionKey ?? throw new ArgumentNullException(nameof(connectionKey));
-        m_manager = new NetManager(this)
+        m_manager = new NetManager(new EventListener(this))
         {
             ChannelsCount = MessageRouting.ChannelCount,
             AutoRecycle = true,
@@ -82,48 +82,23 @@ public sealed class LiteNetLibClientTransport : IClientTransport, INetEventListe
         m_manager.Stop(true);
     }
 
-    void INetEventListener.OnPeerConnected(NetPeer peer)
+    private void OnPeerConnected()
     {
         m_listener?.OnConnected();
     }
 
-    void INetEventListener.OnPeerDisconnected(NetPeer peer, DisconnectInfo disconnectInfo)
+    private void OnPeerDisconnected(DisconnectInfo disconnectInfo)
     {
         m_peer = null;
-        ReadOnlySpan<byte> notice = disconnectInfo.AdditionalData != null
-            && disconnectInfo.AdditionalData.AvailableBytes > 0
-                ? disconnectInfo.AdditionalData.GetRemainingBytesSpan()
-                : ReadOnlySpan<byte>.Empty;
+        NetPacketReader? data = disconnectInfo.AdditionalData;
+        bool hasNotice = data != null && data.AvailableBytes > 0;
+        ReadOnlySpan<byte> notice = hasNotice ? data!.GetRemainingBytesSpan() : ReadOnlySpan<byte>.Empty;
         m_listener?.OnDisconnected(ToCause(disconnectInfo.Reason), notice);
     }
 
-    void INetEventListener.OnNetworkReceive(
-        NetPeer peer,
-        NetPacketReader reader,
-        byte channelNumber,
-        DeliveryMethod deliveryMethod)
+    private void OnNetworkReceive(NetPacketReader reader, byte channelNumber)
     {
         m_listener?.OnPayload((ProtocolChannel)channelNumber, reader.GetRemainingBytesSpan());
-    }
-
-    void INetEventListener.OnNetworkError(IPEndPoint endPoint, SocketError socketError)
-    {
-    }
-
-    void INetEventListener.OnNetworkReceiveUnconnected(
-        IPEndPoint remoteEndPoint,
-        NetPacketReader reader,
-        UnconnectedMessageType messageType)
-    {
-    }
-
-    void INetEventListener.OnNetworkLatencyUpdate(NetPeer peer, int latency)
-    {
-    }
-
-    void INetEventListener.OnConnectionRequest(ConnectionRequest request)
-    {
-        request.Reject();
     }
 
     private static TransportDisconnectCause ToCause(LiteNetLib.DisconnectReason reason)
@@ -144,6 +119,56 @@ public sealed class LiteNetLibClientTransport : IClientTransport, INetEventListe
                 return TransportDisconnectCause.ConnectionFailed;
             default:
                 return TransportDisconnectCause.Other;
+        }
+    }
+
+    // Kept off the public type so that assemblies using the transport need no reference to the network library.
+    private sealed class EventListener : INetEventListener
+    {
+        private readonly LiteNetLibClientTransport m_owner;
+
+        public EventListener(LiteNetLibClientTransport owner)
+        {
+            m_owner = owner;
+        }
+
+        public void OnPeerConnected(NetPeer peer)
+        {
+            m_owner.OnPeerConnected();
+        }
+
+        public void OnPeerDisconnected(NetPeer peer, DisconnectInfo disconnectInfo)
+        {
+            m_owner.OnPeerDisconnected(disconnectInfo);
+        }
+
+        public void OnNetworkReceive(
+            NetPeer peer,
+            NetPacketReader reader,
+            byte channelNumber,
+            DeliveryMethod deliveryMethod)
+        {
+            m_owner.OnNetworkReceive(reader, channelNumber);
+        }
+
+        public void OnNetworkError(IPEndPoint endPoint, SocketError socketError)
+        {
+        }
+
+        public void OnNetworkReceiveUnconnected(
+            IPEndPoint remoteEndPoint,
+            NetPacketReader reader,
+            UnconnectedMessageType messageType)
+        {
+        }
+
+        public void OnNetworkLatencyUpdate(NetPeer peer, int latency)
+        {
+        }
+
+        public void OnConnectionRequest(ConnectionRequest request)
+        {
+            request.Reject();
         }
     }
 }

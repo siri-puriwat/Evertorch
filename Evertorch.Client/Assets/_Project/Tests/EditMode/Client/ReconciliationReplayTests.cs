@@ -109,6 +109,17 @@ public sealed class ReconciliationReplayTests
     }
 
     [Test]
+    public void StopsLostAfterTheAcknowledgedOne_DoNotLingerAsPendingInputs()
+    {
+        int stopTick = MoveTicks + 1;
+        Scenario scenario = new Scenario(3, 3, (tick, isUplink) => !isUplink || tick <= stopTick);
+
+        scenario.Run();
+
+        scenario.AssertConverged();
+    }
+
+    [Test]
     public void IdlePlayer_SendsNothing()
     {
         Scenario scenario = new Scenario(1, 1, (tick, isUplink) => true)

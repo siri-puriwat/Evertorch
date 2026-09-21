@@ -79,6 +79,23 @@ public sealed class MovementPredictor
         }
     }
 
+    /// <summary>
+    /// Forgets unacknowledged inputs that ask for no movement. Once the server has acknowledged a stop, any later
+    /// stop that was lost on the way will never be acknowledged, and replaying it changes nothing.
+    /// </summary>
+    public void ForgetPendingStops()
+    {
+        int count = m_pending.Count;
+        for (int index = 0; index < count; index++)
+        {
+            MoveIntent pending = m_pending.Dequeue();
+            if (pending.DirectionX != 0f || pending.DirectionZ != 0f)
+            {
+                m_pending.Enqueue(pending);
+            }
+        }
+    }
+
     private static bool IsNewer(uint sequence, uint reference)
     {
         return unchecked((int)(sequence - reference)) > 0;

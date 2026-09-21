@@ -145,6 +145,23 @@ public sealed class MovementPredictorTests
         Assert.That(predictor.DroppedPendingInputs, Is.EqualTo(3));
     }
 
+    [Test]
+    public void ForgetPendingStops_RemovesStopsAndKeepsMovesInOrder()
+    {
+        MovementPredictor predictor = CreatePredictor(ClientTestGrids.CreateYard());
+        predictor.Apply(new MoveIntent(1, 1, 0f, 0f));
+        predictor.Apply(new MoveIntent(2, 2, 1f, 0f));
+        predictor.Apply(new MoveIntent(3, 3, 0f, 0f));
+        predictor.Apply(new MoveIntent(4, 4, 0f, -1f));
+
+        predictor.ForgetPendingStops();
+        predictor.Reconcile(ClientWorldFixture.State(ClientWorldFixture.LocalEntity, Start), 0);
+
+        Assert.That(predictor.PendingCount, Is.EqualTo(2));
+        Assert.That(predictor.Position.X, Is.EqualTo(Start.X + Step).Within(1e-5f), "the move east was kept");
+        Assert.That(predictor.Position.Z, Is.EqualTo(Start.Z - Step).Within(1e-5f), "then the move south");
+    }
+
     private static MovementPredictor CreatePredictor(NavigationGrid grid)
     {
         return new MovementPredictor(
