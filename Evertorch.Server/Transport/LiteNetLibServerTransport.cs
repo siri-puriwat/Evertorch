@@ -8,12 +8,13 @@ using Evertorch.Protocol;
 using LiteNetLib;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using DisconnectReason = Evertorch.Protocol.DisconnectReason;
 
 namespace Evertorch.Server
 {
 /// <summary>
-/// The only place the server touches LiteNetLib. Library callbacks run on its own threads; all they do is decode
-/// into the <see cref="InboundQueue"/> and keep the peer table, so the simulation never sees a library type.
+///     The only place the server touches LiteNetLib. Library callbacks run on its own threads; all they do is decode
+///     into the <see cref="InboundQueue" /> and keep the peer table, so the simulation never sees a library type.
 /// </summary>
 public sealed class LiteNetLibServerTransport : IServerTransport, INetEventListener, IDisposable
 {
@@ -34,8 +35,7 @@ public sealed class LiteNetLibServerTransport : IServerTransport, INetEventListe
     private readonly ILogger<LiteNetLibServerTransport> m_logger;
     private readonly NetManager m_manager;
 
-    private readonly ConcurrentDictionary<ConnectionId, NetPeer> m_peers =
-        new ConcurrentDictionary<ConnectionId, NetPeer>();
+    private readonly ConcurrentDictionary<ConnectionId, NetPeer> m_peers = new();
 
     private long m_lastConnection;
     private volatile bool m_isAdmissionClosed;
@@ -64,95 +64,8 @@ public sealed class LiteNetLibServerTransport : IServerTransport, INetEventListe
 
             // Callbacks fire straight from the library's threads instead of waiting for a poll, which would add up
             // to a timer quantum of latency to every input.
-            UnsyncedEvents = true,
+            UnsyncedEvents = true
         };
-    }
-
-    public int LocalPort => m_manager.LocalPort;
-
-    public void Start()
-    {
-        IPAddress address = IPAddress.Parse(m_options.BindAddress);
-        if (!m_manager.Start(address, IPAddress.IPv6Any, m_options.Port))
-        {
-            throw new InvalidOperationException(
-                "The transport could not bind " + m_options.BindAddress + ":" + m_options.Port + ".");
-        }
-
-        LogListening(m_logger, m_options.BindAddress, m_manager.LocalPort, null);
-    }
-
-    public void CloseAdmission()
-    {
-        m_isAdmissionClosed = true;
-    }
-
-    public void Stop()
-    {
-        CloseAdmission();
-        byte[] notice = EncodeNotice(Protocol.DisconnectReason.Maintenance, string.Empty);
-        foreach (KeyValuePair<ConnectionId, NetPeer> entry in m_peers)
-        {
-            MarkClosedByServer(entry.Value);
-            m_manager.DisconnectPeer(entry.Value, notice);
-        }
-
-        m_peers.Clear();
-        m_manager.Stop(true);
-    }
-
-    public void Send(ConnectionId connection, ReadOnlySpan<byte> payload)
-    {
-        if (!m_peers.TryGetValue(connection, out NetPeer? peer))
-        {
-            return;
-        }
-
-        if (!MessageRouting.TryReadOpcode(payload, out MessageOpcode opcode)
-            || !MessageRouting.TryGetRoute(opcode, out ProtocolChannel channel, out MessageDelivery delivery))
-        {
-            throw new ArgumentException("The payload does not start with a routable opcode.", nameof(payload));
-        }
-
-        DeliveryMethod method = delivery == MessageDelivery.ReliableOrdered
-            ? DeliveryMethod.ReliableOrdered
-            : DeliveryMethod.Sequenced;
-        peer.Send(payload, (byte)channel, method);
-    }
-
-    public void Disconnect(ConnectionId connection, Protocol.DisconnectReason reason, string message)
-    {
-        if (!m_peers.TryRemove(connection, out NetPeer? peer))
-        {
-            return;
-        }
-
-        // The notice rides in the disconnect packet itself, which the library retransmits, so it needs no channel.
-        MarkClosedByServer(peer);
-        m_manager.DisconnectPeer(peer, EncodeNotice(reason, message));
-    }
-
-    public TransportStatistics GetStatistics()
-    {
-        NetStatistics statistics = m_manager.Statistics;
-        return new TransportStatistics(
-            statistics.BytesReceived,
-            statistics.BytesSent,
-            statistics.PacketsReceived,
-            statistics.PacketsSent,
-            statistics.PacketLoss);
-    }
-
-    public bool TryGetRoundTripTime(ConnectionId connection, out int milliseconds)
-    {
-        if (m_peers.TryGetValue(connection, out NetPeer? peer))
-        {
-            milliseconds = peer.RoundTripTime;
-            return true;
-        }
-
-        milliseconds = 0;
-        return false;
     }
 
     public void Dispose()
@@ -167,13 +80,13 @@ public sealed class LiteNetLibServerTransport : IServerTransport, INetEventListe
     {
         if (m_isAdmissionClosed)
         {
-            request.Reject(EncodeNotice(Protocol.DisconnectReason.Maintenance, string.Empty));
+            request.Reject(EncodeNotice(DisconnectReason.Maintenance, string.Empty));
             return;
         }
 
         if (m_manager.ConnectedPeersCount >= m_options.MaxConnections)
         {
-            request.Reject(EncodeNotice(Protocol.DisconnectReason.ServerFull, string.Empty));
+            request.Reject(EncodeNotice(DisconnectReason.ServerFull, string.Empty));
             return;
         }
 
@@ -182,7 +95,7 @@ public sealed class LiteNetLibServerTransport : IServerTransport, INetEventListe
 
     void INetEventListener.OnPeerConnected(NetPeer peer)
     {
-        ConnectionId connection = new ConnectionId(Interlocked.Increment(ref m_lastConnection));
+        var connection = new ConnectionId(Interlocked.Increment(ref m_lastConnection));
         peer.Tag = new PeerState(connection);
         m_peers[connection] = peer;
         m_inbound.OnConnected(connection);
@@ -240,6 +153,93 @@ public sealed class LiteNetLibServerTransport : IServerTransport, INetEventListe
     {
     }
 
+    public int LocalPort => m_manager.LocalPort;
+
+    public void Start()
+    {
+        var address = IPAddress.Parse(m_options.BindAddress);
+        if (!m_manager.Start(address, IPAddress.IPv6Any, m_options.Port))
+        {
+            throw new InvalidOperationException(
+                "The transport could not bind " + m_options.BindAddress + ":" + m_options.Port + ".");
+        }
+
+        LogListening(m_logger, m_options.BindAddress, m_manager.LocalPort, null);
+    }
+
+    public void CloseAdmission()
+    {
+        m_isAdmissionClosed = true;
+    }
+
+    public void Stop()
+    {
+        CloseAdmission();
+        byte[] notice = EncodeNotice(DisconnectReason.Maintenance, string.Empty);
+        foreach (KeyValuePair<ConnectionId, NetPeer> entry in m_peers)
+        {
+            MarkClosedByServer(entry.Value);
+            m_manager.DisconnectPeer(entry.Value, notice);
+        }
+
+        m_peers.Clear();
+        m_manager.Stop(true);
+    }
+
+    public void Send(ConnectionId connection, ReadOnlySpan<byte> payload)
+    {
+        if (!m_peers.TryGetValue(connection, out NetPeer? peer))
+        {
+            return;
+        }
+
+        if (!MessageRouting.TryReadOpcode(payload, out MessageOpcode opcode)
+            || !MessageRouting.TryGetRoute(opcode, out ProtocolChannel channel, out MessageDelivery delivery))
+        {
+            throw new ArgumentException("The payload does not start with a routable opcode.", nameof(payload));
+        }
+
+        DeliveryMethod method = delivery == MessageDelivery.ReliableOrdered
+            ? DeliveryMethod.ReliableOrdered
+            : DeliveryMethod.Sequenced;
+        peer.Send(payload, (byte)channel, method);
+    }
+
+    public void Disconnect(ConnectionId connection, DisconnectReason reason, string message)
+    {
+        if (!m_peers.TryRemove(connection, out NetPeer? peer))
+        {
+            return;
+        }
+
+        // The notice rides in the disconnect packet itself, which the library retransmits, so it needs no channel.
+        MarkClosedByServer(peer);
+        m_manager.DisconnectPeer(peer, EncodeNotice(reason, message));
+    }
+
+    public TransportStatistics GetStatistics()
+    {
+        NetStatistics statistics = m_manager.Statistics;
+        return new TransportStatistics(
+            statistics.BytesReceived,
+            statistics.BytesSent,
+            statistics.PacketsReceived,
+            statistics.PacketsSent,
+            statistics.PacketLoss);
+    }
+
+    public bool TryGetRoundTripTime(ConnectionId connection, out int milliseconds)
+    {
+        if (m_peers.TryGetValue(connection, out NetPeer? peer))
+        {
+            milliseconds = peer.RoundTripTime;
+            return true;
+        }
+
+        milliseconds = 0;
+        return false;
+    }
+
     private static void MarkClosedByServer(NetPeer peer)
     {
         if (peer.Tag is PeerState state)
@@ -248,9 +248,9 @@ public sealed class LiteNetLibServerTransport : IServerTransport, INetEventListe
         }
     }
 
-    private static byte[] EncodeNotice(Protocol.DisconnectReason reason, string message)
+    private static byte[] EncodeNotice(DisconnectReason reason, string message)
     {
-        DisconnectNotice notice = new DisconnectNotice(reason, message);
+        var notice = new DisconnectNotice(reason, message);
         byte[] payload = new byte[notice.GetEncodedLength()];
         notice.Write(payload);
         return payload;

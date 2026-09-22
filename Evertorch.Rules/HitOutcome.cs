@@ -5,6 +5,6 @@ public enum HitOutcome
     Miss,
     Hit,
     Critical,
-    PerfectDodge,
+    PerfectDodge
 }
 }

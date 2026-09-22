@@ -1,7 +1,7 @@
 namespace Evertorch.Rules
 {
 /// <summary>
-/// The only source of randomness a rule may use. The server owns the instance; tests supply a scripted one.
+///     The only source of randomness a rule may use. The server owns the instance; tests supply a scripted one.
 /// </summary>
 public interface IRandomSource
 {

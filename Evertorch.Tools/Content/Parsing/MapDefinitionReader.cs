@@ -32,13 +32,13 @@ internal static class MapDefinitionReader
         YamlFieldReader spawnPoint = server.RequiredMapping("spawnPoint");
         WorldPosition spawnPosition = ReadPosition(spawnPoint.RequiredMapping("position"));
         YamlFieldReader facing = spawnPoint.RequiredMapping("facing");
-        WorldDirection spawnFacing = new WorldDirection(ReadCoordinate(facing, "x"), ReadCoordinate(facing, "z"));
+        var spawnFacing = new WorldDirection(ReadCoordinate(facing, "x"), ReadCoordinate(facing, "z"));
         if (diagnostics.Count == errorsBefore && spawnFacing == new WorldDirection(0f, 0f))
         {
             spawnPoint.ReportField("facing", "must not be the zero direction");
         }
 
-        List<MonsterSpawn> monsterSpawns = new List<MonsterSpawn>();
+        var monsterSpawns = new List<MonsterSpawn>();
         IReadOnlyList<YamlFieldReader> spawnReaders = server.OptionalMappingSequence("monsterSpawns");
         foreach (YamlFieldReader spawn in spawnReaders)
         {
@@ -62,7 +62,7 @@ internal static class MapDefinitionReader
             return null;
         }
 
-        MapDefinition definition = new MapDefinition(
+        var definition = new MapDefinition(
             id,
             displayName,
             spawnPosition,
@@ -85,8 +85,8 @@ internal static class MapDefinitionReader
             return;
         }
 
-        GridPathfinder pathfinder = new GridPathfinder(navigation);
-        List<WorldPosition> waypoints = new List<WorldPosition>();
+        var pathfinder = new GridPathfinder(navigation);
+        var waypoints = new List<WorldPosition>();
         int nodeBudget = navigation.Columns * navigation.Rows;
         for (int index = 0; index < monsterSpawns.Count; index++)
         {

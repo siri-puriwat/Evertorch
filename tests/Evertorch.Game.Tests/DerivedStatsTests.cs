@@ -8,7 +8,7 @@ public sealed class DerivedStatsTests
     [Test]
     public void Properties_AfterConstruction_ReturnSuppliedValues()
     {
-        DerivedStats stats = new DerivedStats(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12.5f, 13, 14);
+        var stats = new DerivedStats(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12.5f, 13, 14);
 
         Assert.That(stats.MaxHp, Is.EqualTo(1));
         Assert.That(stats.MaxSp, Is.EqualTo(2));

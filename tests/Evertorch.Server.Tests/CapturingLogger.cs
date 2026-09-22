@@ -6,8 +6,7 @@ namespace Evertorch.Server.Tests
 {
 internal sealed class CapturingLogger<T> : ILogger<T>
 {
-    public List<(LogLevel Level, EventId EventId, string Message)> Entries { get; } =
-        new List<(LogLevel, EventId, string)>();
+    public List<(LogLevel Level, EventId EventId, string Message)> Entries { get; } = new();
 
     public IDisposable? BeginScope<TState>(TState state)
         where TState : notnull

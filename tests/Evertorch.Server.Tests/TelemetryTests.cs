@@ -4,6 +4,7 @@ using System.Linq;
 using System.Reflection;
 using System.Threading;
 using Evertorch.Game;
+using Evertorch.Protocol;
 using NUnit.Framework;
 
 namespace Evertorch.Server.Tests
@@ -11,6 +12,97 @@ namespace Evertorch.Server.Tests
 [TestFixture]
 public sealed class TelemetryTests
 {
+    [TestCase("shutdown")]
+    [TestCase("teleport 1 2 3")]
+    [TestCase("status now")]
+    public void Execute_UnknownCommand_PrintsHelpAndDoesNothingElse(string line)
+    {
+        var output = new StringWriter();
+
+        CreateConsole(new TestServer()).Execute(line, output);
+
+        Assert.That(output.ToString().Trim(), Is.EqualTo("Unknown command. Commands: status, players, help"));
+    }
+
+    [TestCase("")]
+    [TestCase("   ")]
+    public void Execute_BlankLine_PrintsNothing(string line)
+    {
+        var output = new StringWriter();
+
+        CreateConsole(new TestServer()).Execute(line, output);
+
+        Assert.That(output.ToString(), Is.Empty);
+    }
+
+    private static AdminConsole CreateConsole(TestServer server)
+    {
+        return new AdminConsole(new AdminCommandService(server.Status));
+    }
+
+    private static ServerMetrics CreateMetrics(out CapturingLogger<TickLogObserver> log)
+    {
+        log = new CapturingLogger<TickLogObserver>();
+        return new ServerMetrics(new TickLogObserver(log, new FakeClock()));
+    }
+
+    [Test]
+    public void AdminCommandService_DependsOnlyOnThePublishedStatus()
+    {
+        Type[] dependencies = typeof(AdminCommandService)
+            .GetConstructors()
+            .Single()
+            .GetParameters()
+            .Select(parameter => parameter.ParameterType)
+            .ToArray();
+
+        Assert.That(dependencies, Is.EqualTo(new[] { typeof(StatusPublisher) }));
+    }
+
+    [Test]
+    public void Execute_PlayersWithNobodyInTheWorld_SaysSo()
+    {
+        var output = new StringWriter();
+
+        CreateConsole(new TestServer()).Execute("players", output);
+
+        Assert.That(output.ToString(), Does.Contain("No players in the world."));
+    }
+
+    [Test]
+    public void Execute_Players_ListsEveryPlayerWithoutCredentials()
+    {
+        var server = new TestServer();
+        server.EnterWorld(7);
+        server.EnterWorld(8);
+        server.Tick(19);
+        var output = new StringWriter();
+
+        CreateConsole(server).Execute("  PLAYERS ", output);
+
+        string[] lines = output.ToString().Split(new[] { Environment.NewLine }, StringSplitOptions.RemoveEmptyEntries);
+        Assert.That(lines, Has.Length.EqualTo(2));
+        Assert.That(lines[0], Does.Contain("character 7").And.Contain("map.training_ground").And.Contain("rtt 42 ms"));
+        Assert.That(lines[1], Does.Contain("character 8"));
+        Assert.That(output.ToString(), Does.Not.Contain("dev:").And.Not.Contain("tester"));
+    }
+
+    [Test]
+    public void Execute_Status_PrintsThePublishedStatus()
+    {
+        var server = new TestServer();
+        server.EnterWorld(7);
+        var output = new StringWriter();
+
+        CreateConsole(server).Execute("status", output);
+
+        string text = output.ToString();
+        Assert.That(text, Does.Contain("tick 1 at 20 Hz"));
+        Assert.That(text, Does.Contain("sessions connected 1, in world 1"));
+        Assert.That(text, Does.Contain("network bytes in 1000, out 2000"));
+        Assert.That(text, Does.Contain("map map.training_ground: 1 players"));
+    }
+
     [Test]
     public void Metrics_AfterTicks_ReportLastAndMaximumDuration()
     {
@@ -39,17 +131,68 @@ public sealed class TelemetryTests
     }
 
     [Test]
+    public void PlayerSummary_HasNoMemberThatCouldCarryAnIdentityOrToken()
+    {
+        string[] textMembers = typeof(PlayerSummary)
+            .GetProperties(BindingFlags.Public | BindingFlags.Instance)
+            .Where(property => property.PropertyType == typeof(string))
+            .Select(property => property.Name)
+            .ToArray();
+
+        Assert.That(textMembers, Is.Empty);
+    }
+
+    [Test]
+    public void Run_WhenAlreadyStopped_ReadsNothing()
+    {
+        var output = new StringWriter();
+        using var stop = new CancellationTokenSource();
+        stop.Cancel();
+
+        CreateConsole(new TestServer()).Run(new StringReader("help"), output, stop.Token);
+
+        Assert.That(output.ToString(), Is.Empty);
+    }
+
+    [Test]
+    public void Run_WhenInputEnds_ExitsQuietly()
+    {
+        var output = new StringWriter();
+        var input = new StringReader("help" + Environment.NewLine);
+
+        CreateConsole(new TestServer()).Run(input, output, CancellationToken.None);
+
+        Assert.That(output.ToString().Trim(), Is.EqualTo("Commands: status, players, help"));
+    }
+
+    [Test]
     public void Status_BeforeAnyTick_IsEmpty()
     {
-        TestServer server = new TestServer();
+        var server = new TestServer();
 
         Assert.That(server.Status.Current, Is.SameAs(ServerStatus.Empty));
     }
 
     [Test]
+    public void Status_IsASnapshot_NotAViewOfLiveState()
+    {
+        var server = new TestServer();
+        ConnectionId connection = server.EnterWorld(7);
+        ServerStatus published = server.Status.Current;
+        WorldPosition publishedPosition = published.Players.Single().Position;
+
+        server.SendMove(connection, 1, 1f, 0f);
+        server.Tick(5);
+
+        Assert.That(server.Status.Current, Is.SameAs(published), "nothing is republished within the second");
+        Assert.That(published.Players.Single().Position, Is.EqualTo(publishedPosition));
+        Assert.That(server.PlayerOf(connection).Position, Is.Not.EqualTo(publishedPosition));
+    }
+
+    [Test]
     public void Status_IsPublishedOnTheFirstTickAndThenOncePerSecond()
     {
-        TestServer server = new TestServer();
+        var server = new TestServer();
 
         server.Tick();
         uint afterFirstTick = server.Status.Current.Tick;
@@ -66,11 +209,11 @@ public sealed class TelemetryTests
     [Test]
     public void Status_ReportsSessionsPlayersQueueCountersAndTransportTotals()
     {
-        TestServer server = new TestServer();
+        var server = new TestServer();
         ConnectionId inWorld = server.EnterWorld(7);
         ConnectionId handshakeOnly = server.Connect();
         server.SendHello(handshakeOnly);
-        server.Inbound.OnPayload(inWorld, Protocol.ProtocolChannel.Control, new byte[] { 0xFF, 0xFF });
+        server.Inbound.OnPayload(inWorld, ProtocolChannel.Control, new byte[] { 0xFF, 0xFF });
         server.SendMove(inWorld, 2, 1f, 0f);
         server.SendMove(inWorld, 1, 1f, 0f);
         server.Metrics.OnTickCompleted(19, TimeSpan.FromMilliseconds(3));
@@ -96,148 +239,6 @@ public sealed class TelemetryTests
         Assert.That(player.Map.Value, Is.EqualTo("map.training_ground"));
         Assert.That(player.RoundTripMilliseconds, Is.EqualTo(42));
         Assert.That(player.StaleInputs, Is.EqualTo(1));
-    }
-
-    [Test]
-    public void Status_IsASnapshot_NotAViewOfLiveState()
-    {
-        TestServer server = new TestServer();
-        ConnectionId connection = server.EnterWorld(7);
-        ServerStatus published = server.Status.Current;
-        WorldPosition publishedPosition = published.Players.Single().Position;
-
-        server.SendMove(connection, 1, 1f, 0f);
-        server.Tick(5);
-
-        Assert.That(server.Status.Current, Is.SameAs(published), "nothing is republished within the second");
-        Assert.That(published.Players.Single().Position, Is.EqualTo(publishedPosition));
-        Assert.That(server.PlayerOf(connection).Position, Is.Not.EqualTo(publishedPosition));
-    }
-
-    [Test]
-    public void PlayerSummary_HasNoMemberThatCouldCarryAnIdentityOrToken()
-    {
-        string[] textMembers = typeof(PlayerSummary)
-            .GetProperties(BindingFlags.Public | BindingFlags.Instance)
-            .Where(property => property.PropertyType == typeof(string))
-            .Select(property => property.Name)
-            .ToArray();
-
-        Assert.That(textMembers, Is.Empty);
-    }
-
-    [Test]
-    public void AdminCommandService_DependsOnlyOnThePublishedStatus()
-    {
-        Type[] dependencies = typeof(AdminCommandService)
-            .GetConstructors()
-            .Single()
-            .GetParameters()
-            .Select(parameter => parameter.ParameterType)
-            .ToArray();
-
-        Assert.That(dependencies, Is.EqualTo(new[] { typeof(StatusPublisher) }));
-    }
-
-    [Test]
-    public void Execute_Status_PrintsThePublishedStatus()
-    {
-        TestServer server = new TestServer();
-        server.EnterWorld(7);
-        StringWriter output = new StringWriter();
-
-        CreateConsole(server).Execute("status", output);
-
-        string text = output.ToString();
-        Assert.That(text, Does.Contain("tick 1 at 20 Hz"));
-        Assert.That(text, Does.Contain("sessions connected 1, in world 1"));
-        Assert.That(text, Does.Contain("network bytes in 1000, out 2000"));
-        Assert.That(text, Does.Contain("map map.training_ground: 1 players"));
-    }
-
-    [Test]
-    public void Execute_Players_ListsEveryPlayerWithoutCredentials()
-    {
-        TestServer server = new TestServer();
-        server.EnterWorld(7);
-        server.EnterWorld(8);
-        server.Tick(19);
-        StringWriter output = new StringWriter();
-
-        CreateConsole(server).Execute("  PLAYERS ", output);
-
-        string[] lines = output.ToString().Split(new[] { Environment.NewLine }, StringSplitOptions.RemoveEmptyEntries);
-        Assert.That(lines, Has.Length.EqualTo(2));
-        Assert.That(lines[0], Does.Contain("character 7").And.Contain("map.training_ground").And.Contain("rtt 42 ms"));
-        Assert.That(lines[1], Does.Contain("character 8"));
-        Assert.That(output.ToString(), Does.Not.Contain("dev:").And.Not.Contain("tester"));
-    }
-
-    [Test]
-    public void Execute_PlayersWithNobodyInTheWorld_SaysSo()
-    {
-        StringWriter output = new StringWriter();
-
-        CreateConsole(new TestServer()).Execute("players", output);
-
-        Assert.That(output.ToString(), Does.Contain("No players in the world."));
-    }
-
-    [TestCase("shutdown")]
-    [TestCase("teleport 1 2 3")]
-    [TestCase("status now")]
-    public void Execute_UnknownCommand_PrintsHelpAndDoesNothingElse(string line)
-    {
-        StringWriter output = new StringWriter();
-
-        CreateConsole(new TestServer()).Execute(line, output);
-
-        Assert.That(output.ToString().Trim(), Is.EqualTo("Unknown command. Commands: status, players, help"));
-    }
-
-    [TestCase("")]
-    [TestCase("   ")]
-    public void Execute_BlankLine_PrintsNothing(string line)
-    {
-        StringWriter output = new StringWriter();
-
-        CreateConsole(new TestServer()).Execute(line, output);
-
-        Assert.That(output.ToString(), Is.Empty);
-    }
-
-    [Test]
-    public void Run_WhenInputEnds_ExitsQuietly()
-    {
-        StringWriter output = new StringWriter();
-        StringReader input = new StringReader("help" + Environment.NewLine);
-
-        CreateConsole(new TestServer()).Run(input, output, CancellationToken.None);
-
-        Assert.That(output.ToString().Trim(), Is.EqualTo("Commands: status, players, help"));
-    }
-
-    [Test]
-    public void Run_WhenAlreadyStopped_ReadsNothing()
-    {
-        StringWriter output = new StringWriter();
-        using CancellationTokenSource stop = new CancellationTokenSource();
-        stop.Cancel();
-
-        CreateConsole(new TestServer()).Run(new StringReader("help"), output, stop.Token);
-
-        Assert.That(output.ToString(), Is.Empty);
-    }
-
-    private static AdminConsole CreateConsole(TestServer server)
-    {
-        return new AdminConsole(new AdminCommandService(server.Status));
-    }
-
-    private static ServerMetrics CreateMetrics(out CapturingLogger<TickLogObserver> log)
-    {
-        log = new CapturingLogger<TickLogObserver>();
-        return new ServerMetrics(new TickLogObserver(log, new FakeClock()));
     }
 }
 }

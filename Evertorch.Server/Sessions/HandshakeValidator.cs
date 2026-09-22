@@ -5,8 +5,8 @@ using Microsoft.Extensions.Options;
 namespace Evertorch.Server
 {
 /// <summary>
-/// Decides whether a hello may become a session. Checks run from the most general incompatibility to the most
-/// specific, so a client learns the first thing it has to fix.
+///     Decides whether a hello may become a session. Checks run from the most general incompatibility to the most
+///     specific, so a client learns the first thing it has to fix.
 /// </summary>
 public sealed class HandshakeValidator
 {
@@ -34,7 +34,7 @@ public sealed class HandshakeValidator
     public uint RequiredClientContentVersion { get; }
 
     /// <summary>
-    /// Returns <see cref="DisconnectReason.None"/> when the hello is accepted.
+    ///     Returns <see cref="DisconnectReason.None" /> when the hello is accepted.
     /// </summary>
     public DisconnectReason Validate(ClientHello hello)
     {

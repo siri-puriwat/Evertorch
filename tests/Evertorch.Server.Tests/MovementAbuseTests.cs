@@ -9,8 +9,8 @@ using NUnit.Framework;
 namespace Evertorch.Server.Tests
 {
 /// <summary>
-/// A client that lies, floods, or sends garbage. Whatever arrives, the authoritative entity may only ever stand
-/// where the grid lets a body stand, and may never cover more ground in a tick than its speed allows.
+///     A client that lies, floods, or sends garbage. Whatever arrives, the authoritative entity may only ever stand
+///     where the grid lets a body stand, and may never cover more ground in a tick than its speed allows.
 /// </summary>
 [TestFixture]
 public sealed class MovementAbuseTests
@@ -18,47 +18,7 @@ public sealed class MovementAbuseTests
     private const float TickSeconds = 1f / TestServer.TickRate;
     private const float Tolerance = 1e-4f;
 
-    private static readonly MapDefinitionId TrainingGround = new MapDefinitionId("map.training_ground");
-
-    [Test]
-    public void MoveIntent_HasNoFieldThatCouldStateAPositionOrASpeed()
-    {
-        string[] properties = typeof(MoveIntent)
-            .GetProperties(BindingFlags.Public | BindingFlags.Instance)
-            .Select(property => property.Name)
-            .OrderBy(name => name, StringComparer.Ordinal)
-            .ToArray();
-
-        Assert.That(properties, Is.EqualTo(new[] { "ClientTick", "DirectionX", "DirectionZ", "Sequence" }));
-        Assert.That(MoveInput.EncodedLength, Is.EqualTo(18), "opcode, sequence, client tick, and two floats");
-    }
-
-    [Test]
-    public void InputFlood_BuysNoExtraDistance()
-    {
-        TestServer server = new TestServer();
-        ConnectionId connection = server.EnterWorld(7);
-        PlayerEntity player = server.PlayerOf(connection);
-        WorldPosition start = player.Position;
-        uint sequence = 0;
-
-        for (int tick = 0; tick < 20; tick++)
-        {
-            for (int burst = 0; burst < 200; burst++)
-            {
-                sequence++;
-                server.SendMove(connection, sequence, 0f, -1f);
-            }
-
-            WorldPosition before = player.Position;
-            server.Tick();
-            AssertLegalStep(server, player, before);
-        }
-
-        float travelled = start.Z - player.Position.Z;
-        Assert.That(travelled, Is.LessThanOrEqualTo((20 * player.MovementSpeed * TickSeconds) + Tolerance));
-        Assert.That(travelled, Is.GreaterThan(0f), "the flood is not rewarded, but the player is not frozen either");
-    }
+    private static readonly MapDefinitionId TrainingGround = new("map.training_ground");
 
     [TestCase(float.MaxValue, 0f)]
     [TestCase(1e30f, -1e30f)]
@@ -66,7 +26,7 @@ public sealed class MovementAbuseTests
     [TestCase(1000f, 0.001f)]
     public void EnormousDirection_MovesExactlyOneNormalStep(float directionX, float directionZ)
     {
-        TestServer server = new TestServer();
+        var server = new TestServer();
         ConnectionId connection = server.EnterWorld(7);
         PlayerEntity player = server.PlayerOf(connection);
         WorldPosition before = player.Position;
@@ -85,7 +45,7 @@ public sealed class MovementAbuseTests
     [TestCase(-0f, 0f)]
     public void NegligibleDirection_MovesNothing(float directionX, float directionZ)
     {
-        TestServer server = new TestServer();
+        var server = new TestServer();
         ConnectionId connection = server.EnterWorld(7);
         PlayerEntity player = server.PlayerOf(connection);
         WorldPosition before = player.Position;
@@ -102,7 +62,7 @@ public sealed class MovementAbuseTests
     [TestCase(1f, float.NegativeInfinity)]
     public void NonFiniteDirectionBytes_AreMalformedAndMoveNothing(float directionX, float directionZ)
     {
-        TestServer server = new TestServer();
+        var server = new TestServer();
         ConnectionId connection = server.EnterWorld(7);
         PlayerEntity player = server.PlayerOf(connection);
         WorldPosition before = player.Position;
@@ -114,137 +74,6 @@ public sealed class MovementAbuseTests
         Assert.That(server.Inbound.Malformed, Is.EqualTo(malformedBefore + 1));
         Assert.That(player.Position, Is.EqualTo(before));
         Assert.That(float.IsNaN(player.Position.X) || float.IsNaN(player.Position.Z), Is.False);
-    }
-
-    [Test]
-    public void SteeringIntoAWall_ForSeconds_NeverEntersIt()
-    {
-        TestServer server = new TestServer();
-        ConnectionId connection = server.EnterWorld(7);
-        PlayerEntity player = server.PlayerOf(connection);
-        NavigationGrid grid = Grid(server);
-
-        for (uint tick = 1; tick <= 400; tick++)
-        {
-            WorldPosition before = player.Position;
-            server.SendMove(connection, tick, 1f, tick % 40 < 20 ? 0.6f : -0.6f);
-            server.Tick();
-            AssertLegalStep(server, player, before);
-        }
-
-        float eastWallInnerFace = grid.OriginX + ((grid.Columns - 1) * grid.CellSize);
-        Assert.That(player.Position.X, Is.LessThanOrEqualTo(eastWallInnerFace - grid.AgentRadius + Tolerance));
-        Assert.That(player.Position.X, Is.GreaterThan(eastWallInnerFace - 1.5f), "it really reached the wall");
-    }
-
-    [Test]
-    public void SteeringOffThePlateauEdge_IsHeldAtTheEdge()
-    {
-        TestServer server = new TestServer();
-        ConnectionId connection = server.EnterWorld(7);
-        PlayerEntity player = server.PlayerOf(connection);
-        NavigationGrid grid = Grid(server);
-        FindLedge(grid, out WorldPosition onTop, out float ledgeHeight);
-        player.Position = onTop;
-
-        for (uint tick = 1; tick <= 60; tick++)
-        {
-            WorldPosition before = player.Position;
-            server.SendMove(connection, tick, 0f, -1f);
-            server.Tick();
-            AssertLegalStep(server, player, before);
-        }
-
-        Assert.That(ledgeHeight, Is.GreaterThan(grid.MaxStepHeight), "the fixture really is a ledge");
-        Assert.That(player.Position.Y, Is.EqualTo(onTop.Y).Within(Tolerance), "still on top");
-        Assert.That(player.Position.Z, Is.LessThan(onTop.Z), "it walked up to the edge");
-    }
-
-    [Test]
-    public void InputsFromASessionThatNeverEnteredTheWorld_MoveNobody()
-    {
-        TestServer server = new TestServer();
-        ConnectionId player = server.EnterWorld(7);
-        ConnectionId lurker = server.Connect();
-        server.SendHello(lurker);
-        server.Tick();
-        WorldPosition before = server.PlayerOf(player).Position;
-        long ignoredBefore = server.SessionManager.IgnoredEvents;
-
-        for (uint sequence = 1; sequence <= 50; sequence++)
-        {
-            server.SendMove(lurker, sequence, 1f, 0f);
-        }
-
-        server.Tick(5);
-
-        Assert.That(server.PlayerOf(player).Position, Is.EqualTo(before));
-        Assert.That(server.SessionManager.IgnoredEvents, Is.EqualTo(ignoredBefore + 50));
-        Assert.That(server.World.Maps.Sum(map => map.Players.Count), Is.EqualTo(1));
-    }
-
-    [Test]
-    public void MalformedBurst_DoesNotFaultTheTickOrMoveAnyone()
-    {
-        TestServer server = new TestServer();
-        ConnectionId connection = server.EnterWorld(7);
-        PlayerEntity player = server.PlayerOf(connection);
-        WorldPosition before = player.Position;
-        Random random = new Random(20260921);
-        long malformedBefore = server.Inbound.Malformed;
-
-        for (int index = 0; index < 3000; index++)
-        {
-            byte[] garbage = new byte[random.Next(0, 40)];
-            random.NextBytes(garbage);
-            if (garbage.Length >= 2)
-            {
-                // Never a routable client opcode, so every payload here is one the server must refuse.
-                garbage[1] = 0x7F;
-            }
-
-            server.Inbound.OnPayload(connection, (ProtocolChannel)random.Next(0, 3), garbage);
-        }
-
-        Action tick = () => server.Tick(3);
-
-        Assert.That(tick, Throws.Nothing);
-        Assert.That(server.Inbound.Malformed, Is.EqualTo(malformedBefore + 3000));
-        Assert.That(player.Position, Is.EqualTo(before));
-
-        server.SendMove(connection, 1, 1f, 0f);
-        server.Tick();
-        Assert.That(player.Position.X, Is.GreaterThan(before.X), "an honest input still works afterwards");
-    }
-
-    [Test]
-    public void HostileRun_NeverLeavesWalkableGroundOrOutrunsItsSpeed()
-    {
-        TestServer server = new TestServer();
-        ConnectionId connection = server.EnterWorld(7);
-        PlayerEntity player = server.PlayerOf(connection);
-        Random random = new Random(7);
-        uint sequence = 0;
-        float farthest = 0f;
-        WorldPosition start = player.Position;
-
-        for (int tick = 0; tick < 10000; tick++)
-        {
-            int messages = random.Next(0, 6);
-            for (int index = 0; index < messages; index++)
-            {
-                sequence = NextHostileSequence(random, sequence);
-                SendHostileMessage(server, connection, random, sequence);
-            }
-
-            WorldPosition before = player.Position;
-            server.Tick();
-            AssertLegalStep(server, player, before);
-            farthest = Math.Max(farthest, Distance(start, player.Position));
-        }
-
-        Assert.That(farthest, Is.GreaterThan(5f), "the run really moved the entity around");
-        Assert.That(server.Transport.Disconnects, Is.Empty, "abuse is counted in this milestone, not punished");
     }
 
     private static uint NextHostileSequence(Random random, uint current)
@@ -305,7 +134,7 @@ public sealed class MovementAbuseTests
         float horizontal = Distance(before, after);
         Assert.That(
             horizontal,
-            Is.LessThanOrEqualTo((player.MovementSpeed * TickSeconds) + Tolerance),
+            Is.LessThanOrEqualTo(player.MovementSpeed * TickSeconds + Tolerance),
             "moved " + horizontal + " m in one tick from " + before + " to " + after);
     }
 
@@ -315,8 +144,8 @@ public sealed class MovementAbuseTests
     }
 
     /// <summary>
-    /// Finds a level raised cell whose southern neighbour is level ground too far below to step down to, and
-    /// returns a starting point one cell further back on the same level, so there is room to walk up to the edge.
+    ///     Finds a level raised cell whose southern neighbour is level ground too far below to step down to, and
+    ///     returns a starting point one cell further back on the same level, so there is room to walk up to the edge.
     /// </summary>
     private static void FindLedge(NavigationGrid grid, out WorldPosition onTop, out float ledgeHeight)
     {
@@ -357,7 +186,178 @@ public sealed class MovementAbuseTests
     {
         float deltaX = to.X - from.X;
         float deltaZ = to.Z - from.Z;
-        return (float)Math.Sqrt((deltaX * deltaX) + (deltaZ * deltaZ));
+        return (float)Math.Sqrt(deltaX * deltaX + deltaZ * deltaZ);
+    }
+
+    [Test]
+    public void HostileRun_NeverLeavesWalkableGroundOrOutrunsItsSpeed()
+    {
+        var server = new TestServer();
+        ConnectionId connection = server.EnterWorld(7);
+        PlayerEntity player = server.PlayerOf(connection);
+        var random = new Random(7);
+        uint sequence = 0;
+        float farthest = 0f;
+        WorldPosition start = player.Position;
+
+        for (int tick = 0; tick < 10000; tick++)
+        {
+            int messages = random.Next(0, 6);
+            for (int index = 0; index < messages; index++)
+            {
+                sequence = NextHostileSequence(random, sequence);
+                SendHostileMessage(server, connection, random, sequence);
+            }
+
+            WorldPosition before = player.Position;
+            server.Tick();
+            AssertLegalStep(server, player, before);
+            farthest = Math.Max(farthest, Distance(start, player.Position));
+        }
+
+        Assert.That(farthest, Is.GreaterThan(5f), "the run really moved the entity around");
+        Assert.That(server.Transport.Disconnects, Is.Empty, "abuse is counted in this milestone, not punished");
+    }
+
+    [Test]
+    public void InputFlood_BuysNoExtraDistance()
+    {
+        var server = new TestServer();
+        ConnectionId connection = server.EnterWorld(7);
+        PlayerEntity player = server.PlayerOf(connection);
+        WorldPosition start = player.Position;
+        uint sequence = 0;
+
+        for (int tick = 0; tick < 20; tick++)
+        {
+            for (int burst = 0; burst < 200; burst++)
+            {
+                sequence++;
+                server.SendMove(connection, sequence, 0f, -1f);
+            }
+
+            WorldPosition before = player.Position;
+            server.Tick();
+            AssertLegalStep(server, player, before);
+        }
+
+        float travelled = start.Z - player.Position.Z;
+        Assert.That(travelled, Is.LessThanOrEqualTo(20 * player.MovementSpeed * TickSeconds + Tolerance));
+        Assert.That(travelled, Is.GreaterThan(0f), "the flood is not rewarded, but the player is not frozen either");
+    }
+
+    [Test]
+    public void InputsFromASessionThatNeverEnteredTheWorld_MoveNobody()
+    {
+        var server = new TestServer();
+        ConnectionId player = server.EnterWorld(7);
+        ConnectionId lurker = server.Connect();
+        server.SendHello(lurker);
+        server.Tick();
+        WorldPosition before = server.PlayerOf(player).Position;
+        long ignoredBefore = server.SessionManager.IgnoredEvents;
+
+        for (uint sequence = 1; sequence <= 50; sequence++)
+        {
+            server.SendMove(lurker, sequence, 1f, 0f);
+        }
+
+        server.Tick(5);
+
+        Assert.That(server.PlayerOf(player).Position, Is.EqualTo(before));
+        Assert.That(server.SessionManager.IgnoredEvents, Is.EqualTo(ignoredBefore + 50));
+        Assert.That(server.World.Maps.Sum(map => map.Players.Count), Is.EqualTo(1));
+    }
+
+    [Test]
+    public void MalformedBurst_DoesNotFaultTheTickOrMoveAnyone()
+    {
+        var server = new TestServer();
+        ConnectionId connection = server.EnterWorld(7);
+        PlayerEntity player = server.PlayerOf(connection);
+        WorldPosition before = player.Position;
+        var random = new Random(20260921);
+        long malformedBefore = server.Inbound.Malformed;
+
+        for (int index = 0; index < 3000; index++)
+        {
+            byte[] garbage = new byte[random.Next(0, 40)];
+            random.NextBytes(garbage);
+            if (garbage.Length >= 2)
+            {
+                // Never a routable client opcode, so every payload here is one the server must refuse.
+                garbage[1] = 0x7F;
+            }
+
+            server.Inbound.OnPayload(connection, (ProtocolChannel)random.Next(0, 3), garbage);
+        }
+
+        Action tick = () => server.Tick(3);
+
+        Assert.That(tick, Throws.Nothing);
+        Assert.That(server.Inbound.Malformed, Is.EqualTo(malformedBefore + 3000));
+        Assert.That(player.Position, Is.EqualTo(before));
+
+        server.SendMove(connection, 1, 1f, 0f);
+        server.Tick();
+        Assert.That(player.Position.X, Is.GreaterThan(before.X), "an honest input still works afterwards");
+    }
+
+    [Test]
+    public void MoveIntent_HasNoFieldThatCouldStateAPositionOrASpeed()
+    {
+        string[] properties = typeof(MoveIntent)
+            .GetProperties(BindingFlags.Public | BindingFlags.Instance)
+            .Select(property => property.Name)
+            .OrderBy(name => name, StringComparer.Ordinal)
+            .ToArray();
+
+        Assert.That(properties, Is.EqualTo(new[] { "ClientTick", "DirectionX", "DirectionZ", "Sequence" }));
+        Assert.That(MoveInput.EncodedLength, Is.EqualTo(18), "opcode, sequence, client tick, and two floats");
+    }
+
+    [Test]
+    public void SteeringIntoAWall_ForSeconds_NeverEntersIt()
+    {
+        var server = new TestServer();
+        ConnectionId connection = server.EnterWorld(7);
+        PlayerEntity player = server.PlayerOf(connection);
+        NavigationGrid grid = Grid(server);
+
+        for (uint tick = 1; tick <= 400; tick++)
+        {
+            WorldPosition before = player.Position;
+            server.SendMove(connection, tick, 1f, tick % 40 < 20 ? 0.6f : -0.6f);
+            server.Tick();
+            AssertLegalStep(server, player, before);
+        }
+
+        float eastWallInnerFace = grid.OriginX + (grid.Columns - 1) * grid.CellSize;
+        Assert.That(player.Position.X, Is.LessThanOrEqualTo(eastWallInnerFace - grid.AgentRadius + Tolerance));
+        Assert.That(player.Position.X, Is.GreaterThan(eastWallInnerFace - 1.5f), "it really reached the wall");
+    }
+
+    [Test]
+    public void SteeringOffThePlateauEdge_IsHeldAtTheEdge()
+    {
+        var server = new TestServer();
+        ConnectionId connection = server.EnterWorld(7);
+        PlayerEntity player = server.PlayerOf(connection);
+        NavigationGrid grid = Grid(server);
+        FindLedge(grid, out WorldPosition onTop, out float ledgeHeight);
+        player.Position = onTop;
+
+        for (uint tick = 1; tick <= 60; tick++)
+        {
+            WorldPosition before = player.Position;
+            server.SendMove(connection, tick, 0f, -1f);
+            server.Tick();
+            AssertLegalStep(server, player, before);
+        }
+
+        Assert.That(ledgeHeight, Is.GreaterThan(grid.MaxStepHeight), "the fixture really is a ledge");
+        Assert.That(player.Position.Y, Is.EqualTo(onTop.Y).Within(Tolerance), "still on top");
+        Assert.That(player.Position.Z, Is.LessThan(onTop.Z), "it walked up to the edge");
     }
 }
 }

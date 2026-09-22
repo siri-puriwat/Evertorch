@@ -4,8 +4,8 @@ using System.Collections.Generic;
 namespace Evertorch.Server
 {
 /// <summary>
-/// An immutable picture of the server taken by the tick thread. Everything outside the simulation that wants to
-/// know how the server is doing reads one of these.
+///     An immutable picture of the server taken by the tick thread. Everything outside the simulation that wants to
+///     know how the server is doing reads one of these.
 /// </summary>
 public sealed class ServerStatus
 {
@@ -43,7 +43,7 @@ public sealed class ServerStatus
         Players = players;
     }
 
-    public static ServerStatus Empty { get; } = new ServerStatus(
+    public static ServerStatus Empty { get; } = new(
         0,
         0,
         TimeSpan.Zero,

@@ -5,7 +5,7 @@ using Evertorch.Game;
 namespace Evertorch.Protocol
 {
 /// <summary>
-/// Client request to select an entity as the current target. The server validates the target before accepting it.
+///     Client request to select an entity as the current target. The server validates the target before accepting it.
 /// </summary>
 public readonly struct TargetEntity
 {
@@ -19,7 +19,7 @@ public readonly struct TargetEntity
     public EntityId Target { get; }
 
     /// <summary>
-    /// Reads a complete payload. Truncated input, trailing bytes, and any other opcode are rejected.
+    ///     Reads a complete payload. Truncated input, trailing bytes, and any other opcode are rejected.
     /// </summary>
     public static bool TryRead(ReadOnlySpan<byte> source, out TargetEntity message)
     {

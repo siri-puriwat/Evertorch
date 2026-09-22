@@ -1,7 +1,7 @@
 namespace Evertorch.Game
 {
 /// <summary>
-/// Where one simulation step left a body, and how it actually moved to get there.
+///     Where one simulation step left a body, and how it actually moved to get there.
 /// </summary>
 public readonly struct MovementStep
 {
@@ -24,7 +24,7 @@ public readonly struct MovementStep
     public WorldDirection Facing { get; }
 
     /// <summary>
-    /// Displacement over the step divided by its duration, so it is zero against a wall whatever was requested.
+    ///     Displacement over the step divided by its duration, so it is zero against a wall whatever was requested.
     /// </summary>
     public float VelocityX { get; }
 

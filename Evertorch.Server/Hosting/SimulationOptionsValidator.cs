@@ -7,7 +7,7 @@ public sealed class SimulationOptionsValidator : IValidateOptions<SimulationOpti
 {
     public ValidateOptionsResult Validate(string? name, SimulationOptions options)
     {
-        List<string> failures = new List<string>();
+        var failures = new List<string>();
 
         if (options.TickRate < SimulationOptions.MinimumTickRate
             || options.TickRate > SimulationOptions.MaximumTickRate)

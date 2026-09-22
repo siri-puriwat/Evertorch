@@ -5,10 +5,22 @@ namespace Evertorch.Game.Tests
 [TestFixture]
 public sealed class WorldDirectionTests
 {
+    [TestCase(0f, 0f)]
+    [TestCase(1f, 1f)]
+    public void Equals_WhenAnyComponentDiffers_IsFalse(float x, float z)
+    {
+        var left = new WorldDirection(1f, 0f);
+        var right = new WorldDirection(x, z);
+
+        Assert.That(left.Equals(right), Is.False);
+        Assert.That(left == right, Is.False);
+        Assert.That(left != right, Is.True);
+    }
+
     [Test]
     public void Components_AfterConstruction_ReturnSuppliedValues()
     {
-        WorldDirection direction = new WorldDirection(0.6f, -0.8f);
+        var direction = new WorldDirection(0.6f, -0.8f);
 
         Assert.That(direction.X, Is.EqualTo(0.6f));
         Assert.That(direction.Z, Is.EqualTo(-0.8f));
@@ -17,17 +29,25 @@ public sealed class WorldDirectionTests
     [Test]
     public void Components_WhenNotUnitLength_AreKeptUnchanged()
     {
-        WorldDirection direction = new WorldDirection(3f, 4f);
+        var direction = new WorldDirection(3f, 4f);
 
         Assert.That(direction.X, Is.EqualTo(3f));
         Assert.That(direction.Z, Is.EqualTo(4f));
     }
 
     [Test]
+    public void Equals_WhenComponentIsNaN_IsReflexive()
+    {
+        var direction = new WorldDirection(float.NaN, 0f);
+
+        Assert.That(direction.Equals(direction), Is.True);
+    }
+
+    [Test]
     public void Equals_WhenComponentsMatch_IsTrueWithMatchingHash()
     {
-        WorldDirection left = new WorldDirection(1f, 0f);
-        WorldDirection right = new WorldDirection(1f, 0f);
+        var left = new WorldDirection(1f, 0f);
+        var right = new WorldDirection(1f, 0f);
 
         Assert.That(left, Is.EqualTo(right));
         Assert.That(left == right, Is.True);
@@ -35,24 +55,11 @@ public sealed class WorldDirectionTests
         Assert.That(left.GetHashCode(), Is.EqualTo(right.GetHashCode()));
     }
 
-    [TestCase(0f, 0f)]
-    [TestCase(1f, 1f)]
-    public void Equals_WhenAnyComponentDiffers_IsFalse(float x, float z)
-    {
-        WorldDirection left = new WorldDirection(1f, 0f);
-        WorldDirection right = new WorldDirection(x, z);
-
-        Assert.That(left.Equals(right), Is.False);
-        Assert.That(left == right, Is.False);
-        Assert.That(left != right, Is.True);
-    }
-
     [Test]
-    public void Equals_WhenComponentIsNaN_IsReflexive()
+    [SetCulture("de-DE")]
+    public void ToString_UnderCommaDecimalCulture_IsInvariant()
     {
-        WorldDirection direction = new WorldDirection(float.NaN, 0f);
-
-        Assert.That(direction.Equals(direction), Is.True);
+        Assert.That(new WorldDirection(0.5f, -0.25f).ToString(), Is.EqualTo("(0.5, -0.25)"));
     }
 
     [Test]
@@ -61,13 +68,6 @@ public sealed class WorldDirectionTests
         WorldDirection direction = default;
 
         Assert.That(direction, Is.EqualTo(new WorldDirection(0f, 0f)));
-    }
-
-    [Test]
-    [SetCulture("de-DE")]
-    public void ToString_UnderCommaDecimalCulture_IsInvariant()
-    {
-        Assert.That(new WorldDirection(0.5f, -0.25f).ToString(), Is.EqualTo("(0.5, -0.25)"));
     }
 }
 }

@@ -10,56 +10,7 @@ namespace Evertorch.Server.Tests
 [TestFixture]
 public sealed class InboundQueueTests
 {
-    private static readonly ConnectionId Peer = new ConnectionId(1);
-
-    [Test]
-    public void OnPayload_ForWellFormedHello_EnqueuesADecodedEvent()
-    {
-        InboundQueue queue = CreateQueue(16);
-
-        queue.OnPayload(Peer, ProtocolChannel.Control, Hello());
-
-        Assert.That(queue.TryDequeue(out InboundEvent inboundEvent), Is.True);
-        Assert.That(inboundEvent.Kind, Is.EqualTo(InboundEventKind.Hello));
-        Assert.That(inboundEvent.Connection, Is.EqualTo(Peer));
-        Assert.That(inboundEvent.Hello!.ClientBuildVersion, Is.EqualTo("0.2.0-dev"));
-        Assert.That(queue.Malformed, Is.EqualTo(0));
-    }
-
-    [Test]
-    public void Message_OnWrongChannel_IsRejected()
-    {
-        InboundQueue queue = CreateQueue(16);
-
-        queue.OnPayload(Peer, ProtocolChannel.Input, Hello());
-        queue.OnPayload(Peer, ProtocolChannel.State, Hello());
-
-        AssertOnlyMalformed(queue, 2);
-    }
-
-    [Test]
-    public void Message_ThatOnlyAServerSends_IsRejected()
-    {
-        InboundQueue queue = CreateQueue(16);
-        byte[] despawn = new byte[EntityDespawn.EncodedLength];
-        new EntityDespawn(new EntityId(1), DespawnReason.Removed).Write(despawn);
-
-        queue.OnPayload(Peer, ProtocolChannel.Control, despawn);
-
-        AssertOnlyMalformed(queue, 1);
-    }
-
-    [Test]
-    public void Message_LargerThanAnyClientPayload_IsRejectedBeforeDecoding()
-    {
-        InboundQueue queue = CreateQueue(16);
-        byte[] oversized = new byte[ProtocolLimits.MaxClientPayloadBytes + 1];
-        oversized[0] = 0x01;
-
-        queue.OnPayload(Peer, ProtocolChannel.Control, oversized);
-
-        AssertOnlyMalformed(queue, 1);
-    }
+    private static readonly ConnectionId Peer = new(1);
 
     [TestCase(new byte[0])]
     [TestCase(new byte[] { 0x01 })]
@@ -74,6 +25,49 @@ public sealed class InboundQueueTests
         queue.OnPayload(Peer, ProtocolChannel.Control, payload);
 
         AssertOnlyMalformed(queue, 1);
+    }
+
+    private static InboundQueue CreateQueue(int capacity)
+    {
+        return new InboundQueue(Options.Create(new NetworkOptions { MaxInboundEvents = capacity }));
+    }
+
+    private static byte[] Hello()
+    {
+        var hello = new ClientHello(1, "0.2.0-dev", 1, "dev:tester");
+        byte[] payload = new byte[hello.GetEncodedLength()];
+        hello.Write(payload);
+        return payload;
+    }
+
+    private static void AssertOnlyMalformed(InboundQueue queue, int expectedCount)
+    {
+        Assert.That(queue.Malformed, Is.EqualTo(expectedCount));
+        Assert.That(queue.Count, Is.EqualTo(expectedCount));
+        while (queue.TryDequeue(out InboundEvent inboundEvent))
+        {
+            Assert.That(inboundEvent.Kind, Is.EqualTo(InboundEventKind.Malformed));
+        }
+    }
+
+    [Test]
+    public void Fault_WhileHandlingOnePeer_ClosesThatPeerAndTheTickGoesOn()
+    {
+        var server = new TestServer();
+        ConnectionId faulty = server.Connect();
+        ConnectionId healthy = server.Connect();
+        server.Transport.FailSendsTo.Add(faulty);
+        server.SendHello(faulty);
+        server.SendHello(healthy);
+
+        server.Tick();
+
+        Assert.That(server.Transport.Disconnects[faulty], Is.EqualTo(DisconnectReason.InternalError));
+        Assert.That(server.Sessions.TryGet(faulty, out _), Is.False);
+        Assert.That(server.Transport.ControlOpcodesSentTo(healthy), Is.EqualTo(new[] { MessageOpcode.ServerHello }));
+        Assert.That(server.Log.Entries.Count(entry => entry.Level == LogLevel.Error), Is.EqualTo(1));
+        Assert.That(server.Log.Entries.Single(entry => entry.Level == LogLevel.Error).EventId.Name,
+            Is.EqualTo("SessionFaulted"));
     }
 
     [Test]
@@ -107,31 +101,21 @@ public sealed class InboundQueueTests
     }
 
     [Test]
-    public void TryDequeue_ReturnsEventsInArrivalOrderAndTracksCount()
+    public void Input_FromAConnectionTheServerNeverSaw_IsIgnored()
     {
-        InboundQueue queue = CreateQueue(16);
-        queue.OnConnected(Peer);
-        queue.OnPayload(Peer, ProtocolChannel.Control, Hello());
-        queue.OnDisconnected(Peer);
+        var server = new TestServer();
 
-        InboundEventKind[] kinds = new InboundEventKind[3];
-        for (int index = 0; index < kinds.Length; index++)
-        {
-            queue.TryDequeue(out InboundEvent inboundEvent);
-            kinds[index] = inboundEvent.Kind;
-        }
+        server.SendHello(new ConnectionId(999));
+        server.Tick();
 
-        InboundEventKind[] expected =
-            { InboundEventKind.Connected, InboundEventKind.Hello, InboundEventKind.Disconnected };
-        Assert.That(kinds, Is.EqualTo(expected));
-        Assert.That(queue.Count, Is.EqualTo(0));
-        Assert.That(queue.TryDequeue(out _), Is.False);
+        Assert.That(server.SessionManager.IgnoredEvents, Is.EqualTo(1));
+        Assert.That(server.Sessions.Sessions, Is.Empty);
     }
 
     [Test]
     public void MalformedInput_FromAPeer_IsCountedAndChangesNothing()
     {
-        TestServer server = new TestServer();
+        var server = new TestServer();
         ConnectionId connection = server.EnterWorld(3);
         server.Transport.ClearSent();
 
@@ -145,58 +129,74 @@ public sealed class InboundQueueTests
     }
 
     [Test]
-    public void Input_FromAConnectionTheServerNeverSaw_IsIgnored()
+    public void Message_LargerThanAnyClientPayload_IsRejectedBeforeDecoding()
     {
-        TestServer server = new TestServer();
+        InboundQueue queue = CreateQueue(16);
+        byte[] oversized = new byte[ProtocolLimits.MaxClientPayloadBytes + 1];
+        oversized[0] = 0x01;
 
-        server.SendHello(new ConnectionId(999));
-        server.Tick();
+        queue.OnPayload(Peer, ProtocolChannel.Control, oversized);
 
-        Assert.That(server.SessionManager.IgnoredEvents, Is.EqualTo(1));
-        Assert.That(server.Sessions.Sessions, Is.Empty);
+        AssertOnlyMalformed(queue, 1);
     }
 
     [Test]
-    public void Fault_WhileHandlingOnePeer_ClosesThatPeerAndTheTickGoesOn()
+    public void Message_OnWrongChannel_IsRejected()
     {
-        TestServer server = new TestServer();
-        ConnectionId faulty = server.Connect();
-        ConnectionId healthy = server.Connect();
-        server.Transport.FailSendsTo.Add(faulty);
-        server.SendHello(faulty);
-        server.SendHello(healthy);
+        InboundQueue queue = CreateQueue(16);
 
-        server.Tick();
+        queue.OnPayload(Peer, ProtocolChannel.Input, Hello());
+        queue.OnPayload(Peer, ProtocolChannel.State, Hello());
 
-        Assert.That(server.Transport.Disconnects[faulty], Is.EqualTo(DisconnectReason.InternalError));
-        Assert.That(server.Sessions.TryGet(faulty, out _), Is.False);
-        Assert.That(server.Transport.ControlOpcodesSentTo(healthy), Is.EqualTo(new[] { MessageOpcode.ServerHello }));
-        Assert.That(server.Log.Entries.Count(entry => entry.Level == LogLevel.Error), Is.EqualTo(1));
-        Assert.That(server.Log.Entries.Single(entry => entry.Level == LogLevel.Error).EventId.Name,
-            Is.EqualTo("SessionFaulted"));
+        AssertOnlyMalformed(queue, 2);
     }
 
-    private static InboundQueue CreateQueue(int capacity)
+    [Test]
+    public void Message_ThatOnlyAServerSends_IsRejected()
     {
-        return new InboundQueue(Options.Create(new NetworkOptions { MaxInboundEvents = capacity }));
+        InboundQueue queue = CreateQueue(16);
+        byte[] despawn = new byte[EntityDespawn.EncodedLength];
+        new EntityDespawn(new EntityId(1), DespawnReason.Removed).Write(despawn);
+
+        queue.OnPayload(Peer, ProtocolChannel.Control, despawn);
+
+        AssertOnlyMalformed(queue, 1);
     }
 
-    private static byte[] Hello()
+    [Test]
+    public void OnPayload_ForWellFormedHello_EnqueuesADecodedEvent()
     {
-        ClientHello hello = new ClientHello(1, "0.2.0-dev", 1, "dev:tester");
-        byte[] payload = new byte[hello.GetEncodedLength()];
-        hello.Write(payload);
-        return payload;
+        InboundQueue queue = CreateQueue(16);
+
+        queue.OnPayload(Peer, ProtocolChannel.Control, Hello());
+
+        Assert.That(queue.TryDequeue(out InboundEvent inboundEvent), Is.True);
+        Assert.That(inboundEvent.Kind, Is.EqualTo(InboundEventKind.Hello));
+        Assert.That(inboundEvent.Connection, Is.EqualTo(Peer));
+        Assert.That(inboundEvent.Hello!.ClientBuildVersion, Is.EqualTo("0.2.0-dev"));
+        Assert.That(queue.Malformed, Is.EqualTo(0));
     }
 
-    private static void AssertOnlyMalformed(InboundQueue queue, int expectedCount)
+    [Test]
+    public void TryDequeue_ReturnsEventsInArrivalOrderAndTracksCount()
     {
-        Assert.That(queue.Malformed, Is.EqualTo(expectedCount));
-        Assert.That(queue.Count, Is.EqualTo(expectedCount));
-        while (queue.TryDequeue(out InboundEvent inboundEvent))
+        InboundQueue queue = CreateQueue(16);
+        queue.OnConnected(Peer);
+        queue.OnPayload(Peer, ProtocolChannel.Control, Hello());
+        queue.OnDisconnected(Peer);
+
+        var kinds = new InboundEventKind[3];
+        for (int index = 0; index < kinds.Length; index++)
         {
-            Assert.That(inboundEvent.Kind, Is.EqualTo(InboundEventKind.Malformed));
+            queue.TryDequeue(out InboundEvent inboundEvent);
+            kinds[index] = inboundEvent.Kind;
         }
+
+        InboundEventKind[] expected =
+            { InboundEventKind.Connected, InboundEventKind.Hello, InboundEventKind.Disconnected };
+        Assert.That(kinds, Is.EqualTo(expected));
+        Assert.That(queue.Count, Is.EqualTo(0));
+        Assert.That(queue.TryDequeue(out _), Is.False);
     }
 }
 }

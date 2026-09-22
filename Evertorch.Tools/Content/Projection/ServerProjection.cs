@@ -5,7 +5,7 @@ using Evertorch.Game;
 namespace Evertorch.Tools
 {
 /// <summary>
-/// Everything the authoritative simulation needs, including values the client must never receive.
+///     Everything the authoritative simulation needs, including values the client must never receive.
 /// </summary>
 internal static class ServerProjection
 {
@@ -13,11 +13,11 @@ internal static class ServerProjection
     {
         return new List<PackageFile>
         {
-            new PackageFile("items.json", PackageJson.Write(writer => WriteItems(writer, content))),
-            new PackageFile("jobs.json", PackageJson.Write(writer => WriteJobs(writer, content))),
-            new PackageFile("maps.json", PackageJson.Write(writer => WriteMaps(writer, content))),
-            new PackageFile("monsters.json", PackageJson.Write(writer => WriteMonsters(writer, content))),
-            new PackageFile("skills.json", PackageJson.Write(writer => WriteSkills(writer, content))),
+            new("items.json", PackageJson.Write(writer => WriteItems(writer, content))),
+            new("jobs.json", PackageJson.Write(writer => WriteJobs(writer, content))),
+            new("maps.json", PackageJson.Write(writer => WriteMaps(writer, content))),
+            new("monsters.json", PackageJson.Write(writer => WriteMonsters(writer, content))),
+            new("skills.json", PackageJson.Write(writer => WriteSkills(writer, content)))
         };
     }
 

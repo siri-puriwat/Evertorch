@@ -3,7 +3,7 @@ using Evertorch.Game;
 namespace Evertorch.Tools
 {
 /// <summary>
-/// An item as authored: the gameplay definition plus where it came from and its client presentation keys.
+///     An item as authored: the gameplay definition plus where it came from and its client presentation keys.
 /// </summary>
 public sealed class AuthoredItem
 {

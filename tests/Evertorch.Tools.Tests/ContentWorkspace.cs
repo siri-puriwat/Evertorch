@@ -5,7 +5,7 @@ using NUnit.Framework;
 namespace Evertorch.Tools.Tests
 {
 /// <summary>
-/// A throwaway copy of the valid fixture content that one test can break in exactly one way.
+///     A throwaway copy of the valid fixture content that one test can break in exactly one way.
 /// </summary>
 internal sealed class ContentWorkspace : IDisposable
 {
@@ -27,6 +27,14 @@ internal sealed class ContentWorkspace : IDisposable
     public string OutputDirectory { get; }
 
     public string ClientDirectory { get; }
+
+    public void Dispose()
+    {
+        if (Directory.Exists(m_root))
+        {
+            Directory.Delete(m_root, true);
+        }
+    }
 
     public void Replace(string relativePath, string oldText, string newText)
     {
@@ -57,14 +65,6 @@ internal sealed class ContentWorkspace : IDisposable
         string destination = Path.Combine(ContentRoot, newRelativePath);
         Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
         File.Move(Path.Combine(ContentRoot, relativePath), destination);
-    }
-
-    public void Dispose()
-    {
-        if (Directory.Exists(m_root))
-        {
-            Directory.Delete(m_root, true);
-        }
     }
 
     private static void CopyDirectory(string source, string destination)

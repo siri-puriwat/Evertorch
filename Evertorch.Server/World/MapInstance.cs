@@ -4,11 +4,11 @@ using Evertorch.Game;
 namespace Evertorch.Server
 {
 /// <summary>
-/// One running copy of a map: its definition, its players, and their interest cells.
+///     One running copy of a map: its definition, its players, and their interest cells.
 /// </summary>
 public sealed class MapInstance
 {
-    private readonly Dictionary<EntityId, PlayerEntity> m_players = new Dictionary<EntityId, PlayerEntity>();
+    private readonly Dictionary<EntityId, PlayerEntity> m_players = new();
 
     public MapInstance(MapDefinition definition, uint instanceNumber, InterestGrid interest)
     {

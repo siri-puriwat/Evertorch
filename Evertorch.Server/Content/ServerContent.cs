@@ -5,7 +5,7 @@ using Evertorch.Game;
 namespace Evertorch.Server
 {
 /// <summary>
-/// One validated server content package. It never changes after loading; a new package means a new instance.
+///     One validated server content package. It never changes after loading; a new package means a new instance.
 /// </summary>
 public sealed class ServerContent
 {
@@ -30,7 +30,7 @@ public sealed class ServerContent
     public string ServerContentVersion { get; }
 
     /// <summary>
-    /// The client package version built from the same canonical content; the only one this server admits.
+    ///     The client package version built from the same canonical content; the only one this server admits.
     /// </summary>
     public string ClientContentVersion { get; }
 

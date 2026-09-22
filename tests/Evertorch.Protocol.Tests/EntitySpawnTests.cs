@@ -22,59 +22,16 @@ public sealed class EntitySpawnTests
         0x05, 0x00, 0x6A, 0x6F, 0x62, 0x2E, 0x61,
         0x00, 0x00, 0x80, 0x3F, 0x00, 0x00, 0x00, 0x3F, 0x00, 0x00, 0x00, 0xC0,
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80, 0x3F,
-        0x01, 0x00,
+        0x01, 0x00
     };
 
-    private static EntitySpawn Golden => new EntitySpawn(
+    private static EntitySpawn Golden => new(
         new EntityId(0x0123456789ABCDEF),
         EntityKind.Player,
         "job.a",
         new WorldPosition(1f, 0.5f, -2f),
         new WorldDirection(0f, 1f),
         EntityStateFlags.Moving);
-
-    [Test]
-    public void Write_ForKnownMessage_ProducesGoldenBytes()
-    {
-        byte[] buffer = new byte[Golden.GetEncodedLength()];
-
-        int written = Golden.Write(buffer);
-
-        Assert.That(written, Is.EqualTo(GoldenBytes.Length));
-        Assert.That(buffer, Is.EqualTo(GoldenBytes));
-    }
-
-    [Test]
-    public void TryRead_ForGoldenBytes_ReturnsKnownMessage()
-    {
-        bool isRead = EntitySpawn.TryRead(GoldenBytes, out EntitySpawn? message);
-
-        Assert.That(isRead, Is.True);
-        Assert.That(message!.Entity, Is.EqualTo(new EntityId(0x0123456789ABCDEF)));
-        Assert.That(message.Kind, Is.EqualTo(EntityKind.Player));
-        Assert.That(message.DefinitionId, Is.EqualTo("job.a"));
-        Assert.That(message.Position, Is.EqualTo(new WorldPosition(1f, 0.5f, -2f)));
-        Assert.That(message.Facing, Is.EqualTo(new WorldDirection(0f, 1f)));
-        Assert.That(message.StateFlags, Is.EqualTo(EntityStateFlags.Moving));
-    }
-
-    [Test]
-    public void TryRead_WhenTruncatedAtAnyLength_ReturnsFalse()
-    {
-        WireMatrix.AssertRejectsEveryTruncation(GoldenBytes, bytes => EntitySpawn.TryRead(bytes, out _));
-    }
-
-    [Test]
-    public void TryRead_WhenTrailingDataPresent_ReturnsFalse()
-    {
-        WireMatrix.AssertRejectsTrailingData(GoldenBytes, bytes => EntitySpawn.TryRead(bytes, out _));
-    }
-
-    [Test]
-    public void TryRead_WhenOpcodeDiffers_ReturnsFalse()
-    {
-        WireMatrix.AssertRejectsOtherOpcodes(GoldenBytes, bytes => EntitySpawn.TryRead(bytes, out _));
-    }
 
     [TestCase(0)]
     [TestCase(2)]
@@ -93,11 +50,17 @@ public sealed class EntitySpawnTests
     }
 
     [Test]
-    public void TryRead_WhenDefinitionIsNotAJobForAPlayer_ReturnsFalse()
+    public void TryRead_ForGoldenBytes_ReturnsKnownMessage()
     {
-        byte[] mapId = WireMatrix.With(GoldenBytes, DefinitionTextOffset, 0x6D, 0x61, 0x70);
+        bool isRead = EntitySpawn.TryRead(GoldenBytes, out EntitySpawn? message);
 
-        Assert.That(EntitySpawn.TryRead(mapId, out _), Is.False);
+        Assert.That(isRead, Is.True);
+        Assert.That(message!.Entity, Is.EqualTo(new EntityId(0x0123456789ABCDEF)));
+        Assert.That(message.Kind, Is.EqualTo(EntityKind.Player));
+        Assert.That(message.DefinitionId, Is.EqualTo("job.a"));
+        Assert.That(message.Position, Is.EqualTo(new WorldPosition(1f, 0.5f, -2f)));
+        Assert.That(message.Facing, Is.EqualTo(new WorldDirection(0f, 1f)));
+        Assert.That(message.StateFlags, Is.EqualTo(EntityStateFlags.Moving));
     }
 
     [Test]
@@ -110,9 +73,46 @@ public sealed class EntitySpawnTests
     }
 
     [Test]
+    public void TryRead_WhenDefinitionIsNotAJobForAPlayer_ReturnsFalse()
+    {
+        byte[] mapId = WireMatrix.With(GoldenBytes, DefinitionTextOffset, 0x6D, 0x61, 0x70);
+
+        Assert.That(EntitySpawn.TryRead(mapId, out _), Is.False);
+    }
+
+    [Test]
+    public void TryRead_WhenOpcodeDiffers_ReturnsFalse()
+    {
+        WireMatrix.AssertRejectsOtherOpcodes(GoldenBytes, bytes => EntitySpawn.TryRead(bytes, out _));
+    }
+
+    [Test]
+    public void TryRead_WhenTrailingDataPresent_ReturnsFalse()
+    {
+        WireMatrix.AssertRejectsTrailingData(GoldenBytes, bytes => EntitySpawn.TryRead(bytes, out _));
+    }
+
+    [Test]
+    public void TryRead_WhenTruncatedAtAnyLength_ReturnsFalse()
+    {
+        WireMatrix.AssertRejectsEveryTruncation(GoldenBytes, bytes => EntitySpawn.TryRead(bytes, out _));
+    }
+
+    [Test]
+    public void Write_ForKnownMessage_ProducesGoldenBytes()
+    {
+        byte[] buffer = new byte[Golden.GetEncodedLength()];
+
+        int written = Golden.Write(buffer);
+
+        Assert.That(written, Is.EqualTo(GoldenBytes.Length));
+        Assert.That(buffer, Is.EqualTo(GoldenBytes));
+    }
+
+    [Test]
     public void Write_WhenDefinitionIdExceedsLimit_Throws()
     {
-        EntitySpawn message =
+        var message =
             new EntitySpawn(default, EntityKind.Player, "job." + new string('a', 61), default, default, 0);
         Action write = () => message.Write(new byte[512]);
 

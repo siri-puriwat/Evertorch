@@ -39,7 +39,7 @@ internal static class ItemDefinitionReader
             return null;
         }
 
-        ItemDefinition definition = new ItemDefinition(id, displayName, type, stackLimit, weight, sellPrice);
+        var definition = new ItemDefinition(id, displayName, type, stackLimit, weight, sellPrice);
         return new AuthoredItem(root.ToSource(), definition, icon, model);
     }
 }

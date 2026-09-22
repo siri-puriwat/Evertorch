@@ -4,8 +4,8 @@ using Evertorch.Game;
 namespace Evertorch.Protocol
 {
 /// <summary>
-/// One movement intent on the wire. It asks for a direction and nothing more; the server decides where the entity
-/// ends up.
+///     One movement intent on the wire. It asks for a direction and nothing more; the server decides where the entity
+///     ends up.
 /// </summary>
 public readonly struct MoveInput
 {
@@ -21,7 +21,7 @@ public readonly struct MoveInput
     public static bool TryRead(ReadOnlySpan<byte> source, out MoveInput message)
     {
         message = default;
-        WireReader reader = new WireReader(source);
+        var reader = new WireReader(source);
         if (!reader.TryReadOpcode(MessageOpcode.MoveInput)
             || !reader.TryReadUInt32(out uint sequence)
             || !reader.TryReadUInt32(out uint clientTick)
@@ -38,7 +38,7 @@ public readonly struct MoveInput
 
     public int Write(Span<byte> destination)
     {
-        WireWriter writer = new WireWriter(destination);
+        var writer = new WireWriter(destination);
         writer.WriteOpcode(MessageOpcode.MoveInput);
         writer.WriteUInt32(Intent.Sequence);
         writer.WriteUInt32(Intent.ClientTick);

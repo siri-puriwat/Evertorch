@@ -122,7 +122,7 @@ public static class Program
 
     private static string? FindRepositoryRoot(string start)
     {
-        DirectoryInfo? directory = new DirectoryInfo(start);
+        var directory = new DirectoryInfo(start);
         while (directory != null)
         {
             if (File.Exists(Path.Combine(directory.FullName, "Evertorch.sln")))

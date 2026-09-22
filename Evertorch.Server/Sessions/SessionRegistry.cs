@@ -4,15 +4,13 @@ using Evertorch.Game;
 namespace Evertorch.Server
 {
 /// <summary>
-/// Every live session, by connection and, once in the world, by character. Tick thread only.
+///     Every live session, by connection and, once in the world, by character. Tick thread only.
 /// </summary>
 public sealed class SessionRegistry
 {
-    private readonly Dictionary<ConnectionId, ClientSession> m_byConnection =
-        new Dictionary<ConnectionId, ClientSession>();
+    private readonly Dictionary<ConnectionId, ClientSession> m_byConnection = new();
 
-    private readonly Dictionary<CharacterId, ClientSession> m_byCharacter =
-        new Dictionary<CharacterId, ClientSession>();
+    private readonly Dictionary<CharacterId, ClientSession> m_byCharacter = new();
 
     public IReadOnlyCollection<ClientSession> Sessions => m_byConnection.Values;
 

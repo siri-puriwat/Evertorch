@@ -3,15 +3,15 @@ using Evertorch.Game;
 namespace Evertorch.Protocol
 {
 /// <summary>
-/// One entity's transform inside an <see cref="EntitySnapshot"/>. Velocity is what the server simulated this tick,
-/// so a receiver can tell standing from moving without differencing positions.
+///     One entity's transform inside an <see cref="EntitySnapshot" />. Velocity is what the server simulated this tick,
+///     so a receiver can tell standing from moving without differencing positions.
 /// </summary>
 public readonly struct EntityState
 {
     public const int EncodedLength = sizeof(long)
-        + (3 * sizeof(float))
-        + (2 * sizeof(float))
-        + (3 * sizeof(float))
+        + 3 * sizeof(float)
+        + 2 * sizeof(float)
+        + 3 * sizeof(float)
         + sizeof(ushort);
 
     public EntityState(

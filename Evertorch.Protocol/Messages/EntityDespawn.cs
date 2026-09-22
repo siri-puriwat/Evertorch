@@ -20,7 +20,7 @@ public readonly struct EntityDespawn
     public static bool TryRead(ReadOnlySpan<byte> source, out EntityDespawn message)
     {
         message = default;
-        WireReader reader = new WireReader(source);
+        var reader = new WireReader(source);
         if (!reader.TryReadOpcode(MessageOpcode.EntityDespawn)
             || !reader.TryReadInt64(out long entity)
             || !reader.TryReadByte(out byte reasonValue)
@@ -36,7 +36,7 @@ public readonly struct EntityDespawn
 
     public int Write(Span<byte> destination)
     {
-        WireWriter writer = new WireWriter(destination);
+        var writer = new WireWriter(destination);
         writer.WriteOpcode(MessageOpcode.EntityDespawn);
         writer.WriteInt64(Entity.Value);
         writer.WriteByte((byte)Reason);

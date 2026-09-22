@@ -64,7 +64,7 @@ internal static class JobDefinitionReader
             return null;
         }
 
-        JobDefinition definition = new JobDefinition(
+        var definition = new JobDefinition(
             id,
             displayName,
             new PrimaryStats(str, agi, vit, intelligence, dex, luk),

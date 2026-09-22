@@ -4,7 +4,7 @@ using System.Collections.Generic;
 namespace Evertorch.Rules.Tests
 {
 /// <summary>
-/// Replays a fixed list of draws and records the bound each one was asked for.
+///     Replays a fixed list of draws and records the bound each one was asked for.
 /// </summary>
 internal sealed class ScriptedRandomSource : IRandomSource
 {
@@ -15,7 +15,7 @@ internal sealed class ScriptedRandomSource : IRandomSource
         m_values = new Queue<int>(values);
     }
 
-    public List<int> RequestedBounds { get; } = new List<int>();
+    public List<int> RequestedBounds { get; } = new();
 
     public int Next(int exclusiveMax)
     {

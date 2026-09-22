@@ -3,10 +3,10 @@ using System;
 namespace Evertorch.Game.Tests
 {
 /// <summary>
-/// Builds small grids from text. Rows are written north (largest Z) first, one character per 1 m cell, with the
-/// south-west corner at the world origin. Legend: <c>.</c> floor at 0, <c>^</c> floor at 1, <c>#</c> wall,
-/// <c>o</c> obstacle, <c>N</c> NPC marker, <c>G</c> gate, <c>&gt;</c> ramp rising east from 0 to 1,
-/// <c>&lt;</c> ramp rising west, <c>n</c> ramp rising north, <c>s</c> ramp rising south.
+///     Builds small grids from text. Rows are written north (largest Z) first, one character per 1 m cell, with the
+///     south-west corner at the world origin. Legend: <c>.</c> floor at 0, <c>^</c> floor at 1, <c>#</c> wall,
+///     <c>o</c> obstacle, <c>N</c> NPC marker, <c>G</c> gate, <c>&gt;</c> ramp rising east from 0 to 1,
+///     <c>&lt;</c> ramp rising west, <c>n</c> ramp rising north, <c>s</c> ramp rising south.
 /// </summary>
 internal static class TestGrids
 {
@@ -17,7 +17,7 @@ internal static class TestGrids
     {
         int rows = northFirstRows.Length;
         int columns = northFirstRows[0].Length;
-        NavigationCell[] cells = new NavigationCell[rows * columns];
+        var cells = new NavigationCell[rows * columns];
         for (int row = 0; row < rows; row++)
         {
             string text = northFirstRows[rows - 1 - row];
@@ -28,7 +28,7 @@ internal static class TestGrids
 
             for (int column = 0; column < columns; column++)
             {
-                cells[(row * columns) + column] = ToCell(text[column]);
+                cells[row * columns + column] = ToCell(text[column]);
             }
         }
 
@@ -36,7 +36,7 @@ internal static class TestGrids
     }
 
     /// <summary>
-    /// The center of a cell, addressed as in the text: column from the west, row from the south.
+    ///     The center of a cell, addressed as in the text: column from the west, row from the south.
     /// </summary>
     public static WorldPosition Center(NavigationGrid grid, int column, int row)
     {

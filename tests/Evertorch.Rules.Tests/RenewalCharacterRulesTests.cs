@@ -129,24 +129,6 @@ public sealed class RenewalCharacterRulesTests
         Assert.That(derived.AttackSpeed, Is.EqualTo(expectedAttackSpeed));
     }
 
-    [Test]
-    public void CalculateDerivedStats_WhenStatsExceedTheCap_ClampsAttackSpeed()
-    {
-        DerivedStats derived = Calculate(1, new PrimaryStats(0, 9999, 0, 0, 9999, 0));
-
-        Assert.That(derived.AttackSpeed, Is.EqualTo(RenewalCharacterRules.MaxAttackSpeed));
-    }
-
-    [Test]
-    public void CalculateDerivedStats_WhenPenaltyExceedsTheBase_ClampsAttackSpeedAtZero()
-    {
-        CharacterBuild build = new CharacterBuild(1, new PrimaryStats(0, 0, 0, 0, 0, 0), 1, 0, 0, 0, 500, 5f);
-
-        DerivedStats derived = new RenewalCharacterRules().CalculateDerivedStats(build);
-
-        Assert.That(derived.AttackSpeed, Is.Zero);
-    }
-
     // 2 dex + int = 530 removes the variable cast entirely. At 529 less than a thousandth remains and truncates
     // away; 528 is the first total that leaves one.
     [TestCase(265, 0, 0)]
@@ -161,10 +143,45 @@ public sealed class RenewalCharacterRulesTests
         Assert.That(derived.VariableCastPermille, Is.EqualTo(expected));
     }
 
+    [TestCase(0)]
+    [TestCase(-1)]
+    public void CharacterBuild_WhenLevelIsBelowOne_Throws(int level)
+    {
+        Action create = () => _ = new CharacterBuild(level, default, 1, 1, 1, 1, 0, 5f);
+
+        Assert.That(create, Throws.InstanceOf<ArgumentOutOfRangeException>());
+    }
+
+    private static DerivedStats Calculate(int level, PrimaryStats stats)
+    {
+        var build = new CharacterBuild(
+            level,
+            stats,
+            HealthBase,
+            HealthPerLevel,
+            SpiritBase,
+            SpiritPerLevel,
+            UnarmedPenalty,
+            5f);
+
+        return new RenewalCharacterRules().CalculateDerivedStats(build);
+    }
+
+    [Test]
+    public void CalculateDerivedStats_ForIdenticalBuilds_IsDeterministic()
+    {
+        DerivedStats first = Calculate(42, new PrimaryStats(31, 17, 23, 5, 29, 11));
+        DerivedStats second = Calculate(42, new PrimaryStats(31, 17, 23, 5, 29, 11));
+
+        Assert.That(second.MaxHp, Is.EqualTo(first.MaxHp));
+        Assert.That(second.AttackSpeed, Is.EqualTo(first.AttackSpeed));
+        Assert.That(second.VariableCastPermille, Is.EqualTo(first.VariableCastPermille));
+    }
+
     [Test]
     public void CalculateDerivedStats_ForLargeJobValues_DoesNotOverflow()
     {
-        CharacterBuild build = new CharacterBuild(
+        var build = new CharacterBuild(
             999,
             new PrimaryStats(0, 0, 9999, 9999, 0, 0),
             100_000_000,
@@ -181,23 +198,21 @@ public sealed class RenewalCharacterRulesTests
     }
 
     [Test]
-    public void CalculateDerivedStats_ForIdenticalBuilds_IsDeterministic()
+    public void CalculateDerivedStats_WhenPenaltyExceedsTheBase_ClampsAttackSpeedAtZero()
     {
-        DerivedStats first = Calculate(42, new PrimaryStats(31, 17, 23, 5, 29, 11));
-        DerivedStats second = Calculate(42, new PrimaryStats(31, 17, 23, 5, 29, 11));
+        var build = new CharacterBuild(1, new PrimaryStats(0, 0, 0, 0, 0, 0), 1, 0, 0, 0, 500, 5f);
 
-        Assert.That(second.MaxHp, Is.EqualTo(first.MaxHp));
-        Assert.That(second.AttackSpeed, Is.EqualTo(first.AttackSpeed));
-        Assert.That(second.VariableCastPermille, Is.EqualTo(first.VariableCastPermille));
+        DerivedStats derived = new RenewalCharacterRules().CalculateDerivedStats(build);
+
+        Assert.That(derived.AttackSpeed, Is.Zero);
     }
 
-    [TestCase(0)]
-    [TestCase(-1)]
-    public void CharacterBuild_WhenLevelIsBelowOne_Throws(int level)
+    [Test]
+    public void CalculateDerivedStats_WhenStatsExceedTheCap_ClampsAttackSpeed()
     {
-        Action create = () => _ = new CharacterBuild(level, default, 1, 1, 1, 1, 0, 5f);
+        DerivedStats derived = Calculate(1, new PrimaryStats(0, 9999, 0, 0, 9999, 0));
 
-        Assert.That(create, Throws.InstanceOf<ArgumentOutOfRangeException>());
+        Assert.That(derived.AttackSpeed, Is.EqualTo(RenewalCharacterRules.MaxAttackSpeed));
     }
 
     [Test]
@@ -206,21 +221,6 @@ public sealed class RenewalCharacterRulesTests
         Action create = () => _ = new CharacterBuild(1, default, 1, -1, 1, 1, 0, 5f);
 
         Assert.That(create, Throws.InstanceOf<ArgumentOutOfRangeException>());
-    }
-
-    private static DerivedStats Calculate(int level, PrimaryStats stats)
-    {
-        CharacterBuild build = new CharacterBuild(
-            level,
-            stats,
-            HealthBase,
-            HealthPerLevel,
-            SpiritBase,
-            SpiritPerLevel,
-            UnarmedPenalty,
-            5f);
-
-        return new RenewalCharacterRules().CalculateDerivedStats(build);
     }
 }
 }

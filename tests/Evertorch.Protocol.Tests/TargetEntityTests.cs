@@ -10,29 +10,10 @@ public sealed class TargetEntityTests
     private static readonly byte[] GoldenBytes =
     {
         0x05, 0x00,
-        0xEF, 0xCD, 0xAB, 0x89, 0x67, 0x45, 0x23, 0x01,
+        0xEF, 0xCD, 0xAB, 0x89, 0x67, 0x45, 0x23, 0x01
     };
 
-    private static readonly EntityId GoldenTarget = new EntityId(0x0123456789ABCDEF);
-
-    [Test]
-    public void Write_ForKnownTarget_ProducesGoldenBytes()
-    {
-        byte[] buffer = new byte[TargetEntity.EncodedLength];
-
-        new TargetEntity(GoldenTarget).Write(buffer);
-
-        Assert.That(buffer, Is.EqualTo(GoldenBytes));
-    }
-
-    [Test]
-    public void TryRead_ForGoldenBytes_ReturnsKnownTarget()
-    {
-        bool isRead = TargetEntity.TryRead(GoldenBytes, out TargetEntity message);
-
-        Assert.That(isRead, Is.True);
-        Assert.That(message.Target, Is.EqualTo(GoldenTarget));
-    }
+    private static readonly EntityId GoldenTarget = new(0x0123456789ABCDEF);
 
     [TestCase(0L)]
     [TestCase(-1L)]
@@ -50,20 +31,27 @@ public sealed class TargetEntityTests
     }
 
     [Test]
+    public void TryRead_ForGoldenBytes_ReturnsKnownTarget()
+    {
+        bool isRead = TargetEntity.TryRead(GoldenBytes, out TargetEntity message);
+
+        Assert.That(isRead, Is.True);
+        Assert.That(message.Target, Is.EqualTo(GoldenTarget));
+    }
+
+    [Test]
+    public void TryRead_WhenEmpty_ReturnsFalse()
+    {
+        Assert.That(TargetEntity.TryRead(ReadOnlySpan<byte>.Empty, out _), Is.False);
+    }
+
+    [Test]
     public void TryRead_WhenOpcodeDiffers_ReturnsFalse()
     {
         byte[] buffer = (byte[])GoldenBytes.Clone();
         buffer[0] = 0x06;
 
         Assert.That(TargetEntity.TryRead(buffer, out _), Is.False);
-    }
-
-    [Test]
-    public void TryRead_WhenTruncated_ReturnsFalse()
-    {
-        ReadOnlySpan<byte> truncated = new ReadOnlySpan<byte>(GoldenBytes, 0, GoldenBytes.Length - 1);
-
-        Assert.That(TargetEntity.TryRead(truncated, out _), Is.False);
     }
 
     [Test]
@@ -76,9 +64,21 @@ public sealed class TargetEntityTests
     }
 
     [Test]
-    public void TryRead_WhenEmpty_ReturnsFalse()
+    public void TryRead_WhenTruncated_ReturnsFalse()
     {
-        Assert.That(TargetEntity.TryRead(ReadOnlySpan<byte>.Empty, out _), Is.False);
+        var truncated = new ReadOnlySpan<byte>(GoldenBytes, 0, GoldenBytes.Length - 1);
+
+        Assert.That(TargetEntity.TryRead(truncated, out _), Is.False);
+    }
+
+    [Test]
+    public void Write_ForKnownTarget_ProducesGoldenBytes()
+    {
+        byte[] buffer = new byte[TargetEntity.EncodedLength];
+
+        new TargetEntity(GoldenTarget).Write(buffer);
+
+        Assert.That(buffer, Is.EqualTo(GoldenBytes));
     }
 
     [Test]

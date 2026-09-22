@@ -10,9 +10,9 @@ namespace Evertorch.Tools
 public delegate bool TryCreateId<T>(string? value, out T id);
 
 /// <summary>
-/// Reads typed fields from one YAML mapping and reports every problem with its file, field path, and line.
-/// Read methods return a default after reporting, so a definition reader can collect all errors in one pass
-/// and then discard the definition.
+///     Reads typed fields from one YAML mapping and reports every problem with its file, field path, and line.
+///     Read methods return a default after reporting, so a definition reader can collect all errors in one pass
+///     and then discard the definition.
 /// </summary>
 public sealed class YamlFieldReader
 {
@@ -21,8 +21,8 @@ public sealed class YamlFieldReader
     private readonly string m_path;
     private readonly List<ContentDiagnostic> m_diagnostics;
     private readonly Dictionary<string, int> m_fieldLines;
-    private readonly HashSet<string> m_readKeys = new HashSet<string>(StringComparer.Ordinal);
-    private readonly List<YamlFieldReader> m_children = new List<YamlFieldReader>();
+    private readonly HashSet<string> m_readKeys = new(StringComparer.Ordinal);
+    private readonly List<YamlFieldReader> m_children = new();
 
     // A reader standing in for a missing mapping: the absence is already reported, so its fields stay quiet.
     private readonly bool m_isPlaceholder;
@@ -200,7 +200,7 @@ public sealed class YamlFieldReader
             return default;
         }
 
-        List<string> allowed = new List<string>();
+        var allowed = new List<string>();
         foreach (TEnum candidate in Enum.GetValues<TEnum>())
         {
             string name = EnumText.Of(candidate);
@@ -241,7 +241,7 @@ public sealed class YamlFieldReader
 
     public IReadOnlyList<YamlFieldReader> OptionalMappingSequence(string key)
     {
-        List<YamlFieldReader> readers = new List<YamlFieldReader>();
+        var readers = new List<YamlFieldReader>();
         YamlNode? node = Find(key);
         if (node == null)
         {
@@ -283,12 +283,12 @@ public sealed class YamlFieldReader
     }
 
     /// <summary>
-    /// Elements are returned as written. Each one's line is kept under <c>key[index]</c> for
-    /// <see cref="ReportField"/>. A missing or malformed sequence yields an empty list and one diagnostic.
+    ///     Elements are returned as written. Each one's line is kept under <c>key[index]</c> for
+    ///     <see cref="ReportField" />. A missing or malformed sequence yields an empty list and one diagnostic.
     /// </summary>
     public IReadOnlyList<string> RequiredStringSequence(string key)
     {
-        List<string> values = new List<string>();
+        var values = new List<string>();
         YamlNode? node = Find(key);
         if (node == null)
         {
@@ -399,7 +399,7 @@ public sealed class YamlFieldReader
 
     private YamlFieldReader AddChild(YamlMappingNode mapping, string path, bool isPlaceholder)
     {
-        YamlFieldReader child = new YamlFieldReader(
+        var child = new YamlFieldReader(
             mapping,
             m_file,
             path,

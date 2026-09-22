@@ -7,8 +7,8 @@ using System.Threading;
 namespace Evertorch.Tools
 {
 /// <summary>
-/// Publishes generated packages to disk. The output directory is replaced as a whole, only when it is
-/// recognisably this tool's own output, and never left half-written.
+///     Publishes generated packages to disk. The output directory is replaced as a whole, only when it is
+///     recognisably this tool's own output, and never left half-written.
 /// </summary>
 public static class ContentPackageDeployer
 {
@@ -49,9 +49,9 @@ public static class ContentPackageDeployer
     }
 
     /// <summary>
-    /// Copies the client package into a directory another tool also writes to, such as a Unity
-    /// <c>StreamingAssets</c> folder. Files are replaced in place so that tool's own side files survive; the
-    /// manifest is removed first and written last, so an interrupted copy reads as incomplete, never as valid.
+    ///     Copies the client package into a directory another tool also writes to, such as a Unity
+    ///     <c>StreamingAssets</c> folder. Files are replaced in place so that tool's own side files survive; the
+    ///     manifest is removed first and written last, so an interrupted copy reads as incomplete, never as valid.
     /// </summary>
     public static void DeployClient(ContentPackage client, string clientDirectory)
     {
@@ -105,7 +105,7 @@ public static class ContentPackageDeployer
 
         try
         {
-            using JsonDocument document = JsonDocument.Parse(File.ReadAllBytes(manifestPath));
+            using var document = JsonDocument.Parse(File.ReadAllBytes(manifestPath));
             JsonElement root = document.RootElement;
             return root.ValueKind == JsonValueKind.Object
                 && root.TryGetProperty("schemaVersion", out JsonElement _)

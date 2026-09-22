@@ -4,7 +4,7 @@ using NUnit.Framework;
 namespace Evertorch.Protocol.Tests
 {
 /// <summary>
-/// The rejection checks every message must pass, written once. A reader is a function from bytes to "accepted".
+///     The rejection checks every message must pass, written once. A reader is a function from bytes to "accepted".
 /// </summary>
 internal static class WireMatrix
 {

@@ -4,7 +4,7 @@ using Evertorch.Protocol;
 namespace Evertorch.Server
 {
 /// <summary>
-/// A player's authoritative presence on one map. Only the tick thread reads or writes it.
+///     A player's authoritative presence on one map. Only the tick thread reads or writes it.
 /// </summary>
 public sealed class PlayerEntity
 {
@@ -47,7 +47,7 @@ public sealed class PlayerEntity
     public EntityStateFlags StateFlags { get; set; }
 
     /// <summary>
-    /// World units per second after the movement rules were applied; never a value the client supplied.
+    ///     World units per second after the movement rules were applied; never a value the client supplied.
     /// </summary>
     public float MovementSpeed { get; }
 }

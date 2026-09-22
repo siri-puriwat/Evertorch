@@ -3,7 +3,7 @@ using System.Collections.Generic;
 namespace Evertorch.Tools
 {
 /// <summary>
-/// Where a definition was authored, kept so cross-definition checks can still report a file, field, and line.
+///     Where a definition was authored, kept so cross-definition checks can still report a file, field, and line.
 /// </summary>
 public sealed class DefinitionSource
 {

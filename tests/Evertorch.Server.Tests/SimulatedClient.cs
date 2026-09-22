@@ -5,15 +5,15 @@ using Evertorch.Game;
 namespace Evertorch.Server.Tests
 {
 /// <summary>
-/// The real client stack (connection, world, prediction, controller, driver) behind a seeded lossy link, driven by
-/// a virtual clock instead of Unity's frame loop.
+///     The real client stack (connection, world, prediction, controller, driver) behind a seeded lossy link, driven by
+///     a virtual clock instead of Unity's frame loop.
 /// </summary>
 internal sealed class SimulatedClient : IMapProvider
 {
     private const string BuildVersion = TestServer.BuildVersion;
 
     private readonly TestServer m_server;
-    private readonly MoveIntentProducer m_producer = new MoveIntentProducer();
+    private readonly MoveIntentProducer m_producer = new();
     private LocalPlayerDriver? m_driver;
     private uint m_clientTick;
 
@@ -72,7 +72,7 @@ internal sealed class SimulatedClient : IMapProvider
         WorldPosition predicted = World.Predictor.Position;
         float deltaX = predicted.X - serverPosition.X;
         float deltaZ = predicted.Z - serverPosition.Z;
-        return (float)Math.Sqrt((deltaX * deltaX) + (deltaZ * deltaZ));
+        return (float)Math.Sqrt(deltaX * deltaX + deltaZ * deltaZ);
     }
 }
 }

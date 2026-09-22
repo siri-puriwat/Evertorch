@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Threading;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -19,47 +20,22 @@ public sealed class ServerHostTests
 
     private static readonly TimeSpan SignalTimeout = TimeSpan.FromSeconds(10);
 
-    [Test]
-    public void CreateBuilder_WithoutConfigurationFiles_UsesTwentyHertz()
+    private static void WriteValidContent(TemporaryDirectory root)
     {
-        using TemporaryDirectory root = new TemporaryDirectory();
-        using IHost host = ServerHost.CreateBuilder(EphemeralPort, root.Path).Build();
-
-        Assert.That(ReadOptions(host).TickRate, Is.EqualTo(20));
+        PackageFixture.WriteTo(
+            Path.Combine(root.Path, "content", "server"),
+            PackageFixture.BuildRepositoryPackage());
     }
 
-    [Test]
-    public void CreateBuilder_WithJsonFile_ReadsTickRate()
+    private static SimulationOptions ReadOptions(IHost host)
     {
-        using TemporaryDirectory root = new TemporaryDirectory();
-        root.Write("appsettings.json", "{ \"Simulation\": { \"TickRate\": 30 } }");
-        using IHost host = ServerHost.CreateBuilder(EphemeralPort, root.Path).Build();
-
-        Assert.That(ReadOptions(host).TickRate, Is.EqualTo(30));
-    }
-
-    [Test]
-    public void CreateBuilder_WithEnvironmentOverride_ReplacesJsonTickRate()
-    {
-        using TemporaryDirectory root = new TemporaryDirectory();
-        root.Write("appsettings.json", "{ \"Simulation\": { \"TickRate\": 30 } }");
-        Environment.SetEnvironmentVariable(TickRateVariable, "40");
-        try
-        {
-            using IHost host = ServerHost.CreateBuilder(EphemeralPort, root.Path).Build();
-
-            Assert.That(ReadOptions(host).TickRate, Is.EqualTo(40));
-        }
-        finally
-        {
-            Environment.SetEnvironmentVariable(TickRateVariable, null);
-        }
+        return host.Services.GetRequiredService<IOptions<SimulationOptions>>().Value;
     }
 
     [Test]
     public void CreateBuilder_WithCommandLineOverride_WinsOverEnvironment()
     {
-        using TemporaryDirectory root = new TemporaryDirectory();
+        using var root = new TemporaryDirectory();
         Environment.SetEnvironmentVariable(TickRateVariable, "40");
         try
         {
@@ -75,50 +51,48 @@ public sealed class ServerHostTests
     }
 
     [Test]
-    public void Start_WithInvalidTickRate_FailsBeforeSimulationStarts()
+    public void CreateBuilder_WithEnvironmentOverride_ReplacesJsonTickRate()
     {
-        using TemporaryDirectory root = new TemporaryDirectory();
-        root.Write("appsettings.json", "{ \"Simulation\": { \"TickRate\": 0 } }");
-        WriteValidContent(root);
-        List<string> log = new List<string>();
-        HostApplicationBuilder builder = ServerHost.CreateBuilder(EphemeralPort, root.Path);
-        builder.Services.AddSingleton<ITickPhase>(new RecordingPhase(TickPhase.Movement, "tick", log));
-        using IHost host = builder.Build();
-        Action start = () => host.Start();
+        using var root = new TemporaryDirectory();
+        root.Write("appsettings.json", "{ \"Simulation\": { \"TickRate\": 30 } }");
+        Environment.SetEnvironmentVariable(TickRateVariable, "40");
+        try
+        {
+            using IHost host = ServerHost.CreateBuilder(EphemeralPort, root.Path).Build();
 
-        Assert.That(start, Throws.InstanceOf<OptionsValidationException>());
-        Assert.That(log, Is.Empty);
+            Assert.That(ReadOptions(host).TickRate, Is.EqualTo(40));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(TickRateVariable, null);
+        }
     }
 
     [Test]
-    public void Stop_WhileSimulationRuns_JoinsSimulationThread()
+    public void CreateBuilder_WithJsonFile_ReadsTickRate()
     {
-        using TemporaryDirectory root = new TemporaryDirectory();
-        WriteValidContent(root);
-        using ManualResetEventSlim ticked = new ManualResetEventSlim();
-        HostApplicationBuilder builder = ServerHost.CreateBuilder(EphemeralPort, root.Path);
-        builder.Services.AddSingleton<ITickPhase>(
-            new RecordingPhase(TickPhase.Movement, "tick", new List<string>(), _ => ticked.Set()));
-        using IHost host = builder.Build();
-        ServerLifetimeService lifetime = host.Services.GetRequiredService<ServerLifetimeService>();
+        using var root = new TemporaryDirectory();
+        root.Write("appsettings.json", "{ \"Simulation\": { \"TickRate\": 30 } }");
+        using IHost host = ServerHost.CreateBuilder(EphemeralPort, root.Path).Build();
 
-        host.Start();
-        bool didTick = ticked.Wait(SignalTimeout);
-        bool wasRunning = lifetime.IsSimulationRunning;
-        host.StopAsync().GetAwaiter().GetResult();
+        Assert.That(ReadOptions(host).TickRate, Is.EqualTo(30));
+    }
 
-        Assert.That(didTick, Is.True);
-        Assert.That(wasRunning, Is.True);
-        Assert.That(lifetime.IsSimulationRunning, Is.False);
-        Assert.That(lifetime.HasFaulted, Is.False);
+    [Test]
+    public void CreateBuilder_WithoutConfigurationFiles_UsesTwentyHertz()
+    {
+        using var root = new TemporaryDirectory();
+        using IHost host = ServerHost.CreateBuilder(EphemeralPort, root.Path).Build();
+
+        Assert.That(ReadOptions(host).TickRate, Is.EqualTo(20));
     }
 
     [Test]
     public void Dispose_WithoutStop_EndsSimulationThread()
     {
-        using TemporaryDirectory root = new TemporaryDirectory();
+        using var root = new TemporaryDirectory();
         WriteValidContent(root);
-        using ManualResetEventSlim ticked = new ManualResetEventSlim();
+        using var ticked = new ManualResetEventSlim();
         HostApplicationBuilder builder = ServerHost.CreateBuilder(EphemeralPort, root.Path);
         builder.Services.AddSingleton<ITickPhase>(
             new RecordingPhase(TickPhase.Movement, "tick", new List<string>(), _ => ticked.Set()));
@@ -136,7 +110,7 @@ public sealed class ServerHostTests
     [Test]
     public void Simulation_WhenPhaseThrows_StopsApplicationAndReportsFault()
     {
-        using TemporaryDirectory root = new TemporaryDirectory();
+        using var root = new TemporaryDirectory();
         WriteValidContent(root);
         HostApplicationBuilder builder = ServerHost.CreateBuilder(EphemeralPort, root.Path);
         builder.Services.AddSingleton<ITickPhase>(
@@ -157,27 +131,13 @@ public sealed class ServerHostTests
     }
 
     [Test]
-    public void Start_WhenContentPackageIsMissing_FailsBeforeSimulationStarts()
-    {
-        using TemporaryDirectory root = new TemporaryDirectory();
-        List<string> log = new List<string>();
-        HostApplicationBuilder builder = ServerHost.CreateBuilder(EphemeralPort, root.Path);
-        builder.Services.AddSingleton<ITickPhase>(new RecordingPhase(TickPhase.Movement, "tick", log));
-        using IHost host = builder.Build();
-        Action start = () => host.Start();
-
-        Assert.That(start, Throws.InstanceOf<ContentLoadException>());
-        Assert.That(log, Is.Empty);
-    }
-
-    [Test]
     public void Start_WhenContentPackageIsInvalid_FailsBeforeSimulationStarts()
     {
-        using TemporaryDirectory root = new TemporaryDirectory();
+        using var root = new TemporaryDirectory();
         Dictionary<string, byte[]> files = PackageFixture.BuildRepositoryPackage();
         PackageFixture.ReplaceWithoutManifest(files, "jobs.json", "\"baseSpeed\": 5", "\"baseSpeed\": 500");
-        PackageFixture.WriteTo(System.IO.Path.Combine(root.Path, "content", "server"), files);
-        List<string> log = new List<string>();
+        PackageFixture.WriteTo(Path.Combine(root.Path, "content", "server"), files);
+        var log = new List<string>();
         HostApplicationBuilder builder = ServerHost.CreateBuilder(EphemeralPort, root.Path);
         builder.Services.AddSingleton<ITickPhase>(new RecordingPhase(TickPhase.Movement, "tick", log));
         using IHost host = builder.Build();
@@ -188,10 +148,24 @@ public sealed class ServerHostTests
     }
 
     [Test]
+    public void Start_WhenContentPackageIsMissing_FailsBeforeSimulationStarts()
+    {
+        using var root = new TemporaryDirectory();
+        var log = new List<string>();
+        HostApplicationBuilder builder = ServerHost.CreateBuilder(EphemeralPort, root.Path);
+        builder.Services.AddSingleton<ITickPhase>(new RecordingPhase(TickPhase.Movement, "tick", log));
+        using IHost host = builder.Build();
+        Action start = () => host.Start();
+
+        Assert.That(start, Throws.InstanceOf<ContentLoadException>());
+        Assert.That(log, Is.Empty);
+    }
+
+    [Test]
     public void Start_WithConfiguredPackagePath_LoadsContentFromThere()
     {
-        using TemporaryDirectory root = new TemporaryDirectory();
-        using TemporaryDirectory package = new TemporaryDirectory();
+        using var root = new TemporaryDirectory();
+        using var package = new TemporaryDirectory();
         PackageFixture.WriteTo(package.Path, PackageFixture.BuildRepositoryPackage());
         string[] args = { "--Content:ServerPackagePath=" + package.Path, "--Network:Port=0" };
         using IHost host = ServerHost.CreateBuilder(args, root.Path).Build();
@@ -203,16 +177,43 @@ public sealed class ServerHostTests
         Assert.That(content.Maps, Is.Not.Empty);
     }
 
-    private static void WriteValidContent(TemporaryDirectory root)
+    [Test]
+    public void Start_WithInvalidTickRate_FailsBeforeSimulationStarts()
     {
-        PackageFixture.WriteTo(
-            System.IO.Path.Combine(root.Path, "content", "server"),
-            PackageFixture.BuildRepositoryPackage());
+        using var root = new TemporaryDirectory();
+        root.Write("appsettings.json", "{ \"Simulation\": { \"TickRate\": 0 } }");
+        WriteValidContent(root);
+        var log = new List<string>();
+        HostApplicationBuilder builder = ServerHost.CreateBuilder(EphemeralPort, root.Path);
+        builder.Services.AddSingleton<ITickPhase>(new RecordingPhase(TickPhase.Movement, "tick", log));
+        using IHost host = builder.Build();
+        Action start = () => host.Start();
+
+        Assert.That(start, Throws.InstanceOf<OptionsValidationException>());
+        Assert.That(log, Is.Empty);
     }
 
-    private static SimulationOptions ReadOptions(IHost host)
+    [Test]
+    public void Stop_WhileSimulationRuns_JoinsSimulationThread()
     {
-        return host.Services.GetRequiredService<IOptions<SimulationOptions>>().Value;
+        using var root = new TemporaryDirectory();
+        WriteValidContent(root);
+        using var ticked = new ManualResetEventSlim();
+        HostApplicationBuilder builder = ServerHost.CreateBuilder(EphemeralPort, root.Path);
+        builder.Services.AddSingleton<ITickPhase>(
+            new RecordingPhase(TickPhase.Movement, "tick", new List<string>(), _ => ticked.Set()));
+        using IHost host = builder.Build();
+        ServerLifetimeService lifetime = host.Services.GetRequiredService<ServerLifetimeService>();
+
+        host.Start();
+        bool didTick = ticked.Wait(SignalTimeout);
+        bool wasRunning = lifetime.IsSimulationRunning;
+        host.StopAsync().GetAwaiter().GetResult();
+
+        Assert.That(didTick, Is.True);
+        Assert.That(wasRunning, Is.True);
+        Assert.That(lifetime.IsSimulationRunning, Is.False);
+        Assert.That(lifetime.HasFaulted, Is.False);
     }
 }
 }

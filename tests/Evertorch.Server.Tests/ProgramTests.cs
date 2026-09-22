@@ -11,10 +11,10 @@ public sealed class ProgramTests
     [Test]
     public void Main_WithoutAContentPackage_ReturnsOneAndSaysHowToStartForDevelopment()
     {
-        using TemporaryDirectory root = new TemporaryDirectory();
+        using var root = new TemporaryDirectory();
         string missing = Path.Combine(root.Path, "no-such-package");
         TextWriter original = Console.Error;
-        StringWriter error = new StringWriter();
+        var error = new StringWriter();
         int exitCode;
 
         Console.SetError(error);

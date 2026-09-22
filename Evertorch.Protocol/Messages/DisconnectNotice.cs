@@ -3,8 +3,8 @@ using System;
 namespace Evertorch.Protocol
 {
 /// <summary>
-/// The last message a server sends before it closes a connection. The text is safe to show a player and never
-/// carries diagnostics.
+///     The last message a server sends before it closes a connection. The text is safe to show a player and never
+///     carries diagnostics.
 /// </summary>
 public sealed class DisconnectNotice
 {
@@ -21,7 +21,7 @@ public sealed class DisconnectNotice
     public static bool TryRead(ReadOnlySpan<byte> source, out DisconnectNotice? message)
     {
         message = null;
-        WireReader reader = new WireReader(source);
+        var reader = new WireReader(source);
         if (!reader.TryReadOpcode(MessageOpcode.DisconnectNotice)
             || !reader.TryReadByte(out byte reasonValue)
             || !reader.TryReadString(ProtocolLimits.MaxNoticeMessageBytes, out string text)
@@ -44,7 +44,7 @@ public sealed class DisconnectNotice
 
     public int Write(Span<byte> destination)
     {
-        WireWriter writer = new WireWriter(destination);
+        var writer = new WireWriter(destination);
         writer.WriteOpcode(MessageOpcode.DisconnectNotice);
         writer.WriteByte((byte)Reason);
         writer.WriteString(Message, ProtocolLimits.MaxNoticeMessageBytes);

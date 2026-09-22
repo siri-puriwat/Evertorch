@@ -4,7 +4,7 @@ using System.Globalization;
 namespace Evertorch.Game
 {
 /// <summary>
-/// A direction on the horizontal X/Z plane. The type stores what it is given; it does not normalize.
+///     A direction on the horizontal X/Z plane. The type stores what it is given; it does not normalize.
 /// </summary>
 public readonly struct WorldDirection : IEquatable<WorldDirection>
 {

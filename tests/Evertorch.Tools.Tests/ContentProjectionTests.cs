@@ -19,7 +19,7 @@ public sealed class ContentProjectionTests
     {
         "3917", "3918", "73219", "73220", "54321", "7613", "2917", "1553", "1027", "4.0625", "1.5625", "12347",
         "6.125", "12.375", "0.7321", "1.8125", "60413", "8123", "20417", "3119", "5.1875", "3.4375", "7.5625",
-        "12.6875", "14.3125", "6.875", "86421",
+        "12.6875", "14.3125", "6.875", "86421"
     };
 
     private static readonly string[] ServerOnlyFieldNames =
@@ -29,170 +29,8 @@ public sealed class ContentProjectionTests
         "leashRadius", "drops", "chance", "amount", "minAmount", "maxAmount", "range", "damageType",
         "startingStats", "health", "spirit", "healthBase", "healthPerLevel", "spiritBase", "spiritPerLevel",
         "unarmedAttackSpeedPenalty", "startingMap", "basicAttack", "spawnPoint", "monsterSpawns", "respawnMs",
-        "serverContentVersion",
+        "serverContentVersion"
     };
-
-    [Test]
-    public void Build_ForIdenticalInput_ProducesIdenticalBytes()
-    {
-        using (ContentWorkspace first = new ContentWorkspace())
-        using (ContentWorkspace second = new ContentWorkspace())
-        {
-            ContentPackages left = BuildValid(first);
-            ContentPackages right = BuildValid(second);
-
-            AssertSameBytes(left.Server, right.Server);
-            AssertSameBytes(left.Client, right.Client);
-        }
-    }
-
-    [Test]
-    public void Build_WhenFileNamesSortDifferently_OrdersDefinitionsById()
-    {
-        using (ContentWorkspace original = new ContentWorkspace())
-        using (ContentWorkspace renamed = new ContentWorkspace())
-        {
-            renamed.Move(Item, "items/aaa_first_on_disk.yml");
-            renamed.Move("items/minor_health.yml", "items/zzz_last_on_disk.yml");
-
-            AssertSameBytes(BuildValid(original).Server, BuildValid(renamed).Server);
-            AssertSameBytes(BuildValid(original).Client, BuildValid(renamed).Client);
-        }
-    }
-
-    [Test]
-    public void Build_ForValidFixture_MatchesGoldenClientPackage()
-    {
-        using (ContentWorkspace workspace = new ContentWorkspace())
-        {
-            ContentPackage client = BuildValid(workspace).Client;
-
-            string goldenDirectory = Path.Combine(ContentWorkspace.FixturesDirectory, "golden-client");
-            string[] goldenFiles = Directory.GetFiles(goldenDirectory).Select(Path.GetFileName).ToArray()!;
-            Assert.That(client.DataFiles.Select(file => file.Path), Is.EquivalentTo(goldenFiles));
-            foreach (PackageFile file in client.DataFiles)
-            {
-                string expected = File.ReadAllText(Path.Combine(goldenDirectory, file.Path)).Replace("\r\n", "\n");
-                Assert.That(Encoding.UTF8.GetString(file.Content), Is.EqualTo(expected), file.Path);
-            }
-        }
-    }
-
-    [Test]
-    public void Build_ForValidFixture_KeepsServerOnlyValuesOutOfClientPackage()
-    {
-        using (ContentWorkspace workspace = new ContentWorkspace())
-        {
-            ContentPackages packages = BuildValid(workspace);
-            string clientText = AllText(packages.Client);
-            string serverText = AllText(packages.Server);
-
-            foreach (string sentinel in ServerOnlySentinels)
-            {
-                // A sentinel missing from the server package would prove nothing about the client.
-                Assert.That(serverText, Does.Contain(sentinel), "sentinel is not authored: " + sentinel);
-                Assert.That(clientText, Does.Not.Contain(sentinel), "server-only value leaked: " + sentinel);
-            }
-        }
-    }
-
-    [Test]
-    public void Build_ForValidFixture_KeepsServerOnlyFieldNamesOutOfClientPackage()
-    {
-        using (ContentWorkspace workspace = new ContentWorkspace())
-        {
-            ContentPackage client = BuildValid(workspace).Client;
-
-            HashSet<string> propertyNames = new HashSet<string>(StringComparer.Ordinal);
-            foreach (PackageFile file in client.DataFiles.Append(client.Manifest))
-            {
-                using (JsonDocument document = JsonDocument.Parse(file.Content))
-                {
-                    CollectPropertyNames(document.RootElement, propertyNames);
-                }
-            }
-
-            Assert.That(propertyNames.Intersect(ServerOnlyFieldNames), Is.Empty);
-        }
-    }
-
-    [Test]
-    public void Build_ForValidFixture_KeepsSourcePathsOutOfBothPackages()
-    {
-        using (ContentWorkspace workspace = new ContentWorkspace())
-        {
-            ContentPackages packages = BuildValid(workspace);
-
-            foreach (string text in new[] { AllText(packages.Client), AllText(packages.Server) })
-            {
-                Assert.That(text, Does.Not.Contain(".yml"));
-                Assert.That(text, Does.Not.Contain(workspace.ContentRoot));
-                Assert.That(text, Does.Not.Contain("\r"));
-            }
-        }
-    }
-
-    [Test]
-    public void Build_WhenOnlyServerDataChanges_KeepsClientFilesAndVersion()
-    {
-        using (ContentWorkspace original = new ContentWorkspace())
-        using (ContentWorkspace rebalanced = new ContentWorkspace())
-        {
-            rebalanced.Replace(Monster, "chance: 0.7321", "chance: 0.25");
-            rebalanced.Replace(Item, "sellPrice: 73219", "sellPrice: 5");
-
-            ContentPackages before = BuildValid(original);
-            ContentPackages after = BuildValid(rebalanced);
-
-            Assert.That(after.Server.Version, Is.Not.EqualTo(before.Server.Version));
-            Assert.That(after.Client.Version, Is.EqualTo(before.Client.Version));
-            AssertSameBytes(before.Client, after.Client);
-        }
-    }
-
-    [Test]
-    public void Build_WhenClientPresentationChanges_AdvancesClientVersion()
-    {
-        using (ContentWorkspace original = new ContentWorkspace())
-        using (ContentWorkspace restyled = new ContentWorkspace())
-        {
-            restyled.Replace(Item, "icon: item_slime_gel", "icon: item_slime_gel_v2");
-
-            ContentPackages before = BuildValid(original);
-            ContentPackages after = BuildValid(restyled);
-
-            Assert.That(after.Client.Version, Is.Not.EqualTo(before.Client.Version));
-            Assert.That(after.Server.Version, Is.EqualTo(before.Server.Version));
-        }
-    }
-
-    [Test]
-    public void Build_ForValidFixture_WritesManifestsThatDescribeTheirFiles()
-    {
-        using (ContentWorkspace workspace = new ContentWorkspace())
-        {
-            ContentPackages packages = BuildValid(workspace);
-
-            using (JsonDocument server = JsonDocument.Parse(packages.Server.Manifest.Content))
-            using (JsonDocument client = JsonDocument.Parse(packages.Client.Manifest.Content))
-            {
-                Assert.That(server.RootElement.GetProperty("schemaVersion").GetInt32(), Is.EqualTo(1));
-                Assert.That(
-                    server.RootElement.GetProperty("serverContentVersion").GetString(),
-                    Is.EqualTo(packages.Server.Version));
-                Assert.That(
-                    server.RootElement.GetProperty("clientContentVersion").GetString(),
-                    Is.EqualTo(packages.Client.Version));
-                Assert.That(
-                    client.RootElement.GetProperty("clientContentVersion").GetString(),
-                    Is.EqualTo(packages.Client.Version));
-                Assert.That(client.RootElement.TryGetProperty("serverContentVersion", out _), Is.False);
-
-                AssertManifestHashes(server.RootElement, packages.Server);
-                AssertManifestHashes(client.RootElement, packages.Client);
-            }
-        }
-    }
 
     private static ContentPackages BuildValid(ContentWorkspace workspace)
     {
@@ -203,7 +41,7 @@ public sealed class ContentProjectionTests
 
     private static void AssertManifestHashes(JsonElement manifest, ContentPackage package)
     {
-        Dictionary<string, string> listed = manifest
+        var listed = manifest
             .GetProperty("files")
             .EnumerateArray()
             .ToDictionary(
@@ -250,6 +88,168 @@ public sealed class ContentProjectionTests
             {
                 CollectPropertyNames(child, names);
             }
+        }
+    }
+
+    [Test]
+    public void Build_ForIdenticalInput_ProducesIdenticalBytes()
+    {
+        using (var first = new ContentWorkspace())
+        using (var second = new ContentWorkspace())
+        {
+            ContentPackages left = BuildValid(first);
+            ContentPackages right = BuildValid(second);
+
+            AssertSameBytes(left.Server, right.Server);
+            AssertSameBytes(left.Client, right.Client);
+        }
+    }
+
+    [Test]
+    public void Build_ForValidFixture_KeepsServerOnlyFieldNamesOutOfClientPackage()
+    {
+        using (var workspace = new ContentWorkspace())
+        {
+            ContentPackage client = BuildValid(workspace).Client;
+
+            var propertyNames = new HashSet<string>(StringComparer.Ordinal);
+            foreach (PackageFile file in client.DataFiles.Append(client.Manifest))
+            {
+                using (var document = JsonDocument.Parse(file.Content))
+                {
+                    CollectPropertyNames(document.RootElement, propertyNames);
+                }
+            }
+
+            Assert.That(propertyNames.Intersect(ServerOnlyFieldNames), Is.Empty);
+        }
+    }
+
+    [Test]
+    public void Build_ForValidFixture_KeepsServerOnlyValuesOutOfClientPackage()
+    {
+        using (var workspace = new ContentWorkspace())
+        {
+            ContentPackages packages = BuildValid(workspace);
+            string clientText = AllText(packages.Client);
+            string serverText = AllText(packages.Server);
+
+            foreach (string sentinel in ServerOnlySentinels)
+            {
+                // A sentinel missing from the server package would prove nothing about the client.
+                Assert.That(serverText, Does.Contain(sentinel), "sentinel is not authored: " + sentinel);
+                Assert.That(clientText, Does.Not.Contain(sentinel), "server-only value leaked: " + sentinel);
+            }
+        }
+    }
+
+    [Test]
+    public void Build_ForValidFixture_KeepsSourcePathsOutOfBothPackages()
+    {
+        using (var workspace = new ContentWorkspace())
+        {
+            ContentPackages packages = BuildValid(workspace);
+
+            foreach (string text in new[] { AllText(packages.Client), AllText(packages.Server) })
+            {
+                Assert.That(text, Does.Not.Contain(".yml"));
+                Assert.That(text, Does.Not.Contain(workspace.ContentRoot));
+                Assert.That(text, Does.Not.Contain("\r"));
+            }
+        }
+    }
+
+    [Test]
+    public void Build_ForValidFixture_MatchesGoldenClientPackage()
+    {
+        using (var workspace = new ContentWorkspace())
+        {
+            ContentPackage client = BuildValid(workspace).Client;
+
+            string goldenDirectory = Path.Combine(ContentWorkspace.FixturesDirectory, "golden-client");
+            string[] goldenFiles = Directory.GetFiles(goldenDirectory).Select(Path.GetFileName).ToArray()!;
+            Assert.That(client.DataFiles.Select(file => file.Path), Is.EquivalentTo(goldenFiles));
+            foreach (PackageFile file in client.DataFiles)
+            {
+                string expected = File.ReadAllText(Path.Combine(goldenDirectory, file.Path)).Replace("\r\n", "\n");
+                Assert.That(Encoding.UTF8.GetString(file.Content), Is.EqualTo(expected), file.Path);
+            }
+        }
+    }
+
+    [Test]
+    public void Build_ForValidFixture_WritesManifestsThatDescribeTheirFiles()
+    {
+        using (var workspace = new ContentWorkspace())
+        {
+            ContentPackages packages = BuildValid(workspace);
+
+            using (var server = JsonDocument.Parse(packages.Server.Manifest.Content))
+            using (var client = JsonDocument.Parse(packages.Client.Manifest.Content))
+            {
+                Assert.That(server.RootElement.GetProperty("schemaVersion").GetInt32(), Is.EqualTo(1));
+                Assert.That(
+                    server.RootElement.GetProperty("serverContentVersion").GetString(),
+                    Is.EqualTo(packages.Server.Version));
+                Assert.That(
+                    server.RootElement.GetProperty("clientContentVersion").GetString(),
+                    Is.EqualTo(packages.Client.Version));
+                Assert.That(
+                    client.RootElement.GetProperty("clientContentVersion").GetString(),
+                    Is.EqualTo(packages.Client.Version));
+                Assert.That(client.RootElement.TryGetProperty("serverContentVersion", out _), Is.False);
+
+                AssertManifestHashes(server.RootElement, packages.Server);
+                AssertManifestHashes(client.RootElement, packages.Client);
+            }
+        }
+    }
+
+    [Test]
+    public void Build_WhenClientPresentationChanges_AdvancesClientVersion()
+    {
+        using (var original = new ContentWorkspace())
+        using (var restyled = new ContentWorkspace())
+        {
+            restyled.Replace(Item, "icon: item_slime_gel", "icon: item_slime_gel_v2");
+
+            ContentPackages before = BuildValid(original);
+            ContentPackages after = BuildValid(restyled);
+
+            Assert.That(after.Client.Version, Is.Not.EqualTo(before.Client.Version));
+            Assert.That(after.Server.Version, Is.EqualTo(before.Server.Version));
+        }
+    }
+
+    [Test]
+    public void Build_WhenFileNamesSortDifferently_OrdersDefinitionsById()
+    {
+        using (var original = new ContentWorkspace())
+        using (var renamed = new ContentWorkspace())
+        {
+            renamed.Move(Item, "items/aaa_first_on_disk.yml");
+            renamed.Move("items/minor_health.yml", "items/zzz_last_on_disk.yml");
+
+            AssertSameBytes(BuildValid(original).Server, BuildValid(renamed).Server);
+            AssertSameBytes(BuildValid(original).Client, BuildValid(renamed).Client);
+        }
+    }
+
+    [Test]
+    public void Build_WhenOnlyServerDataChanges_KeepsClientFilesAndVersion()
+    {
+        using (var original = new ContentWorkspace())
+        using (var rebalanced = new ContentWorkspace())
+        {
+            rebalanced.Replace(Monster, "chance: 0.7321", "chance: 0.25");
+            rebalanced.Replace(Item, "sellPrice: 73219", "sellPrice: 5");
+
+            ContentPackages before = BuildValid(original);
+            ContentPackages after = BuildValid(rebalanced);
+
+            Assert.That(after.Server.Version, Is.Not.EqualTo(before.Server.Version));
+            Assert.That(after.Client.Version, Is.EqualTo(before.Client.Version));
+            AssertSameBytes(before.Client, after.Client);
         }
     }
 }

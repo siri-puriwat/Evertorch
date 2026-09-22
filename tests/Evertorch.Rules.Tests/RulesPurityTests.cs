@@ -6,7 +6,7 @@ using NUnit.Framework;
 namespace Evertorch.Rules.Tests
 {
 /// <summary>
-/// The rules must run with nothing but their inputs: no host, container, file system, network, or engine.
+///     The rules must run with nothing but their inputs: no host, container, file system, network, or engine.
 /// </summary>
 [TestFixture]
 public sealed class RulesPurityTests
@@ -15,18 +15,19 @@ public sealed class RulesPurityTests
 
     private static readonly Type[] RuleImplementations =
     {
-        typeof(RenewalCharacterRules), typeof(RenewalCombatRules), typeof(RenewalMovementRules),
+        typeof(RenewalCharacterRules), typeof(RenewalCombatRules), typeof(RenewalMovementRules)
     };
 
     [Test]
-    public void RulesAssembly_ReferencesOnlyTheSharedDomainAndTheCoreRuntime()
+    public void RuleImplementations_HoldNoState()
     {
-        string[] referenced = typeof(RenewalCombatRules).Assembly
-            .GetReferencedAssemblies()
-            .Select(reference => reference.Name!)
-            .ToArray();
+        foreach (Type type in RuleImplementations)
+        {
+            FieldInfo[] fields = type.GetFields(
+                BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
 
-        Assert.That(referenced, Is.SubsetOf(AllowedAssemblies));
+            Assert.That(fields.Where(field => !field.IsLiteral), Is.Empty, type.Name);
+        }
     }
 
     [Test]
@@ -42,15 +43,14 @@ public sealed class RulesPurityTests
     }
 
     [Test]
-    public void RuleImplementations_HoldNoState()
+    public void RulesAssembly_ReferencesOnlyTheSharedDomainAndTheCoreRuntime()
     {
-        foreach (Type type in RuleImplementations)
-        {
-            FieldInfo[] fields = type.GetFields(
-                BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+        string[] referenced = typeof(RenewalCombatRules).Assembly
+            .GetReferencedAssemblies()
+            .Select(reference => reference.Name!)
+            .ToArray();
 
-            Assert.That(fields.Where(field => !field.IsLiteral), Is.Empty, type.Name);
-        }
+        Assert.That(referenced, Is.SubsetOf(AllowedAssemblies));
     }
 }
 }

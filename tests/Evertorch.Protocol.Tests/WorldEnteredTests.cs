@@ -23,10 +23,10 @@ public sealed class WorldEnteredTests
         0x03, 0x02, 0x01, 0x00,
         0x00, 0x00, 0x80, 0x3F, 0x00, 0x00, 0x00, 0x3F, 0x00, 0x00, 0x00, 0xC0,
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80, 0x3F,
-        0x00, 0x00, 0xA0, 0x40,
+        0x00, 0x00, 0xA0, 0x40
     };
 
-    private static WorldEntered Golden => new WorldEntered(
+    private static WorldEntered Golden => new(
         new MapDefinitionId("map.a"),
         1,
         new EntityId(0x0123456789ABCDEF),
@@ -34,17 +34,6 @@ public sealed class WorldEnteredTests
         new WorldPosition(1f, 0.5f, -2f),
         new WorldDirection(0f, 1f),
         5f);
-
-    [Test]
-    public void Write_ForKnownMessage_ProducesGoldenBytes()
-    {
-        byte[] buffer = new byte[Golden.GetEncodedLength()];
-
-        int written = Golden.Write(buffer);
-
-        Assert.That(written, Is.EqualTo(GoldenBytes.Length));
-        Assert.That(buffer, Is.EqualTo(GoldenBytes));
-    }
 
     [Test]
     public void TryRead_ForGoldenBytes_ReturnsKnownMessage()
@@ -62,24 +51,6 @@ public sealed class WorldEnteredTests
     }
 
     [Test]
-    public void TryRead_WhenTruncatedAtAnyLength_ReturnsFalse()
-    {
-        WireMatrix.AssertRejectsEveryTruncation(GoldenBytes, bytes => WorldEntered.TryRead(bytes, out _));
-    }
-
-    [Test]
-    public void TryRead_WhenTrailingDataPresent_ReturnsFalse()
-    {
-        WireMatrix.AssertRejectsTrailingData(GoldenBytes, bytes => WorldEntered.TryRead(bytes, out _));
-    }
-
-    [Test]
-    public void TryRead_WhenOpcodeDiffers_ReturnsFalse()
-    {
-        WireMatrix.AssertRejectsOtherOpcodes(GoldenBytes, bytes => WorldEntered.TryRead(bytes, out _));
-    }
-
-    [Test]
     public void TryRead_WhenAnyFloatIsNotFinite_ReturnsFalse()
     {
         for (int offset = PositionXOffset; offset <= MovementSpeedOffset; offset += sizeof(float))
@@ -87,14 +58,6 @@ public sealed class WorldEnteredTests
             Assert.That(WorldEntered.TryRead(WireMatrix.With(GoldenBytes, offset, NotANumber), out _), Is.False);
             Assert.That(WorldEntered.TryRead(WireMatrix.With(GoldenBytes, offset, PositiveInfinity), out _), Is.False);
         }
-    }
-
-    [Test]
-    public void TryRead_WhenMovementSpeedIsNegative_ReturnsFalse()
-    {
-        byte[] negative = WireMatrix.With(GoldenBytes, MovementSpeedOffset, MinusOne);
-
-        Assert.That(WorldEntered.TryRead(negative, out _), Is.False);
     }
 
     [Test]
@@ -106,17 +69,40 @@ public sealed class WorldEnteredTests
     }
 
     [Test]
-    public void Write_WithLongestMapId_RoundTrips()
+    public void TryRead_WhenMovementSpeedIsNegative_ReturnsFalse()
     {
-        MapDefinitionId longest = new MapDefinitionId("map." + new string('a', 60));
-        WorldEntered original = new WorldEntered(longest, 0, default, 0, default, new WorldDirection(1f, 0f), 0f);
-        byte[] buffer = new byte[original.GetEncodedLength()];
-        original.Write(buffer);
+        byte[] negative = WireMatrix.With(GoldenBytes, MovementSpeedOffset, MinusOne);
 
-        bool isRead = WorldEntered.TryRead(buffer, out WorldEntered? message);
+        Assert.That(WorldEntered.TryRead(negative, out _), Is.False);
+    }
 
-        Assert.That(isRead, Is.True);
-        Assert.That(message!.Map, Is.EqualTo(longest));
+    [Test]
+    public void TryRead_WhenOpcodeDiffers_ReturnsFalse()
+    {
+        WireMatrix.AssertRejectsOtherOpcodes(GoldenBytes, bytes => WorldEntered.TryRead(bytes, out _));
+    }
+
+    [Test]
+    public void TryRead_WhenTrailingDataPresent_ReturnsFalse()
+    {
+        WireMatrix.AssertRejectsTrailingData(GoldenBytes, bytes => WorldEntered.TryRead(bytes, out _));
+    }
+
+    [Test]
+    public void TryRead_WhenTruncatedAtAnyLength_ReturnsFalse()
+    {
+        WireMatrix.AssertRejectsEveryTruncation(GoldenBytes, bytes => WorldEntered.TryRead(bytes, out _));
+    }
+
+    [Test]
+    public void Write_ForKnownMessage_ProducesGoldenBytes()
+    {
+        byte[] buffer = new byte[Golden.GetEncodedLength()];
+
+        int written = Golden.Write(buffer);
+
+        Assert.That(written, Is.EqualTo(GoldenBytes.Length));
+        Assert.That(buffer, Is.EqualTo(GoldenBytes));
     }
 
     [Test]
@@ -125,6 +111,20 @@ public sealed class WorldEnteredTests
         Action write = () => Golden.Write(new byte[GoldenBytes.Length - 1]);
 
         Assert.That(write, Throws.ArgumentException);
+    }
+
+    [Test]
+    public void Write_WithLongestMapId_RoundTrips()
+    {
+        var longest = new MapDefinitionId("map." + new string('a', 60));
+        var original = new WorldEntered(longest, 0, default, 0, default, new WorldDirection(1f, 0f), 0f);
+        byte[] buffer = new byte[original.GetEncodedLength()];
+        original.Write(buffer);
+
+        bool isRead = WorldEntered.TryRead(buffer, out WorldEntered? message);
+
+        Assert.That(isRead, Is.True);
+        Assert.That(message!.Map, Is.EqualTo(longest));
     }
 }
 }

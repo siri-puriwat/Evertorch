@@ -90,7 +90,7 @@ public sealed class NavigationContentTests
         string expectedFieldPath,
         string expectedMessagePart)
     {
-        using (ContentWorkspace workspace = new ContentWorkspace())
+        using (var workspace = new ContentWorkspace())
         {
             workspace.Replace(Map, oldText, newText);
 
@@ -106,87 +106,56 @@ public sealed class NavigationContentTests
         }
     }
 
-    [Test]
-    public void Run_WhenNavigationIsMissing_ReportsTheField()
+    private static string NavigationOf(ContentPackage package)
     {
-        using (ContentWorkspace workspace = new ContentWorkspace())
+        using (var document = JsonDocument.Parse(FileOf(package, "maps.json")))
         {
-            string text = workspace.Read(Map).Replace("\r\n", "\n");
-            int start = text.IndexOf("navigation:\n", StringComparison.Ordinal);
-            int end = text.IndexOf("client:\n", StringComparison.Ordinal);
-            workspace.Write(Map, text.Remove(start, end - start));
-
-            ContentPipelineResult result = ContentPipeline.Run(workspace.ContentRoot);
-
-            Assert.That(result.Diagnostics, Has.Count.EqualTo(1), Describe(result));
-            Assert.That(result.Diagnostics[0].FieldPath, Is.EqualTo("navigation"));
-            Assert.That(result.Diagnostics[0].Message, Does.Contain("required field is missing"));
+            return document.RootElement.GetProperty("definitions")[0].GetProperty("navigation").GetRawText();
         }
     }
 
-    [Test]
-    public void Run_WhenMonsterCenterIsOnThePlateau_IsValidBecauseTheRampReachesIt()
+    private static byte[] FileOf(ContentPackage package, string path)
     {
-        using (ContentWorkspace workspace = new ContentWorkspace())
-        {
-            workspace.Replace(Map, MonsterCenter, "center: { x: -13.0, y: 1.0, z: 13.0 }");
-
-            ContentPipelineResult result = ContentPipeline.Run(workspace.ContentRoot);
-
-            Assert.That(result.Diagnostics, Is.Empty, Describe(result));
-        }
+        return package.DataFiles.Single(file => file.Path == path).Content;
     }
 
-    [Test]
-    public void Run_ForValidFixture_ReadsRowsNorthFirstIntoTheGrid()
+    private static string RepositoryContentDirectory()
     {
-        using (ContentWorkspace workspace = new ContentWorkspace())
+        var directory = new DirectoryInfo(TestContext.CurrentContext.TestDirectory);
+        while (directory != null && !File.Exists(Path.Combine(directory.FullName, "Evertorch.sln")))
         {
-            NavigationGrid grid = ContentPipeline.Run(workspace.ContentRoot).Content.Maps.Single().Definition
-                .Navigation;
-
-            Assert.That(grid.Columns, Is.EqualTo(40));
-            Assert.That(grid.Rows, Is.EqualTo(40));
-            Assert.That(grid.OriginX, Is.EqualTo(-20f));
-            Assert.That(grid.AgentRadius, Is.EqualTo(0.3f));
-            Assert.That(grid.MaxStepHeight, Is.EqualTo(0.4f));
-            Assert.That(grid.GetCell(18, 16).Surface, Is.EqualTo(NavigationSurface.NpcMarker));
-            Assert.That(grid.GetCell(39, 19).Surface, Is.EqualTo(NavigationSurface.Gate));
-            Assert.That(grid.GetCell(6, 28), Is.EqualTo(NavigationCell.Ramp(RampAxis.Z, 0f, 0.5f)));
-            Assert.That(grid.GetCell(6, 31), Is.EqualTo(NavigationCell.Level(NavigationSurface.Floor, 1f)));
+            directory = directory.Parent;
         }
+
+        return Path.Combine(directory!.FullName, "content");
     }
 
-    [Test]
-    public void Build_ForMap_WritesIdenticalNavigationToBothPackages()
+    private static string Describe(ContentPipelineResult result)
     {
-        using (ContentWorkspace workspace = new ContentWorkspace())
+        var text = new StringBuilder();
+        foreach (ContentDiagnostic diagnostic in result.Diagnostics)
         {
-            ContentPackages packages = ContentPipeline.Run(workspace.ContentRoot).Packages!;
-
-            string server = NavigationOf(packages.Server);
-            string client = NavigationOf(packages.Client);
-
-            Assert.That(client, Is.EqualTo(server));
-            Assert.That(client, Does.Contain("\"cellRows\""));
+            text.AppendLine(diagnostic.ToString());
         }
+
+        return text.ToString();
     }
 
     [Test]
     public void Build_ForMap_WritesCellRowsSouthFirstWithLetterSymbolsOnly()
     {
-        using (ContentWorkspace workspace = new ContentWorkspace())
+        using (var workspace = new ContentWorkspace())
         {
             ContentPipelineResult result = ContentPipeline.Run(workspace.ContentRoot);
             NavigationGrid grid = result.Content.Maps.Single().Definition.Navigation;
 
-            using (JsonDocument document = JsonDocument.Parse(FileOf(result.Packages!.Client, "maps.json")))
+            using (var document = JsonDocument.Parse(FileOf(result.Packages!.Client, "maps.json")))
             {
                 JsonElement navigation = document.RootElement.GetProperty("definitions")[0].GetProperty("navigation");
                 string[] cellRows = navigation.GetProperty("cellRows").EnumerateArray()
                     .Select(row => row.GetString()!)
                     .ToArray();
-                Dictionary<string, string> surfaceBySymbol = navigation.GetProperty("legend").EnumerateArray()
+                var surfaceBySymbol = navigation.GetProperty("legend").EnumerateArray()
                     .ToDictionary(
                         entry => entry.GetProperty("symbol").GetString()!,
                         entry => entry.GetProperty("surface").GetString()!);
@@ -202,6 +171,21 @@ public sealed class NavigationContentTests
     }
 
     [Test]
+    public void Build_ForMap_WritesIdenticalNavigationToBothPackages()
+    {
+        using (var workspace = new ContentWorkspace())
+        {
+            ContentPackages packages = ContentPipeline.Run(workspace.ContentRoot).Packages!;
+
+            string server = NavigationOf(packages.Server);
+            string client = NavigationOf(packages.Client);
+
+            Assert.That(client, Is.EqualTo(server));
+            Assert.That(client, Does.Contain("\"cellRows\""));
+        }
+    }
+
+    [Test]
     public void Run_ForRepositoryContent_TrainingGroundExercisesNavigation()
     {
         ContentPipelineResult result = ContentPipeline.Run(RepositoryContentDirectory());
@@ -209,11 +193,11 @@ public sealed class NavigationContentTests
             .Single(candidate => candidate.Definition.Id.Value == "map.training_ground")
             .Definition;
         NavigationGrid grid = map.Navigation;
-        GridPathfinder pathfinder = new GridPathfinder(grid);
-        List<WorldPosition> waypoints = new List<WorldPosition>();
+        var pathfinder = new GridPathfinder(grid);
+        var waypoints = new List<WorldPosition>();
         int budget = grid.Columns * grid.Rows;
 
-        HashSet<NavigationSurface> surfaces = new HashSet<NavigationSurface>();
+        var surfaces = new HashSet<NavigationSurface>();
         bool hasRamp = false;
         for (int row = 0; row < grid.Rows; row++)
         {
@@ -237,39 +221,55 @@ public sealed class NavigationContentTests
         Assert.That(grid.HasLineOfSight(map.SpawnPosition, map.MonsterSpawns[0].Center), Is.False);
     }
 
-    private static string NavigationOf(ContentPackage package)
+    [Test]
+    public void Run_ForValidFixture_ReadsRowsNorthFirstIntoTheGrid()
     {
-        using (JsonDocument document = JsonDocument.Parse(FileOf(package, "maps.json")))
+        using (var workspace = new ContentWorkspace())
         {
-            return document.RootElement.GetProperty("definitions")[0].GetProperty("navigation").GetRawText();
+            NavigationGrid grid = ContentPipeline.Run(workspace.ContentRoot).Content.Maps.Single().Definition
+                .Navigation;
+
+            Assert.That(grid.Columns, Is.EqualTo(40));
+            Assert.That(grid.Rows, Is.EqualTo(40));
+            Assert.That(grid.OriginX, Is.EqualTo(-20f));
+            Assert.That(grid.AgentRadius, Is.EqualTo(0.3f));
+            Assert.That(grid.MaxStepHeight, Is.EqualTo(0.4f));
+            Assert.That(grid.GetCell(18, 16).Surface, Is.EqualTo(NavigationSurface.NpcMarker));
+            Assert.That(grid.GetCell(39, 19).Surface, Is.EqualTo(NavigationSurface.Gate));
+            Assert.That(grid.GetCell(6, 28), Is.EqualTo(NavigationCell.Ramp(RampAxis.Z, 0f, 0.5f)));
+            Assert.That(grid.GetCell(6, 31), Is.EqualTo(NavigationCell.Level(NavigationSurface.Floor, 1f)));
         }
     }
 
-    private static byte[] FileOf(ContentPackage package, string path)
+    [Test]
+    public void Run_WhenMonsterCenterIsOnThePlateau_IsValidBecauseTheRampReachesIt()
     {
-        return package.DataFiles.Single(file => file.Path == path).Content;
+        using (var workspace = new ContentWorkspace())
+        {
+            workspace.Replace(Map, MonsterCenter, "center: { x: -13.0, y: 1.0, z: 13.0 }");
+
+            ContentPipelineResult result = ContentPipeline.Run(workspace.ContentRoot);
+
+            Assert.That(result.Diagnostics, Is.Empty, Describe(result));
+        }
     }
 
-    private static string RepositoryContentDirectory()
+    [Test]
+    public void Run_WhenNavigationIsMissing_ReportsTheField()
     {
-        DirectoryInfo? directory = new DirectoryInfo(TestContext.CurrentContext.TestDirectory);
-        while (directory != null && !File.Exists(Path.Combine(directory.FullName, "Evertorch.sln")))
+        using (var workspace = new ContentWorkspace())
         {
-            directory = directory.Parent;
+            string text = workspace.Read(Map).Replace("\r\n", "\n");
+            int start = text.IndexOf("navigation:\n", StringComparison.Ordinal);
+            int end = text.IndexOf("client:\n", StringComparison.Ordinal);
+            workspace.Write(Map, text.Remove(start, end - start));
+
+            ContentPipelineResult result = ContentPipeline.Run(workspace.ContentRoot);
+
+            Assert.That(result.Diagnostics, Has.Count.EqualTo(1), Describe(result));
+            Assert.That(result.Diagnostics[0].FieldPath, Is.EqualTo("navigation"));
+            Assert.That(result.Diagnostics[0].Message, Does.Contain("required field is missing"));
         }
-
-        return Path.Combine(directory!.FullName, "content");
-    }
-
-    private static string Describe(ContentPipelineResult result)
-    {
-        StringBuilder text = new StringBuilder();
-        foreach (ContentDiagnostic diagnostic in result.Diagnostics)
-        {
-            text.AppendLine(diagnostic.ToString());
-        }
-
-        return text.ToString();
     }
 }
 }

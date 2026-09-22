@@ -11,23 +11,6 @@ public sealed class MessageRoutingTests
         .Where(opcode => opcode != MessageOpcode.None)
         .ToArray();
 
-    [Test]
-    public void MessageOpcode_Values_KeepTheirStableNumbers()
-    {
-        string[] expected =
-        {
-            "None=0x0000", "ClientHello=0x0001", "EnterWorldRequest=0x0002", "MoveInput=0x0003",
-            "StopMovement=0x0004", "TargetEntity=0x0005", "ServerHello=0x8001", "WorldEntered=0x8003",
-            "EntitySpawn=0x8004", "EntityDespawn=0x8005", "EntitySnapshot=0x8006", "DisconnectNotice=0x8013",
-        };
-
-        string[] actual = ((MessageOpcode[])Enum.GetValues(typeof(MessageOpcode)))
-            .Select(opcode => opcode + "=0x" + ((ushort)opcode).ToString("X4"))
-            .ToArray();
-
-        Assert.That(actual, Is.EqualTo(expected));
-    }
-
     [TestCaseSource(nameof(RealOpcodes))]
     public void TryGetRoute_ForEveryOpcode_HasARoute(MessageOpcode opcode)
     {
@@ -91,25 +74,6 @@ public sealed class MessageRoutingTests
         Assert.That(MessageRouting.IsClientToServer(opcode), Is.EqualTo(expected));
     }
 
-    [Test]
-    public void ProtocolChannel_Values_MatchTheChannelCount()
-    {
-        ProtocolChannel[] values = (ProtocolChannel[])Enum.GetValues(typeof(ProtocolChannel));
-        byte[] channels = values.Select(channel => (byte)channel).ToArray();
-
-        Assert.That(channels, Is.EqualTo(new byte[] { 0, 1, 2 }));
-        Assert.That(MessageRouting.ChannelCount, Is.EqualTo(channels.Length));
-    }
-
-    [Test]
-    public void TryReadOpcode_ForKnownOpcode_ReturnsIt()
-    {
-        bool isRead = MessageRouting.TryReadOpcode(new byte[] { 0x13, 0x80, 0x01 }, out MessageOpcode opcode);
-
-        Assert.That(isRead, Is.True);
-        Assert.That(opcode, Is.EqualTo(MessageOpcode.DisconnectNotice));
-    }
-
     [TestCase(new byte[0])]
     [TestCase(new byte[] { 0x01 })]
     [TestCase(new byte[] { 0x00, 0x00 })]
@@ -124,9 +88,45 @@ public sealed class MessageRoutingTests
     }
 
     [Test]
+    public void MessageOpcode_Values_KeepTheirStableNumbers()
+    {
+        string[] expected =
+        {
+            "None=0x0000", "ClientHello=0x0001", "EnterWorldRequest=0x0002", "MoveInput=0x0003",
+            "StopMovement=0x0004", "TargetEntity=0x0005", "ServerHello=0x8001", "WorldEntered=0x8003",
+            "EntitySpawn=0x8004", "EntityDespawn=0x8005", "EntitySnapshot=0x8006", "DisconnectNotice=0x8013"
+        };
+
+        string[] actual = ((MessageOpcode[])Enum.GetValues(typeof(MessageOpcode)))
+            .Select(opcode => opcode + "=0x" + ((ushort)opcode).ToString("X4"))
+            .ToArray();
+
+        Assert.That(actual, Is.EqualTo(expected));
+    }
+
+    [Test]
+    public void ProtocolChannel_Values_MatchTheChannelCount()
+    {
+        var values = (ProtocolChannel[])Enum.GetValues(typeof(ProtocolChannel));
+        byte[] channels = values.Select(channel => (byte)channel).ToArray();
+
+        Assert.That(channels, Is.EqualTo(new byte[] { 0, 1, 2 }));
+        Assert.That(MessageRouting.ChannelCount, Is.EqualTo(channels.Length));
+    }
+
+    [Test]
     public void ProtocolVersion_IsOne()
     {
         Assert.That(ProtocolConstants.ProtocolVersion, Is.EqualTo(1));
+    }
+
+    [Test]
+    public void TryReadOpcode_ForKnownOpcode_ReturnsIt()
+    {
+        bool isRead = MessageRouting.TryReadOpcode(new byte[] { 0x13, 0x80, 0x01 }, out MessageOpcode opcode);
+
+        Assert.That(isRead, Is.True);
+        Assert.That(opcode, Is.EqualTo(MessageOpcode.DisconnectNotice));
     }
 }
 }

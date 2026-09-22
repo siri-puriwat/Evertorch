@@ -3,7 +3,7 @@ using System.Globalization;
 namespace Evertorch.Tools
 {
 /// <summary>
-/// One content error, located by source file, field path, and line so an author can fix it without searching.
+///     One content error, located by source file, field path, and line so an author can fix it without searching.
 /// </summary>
 public sealed class ContentDiagnostic
 {

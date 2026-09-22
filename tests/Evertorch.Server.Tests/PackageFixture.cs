@@ -9,7 +9,7 @@ using NUnit.Framework;
 namespace Evertorch.Server.Tests
 {
 /// <summary>
-/// Server packages produced by the real content pipeline, plus helpers to damage them in controlled ways.
+///     Server packages produced by the real content pipeline, plus helpers to damage them in controlled ways.
 /// </summary>
 internal static class PackageFixture
 {
@@ -27,7 +27,7 @@ internal static class PackageFixture
         }
 
         ContentPackage server = result.Packages.Server;
-        Dictionary<string, byte[]> files = server.DataFiles.ToDictionary(
+        var files = server.DataFiles.ToDictionary(
             file => file.Path,
             file => file.Content,
             StringComparer.Ordinal);
@@ -41,7 +41,7 @@ internal static class PackageFixture
     }
 
     /// <summary>
-    /// Replaces text in one file and leaves the manifest alone, as tampering or corruption would.
+    ///     Replaces text in one file and leaves the manifest alone, as tampering or corruption would.
     /// </summary>
     public static void ReplaceWithoutManifest(
         Dictionary<string, byte[]> files,
@@ -59,7 +59,7 @@ internal static class PackageFixture
     }
 
     /// <summary>
-    /// Replaces text in a data file and re-signs the manifest, so only the content defect remains to be found.
+    ///     Replaces text in a data file and re-signs the manifest, so only the content defect remains to be found.
     /// </summary>
     public static void Replace(Dictionary<string, byte[]> files, string file, string oldText, string newText)
     {
@@ -74,8 +74,8 @@ internal static class PackageFixture
             .OrderBy(name => name, StringComparer.Ordinal)
             .ToArray();
 
-        StringBuilder listing = new StringBuilder();
-        List<string> entries = new List<string>();
+        var listing = new StringBuilder();
+        var entries = new List<string>();
         foreach (string name in dataFiles)
         {
             string hash = ContentPackageBuilder.ComputeHash(files[name]);
@@ -86,7 +86,7 @@ internal static class PackageFixture
         byte[] listingBytes = Encoding.UTF8.GetBytes(listing.ToString());
         string serverVersion = ContentPackageBuilder.ComputeHash(listingBytes).Substring(0, 16);
 
-        StringBuilder manifest = new StringBuilder();
+        var manifest = new StringBuilder();
         manifest.Append("{\"schemaVersion\":1,");
         manifest.Append("\"serverContentVersion\":\"").Append(serverVersion).Append("\",");
         manifest.Append("\"clientContentVersion\":\"0123456789abcdef\",");
@@ -105,7 +105,7 @@ internal static class PackageFixture
 
     private static string FindRepositoryRoot()
     {
-        DirectoryInfo? directory = new DirectoryInfo(TestContext.CurrentContext.TestDirectory);
+        var directory = new DirectoryInfo(TestContext.CurrentContext.TestDirectory);
         while (directory != null)
         {
             if (File.Exists(Path.Combine(directory.FullName, SolutionFileName)))

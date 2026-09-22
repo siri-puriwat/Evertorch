@@ -4,8 +4,8 @@ using Evertorch.Game;
 namespace Evertorch.Server
 {
 /// <summary>
-/// Movement inputs one client has sent and the simulation has not applied yet. It accepts each sequence at most
-/// once and only in increasing order, so a delayed or duplicated packet can never undo a newer input.
+///     Movement inputs one client has sent and the simulation has not applied yet. It accepts each sequence at most
+///     once and only in increasing order, so a delayed or duplicated packet can never undo a newer input.
 /// </summary>
 public sealed class PlayerInputQueue
 {
@@ -27,12 +27,12 @@ public sealed class PlayerInputQueue
     public int Count { get; private set; }
 
     /// <summary>
-    /// Inputs refused because a newer or equal sequence had already arrived. Ordinary on a lossy network.
+    ///     Inputs refused because a newer or equal sequence had already arrived. Ordinary on a lossy network.
     /// </summary>
     public long Stale { get; private set; }
 
     /// <summary>
-    /// Oldest inputs discarded because more arrived than one per tick can consume.
+    ///     Oldest inputs discarded because more arrived than one per tick can consume.
     /// </summary>
     public long Dropped { get; private set; }
 

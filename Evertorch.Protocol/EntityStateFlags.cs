@@ -6,6 +6,6 @@ namespace Evertorch.Protocol
 public enum EntityStateFlags : ushort
 {
     None = 0,
-    Moving = 1,
+    Moving = 1
 }
 }

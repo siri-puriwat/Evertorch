@@ -10,32 +10,32 @@ public sealed class NetworkOptions
     public const string SectionName = "Network";
 
     /// <summary>
-    /// IPv4 address to listen on. The default is loopback, so a server reachable from other machines is always a
-    /// deliberate configuration choice.
+    ///     IPv4 address to listen on. The default is loopback, so a server reachable from other machines is always a
+    ///     deliberate configuration choice.
     /// </summary>
     public string BindAddress { get; set; } = "127.0.0.1";
 
     /// <summary>
-    /// UDP port. 0 lets the operating system choose one, which tests rely on.
+    ///     UDP port. 0 lets the operating system choose one, which tests rely on.
     /// </summary>
     public int Port { get; set; } = 7777;
 
     public int MaxConnections { get; set; } = 256;
 
     /// <summary>
-    /// Shared by every client build. It keeps stray traffic out; it is not a secret and not authentication.
+    ///     Shared by every client build. It keeps stray traffic out; it is not a secret and not authentication.
     /// </summary>
     public string ConnectionKey { get; set; } = "evertorch";
 
     public int DisconnectTimeoutMs { get; set; } = 10000;
 
     /// <summary>
-    /// How long a connection may stay silent before its hello. Converted to ticks at the configured rate.
+    ///     How long a connection may stay silent before its hello. Converted to ticks at the configured rate.
     /// </summary>
     public int HandshakeTimeoutMs { get; set; } = 5000;
 
     /// <summary>
-    /// Decoded messages that may wait for the next tick. More than this are dropped and counted.
+    ///     Decoded messages that may wait for the next tick. More than this are dropped and counted.
     /// </summary>
     public int MaxInboundEvents { get; set; } = 4096;
 }
@@ -44,7 +44,7 @@ internal sealed class NetworkOptionsValidator : IValidateOptions<NetworkOptions>
 {
     public ValidateOptionsResult Validate(string? name, NetworkOptions options)
     {
-        List<string> failures = new List<string>();
+        var failures = new List<string>();
         if (options.HandshakeTimeoutMs < 100 || options.HandshakeTimeoutMs > 60000)
         {
             failures.Add(NetworkOptions.SectionName + ":HandshakeTimeoutMs must be between 100 and 60000.");

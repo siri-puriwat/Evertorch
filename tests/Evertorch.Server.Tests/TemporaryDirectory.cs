@@ -13,13 +13,6 @@ internal sealed class TemporaryDirectory : IDisposable
 
     public string Path { get; }
 
-    public void Write(string relativePath, string content)
-    {
-        string path = System.IO.Path.Combine(Path, relativePath);
-        Directory.CreateDirectory(System.IO.Path.GetDirectoryName(path)!);
-        File.WriteAllText(path, content);
-    }
-
     public void Dispose()
     {
         try
@@ -33,6 +26,13 @@ internal sealed class TemporaryDirectory : IDisposable
         catch (UnauthorizedAccessException)
         {
         }
+    }
+
+    public void Write(string relativePath, string content)
+    {
+        string path = System.IO.Path.Combine(Path, relativePath);
+        Directory.CreateDirectory(System.IO.Path.GetDirectoryName(path)!);
+        File.WriteAllText(path, content);
     }
 }
 }

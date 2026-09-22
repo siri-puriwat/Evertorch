@@ -4,18 +4,19 @@ using System.Diagnostics;
 using System.Threading;
 using Evertorch.Protocol;
 using LiteNetLib;
+using DisconnectReason = LiteNetLib.DisconnectReason;
 
 namespace Evertorch.Server.Tests
 {
 /// <summary>
-/// A bare LiteNetLib client for loopback tests. It knows nothing about the server's code, so what it observes is
-/// what any real client would see on the wire.
+///     A bare LiteNetLib client for loopback tests. It knows nothing about the server's code, so what it observes is
+///     what any real client would see on the wire.
 /// </summary>
 internal sealed class TestNetClient : IDisposable
 {
     private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(5);
 
-    private readonly EventBasedNetListener m_listener = new EventBasedNetListener();
+    private readonly EventBasedNetListener m_listener = new();
     private readonly NetManager m_manager;
     private NetPeer? m_peer;
 
@@ -25,7 +26,7 @@ internal sealed class TestNetClient : IDisposable
         {
             ChannelsCount = MessageRouting.ChannelCount,
             AutoRecycle = true,
-            IPv6Enabled = false,
+            IPv6Enabled = false
         };
         m_listener.PeerConnectedEvent += _ => IsConnected = true;
         m_listener.PeerDisconnectedEvent += (_, info) =>
@@ -48,11 +49,18 @@ internal sealed class TestNetClient : IDisposable
 
     public bool IsDisconnected { get; private set; }
 
-    public LiteNetLib.DisconnectReason TransportReason { get; private set; }
+    public DisconnectReason TransportReason { get; private set; }
 
     public DisconnectNotice? Notice { get; private set; }
 
-    public List<ReceivedMessage> Received { get; } = new List<ReceivedMessage>();
+    public List<ReceivedMessage> Received { get; } = new();
+
+    public int MaxUnreliablePayload => m_peer!.GetMaxSinglePacketSize(DeliveryMethod.Sequenced);
+
+    public void Dispose()
+    {
+        m_manager.Stop(false);
+    }
 
     public void Connect(int port, string key)
     {
@@ -64,19 +72,17 @@ internal sealed class TestNetClient : IDisposable
         m_peer!.Send(payload, (byte)channel, method);
     }
 
-    public int MaxUnreliablePayload => m_peer!.GetMaxSinglePacketSize(DeliveryMethod.Sequenced);
-
     public void Disconnect()
     {
         m_peer!.Disconnect();
     }
 
     /// <summary>
-    /// Pumps events until the condition holds. Returns false on timeout so the test can assert with a clear message.
+    ///     Pumps events until the condition holds. Returns false on timeout so the test can assert with a clear message.
     /// </summary>
     public bool WaitFor(Func<bool> condition)
     {
-        Stopwatch elapsed = Stopwatch.StartNew();
+        var elapsed = Stopwatch.StartNew();
         while (elapsed.Elapsed < Timeout)
         {
             m_manager.PollEvents();
@@ -89,11 +95,6 @@ internal sealed class TestNetClient : IDisposable
         }
 
         return false;
-    }
-
-    public void Dispose()
-    {
-        m_manager.Stop(false);
     }
 
     internal sealed class ReceivedMessage

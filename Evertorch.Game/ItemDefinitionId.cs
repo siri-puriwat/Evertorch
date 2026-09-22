@@ -3,8 +3,8 @@ using System;
 namespace Evertorch.Game
 {
 /// <summary>
-/// Stable namespaced identity of an item definition, such as <c>item.material.slime_gel</c>.
-/// The default value holds an empty string and names no definition.
+///     Stable namespaced identity of an item definition, such as <c>item.material.slime_gel</c>.
+///     The default value holds an empty string and names no definition.
 /// </summary>
 public readonly struct ItemDefinitionId : IEquatable<ItemDefinitionId>
 {

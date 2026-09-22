@@ -4,8 +4,8 @@ using System.Globalization;
 namespace Evertorch.Server
 {
 /// <summary>
-/// Identifies one transport connection for as long as the process runs. Values are never reused, so a late event
-/// for a closed connection cannot be mistaken for a new one.
+///     Identifies one transport connection for as long as the process runs. Values are never reused, so a late event
+///     for a closed connection cannot be mistaken for a new one.
 /// </summary>
 public readonly struct ConnectionId : IEquatable<ConnectionId>
 {

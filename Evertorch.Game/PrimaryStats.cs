@@ -4,7 +4,7 @@ using System.Globalization;
 namespace Evertorch.Game
 {
 /// <summary>
-/// The six primary character statistics. Values are base inputs; derived statistics are calculated by the rules.
+///     The six primary character statistics. Values are base inputs; derived statistics are calculated by the rules.
 /// </summary>
 public readonly struct PrimaryStats : IEquatable<PrimaryStats>
 {

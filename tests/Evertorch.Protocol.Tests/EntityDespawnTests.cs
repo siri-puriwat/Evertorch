@@ -13,32 +13,10 @@ public sealed class EntityDespawnTests
     {
         0x05, 0x80,
         0xEF, 0xCD, 0xAB, 0x89, 0x67, 0x45, 0x23, 0x01,
-        0x02,
+        0x02
     };
 
-    private static readonly EntityDespawn Golden =
-        new EntityDespawn(new EntityId(0x0123456789ABCDEF), DespawnReason.Removed);
-
-    [Test]
-    public void Write_ForKnownMessage_ProducesGoldenBytes()
-    {
-        byte[] buffer = new byte[EntityDespawn.EncodedLength];
-
-        int written = Golden.Write(buffer);
-
-        Assert.That(written, Is.EqualTo(EntityDespawn.EncodedLength));
-        Assert.That(buffer, Is.EqualTo(GoldenBytes));
-    }
-
-    [Test]
-    public void TryRead_ForGoldenBytes_ReturnsKnownMessage()
-    {
-        bool isRead = EntityDespawn.TryRead(GoldenBytes, out EntityDespawn message);
-
-        Assert.That(isRead, Is.True);
-        Assert.That(message.Entity, Is.EqualTo(new EntityId(0x0123456789ABCDEF)));
-        Assert.That(message.Reason, Is.EqualTo(DespawnReason.Removed));
-    }
+    private static readonly EntityDespawn Golden = new(new EntityId(0x0123456789ABCDEF), DespawnReason.Removed);
 
     [TestCase(DespawnReason.OutOfRange)]
     [TestCase(DespawnReason.Removed)]
@@ -63,9 +41,19 @@ public sealed class EntityDespawnTests
     }
 
     [Test]
-    public void TryRead_WhenTruncatedAtAnyLength_ReturnsFalse()
+    public void TryRead_ForGoldenBytes_ReturnsKnownMessage()
     {
-        WireMatrix.AssertRejectsEveryTruncation(GoldenBytes, bytes => EntityDespawn.TryRead(bytes, out _));
+        bool isRead = EntityDespawn.TryRead(GoldenBytes, out EntityDespawn message);
+
+        Assert.That(isRead, Is.True);
+        Assert.That(message.Entity, Is.EqualTo(new EntityId(0x0123456789ABCDEF)));
+        Assert.That(message.Reason, Is.EqualTo(DespawnReason.Removed));
+    }
+
+    [Test]
+    public void TryRead_WhenOpcodeDiffers_ReturnsFalse()
+    {
+        WireMatrix.AssertRejectsOtherOpcodes(GoldenBytes, bytes => EntityDespawn.TryRead(bytes, out _));
     }
 
     [Test]
@@ -75,9 +63,20 @@ public sealed class EntityDespawnTests
     }
 
     [Test]
-    public void TryRead_WhenOpcodeDiffers_ReturnsFalse()
+    public void TryRead_WhenTruncatedAtAnyLength_ReturnsFalse()
     {
-        WireMatrix.AssertRejectsOtherOpcodes(GoldenBytes, bytes => EntityDespawn.TryRead(bytes, out _));
+        WireMatrix.AssertRejectsEveryTruncation(GoldenBytes, bytes => EntityDespawn.TryRead(bytes, out _));
+    }
+
+    [Test]
+    public void Write_ForKnownMessage_ProducesGoldenBytes()
+    {
+        byte[] buffer = new byte[EntityDespawn.EncodedLength];
+
+        int written = Golden.Write(buffer);
+
+        Assert.That(written, Is.EqualTo(EntityDespawn.EncodedLength));
+        Assert.That(buffer, Is.EqualTo(GoldenBytes));
     }
 
     [Test]

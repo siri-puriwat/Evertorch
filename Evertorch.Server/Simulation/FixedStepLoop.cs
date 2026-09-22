@@ -34,7 +34,7 @@ public sealed class FixedStepLoop
     }
 
     /// <summary>
-    /// Runs ticks until <paramref name="stop"/> is signalled. A tick that has started always finishes.
+    ///     Runs ticks until <paramref name="stop" /> is signalled. A tick that has started always finishes.
     /// </summary>
     public void Run(CancellationToken stop)
     {

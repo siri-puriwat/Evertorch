@@ -37,7 +37,7 @@ internal static class SkillDefinitionReader
             return null;
         }
 
-        SkillDefinition definition = new SkillDefinition(id, displayName, targetType, damageType, range);
+        var definition = new SkillDefinition(id, displayName, targetType, damageType, range);
         return new AuthoredSkill(root.ToSource(), definition, icon);
     }
 }

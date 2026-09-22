@@ -3,8 +3,8 @@ using System;
 namespace Evertorch.Protocol
 {
 /// <summary>
-/// First message on a connection. The server checks every field before it binds a session; the token is a
-/// credential and must never be logged.
+///     First message on a connection. The server checks every field before it binds a session; the token is a
+///     credential and must never be logged.
 /// </summary>
 public sealed class ClientHello
 {
@@ -24,7 +24,7 @@ public sealed class ClientHello
 
     public string ClientBuildVersion { get; }
 
-    /// <summary>See <see cref="ContentVersionCodec"/>.</summary>
+    /// <summary>See <see cref="ContentVersionCodec" />.</summary>
     public uint ClientContentVersion { get; }
 
     public string SessionToken { get; }
@@ -32,7 +32,7 @@ public sealed class ClientHello
     public static bool TryRead(ReadOnlySpan<byte> source, out ClientHello? message)
     {
         message = null;
-        WireReader reader = new WireReader(source);
+        var reader = new WireReader(source);
         if (!reader.TryReadOpcode(MessageOpcode.ClientHello)
             || !reader.TryReadUInt16(out ushort protocolVersion)
             || !reader.TryReadString(ProtocolLimits.MaxBuildVersionBytes, out string clientBuildVersion)
@@ -58,7 +58,7 @@ public sealed class ClientHello
 
     public int Write(Span<byte> destination)
     {
-        WireWriter writer = new WireWriter(destination);
+        var writer = new WireWriter(destination);
         writer.WriteOpcode(MessageOpcode.ClientHello);
         writer.WriteUInt16(ProtocolVersion);
         writer.WriteString(ClientBuildVersion, ProtocolLimits.MaxBuildVersionBytes);

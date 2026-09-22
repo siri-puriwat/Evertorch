@@ -18,9 +18,9 @@ public sealed class ProjectReferenceGraphTests
                 "Evertorch.Game",
                 "Evertorch.Protocol",
                 "Evertorch.Rules",
-                "Evertorch.Persistence",
+                "Evertorch.Persistence"
             },
-            ["Evertorch.Tools"] = new[] { "Evertorch.Game" },
+            ["Evertorch.Tools"] = new[] { "Evertorch.Game" }
         };
 
     private static IEnumerable<string> KnownProjects => AllowedReferences.Keys;

@@ -5,12 +5,6 @@ namespace Evertorch.Game.Tests
 [TestFixture]
 public sealed class DefinitionIdLengthTests
 {
-    [Test]
-    public void MaxLength_IsSixtyFour()
-    {
-        Assert.That(DefinitionIdLimits.MaxLength, Is.EqualTo(64));
-    }
-
     [TestCase(64, true)]
     [TestCase(65, false)]
     [TestCase(500, false)]
@@ -26,6 +20,12 @@ public sealed class DefinitionIdLengthTests
     private static string OfLength(string kindPrefix, int length)
     {
         return kindPrefix + "." + new string('a', length - kindPrefix.Length - 1);
+    }
+
+    [Test]
+    public void MaxLength_IsSixtyFour()
+    {
+        Assert.That(DefinitionIdLimits.MaxLength, Is.EqualTo(64));
     }
 }
 }

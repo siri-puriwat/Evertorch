@@ -8,8 +8,8 @@ using Microsoft.Extensions.Options;
 namespace Evertorch.Server.Tests
 {
 /// <summary>
-/// The real session, world, and visibility code wired to an in-memory transport and ticked by hand. Nothing here
-/// stands in for server logic; only the socket and the clock are replaced.
+///     The real session, world, and visibility code wired to an in-memory transport and ticked by hand. Nothing here
+///     stands in for server logic; only the socket and the clock are replaced.
 /// </summary>
 internal sealed class TestServer
 {
@@ -18,10 +18,10 @@ internal sealed class TestServer
     public const int TickRate = 20;
 
     private static readonly Lazy<ServerContent> RepositoryContent =
-        new Lazy<ServerContent>(() => ServerContentLoader.Load(PackageFixture.BuildRepositoryPackage()));
+        new(() => ServerContentLoader.Load(PackageFixture.BuildRepositoryPackage()));
 
     private readonly TickPipeline m_pipeline;
-    private readonly List<Action> m_afterCommands = new List<Action>();
+    private readonly List<Action> m_afterCommands = new();
     private long m_lastConnection;
     private uint m_tick;
 
@@ -36,22 +36,22 @@ internal sealed class TestServer
         int snapshotIntervalTicks = 1)
     {
         Content = RepositoryContent.Value;
-        NetworkOptions network = new NetworkOptions
+        var network = new NetworkOptions
         {
             HandshakeTimeoutMs = handshakeTimeoutMs,
-            MaxInboundEvents = maxInboundEvents,
+            MaxInboundEvents = maxInboundEvents
         };
-        WorldOptions world = new WorldOptions
+        var world = new WorldOptions
         {
             InterestCellSize = interestCellSize,
             InterestNeighborRadius = interestNeighborRadius,
             InputHoldTimeoutMs = inputHoldTimeoutMs,
             MaxQueuedInputs = maxQueuedInputs,
-            SnapshotIntervalTicks = snapshotIntervalTicks,
+            SnapshotIntervalTicks = snapshotIntervalTicks
         };
-        DevelopmentAuthenticationOptions authentication = new DevelopmentAuthenticationOptions
+        var authentication = new DevelopmentAuthenticationOptions
         {
-            Enabled = isDevelopmentAuthenticationEnabled,
+            Enabled = isDevelopmentAuthenticationEnabled
         };
         IOptions<CompatibilityOptions> compatibility = Options.Create(new CompatibilityOptions());
         IOptions<SimulationOptions> simulation = Options.Create(new SimulationOptions { TickRate = TickRate });
@@ -67,8 +67,8 @@ internal sealed class TestServer
         Log = new CapturingLogger<SessionManager>();
         Time = new FakeTimeProvider();
 
-        MessageSender sender = new MessageSender(Transport);
-        HandshakeValidator handshake = new HandshakeValidator(compatibility, Options.Create(authentication), Content);
+        var sender = new MessageSender(Transport);
+        var handshake = new HandshakeValidator(compatibility, Options.Create(authentication), Content);
         SessionManager = new SessionManager(
             Inbound,
             Sessions,
@@ -91,7 +91,7 @@ internal sealed class TestServer
                 new VisibilityPhase(Sessions, sender),
                 new MovementSystem(Sessions, Options.Create(world), simulation),
                 SessionManager,
-                new RecordingPhase(TickPhase.ApplyCommands, "test", new List<string>(), _ => RunAfterCommands()),
+                new RecordingPhase(TickPhase.ApplyCommands, "test", new List<string>(), _ => RunAfterCommands())
             });
         RequiredClientContentVersion = handshake.RequiredClientContentVersion;
     }
@@ -132,7 +132,7 @@ internal sealed class TestServer
     }
 
     /// <summary>
-    /// Runs once in the next tick, after sessions have handled their input and before visibility is computed.
+    ///     Runs once in the next tick, after sessions have handled their input and before visibility is computed.
     /// </summary>
     public void AfterCommandsOnce(Action action)
     {
@@ -142,7 +142,7 @@ internal sealed class TestServer
     public ConnectionId Connect()
     {
         m_lastConnection++;
-        ConnectionId connection = new ConnectionId(m_lastConnection);
+        var connection = new ConnectionId(m_lastConnection);
         Inbound.OnConnected(connection);
         return connection;
     }
@@ -169,7 +169,7 @@ internal sealed class TestServer
         uint contentVersion,
         string token)
     {
-        ClientHello hello = new ClientHello(protocolVersion, buildVersion, contentVersion, token);
+        var hello = new ClientHello(protocolVersion, buildVersion, contentVersion, token);
         byte[] payload = new byte[hello.GetEncodedLength()];
         hello.Write(payload);
         Inbound.OnPayload(connection, ProtocolChannel.Control, payload);
@@ -202,7 +202,7 @@ internal sealed class TestServer
     }
 
     /// <summary>
-    /// Connects, completes the handshake, enters the world, and runs the tick that processes all three.
+    ///     Connects, completes the handshake, enters the world, and runs the tick that processes all three.
     /// </summary>
     public ConnectionId EnterWorld(long character)
     {

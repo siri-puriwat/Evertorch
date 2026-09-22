@@ -1,7 +1,7 @@
 namespace Evertorch.Server
 {
 /// <summary>
-/// The stable order in which one simulation tick processes work. Values are ordered; do not renumber them.
+///     The stable order in which one simulation tick processes work. Values are ordered; do not renumber them.
 /// </summary>
 public enum TickPhase
 {
@@ -12,6 +12,6 @@ public enum TickPhase
     MonsterAi = 4,
     FinalizeWorld = 5,
     BuildSnapshots = 6,
-    SchedulePersistence = 7,
+    SchedulePersistence = 7
 }
 }

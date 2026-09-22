@@ -7,17 +7,17 @@ internal sealed class FakeClock : IMonotonicClock
 {
     public TimeSpan Elapsed { get; private set; }
 
-    public void Advance(TimeSpan duration)
-    {
-        Elapsed += duration;
-    }
-
     public void WaitUntil(TimeSpan elapsed, CancellationToken cancellation)
     {
         if (!cancellation.IsCancellationRequested && elapsed > Elapsed)
         {
             Elapsed = elapsed;
         }
+    }
+
+    public void Advance(TimeSpan duration)
+    {
+        Elapsed += duration;
     }
 }
 }

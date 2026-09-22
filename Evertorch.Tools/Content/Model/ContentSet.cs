@@ -5,7 +5,7 @@ using System.Linq;
 namespace Evertorch.Tools
 {
 /// <summary>
-/// The normalized content model. Every list is ordered by ordinal ID so output never depends on file-system order.
+///     The normalized content model. Every list is ordered by ordinal ID so output never depends on file-system order.
 /// </summary>
 public sealed class ContentSet
 {
@@ -36,8 +36,8 @@ public sealed class ContentSet
     public IReadOnlyList<AuthoredMap> Maps { get; }
 
     /// <summary>
-    /// Every valid ID some file declared, including files rejected for another error. A reference to one of these
-    /// is not reported as unknown, so one mistake does not surface as several.
+    ///     Every valid ID some file declared, including files rejected for another error. A reference to one of these
+    ///     is not reported as unknown, so one mistake does not surface as several.
     /// </summary>
     public IReadOnlyCollection<string> DeclaredIds { get; }
 }

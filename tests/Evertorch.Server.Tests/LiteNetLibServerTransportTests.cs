@@ -6,11 +6,12 @@ using Evertorch.Protocol;
 using LiteNetLib;
 using Microsoft.Extensions.Options;
 using NUnit.Framework;
+using DisconnectReason = Evertorch.Protocol.DisconnectReason;
 
 namespace Evertorch.Server.Tests
 {
 /// <summary>
-/// Real UDP sockets on loopback with an operating-system-chosen port. Every wait is bounded.
+///     Real UDP sockets on loopback with an operating-system-chosen port. Every wait is bounded.
 /// </summary>
 [TestFixture]
 [NonParallelizable]
@@ -18,11 +19,107 @@ public sealed class LiteNetLibServerTransportTests
 {
     private const string Key = "evertorch";
 
+    private static TestNetClient ConnectedClient(Harness harness, out ConnectionId connection)
+    {
+        var client = new TestNetClient();
+        client.Connect(harness.Port, Key);
+        Assert.That(client.WaitFor(() => client.IsConnected), Is.True, "the client did not connect");
+        Assert.That(harness.WaitForEvent(out InboundEvent connected), Is.True, "no Connected event arrived");
+        connection = connected.Connection;
+        return client;
+    }
+
+    private static byte[] Hello()
+    {
+        var hello = new ClientHello(1, "0.2.0-dev", 1, "dev:tester");
+        byte[] payload = new byte[hello.GetEncodedLength()];
+        hello.Write(payload);
+        return payload;
+    }
+
+    private sealed class Harness : IDisposable
+    {
+        public Harness(int maxConnections = 8)
+        {
+            Transport = CreateTransport(0, maxConnections, out InboundQueue inbound);
+            Inbound = inbound;
+            Transport.Start();
+        }
+
+        public LiteNetLibServerTransport Transport { get; }
+
+        public InboundQueue Inbound { get; }
+
+        public int Port => Transport.LocalPort;
+
+        public void Dispose()
+        {
+            Transport.Dispose();
+        }
+
+        public static LiteNetLibServerTransport CreateTransport(int port, int maxConnections, out InboundQueue inbound)
+        {
+            var options = new NetworkOptions { Port = port, MaxConnections = maxConnections };
+            inbound = new InboundQueue(Options.Create(options));
+            return new LiteNetLibServerTransport(
+                inbound,
+                Options.Create(options),
+                new CapturingLogger<LiteNetLibServerTransport>());
+        }
+
+        public bool WaitForEvent(out InboundEvent inboundEvent)
+        {
+            var elapsed = Stopwatch.StartNew();
+            while (elapsed.Elapsed < TimeSpan.FromSeconds(5))
+            {
+                if (Inbound.TryDequeue(out inboundEvent))
+                {
+                    return true;
+                }
+
+                Thread.Sleep(5);
+            }
+
+            inboundEvent = default;
+            return false;
+        }
+    }
+
+    [Test]
+    public void Connect_AfterAdmissionClosed_IsRejectedWithMaintenance()
+    {
+        using var harness = new Harness();
+        using var client = new TestNetClient();
+        harness.Transport.CloseAdmission();
+
+        client.Connect(harness.Port, Key);
+
+        Assert.That(client.WaitFor(() => client.IsDisconnected), Is.True);
+        Assert.That(client.Notice!.Reason, Is.EqualTo(DisconnectReason.Maintenance));
+    }
+
+    [Test]
+    public void Connect_WhenServerFull_IsRejectedWithServerFullNotice()
+    {
+        using var harness = new Harness(1);
+        using var first = new TestNetClient();
+        using var second = new TestNetClient();
+        first.Connect(harness.Port, Key);
+        Assert.That(first.WaitFor(() => first.IsConnected), Is.True);
+
+        second.Connect(harness.Port, Key);
+
+        Assert.That(second.WaitFor(() => second.IsDisconnected), Is.True);
+        Assert.That(second.Notice, Is.Not.Null);
+        Assert.That(second.Notice!.Reason, Is.EqualTo(DisconnectReason.ServerFull));
+        Assert.That(first.IsConnected, Is.True);
+    }
+
     [Test]
     public void Connect_WithRightKey_EnqueuesConnected()
     {
-        using Harness harness = new Harness();
-        using TestNetClient client = new TestNetClient();
+        using var harness = new Harness();
+        using var client = new TestNetClient();
 
         client.Connect(harness.Port, Key);
 
@@ -34,8 +131,8 @@ public sealed class LiteNetLibServerTransportTests
     [Test]
     public void Connect_WithWrongKey_IsRejected()
     {
-        using Harness harness = new Harness();
-        using TestNetClient client = new TestNetClient();
+        using var harness = new Harness();
+        using var client = new TestNetClient();
 
         client.Connect(harness.Port, "not-the-key");
 
@@ -45,39 +142,37 @@ public sealed class LiteNetLibServerTransportTests
     }
 
     [Test]
-    public void Connect_WhenServerFull_IsRejectedWithServerFullNotice()
+    public void Disconnect_ByClient_EnqueuesDisconnected()
     {
-        using Harness harness = new Harness(maxConnections: 1);
-        using TestNetClient first = new TestNetClient();
-        using TestNetClient second = new TestNetClient();
-        first.Connect(harness.Port, Key);
-        Assert.That(first.WaitFor(() => first.IsConnected), Is.True);
+        using var harness = new Harness();
+        using TestNetClient client = ConnectedClient(harness, out ConnectionId connection);
 
-        second.Connect(harness.Port, Key);
+        client.Disconnect();
 
-        Assert.That(second.WaitFor(() => second.IsDisconnected), Is.True);
-        Assert.That(second.Notice, Is.Not.Null);
-        Assert.That(second.Notice!.Reason, Is.EqualTo(Protocol.DisconnectReason.ServerFull));
-        Assert.That(first.IsConnected, Is.True);
+        Assert.That(harness.WaitForEvent(out InboundEvent disconnected), Is.True);
+        Assert.That(disconnected.Kind, Is.EqualTo(InboundEventKind.Disconnected));
+        Assert.That(disconnected.Connection, Is.EqualTo(connection));
     }
 
     [Test]
-    public void Connect_AfterAdmissionClosed_IsRejectedWithMaintenance()
+    public void Disconnect_ByServer_DeliversTheNoticeAndEnqueuesNothing()
     {
-        using Harness harness = new Harness();
-        using TestNetClient client = new TestNetClient();
-        harness.Transport.CloseAdmission();
+        using var harness = new Harness();
+        using TestNetClient client = ConnectedClient(harness, out ConnectionId connection);
 
-        client.Connect(harness.Port, Key);
+        harness.Transport.Disconnect(connection, DisconnectReason.SessionReplaced, "Signed in elsewhere");
 
         Assert.That(client.WaitFor(() => client.IsDisconnected), Is.True);
-        Assert.That(client.Notice!.Reason, Is.EqualTo(Protocol.DisconnectReason.Maintenance));
+        Assert.That(client.Notice!.Reason, Is.EqualTo(DisconnectReason.SessionReplaced));
+        Assert.That(client.Notice.Message, Is.EqualTo("Signed in elsewhere"));
+        Thread.Sleep(100);
+        Assert.That(harness.Inbound.Count, Is.EqualTo(0));
     }
 
     [Test]
     public void Payload_FromClient_IsDecodedAndEnqueued()
     {
-        using Harness harness = new Harness();
+        using var harness = new Harness();
         using TestNetClient client = ConnectedClient(harness, out ConnectionId connection);
 
         client.Send(Hello(), ProtocolChannel.Control, DeliveryMethod.ReliableOrdered);
@@ -89,9 +184,25 @@ public sealed class LiteNetLibServerTransportTests
     }
 
     [Test]
+    public void Payload_MoveInputOnTheInputChannel_IsDecodedAsAMoveEvent()
+    {
+        using var harness = new Harness();
+        using TestNetClient client = ConnectedClient(harness, out ConnectionId connection);
+        byte[] payload = new byte[MoveInput.EncodedLength];
+        new MoveInput(new MoveIntent(4, 8, 0f, 1f)).Write(payload);
+
+        client.Send(payload, ProtocolChannel.Input, DeliveryMethod.Sequenced);
+
+        Assert.That(harness.WaitForEvent(out InboundEvent move), Is.True);
+        Assert.That(move.Kind, Is.EqualTo(InboundEventKind.Move));
+        Assert.That(move.Connection, Is.EqualTo(connection));
+        Assert.That(move.Intent, Is.EqualTo(new MoveIntent(4, 8, 0f, 1f)));
+    }
+
+    [Test]
     public void Payload_OnTheWrongChannel_IsEnqueuedAsMalformed()
     {
-        using Harness harness = new Harness();
+        using var harness = new Harness();
         using TestNetClient client = ConnectedClient(harness, out ConnectionId _);
 
         client.Send(Hello(), ProtocolChannel.Input, DeliveryMethod.ReliableOrdered);
@@ -103,7 +214,7 @@ public sealed class LiteNetLibServerTransportTests
     [Test]
     public void Payload_TooLargeForOneDatagram_IsDroppedByTheTransportBeforeAnythingIsReassembled()
     {
-        using Harness harness = new Harness();
+        using var harness = new Harness();
         using TestNetClient client = ConnectedClient(harness, out ConnectionId _);
         long malformedBefore = harness.Inbound.Malformed;
 
@@ -120,27 +231,11 @@ public sealed class LiteNetLibServerTransportTests
     }
 
     [Test]
-    public void Send_ToConnection_ArrivesUnchangedOnItsRoutedChannelAndDelivery()
-    {
-        using Harness harness = new Harness();
-        using TestNetClient client = ConnectedClient(harness, out ConnectionId connection);
-        byte[] despawn = new byte[EntityDespawn.EncodedLength];
-        new EntityDespawn(new EntityId(77), DespawnReason.Removed).Write(despawn);
-
-        harness.Transport.Send(connection, despawn);
-
-        Assert.That(client.WaitFor(() => client.Received.Count == 1), Is.True);
-        Assert.That(client.Received[0].Payload, Is.EqualTo(despawn));
-        Assert.That(client.Received[0].Channel, Is.EqualTo((byte)ProtocolChannel.Control));
-        Assert.That(client.Received[0].Method, Is.EqualTo(DeliveryMethod.ReliableOrdered));
-    }
-
-    [Test]
     public void Send_OfTheLargestSnapshot_FitsOneUnreliableDatagramAndArrivesOnTheStateChannel()
     {
-        using Harness harness = new Harness();
+        using var harness = new Harness();
         using TestNetClient client = ConnectedClient(harness, out ConnectionId connection);
-        EntitySnapshot largest = new EntitySnapshot(1, 1, new EntityState[EntitySnapshot.MaxEntities]);
+        var largest = new EntitySnapshot(1, 1, new EntityState[EntitySnapshot.MaxEntities]);
         byte[] payload = new byte[largest.GetEncodedLength()];
         largest.Write(payload);
 
@@ -154,25 +249,25 @@ public sealed class LiteNetLibServerTransportTests
     }
 
     [Test]
-    public void Payload_MoveInputOnTheInputChannel_IsDecodedAsAMoveEvent()
+    public void Send_ToConnection_ArrivesUnchangedOnItsRoutedChannelAndDelivery()
     {
-        using Harness harness = new Harness();
+        using var harness = new Harness();
         using TestNetClient client = ConnectedClient(harness, out ConnectionId connection);
-        byte[] payload = new byte[MoveInput.EncodedLength];
-        new MoveInput(new MoveIntent(4, 8, 0f, 1f)).Write(payload);
+        byte[] despawn = new byte[EntityDespawn.EncodedLength];
+        new EntityDespawn(new EntityId(77), DespawnReason.Removed).Write(despawn);
 
-        client.Send(payload, ProtocolChannel.Input, DeliveryMethod.Sequenced);
+        harness.Transport.Send(connection, despawn);
 
-        Assert.That(harness.WaitForEvent(out InboundEvent move), Is.True);
-        Assert.That(move.Kind, Is.EqualTo(InboundEventKind.Move));
-        Assert.That(move.Connection, Is.EqualTo(connection));
-        Assert.That(move.Intent, Is.EqualTo(new MoveIntent(4, 8, 0f, 1f)));
+        Assert.That(client.WaitFor(() => client.Received.Count == 1), Is.True);
+        Assert.That(client.Received[0].Payload, Is.EqualTo(despawn));
+        Assert.That(client.Received[0].Channel, Is.EqualTo((byte)ProtocolChannel.Control));
+        Assert.That(client.Received[0].Method, Is.EqualTo(DeliveryMethod.ReliableOrdered));
     }
 
     [Test]
     public void Send_ToUnknownConnection_IsIgnored()
     {
-        using Harness harness = new Harness();
+        using var harness = new Harness();
         byte[] despawn = new byte[EntityDespawn.EncodedLength];
         new EntityDespawn(new EntityId(77), DespawnReason.Removed).Write(despawn);
         Action send = () => harness.Transport.Send(new ConnectionId(12345), despawn);
@@ -183,7 +278,7 @@ public sealed class LiteNetLibServerTransportTests
     [Test]
     public void Send_WithoutARoutableOpcode_Throws()
     {
-        using Harness harness = new Harness();
+        using var harness = new Harness();
         using TestNetClient client = ConnectedClient(harness, out ConnectionId connection);
         Action send = () => harness.Transport.Send(connection, new byte[] { 0xFF, 0xFF });
 
@@ -191,49 +286,19 @@ public sealed class LiteNetLibServerTransportTests
     }
 
     [Test]
-    public void Disconnect_ByServer_DeliversTheNoticeAndEnqueuesNothing()
+    public void Start_WhenPortIsTaken_Throws()
     {
-        using Harness harness = new Harness();
-        using TestNetClient client = ConnectedClient(harness, out ConnectionId connection);
+        using var harness = new Harness();
+        using LiteNetLibServerTransport second = Harness.CreateTransport(harness.Port, 4, out InboundQueue _);
+        Action start = () => second.Start();
 
-        harness.Transport.Disconnect(connection, Protocol.DisconnectReason.SessionReplaced, "Signed in elsewhere");
-
-        Assert.That(client.WaitFor(() => client.IsDisconnected), Is.True);
-        Assert.That(client.Notice!.Reason, Is.EqualTo(Protocol.DisconnectReason.SessionReplaced));
-        Assert.That(client.Notice.Message, Is.EqualTo("Signed in elsewhere"));
-        Thread.Sleep(100);
-        Assert.That(harness.Inbound.Count, Is.EqualTo(0));
-    }
-
-    [Test]
-    public void Disconnect_ByClient_EnqueuesDisconnected()
-    {
-        using Harness harness = new Harness();
-        using TestNetClient client = ConnectedClient(harness, out ConnectionId connection);
-
-        client.Disconnect();
-
-        Assert.That(harness.WaitForEvent(out InboundEvent disconnected), Is.True);
-        Assert.That(disconnected.Kind, Is.EqualTo(InboundEventKind.Disconnected));
-        Assert.That(disconnected.Connection, Is.EqualTo(connection));
-    }
-
-    [Test]
-    public void Stop_WithConnectedPeer_DeliversMaintenanceNotice()
-    {
-        using Harness harness = new Harness();
-        using TestNetClient client = ConnectedClient(harness, out ConnectionId _);
-
-        harness.Transport.Stop();
-
-        Assert.That(client.WaitFor(() => client.IsDisconnected), Is.True);
-        Assert.That(client.Notice!.Reason, Is.EqualTo(Protocol.DisconnectReason.Maintenance));
+        Assert.That(start, Throws.InvalidOperationException);
     }
 
     [Test]
     public void Statistics_AfterTraffic_ReportBytesBothWaysAndARoundTripForKnownConnections()
     {
-        using Harness harness = new Harness();
+        using var harness = new Harness();
         using TestNetClient client = ConnectedClient(harness, out ConnectionId connection);
         client.Send(Hello(), ProtocolChannel.Control, DeliveryMethod.ReliableOrdered);
         Assert.That(harness.WaitForEvent(out InboundEvent _), Is.True);
@@ -255,79 +320,15 @@ public sealed class LiteNetLibServerTransportTests
     }
 
     [Test]
-    public void Start_WhenPortIsTaken_Throws()
+    public void Stop_WithConnectedPeer_DeliversMaintenanceNotice()
     {
-        using Harness harness = new Harness();
-        using LiteNetLibServerTransport second = Harness.CreateTransport(harness.Port, 4, out InboundQueue _);
-        Action start = () => second.Start();
+        using var harness = new Harness();
+        using TestNetClient client = ConnectedClient(harness, out ConnectionId _);
 
-        Assert.That(start, Throws.InvalidOperationException);
-    }
+        harness.Transport.Stop();
 
-    private static TestNetClient ConnectedClient(Harness harness, out ConnectionId connection)
-    {
-        TestNetClient client = new TestNetClient();
-        client.Connect(harness.Port, Key);
-        Assert.That(client.WaitFor(() => client.IsConnected), Is.True, "the client did not connect");
-        Assert.That(harness.WaitForEvent(out InboundEvent connected), Is.True, "no Connected event arrived");
-        connection = connected.Connection;
-        return client;
-    }
-
-    private static byte[] Hello()
-    {
-        ClientHello hello = new ClientHello(1, "0.2.0-dev", 1, "dev:tester");
-        byte[] payload = new byte[hello.GetEncodedLength()];
-        hello.Write(payload);
-        return payload;
-    }
-
-    private sealed class Harness : IDisposable
-    {
-        public Harness(int maxConnections = 8)
-        {
-            Transport = CreateTransport(0, maxConnections, out InboundQueue inbound);
-            Inbound = inbound;
-            Transport.Start();
-        }
-
-        public LiteNetLibServerTransport Transport { get; }
-
-        public InboundQueue Inbound { get; }
-
-        public int Port => Transport.LocalPort;
-
-        public static LiteNetLibServerTransport CreateTransport(int port, int maxConnections, out InboundQueue inbound)
-        {
-            NetworkOptions options = new NetworkOptions { Port = port, MaxConnections = maxConnections };
-            inbound = new InboundQueue(Options.Create(options));
-            return new LiteNetLibServerTransport(
-                inbound,
-                Options.Create(options),
-                new CapturingLogger<LiteNetLibServerTransport>());
-        }
-
-        public bool WaitForEvent(out InboundEvent inboundEvent)
-        {
-            Stopwatch elapsed = Stopwatch.StartNew();
-            while (elapsed.Elapsed < TimeSpan.FromSeconds(5))
-            {
-                if (Inbound.TryDequeue(out inboundEvent))
-                {
-                    return true;
-                }
-
-                Thread.Sleep(5);
-            }
-
-            inboundEvent = default;
-            return false;
-        }
-
-        public void Dispose()
-        {
-            Transport.Dispose();
-        }
+        Assert.That(client.WaitFor(() => client.IsDisconnected), Is.True);
+        Assert.That(client.Notice!.Reason, Is.EqualTo(DisconnectReason.Maintenance));
     }
 }
 }

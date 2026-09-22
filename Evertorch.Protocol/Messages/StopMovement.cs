@@ -3,8 +3,8 @@ using System;
 namespace Evertorch.Protocol
 {
 /// <summary>
-/// Asks the server to stop the entity. It shares the input sequence space with <see cref="MoveInput"/>, so a stop
-/// that arrives after a newer move is recognised as stale.
+///     Asks the server to stop the entity. It shares the input sequence space with <see cref="MoveInput" />, so a stop
+///     that arrives after a newer move is recognised as stale.
 /// </summary>
 public readonly struct StopMovement
 {
@@ -23,7 +23,7 @@ public readonly struct StopMovement
     public static bool TryRead(ReadOnlySpan<byte> source, out StopMovement message)
     {
         message = default;
-        WireReader reader = new WireReader(source);
+        var reader = new WireReader(source);
         if (!reader.TryReadOpcode(MessageOpcode.StopMovement)
             || !reader.TryReadUInt32(out uint sequence)
             || !reader.TryReadUInt32(out uint clientTick)
@@ -38,7 +38,7 @@ public readonly struct StopMovement
 
     public int Write(Span<byte> destination)
     {
-        WireWriter writer = new WireWriter(destination);
+        var writer = new WireWriter(destination);
         writer.WriteOpcode(MessageOpcode.StopMovement);
         writer.WriteUInt32(Sequence);
         writer.WriteUInt32(ClientTick);

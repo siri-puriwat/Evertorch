@@ -3,8 +3,8 @@ using System;
 namespace Evertorch.Server
 {
 /// <summary>
-/// Tick timing as seen by the loop. Written by the tick thread only; other threads see it through the status the
-/// tick thread publishes, never by reading these fields.
+///     Tick timing as seen by the loop. Written by the tick thread only; other threads see it through the status the
+///     tick thread publishes, never by reading these fields.
 /// </summary>
 public sealed class ServerMetrics : ITickObserver
 {

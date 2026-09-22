@@ -6,8 +6,8 @@ using Evertorch.Game;
 namespace Evertorch.Protocol
 {
 /// <summary>
-/// Reads little-endian fields from untrusted bytes. Every read checks the remaining length first and reports
-/// failure instead of throwing; nothing is allocated before its size has been checked against a limit.
+///     Reads little-endian fields from untrusted bytes. Every read checks the remaining length first and reports
+///     failure instead of throwing; nothing is allocated before its size has been checked against a limit.
 /// </summary>
 public ref struct WireReader
 {
@@ -78,7 +78,7 @@ public ref struct WireReader
     }
 
     /// <summary>
-    /// Fails on NaN and infinities: no message has a use for them and they poison arithmetic downstream.
+    ///     Fails on NaN and infinities: no message has a use for them and they poison arithmetic downstream.
     /// </summary>
     public bool TryReadSingle(out float value)
     {
@@ -95,8 +95,8 @@ public ref struct WireReader
     }
 
     /// <summary>
-    /// Reads a 16-bit byte count followed by strict UTF-8. The count is checked against the limit and the
-    /// remaining input before anything is decoded.
+    ///     Reads a 16-bit byte count followed by strict UTF-8. The count is checked against the limit and the
+    ///     remaining input before anything is decoded.
     /// </summary>
     public bool TryReadString(int maxBytes, out string value)
     {

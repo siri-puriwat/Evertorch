@@ -9,8 +9,8 @@ using Evertorch.Game;
 namespace Evertorch.Server
 {
 /// <summary>
-/// Loads the server content package and rejects it unless it is complete, untampered, and internally consistent.
-/// The tools already validate canonical content; this guards the package the server was actually given.
+///     Loads the server content package and rejects it unless it is complete, untampered, and internally consistent.
+///     The tools already validate canonical content; this guards the package the server was actually given.
 /// </summary>
 public static class ServerContentLoader
 {
@@ -33,7 +33,7 @@ public static class ServerContentLoader
             throw new ContentLoadException(new[] { directory + ": the content package directory does not exist" });
         }
 
-        Dictionary<string, byte[]> files = new Dictionary<string, byte[]>(StringComparer.Ordinal);
+        var files = new Dictionary<string, byte[]>(StringComparer.Ordinal);
         foreach (string path in Directory.EnumerateFiles(directory))
         {
             files[Path.GetFileName(path)] = File.ReadAllBytes(path);
@@ -44,7 +44,7 @@ public static class ServerContentLoader
 
     public static ServerContent Load(IReadOnlyDictionary<string, byte[]> files)
     {
-        List<string> problems = new List<string>();
+        var problems = new List<string>();
 
         PackageManifest? manifest = ReadManifest(files, problems);
         if (manifest == null)
@@ -59,28 +59,28 @@ public static class ServerContentLoader
             throw new ContentLoadException(problems);
         }
 
-        Dictionary<ItemDefinitionId, ItemDefinition> items = new Dictionary<ItemDefinitionId, ItemDefinition>();
-        Dictionary<MonsterDefinitionId, MonsterDefinition> monsters =
+        var items = new Dictionary<ItemDefinitionId, ItemDefinition>();
+        var monsters =
             new Dictionary<MonsterDefinitionId, MonsterDefinition>();
-        Dictionary<SkillDefinitionId, SkillDefinition> skills = new Dictionary<SkillDefinitionId, SkillDefinition>();
-        Dictionary<JobDefinitionId, JobDefinition> jobs = new Dictionary<JobDefinitionId, JobDefinition>();
-        Dictionary<MapDefinitionId, MapDefinition> maps = new Dictionary<MapDefinitionId, MapDefinition>();
+        var skills = new Dictionary<SkillDefinitionId, SkillDefinition>();
+        var jobs = new Dictionary<JobDefinitionId, JobDefinition>();
+        var maps = new Dictionary<MapDefinitionId, MapDefinition>();
 
-        HashSet<ItemDefinitionId> declaredItems = ReadDefinitions<ItemDefinitionId, ItemDefinition>(
+        HashSet<ItemDefinitionId> declaredItems = ReadDefinitions(
             files,
             ItemsFile,
             problems,
             items,
             ItemDefinitionId.TryCreate,
             ReadItem);
-        HashSet<MonsterDefinitionId> declaredMonsters = ReadDefinitions<MonsterDefinitionId, MonsterDefinition>(
+        HashSet<MonsterDefinitionId> declaredMonsters = ReadDefinitions(
             files,
             MonstersFile,
             problems,
             monsters,
             MonsterDefinitionId.TryCreate,
             ReadMonster);
-        HashSet<SkillDefinitionId> declaredSkills = ReadDefinitions<SkillDefinitionId, SkillDefinition>(
+        HashSet<SkillDefinitionId> declaredSkills = ReadDefinitions(
             files,
             SkillsFile,
             problems,
@@ -94,7 +94,7 @@ public static class ServerContentLoader
             jobs,
             JobDefinitionId.TryCreate,
             ReadJob);
-        HashSet<MapDefinitionId> declaredMaps = ReadDefinitions<MapDefinitionId, MapDefinition>(
+        HashSet<MapDefinitionId> declaredMaps = ReadDefinitions(
             files,
             MapsFile,
             problems,
@@ -135,7 +135,7 @@ public static class ServerContentLoader
             return null;
         }
 
-        PackageObjectReader? root = PackageObjectReader.ForRoot(content, ManifestFile, problems);
+        var root = PackageObjectReader.ForRoot(content, ManifestFile, problems);
         if (root == null)
         {
             return null;
@@ -146,7 +146,7 @@ public static class ServerContentLoader
         string serverVersion = root.RequiredString("serverContentVersion");
         string clientVersion = root.RequiredString("clientContentVersion");
 
-        Dictionary<string, string> hashes = new Dictionary<string, string>(StringComparer.Ordinal);
+        var hashes = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (PackageObjectReader entry in root.RequiredObjectArray("files"))
         {
             string path = entry.RequiredString("path");
@@ -234,8 +234,8 @@ public static class ServerContentLoader
     }
 
     /// <summary>
-    /// Returns every ID the file declared, including definitions rejected for another defect, so that one defect is
-    /// not also reported as an unknown reference wherever that definition is used.
+    ///     Returns every ID the file declared, including definitions rejected for another defect, so that one defect is
+    ///     not also reported as an unknown reference wherever that definition is used.
     /// </summary>
     private static HashSet<TId> ReadDefinitions<TId, TDefinition>(
         IReadOnlyDictionary<string, byte[]> files,
@@ -247,8 +247,8 @@ public static class ServerContentLoader
         where TId : struct
         where TDefinition : class
     {
-        HashSet<TId> declared = new HashSet<TId>();
-        PackageObjectReader? root = PackageObjectReader.ForRoot(files[file], file, problems);
+        var declared = new HashSet<TId>();
+        var root = PackageObjectReader.ForRoot(files[file], file, problems);
         if (root == null)
         {
             return declared;
@@ -316,7 +316,7 @@ public static class ServerContentLoader
         double perceptionRadius = RequiredNonNegative(entry, "perceptionRadius");
         double leashRadius = RequiredNonNegative(entry, "leashRadius");
 
-        List<MonsterDrop> drops = new List<MonsterDrop>();
+        var drops = new List<MonsterDrop>();
         foreach (PackageObjectReader drop in entry.RequiredObjectArray("drops"))
         {
             ItemDefinitionId item = drop.RequiredId<ItemDefinitionId>("item", ItemDefinitionId.TryCreate);
@@ -452,7 +452,7 @@ public static class ServerContentLoader
             spawnPoint.ReportUnexpectedProperties();
         }
 
-        List<MonsterSpawn> monsterSpawns = new List<MonsterSpawn>();
+        var monsterSpawns = new List<MonsterSpawn>();
         foreach (PackageObjectReader spawn in entry.RequiredObjectArray("monsterSpawns"))
         {
             MonsterDefinitionId monster = spawn.RequiredId<MonsterDefinitionId>(
@@ -496,7 +496,7 @@ public static class ServerContentLoader
             return default;
         }
 
-        WorldPosition result = new WorldPosition(
+        var result = new WorldPosition(
             (float)position.RequiredDouble("x"),
             (float)position.RequiredDouble("y"),
             (float)position.RequiredDouble("z"));
@@ -589,7 +589,7 @@ public static class ServerContentLoader
     // Must stay in step with the tools: the first 16 hex digits of the SHA-256 over the sorted "path:hash" lines.
     private static string ComputeVersion(IReadOnlyDictionary<string, string> hashes)
     {
-        StringBuilder listing = new StringBuilder();
+        var listing = new StringBuilder();
         foreach (KeyValuePair<string, string> entry in hashes.OrderBy(pair => pair.Key, StringComparer.Ordinal))
         {
             listing.Append(entry.Key).Append(':').Append(entry.Value).Append('\n');

@@ -12,15 +12,15 @@ public sealed class CompatibilityOptions
     public const string DefaultBuildVersion = "0.2.0-dev";
 
     /// <summary>
-    /// Reported in the handshake. A client with exactly this build version is always admitted.
+    ///     Reported in the handshake. A client with exactly this build version is always admitted.
     /// </summary>
     public string ServerBuildVersion { get; set; } = DefaultBuildVersion;
 
     /// <summary>
-    /// Other client build versions this server admits, compared exactly. Empty by default, because configuration
-    /// binding appends to a list and would otherwise never be able to remove a built-in entry.
+    ///     Other client build versions this server admits, compared exactly. Empty by default, because configuration
+    ///     binding appends to a list and would otherwise never be able to remove a built-in entry.
     /// </summary>
-    public List<string> AdditionalClientBuildVersions { get; set; } = new List<string>();
+    public List<string> AdditionalClientBuildVersions { get; set; } = new();
 
     public bool Accepts(string clientBuildVersion)
     {
@@ -33,7 +33,7 @@ internal sealed class CompatibilityOptionsValidator : IValidateOptions<Compatibi
 {
     public ValidateOptionsResult Validate(string? name, CompatibilityOptions options)
     {
-        List<string> failures = new List<string>();
+        var failures = new List<string>();
         if (!IsSendable(options.ServerBuildVersion))
         {
             failures.Add(

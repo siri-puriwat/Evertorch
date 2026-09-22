@@ -4,7 +4,7 @@ using System.Globalization;
 namespace Evertorch.Game
 {
 /// <summary>
-/// Identifies one durable character. It outlives any live <see cref="EntityId" /> the character is given in a map.
+///     Identifies one durable character. It outlives any live <see cref="EntityId" /> the character is given in a map.
 /// </summary>
 public readonly struct CharacterId : IEquatable<CharacterId>
 {

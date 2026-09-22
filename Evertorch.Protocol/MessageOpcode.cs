@@ -1,8 +1,8 @@
 namespace Evertorch.Protocol
 {
 /// <summary>
-/// Stable wire identities. Client-to-server messages use 0x0001–0x7FFF and server-to-client messages use
-/// 0x8000–0xFFFF. A value is never reused with an incompatible meaning.
+///     Stable wire identities. Client-to-server messages use 0x0001–0x7FFF and server-to-client messages use
+///     0x8000–0xFFFF. A value is never reused with an incompatible meaning.
 /// </summary>
 public enum MessageOpcode : ushort
 {
@@ -17,6 +17,6 @@ public enum MessageOpcode : ushort
     EntitySpawn = 0x8004,
     EntityDespawn = 0x8005,
     EntitySnapshot = 0x8006,
-    DisconnectNotice = 0x8013,
+    DisconnectNotice = 0x8013
 }
 }

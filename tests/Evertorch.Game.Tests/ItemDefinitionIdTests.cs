@@ -12,7 +12,7 @@ public sealed class ItemDefinitionIdTests
     [TestCase("item.tier-2.potion_01")]
     public void Constructor_WhenValueIsValid_KeepsValue(string value)
     {
-        ItemDefinitionId id = new ItemDefinitionId(value);
+        var id = new ItemDefinitionId(value);
 
         Assert.That(id.Value, Is.EqualTo(value));
         Assert.That(id.ToString(), Is.EqualTo(value));
@@ -39,15 +39,6 @@ public sealed class ItemDefinitionIdTests
         Assert.That(create, Throws.ArgumentException);
     }
 
-    [Test]
-    public void TryCreate_WhenValueIsValid_ReturnsId()
-    {
-        bool isCreated = ItemDefinitionId.TryCreate("item.material.slime_gel", out ItemDefinitionId id);
-
-        Assert.That(isCreated, Is.True);
-        Assert.That(id, Is.EqualTo(new ItemDefinitionId("item.material.slime_gel")));
-    }
-
     [TestCase(null)]
     [TestCase("monster.training_slime")]
     [TestCase("item..slime_gel")]
@@ -60,10 +51,21 @@ public sealed class ItemDefinitionIdTests
     }
 
     [Test]
+    public void Equals_WhenValuesDiffer_IsFalse()
+    {
+        var left = new ItemDefinitionId("item.material.slime_gel");
+        var right = new ItemDefinitionId("item.consumable.minor_health");
+
+        Assert.That(left, Is.Not.EqualTo(right));
+        Assert.That(left == right, Is.False);
+        Assert.That(left != right, Is.True);
+    }
+
+    [Test]
     public void Equals_WhenValuesMatch_IsTrueWithMatchingHash()
     {
-        ItemDefinitionId left = new ItemDefinitionId("item.material.slime_gel");
-        ItemDefinitionId right = new ItemDefinitionId(string.Concat("item.material.", "slime_gel"));
+        var left = new ItemDefinitionId("item.material.slime_gel");
+        var right = new ItemDefinitionId(string.Concat("item.material.", "slime_gel"));
 
         Assert.That(left, Is.EqualTo(right));
         Assert.That(left == right, Is.True);
@@ -72,14 +74,12 @@ public sealed class ItemDefinitionIdTests
     }
 
     [Test]
-    public void Equals_WhenValuesDiffer_IsFalse()
+    public void TryCreate_WhenValueIsValid_ReturnsId()
     {
-        ItemDefinitionId left = new ItemDefinitionId("item.material.slime_gel");
-        ItemDefinitionId right = new ItemDefinitionId("item.consumable.minor_health");
+        bool isCreated = ItemDefinitionId.TryCreate("item.material.slime_gel", out ItemDefinitionId id);
 
-        Assert.That(left, Is.Not.EqualTo(right));
-        Assert.That(left == right, Is.False);
-        Assert.That(left != right, Is.True);
+        Assert.That(isCreated, Is.True);
+        Assert.That(id, Is.EqualTo(new ItemDefinitionId("item.material.slime_gel")));
     }
 
     [Test]

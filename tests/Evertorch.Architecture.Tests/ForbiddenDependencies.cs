@@ -13,7 +13,7 @@ internal static class ForbiddenDependencies
         "Evertorch.Persistence",
         "Evertorch.Rules",
         "Evertorch.Server",
-        "Evertorch.Tools",
+        "Evertorch.Tools"
     };
 
     private static readonly string[] Prefixes =
@@ -30,7 +30,7 @@ internal static class ForbiddenDependencies
         "Evertorch.Persistence.",
         "Evertorch.Rules.",
         "Evertorch.Server.",
-        "Evertorch.Tools.",
+        "Evertorch.Tools."
     };
 
     public static bool IsForbiddenForSharedAssembly(string dependencyName)

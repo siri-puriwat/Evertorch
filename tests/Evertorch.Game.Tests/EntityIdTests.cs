@@ -12,28 +12,24 @@ public sealed class EntityIdTests
     [TestCase(long.MinValue)]
     public void Value_AfterConstruction_ReturnsSuppliedValue(long value)
     {
-        EntityId entityId = new EntityId(value);
+        var entityId = new EntityId(value);
 
         Assert.That(entityId.Value, Is.EqualTo(value));
     }
 
     [Test]
-    public void Equals_WhenValuesMatch_IsTrueWithMatchingHash()
+    public void Equals_WhenComparedWithAnotherType_IsFalse()
     {
-        EntityId left = new EntityId(7);
-        EntityId right = new EntityId(7);
+        var entityId = new EntityId(7);
 
-        Assert.That(left, Is.EqualTo(right));
-        Assert.That(left == right, Is.True);
-        Assert.That(left != right, Is.False);
-        Assert.That(left.GetHashCode(), Is.EqualTo(right.GetHashCode()));
+        Assert.That(entityId.Equals(7L), Is.False);
     }
 
     [Test]
     public void Equals_WhenValuesDiffer_IsFalse()
     {
-        EntityId left = new EntityId(7);
-        EntityId right = new EntityId(8);
+        var left = new EntityId(7);
+        var right = new EntityId(8);
 
         Assert.That(left, Is.Not.EqualTo(right));
         Assert.That(left == right, Is.False);
@@ -41,11 +37,15 @@ public sealed class EntityIdTests
     }
 
     [Test]
-    public void Equals_WhenComparedWithAnotherType_IsFalse()
+    public void Equals_WhenValuesMatch_IsTrueWithMatchingHash()
     {
-        EntityId entityId = new EntityId(7);
+        var left = new EntityId(7);
+        var right = new EntityId(7);
 
-        Assert.That(entityId.Equals(7L), Is.False);
+        Assert.That(left, Is.EqualTo(right));
+        Assert.That(left == right, Is.True);
+        Assert.That(left != right, Is.False);
+        Assert.That(left.GetHashCode(), Is.EqualTo(right.GetHashCode()));
     }
 
     [Test]

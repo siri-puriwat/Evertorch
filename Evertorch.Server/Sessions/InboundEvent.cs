@@ -4,7 +4,7 @@ using Evertorch.Protocol;
 namespace Evertorch.Server
 {
 /// <summary>
-/// One already-decoded thing that happened on a connection, carried from a network thread to the tick thread.
+///     One already-decoded thing that happened on a connection, carried from a network thread to the tick thread.
 /// </summary>
 public readonly struct InboundEvent
 {

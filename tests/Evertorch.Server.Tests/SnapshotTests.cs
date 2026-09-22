@@ -9,22 +9,33 @@ namespace Evertorch.Server.Tests
 public sealed class SnapshotTests
 {
     [Test]
-    public void Snapshot_IsSentOnStateChannelUnreliableSequenced()
+    public void Snapshot_AcknowledgesEachClientsOwnInputs()
     {
-        TestServer server = new TestServer();
+        var server = new TestServer();
+        ConnectionId first = server.EnterWorld(1);
+        ConnectionId second = server.EnterWorld(2);
+        server.SendMove(first, 40, 1f, 0f);
+        server.SendMove(second, 7, 0f, 1f);
+
+        server.Tick();
+
+        Assert.That(server.Transport.SnapshotsSentTo(first).Last().LastProcessedInputSequence, Is.EqualTo(40u));
+        Assert.That(server.Transport.SnapshotsSentTo(second).Last().LastProcessedInputSequence, Is.EqualTo(7u));
+    }
+
+    [Test]
+    public void Snapshot_BeforeAnyInput_AcknowledgesZero()
+    {
+        var server = new TestServer();
         ConnectionId connection = server.EnterWorld(1);
 
-        InMemoryServerTransport.SentMessage snapshot = server.Transport.SentTo(connection)
-            .First(message => message.Opcode == MessageOpcode.EntitySnapshot);
-
-        Assert.That(snapshot.Channel, Is.EqualTo(ProtocolChannel.State));
-        Assert.That(snapshot.Delivery, Is.EqualTo(MessageDelivery.UnreliableSequenced));
+        Assert.That(server.Transport.SnapshotsSentTo(connection).Last().LastProcessedInputSequence, Is.EqualTo(0u));
     }
 
     [Test]
     public void Snapshot_CarriesTheTickOwnStateAndAcknowledgement()
     {
-        TestServer server = new TestServer();
+        var server = new TestServer();
         ConnectionId connection = server.EnterWorld(1);
         server.SendMove(connection, 9, 1f, 0f);
 
@@ -42,33 +53,9 @@ public sealed class SnapshotTests
     }
 
     [Test]
-    public void Snapshot_BeforeAnyInput_AcknowledgesZero()
-    {
-        TestServer server = new TestServer();
-        ConnectionId connection = server.EnterWorld(1);
-
-        Assert.That(server.Transport.SnapshotsSentTo(connection).Last().LastProcessedInputSequence, Is.EqualTo(0u));
-    }
-
-    [Test]
-    public void Snapshot_AcknowledgesEachClientsOwnInputs()
-    {
-        TestServer server = new TestServer();
-        ConnectionId first = server.EnterWorld(1);
-        ConnectionId second = server.EnterWorld(2);
-        server.SendMove(first, 40, 1f, 0f);
-        server.SendMove(second, 7, 0f, 1f);
-
-        server.Tick();
-
-        Assert.That(server.Transport.SnapshotsSentTo(first).Last().LastProcessedInputSequence, Is.EqualTo(40u));
-        Assert.That(server.Transport.SnapshotsSentTo(second).Last().LastProcessedInputSequence, Is.EqualTo(7u));
-    }
-
-    [Test]
     public void Snapshot_ContainsOnlyEntitiesInInterestAreaWithOwnEntityFirst()
     {
-        TestServer server = new TestServer(interestCellSize: 4f, interestNeighborRadius: 1);
+        var server = new TestServer(interestCellSize: 4f, interestNeighborRadius: 1);
         ConnectionId observer = server.EnterWorld(1);
         ConnectionId neighbour = server.EnterWorld(2);
         ConnectionId distant = server.Connect();
@@ -86,14 +73,39 @@ public sealed class SnapshotTests
     }
 
     [Test]
+    public void Snapshot_IsNotSentToASessionThatHasNotEnteredTheWorld()
+    {
+        var server = new TestServer();
+        ConnectionId connection = server.Connect();
+        server.SendHello(connection);
+
+        server.Tick(3);
+
+        Assert.That(server.Transport.SnapshotsSentTo(connection), Is.Empty);
+    }
+
+    [Test]
+    public void Snapshot_IsSentOnStateChannelUnreliableSequenced()
+    {
+        var server = new TestServer();
+        ConnectionId connection = server.EnterWorld(1);
+
+        InMemoryServerTransport.SentMessage snapshot = server.Transport.SentTo(connection)
+            .First(message => message.Opcode == MessageOpcode.EntitySnapshot);
+
+        Assert.That(snapshot.Channel, Is.EqualTo(ProtocolChannel.State));
+        Assert.That(snapshot.Delivery, Is.EqualTo(MessageDelivery.UnreliableSequenced));
+    }
+
+    [Test]
     public void Snapshot_NeverMentionsAnEntityBeforeItsSpawnWasSent()
     {
-        TestServer server = new TestServer();
+        var server = new TestServer();
         ConnectionId observer = server.EnterWorld(1);
         server.EnterWorld(2);
         server.Tick(3);
 
-        HashSet<long> spawned = new HashSet<long> { server.PlayerOf(observer).Id.Value };
+        var spawned = new HashSet<long> { server.PlayerOf(observer).Id.Value };
         foreach (InMemoryServerTransport.SentMessage message in server.Transport.SentTo(observer))
         {
             if (EntitySpawn.TryRead(message.Payload, out EntitySpawn? spawn))
@@ -110,7 +122,7 @@ public sealed class SnapshotTests
     [Test]
     public void Snapshot_WhenInterestAreaExceedsMaximum_SplitsAcrossPacketsWithLocalEntityFirst()
     {
-        TestServer server = new TestServer();
+        var server = new TestServer();
         ConnectionId observer = server.EnterWorld(1);
         for (long character = 2; character <= 30; character++)
         {
@@ -132,7 +144,7 @@ public sealed class SnapshotTests
     [Test]
     public void Snapshot_WithIntervalOfTwo_IsSentEverySecondTick()
     {
-        TestServer server = new TestServer(snapshotIntervalTicks: 2);
+        var server = new TestServer(snapshotIntervalTicks: 2);
         ConnectionId connection = server.EnterWorld(1);
         server.Transport.ClearSent();
 
@@ -140,18 +152,6 @@ public sealed class SnapshotTests
 
         uint[] ticks = server.Transport.SnapshotsSentTo(connection).Select(snapshot => snapshot.ServerTick).ToArray();
         Assert.That(ticks, Is.EqualTo(new uint[] { 2, 4, 6 }));
-    }
-
-    [Test]
-    public void Snapshot_IsNotSentToASessionThatHasNotEnteredTheWorld()
-    {
-        TestServer server = new TestServer();
-        ConnectionId connection = server.Connect();
-        server.SendHello(connection);
-
-        server.Tick(3);
-
-        Assert.That(server.Transport.SnapshotsSentTo(connection), Is.Empty);
     }
 }
 }

@@ -10,31 +10,10 @@ public sealed class StopMovementTests
     {
         0x04, 0x00,
         0x04, 0x03, 0x02, 0x01,
-        0x0D, 0x0C, 0x0B, 0x0A,
+        0x0D, 0x0C, 0x0B, 0x0A
     };
 
-    private static readonly StopMovement Golden = new StopMovement(0x01020304, 0x0A0B0C0D);
-
-    [Test]
-    public void Write_ForKnownMessage_ProducesGoldenBytes()
-    {
-        byte[] buffer = new byte[StopMovement.EncodedLength];
-
-        int written = Golden.Write(buffer);
-
-        Assert.That(written, Is.EqualTo(StopMovement.EncodedLength));
-        Assert.That(buffer, Is.EqualTo(GoldenBytes));
-    }
-
-    [Test]
-    public void TryRead_ForGoldenBytes_ReturnsKnownMessage()
-    {
-        bool isRead = StopMovement.TryRead(GoldenBytes, out StopMovement message);
-
-        Assert.That(isRead, Is.True);
-        Assert.That(message.Sequence, Is.EqualTo(0x01020304u));
-        Assert.That(message.ClientTick, Is.EqualTo(0x0A0B0C0Du));
-    }
+    private static readonly StopMovement Golden = new(0x01020304, 0x0A0B0C0D);
 
     [TestCase(0u, 0u)]
     [TestCase(uint.MaxValue, uint.MaxValue)]
@@ -51,9 +30,19 @@ public sealed class StopMovementTests
     }
 
     [Test]
-    public void TryRead_WhenTruncatedAtAnyLength_ReturnsFalse()
+    public void TryRead_ForGoldenBytes_ReturnsKnownMessage()
     {
-        WireMatrix.AssertRejectsEveryTruncation(GoldenBytes, bytes => StopMovement.TryRead(bytes, out _));
+        bool isRead = StopMovement.TryRead(GoldenBytes, out StopMovement message);
+
+        Assert.That(isRead, Is.True);
+        Assert.That(message.Sequence, Is.EqualTo(0x01020304u));
+        Assert.That(message.ClientTick, Is.EqualTo(0x0A0B0C0Du));
+    }
+
+    [Test]
+    public void TryRead_WhenOpcodeDiffers_ReturnsFalse()
+    {
+        WireMatrix.AssertRejectsOtherOpcodes(GoldenBytes, bytes => StopMovement.TryRead(bytes, out _));
     }
 
     [Test]
@@ -63,9 +52,20 @@ public sealed class StopMovementTests
     }
 
     [Test]
-    public void TryRead_WhenOpcodeDiffers_ReturnsFalse()
+    public void TryRead_WhenTruncatedAtAnyLength_ReturnsFalse()
     {
-        WireMatrix.AssertRejectsOtherOpcodes(GoldenBytes, bytes => StopMovement.TryRead(bytes, out _));
+        WireMatrix.AssertRejectsEveryTruncation(GoldenBytes, bytes => StopMovement.TryRead(bytes, out _));
+    }
+
+    [Test]
+    public void Write_ForKnownMessage_ProducesGoldenBytes()
+    {
+        byte[] buffer = new byte[StopMovement.EncodedLength];
+
+        int written = Golden.Write(buffer);
+
+        Assert.That(written, Is.EqualTo(StopMovement.EncodedLength));
+        Assert.That(buffer, Is.EqualTo(GoldenBytes));
     }
 
     [Test]

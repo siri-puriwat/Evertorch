@@ -10,8 +10,8 @@ public sealed class TickLogObserverTests
     [Test]
     public void OnOverrun_ForFirstOverrun_LogsWarningWithStableEventName()
     {
-        CapturingLogger<TickLogObserver> logger = new CapturingLogger<TickLogObserver>();
-        TickLogObserver observer = new TickLogObserver(logger, new FakeClock());
+        var logger = new CapturingLogger<TickLogObserver>();
+        var observer = new TickLogObserver(logger, new FakeClock());
 
         observer.OnOverrun(12, TimeSpan.FromMilliseconds(80), 0);
 
@@ -24,9 +24,9 @@ public sealed class TickLogObserverTests
     [Test]
     public void OnOverrun_RepeatedWithinInterval_LogsOnceThenReportsSuppressedCount()
     {
-        CapturingLogger<TickLogObserver> logger = new CapturingLogger<TickLogObserver>();
-        FakeClock clock = new FakeClock();
-        TickLogObserver observer = new TickLogObserver(logger, clock);
+        var logger = new CapturingLogger<TickLogObserver>();
+        var clock = new FakeClock();
+        var observer = new TickLogObserver(logger, clock);
 
         observer.OnOverrun(1, TimeSpan.FromMilliseconds(80), 0);
         observer.OnOverrun(2, TimeSpan.FromMilliseconds(80), 0);
@@ -41,8 +41,8 @@ public sealed class TickLogObserverTests
     [Test]
     public void OnTickCompleted_ForOrdinaryTick_LogsNothing()
     {
-        CapturingLogger<TickLogObserver> logger = new CapturingLogger<TickLogObserver>();
-        TickLogObserver observer = new TickLogObserver(logger, new FakeClock());
+        var logger = new CapturingLogger<TickLogObserver>();
+        var observer = new TickLogObserver(logger, new FakeClock());
 
         observer.OnTickCompleted(1, TimeSpan.FromMilliseconds(2));
 

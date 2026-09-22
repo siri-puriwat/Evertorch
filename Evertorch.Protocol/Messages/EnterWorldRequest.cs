@@ -4,7 +4,7 @@ using Evertorch.Game;
 namespace Evertorch.Protocol
 {
 /// <summary>
-/// Asks to enter the world as one character. The server decides whether the session may control it.
+///     Asks to enter the world as one character. The server decides whether the session may control it.
 /// </summary>
 public readonly struct EnterWorldRequest
 {
@@ -20,7 +20,7 @@ public readonly struct EnterWorldRequest
     public static bool TryRead(ReadOnlySpan<byte> source, out EnterWorldRequest message)
     {
         message = default;
-        WireReader reader = new WireReader(source);
+        var reader = new WireReader(source);
         if (!reader.TryReadOpcode(MessageOpcode.EnterWorldRequest)
             || !reader.TryReadInt64(out long character)
             || !reader.IsAtEnd)
@@ -34,7 +34,7 @@ public readonly struct EnterWorldRequest
 
     public int Write(Span<byte> destination)
     {
-        WireWriter writer = new WireWriter(destination);
+        var writer = new WireWriter(destination);
         writer.WriteOpcode(MessageOpcode.EnterWorldRequest);
         writer.WriteInt64(Character.Value);
         return writer.Position;

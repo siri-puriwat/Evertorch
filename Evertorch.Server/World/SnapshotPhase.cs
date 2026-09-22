@@ -7,16 +7,16 @@ using Microsoft.Extensions.Options;
 namespace Evertorch.Server
 {
 /// <summary>
-/// Sends each client the transforms of its own entity and of the entities it has been told about. It runs after
-/// visibility, so a snapshot never mentions an entity whose spawn has not been queued for that client.
+///     Sends each client the transforms of its own entity and of the entities it has been told about. It runs after
+///     visibility, so a snapshot never mentions an entity whose spawn has not been queued for that client.
 /// </summary>
 public sealed class SnapshotPhase : ITickPhase
 {
     private readonly SessionRegistry m_sessions;
     private readonly MessageSender m_sender;
     private readonly uint m_intervalTicks;
-    private readonly List<EntityState> m_states = new List<EntityState>();
-    private readonly List<EntityState> m_packet = new List<EntityState>(EntitySnapshot.MaxEntities);
+    private readonly List<EntityState> m_states = new();
+    private readonly List<EntityState> m_packet = new(EntitySnapshot.MaxEntities);
 
     public SnapshotPhase(SessionRegistry sessions, MessageSender sender, IOptions<WorldOptions> world)
     {

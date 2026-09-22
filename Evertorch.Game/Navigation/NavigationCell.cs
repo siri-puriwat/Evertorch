@@ -3,7 +3,7 @@ using System;
 namespace Evertorch.Game
 {
 /// <summary>
-/// One square of a <see cref="NavigationGrid"/>: what stands there and how high its ground is.
+///     One square of a <see cref="NavigationGrid" />: what stands there and how high its ground is.
 /// </summary>
 public readonly struct NavigationCell : IEquatable<NavigationCell>
 {
@@ -30,12 +30,12 @@ public readonly struct NavigationCell : IEquatable<NavigationCell>
     public RampAxis Axis { get; }
 
     /// <summary>
-    /// Ground height at the cell edge with the smaller coordinate on <see cref="Axis"/>.
+    ///     Ground height at the cell edge with the smaller coordinate on <see cref="Axis" />.
     /// </summary>
     public float HeightAtMin { get; }
 
     /// <summary>
-    /// Ground height at the cell edge with the larger coordinate on <see cref="Axis"/>.
+    ///     Ground height at the cell edge with the larger coordinate on <see cref="Axis" />.
     /// </summary>
     public float HeightAtMax { get; }
 

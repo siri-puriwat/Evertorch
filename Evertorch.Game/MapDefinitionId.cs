@@ -3,8 +3,8 @@ using System;
 namespace Evertorch.Game
 {
 /// <summary>
-/// Stable namespaced identity of a map definition, such as <c>map.training_ground</c>.
-/// The default value holds an empty string and names no definition.
+///     Stable namespaced identity of a map definition, such as <c>map.training_ground</c>.
+///     The default value holds an empty string and names no definition.
 /// </summary>
 public readonly struct MapDefinitionId : IEquatable<MapDefinitionId>
 {

@@ -1,7 +1,7 @@
 namespace Evertorch.Protocol
 {
 /// <summary>
-/// Range checks for enums read off the wire. A value outside the defined set rejects the whole message.
+///     Range checks for enums read off the wire. A value outside the defined set rejects the whole message.
 /// </summary>
 internal static class WireEnums
 {

@@ -5,7 +5,7 @@ using System.Globalization;
 namespace Evertorch.Tools
 {
 /// <summary>
-/// Checks that span definitions: duplicate IDs and references between kinds. Single-field rules live in the readers.
+///     Checks that span definitions: duplicate IDs and references between kinds. Single-field rules live in the readers.
 /// </summary>
 public static class ContentValidator
 {
@@ -82,7 +82,7 @@ public static class ContentValidator
         Func<T, DefinitionSource> getSource,
         List<ContentDiagnostic> diagnostics)
     {
-        Dictionary<string, string> firstFileById = new Dictionary<string, string>(StringComparer.Ordinal);
+        var firstFileById = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (T definition in definitions)
         {
             string id = getId(definition);

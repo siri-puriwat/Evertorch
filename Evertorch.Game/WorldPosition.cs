@@ -4,7 +4,7 @@ using System.Globalization;
 namespace Evertorch.Game
 {
 /// <summary>
-/// A point in continuous world space: X/Z form the horizontal plane, Y is height, one unit is about one meter.
+///     A point in continuous world space: X/Z form the horizontal plane, Y is height, one unit is about one meter.
 /// </summary>
 public readonly struct WorldPosition : IEquatable<WorldPosition>
 {

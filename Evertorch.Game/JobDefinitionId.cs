@@ -3,8 +3,8 @@ using System;
 namespace Evertorch.Game
 {
 /// <summary>
-/// Stable namespaced identity of a job definition, such as <c>job.adventurer</c>.
-/// The default value holds an empty string and names no definition.
+///     Stable namespaced identity of a job definition, such as <c>job.adventurer</c>.
+///     The default value holds an empty string and names no definition.
 /// </summary>
 public readonly struct JobDefinitionId : IEquatable<JobDefinitionId>
 {

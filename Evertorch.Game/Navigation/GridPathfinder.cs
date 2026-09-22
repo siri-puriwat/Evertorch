@@ -4,8 +4,8 @@ using System.Collections.Generic;
 namespace Evertorch.Game
 {
 /// <summary>
-/// A* over the cells of one <see cref="NavigationGrid"/>. Costs are whole numbers and ties break on cell index, so
-/// the same request yields the same path on every platform. Not thread-safe: it reuses its working buffers.
+///     A* over the cells of one <see cref="NavigationGrid" />. Costs are whole numbers and ties break on cell index, so
+///     the same request yields the same path on every platform. Not thread-safe: it reuses its working buffers.
 /// </summary>
 public sealed class GridPathfinder
 {
@@ -23,8 +23,8 @@ public sealed class GridPathfinder
     private readonly bool[] m_isClosed;
     private readonly byte[] m_links;
     private readonly bool[] m_hasLinks;
-    private readonly List<OpenNode> m_open = new List<OpenNode>();
-    private readonly List<WorldPosition> m_cellPath = new List<WorldPosition>();
+    private readonly List<OpenNode> m_open = new();
+    private readonly List<WorldPosition> m_cellPath = new();
     private int m_stamp;
 
     public GridPathfinder(NavigationGrid grid)
@@ -40,9 +40,9 @@ public sealed class GridPathfinder
     }
 
     /// <summary>
-    /// Finds a walkable route and writes its waypoints, excluding the start and ending exactly on the goal. Returns
-    /// false, leaving <paramref name="waypoints"/> empty, when the goal cannot be stood on, cannot be reached, or
-    /// the search would expand more than <paramref name="maxExpandedNodes"/> cells.
+    ///     Finds a walkable route and writes its waypoints, excluding the start and ending exactly on the goal. Returns
+    ///     false, leaving <paramref name="waypoints" /> empty, when the goal cannot be stood on, cannot be reached, or
+    ///     the search would expand more than <paramref name="maxExpandedNodes" /> cells.
     /// </summary>
     public bool TryFindPath(
         WorldPosition start,
@@ -65,7 +65,7 @@ public sealed class GridPathfinder
             return false;
         }
 
-        WorldPosition groundedGoal = new WorldPosition(goal.X, goalHeight, goal.Z);
+        var groundedGoal = new WorldPosition(goal.X, goalHeight, goal.Z);
         int startCell = ToCell(startColumn, startRow);
         int goalCell = ToCell(goalColumn, goalRow);
         if (!Search(startCell, goalCell, maxExpandedNodes))
@@ -211,16 +211,16 @@ public sealed class GridPathfinder
 
     private int Heuristic(int cell, int goalCell)
     {
-        int deltaColumn = Math.Abs((cell % m_grid.Columns) - (goalCell % m_grid.Columns));
-        int deltaRow = Math.Abs((cell / m_grid.Columns) - (goalCell / m_grid.Columns));
+        int deltaColumn = Math.Abs(cell % m_grid.Columns - goalCell % m_grid.Columns);
+        int deltaRow = Math.Abs(cell / m_grid.Columns - goalCell / m_grid.Columns);
         int longer = Math.Max(deltaColumn, deltaRow);
         int shorter = Math.Min(deltaColumn, deltaRow);
-        return (CardinalCost * longer) + ((DiagonalCost - CardinalCost) * shorter);
+        return CardinalCost * longer + (DiagonalCost - CardinalCost) * shorter;
     }
 
     private int ToCell(int column, int row)
     {
-        return (row * m_grid.Columns) + column;
+        return row * m_grid.Columns + column;
     }
 
     private void Push(OpenNode node)
@@ -250,7 +250,7 @@ public sealed class GridPathfinder
         int parent = 0;
         while (true)
         {
-            int left = (parent * 2) + 1;
+            int left = parent * 2 + 1;
             int right = left + 1;
             int smallest = parent;
             if (left < m_open.Count && m_open[left].IsBefore(m_open[smallest]))

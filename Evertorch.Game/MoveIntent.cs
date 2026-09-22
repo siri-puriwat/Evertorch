@@ -4,8 +4,8 @@ using System.Globalization;
 namespace Evertorch.Game
 {
 /// <summary>
-/// The single movement intent every control scheme produces. The direction is a request: the server normalizes it
-/// and never treats its magnitude as a speed multiplier.
+///     The single movement intent every control scheme produces. The direction is a request: the server normalizes it
+///     and never treats its magnitude as a speed multiplier.
 /// </summary>
 public readonly struct MoveIntent : IEquatable<MoveIntent>
 {

@@ -3,8 +3,8 @@ using System;
 namespace Evertorch.Rules
 {
 /// <summary>
-/// What sets the pace of a basic attack: the attack speed of a character, or the fixed interval from a monster
-/// definition.
+///     What sets the pace of a basic attack: the attack speed of a character, or the fixed interval from a monster
+///     definition.
 /// </summary>
 public readonly struct AttackContext
 {

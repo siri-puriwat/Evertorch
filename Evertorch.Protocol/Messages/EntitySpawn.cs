@@ -4,8 +4,8 @@ using Evertorch.Game;
 namespace Evertorch.Protocol
 {
 /// <summary>
-/// An entity entered this client's area of interest. It always precedes any other reliable message about that
-/// entity; snapshots travel separately and may mention it earlier, which the client ignores.
+///     An entity entered this client's area of interest. It always precedes any other reliable message about that
+///     entity; snapshots travel separately and may mention it earlier, which the client ignores.
 /// </summary>
 public sealed class EntitySpawn
 {
@@ -30,7 +30,7 @@ public sealed class EntitySpawn
     public EntityKind Kind { get; }
 
     /// <summary>
-    /// The definition the client presents this entity with. Its kind is decided by <see cref="Kind"/>.
+    ///     The definition the client presents this entity with. Its kind is decided by <see cref="Kind" />.
     /// </summary>
     public string DefinitionId { get; }
 
@@ -43,7 +43,7 @@ public sealed class EntitySpawn
     public static bool TryRead(ReadOnlySpan<byte> source, out EntitySpawn? message)
     {
         message = null;
-        WireReader reader = new WireReader(source);
+        var reader = new WireReader(source);
         if (!reader.TryReadOpcode(MessageOpcode.EntitySpawn)
             || !reader.TryReadInt64(out long entity)
             || !reader.TryReadByte(out byte kindValue)
@@ -56,8 +56,8 @@ public sealed class EntitySpawn
             return false;
         }
 
-        EntityKind kind = (EntityKind)kindValue;
-        EntityStateFlags stateFlags = (EntityStateFlags)flagsValue;
+        var kind = (EntityKind)kindValue;
+        var stateFlags = (EntityStateFlags)flagsValue;
         if (!WireEnums.IsDefined(kind) || !WireEnums.IsDefined(stateFlags) || !IsDefinitionOfKind(kind, definitionId))
         {
             return false;
@@ -73,14 +73,14 @@ public sealed class EntitySpawn
             + sizeof(long)
             + sizeof(byte)
             + WireText.GetEncodedLength(DefinitionId, ProtocolLimits.MaxDefinitionIdBytes)
-            + (3 * sizeof(float))
-            + (2 * sizeof(float))
+            + 3 * sizeof(float)
+            + 2 * sizeof(float)
             + sizeof(ushort);
     }
 
     public int Write(Span<byte> destination)
     {
-        WireWriter writer = new WireWriter(destination);
+        var writer = new WireWriter(destination);
         writer.WriteOpcode(MessageOpcode.EntitySpawn);
         writer.WriteInt64(Entity.Value);
         writer.WriteByte((byte)Kind);

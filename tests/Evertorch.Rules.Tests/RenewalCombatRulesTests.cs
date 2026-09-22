@@ -7,7 +7,7 @@ namespace Evertorch.Rules.Tests
 [TestFixture]
 public sealed class RenewalCombatRulesTests
 {
-    private static readonly RenewalCombatRules Rules = new RenewalCombatRules();
+    private static readonly RenewalCombatRules Rules = new();
 
     // attack speed => interval, windup and impact, recovery (ms)
     [TestCase(152, 960, 480, 240)]
@@ -45,16 +45,6 @@ public sealed class RenewalCombatRulesTests
         Assert.That(timing.Recovery, Is.EqualTo(TimeSpan.FromMilliseconds(recoveryMs)));
     }
 
-    [Test]
-    public void AttackContext_WhenInputsAreInvalid_Throws()
-    {
-        Action negativeSpeed = () => _ = AttackContext.ForAttackSpeed(-1);
-        Action zeroInterval = () => _ = AttackContext.ForFixedInterval(TimeSpan.Zero);
-
-        Assert.That(negativeSpeed, Throws.InstanceOf<ArgumentOutOfRangeException>());
-        Assert.That(zeroInterval, Throws.InstanceOf<ArgumentOutOfRangeException>());
-    }
-
     [TestCase(10, HitOutcome.PerfectDodge, 1)]
     [TestCase(11, HitOutcome.Hit, 3)]
     public void CalculateHit_AtThePerfectDodgeBoundary_ResolvesBeforeAnythingElse(
@@ -62,7 +52,7 @@ public sealed class RenewalCombatRulesTests
         HitOutcome expected,
         int expectedDraws)
     {
-        ScriptedRandomSource random = new ScriptedRandomSource(dodgeRoll, 999, 0);
+        var random = new ScriptedRandomSource(dodgeRoll, 999, 0);
 
         HitResult result = Rules.CalculateHit(new HitContext(177, 13, 102, 11, 0, random));
 
@@ -78,33 +68,12 @@ public sealed class RenewalCombatRulesTests
         HitOutcome expected,
         int expectedDraws)
     {
-        ScriptedRandomSource random = new ScriptedRandomSource(999, criticalRoll, 0);
+        var random = new ScriptedRandomSource(999, criticalRoll, 0);
 
         HitResult result = Rules.CalculateHit(new HitContext(177, 13, 102, 0, 5, random));
 
         Assert.That(result.Outcome, Is.EqualTo(expected));
         Assert.That(random.RequestedBounds, Has.Count.EqualTo(expectedDraws));
-    }
-
-    [Test]
-    public void CalculateHit_WhenDefenderLukCancelsCritical_NeverCrits()
-    {
-        ScriptedRandomSource random = new ScriptedRandomSource(999, 0, 0);
-
-        HitResult result = Rules.CalculateHit(new HitContext(177, 13, 102, 0, 7, random));
-
-        Assert.That(result.Outcome, Is.EqualTo(HitOutcome.Hit));
-    }
-
-    [Test]
-    public void CalculateHit_WhenCritical_IgnoresFlee()
-    {
-        ScriptedRandomSource random = new ScriptedRandomSource(999, 0);
-
-        HitResult result = Rules.CalculateHit(new HitContext(0, 500, 9999, 0, 0, random));
-
-        Assert.That(result.Outcome, Is.EqualTo(HitOutcome.Critical));
-        Assert.That(result.DealsDamage, Is.True);
     }
 
     // hit 177 against flee 102 is 75 percent.
@@ -121,7 +90,7 @@ public sealed class RenewalCombatRulesTests
         HitOutcome expected,
         int expectedChance)
     {
-        ScriptedRandomSource random = new ScriptedRandomSource(999, 999, hitRoll);
+        var random = new ScriptedRandomSource(999, 999, hitRoll);
 
         HitResult result = Rules.CalculateHit(new HitContext(hit, 0, flee, 0, 0, random));
 
@@ -146,7 +115,7 @@ public sealed class RenewalCombatRulesTests
         int softDefense,
         int expected)
     {
-        ScriptedRandomSource random = new ScriptedRandomSource();
+        var random = new ScriptedRandomSource();
 
         DamageResult result = Rules.CalculateDamage(
             new DamageContext(
@@ -192,7 +161,7 @@ public sealed class RenewalCombatRulesTests
     [TestCase(3, 8)]
     public void CalculateDamage_ForMonster_RollsWithinTwentyPercentInclusive(int roll, int expected)
     {
-        ScriptedRandomSource random = new ScriptedRandomSource(roll);
+        var random = new ScriptedRandomSource(roll);
 
         DamageResult result = Rules.CalculateDamage(
             new DamageContext(AttackerKind.Monster, 0, 7, 0, 0, false, random));
@@ -202,21 +171,19 @@ public sealed class RenewalCombatRulesTests
     }
 
     [Test]
-    public void CalculateDamage_ForMonster_SubtractsSoftDefenseAndKeepsOne()
+    public void AttackContext_WhenInputsAreInvalid_Throws()
     {
-        DamageResult reduced = Rules.CalculateDamage(
-            new DamageContext(AttackerKind.Monster, 0, 7, 0, 3, false, new ScriptedRandomSource(3)));
-        DamageResult floored = Rules.CalculateDamage(
-            new DamageContext(AttackerKind.Monster, 0, 7, 0, 50, false, new ScriptedRandomSource(0)));
+        Action negativeSpeed = () => _ = AttackContext.ForAttackSpeed(-1);
+        Action zeroInterval = () => _ = AttackContext.ForFixedInterval(TimeSpan.Zero);
 
-        Assert.That(reduced.Amount, Is.EqualTo(5));
-        Assert.That(floored.Amount, Is.EqualTo(1));
+        Assert.That(negativeSpeed, Throws.InstanceOf<ArgumentOutOfRangeException>());
+        Assert.That(zeroInterval, Throws.InstanceOf<ArgumentOutOfRangeException>());
     }
 
     [Test]
     public void CalculateDamage_ForCriticalMonster_TakesTheMaximumWithoutRolling()
     {
-        ScriptedRandomSource random = new ScriptedRandomSource();
+        var random = new ScriptedRandomSource();
 
         DamageResult result = Rules.CalculateDamage(
             new DamageContext(AttackerKind.Monster, 0, 7, 0, 3, true, random));
@@ -242,9 +209,42 @@ public sealed class RenewalCombatRulesTests
     }
 
     [Test]
+    public void CalculateDamage_ForMonster_SubtractsSoftDefenseAndKeepsOne()
+    {
+        DamageResult reduced = Rules.CalculateDamage(
+            new DamageContext(AttackerKind.Monster, 0, 7, 0, 3, false, new ScriptedRandomSource(3)));
+        DamageResult floored = Rules.CalculateDamage(
+            new DamageContext(AttackerKind.Monster, 0, 7, 0, 50, false, new ScriptedRandomSource(0)));
+
+        Assert.That(reduced.Amount, Is.EqualTo(5));
+        Assert.That(floored.Amount, Is.EqualTo(1));
+    }
+
+    [Test]
+    public void CalculateHit_WhenCritical_IgnoresFlee()
+    {
+        var random = new ScriptedRandomSource(999, 0);
+
+        HitResult result = Rules.CalculateHit(new HitContext(0, 500, 9999, 0, 0, random));
+
+        Assert.That(result.Outcome, Is.EqualTo(HitOutcome.Critical));
+        Assert.That(result.DealsDamage, Is.True);
+    }
+
+    [Test]
+    public void CalculateHit_WhenDefenderLukCancelsCritical_NeverCrits()
+    {
+        var random = new ScriptedRandomSource(999, 0, 0);
+
+        HitResult result = Rules.CalculateHit(new HitContext(177, 13, 102, 0, 7, random));
+
+        Assert.That(result.Outcome, Is.EqualTo(HitOutcome.Hit));
+    }
+
+    [Test]
     public void Contexts_WhenInputsAreInvalid_Throw()
     {
-        ScriptedRandomSource random = new ScriptedRandomSource();
+        var random = new ScriptedRandomSource();
         Action negativeHit = () => _ = new HitContext(-1, 0, 0, 0, 0, random);
         Action missingHitRandom = () => _ = new HitContext(0, 0, 0, 0, 0, null!);
         Action negativeDamage = () => _ = new DamageContext(AttackerKind.Character, 0, 0, -1, 0, false, random);
@@ -261,7 +261,7 @@ public sealed class RenewalCombatRulesTests
     {
         DerivedStats adventurer = new RenewalCharacterRules().CalculateDerivedStats(
             new CharacterBuild(1, new PrimaryStats(5, 5, 5, 5, 5, 5), 60, 8, 20, 3, 44, 5f));
-        SeededRandomSource random = new SeededRandomSource(12345);
+        var random = new SeededRandomSource(12345);
 
         AttackTiming timing = Rules.CalculateAttackTiming(AttackContext.ForAttackSpeed(adventurer.AttackSpeed));
         HitResult hit = Rules.CalculateHit(

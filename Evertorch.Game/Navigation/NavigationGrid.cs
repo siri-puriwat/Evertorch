@@ -3,22 +3,22 @@ using System;
 namespace Evertorch.Game
 {
 /// <summary>
-/// Walkability and ground height for one map, sampled on a uniform grid over the X/Z plane. Positions stay
-/// continuous; the grid only answers where a body may stand and step. Server validation and client prediction
-/// must ask the same instance-equivalent grid so they agree.
+///     Walkability and ground height for one map, sampled on a uniform grid over the X/Z plane. Positions stay
+///     continuous; the grid only answers where a body may stand and step. Server validation and client prediction
+///     must ask the same instance-equivalent grid so they agree.
 /// </summary>
 public sealed class NavigationGrid
 {
     public const int MaxCellsPerAxis = 512;
 
     /// <summary>
-    /// Longest single displacement anything may test with <see cref="CanStep"/>. Longer moves are split, so a body
-    /// can never pass through something thinner than this.
+    ///     Longest single displacement anything may test with <see cref="CanStep" />. Longer moves are split, so a body
+    ///     can never pass through something thinner than this.
     /// </summary>
     public const float MaxMoveStep = 0.25f;
 
     /// <summary>
-    /// Longest distance between two positions checked by <see cref="HasLineOfSight"/>.
+    ///     Longest distance between two positions checked by <see cref="HasLineOfSight" />.
     /// </summary>
     public const float LineOfSightStep = 0.125f;
 
@@ -109,25 +109,25 @@ public sealed class NavigationGrid
     public float AgentRadius { get; }
 
     /// <summary>
-    /// Largest sudden change in ground height a body may cross. Taller edges block like walls, from both sides.
+    ///     Largest sudden change in ground height a body may cross. Taller edges block like walls, from both sides.
     /// </summary>
     public float MaxStepHeight { get; }
 
     /// <summary>
-    /// The longest displacement the mover tests in one piece. Only the end of a piece is checked, so a piece must
-    /// not be longer than the body is wide from its centre: a longer one could land on the far side of a thin
-    /// wall, or of the point where two walls meet at a corner, without ever overlapping either.
+    ///     The longest displacement the mover tests in one piece. Only the end of a piece is checked, so a piece must
+    ///     not be longer than the body is wide from its centre: a longer one could land on the far side of a thin
+    ///     wall, or of the point where two walls meet at a corner, without ever overlapping either.
     /// </summary>
     public float MoveStepLength => Math.Min(MaxMoveStep, AgentRadius);
 
     /// <summary>
-    /// The spacing of the checks along a line of sight, bounded by the agent radius for the same reason.
+    ///     The spacing of the checks along a line of sight, bounded by the agent radius for the same reason.
     /// </summary>
     public float LineOfSightStepLength => Math.Min(LineOfSightStep, AgentRadius);
 
     /// <summary>
-    /// The steepest ramp (rise over run) a grid accepts. The step-height rule compares ground heights across a
-    /// body's footprint and across one move, so a ramp must rise less than one step height over either distance.
+    ///     The steepest ramp (rise over run) a grid accepts. The step-height rule compares ground heights across a
+    ///     body's footprint and across one move, so a ramp must rise less than one step height over either distance.
     /// </summary>
     public static float MaxRampSlope(float agentRadius, float maxStepHeight)
     {
@@ -141,7 +141,7 @@ public sealed class NavigationGrid
             throw new ArgumentOutOfRangeException(nameof(column), "The cell is outside the grid.");
         }
 
-        return m_cells[(row * Columns) + column];
+        return m_cells[row * Columns + column];
     }
 
     public bool Contains(int column, int row)
@@ -162,7 +162,7 @@ public sealed class NavigationGrid
     }
 
     /// <summary>
-    /// Ground height under a point. False outside the grid or on a cell that cannot be walked on.
+    ///     Ground height under a point. False outside the grid or on a cell that cannot be walked on.
     /// </summary>
     public bool TrySampleHeight(float x, float z, out float height)
     {
@@ -178,14 +178,14 @@ public sealed class NavigationGrid
 
     public WorldPosition GetCellCenter(int column, int row)
     {
-        float x = OriginX + ((column + 0.5f) * CellSize);
-        float z = OriginZ + ((row + 0.5f) * CellSize);
+        float x = OriginX + (column + 0.5f) * CellSize;
+        float z = OriginZ + (row + 0.5f) * CellSize;
         return new WorldPosition(x, HeightInCell(column, row, x, z), z);
     }
 
     /// <summary>
-    /// Whether a body of <see cref="AgentRadius"/> may stand centered on the point: every cell its circle overlaps
-    /// must be walkable ground within one step height of the ground under its center.
+    ///     Whether a body of <see cref="AgentRadius" /> may stand centered on the point: every cell its circle overlaps
+    ///     must be walkable ground within one step height of the ground under its center.
     /// </summary>
     public bool CanOccupy(float x, float z)
     {
@@ -210,7 +210,7 @@ public sealed class NavigationGrid
                 float deltaZ = nearestZ - z;
 
                 // Strictly inside: a body may rest flush against a wall and slide along it.
-                if ((deltaX * deltaX) + (deltaZ * deltaZ) >= radiusSquared)
+                if (deltaX * deltaX + deltaZ * deltaZ >= radiusSquared)
                 {
                     continue;
                 }
@@ -232,8 +232,8 @@ public sealed class NavigationGrid
     }
 
     /// <summary>
-    /// Whether a body standing at the first point may move straight to the second, which must be close enough that
-    /// nothing can lie between them (callers keep it at or below <see cref="LineOfSightStep"/> or their own sub-step).
+    ///     Whether a body standing at the first point may move straight to the second, which must be close enough that
+    ///     nothing can lie between them (callers keep it at or below <see cref="LineOfSightStep" /> or their own sub-step).
     /// </summary>
     public bool CanStep(float fromX, float fromZ, float toX, float toZ)
     {
@@ -248,7 +248,7 @@ public sealed class NavigationGrid
     }
 
     /// <summary>
-    /// Whether a body can walk the straight segment without being blocked, checked by stepping along it.
+    ///     Whether a body can walk the straight segment without being blocked, checked by stepping along it.
     /// </summary>
     public bool HasLineOfSight(WorldPosition from, WorldPosition to)
     {
@@ -259,7 +259,7 @@ public sealed class NavigationGrid
 
         double deltaX = (double)to.X - from.X;
         double deltaZ = (double)to.Z - from.Z;
-        double length = Math.Sqrt((deltaX * deltaX) + (deltaZ * deltaZ));
+        double length = Math.Sqrt(deltaX * deltaX + deltaZ * deltaZ);
 
         // Also false for a non-finite end point: no segment inside the grid is longer than its two sides together.
         if (!(length <= (Columns + Rows) * (double)CellSize))
@@ -274,8 +274,8 @@ public sealed class NavigationGrid
         for (int step = 1; step <= steps; step++)
         {
             double fraction = (double)step / steps;
-            float x = (float)(from.X + (deltaX * fraction));
-            float z = (float)(from.Z + (deltaZ * fraction));
+            float x = (float)(from.X + deltaX * fraction);
+            float z = (float)(from.Z + deltaZ * fraction);
             if (!CanStep(previousX, previousZ, x, z))
             {
                 return false;
@@ -289,8 +289,8 @@ public sealed class NavigationGrid
     }
 
     /// <summary>
-    /// Whether a path may lead from the center of one cell to the center of a neighbouring one. It is the same
-    /// walk the mover will attempt, so a body is never routed past a corner it would catch on.
+    ///     Whether a path may lead from the center of one cell to the center of a neighbouring one. It is the same
+    ///     walk the mover will attempt, so a body is never routed past a corner it would catch on.
     /// </summary>
     public bool CanTraverse(int fromColumn, int fromRow, int toColumn, int toRow)
     {
@@ -332,12 +332,12 @@ public sealed class NavigationGrid
             ? (x - CellMin(column, OriginX)) / CellSize
             : (z - CellMin(row, OriginZ)) / CellSize;
         float fraction = Clamp(along, 0f, 1f);
-        return cell.HeightAtMin + ((cell.HeightAtMax - cell.HeightAtMin) * fraction);
+        return cell.HeightAtMin + (cell.HeightAtMax - cell.HeightAtMin) * fraction;
     }
 
     private float CellMin(int index, float origin)
     {
-        return origin + (index * CellSize);
+        return origin + index * CellSize;
     }
 
     private int ToIndex(float coordinate, float origin)

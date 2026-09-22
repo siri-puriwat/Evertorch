@@ -32,7 +32,7 @@ public sealed class MovementModelTests
     {
         WorldDirection direction = MovementModel.NormalizeOrZero(x, z);
 
-        double length = Math.Sqrt(((double)direction.X * direction.X) + ((double)direction.Z * direction.Z));
+        double length = Math.Sqrt((double)direction.X * direction.X + (double)direction.Z * direction.Z);
         Assert.That(length, Is.EqualTo(1d).Within(1e-6));
     }
 
@@ -54,48 +54,22 @@ public sealed class MovementModelTests
         Assert.That(MovementModel.NormalizeOrZero(x, z), Is.EqualTo(new WorldDirection(0f, 0f)));
     }
 
-    [Test]
-    public void Step_WithABodyNarrowerThanTheUsualPiece_CannotJumpAThinWall()
-    {
-        NavigationCell floor = NavigationCell.Level(NavigationSurface.Floor, 0f);
-        NavigationCell wall = NavigationCell.Level(NavigationSurface.Wall, 0f);
-        NavigationCell[] cells = new NavigationCell[30];
-        for (int index = 0; index < cells.Length; index++)
-        {
-            cells[index] = index == 10 ? wall : floor;
-        }
-
-        // Cells of 0.1 m and a body of 0.05 m: the wall spans x 1.0 to 1.1, thinner than a quarter-metre piece.
-        NavigationGrid grid = new NavigationGrid(30, 1, 0.1f, 0f, 0f, 0.05f, 0.4f, cells);
-        WorldPosition position = new WorldPosition(0.92f, 0f, 0.05f);
-        WorldDirection facing = new WorldDirection(1f, 0f);
-
-        for (int tick = 0; tick < 40; tick++)
-        {
-            MovementStep step = MovementModel.Step(grid, position, facing, new WorldDirection(1f, 0f), 5f, 0.05f);
-            position = step.Position;
-        }
-
-        Assert.That(position.X, Is.LessThanOrEqualTo(0.95f + 1e-4f), "held on the near side of the wall");
-        Assert.That(grid.MoveStepLength, Is.EqualTo(0.05f));
-    }
-
     [TestCase(0.05f)]
     [TestCase(0.08f)]
     [TestCase(0.3f)]
     public void Step_BetweenTwoWallsThatTouchAtACorner_NeverSqueezesThrough(float agentRadius)
     {
-        NavigationCell floor = NavigationCell.Level(NavigationSurface.Floor, 0f);
-        NavigationCell wall = NavigationCell.Level(NavigationSurface.Wall, 0f);
+        var floor = NavigationCell.Level(NavigationSurface.Floor, 0f);
+        var wall = NavigationCell.Level(NavigationSurface.Wall, 0f);
 
         // Row 0 is the south: wall at (1, 0) and at (0, 1), floor at (0, 0) and (1, 1).
         NavigationCell[] cells = { floor, wall, wall, floor };
-        NavigationGrid grid = new NavigationGrid(2, 2, 1f, 0f, 0f, agentRadius, 0.4f, cells);
+        var grid = new NavigationGrid(2, 2, 1f, 0f, 0f, agentRadius, 0.4f, cells);
 
         // From here quarter-metre pieces along the diagonal would land at 0.93 and then at 1.11, clear of both
         // walls on the far side, which is how a narrow body once slipped through.
-        WorldPosition position = new WorldPosition(0.4f, 0f, 0.4f);
-        WorldDirection facing = new WorldDirection(0f, 1f);
+        var position = new WorldPosition(0.4f, 0f, 0.4f);
+        var facing = new WorldDirection(0f, 1f);
 
         for (int tick = 0; tick < 60; tick++)
         {
@@ -108,6 +82,32 @@ public sealed class MovementModelTests
             grid.HasLineOfSight(new WorldPosition(0.5f, 0f, 0.5f), new WorldPosition(1.5f, 0f, 1.5f)),
             Is.False,
             "and the pathfinder must not think the corner can be crossed either");
+    }
+
+    [Test]
+    public void Step_WithABodyNarrowerThanTheUsualPiece_CannotJumpAThinWall()
+    {
+        var floor = NavigationCell.Level(NavigationSurface.Floor, 0f);
+        var wall = NavigationCell.Level(NavigationSurface.Wall, 0f);
+        var cells = new NavigationCell[30];
+        for (int index = 0; index < cells.Length; index++)
+        {
+            cells[index] = index == 10 ? wall : floor;
+        }
+
+        // Cells of 0.1 m and a body of 0.05 m: the wall spans x 1.0 to 1.1, thinner than a quarter-metre piece.
+        var grid = new NavigationGrid(30, 1, 0.1f, 0f, 0f, 0.05f, 0.4f, cells);
+        var position = new WorldPosition(0.92f, 0f, 0.05f);
+        var facing = new WorldDirection(1f, 0f);
+
+        for (int tick = 0; tick < 40; tick++)
+        {
+            MovementStep step = MovementModel.Step(grid, position, facing, new WorldDirection(1f, 0f), 5f, 0.05f);
+            position = step.Position;
+        }
+
+        Assert.That(position.X, Is.LessThanOrEqualTo(0.95f + 1e-4f), "held on the near side of the wall");
+        Assert.That(grid.MoveStepLength, Is.EqualTo(0.05f));
     }
 }
 }

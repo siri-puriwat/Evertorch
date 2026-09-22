@@ -4,7 +4,7 @@ using Evertorch.Protocol;
 namespace Evertorch.Server
 {
 /// <summary>
-/// Encodes server messages into one reusable buffer. Tick thread only, which is what makes the shared buffer safe.
+///     Encodes server messages into one reusable buffer. Tick thread only, which is what makes the shared buffer safe.
 /// </summary>
 public sealed class MessageSender
 {

@@ -5,24 +5,24 @@ using Evertorch.Client;
 namespace Evertorch.Server.Tests
 {
 /// <summary>
-/// One in-memory server and any number of simulated clients on a shared millisecond clock. The server ticks every
-/// 50 ms; each client ticks at the same rate but out of phase with it, as a real client would.
+///     One in-memory server and any number of simulated clients on a shared millisecond clock. The server ticks every
+///     50 ms; each client ticks at the same rate but out of phase with it, as a real client would.
 /// </summary>
 internal sealed class ClientServerRig
 {
     private const int TickMilliseconds = 1000 / TestServer.TickRate;
 
-    private readonly List<SimulatedClient> m_clients = new List<SimulatedClient>();
-    private readonly List<int> m_phases = new List<int>();
+    private readonly List<SimulatedClient> m_clients = new();
+    private readonly List<int> m_phases = new();
     private int m_nowMilliseconds;
 
-    public TestServer Server { get; } = new TestServer();
+    public TestServer Server { get; } = new();
 
     public int NowMilliseconds => m_nowMilliseconds;
 
     public SimulatedClient AddClient(long character, int seed, int phaseMilliseconds)
     {
-        SimulatedClient client = new SimulatedClient(Server, character, seed, () => m_nowMilliseconds / 1000.0);
+        var client = new SimulatedClient(Server, character, seed, () => m_nowMilliseconds / 1000.0);
         m_clients.Add(client);
         m_phases.Add(phaseMilliseconds % TickMilliseconds);
         return client;
@@ -65,7 +65,7 @@ internal sealed class ClientServerRig
     }
 
     /// <summary>
-    /// Advances until the condition holds. Returns the time it took, or -1 when the limit was reached first.
+    ///     Advances until the condition holds. Returns the time it took, or -1 when the limit was reached first.
     /// </summary>
     public int AdvanceUntil(
         Func<bool> condition,

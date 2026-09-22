@@ -15,43 +15,6 @@ public sealed class ContentValidationTests
     private const string Job = "jobs/adventurer.yml";
     private const string Map = "maps/training_ground.yml";
 
-    [Test]
-    public void Run_ForValidFixture_HasNoDiagnosticsAndBuildsPackages()
-    {
-        using (ContentWorkspace workspace = new ContentWorkspace())
-        {
-            ContentPipelineResult result = ContentPipeline.Run(workspace.ContentRoot);
-
-            Assert.That(result.Diagnostics, Is.Empty);
-            Assert.That(result.Packages, Is.Not.Null);
-            Assert.That(result.Content.Items, Has.Count.EqualTo(2));
-            Assert.That(result.Content.Monsters, Has.Count.EqualTo(1));
-            Assert.That(result.Content.Skills, Has.Count.EqualTo(1));
-            Assert.That(result.Content.Jobs, Has.Count.EqualTo(1));
-            Assert.That(result.Content.Maps, Has.Count.EqualTo(1));
-        }
-    }
-
-    [Test]
-    public void Run_ForRepositoryContent_HasNoDiagnostics()
-    {
-        string contentRoot = Path.Combine(RepositoryRoot(), "content");
-
-        ContentPipelineResult result = ContentPipeline.Run(contentRoot);
-
-        Assert.That(result.Diagnostics.Select(diagnostic => diagnostic.ToString()), Is.Empty);
-        Assert.That(result.Content.Maps.Select(map => map.Definition.Id.Value), Does.Contain("map.training_ground"));
-        Assert.That(result.Content.Jobs.Select(job => job.Definition.Id.Value), Does.Contain("job.adventurer"));
-        Assert.That(result.Content.Monsters.Select(monster => monster.Definition.Id.Value),
-            Does.Contain("monster.training_slime"));
-        Assert.That(
-            result.Content.Items.Select(item => item.Definition.Id.Value),
-            Does.Contain("item.material.slime_gel"));
-        Assert.That(
-            result.Content.Skills.Select(skill => skill.Definition.Id.Value),
-            Does.Contain("skill.basic_attack"));
-    }
-
     [TestCase(Potion, "id: item.consumable.minor_health", "id: Item.Consumable.MinorHealth", "id", "not a valid ID")]
     [TestCase(Potion, "id: item.consumable.minor_health", "id: item..minor_health", "id", "not a valid ID")]
     [TestCase(Potion, "id: item.consumable.minor_health", "id: monster.minor_health", "id", "expected 'item.'")]
@@ -130,7 +93,7 @@ public sealed class ContentValidationTests
         string expectedFieldPath,
         string expectedMessagePart)
     {
-        using (ContentWorkspace workspace = new ContentWorkspace())
+        using (var workspace = new ContentWorkspace())
         {
             workspace.Replace(file, oldText, newText);
 
@@ -152,7 +115,7 @@ public sealed class ContentValidationTests
     [TestCase("0.5")]
     public void Run_WhenChanceIsOnOrInsideTheBounds_IsValid(string chance)
     {
-        using (ContentWorkspace workspace = new ContentWorkspace())
+        using (var workspace = new ContentWorkspace())
         {
             workspace.Replace(Monster, "chance: 0.7321", "chance: " + chance);
 
@@ -162,10 +125,105 @@ public sealed class ContentValidationTests
         }
     }
 
+    internal static string RepositoryRoot()
+    {
+        var directory = new DirectoryInfo(TestContext.CurrentContext.TestDirectory);
+        while (directory != null && !File.Exists(Path.Combine(directory.FullName, "Evertorch.sln")))
+        {
+            directory = directory.Parent;
+        }
+
+        Assert.That(directory, Is.Not.Null, "Evertorch.sln was not found above the test directory.");
+        return directory!.FullName;
+    }
+
+    private static string Describe(ContentPipelineResult result)
+    {
+        return string.Join("\n", result.Diagnostics.Select(diagnostic => diagnostic.ToString()));
+    }
+
+    [Test]
+    public void Run_ForRepositoryContent_HasNoDiagnostics()
+    {
+        string contentRoot = Path.Combine(RepositoryRoot(), "content");
+
+        ContentPipelineResult result = ContentPipeline.Run(contentRoot);
+
+        Assert.That(result.Diagnostics.Select(diagnostic => diagnostic.ToString()), Is.Empty);
+        Assert.That(result.Content.Maps.Select(map => map.Definition.Id.Value), Does.Contain("map.training_ground"));
+        Assert.That(result.Content.Jobs.Select(job => job.Definition.Id.Value), Does.Contain("job.adventurer"));
+        Assert.That(result.Content.Monsters.Select(monster => monster.Definition.Id.Value),
+            Does.Contain("monster.training_slime"));
+        Assert.That(
+            result.Content.Items.Select(item => item.Definition.Id.Value),
+            Does.Contain("item.material.slime_gel"));
+        Assert.That(
+            result.Content.Skills.Select(skill => skill.Definition.Id.Value),
+            Does.Contain("skill.basic_attack"));
+    }
+
+    [Test]
+    public void Run_ForValidFixture_HasNoDiagnosticsAndBuildsPackages()
+    {
+        using (var workspace = new ContentWorkspace())
+        {
+            ContentPipelineResult result = ContentPipeline.Run(workspace.ContentRoot);
+
+            Assert.That(result.Diagnostics, Is.Empty);
+            Assert.That(result.Packages, Is.Not.Null);
+            Assert.That(result.Content.Items, Has.Count.EqualTo(2));
+            Assert.That(result.Content.Monsters, Has.Count.EqualTo(1));
+            Assert.That(result.Content.Skills, Has.Count.EqualTo(1));
+            Assert.That(result.Content.Jobs, Has.Count.EqualTo(1));
+            Assert.That(result.Content.Maps, Has.Count.EqualTo(1));
+        }
+    }
+
+    [Test]
+    public void Run_WhenAmountMinEqualsMax_IsValid()
+    {
+        using (var workspace = new ContentWorkspace())
+        {
+            workspace.Replace(Monster, "{ min: 1, max: 2 }", "{ min: 2, max: 2 }");
+
+            ContentPipelineResult result = ContentPipeline.Run(workspace.ContentRoot);
+
+            Assert.That(result.Diagnostics, Is.Empty, Describe(result));
+        }
+    }
+
+    [Test]
+    public void Run_WhenBrokenFieldIsOnAKnownLine_ReportsThatLine()
+    {
+        using (var workspace = new ContentWorkspace())
+        {
+            workspace.Replace(Item, "stackLimit: 999", "stackLimit: many");
+
+            ContentPipelineResult result = ContentPipeline.Run(workspace.ContentRoot);
+
+            Assert.That(result.Diagnostics[0].Line, Is.EqualTo(4));
+            Assert.That(
+                result.Diagnostics[0].ToString(),
+                Is.EqualTo("items/slime_gel.yml(4): stackLimit: must be a whole number"));
+        }
+    }
+
+    [Test]
+    public void Run_WhenContentDirectoryIsMissing_ReportsIt()
+    {
+        using (var workspace = new ContentWorkspace())
+        {
+            ContentPipelineResult result = ContentPipeline.Run(Path.Combine(workspace.ContentRoot, "absent"));
+
+            Assert.That(result.Packages, Is.Null);
+            Assert.That(result.Diagnostics[0].Message, Is.EqualTo("content directory does not exist"));
+        }
+    }
+
     [Test]
     public void Run_WhenDropsIsNotASequence_ReportsTheField()
     {
-        using (ContentWorkspace workspace = new ContentWorkspace())
+        using (var workspace = new ContentWorkspace())
         {
             string text = workspace.Read(Monster);
             int start = text.IndexOf("drops:", StringComparison.Ordinal);
@@ -181,38 +239,84 @@ public sealed class ContentValidationTests
     }
 
     [Test]
-    public void Run_WhenAmountMinEqualsMax_IsValid()
+    public void Run_WhenFieldIsDeclaredTwice_ReportsInvalidYaml()
     {
-        using (ContentWorkspace workspace = new ContentWorkspace())
+        using (var workspace = new ContentWorkspace())
         {
-            workspace.Replace(Monster, "{ min: 1, max: 2 }", "{ min: 2, max: 2 }");
+            workspace.Replace(Item, "stackLimit: 999", "stackLimit: 999\nstackLimit: 5");
 
             ContentPipelineResult result = ContentPipeline.Run(workspace.ContentRoot);
 
-            Assert.That(result.Diagnostics, Is.Empty, Describe(result));
+            Assert.That(result.Packages, Is.Null);
+            Assert.That(result.Diagnostics.Select(diagnostic => diagnostic.File), Does.Contain(Item));
         }
     }
 
     [Test]
-    public void Run_WhenBrokenFieldIsOnAKnownLine_ReportsThatLine()
+    public void Run_WhenFileIsOutsideAKnownFolder_ReportsTheFile()
     {
-        using (ContentWorkspace workspace = new ContentWorkspace())
+        using (var workspace = new ContentWorkspace())
         {
-            workspace.Replace(Item, "stackLimit: 999", "stackLimit: many");
+            workspace.Write("recipes/bread.yml", "id: recipe.bread\n");
 
             ContentPipelineResult result = ContentPipeline.Run(workspace.ContentRoot);
 
-            Assert.That(result.Diagnostics[0].Line, Is.EqualTo(4));
+            Assert.That(result.Diagnostics, Has.Count.EqualTo(1), Describe(result));
+            Assert.That(result.Diagnostics[0].File, Is.EqualTo("recipes/bread.yml"));
+            Assert.That(result.Diagnostics[0].Message, Does.Contain("known definition folder"));
+        }
+    }
+
+    [Test]
+    public void Run_WhenFileUsesAnotherExtension_ReportsTheFile()
+    {
+        using (var workspace = new ContentWorkspace())
+        {
+            workspace.Move(Skill, "skills/basic_attack.yaml");
+
+            ContentPipelineResult result = ContentPipeline.Run(workspace.ContentRoot);
+
             Assert.That(
-                result.Diagnostics[0].ToString(),
-                Is.EqualTo("items/slime_gel.yml(4): stackLimit: must be a whole number"));
+                result.Diagnostics.Select(diagnostic => diagnostic.ToString()),
+                Does.Contain("skills/basic_attack.yaml: content files must use the .yml extension"));
+        }
+    }
+
+    [Test]
+    public void Run_WhenMappingIsMissing_ReportsItOnceWithoutItsFields()
+    {
+        using (var workspace = new ContentWorkspace())
+        {
+            workspace.Replace(Item, "client:\n  icon: item_slime_gel\n  model: pickup_slime_gel\n", string.Empty);
+
+            ContentPipelineResult result = ContentPipeline.Run(workspace.ContentRoot);
+
+            Assert.That(result.Diagnostics, Has.Count.EqualTo(1), Describe(result));
+            Assert.That(result.Diagnostics[0].FieldPath, Is.EqualTo("client"));
+        }
+    }
+
+    [Test]
+    public void Run_WhenOneFileHasSeveralProblems_ReportsAllOfThem()
+    {
+        using (var workspace = new ContentWorkspace())
+        {
+            workspace.Replace(Item, "stackLimit: 999", "stackLimit: many");
+            workspace.Replace(Item, "sellPrice: 73219", "sellPrice: -5");
+
+            ContentPipelineResult result = ContentPipeline.Run(workspace.ContentRoot);
+
+            Assert.That(
+                result.Diagnostics.Where(diagnostic => diagnostic.File == Item)
+                    .Select(diagnostic => diagnostic.FieldPath),
+                Is.EquivalentTo(new[] { "stackLimit", "server.sellPrice" }));
         }
     }
 
     [Test]
     public void Run_WhenTwoFilesShareAnId_ReportsTheSecondFile()
     {
-        using (ContentWorkspace workspace = new ContentWorkspace())
+        using (var workspace = new ContentWorkspace())
         {
             workspace.Write("items/slime_gel_copy.yml", workspace.Read(Item));
 
@@ -229,40 +333,9 @@ public sealed class ContentValidationTests
     }
 
     [Test]
-    public void Run_WhenOneFileHasSeveralProblems_ReportsAllOfThem()
-    {
-        using (ContentWorkspace workspace = new ContentWorkspace())
-        {
-            workspace.Replace(Item, "stackLimit: 999", "stackLimit: many");
-            workspace.Replace(Item, "sellPrice: 73219", "sellPrice: -5");
-
-            ContentPipelineResult result = ContentPipeline.Run(workspace.ContentRoot);
-
-            Assert.That(
-                result.Diagnostics.Where(diagnostic => diagnostic.File == Item)
-                    .Select(diagnostic => diagnostic.FieldPath),
-                Is.EquivalentTo(new[] { "stackLimit", "server.sellPrice" }));
-        }
-    }
-
-    [Test]
-    public void Run_WhenMappingIsMissing_ReportsItOnceWithoutItsFields()
-    {
-        using (ContentWorkspace workspace = new ContentWorkspace())
-        {
-            workspace.Replace(Item, "client:\n  icon: item_slime_gel\n  model: pickup_slime_gel\n", string.Empty);
-
-            ContentPipelineResult result = ContentPipeline.Run(workspace.ContentRoot);
-
-            Assert.That(result.Diagnostics, Has.Count.EqualTo(1), Describe(result));
-            Assert.That(result.Diagnostics[0].FieldPath, Is.EqualTo("client"));
-        }
-    }
-
-    [Test]
     public void Run_WhenYamlIsMalformed_ReportsTheFile()
     {
-        using (ContentWorkspace workspace = new ContentWorkspace())
+        using (var workspace = new ContentWorkspace())
         {
             workspace.Write(Skill, "id: skill.basic_attack\ndisplayName: [unclosed\n");
 
@@ -273,79 +346,6 @@ public sealed class ContentValidationTests
             Assert.That(diagnostic.Message, Does.StartWith("invalid YAML"));
             Assert.That(diagnostic.Line, Is.GreaterThan(0));
         }
-    }
-
-    [Test]
-    public void Run_WhenFieldIsDeclaredTwice_ReportsInvalidYaml()
-    {
-        using (ContentWorkspace workspace = new ContentWorkspace())
-        {
-            workspace.Replace(Item, "stackLimit: 999", "stackLimit: 999\nstackLimit: 5");
-
-            ContentPipelineResult result = ContentPipeline.Run(workspace.ContentRoot);
-
-            Assert.That(result.Packages, Is.Null);
-            Assert.That(result.Diagnostics.Select(diagnostic => diagnostic.File), Does.Contain(Item));
-        }
-    }
-
-    [Test]
-    public void Run_WhenFileIsOutsideAKnownFolder_ReportsTheFile()
-    {
-        using (ContentWorkspace workspace = new ContentWorkspace())
-        {
-            workspace.Write("recipes/bread.yml", "id: recipe.bread\n");
-
-            ContentPipelineResult result = ContentPipeline.Run(workspace.ContentRoot);
-
-            Assert.That(result.Diagnostics, Has.Count.EqualTo(1), Describe(result));
-            Assert.That(result.Diagnostics[0].File, Is.EqualTo("recipes/bread.yml"));
-            Assert.That(result.Diagnostics[0].Message, Does.Contain("known definition folder"));
-        }
-    }
-
-    [Test]
-    public void Run_WhenFileUsesAnotherExtension_ReportsTheFile()
-    {
-        using (ContentWorkspace workspace = new ContentWorkspace())
-        {
-            workspace.Move(Skill, "skills/basic_attack.yaml");
-
-            ContentPipelineResult result = ContentPipeline.Run(workspace.ContentRoot);
-
-            Assert.That(
-                result.Diagnostics.Select(diagnostic => diagnostic.ToString()),
-                Does.Contain("skills/basic_attack.yaml: content files must use the .yml extension"));
-        }
-    }
-
-    [Test]
-    public void Run_WhenContentDirectoryIsMissing_ReportsIt()
-    {
-        using (ContentWorkspace workspace = new ContentWorkspace())
-        {
-            ContentPipelineResult result = ContentPipeline.Run(Path.Combine(workspace.ContentRoot, "absent"));
-
-            Assert.That(result.Packages, Is.Null);
-            Assert.That(result.Diagnostics[0].Message, Is.EqualTo("content directory does not exist"));
-        }
-    }
-
-    internal static string RepositoryRoot()
-    {
-        DirectoryInfo? directory = new DirectoryInfo(TestContext.CurrentContext.TestDirectory);
-        while (directory != null && !File.Exists(Path.Combine(directory.FullName, "Evertorch.sln")))
-        {
-            directory = directory.Parent;
-        }
-
-        Assert.That(directory, Is.Not.Null, "Evertorch.sln was not found above the test directory.");
-        return directory!.FullName;
-    }
-
-    private static string Describe(ContentPipelineResult result)
-    {
-        return string.Join("\n", result.Diagnostics.Select(diagnostic => diagnostic.ToString()));
     }
 }
 }

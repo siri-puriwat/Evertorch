@@ -8,12 +8,12 @@ using Microsoft.Extensions.Options;
 namespace Evertorch.Server
 {
 /// <summary>
-/// The only structure network threads and the tick thread share. Network threads decode and enqueue here and touch
-/// nothing else; the tick thread drains it at the start of a tick and is the sole writer of sessions and the world.
+///     The only structure network threads and the tick thread share. Network threads decode and enqueue here and touch
+///     nothing else; the tick thread drains it at the start of a tick and is the sole writer of sessions and the world.
 /// </summary>
 public sealed class InboundQueue
 {
-    private readonly ConcurrentQueue<InboundEvent> m_events = new ConcurrentQueue<InboundEvent>();
+    private readonly ConcurrentQueue<InboundEvent> m_events = new();
     private readonly int m_capacity;
     private int m_count;
     private long m_dropped;
@@ -27,7 +27,7 @@ public sealed class InboundQueue
     public int Count => Volatile.Read(ref m_count);
 
     /// <summary>
-    /// Events discarded because the queue was full: the tick thread is not keeping up or a peer is flooding.
+    ///     Events discarded because the queue was full: the tick thread is not keeping up or a peer is flooding.
     /// </summary>
     public long Dropped => Interlocked.Read(ref m_dropped);
 
@@ -44,8 +44,8 @@ public sealed class InboundQueue
     }
 
     /// <summary>
-    /// Decodes one payload. Anything that is oversized, unknown, server-bound, on the wrong channel, or not exactly
-    /// a well-formed message becomes a <see cref="InboundEventKind.Malformed"/> event.
+    ///     Decodes one payload. Anything that is oversized, unknown, server-bound, on the wrong channel, or not exactly
+    ///     a well-formed message becomes a <see cref="InboundEventKind.Malformed" /> event.
     /// </summary>
     public void OnPayload(ConnectionId connection, ProtocolChannel channel, ReadOnlySpan<byte> payload)
     {

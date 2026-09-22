@@ -5,8 +5,8 @@ using Microsoft.Extensions.Options;
 namespace Evertorch.Server
 {
 /// <summary>
-/// Last phase of a tick. Once a second it copies what operators may see into an immutable <see cref="ServerStatus"/>
-/// and publishes it, so nothing outside the tick thread ever reads live sessions or the world.
+///     Last phase of a tick. Once a second it copies what operators may see into an immutable <see cref="ServerStatus" />
+///     and publishes it, so nothing outside the tick thread ever reads live sessions or the world.
 /// </summary>
 public sealed class StatusPublisher : ITickPhase
 {
@@ -37,12 +37,12 @@ public sealed class StatusPublisher : ITickPhase
         m_tickRate = simulation.Value.TickRate;
     }
 
-    public TickPhase Phase => TickPhase.SchedulePersistence;
-
     /// <summary>
-    /// The most recent status. Safe to read from any thread.
+    ///     The most recent status. Safe to read from any thread.
     /// </summary>
     public ServerStatus Current => Volatile.Read(ref m_current);
+
+    public TickPhase Phase => TickPhase.SchedulePersistence;
 
     public void Execute(in TickContext context)
     {
@@ -55,13 +55,13 @@ public sealed class StatusPublisher : ITickPhase
 
     private ServerStatus Build(uint tick)
     {
-        Dictionary<string, int> playersPerMap = new Dictionary<string, int>();
+        var playersPerMap = new Dictionary<string, int>();
         foreach (MapInstance map in m_world.Maps)
         {
             playersPerMap[map.Definition.Id.Value] = map.Players.Count;
         }
 
-        List<PlayerSummary> players = new List<PlayerSummary>();
+        var players = new List<PlayerSummary>();
         int inWorld = 0;
         foreach (ClientSession session in m_sessions.Sessions)
         {

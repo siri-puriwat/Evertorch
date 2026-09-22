@@ -15,26 +15,8 @@ public sealed class ClientAssemblyReferenceTests
 
     private static readonly string[] ServerSideAssemblies =
     {
-        "Evertorch.Rules", "Evertorch.Server", "Evertorch.Persistence", "Evertorch.Tools",
+        "Evertorch.Rules", "Evertorch.Server", "Evertorch.Persistence", "Evertorch.Tools"
     };
-
-    [Test]
-    public void ClientAssembly_ReferencesOnlyTheSharedPackagesTransportAndUnityModules()
-    {
-        Assert.That(
-            References(ClientAssembly),
-            Is.EquivalentTo(
-                new[]
-                {
-                    "Evertorch.Game",
-                    "Evertorch.Protocol",
-                    "LiteNetLib",
-                    "Unity.InputSystem",
-                    "Unity.TextMeshPro",
-                    "UnityEngine.UI",
-                }));
-        Assert.That(PrecompiledReferences(ClientAssembly), Is.Empty);
-    }
 
     [TestCase(ClientAssembly)]
     [TestCase(EditModeTests)]
@@ -52,21 +34,6 @@ public sealed class ClientAssemblyReferenceTests
         Assert.That(References(assemblyDefinition), Does.Contain("Evertorch.Client"));
     }
 
-    [Test]
-    public void UnityManifest_PinsLiteNetLibToTheSameReleaseAsTheServer()
-    {
-        using JsonDocument manifest = JsonDocument.Parse(
-            File.ReadAllText(RepositoryLayout.ClientFilePath("Packages/manifest.json")));
-        string? source = manifest.RootElement
-            .GetProperty("dependencies")
-            .GetProperty("com.revenantx.litenetlib")
-            .GetString();
-
-        string serverVersion = RepositoryLayout.PackageVersion("Evertorch.Server", "LiteNetLib");
-
-        Assert.That(source, Does.EndWith("#" + serverVersion + "-upm"));
-    }
-
     private static IReadOnlyCollection<string> References(string assemblyDefinition)
     {
         return StringArray(assemblyDefinition, "references");
@@ -79,13 +46,46 @@ public sealed class ClientAssemblyReferenceTests
 
     private static IReadOnlyCollection<string> StringArray(string assemblyDefinition, string propertyName)
     {
-        using JsonDocument document = JsonDocument.Parse(
+        using var document = JsonDocument.Parse(
             File.ReadAllText(RepositoryLayout.ClientFilePath(assemblyDefinition)));
         return document.RootElement
             .GetProperty(propertyName)
             .EnumerateArray()
             .Select(element => element.GetString() ?? string.Empty)
             .ToArray();
+    }
+
+    [Test]
+    public void ClientAssembly_ReferencesOnlyTheSharedPackagesTransportAndUnityModules()
+    {
+        Assert.That(
+            References(ClientAssembly),
+            Is.EquivalentTo(
+                new[]
+                {
+                    "Evertorch.Game",
+                    "Evertorch.Protocol",
+                    "LiteNetLib",
+                    "Unity.InputSystem",
+                    "Unity.TextMeshPro",
+                    "UnityEngine.UI"
+                }));
+        Assert.That(PrecompiledReferences(ClientAssembly), Is.Empty);
+    }
+
+    [Test]
+    public void UnityManifest_PinsLiteNetLibToTheSameReleaseAsTheServer()
+    {
+        using var manifest = JsonDocument.Parse(
+            File.ReadAllText(RepositoryLayout.ClientFilePath("Packages/manifest.json")));
+        string? source = manifest.RootElement
+            .GetProperty("dependencies")
+            .GetProperty("com.revenantx.litenetlib")
+            .GetString();
+
+        string serverVersion = RepositoryLayout.PackageVersion("Evertorch.Server", "LiteNetLib");
+
+        Assert.That(source, Does.EndWith("#" + serverVersion + "-upm"));
     }
 }
 }

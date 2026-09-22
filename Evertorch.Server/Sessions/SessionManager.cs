@@ -8,8 +8,8 @@ using Microsoft.Extensions.Options;
 namespace Evertorch.Server
 {
 /// <summary>
-/// First phase of every tick: turns what arrived from the network since the last tick into session and world
-/// changes. It is the only code that creates, advances, or closes a session.
+///     First phase of every tick: turns what arrived from the network since the last tick into session and world
+///     changes. It is the only code that creates, advances, or closes a session.
 /// </summary>
 public sealed class SessionManager : ITickPhase
 {
@@ -50,7 +50,7 @@ public sealed class SessionManager : ITickPhase
     private readonly uint m_tickRate;
     private readonly uint m_handshakeTimeoutTicks;
     private readonly int m_maxQueuedInputs;
-    private readonly List<ClientSession> m_expired = new List<ClientSession>();
+    private readonly List<ClientSession> m_expired = new();
 
     public SessionManager(
         InboundQueue inbound,
@@ -76,17 +76,17 @@ public sealed class SessionManager : ITickPhase
         m_serverBuildVersion = compatibility.Value.ServerBuildVersion;
         m_tickRate = (uint)simulation.Value.TickRate;
 
-        long timeoutTicks = ((long)network.Value.HandshakeTimeoutMs * simulation.Value.TickRate) /
+        long timeoutTicks = (long)network.Value.HandshakeTimeoutMs * simulation.Value.TickRate /
             MillisecondsPerSecond;
         m_handshakeTimeoutTicks = (uint)Math.Max(1L, timeoutTicks);
     }
 
-    public TickPhase Phase => TickPhase.DrainCommands;
-
     /// <summary>
-    /// Inputs that arrived malformed, out of order for the session's state, or for a connection already closed.
+    ///     Inputs that arrived malformed, out of order for the session's state, or for a connection already closed.
     /// </summary>
     public long IgnoredEvents { get; private set; }
+
+    public TickPhase Phase => TickPhase.DrainCommands;
 
     public void Execute(in TickContext context)
     {

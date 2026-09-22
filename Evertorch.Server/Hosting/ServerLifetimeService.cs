@@ -7,7 +7,7 @@ using Microsoft.Extensions.Logging;
 namespace Evertorch.Server
 {
 /// <summary>
-/// Owns the order in which the server's long-running parts start and stop.
+///     Owns the order in which the server's long-running parts start and stop.
 /// </summary>
 public sealed class ServerLifetimeService : IHostedService, IDisposable
 {
@@ -28,7 +28,7 @@ public sealed class ServerLifetimeService : IHostedService, IDisposable
     private readonly FixedStepLoop m_loop;
     private readonly IHostApplicationLifetime m_lifetime;
     private readonly ILogger<ServerLifetimeService> m_logger;
-    private readonly CancellationTokenSource m_stop = new CancellationTokenSource();
+    private readonly CancellationTokenSource m_stop = new();
     private Thread? m_simulationThread;
     private volatile bool m_hasFaulted;
     private bool m_isDisposed;
@@ -54,6 +54,22 @@ public sealed class ServerLifetimeService : IHostedService, IDisposable
 
     public bool HasFaulted => m_hasFaulted;
 
+    public void Dispose()
+    {
+        // The container owns this instance through two registrations and disposes it once for each.
+        if (m_isDisposed)
+        {
+            return;
+        }
+
+        m_isDisposed = true;
+
+        // A host disposed without StopAsync must not leave a foreground thread simulating against disposed services.
+        m_stop.Cancel();
+        m_simulationThread?.Join();
+        m_stop.Dispose();
+    }
+
     public Task StartAsync(CancellationToken cancellationToken)
     {
         LogContentLoaded(
@@ -68,7 +84,7 @@ public sealed class ServerLifetimeService : IHostedService, IDisposable
         m_simulationThread = new Thread(RunSimulation)
         {
             Name = "Simulation",
-            IsBackground = false,
+            IsBackground = false
         };
         m_simulationThread.Start();
 
@@ -92,22 +108,6 @@ public sealed class ServerLifetimeService : IHostedService, IDisposable
         }
 
         m_transport.Stop();
-    }
-
-    public void Dispose()
-    {
-        // The container owns this instance through two registrations and disposes it once for each.
-        if (m_isDisposed)
-        {
-            return;
-        }
-
-        m_isDisposed = true;
-
-        // A host disposed without StopAsync must not leave a foreground thread simulating against disposed services.
-        m_stop.Cancel();
-        m_simulationThread?.Join();
-        m_stop.Dispose();
     }
 
     private void RunSimulation()

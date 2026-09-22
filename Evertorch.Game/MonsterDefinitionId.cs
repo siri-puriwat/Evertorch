@@ -3,8 +3,8 @@ using System;
 namespace Evertorch.Game
 {
 /// <summary>
-/// Stable namespaced identity of a monster definition, such as <c>monster.training_slime</c>.
-/// The default value holds an empty string and names no definition.
+///     Stable namespaced identity of a monster definition, such as <c>monster.training_slime</c>.
+///     The default value holds an empty string and names no definition.
 /// </summary>
 public readonly struct MonsterDefinitionId : IEquatable<MonsterDefinitionId>
 {

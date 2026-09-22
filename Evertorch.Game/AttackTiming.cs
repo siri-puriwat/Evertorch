@@ -4,8 +4,8 @@ using System.Globalization;
 namespace Evertorch.Game
 {
 /// <summary>
-/// Authoritative timing of one basic attack. <see cref="Impact" /> is measured from the start of the attack;
-/// <see cref="Interval" /> is the earliest time the next attack may begin.
+///     Authoritative timing of one basic attack. <see cref="Impact" /> is measured from the start of the attack;
+///     <see cref="Interval" /> is the earliest time the next attack may begin.
 /// </summary>
 public readonly struct AttackTiming : IEquatable<AttackTiming>
 {

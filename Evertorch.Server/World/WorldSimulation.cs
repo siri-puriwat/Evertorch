@@ -8,15 +8,15 @@ using Microsoft.Extensions.Options;
 namespace Evertorch.Server
 {
 /// <summary>
-/// Owns every map this process simulates. It is built from validated content before anything connects and is
-/// touched only by the tick thread afterwards.
+///     Owns every map this process simulates. It is built from validated content before anything connects and is
+///     touched only by the tick thread afterwards.
 /// </summary>
 public sealed class WorldSimulation
 {
     private const int StartingLevel = 1;
     private const uint FirstInstanceNumber = 1;
 
-    private readonly Dictionary<MapDefinitionId, MapInstance> m_maps = new Dictionary<MapDefinitionId, MapInstance>();
+    private readonly Dictionary<MapDefinitionId, MapInstance> m_maps = new();
     private readonly JobDefinition m_startingJob;
     private readonly float m_startingMovementSpeed;
     private long m_lastEntityId;
@@ -40,7 +40,7 @@ public sealed class WorldSimulation
 
         foreach (MapDefinition map in content.Maps.Values.OrderBy(map => map.Id.Value, StringComparer.Ordinal))
         {
-            InterestGrid interest = new InterestGrid(world.InterestCellSize, world.InterestNeighborRadius);
+            var interest = new InterestGrid(world.InterestCellSize, world.InterestNeighborRadius);
             m_maps.Add(map.Id, new MapInstance(map, FirstInstanceNumber, interest));
         }
     }
@@ -48,13 +48,13 @@ public sealed class WorldSimulation
     public IReadOnlyCollection<MapInstance> Maps => m_maps.Values;
 
     /// <summary>
-    /// Places a new player at the spawn point of the starting job's map.
+    ///     Places a new player at the spawn point of the starting job's map.
     /// </summary>
     public PlayerEntity SpawnPlayer(CharacterId character, ConnectionId owner, out MapInstance map)
     {
         map = m_maps[m_startingJob.StartingMap];
         m_lastEntityId++;
-        PlayerEntity player = new PlayerEntity(
+        var player = new PlayerEntity(
             new EntityId(m_lastEntityId),
             character,
             owner,
@@ -76,7 +76,7 @@ public sealed class WorldSimulation
         ICharacterRules characterRules,
         IMovementRules movementRules)
     {
-        CharacterBuild build = new CharacterBuild(
+        var build = new CharacterBuild(
             StartingLevel,
             job.StartingStats,
             job.HealthBase,

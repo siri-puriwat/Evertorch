@@ -5,10 +5,9 @@ namespace Evertorch.Server.Tests
 {
 internal sealed class RecordingObserver : ITickObserver
 {
-    public List<(uint Tick, TimeSpan Duration)> Completed { get; } = new List<(uint, TimeSpan)>();
+    public List<(uint Tick, TimeSpan Duration)> Completed { get; } = new();
 
-    public List<(uint Tick, TimeSpan Duration, int SkippedSteps)> Overruns { get; } =
-        new List<(uint, TimeSpan, int)>();
+    public List<(uint Tick, TimeSpan Duration, int SkippedSteps)> Overruns { get; } = new();
 
     public void OnTickCompleted(uint tick, TimeSpan duration)
     {

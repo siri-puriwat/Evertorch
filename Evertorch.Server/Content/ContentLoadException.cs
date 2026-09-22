@@ -12,7 +12,7 @@ public sealed class ContentLoadException : Exception
     }
 
     /// <summary>
-    /// One entry per defect, formatted as <c>file: path: message</c>.
+    ///     One entry per defect, formatted as <c>file: path: message</c>.
     /// </summary>
     public IReadOnlyList<string> Problems { get; }
 

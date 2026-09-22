@@ -43,7 +43,7 @@ internal static class MonsterDefinitionReader
         double perceptionRadius = ai.RequiredDouble("perceptionRadius", 0d, ContentLimits.MaxDistance, false);
         double leashRadius = ai.RequiredDouble("leashRadius", 0d, ContentLimits.MaxDistance, true);
 
-        List<MonsterDrop> drops = new List<MonsterDrop>();
+        var drops = new List<MonsterDrop>();
         foreach (YamlFieldReader drop in root.OptionalMappingSequence("drops"))
         {
             drops.Add(ReadDrop(drop));
@@ -59,7 +59,7 @@ internal static class MonsterDefinitionReader
             return null;
         }
 
-        MonsterDefinition definition = new MonsterDefinition(
+        var definition = new MonsterDefinition(
             id,
             displayName,
             level,

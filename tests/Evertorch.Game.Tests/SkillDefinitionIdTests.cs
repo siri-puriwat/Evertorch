@@ -10,7 +10,7 @@ public sealed class SkillDefinitionIdTests
     [TestCase("skill.basic_attack")]
     public void Constructor_WhenValueIsValid_KeepsValue(string value)
     {
-        SkillDefinitionId id = new SkillDefinitionId(value);
+        var id = new SkillDefinitionId(value);
 
         Assert.That(id.Value, Is.EqualTo(value));
         Assert.That(id.ToString(), Is.EqualTo(value));
@@ -31,15 +31,6 @@ public sealed class SkillDefinitionIdTests
         Assert.That(create, Throws.ArgumentException);
     }
 
-    [Test]
-    public void TryCreate_WhenValueIsValid_ReturnsId()
-    {
-        bool isCreated = SkillDefinitionId.TryCreate("skill.novice.first_aid", out SkillDefinitionId id);
-
-        Assert.That(isCreated, Is.True);
-        Assert.That(id, Is.EqualTo(new SkillDefinitionId("skill.novice.first_aid")));
-    }
-
     [TestCase(null)]
     [TestCase("map.training_ground")]
     public void TryCreate_WhenValueIsInvalid_ReturnsFalseAndDefault(string? value)
@@ -51,10 +42,21 @@ public sealed class SkillDefinitionIdTests
     }
 
     [Test]
+    public void Equals_WhenValuesDiffer_IsFalse()
+    {
+        var left = new SkillDefinitionId("skill.novice.first_aid");
+        var right = new SkillDefinitionId("skill.basic_attack");
+
+        Assert.That(left, Is.Not.EqualTo(right));
+        Assert.That(left == right, Is.False);
+        Assert.That(left != right, Is.True);
+    }
+
+    [Test]
     public void Equals_WhenValuesMatch_IsTrueWithMatchingHash()
     {
-        SkillDefinitionId left = new SkillDefinitionId("skill.novice.first_aid");
-        SkillDefinitionId right = new SkillDefinitionId(string.Concat("skill.novice.", "first_aid"));
+        var left = new SkillDefinitionId("skill.novice.first_aid");
+        var right = new SkillDefinitionId(string.Concat("skill.novice.", "first_aid"));
 
         Assert.That(left, Is.EqualTo(right));
         Assert.That(left == right, Is.True);
@@ -63,14 +65,12 @@ public sealed class SkillDefinitionIdTests
     }
 
     [Test]
-    public void Equals_WhenValuesDiffer_IsFalse()
+    public void TryCreate_WhenValueIsValid_ReturnsId()
     {
-        SkillDefinitionId left = new SkillDefinitionId("skill.novice.first_aid");
-        SkillDefinitionId right = new SkillDefinitionId("skill.basic_attack");
+        bool isCreated = SkillDefinitionId.TryCreate("skill.novice.first_aid", out SkillDefinitionId id);
 
-        Assert.That(left, Is.Not.EqualTo(right));
-        Assert.That(left == right, Is.False);
-        Assert.That(left != right, Is.True);
+        Assert.That(isCreated, Is.True);
+        Assert.That(id, Is.EqualTo(new SkillDefinitionId("skill.novice.first_aid")));
     }
 
     [Test]

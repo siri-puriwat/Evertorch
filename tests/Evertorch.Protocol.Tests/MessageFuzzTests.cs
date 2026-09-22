@@ -6,8 +6,8 @@ using NUnit.Framework;
 namespace Evertorch.Protocol.Tests
 {
 /// <summary>
-/// Hostile input must never throw, and anything a reader accepts must re-encode to the bytes it came from, so no
-/// two different payloads can mean the same message.
+///     Hostile input must never throw, and anything a reader accepts must re-encode to the bytes it came from, so no
+///     two different payloads can mean the same message.
 /// </summary>
 [TestFixture]
 public sealed class MessageFuzzTests
@@ -87,7 +87,7 @@ public sealed class MessageFuzzTests
                             0f,
                             0f,
                             EntityStateFlags.Moving),
-                        new EntityState(new EntityId(10), default, new WorldDirection(1f, 0f), 0f, 0f, 0f, 0),
+                        new EntityState(new EntityId(10), default, new WorldDirection(1f, 0f), 0f, 0f, 0f, 0)
                     })),
             payload => EntitySnapshot.TryRead(payload, out EntitySnapshot? message) ? Encode(message!) : null);
         yield return Case(
@@ -99,7 +99,7 @@ public sealed class MessageFuzzTests
     [TestCaseSource(nameof(Messages))]
     public void TryRead_ForRandomBytes_NeverThrowsAndAcceptsOnlyCanonicalPayloads(byte[] valid, Reencode reencode)
     {
-        Random random = new Random(Seed);
+        var random = new Random(Seed);
         byte[] opcode = { valid[0], valid[1] };
 
         for (int iteration = 0; iteration < RandomPayloads; iteration++)
@@ -123,7 +123,7 @@ public sealed class MessageFuzzTests
         byte[] valid,
         Reencode reencode)
     {
-        Random random = new Random(Seed);
+        var random = new Random(Seed);
         Assert.That(reencode(valid), Is.EqualTo(valid), "the unmutated payload must be accepted");
 
         for (int iteration = 0; iteration < MutationsPerMessage; iteration++)

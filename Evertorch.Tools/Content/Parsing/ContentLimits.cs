@@ -1,7 +1,7 @@
 namespace Evertorch.Tools
 {
 /// <summary>
-/// Shared numeric bounds for canonical content. They reject nonsense; tuning stays a design decision.
+///     Shared numeric bounds for canonical content. They reject nonsense; tuning stays a design decision.
 /// </summary>
 internal static class ContentLimits
 {

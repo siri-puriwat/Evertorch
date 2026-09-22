@@ -63,7 +63,7 @@ internal static class RepositoryLayout
 
     private static IEnumerable<string> ItemIncludes(string projectName, string itemName)
     {
-        XDocument project = XDocument.Load(ProjectFilePath(projectName));
+        var project = XDocument.Load(ProjectFilePath(projectName));
         return project
             .Descendants(itemName)
             .Select(item => (string?)item.Attribute("Include"))
@@ -73,7 +73,7 @@ internal static class RepositoryLayout
 
     private static string FindRootDirectory()
     {
-        DirectoryInfo? directory = new DirectoryInfo(TestContext.CurrentContext.TestDirectory);
+        var directory = new DirectoryInfo(TestContext.CurrentContext.TestDirectory);
         while (directory != null)
         {
             if (File.Exists(Path.Combine(directory.FullName, SolutionFileName)))

@@ -10,7 +10,7 @@ public sealed class MonsterDefinitionIdTests
     [TestCase("monster.field.wolf-02")]
     public void Constructor_WhenValueIsValid_KeepsValue(string value)
     {
-        MonsterDefinitionId id = new MonsterDefinitionId(value);
+        var id = new MonsterDefinitionId(value);
 
         Assert.That(id.Value, Is.EqualTo(value));
         Assert.That(id.ToString(), Is.EqualTo(value));
@@ -31,15 +31,6 @@ public sealed class MonsterDefinitionIdTests
         Assert.That(create, Throws.ArgumentException);
     }
 
-    [Test]
-    public void TryCreate_WhenValueIsValid_ReturnsId()
-    {
-        bool isCreated = MonsterDefinitionId.TryCreate("monster.training_slime", out MonsterDefinitionId id);
-
-        Assert.That(isCreated, Is.True);
-        Assert.That(id, Is.EqualTo(new MonsterDefinitionId("monster.training_slime")));
-    }
-
     [TestCase(null)]
     [TestCase("item.material.slime_gel")]
     public void TryCreate_WhenValueIsInvalid_ReturnsFalseAndDefault(string? value)
@@ -51,10 +42,21 @@ public sealed class MonsterDefinitionIdTests
     }
 
     [Test]
+    public void Equals_WhenValuesDiffer_IsFalse()
+    {
+        var left = new MonsterDefinitionId("monster.training_slime");
+        var right = new MonsterDefinitionId("monster.field.wolf-02");
+
+        Assert.That(left, Is.Not.EqualTo(right));
+        Assert.That(left == right, Is.False);
+        Assert.That(left != right, Is.True);
+    }
+
+    [Test]
     public void Equals_WhenValuesMatch_IsTrueWithMatchingHash()
     {
-        MonsterDefinitionId left = new MonsterDefinitionId("monster.training_slime");
-        MonsterDefinitionId right = new MonsterDefinitionId(string.Concat("monster.", "training_slime"));
+        var left = new MonsterDefinitionId("monster.training_slime");
+        var right = new MonsterDefinitionId(string.Concat("monster.", "training_slime"));
 
         Assert.That(left, Is.EqualTo(right));
         Assert.That(left == right, Is.True);
@@ -63,14 +65,12 @@ public sealed class MonsterDefinitionIdTests
     }
 
     [Test]
-    public void Equals_WhenValuesDiffer_IsFalse()
+    public void TryCreate_WhenValueIsValid_ReturnsId()
     {
-        MonsterDefinitionId left = new MonsterDefinitionId("monster.training_slime");
-        MonsterDefinitionId right = new MonsterDefinitionId("monster.field.wolf-02");
+        bool isCreated = MonsterDefinitionId.TryCreate("monster.training_slime", out MonsterDefinitionId id);
 
-        Assert.That(left, Is.Not.EqualTo(right));
-        Assert.That(left == right, Is.False);
-        Assert.That(left != right, Is.True);
+        Assert.That(isCreated, Is.True);
+        Assert.That(id, Is.EqualTo(new MonsterDefinitionId("monster.training_slime")));
     }
 
     [Test]

@@ -7,7 +7,7 @@ namespace Evertorch.Server
 internal static class NavigationPackageReader
 {
     /// <summary>
-    /// Returns null after reporting at least one problem.
+    ///     Returns null after reporting at least one problem.
     /// </summary>
     public static NavigationGrid? Read(PackageObjectReader map, List<string> problems)
     {
@@ -26,7 +26,7 @@ internal static class NavigationPackageReader
         int columns = navigation.RequiredInt("columns", 1);
         int rows = navigation.RequiredInt("rows", 1);
 
-        Dictionary<char, NavigationCell> legend = new Dictionary<char, NavigationCell>();
+        var legend = new Dictionary<char, NavigationCell>();
         foreach (PackageObjectReader entry in navigation.RequiredObjectArray("legend"))
         {
             ReadLegendEntry(entry, legend);
@@ -114,7 +114,7 @@ internal static class NavigationPackageReader
             return null;
         }
 
-        NavigationCell[] cells = new NavigationCell[columns * rows];
+        var cells = new NavigationCell[columns * rows];
         for (int row = 0; row < rows; row++)
         {
             string cellRow = cellRows[row];
@@ -134,7 +134,7 @@ internal static class NavigationPackageReader
                     return null;
                 }
 
-                cells[(row * columns) + column] = cell;
+                cells[row * columns + column] = cell;
             }
         }
 

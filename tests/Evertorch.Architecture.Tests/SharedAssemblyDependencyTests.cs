@@ -18,7 +18,7 @@ public sealed class SharedAssemblyDependencyTests
     public void CompiledAssembly_ForSharedProject_HasNoForbiddenReferences(string projectName)
     {
         // Loaded by name rather than typeof: the check must hold even while a shared assembly declares no types.
-        Assembly assembly = Assembly.Load(new AssemblyName(projectName));
+        var assembly = Assembly.Load(new AssemblyName(projectName));
 
         string[] forbidden = assembly
             .GetReferencedAssemblies()
@@ -48,7 +48,7 @@ public sealed class SharedAssemblyDependencyTests
         string projectName,
         params string[] allowedReferences)
     {
-        using JsonDocument assemblyDefinition = JsonDocument.Parse(
+        using var assemblyDefinition = JsonDocument.Parse(
             File.ReadAllText(RepositoryLayout.AssemblyDefinitionPath(projectName)));
         JsonElement root = assemblyDefinition.RootElement;
 

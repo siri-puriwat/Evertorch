@@ -12,7 +12,7 @@ public sealed class SimulationOptions
     public int TickRate { get; set; } = DefaultTickRate;
 
     /// <summary>
-    /// How many steps the loop may fall behind and still simulate back to back before it abandons the backlog.
+    ///     How many steps the loop may fall behind and still simulate back to back before it abandons the backlog.
     /// </summary>
     public int MaxCatchUpTicks { get; set; } = DefaultMaxCatchUpTicks;
 }

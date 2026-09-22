@@ -3,8 +3,8 @@ using System;
 namespace Evertorch.Protocol
 {
 /// <summary>
-/// Sent once a <see cref="ClientHello"/> has been accepted. A rejected hello gets a
-/// <see cref="DisconnectNotice"/> instead.
+///     Sent once a <see cref="ClientHello" /> has been accepted. A rejected hello gets a
+///     <see cref="DisconnectNotice" /> instead.
 /// </summary>
 public sealed class ServerHello
 {
@@ -29,7 +29,7 @@ public sealed class ServerHello
     public uint RequiredClientContentVersion { get; }
 
     /// <summary>
-    /// Simulation ticks per second. The client runs its prediction at this rate.
+    ///     Simulation ticks per second. The client runs its prediction at this rate.
     /// </summary>
     public uint ServerTickRate { get; }
 
@@ -38,7 +38,7 @@ public sealed class ServerHello
     public static bool TryRead(ReadOnlySpan<byte> source, out ServerHello? message)
     {
         message = null;
-        WireReader reader = new WireReader(source);
+        var reader = new WireReader(source);
         if (!reader.TryReadOpcode(MessageOpcode.ServerHello)
             || !reader.TryReadUInt16(out ushort protocolVersion)
             || !reader.TryReadString(ProtocolLimits.MaxBuildVersionBytes, out string serverBuildVersion)
@@ -72,7 +72,7 @@ public sealed class ServerHello
 
     public int Write(Span<byte> destination)
     {
-        WireWriter writer = new WireWriter(destination);
+        var writer = new WireWriter(destination);
         writer.WriteOpcode(MessageOpcode.ServerHello);
         writer.WriteUInt16(ProtocolVersion);
         writer.WriteString(ServerBuildVersion, ProtocolLimits.MaxBuildVersionBytes);

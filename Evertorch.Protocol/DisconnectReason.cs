@@ -1,7 +1,7 @@
 namespace Evertorch.Protocol
 {
 /// <summary>
-/// Stable machine-readable reasons a server closes a connection. Zero is never sent.
+///     Stable machine-readable reasons a server closes a connection. Zero is never sent.
 /// </summary>
 public enum DisconnectReason : byte
 {
@@ -17,6 +17,6 @@ public enum DisconnectReason : byte
     RateLimited = 9,
     Maintenance = 10,
     Kicked = 11,
-    InternalError = 12,
+    InternalError = 12
 }
 }

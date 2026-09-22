@@ -3,7 +3,7 @@ using Evertorch.Game;
 namespace Evertorch.Protocol
 {
 /// <summary>
-/// Upper bounds a receiver enforces before it allocates or decodes anything.
+///     Upper bounds a receiver enforces before it allocates or decodes anything.
 /// </summary>
 public static class ProtocolLimits
 {
@@ -13,7 +13,7 @@ public static class ProtocolLimits
     public const int MaxNoticeMessageBytes = 128;
 
     /// <summary>
-    /// The largest payload a client may send: a <see cref="ClientHello"/> with both strings at their limits.
+    ///     The largest payload a client may send: a <see cref="ClientHello" /> with both strings at their limits.
     /// </summary>
     public const int MaxClientPayloadBytes = 556;
 }

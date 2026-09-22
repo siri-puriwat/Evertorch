@@ -4,7 +4,7 @@ using System.Globalization;
 namespace Evertorch.Game
 {
 /// <summary>
-/// Identifies one live entity in the authoritative world. It is never interchangeable with a definition ID.
+///     Identifies one live entity in the authoritative world. It is never interchangeable with a definition ID.
 /// </summary>
 public readonly struct EntityId : IEquatable<EntityId>
 {

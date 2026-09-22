@@ -1,7 +1,6 @@
 using System;
 using System.IO;
 using Evertorch.Rules;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
@@ -11,16 +10,16 @@ namespace Evertorch.Server
 public static class ServerHost
 {
     /// <summary>
-    /// Builds the server composition. Configuration comes from <c>appsettings.json</c> and
-    /// <c>appsettings.{Environment}.json</c> under <paramref name="contentRootPath"/>, then environment variables,
-    /// then the command line; later sources win.
+    ///     Builds the server composition. Configuration comes from <c>appsettings.json</c> and
+    ///     <c>appsettings.{Environment}.json</c> under <paramref name="contentRootPath" />, then environment variables,
+    ///     then the command line; later sources win.
     /// </summary>
     public static HostApplicationBuilder CreateBuilder(string[] args, string contentRootPath)
     {
-        HostApplicationBuilderSettings settings = new HostApplicationBuilderSettings
+        var settings = new HostApplicationBuilderSettings
         {
             Args = args,
-            ContentRootPath = contentRootPath,
+            ContentRootPath = contentRootPath
         };
         HostApplicationBuilder builder = Host.CreateApplicationBuilder(settings);
 

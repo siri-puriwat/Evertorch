@@ -6,9 +6,9 @@ using Evertorch.Game;
 namespace Evertorch.Tools
 {
 /// <summary>
-/// Writes a navigation grid the same way into both packages: server validation and client prediction must read
-/// identical geometry. Authoring symbols are not kept; each distinct cell kind gets a letter in order of first
-/// appearance, which keeps the output deterministic and free of digits.
+///     Writes a navigation grid the same way into both packages: server validation and client prediction must read
+///     identical geometry. Authoring symbols are not kept; each distinct cell kind gets a letter in order of first
+///     appearance, which keeps the output deterministic and free of digits.
 /// </summary>
 internal static class NavigationJson
 {
@@ -16,12 +16,12 @@ internal static class NavigationJson
 
     public static void Write(Utf8JsonWriter writer, NavigationGrid grid)
     {
-        List<NavigationCell> legend = new List<NavigationCell>();
-        Dictionary<NavigationCell, char> symbolByCell = new Dictionary<NavigationCell, char>();
+        var legend = new List<NavigationCell>();
+        var symbolByCell = new Dictionary<NavigationCell, char>();
         string[] cellRows = new string[grid.Rows];
         for (int row = 0; row < grid.Rows; row++)
         {
-            StringBuilder text = new StringBuilder(grid.Columns);
+            var text = new StringBuilder(grid.Columns);
             for (int column = 0; column < grid.Columns; column++)
             {
                 NavigationCell cell = grid.GetCell(column, row);

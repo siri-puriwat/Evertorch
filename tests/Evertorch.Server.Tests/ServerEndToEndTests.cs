@@ -1,3 +1,4 @@
+using System.IO;
 using System.Linq;
 using Evertorch.Game;
 using Evertorch.Protocol;
@@ -5,82 +6,21 @@ using LiteNetLib;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using NUnit.Framework;
+using DisconnectReason = Evertorch.Protocol.DisconnectReason;
 
 namespace Evertorch.Server.Tests
 {
 /// <summary>
-/// The composed host — real configuration, content, tick thread, and socket — driven by a bare UDP client.
+///     The composed host — real configuration, content, tick thread, and socket — driven by a bare UDP client.
 /// </summary>
 [TestFixture]
 [NonParallelizable]
 public sealed class ServerEndToEndTests
 {
-    [Test]
-    public void Client_OverLoopbackSocket_CompletesHandshakeEntersWorldAndSeesAnotherPlayer()
-    {
-        using TemporaryDirectory root = new TemporaryDirectory();
-        using IHost host = StartHost(root, true);
-        int port = host.Services.GetRequiredService<IServerTransport>().LocalPort;
-        uint contentVersion = host.Services.GetRequiredService<HandshakeValidator>().RequiredClientContentVersion;
-        using TestNetClient first = new TestNetClient();
-        using TestNetClient second = new TestNetClient();
-
-        EnterWorld(first, port, contentVersion, 1);
-        EnterWorld(second, port, contentVersion, 2);
-
-        Assert.That(first.WaitFor(() => Control(first).Length >= 3), Is.True, "the first client never saw the second");
-        Assert.That(second.WaitFor(() => Control(second).Length >= 3), Is.True,
-            "the second client never saw the first");
-        Assert.That(Opcodes(Control(second)).Take(3), Is.EqualTo(new[]
-        {
-            MessageOpcode.ServerHello,
-            MessageOpcode.WorldEntered,
-            MessageOpcode.EntitySpawn,
-        }));
-        Assert.That(Opcodes(Control(first)).Last(), Is.EqualTo(MessageOpcode.EntitySpawn));
-        WorldEntered.TryRead(Control(second)[1].Payload, out WorldEntered? entered);
-        Assert.That(entered!.Map, Is.EqualTo(new MapDefinitionId("map.training_ground")));
-        Assert.That(entered.MovementSpeed, Is.EqualTo(5f));
-
-        Assert.That(second.WaitFor(() => Snapshots(second).Any(snapshot => snapshot.Entities.Count == 2)), Is.True);
-        EntitySnapshot both = Snapshots(second).Last(snapshot => snapshot.Entities.Count == 2);
-        Assert.That(
-            both.Entities[0].Entity,
-            Is.EqualTo(entered.LocalEntity),
-            "a client's own entity leads its snapshot");
-        Assert.That(
-            second.Received.Where(message => message.Channel == (byte)ProtocolChannel.State).Select(m => m.Method),
-            Is.All.EqualTo(DeliveryMethod.Sequenced));
-
-        host.StopAsync().GetAwaiter().GetResult();
-
-        Assert.That(first.WaitFor(() => first.IsDisconnected), Is.True);
-        Assert.That(first.Notice!.Reason, Is.EqualTo(Protocol.DisconnectReason.Maintenance));
-    }
-
-    [Test]
-    public void Client_WhenDevelopmentAuthenticationIsOffByDefault_IsRefused()
-    {
-        using TemporaryDirectory root = new TemporaryDirectory();
-        using IHost host = StartHost(root, false);
-        int port = host.Services.GetRequiredService<IServerTransport>().LocalPort;
-        uint contentVersion = host.Services.GetRequiredService<HandshakeValidator>().RequiredClientContentVersion;
-        using TestNetClient client = new TestNetClient();
-        client.Connect(port, "evertorch");
-        Assert.That(client.WaitFor(() => client.IsConnected), Is.True);
-
-        client.Send(Hello(contentVersion), ProtocolChannel.Control, DeliveryMethod.ReliableOrdered);
-
-        Assert.That(client.WaitFor(() => client.IsDisconnected), Is.True);
-        Assert.That(client.Notice!.Reason, Is.EqualTo(Protocol.DisconnectReason.AuthenticationFailed));
-        Assert.That(client.Received, Is.Empty);
-        host.StopAsync().GetAwaiter().GetResult();
-    }
-
     private static IHost StartHost(TemporaryDirectory root, bool enableDevelopmentAuthentication)
     {
         PackageFixture.WriteTo(
-            System.IO.Path.Combine(root.Path, "content", "server"),
+            Path.Combine(root.Path, "content", "server"),
             PackageFixture.BuildRepositoryPackage());
         string[] args = enableDevelopmentAuthentication
             ? new[] { "--Network:Port=0", "--DevelopmentAuthentication:Enabled=true" }
@@ -105,7 +45,7 @@ public sealed class ServerEndToEndTests
 
     private static byte[] Hello(uint contentVersion)
     {
-        ClientHello hello = new ClientHello(
+        var hello = new ClientHello(
             ProtocolConstants.ProtocolVersion,
             CompatibilityOptions.DefaultBuildVersion,
             contentVersion,
@@ -141,6 +81,68 @@ public sealed class ServerEndToEndTests
                 return opcode;
             })
             .ToArray();
+    }
+
+    [Test]
+    public void Client_OverLoopbackSocket_CompletesHandshakeEntersWorldAndSeesAnotherPlayer()
+    {
+        using var root = new TemporaryDirectory();
+        using IHost host = StartHost(root, true);
+        int port = host.Services.GetRequiredService<IServerTransport>().LocalPort;
+        uint contentVersion = host.Services.GetRequiredService<HandshakeValidator>().RequiredClientContentVersion;
+        using var first = new TestNetClient();
+        using var second = new TestNetClient();
+
+        EnterWorld(first, port, contentVersion, 1);
+        EnterWorld(second, port, contentVersion, 2);
+
+        Assert.That(first.WaitFor(() => Control(first).Length >= 3), Is.True, "the first client never saw the second");
+        Assert.That(second.WaitFor(() => Control(second).Length >= 3), Is.True,
+            "the second client never saw the first");
+        Assert.That(Opcodes(Control(second)).Take(3), Is.EqualTo(new[]
+        {
+            MessageOpcode.ServerHello,
+            MessageOpcode.WorldEntered,
+            MessageOpcode.EntitySpawn
+        }));
+        Assert.That(Opcodes(Control(first)).Last(), Is.EqualTo(MessageOpcode.EntitySpawn));
+        WorldEntered.TryRead(Control(second)[1].Payload, out WorldEntered? entered);
+        Assert.That(entered!.Map, Is.EqualTo(new MapDefinitionId("map.training_ground")));
+        Assert.That(entered.MovementSpeed, Is.EqualTo(5f));
+
+        Assert.That(second.WaitFor(() => Snapshots(second).Any(snapshot => snapshot.Entities.Count == 2)), Is.True);
+        EntitySnapshot both = Snapshots(second).Last(snapshot => snapshot.Entities.Count == 2);
+        Assert.That(
+            both.Entities[0].Entity,
+            Is.EqualTo(entered.LocalEntity),
+            "a client's own entity leads its snapshot");
+        Assert.That(
+            second.Received.Where(message => message.Channel == (byte)ProtocolChannel.State).Select(m => m.Method),
+            Is.All.EqualTo(DeliveryMethod.Sequenced));
+
+        host.StopAsync().GetAwaiter().GetResult();
+
+        Assert.That(first.WaitFor(() => first.IsDisconnected), Is.True);
+        Assert.That(first.Notice!.Reason, Is.EqualTo(DisconnectReason.Maintenance));
+    }
+
+    [Test]
+    public void Client_WhenDevelopmentAuthenticationIsOffByDefault_IsRefused()
+    {
+        using var root = new TemporaryDirectory();
+        using IHost host = StartHost(root, false);
+        int port = host.Services.GetRequiredService<IServerTransport>().LocalPort;
+        uint contentVersion = host.Services.GetRequiredService<HandshakeValidator>().RequiredClientContentVersion;
+        using var client = new TestNetClient();
+        client.Connect(port, "evertorch");
+        Assert.That(client.WaitFor(() => client.IsConnected), Is.True);
+
+        client.Send(Hello(contentVersion), ProtocolChannel.Control, DeliveryMethod.ReliableOrdered);
+
+        Assert.That(client.WaitFor(() => client.IsDisconnected), Is.True);
+        Assert.That(client.Notice!.Reason, Is.EqualTo(DisconnectReason.AuthenticationFailed));
+        Assert.That(client.Received, Is.Empty);
+        host.StopAsync().GetAwaiter().GetResult();
     }
 }
 }

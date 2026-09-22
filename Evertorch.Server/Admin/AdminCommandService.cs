@@ -3,7 +3,7 @@ using System.Collections.Generic;
 namespace Evertorch.Server
 {
 /// <summary>
-/// Read-only commands answer from the published status, so they are safe from any thread and cost the tick nothing.
+///     Read-only commands answer from the published status, so they are safe from any thread and cost the tick nothing.
 /// </summary>
 public sealed class AdminCommandService : IAdminCommandService
 {

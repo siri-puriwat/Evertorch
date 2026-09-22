@@ -5,8 +5,8 @@ using Evertorch.Game;
 namespace Evertorch.Tools
 {
 /// <summary>
-/// Presentation and player-visible lookup data only. Fields are copied one by one from an allow-list;
-/// a new model field reaches the client only when someone adds it here on purpose.
+///     Presentation and player-visible lookup data only. Fields are copied one by one from an allow-list;
+///     a new model field reaches the client only when someone adds it here on purpose.
 /// </summary>
 internal static class ClientProjection
 {
@@ -14,11 +14,11 @@ internal static class ClientProjection
     {
         return new List<PackageFile>
         {
-            new PackageFile("items.json", PackageJson.Write(writer => WriteItems(writer, content))),
-            new PackageFile("jobs.json", PackageJson.Write(writer => WriteJobs(writer, content))),
-            new PackageFile("maps.json", PackageJson.Write(writer => WriteMaps(writer, content))),
-            new PackageFile("monsters.json", PackageJson.Write(writer => WriteMonsters(writer, content))),
-            new PackageFile("skills.json", PackageJson.Write(writer => WriteSkills(writer, content))),
+            new("items.json", PackageJson.Write(writer => WriteItems(writer, content))),
+            new("jobs.json", PackageJson.Write(writer => WriteJobs(writer, content))),
+            new("maps.json", PackageJson.Write(writer => WriteMaps(writer, content))),
+            new("monsters.json", PackageJson.Write(writer => WriteMonsters(writer, content))),
+            new("skills.json", PackageJson.Write(writer => WriteSkills(writer, content)))
         };
     }
 

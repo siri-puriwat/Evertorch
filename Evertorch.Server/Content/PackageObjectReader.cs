@@ -7,8 +7,8 @@ namespace Evertorch.Server
 internal delegate bool TryCreatePackageId<T>(string? value, out T id);
 
 /// <summary>
-/// Reads one JSON object of a content package strictly: every property must be asked for, have the expected kind,
-/// and appear once. Defects are collected rather than thrown so a bad package is reported in full.
+///     Reads one JSON object of a content package strictly: every property must be asked for, have the expected kind,
+///     and appear once. Defects are collected rather than thrown so a bad package is reported in full.
 /// </summary>
 internal sealed class PackageObjectReader
 {
@@ -16,7 +16,7 @@ internal sealed class PackageObjectReader
     private readonly string m_file;
     private readonly string m_path;
     private readonly List<string> m_problems;
-    private readonly HashSet<string> m_requested = new HashSet<string>(StringComparer.Ordinal);
+    private readonly HashSet<string> m_requested = new(StringComparer.Ordinal);
 
     private PackageObjectReader(JsonElement element, string file, string path, List<string> problems)
     {
@@ -31,7 +31,7 @@ internal sealed class PackageObjectReader
         JsonElement root;
         try
         {
-            using (JsonDocument document = JsonDocument.Parse(content))
+            using (var document = JsonDocument.Parse(content))
             {
                 root = document.RootElement.Clone();
             }
@@ -150,7 +150,7 @@ internal sealed class PackageObjectReader
 
     public IReadOnlyList<PackageObjectReader> RequiredObjectArray(string name)
     {
-        List<PackageObjectReader> readers = new List<PackageObjectReader>();
+        var readers = new List<PackageObjectReader>();
         if (!TryGet(name, JsonValueKind.Array, "an array", out JsonElement value))
         {
             return readers;
@@ -177,7 +177,7 @@ internal sealed class PackageObjectReader
 
     public IReadOnlyList<string> RequiredStringArray(string name)
     {
-        List<string> values = new List<string>();
+        var values = new List<string>();
         if (!TryGet(name, JsonValueKind.Array, "an array", out JsonElement value))
         {
             return values;
@@ -200,11 +200,11 @@ internal sealed class PackageObjectReader
     }
 
     /// <summary>
-    /// Call after every expected property has been read.
+    ///     Call after every expected property has been read.
     /// </summary>
     public void ReportUnexpectedProperties()
     {
-        HashSet<string> seen = new HashSet<string>(StringComparer.Ordinal);
+        var seen = new HashSet<string>(StringComparer.Ordinal);
         foreach (JsonProperty property in m_element.EnumerateObject())
         {
             if (!seen.Add(property.Name))

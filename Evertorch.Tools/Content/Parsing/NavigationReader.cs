@@ -6,8 +6,8 @@ using Evertorch.Game;
 namespace Evertorch.Tools
 {
 /// <summary>
-/// Reads a map's <c>navigation</c> block: a legend of cell kinds and the rows of symbols drawn with it, written
-/// with the northern row first so the text reads like a map.
+///     Reads a map's <c>navigation</c> block: a legend of cell kinds and the rows of symbols drawn with it, written
+///     with the northern row first so the text reads like a map.
 /// </summary>
 internal static class NavigationReader
 {
@@ -35,13 +35,13 @@ internal static class NavigationReader
         }
 
         int columns = rows[0].Length;
-        NavigationCell[] cells = new NavigationCell[rows.Count * columns];
+        var cells = new NavigationCell[rows.Count * columns];
         for (int row = 0; row < rows.Count; row++)
         {
             string northFirstRow = rows[rows.Count - 1 - row];
             for (int column = 0; column < columns; column++)
             {
-                cells[(row * columns) + column] = legend[northFirstRow[column]];
+                cells[row * columns + column] = legend[northFirstRow[column]];
             }
         }
 
@@ -61,7 +61,7 @@ internal static class NavigationReader
         double cellSize,
         double maxRampSlope)
     {
-        Dictionary<char, NavigationCell> legend = new Dictionary<char, NavigationCell>();
+        var legend = new Dictionary<char, NavigationCell>();
         IReadOnlyList<YamlFieldReader> entries = navigation.RequiredMappingSequence("legend");
         if (entries.Count > ContentLimits.MaxLegendEntries)
         {
@@ -151,7 +151,7 @@ internal static class NavigationReader
 
         return isValid
             ? new NavigationCell(NavigationSurface.Floor, axis, (float)from, (float)to)
-            : (NavigationCell?)null;
+            : null;
     }
 
     private static bool CheckRows(

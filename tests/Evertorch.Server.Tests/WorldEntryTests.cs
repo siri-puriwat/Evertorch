@@ -8,10 +8,41 @@ namespace Evertorch.Server.Tests
 [TestFixture]
 public sealed class WorldEntryTests
 {
+    [TestCase(0)]
+    [TestCase(-1)]
+    [TestCase(long.MinValue)]
+    public void EnterWorld_WithCharacterIdThatIsNotPositive_IsIgnored(long character)
+    {
+        var server = new TestServer();
+        ConnectionId connection = server.Connect();
+        server.SendHello(connection);
+        server.SendEnterWorld(connection, character);
+
+        server.Tick();
+
+        Assert.That(server.Transport.ControlOpcodesSentTo(connection), Is.EqualTo(new[] { MessageOpcode.ServerHello }));
+        Assert.That(server.World.Maps.Single().Players, Is.Empty);
+        Assert.That(server.SessionManager.IgnoredEvents, Is.EqualTo(1));
+    }
+
+    [Test]
+    public void Disconnect_OfPlayer_RemovesItsEntityAndFreesTheCharacter()
+    {
+        var server = new TestServer();
+        ConnectionId connection = server.EnterWorld(7);
+        server.Disconnect(connection);
+
+        server.Tick();
+
+        Assert.That(server.World.Maps.Single().Players, Is.Empty);
+        Assert.That(server.Sessions.Sessions, Is.Empty);
+        Assert.That(server.Sessions.TryGetByCharacter(new CharacterId(7), out _), Is.False);
+    }
+
     [Test]
     public void EnterWorld_AfterHello_SpawnsPlayerAtMapSpawnPointAndSendsWorldEntered()
     {
-        TestServer server = new TestServer();
+        var server = new TestServer();
         MapDefinition map = server.Content.Maps.Values.Single();
 
         ConnectionId connection = server.EnterWorld(7);
@@ -34,9 +65,50 @@ public sealed class WorldEntryTests
     }
 
     [Test]
+    public void EnterWorld_AfterReplacedSessionsLateDisconnect_KeepsTheNewSession()
+    {
+        var server = new TestServer();
+        ConnectionId older = server.EnterWorld(7);
+        ConnectionId newer = server.EnterWorld(7);
+        server.Disconnect(older);
+
+        server.Tick();
+
+        Assert.That(server.Sessions.TryGet(newer, out _), Is.True);
+        Assert.That(server.Sessions.TryGetByCharacter(new CharacterId(7), out ClientSession? bound), Is.True);
+        Assert.That(bound!.Connection, Is.EqualTo(newer));
+        Assert.That(server.World.Maps.Single().Players, Has.Count.EqualTo(1));
+    }
+
+    [Test]
+    public void EnterWorld_BeforeHello_IsRejected()
+    {
+        var server = new TestServer();
+        ConnectionId connection = server.Connect();
+        server.SendEnterWorld(connection, 7);
+
+        server.Tick();
+
+        Assert.That(server.Transport.Disconnects[connection], Is.EqualTo(DisconnectReason.AuthenticationFailed));
+        Assert.That(server.World.Maps.Single().Players, Is.Empty);
+    }
+
+    [Test]
+    public void EnterWorld_ForEachPlayer_AllocatesADistinctEntityId()
+    {
+        var server = new TestServer();
+
+        EntityId first = server.PlayerOf(server.EnterWorld(1)).Id;
+        EntityId second = server.PlayerOf(server.EnterWorld(2)).Id;
+
+        Assert.That(first.Value, Is.GreaterThan(0));
+        Assert.That(second, Is.Not.EqualTo(first));
+    }
+
+    [Test]
     public void EnterWorld_MovementSpeed_ComesFromTheJobThroughTheRules()
     {
-        TestServer server = new TestServer();
+        var server = new TestServer();
         JobDefinition job = server.Content.Jobs.Values.Single();
 
         ConnectionId connection = server.EnterWorld(7);
@@ -48,51 +120,9 @@ public sealed class WorldEntryTests
     }
 
     [Test]
-    public void EnterWorld_ForEachPlayer_AllocatesADistinctEntityId()
-    {
-        TestServer server = new TestServer();
-
-        EntityId first = server.PlayerOf(server.EnterWorld(1)).Id;
-        EntityId second = server.PlayerOf(server.EnterWorld(2)).Id;
-
-        Assert.That(first.Value, Is.GreaterThan(0));
-        Assert.That(second, Is.Not.EqualTo(first));
-    }
-
-    [Test]
-    public void EnterWorld_BeforeHello_IsRejected()
-    {
-        TestServer server = new TestServer();
-        ConnectionId connection = server.Connect();
-        server.SendEnterWorld(connection, 7);
-
-        server.Tick();
-
-        Assert.That(server.Transport.Disconnects[connection], Is.EqualTo(DisconnectReason.AuthenticationFailed));
-        Assert.That(server.World.Maps.Single().Players, Is.Empty);
-    }
-
-    [TestCase(0)]
-    [TestCase(-1)]
-    [TestCase(long.MinValue)]
-    public void EnterWorld_WithCharacterIdThatIsNotPositive_IsIgnored(long character)
-    {
-        TestServer server = new TestServer();
-        ConnectionId connection = server.Connect();
-        server.SendHello(connection);
-        server.SendEnterWorld(connection, character);
-
-        server.Tick();
-
-        Assert.That(server.Transport.ControlOpcodesSentTo(connection), Is.EqualTo(new[] { MessageOpcode.ServerHello }));
-        Assert.That(server.World.Maps.Single().Players, Is.Empty);
-        Assert.That(server.SessionManager.IgnoredEvents, Is.EqualTo(1));
-    }
-
-    [Test]
     public void EnterWorld_Twice_IsIgnored()
     {
-        TestServer server = new TestServer();
+        var server = new TestServer();
         ConnectionId connection = server.EnterWorld(7);
         EntityId entity = server.PlayerOf(connection).Id;
         server.SendEnterWorld(connection, 8);
@@ -109,7 +139,7 @@ public sealed class WorldEntryTests
     [Test]
     public void EnterWorld_WithCharacterAlreadyInWorld_ReplacesOlderSession()
     {
-        TestServer server = new TestServer();
+        var server = new TestServer();
         ConnectionId older = server.EnterWorld(7);
         EntityId olderEntity = server.PlayerOf(older).Id;
 
@@ -119,36 +149,6 @@ public sealed class WorldEntryTests
         Assert.That(server.Sessions.TryGet(older, out _), Is.False);
         Assert.That(server.World.Maps.Single().Players.Select(player => player.Owner), Is.EqualTo(new[] { newer }));
         Assert.That(server.PlayerOf(newer).Id, Is.Not.EqualTo(olderEntity));
-    }
-
-    [Test]
-    public void EnterWorld_AfterReplacedSessionsLateDisconnect_KeepsTheNewSession()
-    {
-        TestServer server = new TestServer();
-        ConnectionId older = server.EnterWorld(7);
-        ConnectionId newer = server.EnterWorld(7);
-        server.Disconnect(older);
-
-        server.Tick();
-
-        Assert.That(server.Sessions.TryGet(newer, out _), Is.True);
-        Assert.That(server.Sessions.TryGetByCharacter(new CharacterId(7), out ClientSession? bound), Is.True);
-        Assert.That(bound!.Connection, Is.EqualTo(newer));
-        Assert.That(server.World.Maps.Single().Players, Has.Count.EqualTo(1));
-    }
-
-    [Test]
-    public void Disconnect_OfPlayer_RemovesItsEntityAndFreesTheCharacter()
-    {
-        TestServer server = new TestServer();
-        ConnectionId connection = server.EnterWorld(7);
-        server.Disconnect(connection);
-
-        server.Tick();
-
-        Assert.That(server.World.Maps.Single().Players, Is.Empty);
-        Assert.That(server.Sessions.Sessions, Is.Empty);
-        Assert.That(server.Sessions.TryGetByCharacter(new CharacterId(7), out _), Is.False);
     }
 }
 }

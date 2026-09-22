@@ -6,8 +6,8 @@ using Microsoft.Extensions.Options;
 namespace Evertorch.Server
 {
 /// <summary>
-/// Moves every player one step per tick with the shared movement model. At most one input is consumed per tick,
-/// so sending inputs faster than the simulation runs buys no speed.
+///     Moves every player one step per tick with the shared movement model. At most one input is consumed per tick,
+///     so sending inputs faster than the simulation runs buys no speed.
 /// </summary>
 public sealed class MovementSystem : ITickPhase
 {
@@ -25,7 +25,7 @@ public sealed class MovementSystem : ITickPhase
         m_sessions = sessions;
         m_maxClientTickDrift = world.Value.MaxClientTickDrift;
 
-        long holdTicks = ((long)world.Value.InputHoldTimeoutMs * simulation.Value.TickRate) / MillisecondsPerSecond;
+        long holdTicks = (long)world.Value.InputHoldTimeoutMs * simulation.Value.TickRate / MillisecondsPerSecond;
         m_holdTicks = (int)Math.Max(1L, holdTicks);
     }
 

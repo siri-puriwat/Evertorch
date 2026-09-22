@@ -7,7 +7,7 @@ using System.Threading;
 namespace Evertorch.Server
 {
 /// <summary>
-/// Parses development console lines into <see cref="IAdminCommandService"/> calls and prints the answers.
+///     Parses development console lines into <see cref="IAdminCommandService" /> calls and prints the answers.
 /// </summary>
 public sealed class AdminConsole
 {
@@ -21,8 +21,8 @@ public sealed class AdminConsole
     }
 
     /// <summary>
-    /// Reads lines until the input ends or stopping is requested. A process without a console has no input, so this
-    /// simply returns.
+    ///     Reads lines until the input ends or stopping is requested. A process without a console has no input, so this
+    ///     simply returns.
     /// </summary>
     public void Run(TextReader input, TextWriter output, CancellationToken stop)
     {

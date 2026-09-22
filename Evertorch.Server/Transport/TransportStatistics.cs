@@ -1,7 +1,7 @@
 namespace Evertorch.Server
 {
 /// <summary>
-/// Totals since the transport started.
+///     Totals since the transport started.
 /// </summary>
 public readonly struct TransportStatistics
 {
@@ -28,7 +28,7 @@ public readonly struct TransportStatistics
     public long PacketsSent { get; }
 
     /// <summary>
-    /// Reliable packets the transport had to resend because no acknowledgement arrived.
+    ///     Reliable packets the transport had to resend because no acknowledgement arrived.
     /// </summary>
     public long PacketsLost { get; }
 }

@@ -5,16 +5,16 @@ using Evertorch.Protocol;
 namespace Evertorch.Server
 {
 /// <summary>
-/// After the world has settled for this tick, tells each client which entities entered and left its area of
-/// interest. Spawns go out on the reliable control stream, so they follow that client's <see cref="WorldEntered"/>.
+///     After the world has settled for this tick, tells each client which entities entered and left its area of
+///     interest. Spawns go out on the reliable control stream, so they follow that client's <see cref="WorldEntered" />.
 /// </summary>
 public sealed class VisibilityPhase : ITickPhase
 {
     private readonly SessionRegistry m_sessions;
     private readonly MessageSender m_sender;
-    private readonly List<PlayerEntity> m_visible = new List<PlayerEntity>();
-    private readonly HashSet<EntityId> m_visibleIds = new HashSet<EntityId>();
-    private readonly List<EntityId> m_departed = new List<EntityId>();
+    private readonly List<PlayerEntity> m_visible = new();
+    private readonly HashSet<EntityId> m_visibleIds = new();
+    private readonly List<EntityId> m_departed = new();
 
     public VisibilityPhase(SessionRegistry sessions, MessageSender sender)
     {

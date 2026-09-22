@@ -8,7 +8,7 @@ using YamlDotNet.RepresentationModel;
 namespace Evertorch.Tools
 {
 /// <summary>
-/// Parses canonical YAML under a content root into the normalized model. The folder decides the definition kind.
+///     Parses canonical YAML under a content root into the normalized model. The folder decides the definition kind.
 /// </summary>
 public static class ContentLoader
 {
@@ -20,12 +20,12 @@ public static class ContentLoader
 
     public static ContentSet Load(string contentRoot, List<ContentDiagnostic> diagnostics)
     {
-        List<AuthoredItem> items = new List<AuthoredItem>();
-        List<AuthoredMonster> monsters = new List<AuthoredMonster>();
-        List<AuthoredSkill> skills = new List<AuthoredSkill>();
-        List<AuthoredJob> jobs = new List<AuthoredJob>();
-        List<AuthoredMap> maps = new List<AuthoredMap>();
-        HashSet<string> declaredIds = new HashSet<string>(StringComparer.Ordinal);
+        var items = new List<AuthoredItem>();
+        var monsters = new List<AuthoredMonster>();
+        var skills = new List<AuthoredSkill>();
+        var jobs = new List<AuthoredJob>();
+        var maps = new List<AuthoredMap>();
+        var declaredIds = new HashSet<string>(StringComparer.Ordinal);
 
         if (!Directory.Exists(contentRoot))
         {
@@ -102,10 +102,10 @@ public static class ContentLoader
 
     private static YamlFieldReader? ReadRoot(string file, string relativePath, List<ContentDiagnostic> diagnostics)
     {
-        YamlStream stream = new YamlStream();
+        var stream = new YamlStream();
         try
         {
-            using (StreamReader reader = new StreamReader(file))
+            using (var reader = new StreamReader(file))
             {
                 stream.Load(reader);
             }

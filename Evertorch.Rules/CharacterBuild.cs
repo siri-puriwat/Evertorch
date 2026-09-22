@@ -4,7 +4,7 @@ using Evertorch.Game;
 namespace Evertorch.Rules
 {
 /// <summary>
-/// Base inputs for derived statistics: level, primary stats, and the tuning values of the job.
+///     Base inputs for derived statistics: level, primary stats, and the tuning values of the job.
 /// </summary>
 public readonly struct CharacterBuild
 {

@@ -1,7 +1,7 @@
 namespace Evertorch.Game
 {
 /// <summary>
-/// Statistics the rules derive from a character build. Never stored; recalculated when an input changes.
+///     Statistics the rules derive from a character build. Never stored; recalculated when an input changes.
 /// </summary>
 public sealed class DerivedStats
 {

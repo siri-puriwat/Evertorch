@@ -3,7 +3,7 @@ using Evertorch.Game;
 namespace Evertorch.Server
 {
 /// <summary>
-/// One player as an operator sees it. It deliberately has no field for a token or a sign-in identity.
+///     One player as an operator sees it. It deliberately has no field for a token or a sign-in identity.
 /// </summary>
 public sealed class PlayerSummary
 {
@@ -40,7 +40,7 @@ public sealed class PlayerSummary
     public WorldPosition Position { get; }
 
     /// <summary>
-    /// -1 until the transport has measured one.
+    ///     -1 until the transport has measured one.
     /// </summary>
     public int RoundTripMilliseconds { get; }
 

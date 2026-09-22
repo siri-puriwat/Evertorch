@@ -8,7 +8,7 @@ using System.Text.Json;
 namespace Evertorch.Tools
 {
 /// <summary>
-/// Turns validated content into the server and client packages, entirely in memory.
+///     Turns validated content into the server and client packages, entirely in memory.
 /// </summary>
 public static class ContentPackageBuilder
 {
@@ -39,7 +39,7 @@ public static class ContentPackageBuilder
     // A version changes exactly when some file's path or bytes change, so the two sides advance independently.
     private static string ComputeVersion(IReadOnlyList<PackageFile> files)
     {
-        StringBuilder listing = new StringBuilder();
+        var listing = new StringBuilder();
         foreach (PackageFile file in files.OrderBy(file => file.Path, StringComparer.Ordinal))
         {
             listing.Append(file.Path).Append(':').Append(ComputeHash(file.Content)).Append('\n');

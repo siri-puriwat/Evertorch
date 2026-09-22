@@ -16,37 +16,17 @@ public sealed class MoveInputTests
         0x04, 0x03, 0x02, 0x01,
         0x0D, 0x0C, 0x0B, 0x0A,
         0x00, 0x00, 0x80, 0x3F,
-        0x00, 0x00, 0x00, 0xBF,
+        0x00, 0x00, 0x00, 0xBF
     };
 
-    private static readonly MoveInput Golden = new MoveInput(new MoveIntent(0x01020304, 0x0A0B0C0D, 1f, -0.5f));
-
-    [Test]
-    public void Write_ForKnownMessage_ProducesGoldenBytes()
-    {
-        byte[] buffer = new byte[MoveInput.EncodedLength];
-
-        int written = Golden.Write(buffer);
-
-        Assert.That(written, Is.EqualTo(MoveInput.EncodedLength));
-        Assert.That(buffer, Is.EqualTo(GoldenBytes));
-    }
-
-    [Test]
-    public void TryRead_ForGoldenBytes_ReturnsKnownIntent()
-    {
-        bool isRead = MoveInput.TryRead(GoldenBytes, out MoveInput message);
-
-        Assert.That(isRead, Is.True);
-        Assert.That(message.Intent, Is.EqualTo(new MoveIntent(0x01020304, 0x0A0B0C0D, 1f, -0.5f)));
-    }
+    private static readonly MoveInput Golden = new(new MoveIntent(0x01020304, 0x0A0B0C0D, 1f, -0.5f));
 
     [TestCase(0u, 0u, 0f, 0f)]
     [TestCase(uint.MaxValue, uint.MaxValue, -1f, 1f)]
     [TestCase(7u, 9u, 3.4e38f, -3.4e38f)]
     public void TryRead_AfterWrite_RoundTripsIntent(uint sequence, uint clientTick, float x, float z)
     {
-        MoveIntent intent = new MoveIntent(sequence, clientTick, x, z);
+        var intent = new MoveIntent(sequence, clientTick, x, z);
         byte[] buffer = new byte[MoveInput.EncodedLength];
         new MoveInput(intent).Write(buffer);
 
@@ -68,9 +48,18 @@ public sealed class MoveInputTests
     }
 
     [Test]
-    public void TryRead_WhenTruncatedAtAnyLength_ReturnsFalse()
+    public void TryRead_ForGoldenBytes_ReturnsKnownIntent()
     {
-        WireMatrix.AssertRejectsEveryTruncation(GoldenBytes, bytes => MoveInput.TryRead(bytes, out _));
+        bool isRead = MoveInput.TryRead(GoldenBytes, out MoveInput message);
+
+        Assert.That(isRead, Is.True);
+        Assert.That(message.Intent, Is.EqualTo(new MoveIntent(0x01020304, 0x0A0B0C0D, 1f, -0.5f)));
+    }
+
+    [Test]
+    public void TryRead_WhenOpcodeDiffers_ReturnsFalse()
+    {
+        WireMatrix.AssertRejectsOtherOpcodes(GoldenBytes, bytes => MoveInput.TryRead(bytes, out _));
     }
 
     [Test]
@@ -80,9 +69,20 @@ public sealed class MoveInputTests
     }
 
     [Test]
-    public void TryRead_WhenOpcodeDiffers_ReturnsFalse()
+    public void TryRead_WhenTruncatedAtAnyLength_ReturnsFalse()
     {
-        WireMatrix.AssertRejectsOtherOpcodes(GoldenBytes, bytes => MoveInput.TryRead(bytes, out _));
+        WireMatrix.AssertRejectsEveryTruncation(GoldenBytes, bytes => MoveInput.TryRead(bytes, out _));
+    }
+
+    [Test]
+    public void Write_ForKnownMessage_ProducesGoldenBytes()
+    {
+        byte[] buffer = new byte[MoveInput.EncodedLength];
+
+        int written = Golden.Write(buffer);
+
+        Assert.That(written, Is.EqualTo(MoveInput.EncodedLength));
+        Assert.That(buffer, Is.EqualTo(GoldenBytes));
     }
 
     [Test]

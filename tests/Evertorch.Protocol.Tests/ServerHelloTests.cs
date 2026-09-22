@@ -13,20 +13,17 @@ public sealed class ServerHelloTests
         0x05, 0x00, 0x30, 0x2E, 0x32, 0x2E, 0x30,
         0xD1, 0x6B, 0x32, 0x11,
         0x14, 0x00, 0x00, 0x00,
-        0xE6, 0xD5, 0xC4, 0xB3, 0xA2, 0x01, 0x00, 0x00,
+        0xE6, 0xD5, 0xC4, 0xB3, 0xA2, 0x01, 0x00, 0x00
     };
 
-    private static ServerHello Golden => new ServerHello(1, "0.2.0", 0x11326BD1, 20, 0x000001A2B3C4D5E6);
+    private static ServerHello Golden => new(1, "0.2.0", 0x11326BD1, 20, 0x000001A2B3C4D5E6);
 
     [Test]
-    public void Write_ForKnownMessage_ProducesGoldenBytes()
+    public void Constructor_WithNullBuildVersion_Throws()
     {
-        byte[] buffer = new byte[Golden.GetEncodedLength()];
+        Action create = () => _ = new ServerHello(1, null!, 1, 20, 0);
 
-        int written = Golden.Write(buffer);
-
-        Assert.That(written, Is.EqualTo(GoldenBytes.Length));
-        Assert.That(buffer, Is.EqualTo(GoldenBytes));
+        Assert.That(create, Throws.ArgumentNullException);
     }
 
     [Test]
@@ -43,15 +40,15 @@ public sealed class ServerHelloTests
     }
 
     [Test]
-    public void TryRead_WhenTruncatedAtAnyLength_ReturnsFalse()
+    public void TryRead_WhenBuildVersionLengthExceedsLimit_ReturnsFalse()
     {
-        WireMatrix.AssertRejectsEveryTruncation(GoldenBytes, bytes => ServerHello.TryRead(bytes, out _));
-    }
+        byte[] bytes = new byte[2 + 2 + 2 + 33 + 4 + 4 + 8];
+        bytes[0] = 0x01;
+        bytes[1] = 0x80;
+        bytes[4] = 33;
+        bytes[6 + 33 + 4] = 20;
 
-    [Test]
-    public void TryRead_WhenTrailingDataPresent_ReturnsFalse()
-    {
-        WireMatrix.AssertRejectsTrailingData(GoldenBytes, bytes => ServerHello.TryRead(bytes, out _));
+        Assert.That(ServerHello.TryRead(bytes, out _), Is.False);
     }
 
     [Test]
@@ -69,15 +66,26 @@ public sealed class ServerHelloTests
     }
 
     [Test]
-    public void TryRead_WhenBuildVersionLengthExceedsLimit_ReturnsFalse()
+    public void TryRead_WhenTrailingDataPresent_ReturnsFalse()
     {
-        byte[] bytes = new byte[2 + 2 + 2 + 33 + 4 + 4 + 8];
-        bytes[0] = 0x01;
-        bytes[1] = 0x80;
-        bytes[4] = 33;
-        bytes[6 + 33 + 4] = 20;
+        WireMatrix.AssertRejectsTrailingData(GoldenBytes, bytes => ServerHello.TryRead(bytes, out _));
+    }
 
-        Assert.That(ServerHello.TryRead(bytes, out _), Is.False);
+    [Test]
+    public void TryRead_WhenTruncatedAtAnyLength_ReturnsFalse()
+    {
+        WireMatrix.AssertRejectsEveryTruncation(GoldenBytes, bytes => ServerHello.TryRead(bytes, out _));
+    }
+
+    [Test]
+    public void Write_ForKnownMessage_ProducesGoldenBytes()
+    {
+        byte[] buffer = new byte[Golden.GetEncodedLength()];
+
+        int written = Golden.Write(buffer);
+
+        Assert.That(written, Is.EqualTo(GoldenBytes.Length));
+        Assert.That(buffer, Is.EqualTo(GoldenBytes));
     }
 
     [Test]
@@ -86,14 +94,6 @@ public sealed class ServerHelloTests
         Action write = () => Golden.Write(new byte[GoldenBytes.Length - 1]);
 
         Assert.That(write, Throws.ArgumentException);
-    }
-
-    [Test]
-    public void Constructor_WithNullBuildVersion_Throws()
-    {
-        Action create = () => _ = new ServerHello(1, null!, 1, 20, 0);
-
-        Assert.That(create, Throws.ArgumentNullException);
     }
 }
 }

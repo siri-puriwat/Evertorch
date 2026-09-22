@@ -4,8 +4,8 @@ using System.Buffers.Binary;
 namespace Evertorch.Protocol
 {
 /// <summary>
-/// The one place that says how each message travels. Both transport adapters send by it, and a receiver rejects a
-/// message that arrives on any other channel.
+///     The one place that says how each message travels. Both transport adapters send by it, and a receiver rejects a
+///     message that arrives on any other channel.
 /// </summary>
 public static class MessageRouting
 {
@@ -46,7 +46,7 @@ public static class MessageRouting
     }
 
     /// <summary>
-    /// Reads the opcode at the start of a payload. False when the payload is too short or the opcode is unknown.
+    ///     Reads the opcode at the start of a payload. False when the payload is too short or the opcode is unknown.
     /// </summary>
     public static bool TryReadOpcode(ReadOnlySpan<byte> payload, out MessageOpcode opcode)
     {
@@ -56,7 +56,7 @@ public static class MessageRouting
             return false;
         }
 
-        MessageOpcode candidate = (MessageOpcode)BinaryPrimitives.ReadUInt16LittleEndian(payload);
+        var candidate = (MessageOpcode)BinaryPrimitives.ReadUInt16LittleEndian(payload);
         if (!TryGetRoute(candidate, out ProtocolChannel _, out MessageDelivery _))
         {
             return false;

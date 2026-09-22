@@ -5,13 +5,13 @@ using Evertorch.Game;
 namespace Evertorch.Server
 {
 /// <summary>
-/// Buckets a map's players into square cells so "who is near whom" costs a few cell lookups rather than a
-/// comparison of every pair. A player is interested in its own cell and the cells within the neighbour radius.
+///     Buckets a map's players into square cells so "who is near whom" costs a few cell lookups rather than a
+///     comparison of every pair. A player is interested in its own cell and the cells within the neighbour radius.
 /// </summary>
 public sealed class InterestGrid
 {
-    private readonly Dictionary<long, List<PlayerEntity>> m_cells = new Dictionary<long, List<PlayerEntity>>();
-    private readonly Dictionary<EntityId, long> m_cellByEntity = new Dictionary<EntityId, long>();
+    private readonly Dictionary<long, List<PlayerEntity>> m_cells = new();
+    private readonly Dictionary<EntityId, long> m_cellByEntity = new();
     private readonly float m_cellSize;
     private readonly int m_neighborRadius;
 
@@ -32,7 +32,7 @@ public sealed class InterestGrid
     }
 
     /// <summary>
-    /// Adds the entity or moves it to the cell its current position falls in.
+    ///     Adds the entity or moves it to the cell its current position falls in.
     /// </summary>
     public void Update(PlayerEntity entity)
     {
@@ -67,7 +67,7 @@ public sealed class InterestGrid
     }
 
     /// <summary>
-    /// Appends every other entity in the observer's area of interest.
+    ///     Appends every other entity in the observer's area of interest.
     /// </summary>
     public void CollectVisible(PlayerEntity observer, List<PlayerEntity> visible)
     {

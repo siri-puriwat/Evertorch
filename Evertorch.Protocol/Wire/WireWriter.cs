@@ -5,8 +5,8 @@ using Evertorch.Game;
 namespace Evertorch.Protocol
 {
 /// <summary>
-/// Writes little-endian fields into a caller-owned buffer. Running out of room or exceeding a string limit is a
-/// programming error on the sending side, so it throws.
+///     Writes little-endian fields into a caller-owned buffer. Running out of room or exceeding a string limit is a
+///     programming error on the sending side, so it throws.
 /// </summary>
 public ref struct WireWriter
 {

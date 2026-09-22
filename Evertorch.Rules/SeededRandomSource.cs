@@ -3,8 +3,8 @@ using System;
 namespace Evertorch.Rules
 {
 /// <summary>
-/// SplitMix64 generator. It is implemented here rather than taken from the runtime so a seed yields the same
-/// sequence on every platform and framework version.
+///     SplitMix64 generator. It is implemented here rather than taken from the runtime so a seed yields the same
+///     sequence on every platform and framework version.
 /// </summary>
 public sealed class SeededRandomSource : IRandomSource
 {

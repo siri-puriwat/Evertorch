@@ -13,8 +13,8 @@ public sealed class MonsterDrop
     public ItemDefinitionId Item { get; }
 
     /// <summary>
-    /// Probability from 0 to 1 inclusive. The server rolls r in [0, 1) and drops when r is below the chance,
-    /// so 0 never drops and 1 always drops.
+    ///     Probability from 0 to 1 inclusive. The server rolls r in [0, 1) and drops when r is below the chance,
+    ///     so 0 never drops and 1 always drops.
     /// </summary>
     public double Chance { get; }
 

@@ -8,8 +8,8 @@ using NUnit.Framework;
 namespace Evertorch.Architecture.Tests
 {
 /// <summary>
-/// The transport library is a project-level dependency of the server, so the assembly checks cannot keep it out of
-/// the simulation. This reads the sources instead.
+///     The transport library is a project-level dependency of the server, so the assembly checks cannot keep it out of
+///     the simulation. This reads the sources instead.
 /// </summary>
 [TestFixture]
 public sealed class ServerSourceBoundaryTests
@@ -18,21 +18,12 @@ public sealed class ServerSourceBoundaryTests
     private const string AdapterFolder = "Transport";
 
     // The namespace in a using directive or a qualified name. The adapter's own type name may appear anywhere.
-    private static readonly Regex NamespaceUse = new Regex(@"\bLiteNetLib\s*[;.]", RegexOptions.CultureInvariant);
+    private static readonly Regex NamespaceUse = new(@"\bLiteNetLib\s*[;.]", RegexOptions.CultureInvariant);
 
-    [Test]
-    public void ServerSources_OutsideTransportAdapter_DoNotReferenceTransportLibrary()
+    private static bool IsAdapter(string serverRoot, string path)
     {
-        string serverRoot = Path.Combine(RepositoryLayout.RootDirectory, "Evertorch.Server");
-
-        List<string> offenders = Directory
-            .EnumerateFiles(serverRoot, "*.cs", SearchOption.AllDirectories)
-            .Where(path => !IsAdapter(serverRoot, path))
-            .Where(path => NamespaceUse.IsMatch(File.ReadAllText(path)))
-            .Select(path => Path.GetRelativePath(serverRoot, path))
-            .ToList();
-
-        Assert.That(offenders, Is.Empty);
+        string relative = Path.GetRelativePath(serverRoot, path).Replace('\\', '/');
+        return relative.StartsWith(AdapterFolder + "/" + TransportLibrary, StringComparison.Ordinal);
     }
 
     [Test]
@@ -47,10 +38,19 @@ public sealed class ServerSourceBoundaryTests
         Assert.That(adapters, Is.Not.Empty, "the guard above would pass vacuously if the adapter moved");
     }
 
-    private static bool IsAdapter(string serverRoot, string path)
+    [Test]
+    public void ServerSources_OutsideTransportAdapter_DoNotReferenceTransportLibrary()
     {
-        string relative = Path.GetRelativePath(serverRoot, path).Replace('\\', '/');
-        return relative.StartsWith(AdapterFolder + "/" + TransportLibrary, StringComparison.Ordinal);
+        string serverRoot = Path.Combine(RepositoryLayout.RootDirectory, "Evertorch.Server");
+
+        var offenders = Directory
+            .EnumerateFiles(serverRoot, "*.cs", SearchOption.AllDirectories)
+            .Where(path => !IsAdapter(serverRoot, path))
+            .Where(path => NamespaceUse.IsMatch(File.ReadAllText(path)))
+            .Select(path => Path.GetRelativePath(serverRoot, path))
+            .ToList();
+
+        Assert.That(offenders, Is.Empty);
     }
 }
 }

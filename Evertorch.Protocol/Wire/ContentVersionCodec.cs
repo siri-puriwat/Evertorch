@@ -1,8 +1,8 @@
 namespace Evertorch.Protocol
 {
 /// <summary>
-/// Content versions are 16 hexadecimal digits in manifests but travel as 32 bits in the handshake. The wire value
-/// is the first eight digits. It gates compatibility, not security, so 32 bits are enough to tell builds apart.
+///     Content versions are 16 hexadecimal digits in manifests but travel as 32 bits in the handshake. The wire value
+///     is the first eight digits. It gates compatibility, not security, so 32 bits are enough to tell builds apart.
 /// </summary>
 public static class ContentVersionCodec
 {
