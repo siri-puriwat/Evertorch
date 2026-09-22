@@ -5,18 +5,18 @@ using UnityEngine;
 namespace Evertorch.Client
 {
 /// <summary>
-/// The drawn and clickable form of one navigation grid. It owns the mesh and materials it creates.
+///     The drawn and clickable form of one navigation grid. It owns the mesh and materials it creates.
 /// </summary>
 public sealed class GrayboxMap : MonoBehaviour
 {
     private static readonly Color[] Palette =
     {
-        new Color(0.42f, 0.47f, 0.40f),
-        new Color(0.55f, 0.52f, 0.42f),
-        new Color(0.30f, 0.31f, 0.34f),
-        new Color(0.50f, 0.36f, 0.26f),
-        new Color(0.85f, 0.72f, 0.25f),
-        new Color(0.25f, 0.45f, 0.70f),
+        new(0.42f, 0.47f, 0.40f),
+        new(0.55f, 0.52f, 0.42f),
+        new(0.30f, 0.31f, 0.34f),
+        new(0.50f, 0.36f, 0.26f),
+        new(0.85f, 0.72f, 0.25f),
+        new(0.25f, 0.45f, 0.70f)
     };
 
     private Mesh? m_mesh;
@@ -47,7 +47,7 @@ public sealed class GrayboxMap : MonoBehaviour
             throw new ArgumentNullException(nameof(baseMaterial));
         }
 
-        GameObject root = new GameObject("GrayboxMap");
+        var root = new GameObject("GrayboxMap");
         GrayboxMap map = root.AddComponent<GrayboxMap>();
         map.m_mesh = GrayboxMeshBuilder.Build(grid);
         map.m_materials = new Material[GrayboxMeshBuilder.SubMeshCount];

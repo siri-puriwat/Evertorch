@@ -4,7 +4,7 @@ using Evertorch.Game;
 namespace Evertorch.Client
 {
 /// <summary>
-/// The client-safe part of a map definition: what to show and where a body can walk.
+///     The client-safe part of a map definition: what to show and where a body can walk.
 /// </summary>
 public sealed class ClientMap
 {

@@ -6,8 +6,8 @@ using Evertorch.Protocol;
 namespace Evertorch.Client
 {
 /// <summary>
-/// Moves the local player ahead of the server with the shared movement model and keeps every input the server has
-/// not acknowledged, so a snapshot can be adopted and the remaining inputs replayed on top of it.
+///     Moves the local player ahead of the server with the shared movement model and keeps every input the server has
+///     not acknowledged, so a snapshot can be adopted and the remaining inputs replayed on top of it.
 /// </summary>
 public sealed class MovementPredictor
 {
@@ -17,7 +17,7 @@ public sealed class MovementPredictor
     private readonly NavigationGrid m_grid;
     private readonly float m_speed;
     private readonly float m_tickSeconds;
-    private readonly Queue<MoveIntent> m_pending = new Queue<MoveIntent>();
+    private readonly Queue<MoveIntent> m_pending = new();
 
     public MovementPredictor(
         NavigationGrid grid,
@@ -59,7 +59,7 @@ public sealed class MovementPredictor
     }
 
     /// <summary>
-    /// Adopts the server's state, forgets the inputs it has applied, and replays the rest.
+    ///     Adopts the server's state, forgets the inputs it has applied, and replays the rest.
     /// </summary>
     public void Reconcile(EntityState authoritative, uint lastProcessedSequence)
     {
@@ -80,8 +80,8 @@ public sealed class MovementPredictor
     }
 
     /// <summary>
-    /// Forgets unacknowledged inputs that ask for no movement. Once the server has acknowledged a stop, any later
-    /// stop that was lost on the way will never be acknowledged, and replaying it changes nothing.
+    ///     Forgets unacknowledged inputs that ask for no movement. Once the server has acknowledged a stop, any later
+    ///     stop that was lost on the way will never be acknowledged, and replaying it changes nothing.
     /// </summary>
     public void ForgetPendingStops()
     {

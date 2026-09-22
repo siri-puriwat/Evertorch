@@ -20,7 +20,7 @@ public sealed class ClientConnectionSettings
     public string BuildVersion { get; }
 
     /// <summary>
-    /// The client package's content version as its manifest states it.
+    ///     The client package's content version as its manifest states it.
     /// </summary>
     public string ContentVersion { get; }
 

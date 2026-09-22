@@ -5,8 +5,8 @@ using UnityEngine.InputSystem;
 namespace Evertorch.Client
 {
 /// <summary>
-/// Held-direction input. Keyboard, gamepad, and the on-screen stick are all bindings of one action, so this class
-/// cannot tell them apart and neither can anything after it.
+///     Held-direction input. Keyboard, gamepad, and the on-screen stick are all bindings of one action, so this class
+///     cannot tell them apart and neither can anything after it.
 /// </summary>
 public sealed class ManualMoveSource
 {
@@ -25,7 +25,7 @@ public sealed class ManualMoveSource
         float yaw = cameraYawDegrees * Mathf.Deg2Rad;
         float sin = Mathf.Sin(yaw);
         float cos = Mathf.Cos(yaw);
-        controller.SetManualDirection((stick.x * cos) + (stick.y * sin), (stick.y * cos) - (stick.x * sin));
+        controller.SetManualDirection(stick.x * cos + stick.y * sin, stick.y * cos - stick.x * sin);
     }
 }
 }

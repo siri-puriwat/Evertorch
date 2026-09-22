@@ -4,7 +4,7 @@ using Evertorch.Game;
 namespace Evertorch.Client
 {
 /// <summary>
-/// One client simulation tick for the local player: pick a direction, turn it into an intent, predict it, send it.
+///     One client simulation tick for the local player: pick a direction, turn it into an intent, predict it, send it.
 /// </summary>
 public sealed class LocalPlayerDriver
 {

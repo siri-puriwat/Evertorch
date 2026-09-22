@@ -6,12 +6,12 @@ using Evertorch.Protocol;
 namespace Evertorch.Client
 {
 /// <summary>
-/// The client's copy of the map instance it entered: the predicted local player and the remote entities the server
-/// has announced. It only ever follows the server; nothing here decides an outcome.
+///     The client's copy of the map instance it entered: the predicted local player and the remote entities the server
+///     has announced. It only ever follows the server; nothing here decides an outcome.
 /// </summary>
 public sealed class ClientWorld
 {
-    private readonly Dictionary<EntityId, RemoteEntity> m_remotes = new Dictionary<EntityId, RemoteEntity>();
+    private readonly Dictionary<EntityId, RemoteEntity> m_remotes = new();
     private readonly double m_tickSeconds;
 
     public ClientWorld(NavigationGrid grid, WorldEntered entered, uint serverTickRate)
@@ -42,10 +42,6 @@ public sealed class ClientWorld
         ServerTime.Observe(entered.ServerTick * m_tickSeconds);
     }
 
-    public event Action<RemoteEntity>? RemoteSpawned;
-
-    public event Action<RemoteEntity>? RemoteDespawned;
-
     public NavigationGrid Grid { get; }
 
     public MapDefinitionId Map { get; }
@@ -58,7 +54,7 @@ public sealed class ClientWorld
 
     public RenderSmoother Smoother { get; }
 
-    public ServerTimeEstimator ServerTime { get; } = new ServerTimeEstimator();
+    public ServerTimeEstimator ServerTime { get; } = new();
 
     public IReadOnlyDictionary<EntityId, RemoteEntity> Remotes => m_remotes;
 
@@ -71,6 +67,10 @@ public sealed class ClientWorld
     public int UnknownEntityStates { get; private set; }
 
     public double RemoteRenderTime => ServerTime.Now - RemoteEntityBuffer.InterpolationDelaySeconds;
+
+    public event Action<RemoteEntity>? RemoteSpawned;
+
+    public event Action<RemoteEntity>? RemoteDespawned;
 
     public void OnSpawn(EntitySpawn spawn)
     {
@@ -90,7 +90,7 @@ public sealed class ClientWorld
             RemoteDespawned?.Invoke(replaced);
         }
 
-        RemoteEntity remote = new RemoteEntity(spawn.Entity, spawn.Kind, spawn.DefinitionId, spawn.StateFlags);
+        var remote = new RemoteEntity(spawn.Entity, spawn.Kind, spawn.DefinitionId, spawn.StateFlags);
         remote.Buffer.Add(LatestServerTick * m_tickSeconds, spawn.Position, spawn.Facing);
         m_remotes.Add(spawn.Entity, remote);
         RemoteSpawned?.Invoke(remote);

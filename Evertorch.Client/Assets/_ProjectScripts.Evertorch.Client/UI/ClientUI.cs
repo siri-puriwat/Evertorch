@@ -6,14 +6,14 @@ using UnityEngine.UI;
 namespace Evertorch.Client
 {
 /// <summary>
-/// Setup every client canvas shares, so that all screen-space UI scales the same way.
+///     Setup every client canvas shares, so that all screen-space UI scales the same way.
 /// </summary>
 public static class ClientUI
 {
-    private static readonly Vector2 ReferenceResolution = new Vector2(1080f, 1920f);
+    private static readonly Vector2 ReferenceResolution = new(1080f, 1920f);
 
     /// <summary>
-    /// The event system every client canvas shares, created under <paramref name="owner"/> when there is none yet.
+    ///     The event system every client canvas shares, created under <paramref name="owner" /> when there is none yet.
     /// </summary>
     public static EventSystem EnsureEventSystem(Transform owner)
     {
@@ -23,7 +23,7 @@ public static class ClientUI
             return current;
         }
 
-        GameObject eventSystem = new GameObject("EventSystem");
+        var eventSystem = new GameObject("EventSystem");
         eventSystem.transform.SetParent(owner, false);
         current = eventSystem.AddComponent<EventSystem>();
         eventSystem.AddComponent<InputSystemUIInputModule>().AssignDefaultActions();

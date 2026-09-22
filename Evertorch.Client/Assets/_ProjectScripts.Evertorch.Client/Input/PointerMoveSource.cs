@@ -6,8 +6,8 @@ using UnityEngine.InputSystem.Controls;
 namespace Evertorch.Client
 {
 /// <summary>
-/// Click and tap input. It only reports where on the screen the player asked to go; turning that into a walk is
-/// the movement controller's decision.
+///     Click and tap input. It only reports where on the screen the player asked to go; turning that into a walk is
+///     the movement controller's decision.
 /// </summary>
 public sealed class PointerMoveSource : IDisposable
 {
@@ -22,17 +22,17 @@ public sealed class PointerMoveSource : IDisposable
         m_moveTo.Enable();
     }
 
+    public void Dispose()
+    {
+        m_moveTo.performed -= OnMoveTo;
+    }
+
     public bool TryTakeRequest(out Vector2 screenPosition)
     {
         screenPosition = m_requestPosition;
         bool hadRequest = m_hasRequest;
         m_hasRequest = false;
         return hadRequest;
-    }
-
-    public void Dispose()
-    {
-        m_moveTo.performed -= OnMoveTo;
     }
 
     private void OnMoveTo(InputAction.CallbackContext context)

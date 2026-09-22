@@ -5,7 +5,7 @@ using UnityEngine;
 namespace Evertorch.Client
 {
 /// <summary>
-/// A placeholder body for one entity. It is told where to stand every frame and decides nothing.
+///     A placeholder body for one entity. It is told where to stand every frame and decides nothing.
 /// </summary>
 public sealed class EntityView : MonoBehaviour
 {
@@ -28,16 +28,16 @@ public sealed class EntityView : MonoBehaviour
             throw new ArgumentNullException(nameof(baseMaterial));
         }
 
-        GameObject root = new GameObject(objectName);
+        var root = new GameObject(objectName);
         EntityView view = root.AddComponent<EntityView>();
         view.m_material = new Material(baseMaterial) { color = color };
 
-        GameObject body = GameObject.CreatePrimitive(PrimitiveType.Capsule);
+        var body = GameObject.CreatePrimitive(PrimitiveType.Capsule);
         Attach(body, root.transform, view.m_material);
         body.transform.localPosition = new Vector3(0f, BodyHeight * 0.5f, 0f);
         body.transform.localScale = new Vector3(radius * 2f, BodyHeight * 0.5f, radius * 2f);
 
-        GameObject nose = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        var nose = GameObject.CreatePrimitive(PrimitiveType.Cube);
         Attach(nose, root.transform, view.m_material);
         nose.transform.localPosition = new Vector3(0f, BodyHeight * 0.75f, radius);
         nose.transform.localScale = new Vector3(radius * 0.5f, radius * 0.5f, radius);

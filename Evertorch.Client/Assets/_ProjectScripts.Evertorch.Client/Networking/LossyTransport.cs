@@ -5,9 +5,9 @@ using Evertorch.Protocol;
 namespace Evertorch.Client
 {
 /// <summary>
-/// A development wrapper that makes a good connection behave like a bad one: every message is delayed, and
-/// unreliable messages are also dropped and reordered. Reliable messages keep their order, as the real transport
-/// guarantees. The same seed and the same clock readings give the same outcome.
+///     A development wrapper that makes a good connection behave like a bad one: every message is delayed, and
+///     unreliable messages are also dropped and reordered. Reliable messages keep their order, as the real transport
+///     guarantees. The same seed and the same clock readings give the same outcome.
 /// </summary>
 public sealed class LossyTransport : IClientTransport
 {
@@ -17,9 +17,9 @@ public sealed class LossyTransport : IClientTransport
     private readonly IClientTransport m_inner;
     private readonly Func<double> m_nowSeconds;
     private readonly Random m_random;
-    private readonly List<Held> m_outbound = new List<Held>();
-    private readonly List<Held> m_inbound = new List<Held>();
-    private readonly List<Held> m_due = new List<Held>();
+    private readonly List<Held> m_outbound = new();
+    private readonly List<Held> m_inbound = new();
+    private readonly List<Held> m_due = new();
     private readonly Capture m_capture;
     private double m_lastReliableOutbound;
     private double m_lastReliableInbound;
@@ -34,7 +34,7 @@ public sealed class LossyTransport : IClientTransport
     }
 
     /// <summary>
-    /// One-way delay added in each direction.
+    ///     One-way delay added in each direction.
     /// </summary>
     public int LatencyMilliseconds { get; set; }
 
@@ -43,7 +43,7 @@ public sealed class LossyTransport : IClientTransport
     public int LossPercent { get; set; }
 
     /// <summary>
-    /// Chance that an unreliable message is held back long enough for later ones to overtake it.
+    ///     Chance that an unreliable message is held back long enough for later ones to overtake it.
     /// </summary>
     public int ReorderPercent { get; set; }
 
@@ -51,13 +51,13 @@ public sealed class LossyTransport : IClientTransport
 
     public int Reordered { get; private set; }
 
-    public bool IsConnected => m_inner.IsConnected;
-
     // With nothing to simulate and nothing waiting, the wrapper must cost nothing: no extra frame either way.
     private bool IsTransparent =>
         LatencyMilliseconds == 0 && JitterMilliseconds == 0 && LossPercent == 0 && ReorderPercent == 0;
 
-    public int RoundTripMilliseconds => m_inner.RoundTripMilliseconds + (2 * LatencyMilliseconds);
+    public bool IsConnected => m_inner.IsConnected;
+
+    public int RoundTripMilliseconds => m_inner.RoundTripMilliseconds + 2 * LatencyMilliseconds;
 
     public void Connect(string host, int port)
     {
@@ -118,7 +118,7 @@ public sealed class LossyTransport : IClientTransport
         MessageDelivery delivery,
         ReadOnlySpan<byte> payload)
     {
-        double release = now + (LatencyMilliseconds / 1000.0);
+        double release = now + LatencyMilliseconds / 1000.0;
         if (delivery == MessageDelivery.ReliableOrdered)
         {
             release = Math.Max(release, lastReliable);

@@ -3,8 +3,8 @@ using Evertorch.Game;
 namespace Evertorch.Client
 {
 /// <summary>
-/// The only place the client builds a <see cref="MoveIntent"/>. Keyboard, gamepad, on-screen stick, and the path
-/// follower all end here, so the server cannot tell the control schemes apart.
+///     The only place the client builds a <see cref="MoveIntent" />. Keyboard, gamepad, on-screen stick, and the path
+///     follower all end here, so the server cannot tell the control schemes apart.
 /// </summary>
 public sealed class MoveIntentProducer
 {

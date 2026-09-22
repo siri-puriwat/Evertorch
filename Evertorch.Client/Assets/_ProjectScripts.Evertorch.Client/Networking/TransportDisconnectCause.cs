@@ -7,6 +7,6 @@ public enum TransportDisconnectCause
     ClosedByServer = 2,
     TimedOut = 3,
     ConnectionFailed = 4,
-    Other = 5,
+    Other = 5
 }
 }

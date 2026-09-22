@@ -7,8 +7,8 @@ using UnityEngine.UI;
 namespace Evertorch.Client
 {
 /// <summary>
-/// The on-screen stick. It drives a virtual gamepad stick, so the movement action reads it through the same
-/// binding as a real gamepad and no touch-specific movement code exists.
+///     The on-screen stick. It drives a virtual gamepad stick, so the movement action reads it through the same
+///     binding as a real gamepad and no touch-specific movement code exists.
 /// </summary>
 public sealed class TouchControls : MonoBehaviour
 {
@@ -19,7 +19,7 @@ public sealed class TouchControls : MonoBehaviour
     private const float KnobSize = 62f;
     private const float StickInset = 129f;
 
-    private readonly List<RaycastResult> m_raycastResults = new List<RaycastResult>();
+    private readonly List<RaycastResult> m_raycastResults = new();
     private GameObject? m_stickRoot;
     private EventSystem? m_eventSystem;
 
@@ -31,7 +31,7 @@ public sealed class TouchControls : MonoBehaviour
 
     public static TouchControls Create()
     {
-        GameObject root = new GameObject("TouchControls");
+        var root = new GameObject("TouchControls");
         TouchControls controls = root.AddComponent<TouchControls>();
         controls.Build();
         return controls;
@@ -46,7 +46,7 @@ public sealed class TouchControls : MonoBehaviour
     }
 
     /// <summary>
-    /// Whether a screen position is on a control, so that touching the stick is never also a tap on the ground.
+    ///     Whether a screen position is on a control, so that touching the stick is never also a tap on the ground.
     /// </summary>
     public bool IsOverControl(Vector2 screenPosition)
     {
@@ -55,7 +55,7 @@ public sealed class TouchControls : MonoBehaviour
             return false;
         }
 
-        PointerEventData pointer = new PointerEventData(m_eventSystem) { position = screenPosition };
+        var pointer = new PointerEventData(m_eventSystem) { position = screenPosition };
         m_raycastResults.Clear();
         m_eventSystem.RaycastAll(pointer, m_raycastResults);
         return m_raycastResults.Count > 0;
@@ -65,7 +65,7 @@ public sealed class TouchControls : MonoBehaviour
     {
         m_eventSystem = ClientUI.EnsureEventSystem(transform);
 
-        GameObject canvasObject = new GameObject("Canvas");
+        var canvasObject = new GameObject("Canvas");
         canvasObject.transform.SetParent(transform, false);
         ClientUI.AddScreenCanvas(canvasObject, 0);
 
@@ -88,7 +88,7 @@ public sealed class TouchControls : MonoBehaviour
 
     private static GameObject CreateImage(string objectName, Transform parent, float size, Color color)
     {
-        GameObject imageObject = new GameObject(objectName, typeof(RectTransform));
+        var imageObject = new GameObject(objectName, typeof(RectTransform));
         imageObject.transform.SetParent(parent, false);
         Image image = imageObject.AddComponent<Image>();
         image.color = color;

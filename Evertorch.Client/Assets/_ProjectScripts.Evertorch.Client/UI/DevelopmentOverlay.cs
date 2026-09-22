@@ -8,8 +8,8 @@ using UnityEngine.UI;
 namespace Evertorch.Client
 {
 /// <summary>
-/// Development-only readout and controls: connection state, prediction health, and the simulated link quality.
-/// F1 hides it.
+///     Development-only readout and controls: connection state, prediction health, and the simulated link quality.
+///     F1 hides it.
 /// </summary>
 public sealed class DevelopmentOverlay : MonoBehaviour
 {
@@ -25,14 +25,14 @@ public sealed class DevelopmentOverlay : MonoBehaviour
     private const float HandleWidth = 10f;
     private const int FieldCharacterLimit = 64;
 
-    private static readonly Color PanelColor = new Color(0.08f, 0.09f, 0.11f, 0.85f);
-    private static readonly Color ControlColor = new Color(0.24f, 0.27f, 0.32f, 1f);
-    private static readonly Color AccentColor = new Color(0.25f, 0.65f, 0.95f);
-    private static readonly Color TextColor = new Color(0.92f, 0.94f, 0.96f);
+    private static readonly Color PanelColor = new(0.08f, 0.09f, 0.11f, 0.85f);
+    private static readonly Color ControlColor = new(0.24f, 0.27f, 0.32f, 1f);
+    private static readonly Color AccentColor = new(0.25f, 0.65f, 0.95f);
+    private static readonly Color TextColor = new(0.92f, 0.94f, 0.96f);
 
     // A clicked control is never selected: the UI navigate action shares WASD, the arrow keys, and the gamepad stick
     // with movement, so a selected slider would change while the player walks.
-    private static readonly Navigation NoNavigation = new Navigation { mode = Navigation.Mode.None };
+    private static readonly Navigation NoNavigation = new() { mode = Navigation.Mode.None };
 
     private View? m_view;
 
@@ -57,7 +57,7 @@ public sealed class DevelopmentOverlay : MonoBehaviour
     public static DevelopmentOverlay Create(GameClient client)
     {
         // Built inactive, so every control is fully wired before any of them is enabled.
-        GameObject root = new GameObject("DevelopmentOverlay", typeof(RectTransform));
+        var root = new GameObject("DevelopmentOverlay", typeof(RectTransform));
         root.SetActive(false);
         DevelopmentOverlay overlay = root.AddComponent<DevelopmentOverlay>();
         overlay.Build(client);
@@ -66,8 +66,8 @@ public sealed class DevelopmentOverlay : MonoBehaviour
     }
 
     /// <summary>
-    /// Whether a screen position (origin bottom-left, as the input system reports it) is on the overlay, so that
-    /// using its controls is never also a click on the ground.
+    ///     Whether a screen position (origin bottom-left, as the input system reports it) is on the overlay, so that
+    ///     using its controls is never also a click on the ground.
     /// </summary>
     public bool Covers(Vector2 screenPosition)
     {
@@ -97,14 +97,14 @@ public sealed class DevelopmentOverlay : MonoBehaviour
 
     private static GameObject CreateUiObject(string objectName, Transform parent)
     {
-        GameObject uiObject = new GameObject(objectName, typeof(RectTransform));
+        var uiObject = new GameObject(objectName, typeof(RectTransform));
         uiObject.transform.SetParent(parent, false);
         return uiObject;
     }
 
     private static RectTransform Stretch(GameObject target, float insetX, float insetY)
     {
-        RectTransform rect = (RectTransform)target.transform;
+        var rect = (RectTransform)target.transform;
         rect.anchorMin = Vector2.zero;
         rect.anchorMax = Vector2.one;
         rect.offsetMin = new Vector2(insetX, insetY);
@@ -333,7 +333,7 @@ public sealed class DevelopmentOverlay : MonoBehaviour
                     30,
                     client,
                     transport => transport.ReorderPercent,
-                    (transport, value) => transport.ReorderPercent = value),
+                    (transport, value) => transport.ReorderPercent = value)
             };
 
             m_stick = CreateToggle(panel, "On-screen stick", isShown => client.Touch?.SetVisible(isShown));
@@ -444,16 +444,15 @@ public sealed class DevelopmentOverlay : MonoBehaviour
             GameObject row = CreateRow(name, parent);
             m_label = CreateRowLabel(name, row.transform);
             m_slider = CreateSlider(row.transform, max);
-            m_slider.onValueChanged.AddListener(
-                value =>
+            m_slider.onValueChanged.AddListener(value =>
+            {
+                // Every connect replaces the link, so the current one is looked up on each change.
+                LossyTransport? link = client.Link;
+                if (link != null)
                 {
-                    // Every connect replaces the link, so the current one is looked up on each change.
-                    LossyTransport? link = client.Link;
-                    if (link != null)
-                    {
-                        write(link, Mathf.RoundToInt(value));
-                    }
-                });
+                    write(link, Mathf.RoundToInt(value));
+                }
+            });
         }
 
         public void Show(LossyTransport link)

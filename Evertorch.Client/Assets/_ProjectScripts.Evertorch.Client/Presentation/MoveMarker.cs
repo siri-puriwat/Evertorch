@@ -5,15 +5,15 @@ using UnityEngine;
 namespace Evertorch.Client
 {
 /// <summary>
-/// Shows where a click landed: steady while the walk it started is active, and briefly in another colour when the
-/// click was refused.
+///     Shows where a click landed: steady while the walk it started is active, and briefly in another colour when the
+///     click was refused.
 /// </summary>
 public sealed class MoveMarker : MonoBehaviour
 {
     private const float RefusalSeconds = 0.6f;
 
-    private static readonly Color AcceptedColor = new Color(0.3f, 0.9f, 0.4f);
-    private static readonly Color RefusedColor = new Color(0.95f, 0.25f, 0.2f);
+    private static readonly Color AcceptedColor = new(0.3f, 0.9f, 0.4f);
+    private static readonly Color RefusedColor = new(0.95f, 0.25f, 0.2f);
 
     private Material? m_material;
     private MeshRenderer? m_renderer;
@@ -35,7 +35,7 @@ public sealed class MoveMarker : MonoBehaviour
             throw new ArgumentNullException(nameof(baseMaterial));
         }
 
-        GameObject marker = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+        var marker = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
         marker.name = "MoveMarker";
         Destroy(marker.GetComponent<Collider>());
         marker.transform.localScale = new Vector3(0.5f, 0.03f, 0.5f);

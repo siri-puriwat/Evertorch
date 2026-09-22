@@ -5,16 +5,16 @@ using Evertorch.Game;
 namespace Evertorch.Client
 {
 /// <summary>
-/// Chooses this tick's direction from the two ways a player can ask to move: a held direction, or a point to walk
-/// to. A held direction always wins and ends the walk in the same tick it is seen.
+///     Chooses this tick's direction from the two ways a player can ask to move: a held direction, or a point to walk
+///     to. A held direction always wins and ends the walk in the same tick it is seen.
 /// </summary>
 public sealed class MovementController
 {
     public const int PathNodeBudget = 8192;
 
     private readonly GridPathfinder m_pathfinder;
-    private readonly PathFollower m_follower = new PathFollower();
-    private readonly List<WorldPosition> m_foundWaypoints = new List<WorldPosition>();
+    private readonly PathFollower m_follower = new();
+    private readonly List<WorldPosition> m_foundWaypoints = new();
     private WorldDirection m_manualDirection;
 
     public MovementController(NavigationGrid grid)
@@ -33,7 +33,7 @@ public sealed class MovementController
     public int CancelledPaths { get; private set; }
 
     /// <summary>
-    /// The latest held direction in world space. Any length is accepted; only the heading is kept.
+    ///     The latest held direction in world space. Any length is accepted; only the heading is kept.
     /// </summary>
     public void SetManualDirection(float x, float z)
     {
@@ -41,7 +41,7 @@ public sealed class MovementController
     }
 
     /// <summary>
-    /// Starts walking to a point. False, with whatever the player was doing left alone, when no route exists.
+    ///     Starts walking to a point. False, with whatever the player was doing left alone, when no route exists.
     /// </summary>
     public bool TryMoveTo(WorldPosition from, WorldPosition destination)
     {

@@ -3,12 +3,13 @@ using System.Net;
 using System.Net.Sockets;
 using Evertorch.Protocol;
 using LiteNetLib;
+using DisconnectReason = LiteNetLib.DisconnectReason;
 
 namespace Evertorch.Client
 {
 /// <summary>
-/// The only client code that knows LiteNetLib. Events are raised from <see cref="Poll"/>, so everything above it
-/// runs on Unity's main thread.
+///     The only client code that knows LiteNetLib. Events are raised from <see cref="Poll" />, so everything above it
+///     runs on Unity's main thread.
 /// </summary>
 public sealed class LiteNetLibClientTransport : IClientTransport, IDisposable
 {
@@ -29,7 +30,7 @@ public sealed class LiteNetLibClientTransport : IClientTransport, IDisposable
             DisconnectTimeout = disconnectTimeoutMilliseconds,
 
             // The protocol never fragments, so a peer announcing a fragmented message is not speaking it.
-            MaxFragmentsCount = 1,
+            MaxFragmentsCount = 1
         };
     }
 
@@ -104,21 +105,21 @@ public sealed class LiteNetLibClientTransport : IClientTransport, IDisposable
         m_listener?.OnPayload((ProtocolChannel)channelNumber, reader.GetRemainingBytesSpan());
     }
 
-    private static TransportDisconnectCause ToCause(LiteNetLib.DisconnectReason reason)
+    private static TransportDisconnectCause ToCause(DisconnectReason reason)
     {
         switch (reason)
         {
-            case LiteNetLib.DisconnectReason.DisconnectPeerCalled:
+            case DisconnectReason.DisconnectPeerCalled:
                 return TransportDisconnectCause.ClosedLocally;
-            case LiteNetLib.DisconnectReason.RemoteConnectionClose:
-            case LiteNetLib.DisconnectReason.ConnectionRejected:
+            case DisconnectReason.RemoteConnectionClose:
+            case DisconnectReason.ConnectionRejected:
                 return TransportDisconnectCause.ClosedByServer;
-            case LiteNetLib.DisconnectReason.Timeout:
+            case DisconnectReason.Timeout:
                 return TransportDisconnectCause.TimedOut;
-            case LiteNetLib.DisconnectReason.ConnectionFailed:
-            case LiteNetLib.DisconnectReason.HostUnreachable:
-            case LiteNetLib.DisconnectReason.NetworkUnreachable:
-            case LiteNetLib.DisconnectReason.UnknownHost:
+            case DisconnectReason.ConnectionFailed:
+            case DisconnectReason.HostUnreachable:
+            case DisconnectReason.NetworkUnreachable:
+            case DisconnectReason.UnknownHost:
                 return TransportDisconnectCause.ConnectionFailed;
             default:
                 return TransportDisconnectCause.Other;

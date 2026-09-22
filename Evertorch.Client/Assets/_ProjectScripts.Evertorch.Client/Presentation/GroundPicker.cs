@@ -4,7 +4,7 @@ using UnityEngine;
 namespace Evertorch.Client
 {
 /// <summary>
-/// Finds the point on the map under a screen position.
+///     Finds the point on the map under a screen position.
 /// </summary>
 public static class GroundPicker
 {

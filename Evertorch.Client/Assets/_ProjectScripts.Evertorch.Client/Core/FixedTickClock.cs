@@ -3,8 +3,8 @@ using System;
 namespace Evertorch.Client
 {
 /// <summary>
-/// Turns variable frame time into whole simulation ticks at the server's rate, plus how far the current frame sits
-/// between two ticks.
+///     Turns variable frame time into whole simulation ticks at the server's rate, plus how far the current frame sits
+///     between two ticks.
 /// </summary>
 public sealed class FixedTickClock
 {
@@ -34,7 +34,7 @@ public sealed class FixedTickClock
     public int SkippedTicks { get; private set; }
 
     /// <summary>
-    /// Adds frame time and returns how many ticks are due. Call <see cref="NextTick"/> once for each.
+    ///     Adds frame time and returns how many ticks are due. Call <see cref="NextTick" /> once for each.
     /// </summary>
     public int Advance(float deltaSeconds)
     {

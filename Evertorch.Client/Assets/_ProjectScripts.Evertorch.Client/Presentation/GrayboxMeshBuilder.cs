@@ -7,8 +7,8 @@ using UnityEngine.Rendering;
 namespace Evertorch.Client
 {
 /// <summary>
-/// Turns a navigation grid into a graybox mesh, one submesh per <see cref="GrayboxSurface"/>. For the graybox slice
-/// the grid is the map geometry, so what is drawn is exactly what the server collides with.
+///     Turns a navigation grid into a graybox mesh, one submesh per <see cref="GrayboxSurface" />. For the graybox slice
+///     the grid is the map geometry, so what is drawn is exactly what the server collides with.
 /// </summary>
 public static class GrayboxMeshBuilder
 {
@@ -29,8 +29,8 @@ public static class GrayboxMeshBuilder
             throw new ArgumentNullException(nameof(grid));
         }
 
-        List<Vector3> vertices = new List<Vector3>();
-        List<int>[] triangles = new List<int>[SubMeshCount];
+        var vertices = new List<Vector3>();
+        var triangles = new List<int>[SubMeshCount];
         for (int index = 0; index < triangles.Length; index++)
         {
             triangles[index] = new List<int>();
@@ -44,11 +44,11 @@ public static class GrayboxMeshBuilder
             }
         }
 
-        Mesh mesh = new Mesh
+        var mesh = new Mesh
         {
             name = "Graybox",
             indexFormat = IndexFormat.UInt32,
-            subMeshCount = SubMeshCount,
+            subMeshCount = SubMeshCount
         };
         mesh.SetVertices(vertices);
         for (int index = 0; index < triangles.Length; index++)
@@ -69,8 +69,8 @@ public static class GrayboxMeshBuilder
         List<int>[] triangles)
     {
         NavigationCell cell = grid.GetCell(column, row);
-        float x0 = grid.OriginX + (column * grid.CellSize);
-        float z0 = grid.OriginZ + (row * grid.CellSize);
+        float x0 = grid.OriginX + column * grid.CellSize;
+        float z0 = grid.OriginZ + row * grid.CellSize;
         float x1 = x0 + grid.CellSize;
         float z1 = z0 + grid.CellSize;
 

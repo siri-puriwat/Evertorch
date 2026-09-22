@@ -3,12 +3,12 @@ using UnityEngine;
 namespace Evertorch.Client
 {
 /// <summary>
-/// A fixed-angle camera that keeps one transform in view.
+///     A fixed-angle camera that keeps one transform in view.
 /// </summary>
 public sealed class FollowCamera : MonoBehaviour
 {
     [SerializeField]
-    private Vector3 m_offset = new Vector3(0f, 15f, -11f);
+    private Vector3 m_offset = new(0f, 15f, -11f);
 
     private Transform? m_target;
 

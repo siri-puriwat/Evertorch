@@ -4,7 +4,7 @@ using Evertorch.Protocol;
 namespace Evertorch.Client
 {
 /// <summary>
-/// What the client knows about an entity it does not control.
+///     What the client knows about an entity it does not control.
 /// </summary>
 public sealed class RemoteEntity
 {
@@ -24,6 +24,6 @@ public sealed class RemoteEntity
 
     public EntityStateFlags StateFlags { get; internal set; }
 
-    public RemoteEntityBuffer Buffer { get; } = new RemoteEntityBuffer();
+    public RemoteEntityBuffer Buffer { get; } = new();
 }
 }

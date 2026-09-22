@@ -1,7 +1,7 @@
 namespace Evertorch.Client
 {
 /// <summary>
-/// Content names a map's scene by a stable key; this is the one place that knows which Unity scene that is.
+///     Content names a map's scene by a stable key; this is the one place that knows which Unity scene that is.
 /// </summary>
 public static class MapSceneResolver
 {

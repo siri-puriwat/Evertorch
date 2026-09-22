@@ -5,8 +5,8 @@ using Evertorch.Game;
 namespace Evertorch.Client
 {
 /// <summary>
-/// Turns a list of waypoints into one direction per client tick. It only steers; the shared movement model and the
-/// server still decide where the body ends up.
+///     Turns a list of waypoints into one direction per client tick. It only steers; the shared movement model and the
+///     server still decide where the body ends up.
 /// </summary>
 public sealed class PathFollower
 {
@@ -17,7 +17,7 @@ public sealed class PathFollower
 
     private const float ProgressEpsilon = 0.001f;
 
-    private readonly List<WorldPosition> m_waypoints = new List<WorldPosition>();
+    private readonly List<WorldPosition> m_waypoints = new();
     private int m_next;
     private int m_stuckTicks;
     private bool m_hasLastPosition;
@@ -49,12 +49,12 @@ public sealed class PathFollower
     }
 
     /// <summary>
-    /// The direction for this tick, or zero once the last waypoint is reached or the body has stopped making
-    /// progress.
+    ///     The direction for this tick, or zero once the last waypoint is reached or the body has stopped making
+    ///     progress.
     /// </summary>
     /// <param name="stepDistance">
-    /// How far one tick moves the body. Speed is never scaled down, so a waypoint closer than half a step counts as
-    /// reached; stepping again would only overshoot it.
+    ///     How far one tick moves the body. Speed is never scaled down, so a waypoint closer than half a step counts as
+    ///     reached; stepping again would only overshoot it.
     /// </param>
     public WorldDirection Advance(WorldPosition position, float stepDistance)
     {
@@ -75,7 +75,7 @@ public sealed class PathFollower
             WorldPosition waypoint = m_waypoints[m_next];
             float deltaX = waypoint.X - position.X;
             float deltaZ = waypoint.Z - position.Z;
-            if ((deltaX * deltaX) + (deltaZ * deltaZ) > arrival * arrival)
+            if (deltaX * deltaX + deltaZ * deltaZ > arrival * arrival)
             {
                 return MovementModel.NormalizeOrZero(deltaX, deltaZ);
             }
@@ -93,7 +93,7 @@ public sealed class PathFollower
         {
             float deltaX = position.X - m_lastPosition.X;
             float deltaZ = position.Z - m_lastPosition.Z;
-            bool hasMoved = (deltaX * deltaX) + (deltaZ * deltaZ) > ProgressEpsilon * ProgressEpsilon;
+            bool hasMoved = deltaX * deltaX + deltaZ * deltaZ > ProgressEpsilon * ProgressEpsilon;
             m_stuckTicks = hasMoved ? 0 : m_stuckTicks + 1;
         }
 

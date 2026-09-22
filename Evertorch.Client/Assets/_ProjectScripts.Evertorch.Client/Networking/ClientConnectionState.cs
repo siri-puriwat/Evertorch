@@ -6,6 +6,6 @@ public enum ClientConnectionState
     Connecting = 1,
     AwaitingHello = 2,
     EnteringWorld = 3,
-    InWorld = 4,
+    InWorld = 4
 }
 }

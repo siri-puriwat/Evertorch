@@ -7,7 +7,7 @@ using UnityEngine.Networking;
 namespace Evertorch.Client
 {
 /// <summary>
-/// Reads the client content package from <c>StreamingAssets/GameData</c>.
+///     Reads the client content package from <c>StreamingAssets/GameData</c>.
 /// </summary>
 public sealed class StreamingContentLoader
 {
@@ -31,7 +31,7 @@ public sealed class StreamingContentLoader
         Error = string.Empty;
         IsDone = false;
 
-        FileRequest manifestRequest = new FileRequest(ClientContentParser.ManifestFile);
+        var manifestRequest = new FileRequest(ClientContentParser.ManifestFile);
         yield return manifestRequest.Send();
         if (manifestRequest.Bytes == null)
         {
@@ -46,10 +46,10 @@ public sealed class StreamingContentLoader
             yield break;
         }
 
-        Dictionary<string, byte[]> files = new Dictionary<string, byte[]>(StringComparer.Ordinal);
+        var files = new Dictionary<string, byte[]>(StringComparer.Ordinal);
         foreach (string name in names)
         {
-            FileRequest request = new FileRequest(name);
+            var request = new FileRequest(name);
             yield return request.Send();
             if (request.Bytes == null)
             {
@@ -90,7 +90,7 @@ public sealed class StreamingContentLoader
 
         public IEnumerator Send()
         {
-            using (UnityWebRequest request = UnityWebRequest.Get(m_url))
+            using (var request = UnityWebRequest.Get(m_url))
             {
                 yield return request.SendWebRequest();
                 if (request.result == UnityWebRequest.Result.Success)

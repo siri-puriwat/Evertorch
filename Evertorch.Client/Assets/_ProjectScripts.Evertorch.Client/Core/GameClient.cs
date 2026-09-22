@@ -10,9 +10,9 @@ using EntityId = Evertorch.Game.EntityId;
 namespace Evertorch.Client
 {
 /// <summary>
-/// The client's composition root. It loads content, owns the connection, runs the client simulation at the server's
-/// tick rate, and keeps the views in step with it. All state lives on this instance; nothing is static, because the
-/// editor may keep the domain loaded between play sessions.
+///     The client's composition root. It loads content, owns the connection, runs the client simulation at the server's
+///     tick rate, and keeps the views in step with it. All state lives on this instance; nothing is static, because the
+///     editor may keep the domain loaded between play sessions.
 /// </summary>
 public sealed class GameClient : MonoBehaviour
 {
@@ -20,8 +20,8 @@ public sealed class GameClient : MonoBehaviour
     private const int DisconnectTimeoutMilliseconds = 10000;
     private const string DevelopmentTokenPrefix = "dev:";
 
-    private static readonly Color LocalColor = new Color(0.25f, 0.65f, 0.95f);
-    private static readonly Color RemoteColor = new Color(0.9f, 0.55f, 0.2f);
+    private static readonly Color LocalColor = new(0.25f, 0.65f, 0.95f);
+    private static readonly Color RemoteColor = new(0.9f, 0.55f, 0.2f);
 
     [SerializeField]
     private Material? m_grayboxMaterial;
@@ -41,8 +41,8 @@ public sealed class GameClient : MonoBehaviour
     [SerializeField]
     private bool m_connectOnStart = true;
 
-    private readonly Dictionary<EntityId, EntityView> m_remoteViews = new Dictionary<EntityId, EntityView>();
-    private readonly StreamingContentLoader m_contentLoader = new StreamingContentLoader();
+    private readonly Dictionary<EntityId, EntityView> m_remoteViews = new();
+    private readonly StreamingContentLoader m_contentLoader = new();
     private LiteNetLibClientTransport? m_socket;
     private ManualMoveSource? m_manualSource;
     private PointerMoveSource? m_pointerSource;
@@ -212,7 +212,7 @@ public sealed class GameClient : MonoBehaviour
             Link.ReorderPercent = previousLink.ReorderPercent;
         }
 
-        ClientConnectionSettings settings = new ClientConnectionSettings(
+        var settings = new ClientConnectionSettings(
             m_buildVersion,
             m_contentLoader.Content.Version,
             DevelopmentTokenPrefix + Identity,
@@ -398,7 +398,7 @@ public sealed class GameClient : MonoBehaviour
             return;
         }
 
-        EntityView view = EntityView.Create(
+        var view = EntityView.Create(
             "Remote " + remote.Entity.Value,
             m_world.Grid.AgentRadius,
             ResolveMaterial(),

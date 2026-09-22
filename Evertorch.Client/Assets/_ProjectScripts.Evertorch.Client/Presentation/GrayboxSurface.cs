@@ -1,7 +1,7 @@
 namespace Evertorch.Client
 {
 /// <summary>
-/// The colours a graybox map is drawn in. The value is the submesh index.
+///     The colours a graybox map is drawn in. The value is the submesh index.
 /// </summary>
 public enum GrayboxSurface
 {
@@ -10,6 +10,6 @@ public enum GrayboxSurface
     Wall = 2,
     Obstacle = 3,
     NpcMarker = 4,
-    Gate = 5,
+    Gate = 5
 }
 }

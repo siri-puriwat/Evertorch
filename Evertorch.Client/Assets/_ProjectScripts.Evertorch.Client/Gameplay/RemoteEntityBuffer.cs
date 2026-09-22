@@ -4,15 +4,15 @@ using Evertorch.Game;
 namespace Evertorch.Client
 {
 /// <summary>
-/// Recent server states of one remote entity, drawn a little in the past so there are usually two states to blend
-/// between. Remote entities are never predicted: past the newest state the entity simply waits.
+///     Recent server states of one remote entity, drawn a little in the past so there are usually two states to blend
+///     between. Remote entities are never predicted: past the newest state the entity simply waits.
 /// </summary>
 public sealed class RemoteEntityBuffer
 {
     public const double InterpolationDelaySeconds = 0.1;
     public const int Capacity = 32;
 
-    private readonly List<Sample> m_samples = new List<Sample>();
+    private readonly List<Sample> m_samples = new();
 
     public int Count => m_samples.Count;
 
@@ -65,12 +65,12 @@ public sealed class RemoteEntityBuffer
 
         float t = (float)((renderTimeSeconds - from.Time) / (to.Time - from.Time));
         position = new WorldPosition(
-            from.Position.X + ((to.Position.X - from.Position.X) * t),
-            from.Position.Y + ((to.Position.Y - from.Position.Y) * t),
-            from.Position.Z + ((to.Position.Z - from.Position.Z) * t));
+            from.Position.X + (to.Position.X - from.Position.X) * t,
+            from.Position.Y + (to.Position.Y - from.Position.Y) * t,
+            from.Position.Z + (to.Position.Z - from.Position.Z) * t);
         WorldDirection blended = MovementModel.NormalizeOrZero(
-            from.Facing.X + ((to.Facing.X - from.Facing.X) * t),
-            from.Facing.Z + ((to.Facing.Z - from.Facing.Z) * t));
+            from.Facing.X + (to.Facing.X - from.Facing.X) * t,
+            from.Facing.Z + (to.Facing.Z - from.Facing.Z) * t);
         facing = blended == default ? to.Facing : blended;
         return true;
     }
@@ -81,7 +81,7 @@ public sealed class RemoteEntityBuffer
         float deltaY = to.Y - from.Y;
         float deltaZ = to.Z - from.Z;
         float threshold = RenderSmoother.TeleportThreshold;
-        return (deltaX * deltaX) + (deltaY * deltaY) + (deltaZ * deltaZ) > threshold * threshold;
+        return deltaX * deltaX + deltaY * deltaY + deltaZ * deltaZ > threshold * threshold;
     }
 
     private readonly struct Sample

@@ -1,12 +1,13 @@
 using System;
+using System.Net.Sockets;
 using Evertorch.Game;
 using Evertorch.Protocol;
 
 namespace Evertorch.Client
 {
 /// <summary>
-/// Runs the client side of the protocol over a transport: hello, world entry, and then the routing of world
-/// messages into a <see cref="ClientWorld"/>. It trusts nothing it receives beyond what decodes cleanly.
+///     Runs the client side of the protocol over a transport: hello, world entry, and then the routing of world
+///     messages into a <see cref="ClientWorld" />. It trusts nothing it receives beyond what decodes cleanly.
 /// </summary>
 public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
 {
@@ -22,10 +23,6 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
         m_maps = maps ?? throw new ArgumentNullException(nameof(maps));
     }
 
-    public event Action<ClientWorld>? EnteredWorld;
-
-    public event Action? Closed;
-
     public ClientConnectionState State { get; private set; }
 
     public ClientWorld? World { get; private set; }
@@ -39,7 +36,7 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
     public DisconnectNotice? Notice { get; private set; }
 
     /// <summary>
-    /// Why the client itself gave up, when it did. Never contains the session token.
+    ///     Why the client itself gave up, when it did. Never contains the session token.
     /// </summary>
     public string LocalError { get; private set; } = string.Empty;
 
@@ -49,70 +46,6 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
 
     public int RoundTripMilliseconds => m_transport.RoundTripMilliseconds;
 
-    public void Connect(string host, int port)
-    {
-        if (State != ClientConnectionState.Disconnected)
-        {
-            throw new InvalidOperationException("The connection is already in use.");
-        }
-
-        World = null;
-        Notice = null;
-        LocalError = string.Empty;
-        DisconnectCause = TransportDisconnectCause.None;
-        if (!ContentVersionCodec.TryToWire(m_settings.ContentVersion, out uint _))
-        {
-            Fail("The client content version is not a valid content version.");
-            return;
-        }
-
-        State = ClientConnectionState.Connecting;
-        try
-        {
-            m_transport.Connect(host, port);
-        }
-        catch (InvalidOperationException exception)
-        {
-            Fail("The connection could not be started: " + exception.Message);
-        }
-        catch (System.Net.Sockets.SocketException exception)
-        {
-            Fail("The connection could not be started: " + exception.Message);
-        }
-    }
-
-    public void Disconnect()
-    {
-        if (State != ClientConnectionState.Disconnected)
-        {
-            m_transport.Disconnect();
-        }
-    }
-
-    public void Poll()
-    {
-        m_transport.Poll(this);
-    }
-
-    public void Send(MoveIntent intent)
-    {
-        if (State != ClientConnectionState.InWorld)
-        {
-            return;
-        }
-
-        if (intent.DirectionX == 0f && intent.DirectionZ == 0f)
-        {
-            int length = new StopMovement(intent.Sequence, intent.ClientTick).Write(m_sendBuffer);
-            SendRouted(MessageOpcode.StopMovement, length);
-        }
-        else
-        {
-            int length = new MoveInput(intent).Write(m_sendBuffer);
-            SendRouted(MessageOpcode.MoveInput, length);
-        }
-    }
-
     void IClientTransportListener.OnConnected()
     {
         if (State != ClientConnectionState.Connecting)
@@ -121,7 +54,7 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
         }
 
         ContentVersionCodec.TryToWire(m_settings.ContentVersion, out uint contentVersion);
-        ClientHello hello = new ClientHello(
+        var hello = new ClientHello(
             ProtocolConstants.ProtocolVersion,
             m_settings.BuildVersion,
             contentVersion,
@@ -188,6 +121,74 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
                 UnexpectedMessages++;
                 break;
         }
+    }
+
+    public void Send(MoveIntent intent)
+    {
+        if (State != ClientConnectionState.InWorld)
+        {
+            return;
+        }
+
+        if (intent.DirectionX == 0f && intent.DirectionZ == 0f)
+        {
+            int length = new StopMovement(intent.Sequence, intent.ClientTick).Write(m_sendBuffer);
+            SendRouted(MessageOpcode.StopMovement, length);
+        }
+        else
+        {
+            int length = new MoveInput(intent).Write(m_sendBuffer);
+            SendRouted(MessageOpcode.MoveInput, length);
+        }
+    }
+
+    public event Action<ClientWorld>? EnteredWorld;
+
+    public event Action? Closed;
+
+    public void Connect(string host, int port)
+    {
+        if (State != ClientConnectionState.Disconnected)
+        {
+            throw new InvalidOperationException("The connection is already in use.");
+        }
+
+        World = null;
+        Notice = null;
+        LocalError = string.Empty;
+        DisconnectCause = TransportDisconnectCause.None;
+        if (!ContentVersionCodec.TryToWire(m_settings.ContentVersion, out uint _))
+        {
+            Fail("The client content version is not a valid content version.");
+            return;
+        }
+
+        State = ClientConnectionState.Connecting;
+        try
+        {
+            m_transport.Connect(host, port);
+        }
+        catch (InvalidOperationException exception)
+        {
+            Fail("The connection could not be started: " + exception.Message);
+        }
+        catch (SocketException exception)
+        {
+            Fail("The connection could not be started: " + exception.Message);
+        }
+    }
+
+    public void Disconnect()
+    {
+        if (State != ClientConnectionState.Disconnected)
+        {
+            m_transport.Disconnect();
+        }
+    }
+
+    public void Poll()
+    {
+        m_transport.Poll(this);
     }
 
     private void OnServerHello(ReadOnlySpan<byte> payload)

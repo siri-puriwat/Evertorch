@@ -3,8 +3,8 @@ using System;
 namespace Evertorch.Client
 {
 /// <summary>
-/// A steady guess at the server time of the newest state the client holds. It runs on the local clock and leans
-/// gently toward what snapshots report, so jitter in their arrival does not make remote entities stutter.
+///     A steady guess at the server time of the newest state the client holds. It runs on the local clock and leans
+///     gently toward what snapshots report, so jitter in their arrival does not make remote entities stutter.
 /// </summary>
 public sealed class ServerTimeEstimator
 {

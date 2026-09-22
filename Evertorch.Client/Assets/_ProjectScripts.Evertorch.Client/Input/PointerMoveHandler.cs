@@ -5,8 +5,8 @@ using UnityEngine;
 namespace Evertorch.Client
 {
 /// <summary>
-/// Turns a pending click or tap into a walk request. A position on a control is never also a position on the
-/// ground, and the movement controller alone decides whether the point can be walked to.
+///     Turns a pending click or tap into a walk request. A position on a control is never also a position on the
+///     ground, and the movement controller alone decides whether the point can be walked to.
 /// </summary>
 public sealed class PointerMoveHandler
 {

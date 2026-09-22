@@ -9,8 +9,8 @@ using UnityEngine;
 namespace Evertorch.Client
 {
 /// <summary>
-/// Builds <see cref="ClientContent"/> from the bytes of a client content package. The package is generated, but it
-/// reaches the client through a folder anyone can edit, so every file is checked against the manifest before use.
+///     Builds <see cref="ClientContent" /> from the bytes of a client content package. The package is generated, but it
+///     reaches the client through a folder anyone can edit, so every file is checked against the manifest before use.
 /// </summary>
 public static class ClientContentParser
 {
@@ -20,7 +20,7 @@ public static class ClientContentParser
     private const int SupportedSchemaVersion = 1;
 
     /// <summary>
-    /// The files a manifest lists, or an empty list with <paramref name="error"/> set.
+    ///     The files a manifest lists, or an empty list with <paramref name="error" /> set.
     /// </summary>
     public static IReadOnlyList<string> ReadFileList(byte[] manifestBytes, out string error)
     {
@@ -41,7 +41,7 @@ public static class ClientContentParser
             return null;
         }
 
-        StringBuilder listing = new StringBuilder();
+        var listing = new StringBuilder();
         foreach (ManifestFileDto entry in manifest.files.OrderBy(file => file.path, StringComparer.Ordinal))
         {
             if (!files.TryGetValue(entry.path, out byte[]? content))
@@ -118,7 +118,7 @@ public static class ClientContentParser
             return null;
         }
 
-        Dictionary<MapDefinitionId, ClientMap> maps = new Dictionary<MapDefinitionId, ClientMap>();
+        var maps = new Dictionary<MapDefinitionId, ClientMap>();
         foreach (MapDto map in dto.definitions)
         {
             if (!MapDefinitionId.TryCreate(map.id, out MapDefinitionId id) || maps.ContainsKey(id))
@@ -159,7 +159,7 @@ public static class ClientContentParser
             return null;
         }
 
-        Dictionary<char, NavigationCell> legend = new Dictionary<char, NavigationCell>();
+        var legend = new Dictionary<char, NavigationCell>();
         foreach (LegendDto entry in navigation.legend)
         {
             if (entry.symbol == null || entry.symbol.Length != 1 || legend.ContainsKey(entry.symbol[0])
@@ -181,7 +181,7 @@ public static class ClientContentParser
             }
         }
 
-        NavigationCell[] cells = new NavigationCell[columns * rows];
+        var cells = new NavigationCell[columns * rows];
         for (int row = 0; row < rows; row++)
         {
             string text = navigation.cellRows[row];
@@ -199,7 +199,7 @@ public static class ClientContentParser
                     return null;
                 }
 
-                cells[(row * columns) + column] = cell;
+                cells[row * columns + column] = cell;
             }
         }
 
@@ -281,10 +281,10 @@ public static class ClientContentParser
 
     private static string ComputeHash(byte[] content)
     {
-        using (SHA256 sha256 = SHA256.Create())
+        using (var sha256 = SHA256.Create())
         {
             byte[] hash = sha256.ComputeHash(content);
-            StringBuilder text = new StringBuilder(hash.Length * 2);
+            var text = new StringBuilder(hash.Length * 2);
             foreach (byte value in hash)
             {
                 text.Append(value.ToString("x2"));

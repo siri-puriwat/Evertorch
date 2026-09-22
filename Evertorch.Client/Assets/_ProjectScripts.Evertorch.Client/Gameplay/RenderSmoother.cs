@@ -4,9 +4,9 @@ using Evertorch.Game;
 namespace Evertorch.Client
 {
 /// <summary>
-/// Decides where the local player is drawn. It blends between the last two simulation ticks, and when the server
-/// corrects the prediction it hides a small error by letting it fade out, or jumps when the error is too large to
-/// pass off as movement.
+///     Decides where the local player is drawn. It blends between the last two simulation ticks, and when the server
+///     corrects the prediction it hides a small error by letting it fade out, or jumps when the error is too large to
+///     pass off as movement.
 /// </summary>
 public sealed class RenderSmoother
 {
@@ -34,7 +34,7 @@ public sealed class RenderSmoother
     public float LargestCorrection { get; private set; }
 
     public float PendingOffset =>
-        (float)Math.Sqrt((m_offsetX * m_offsetX) + (m_offsetY * m_offsetY) + (m_offsetZ * m_offsetZ));
+        (float)Math.Sqrt(m_offsetX * m_offsetX + m_offsetY * m_offsetY + m_offsetZ * m_offsetZ);
 
     public void OnTick(WorldPosition previous, WorldPosition current)
     {
@@ -43,14 +43,14 @@ public sealed class RenderSmoother
     }
 
     /// <summary>
-    /// Call with the predicted position just before and just after a reconciliation.
+    ///     Call with the predicted position just before and just after a reconciliation.
     /// </summary>
     public void OnCorrected(WorldPosition before, WorldPosition after)
     {
         float shiftX = after.X - before.X;
         float shiftY = after.Y - before.Y;
         float shiftZ = after.Z - before.Z;
-        float error = (float)Math.Sqrt((shiftX * shiftX) + (shiftY * shiftY) + (shiftZ * shiftZ));
+        float error = (float)Math.Sqrt(shiftX * shiftX + shiftY * shiftY + shiftZ * shiftZ);
         LastCorrection = error;
         LargestCorrection = Math.Max(LargestCorrection, error);
 
@@ -98,9 +98,9 @@ public sealed class RenderSmoother
     {
         float t = Math.Max(0f, Math.Min(1f, alpha));
         return new WorldPosition(
-            m_previous.X + ((m_current.X - m_previous.X) * t) + m_offsetX,
-            m_previous.Y + ((m_current.Y - m_previous.Y) * t) + m_offsetY,
-            m_previous.Z + ((m_current.Z - m_previous.Z) * t) + m_offsetZ);
+            m_previous.X + (m_current.X - m_previous.X) * t + m_offsetX,
+            m_previous.Y + (m_current.Y - m_previous.Y) * t + m_offsetY,
+            m_previous.Z + (m_current.Z - m_previous.Z) * t + m_offsetZ);
     }
 }
 }
