@@ -30,7 +30,7 @@ public static class ServerContentLoader
     {
         if (!Directory.Exists(directory))
         {
-            throw new ContentLoadException(new[] { directory + ": the content package directory does not exist" });
+            throw new ContentLoadException(new[] { $"{directory}: the content package directory does not exist" });
         }
 
         var files = new Dictionary<string, byte[]>(StringComparer.Ordinal);
@@ -131,7 +131,7 @@ public static class ServerContentLoader
     {
         if (!files.TryGetValue(ManifestFile, out byte[]? content))
         {
-            problems.Add(ManifestFile + ": the package has no manifest");
+            problems.Add($"{ManifestFile}: the package has no manifest");
             return null;
         }
 
@@ -154,7 +154,7 @@ public static class ServerContentLoader
             entry.ReportUnexpectedProperties();
             if (hashes.ContainsKey(path))
             {
-                entry.Report("path", "'" + path + "' is listed more than once");
+                entry.Report("path", $"'{path}' is listed more than once");
             }
 
             hashes[path] = hash;
@@ -170,7 +170,7 @@ public static class ServerContentLoader
         {
             root.Report(
                 "schemaVersion",
-                "schema version " + schemaVersion + " is not supported; expected " + SupportedSchemaVersion);
+                $"schema version {schemaVersion} is not supported; expected {SupportedSchemaVersion}");
         }
 
         if (!IsContentVersion(serverVersion))
@@ -195,7 +195,7 @@ public static class ServerContentLoader
         {
             if (!manifest.Hashes.ContainsKey(expected))
             {
-                problems.Add(ManifestFile + ": files: '" + expected + "' is not listed");
+                problems.Add($"{ManifestFile}: files: '{expected}' is not listed");
             }
         }
 
@@ -206,15 +206,15 @@ public static class ServerContentLoader
         {
             if (Array.IndexOf(DataFiles, listed.Key) < 0)
             {
-                problems.Add(ManifestFile + ": files: '" + listed.Key + "' is not a known data file");
+                problems.Add($"{ManifestFile}: files: '{listed.Key}' is not a known data file");
             }
             else if (!files.TryGetValue(listed.Key, out byte[]? content))
             {
-                problems.Add(listed.Key + ": listed in the manifest but missing from the package");
+                problems.Add($"{listed.Key}: listed in the manifest but missing from the package");
             }
             else if (!string.Equals(ComputeHash(content), listed.Value, StringComparison.Ordinal))
             {
-                problems.Add(listed.Key + ": content does not match the SHA-256 recorded in the manifest");
+                problems.Add($"{listed.Key}: content does not match the SHA-256 recorded in the manifest");
             }
         }
 
@@ -222,14 +222,14 @@ public static class ServerContentLoader
         {
             if (present != ManifestFile && !manifest.Hashes.ContainsKey(present))
             {
-                problems.Add(present + ": not listed in the manifest");
+                problems.Add($"{present}: not listed in the manifest");
             }
         }
 
         if (problems.Count == 0
             && !string.Equals(ComputeVersion(manifest.Hashes), manifest.ServerContentVersion, StringComparison.Ordinal))
         {
-            problems.Add(ManifestFile + ": serverContentVersion: does not match the listed files");
+            problems.Add($"{ManifestFile}: serverContentVersion: does not match the listed files");
         }
     }
 
@@ -257,7 +257,7 @@ public static class ServerContentLoader
         int schemaVersion = root.RequiredInt("schemaVersion", 0);
         if (schemaVersion != SupportedSchemaVersion)
         {
-            root.Report("schemaVersion", "schema version " + schemaVersion + " is not supported");
+            root.Report("schemaVersion", $"schema version {schemaVersion} is not supported");
         }
 
         foreach (PackageObjectReader entry in root.RequiredObjectArray("definitions"))
@@ -266,7 +266,7 @@ public static class ServerContentLoader
             bool hasId = !EqualityComparer<TId>.Default.Equals(id, default);
             if (hasId && !declared.Add(id))
             {
-                entry.Report("id", "'" + id + "' is defined more than once");
+                entry.Report("id", $"'{id}' is defined more than once");
                 continue;
             }
 
@@ -531,7 +531,7 @@ public static class ServerContentLoader
             {
                 if (!declaredItems.Contains(drop.Item))
                 {
-                    problems.Add(MonstersFile + ": " + monster.Id + ": drops unknown item '" + drop.Item + "'");
+                    problems.Add($"{MonstersFile}: {monster.Id}: drops unknown item '{drop.Item}'");
                 }
             }
         }
@@ -542,7 +542,7 @@ public static class ServerContentLoader
             {
                 if (!declaredMonsters.Contains(spawn.Monster))
                 {
-                    problems.Add(MapsFile + ": " + map.Id + ": spawns unknown monster '" + spawn.Monster + "'");
+                    problems.Add($"{MapsFile}: {map.Id}: spawns unknown monster '{spawn.Monster}'");
                 }
             }
         }
@@ -551,12 +551,12 @@ public static class ServerContentLoader
         {
             if (!declaredMaps.Contains(job.StartingMap))
             {
-                problems.Add(JobsFile + ": " + job.Id + ": starts on unknown map '" + job.StartingMap + "'");
+                problems.Add($"{JobsFile}: {job.Id}: starts on unknown map '{job.StartingMap}'");
             }
 
             if (!declaredSkills.Contains(job.BasicAttack))
             {
-                problems.Add(JobsFile + ": " + job.Id + ": uses unknown skill '" + job.BasicAttack + "'");
+                problems.Add($"{JobsFile}: {job.Id}: uses unknown skill '{job.BasicAttack}'");
             }
         }
     }

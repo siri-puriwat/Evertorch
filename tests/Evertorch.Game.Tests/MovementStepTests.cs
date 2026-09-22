@@ -168,8 +168,8 @@ public sealed class MovementStepTests
             position = MovementModel
                 .Step(grid, position, North, new WorldDirection(directionX, directionZ), Speed, Delta).Position;
 
-            Assert.That(grid.CanOccupy(position.X, position.Z), Is.True, "tick " + tick + " at " + position);
-            Assert.That(Distance(before, position), Is.LessThanOrEqualTo(Speed * Delta + 1e-4f), "tick " + tick);
+            Assert.That(grid.CanOccupy(position.X, position.Z), Is.True, $"tick {tick} at {position}");
+            Assert.That(Distance(before, position), Is.LessThanOrEqualTo(Speed * Delta + 1e-4f), $"tick {tick}");
         }
     }
 

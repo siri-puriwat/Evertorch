@@ -78,7 +78,7 @@ public static class Program
 
         if (result.Packages == null)
         {
-            error.WriteLine("Content validation failed with " + result.Diagnostics.Count + " error(s).");
+            error.WriteLine($"Content validation failed with {result.Diagnostics.Count} error(s).");
             return Failure;
         }
 
@@ -99,24 +99,24 @@ public static class Program
             }
             catch (IOException exception)
             {
-                error.WriteLine("Could not write content packages: " + exception.Message);
+                error.WriteLine($"Could not write content packages: {exception.Message}");
                 return Failure;
             }
             catch (UnauthorizedAccessException exception)
             {
-                error.WriteLine("Could not write content packages: " + exception.Message);
+                error.WriteLine($"Could not write content packages: {exception.Message}");
                 return Failure;
             }
 
-            output.WriteLine("Content packages written to " + Path.GetFullPath(outputDirectory!));
+            output.WriteLine($"Content packages written to {Path.GetFullPath(outputDirectory!)}");
             if (clientDirectory != null)
             {
-                output.WriteLine("Client package copied to " + Path.GetFullPath(clientDirectory));
+                output.WriteLine($"Client package copied to {Path.GetFullPath(clientDirectory)}");
             }
         }
 
-        output.WriteLine("Server content version: " + result.Packages.Server.Version);
-        output.WriteLine("Client content version: " + result.Packages.Client.Version);
+        output.WriteLine($"Server content version: {result.Packages.Server.Version}");
+        output.WriteLine($"Client content version: {result.Packages.Client.Version}");
         return Success;
     }
 

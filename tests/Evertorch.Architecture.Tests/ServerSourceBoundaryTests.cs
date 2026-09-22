@@ -23,7 +23,7 @@ public sealed class ServerSourceBoundaryTests
     private static bool IsAdapter(string serverRoot, string path)
     {
         string relative = Path.GetRelativePath(serverRoot, path).Replace('\\', '/');
-        return relative.StartsWith(AdapterFolder + "/" + TransportLibrary, StringComparison.Ordinal);
+        return relative.StartsWith($"{AdapterFolder}/{TransportLibrary}", StringComparison.Ordinal);
     }
 
     [Test]

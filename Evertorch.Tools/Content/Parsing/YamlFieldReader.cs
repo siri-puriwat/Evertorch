@@ -372,7 +372,7 @@ public sealed class YamlFieldReader
 
     public string PathOf(string key)
     {
-        return m_path.Length == 0 ? key : m_path + "." + key;
+        return m_path.Length == 0 ? key : $"{m_path}.{key}";
     }
 
     private static bool IsAssetKey(string value)

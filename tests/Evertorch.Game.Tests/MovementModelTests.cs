@@ -77,7 +77,7 @@ public sealed class MovementModelTests
             position = step.Position;
         }
 
-        Assert.That(position.X < 1f && position.Z < 1f, Is.True, "still in the south-west cell at " + position);
+        Assert.That(position.X < 1f && position.Z < 1f, Is.True, $"still in the south-west cell at {position}");
         Assert.That(
             grid.HasLineOfSight(new WorldPosition(0.5f, 0f, 0.5f), new WorldPosition(1.5f, 0f, 1.5f)),
             Is.False,

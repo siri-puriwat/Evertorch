@@ -116,7 +116,7 @@ public sealed class WorldEnteredTests
     [Test]
     public void Write_WithLongestMapId_RoundTrips()
     {
-        var longest = new MapDefinitionId("map." + new string('a', 60));
+        var longest = new MapDefinitionId($"map.{new string('a', 60)}");
         var original = new WorldEntered(longest, 0, default, 0, default, new WorldDirection(1f, 0f), 0f);
         byte[] buffer = new byte[original.GetEncodedLength()];
         original.Write(buffer);

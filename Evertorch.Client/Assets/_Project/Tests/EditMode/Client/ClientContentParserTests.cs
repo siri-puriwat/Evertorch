@@ -116,8 +116,8 @@ public sealed class ClientContentParserTests
     [TestCase(1, "")]
     public void ReadFileList_ForAnUnsupportedSchemaOrUnsafeFileName_IsEmptyWithAnError(int schema, string fileName)
     {
-        string manifest = "{\"schemaVersion\":" + schema + ",\"clientContentVersion\":\"x\",\"files\":[{\"path\":\""
-            + fileName + "\",\"sha256\":\"\"}]}";
+        string manifest = $"{{\"schemaVersion\":{schema},\"clientContentVersion\":\"x\","
+            + $"\"files\":[{{\"path\":\"{fileName}\",\"sha256\":\"\"}}]}}";
 
         byte[] bytes = Encoding.UTF8.GetBytes(manifest);
 
@@ -165,7 +165,7 @@ public sealed class ClientContentParserTests
         string manifestPath = Path.Combine(folder, ClientContentParser.ManifestFile);
         if (!File.Exists(manifestPath))
         {
-            Assert.Ignore("No generated client package is present. " + StreamingContentLoader.MissingPackageHint);
+            Assert.Ignore($"No generated client package is present. {StreamingContentLoader.MissingPackageHint}");
         }
 
         byte[] manifest = File.ReadAllBytes(manifestPath);
@@ -204,7 +204,7 @@ public sealed class ClientContentParserTests
 
             Version = versionOverride ?? Hash(Encoding.UTF8.GetBytes(listing.ToString())).Substring(0, 16);
             Manifest = Encoding.UTF8.GetBytes(
-                "{\"schemaVersion\":1,\"clientContentVersion\":\"" + Version + "\",\"files\":[" + entries + "]}");
+                $"{{\"schemaVersion\":1,\"clientContentVersion\":\"{Version}\",\"files\":[{entries}]}}");
         }
 
         public Dictionary<string, byte[]> Files { get; }

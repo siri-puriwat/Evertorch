@@ -26,7 +26,7 @@ public sealed class SimulationOptionsValidator : IValidateOptions<SimulationOpti
 
     private static string RangeFailure(string key, int minimum, int maximum)
     {
-        return SimulationOptions.SectionName + ":" + key + " must be between " + minimum + " and " + maximum + ".";
+        return $"{SimulationOptions.SectionName}:{key} must be between {minimum} and {maximum}.";
     }
 }
 }

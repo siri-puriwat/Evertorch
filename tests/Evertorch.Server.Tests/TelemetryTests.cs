@@ -158,7 +158,7 @@ public sealed class TelemetryTests
     public void Run_WhenInputEnds_ExitsQuietly()
     {
         var output = new StringWriter();
-        var input = new StringReader("help" + Environment.NewLine);
+        var input = new StringReader($"help{Environment.NewLine}");
 
         CreateConsole(new TestServer()).Run(input, output, CancellationToken.None);
 

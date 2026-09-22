@@ -46,7 +46,7 @@ public sealed class GrayboxMeshBuilderTests
             Vector3 c = vertices[triangles[index + 2]];
             Vector3 normal = Vector3.Cross(b - a, c - a);
             Vector3 outward = ((a + b + c) / 3f) - center;
-            Assert.That(Vector3.Dot(normal, outward), Is.GreaterThan(0f), "triangle " + (index / 3));
+            Assert.That(Vector3.Dot(normal, outward), Is.GreaterThan(0f), $"triangle {index / 3}");
         }
 
         Object.DestroyImmediate(mesh);
@@ -74,7 +74,7 @@ public sealed class GrayboxMeshBuilderTests
         foreach (Vector3 corner in top)
         {
             Assert.That(grid.TrySampleHeight(Mathf.Clamp(corner.x, 10.001f, 10.999f), 20.5f, out float height), Is.True);
-            Assert.That(corner.y, Is.EqualTo(height).Within(1e-3f), "corner at x " + corner.x);
+            Assert.That(corner.y, Is.EqualTo(height).Within(1e-3f), $"corner at x {corner.x}");
         }
 
         Assert.That(mesh.GetTriangles((int)GrayboxSurface.RaisedFloor).Length, Is.GreaterThan(0));

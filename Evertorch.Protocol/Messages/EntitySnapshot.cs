@@ -27,7 +27,7 @@ public sealed class EntitySnapshot
 
         if (entities.Count > MaxEntities)
         {
-            throw new ArgumentException("A snapshot carries at most " + MaxEntities + " entities.", nameof(entities));
+            throw new ArgumentException($"A snapshot carries at most {MaxEntities} entities.", nameof(entities));
         }
 
         ServerTick = serverTick;

@@ -21,7 +21,7 @@ internal sealed class RecordingPhase : ITickPhase
 
     public void Execute(in TickContext context)
     {
-        m_log.Add(m_name + "@" + context.Tick);
+        m_log.Add($"{m_name}@{context.Tick}");
         m_onExecute?.Invoke(context);
     }
 }

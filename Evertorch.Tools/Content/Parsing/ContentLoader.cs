@@ -117,7 +117,7 @@ public static class ContentLoader
                     relativePath,
                     string.Empty,
                     (int)exception.Start.Line,
-                    "invalid YAML: " + exception.Message));
+                    $"invalid YAML: {exception.Message}"));
             return null;
         }
 

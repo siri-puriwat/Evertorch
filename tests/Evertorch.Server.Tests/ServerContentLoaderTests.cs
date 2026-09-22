@@ -261,8 +261,8 @@ public sealed class ServerContentLoaderTests
     public void Load_WhenDefinitionIdIsLongerThanTheWireLimit_Fails()
     {
         Dictionary<string, byte[]> files = PackageFixture.BuildRepositoryPackage();
-        string tooLong = "job." + new string('a', 61);
-        PackageFixture.Replace(files, Jobs, "\"id\": \"job.adventurer\"", "\"id\": \"" + tooLong + "\"");
+        string tooLong = $"job.{new string('a', 61)}";
+        PackageFixture.Replace(files, Jobs, "\"id\": \"job.adventurer\"", $"\"id\": \"{tooLong}\"");
 
         IReadOnlyList<string> problems = ProblemsOf(files);
 
@@ -278,7 +278,7 @@ public sealed class ServerContentLoaderTests
         int start = skills.IndexOf("    {", StringComparison.Ordinal);
         int end = skills.IndexOf("    }", StringComparison.Ordinal) + "    }".Length;
         string definition = skills.Substring(start, end - start);
-        PackageFixture.Replace(files, Skills, definition, definition + ",\n" + definition);
+        PackageFixture.Replace(files, Skills, definition, $"{definition},\n{definition}");
 
         IReadOnlyList<string> problems = ProblemsOf(files);
 

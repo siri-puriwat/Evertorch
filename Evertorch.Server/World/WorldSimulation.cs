@@ -32,7 +32,7 @@ public sealed class WorldSimulation
             || !content.Jobs.TryGetValue(startingJob, out JobDefinition? job))
         {
             throw new InvalidOperationException(
-                WorldOptions.SectionName + ":StartingJob '" + world.StartingJob + "' is not in the loaded content.");
+                $"{WorldOptions.SectionName}:StartingJob '{world.StartingJob}' is not in the loaded content.");
         }
 
         m_startingJob = job;

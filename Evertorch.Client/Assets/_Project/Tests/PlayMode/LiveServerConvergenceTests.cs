@@ -57,8 +57,8 @@ public sealed class LiveServerConvergenceTests
         if (!File.Exists(serverDll) || !Directory.Exists(serverContent) || !hasClientPackage)
         {
             Assert.Inconclusive(
-                "Needs the built server, its content package, and the client package. Run scripts/verify.ps1 and "
-                + StreamingContentLoader.MissingPackageHint);
+                "Needs the built server, its content package, and the client package. "
+                + $"Run scripts/verify.ps1 and {StreamingContentLoader.MissingPackageHint}");
         }
 
         // A package that is present but refused is a defect, not a missing prerequisite.
@@ -68,7 +68,7 @@ public sealed class LiveServerConvergenceTests
         // The server picks its own free port, so nothing can take one between a probe and the bind.
         StartServer(serverDll, serverContent);
         yield return WaitUntil(() => TryReadListeningPort(out int _), StartTimeoutSeconds);
-        Assert.That(TryReadListeningPort(out int port), Is.True, "server output: " + JoinOutput());
+        Assert.That(TryReadListeningPort(out int port), Is.True, $"server output: {JoinOutput()}");
 
         m_socket = new LiteNetLibClientTransport("evertorch", 5000);
         LossyTransport link = new LossyTransport(m_socket, 9, () => Time.realtimeSinceStartupAsDouble)
@@ -93,7 +93,7 @@ public sealed class LiveServerConvergenceTests
         Assert.That(
             connection.State,
             Is.EqualTo(ClientConnectionState.InWorld),
-            connection.LocalError + " " + connection.DisconnectCause + " server output: " + JoinOutput());
+            $"{connection.LocalError} {connection.DisconnectCause} server output: {JoinOutput()}");
 
         ClientWorld world = connection.World!;
         MovementController controller = new MovementController(world.Grid);
@@ -122,11 +122,11 @@ public sealed class LiveServerConvergenceTests
         Assert.That(predicted.X, Is.GreaterThan(3f), "the player really walked");
         Assert.That(link.Dropped, Is.GreaterThan(0), "the link really lost messages");
         Assert.That(world.Smoother.Snaps, Is.EqualTo(0));
-        Assert.That(predicted.X, Is.EqualTo(serverX).Within(ConvergedDistance), "server output: " + JoinOutput());
+        Assert.That(predicted.X, Is.EqualTo(serverX).Within(ConvergedDistance), $"server output: {JoinOutput()}");
         Assert.That(predicted.Z, Is.EqualTo(serverZ).Within(ConvergedDistance));
         UnityEngine.Debug.Log(
-            "Live convergence: client " + predicted + ", server (" + serverX + ", " + serverZ + "), largest correction "
-            + world.Smoother.LargestCorrection + " m, dropped " + link.Dropped + ", reordered " + link.Reordered);
+            $"Live convergence: client {predicted}, server ({serverX}, {serverZ}), largest correction "
+            + $"{world.Smoother.LargestCorrection} m, dropped {link.Dropped}, reordered {link.Reordered}");
     }
 
     private static bool HasClientPackage()
@@ -185,9 +185,8 @@ public sealed class LiveServerConvergenceTests
         ProcessStartInfo start = new ProcessStartInfo
         {
             FileName = "dotnet",
-            Arguments = "\"" + serverDll + "\" --Network:Port=0"
-                + " --DevelopmentAuthentication:Enabled=true"
-                + " --Content:ServerPackagePath=\"" + serverContent + "\"",
+            Arguments = $"\"{serverDll}\" --Network:Port=0 --DevelopmentAuthentication:Enabled=true"
+                + $" --Content:ServerPackagePath=\"{serverContent}\"",
             WorkingDirectory = Path.GetDirectoryName(serverDll),
             UseShellExecute = false,
             CreateNoWindow = true,

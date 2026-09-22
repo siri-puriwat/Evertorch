@@ -14,7 +14,7 @@ internal static class WireMatrix
         {
             byte[] truncated = new byte[length];
             Array.Copy(golden, truncated, length);
-            Assert.That(tryRead(truncated), Is.False, "accepted a payload truncated to " + length + " bytes");
+            Assert.That(tryRead(truncated), Is.False, $"accepted a payload truncated to {length} bytes");
         }
     }
 
@@ -40,7 +40,7 @@ internal static class WireMatrix
             byte[] altered = (byte[])golden.Clone();
             altered[0] = low;
             altered[1] = high;
-            Assert.That(tryRead(altered), Is.False, "accepted opcode " + opcode);
+            Assert.That(tryRead(altered), Is.False, $"accepted opcode {opcode}");
         }
     }
 

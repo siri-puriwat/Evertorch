@@ -7,7 +7,7 @@ internal sealed class TemporaryDirectory : IDisposable
 {
     public TemporaryDirectory()
     {
-        Path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "evertorch-" + Guid.NewGuid().ToString("N"));
+        Path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"evertorch-{Guid.NewGuid():N}");
         Directory.CreateDirectory(Path);
     }
 

@@ -60,7 +60,7 @@ public sealed class AdminConsole
         }
         else
         {
-            output.WriteLine("Unknown command. " + Help);
+            output.WriteLine($"Unknown command. {Help}");
         }
     }
 

@@ -20,7 +20,7 @@ public sealed class ProgramTests
         Console.SetError(error);
         try
         {
-            exitCode = Program.Main(new[] { "--Content:ServerPackagePath=" + missing });
+            exitCode = Program.Main(new[] { $"--Content:ServerPackagePath={missing}" });
         }
         finally
         {

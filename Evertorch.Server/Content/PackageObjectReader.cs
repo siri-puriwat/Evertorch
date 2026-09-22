@@ -38,13 +38,13 @@ internal sealed class PackageObjectReader
         }
         catch (JsonException exception)
         {
-            problems.Add(file + ": invalid JSON: " + exception.Message);
+            problems.Add($"{file}: invalid JSON: {exception.Message}");
             return null;
         }
 
         if (root.ValueKind != JsonValueKind.Object)
         {
-            problems.Add(file + ": the root must be an object");
+            problems.Add($"{file}: the root must be an object");
             return null;
         }
 
@@ -76,7 +76,7 @@ internal sealed class PackageObjectReader
 
         if (number < minimum)
         {
-            Report(name, "must be at least " + minimum);
+            Report(name, $"must be at least {minimum}");
             return minimum;
         }
 
@@ -106,7 +106,7 @@ internal sealed class PackageObjectReader
         foreach (TEnum candidate in (TEnum[])Enum.GetValues(typeof(TEnum)))
         {
             string candidateName = candidate.ToString();
-            string spelling = char.ToLowerInvariant(candidateName[0]) + candidateName.Substring(1);
+            string spelling = $"{char.ToLowerInvariant(candidateName[0])}{candidateName.Substring(1)}";
             if (string.Equals(spelling, text, StringComparison.Ordinal))
             {
                 return candidate;
@@ -115,7 +115,7 @@ internal sealed class PackageObjectReader
 
         if (text.Length != 0)
         {
-            Report(name, "unknown value '" + text + "'");
+            Report(name, $"unknown value '{text}'");
         }
 
         return default;
@@ -132,7 +132,7 @@ internal sealed class PackageObjectReader
 
         if (text.Length != 0)
         {
-            Report(name, "'" + text + "' is not a valid ID of this kind");
+            Report(name, $"'{text}' is not a valid ID of this kind");
         }
 
         return default;
@@ -159,14 +159,14 @@ internal sealed class PackageObjectReader
         int index = 0;
         foreach (JsonElement item in value.EnumerateArray())
         {
-            string itemPath = Combine(name) + "[" + index + "]";
+            string itemPath = $"{Combine(name)}[{index}]";
             if (item.ValueKind == JsonValueKind.Object)
             {
                 readers.Add(new PackageObjectReader(item, m_file, itemPath, m_problems));
             }
             else
             {
-                m_problems.Add(m_file + ": " + itemPath + ": must be an object");
+                m_problems.Add($"{m_file}: {itemPath}: must be an object");
             }
 
             index++;
@@ -188,7 +188,7 @@ internal sealed class PackageObjectReader
         {
             if (item.ValueKind != JsonValueKind.String)
             {
-                m_problems.Add(m_file + ": " + Combine(name) + "[" + index + "]: must be a string");
+                m_problems.Add($"{m_file}: {Combine(name)}[{index}]: must be a string");
                 return new List<string>();
             }
 
@@ -220,7 +220,7 @@ internal sealed class PackageObjectReader
 
     public void Report(string name, string message)
     {
-        m_problems.Add(m_file + ": " + Combine(name) + ": " + message);
+        m_problems.Add($"{m_file}: {Combine(name)}: {message}");
     }
 
     private bool TryGet(string name, JsonValueKind kind, string description, out JsonElement value)
@@ -234,7 +234,7 @@ internal sealed class PackageObjectReader
 
         if (value.ValueKind != kind)
         {
-            Report(name, "must be " + description);
+            Report(name, $"must be {description}");
             return false;
         }
 
@@ -243,7 +243,7 @@ internal sealed class PackageObjectReader
 
     private string Combine(string name)
     {
-        return m_path.Length == 0 ? name : m_path + "." + name;
+        return m_path.Length == 0 ? name : $"{m_path}.{name}";
     }
 }
 }

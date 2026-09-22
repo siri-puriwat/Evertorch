@@ -23,8 +23,8 @@ public static class ContentPackageDeployer
         string output = Path.GetFullPath(outputDirectory);
         EnsureReplaceable(output);
 
-        string staging = output + ".staging";
-        string previous = output + ".previous";
+        string staging = $"{output}.staging";
+        string previous = $"{output}.previous";
         DeleteIfPresent(staging);
         DeleteIfPresent(previous);
 
@@ -60,7 +60,7 @@ public static class ContentPackageDeployer
         if (Directory.Exists(directory) && !IsOwnOutput(client, directory, manifest))
         {
             throw new InvalidOperationException(
-                "Refusing to write into '" + directory + "': it holds JSON files but no generated content manifest.");
+                $"Refusing to write into '{directory}': it holds JSON files but no generated content manifest.");
         }
 
         Directory.CreateDirectory(directory);
@@ -130,7 +130,7 @@ public static class ContentPackageDeployer
         if (!File.Exists(marker))
         {
             throw new InvalidOperationException(
-                "Refusing to replace '" + output + "': it is not empty and holds no generated content manifest.");
+                $"Refusing to replace '{output}': it is not empty and holds no generated content manifest.");
         }
     }
 

@@ -231,7 +231,7 @@ public sealed class ServerMovementTests
             server.SendMove(connection, sequence, 1f, 1f);
             server.Tick();
             WorldPosition position = server.PlayerOf(connection).Position;
-            Assert.That(grid.CanOccupy(position.X, position.Z), Is.True, "tick " + sequence + " at " + position);
+            Assert.That(grid.CanOccupy(position.X, position.Z), Is.True, $"tick {sequence} at {position}");
         }
 
         WorldPosition end = server.PlayerOf(connection).Position;

@@ -29,9 +29,9 @@ public sealed class ConvergenceTests
         rig.Advance(1200, simulated => simulated.Controller!.SetManualDirection(1f, 0.4f));
 
         // The predicted position alone would not do: prediction is local, so it is the same whatever the link loses.
-        return client.World.Predictor.Position + " server " + rig.Server.PlayerOf(client.Loopback.Connection).Position
-            + " dropped " + client.Link.Dropped + " reordered " + client.Link.Reordered + " stale "
-            + client.World.StaleSnapshots + " ack " + client.World.Predictor.LastAcknowledgedSequence;
+        return $"{client.World.Predictor.Position} server {rig.Server.PlayerOf(client.Loopback.Connection).Position}"
+            + $" dropped {client.Link.Dropped} reordered {client.Link.Reordered} stale {client.World.StaleSnapshots}"
+            + $" ack {client.World.Predictor.LastAcknowledgedSequence}";
     }
 
     private static void EnterWorld(ClientServerRig rig, SimulatedClient client)
@@ -40,7 +40,7 @@ public sealed class ConvergenceTests
         int entered = rig.AdvanceUntil(
             () => client.Connection.State == ClientConnectionState.InWorld && client.Controller != null,
             EnterWorldLimitMs);
-        Assert.That(entered, Is.GreaterThanOrEqualTo(0), "entered the world: " + client.Connection.LocalError);
+        Assert.That(entered, Is.GreaterThanOrEqualTo(0), $"entered the world: {client.Connection.LocalError}");
     }
 
     /// <summary>
@@ -80,8 +80,8 @@ public sealed class ConvergenceTests
         Assert.That(
             converged,
             Is.GreaterThanOrEqualTo(0),
-            "not converged after " + ConvergenceLimitMs + " ms: " + client.World.Predictor.PendingCount
-            + " pending inputs, " + distance + " m from the server");
+            $"not converged after {ConvergenceLimitMs} ms: {client.World.Predictor.PendingCount}"
+            + $" pending inputs, {distance} m from the server");
 
         // Converged means it stays converged: nothing further arrives that moves the client again.
         rig.Advance(500, simulated => simulated.Controller!.SetManualDirection(0f, 0f));
@@ -121,11 +121,11 @@ public sealed class ConvergenceTests
         RunResult result = Run(rig, client);
 
         TestContext.Out.WriteLine(
-            "latency " + oneWayLatencyMs + " ms each way, loss " + lossPercent + " %, seed " + seed
-            + ": largest correction " + client.World.Smoother.LargestCorrection.ToString("F3")
-            + " m, converged " + result.ManualStopConvergenceMs + " ms after the manual stop and "
-            + result.WalkConvergenceMs + " ms after the walk, dropped " + client.Link.Dropped
-            + ", reordered " + client.Link.Reordered + ", stale snapshots " + client.World.StaleSnapshots);
+            $"latency {oneWayLatencyMs} ms each way, loss {lossPercent} %, seed {seed}"
+            + $": largest correction {client.World.Smoother.LargestCorrection:F3}"
+            + $" m, converged {result.ManualStopConvergenceMs} ms after the manual stop and "
+            + $"{result.WalkConvergenceMs} ms after the walk, dropped {client.Link.Dropped}"
+            + $", reordered {client.Link.Reordered}, stale snapshots {client.World.StaleSnapshots}");
         Assert.That(client.Link.Dropped, Is.GreaterThan(0), "the link really lost messages");
         Assert.That(client.World.Smoother.Snaps, Is.EqualTo(0), "no correction was large enough to teleport");
         Assert.That(client.World.Smoother.LargestCorrection, Is.LessThan(RenderSmoother.TeleportThreshold));

@@ -42,7 +42,7 @@ internal sealed class ContentWorkspace : IDisposable
         string text = File.ReadAllText(path);
         if (!text.Contains(oldText, StringComparison.Ordinal))
         {
-            throw new InvalidOperationException("Fixture " + relativePath + " does not contain: " + oldText);
+            throw new InvalidOperationException($"Fixture {relativePath} does not contain: {oldText}");
         }
 
         File.WriteAllText(path, text.Replace(oldText, newText, StringComparison.Ordinal));

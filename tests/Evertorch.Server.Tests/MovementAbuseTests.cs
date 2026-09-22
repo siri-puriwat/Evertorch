@@ -128,14 +128,14 @@ public sealed class MovementAbuseTests
         NavigationGrid grid = Grid(server);
         WorldPosition after = player.Position;
         Assert.That(float.IsNaN(after.X) || float.IsNaN(after.Y) || float.IsNaN(after.Z), Is.False);
-        Assert.That(grid.CanOccupy(after.X, after.Z), Is.True, "standing somewhere a body cannot stand: " + after);
+        Assert.That(grid.CanOccupy(after.X, after.Z), Is.True, $"standing somewhere a body cannot stand: {after}");
         Assert.That(grid.TrySampleHeight(after.X, after.Z, out float ground), Is.True);
-        Assert.That(after.Y, Is.EqualTo(ground).Within(Tolerance), "off the ground at " + after);
+        Assert.That(after.Y, Is.EqualTo(ground).Within(Tolerance), $"off the ground at {after}");
         float horizontal = Distance(before, after);
         Assert.That(
             horizontal,
             Is.LessThanOrEqualTo(player.MovementSpeed * TickSeconds + Tolerance),
-            "moved " + horizontal + " m in one tick from " + before + " to " + after);
+            $"moved {horizontal} m in one tick from {before} to {after}");
     }
 
     private static NavigationGrid Grid(TestServer server)

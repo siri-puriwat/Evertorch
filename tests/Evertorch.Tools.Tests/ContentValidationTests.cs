@@ -117,7 +117,7 @@ public sealed class ContentValidationTests
     {
         using (var workspace = new ContentWorkspace())
         {
-            workspace.Replace(Monster, "chance: 0.7321", "chance: " + chance);
+            workspace.Replace(Monster, "chance: 0.7321", $"chance: {chance}");
 
             ContentPipelineResult result = ContentPipeline.Run(workspace.ContentRoot);
 
@@ -228,7 +228,7 @@ public sealed class ContentValidationTests
             string text = workspace.Read(Monster);
             int start = text.IndexOf("drops:", StringComparison.Ordinal);
             int end = text.IndexOf("client:", StringComparison.Ordinal);
-            workspace.Write(Monster, text.Substring(0, start) + "drops: none\n" + text.Substring(end));
+            workspace.Write(Monster, $"{text.Substring(0, start)}drops: none\n{text.Substring(end)}");
 
             ContentPipelineResult result = ContentPipeline.Run(workspace.ContentRoot);
 

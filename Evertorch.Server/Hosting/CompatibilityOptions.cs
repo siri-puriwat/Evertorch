@@ -37,16 +37,16 @@ internal sealed class CompatibilityOptionsValidator : IValidateOptions<Compatibi
         if (!IsSendable(options.ServerBuildVersion))
         {
             failures.Add(
-                CompatibilityOptions.SectionName + ":ServerBuildVersion must be 1 to "
-                + ProtocolLimits.MaxBuildVersionBytes + " bytes of UTF-8.");
+                $"{CompatibilityOptions.SectionName}:ServerBuildVersion must be 1 to "
+                + $"{ProtocolLimits.MaxBuildVersionBytes} bytes of UTF-8.");
         }
 
         if (options.AdditionalClientBuildVersions == null
             || !options.AdditionalClientBuildVersions.TrueForAll(IsSendable))
         {
             failures.Add(
-                CompatibilityOptions.SectionName + ":AdditionalClientBuildVersions entries must be 1 to "
-                + ProtocolLimits.MaxBuildVersionBytes + " bytes of UTF-8.");
+                $"{CompatibilityOptions.SectionName}:AdditionalClientBuildVersions entries must be 1 to "
+                + $"{ProtocolLimits.MaxBuildVersionBytes} bytes of UTF-8.");
         }
 
         return failures.Count == 0 ? ValidateOptionsResult.Success : ValidateOptionsResult.Fail(failures);

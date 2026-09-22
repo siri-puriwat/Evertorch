@@ -137,8 +137,8 @@ public sealed class ContentProjectionTests
             foreach (string sentinel in ServerOnlySentinels)
             {
                 // A sentinel missing from the server package would prove nothing about the client.
-                Assert.That(serverText, Does.Contain(sentinel), "sentinel is not authored: " + sentinel);
-                Assert.That(clientText, Does.Not.Contain(sentinel), "server-only value leaked: " + sentinel);
+                Assert.That(serverText, Does.Contain(sentinel), $"sentinel is not authored: {sentinel}");
+                Assert.That(clientText, Does.Not.Contain(sentinel), $"server-only value leaked: {sentinel}");
             }
         }
     }

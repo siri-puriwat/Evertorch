@@ -18,8 +18,8 @@ public sealed class ContentLoadException : Exception
 
     private static string Describe(IReadOnlyList<string> problems)
     {
-        string header = "The server content package is invalid:" + Environment.NewLine;
-        return header + string.Join(Environment.NewLine, problems);
+        string problemList = string.Join(Environment.NewLine, problems);
+        return $"The server content package is invalid:{Environment.NewLine}{problemList}";
     }
 }
 }

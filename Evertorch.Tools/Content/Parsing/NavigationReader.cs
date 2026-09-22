@@ -85,7 +85,7 @@ internal static class NavigationReader
             }
             else if (symbol.Length == 1 && legend.ContainsKey(symbol[0]))
             {
-                entry.ReportField("symbol", "'" + symbol + "' is already in the legend");
+                entry.ReportField("symbol", $"'{symbol}' is already in the legend");
             }
             else if (symbol.Length == 1 && cell.HasValue)
             {

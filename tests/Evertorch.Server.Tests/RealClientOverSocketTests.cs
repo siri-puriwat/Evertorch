@@ -136,7 +136,7 @@ public sealed class RealClientOverSocketTests
         Assert.That(
             PumpUntil(connection, null, () => connection.State == ClientConnectionState.InWorld),
             Is.True,
-            "entered the world: " + connection.LocalError + " " + connection.DisconnectCause);
+            $"entered the world: {connection.LocalError} {connection.DisconnectCause}");
         ClientWorld world = connection.World!;
         var controller = new MovementController(world.Grid);
         var driver = new LocalPlayerDriver(controller, new MoveIntentProducer(), world, connection);
@@ -156,7 +156,7 @@ public sealed class RealClientOverSocketTests
 
         WorldPosition predicted = world.Predictor.Position;
         string serverView = string.Join(", ", admin.GetPlayers().Select(player => player.Position.ToString()));
-        Assert.That(agreed, Is.True, "client at " + predicted + ", server reports " + serverView);
+        Assert.That(agreed, Is.True, $"client at {predicted}, server reports {serverView}");
         Assert.That(predicted.X, Is.GreaterThan(3f), "the player really walked");
         Assert.That(link.Dropped, Is.GreaterThan(0), "the link really lost messages");
         Assert.That(world.Smoother.Snaps, Is.EqualTo(0));

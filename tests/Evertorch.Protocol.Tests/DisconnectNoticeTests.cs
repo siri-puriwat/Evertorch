@@ -55,7 +55,7 @@ public sealed class DisconnectNoticeTests
         };
 
         string[] actual = ((DisconnectReason[])Enum.GetValues(typeof(DisconnectReason)))
-            .Select(reason => reason + "=" + (byte)reason)
+            .Select(reason => $"{reason}={(byte)reason}")
             .ToArray();
 
         Assert.That(actual, Is.EqualTo(expected));

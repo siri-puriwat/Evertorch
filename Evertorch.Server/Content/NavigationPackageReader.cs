@@ -87,7 +87,7 @@ internal static class NavigationPackageReader
 
         if (legend.ContainsKey(symbol[0]))
         {
-            entry.Report("symbol", "'" + symbol + "' appears more than once in the legend");
+            entry.Report("symbol", $"'{symbol}' appears more than once in the legend");
             return;
         }
 
@@ -110,7 +110,7 @@ internal static class NavigationPackageReader
     {
         if (cellRows.Count != rows)
         {
-            navigation.Report("cellRows", "has " + cellRows.Count + " rows but rows is " + rows);
+            navigation.Report("cellRows", $"has {cellRows.Count} rows but rows is {rows}");
             return null;
         }
 
@@ -120,9 +120,7 @@ internal static class NavigationPackageReader
             string cellRow = cellRows[row];
             if (cellRow.Length != columns)
             {
-                navigation.Report(
-                    "cellRows[" + row + "]",
-                    "has " + cellRow.Length + " symbols but columns is " + columns);
+                navigation.Report($"cellRows[{row}]", $"has {cellRow.Length} symbols but columns is {columns}");
                 return null;
             }
 
@@ -130,7 +128,7 @@ internal static class NavigationPackageReader
             {
                 if (!legend.TryGetValue(cellRow[column], out NavigationCell cell))
                 {
-                    navigation.Report("cellRows[" + row + "]", "symbol '" + cellRow[column] + "' is not in the legend");
+                    navigation.Report($"cellRows[{row}]", $"symbol '{cellRow[column]}' is not in the legend");
                     return null;
                 }
 

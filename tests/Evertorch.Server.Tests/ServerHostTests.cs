@@ -167,7 +167,7 @@ public sealed class ServerHostTests
         using var root = new TemporaryDirectory();
         using var package = new TemporaryDirectory();
         PackageFixture.WriteTo(package.Path, PackageFixture.BuildRepositoryPackage());
-        string[] args = { "--Content:ServerPackagePath=" + package.Path, "--Network:Port=0" };
+        string[] args = { $"--Content:ServerPackagePath={package.Path}", "--Network:Port=0" };
         using IHost host = ServerHost.CreateBuilder(args, root.Path).Build();
 
         host.Start();

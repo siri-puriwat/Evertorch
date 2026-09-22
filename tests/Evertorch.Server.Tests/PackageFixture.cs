@@ -23,7 +23,7 @@ internal static class PackageFixture
         if (result.Packages == null)
         {
             string diagnostics = string.Join("; ", result.Diagnostics.Select(item => item.ToString()));
-            throw new InvalidOperationException("Repository content is invalid: " + diagnostics);
+            throw new InvalidOperationException($"Repository content is invalid: {diagnostics}");
         }
 
         ContentPackage server = result.Packages.Server;
@@ -52,7 +52,7 @@ internal static class PackageFixture
         string text = ReadText(files, file);
         if (!text.Contains(oldText, StringComparison.Ordinal))
         {
-            throw new InvalidOperationException("'" + oldText + "' was not found in " + file + ".");
+            throw new InvalidOperationException($"'{oldText}' was not found in {file}.");
         }
 
         files[file] = Encoding.UTF8.GetBytes(text.Replace(oldText, newText, StringComparison.Ordinal));
@@ -80,7 +80,7 @@ internal static class PackageFixture
         {
             string hash = ContentPackageBuilder.ComputeHash(files[name]);
             listing.Append(name).Append(':').Append(hash).Append('\n');
-            entries.Add("{\"path\":\"" + name + "\",\"sha256\":\"" + hash + "\"}");
+            entries.Add($"{{\"path\":\"{name}\",\"sha256\":\"{hash}\"}}");
         }
 
         byte[] listingBytes = Encoding.UTF8.GetBytes(listing.ToString());
@@ -116,7 +116,7 @@ internal static class PackageFixture
             directory = directory.Parent;
         }
 
-        throw new InvalidOperationException(SolutionFileName + " was not found above the test directory.");
+        throw new InvalidOperationException($"{SolutionFileName} was not found above the test directory.");
     }
 }
 }

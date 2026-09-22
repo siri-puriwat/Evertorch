@@ -20,7 +20,7 @@ internal static class WireText
         int length = StrictUtf8.GetByteCount(value);
         if (length > maxBytes)
         {
-            throw new ArgumentException("The string is longer than its wire limit of " + maxBytes + " bytes.");
+            throw new ArgumentException($"The string is longer than its wire limit of {maxBytes} bytes.");
         }
 
         return length;

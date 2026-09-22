@@ -53,17 +53,17 @@ internal sealed class WorldOptionsValidator : IValidateOptions<WorldOptions>
         var failures = new List<string>();
         if (!JobDefinitionId.TryCreate(options.StartingJob, out JobDefinitionId _))
         {
-            failures.Add(WorldOptions.SectionName + ":StartingJob must be a job definition ID.");
+            failures.Add($"{WorldOptions.SectionName}:StartingJob must be a job definition ID.");
         }
 
         if (!(options.InterestCellSize >= 1f && options.InterestCellSize <= 1024f))
         {
-            failures.Add(WorldOptions.SectionName + ":InterestCellSize must be between 1 and 1024.");
+            failures.Add($"{WorldOptions.SectionName}:InterestCellSize must be between 1 and 1024.");
         }
 
         if (options.InterestNeighborRadius < 0 || options.InterestNeighborRadius > 8)
         {
-            failures.Add(WorldOptions.SectionName + ":InterestNeighborRadius must be between 0 and 8.");
+            failures.Add($"{WorldOptions.SectionName}:InterestNeighborRadius must be between 0 and 8.");
         }
 
         AddRangeFailure(failures, "InputHoldTimeoutMs", options.InputHoldTimeoutMs, 0, 5000);
@@ -78,8 +78,7 @@ internal sealed class WorldOptionsValidator : IValidateOptions<WorldOptions>
     {
         if (value < minimum || value > maximum)
         {
-            failures.Add(WorldOptions.SectionName + ":" + key + " must be between " + minimum + " and " + maximum +
-                ".");
+            failures.Add($"{WorldOptions.SectionName}:{key} must be between {minimum} and {maximum}.");
         }
     }
 }

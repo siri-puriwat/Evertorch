@@ -47,7 +47,7 @@ public sealed class GridPathfinderTests
         WorldPosition from = start;
         foreach (WorldPosition waypoint in waypoints)
         {
-            Assert.That(grid.HasLineOfSight(from, waypoint), Is.True, from + " -> " + waypoint);
+            Assert.That(grid.HasLineOfSight(from, waypoint), Is.True, $"{from} -> {waypoint}");
             from = waypoint;
         }
     }

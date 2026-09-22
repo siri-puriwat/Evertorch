@@ -67,7 +67,7 @@ public static class Program
     private static void WriteContentHint(string environmentName)
     {
         Console.Error.WriteLine();
-        Console.Error.WriteLine("The server has no usable content package (environment: " + environmentName + ").");
+        Console.Error.WriteLine($"The server has no usable content package (environment: {environmentName}).");
         Console.Error.WriteLine(
             "For local development start it with scripts\\run-server.cmd, or with the 'Development' launch profile"
             + " (DOTNET_ENVIRONMENT=Development);");

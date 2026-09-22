@@ -161,7 +161,7 @@ public sealed class LiteNetLibServerTransport : IServerTransport, INetEventListe
         if (!m_manager.Start(address, IPAddress.IPv6Any, m_options.Port))
         {
             throw new InvalidOperationException(
-                "The transport could not bind " + m_options.BindAddress + ":" + m_options.Port + ".");
+                $"The transport could not bind {m_options.BindAddress}:{m_options.Port}.");
         }
 
         LogListening(m_logger, m_options.BindAddress, m_manager.LocalPort, null);

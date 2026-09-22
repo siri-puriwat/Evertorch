@@ -68,7 +68,7 @@ internal static class TestGrids
             case 's':
                 return NavigationCell.Ramp(RampAxis.Z, 1f, 0f);
             default:
-                throw new ArgumentException("Unknown grid symbol '" + symbol + "'.");
+                throw new ArgumentException($"Unknown grid symbol '{symbol}'.");
         }
     }
 }

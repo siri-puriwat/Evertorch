@@ -18,12 +18,12 @@ internal static class RepositoryLayout
 
     public static string ProjectFilePath(string projectName)
     {
-        return Path.Combine(RootDirectory, projectName, projectName + ".csproj");
+        return Path.Combine(RootDirectory, projectName, $"{projectName}.csproj");
     }
 
     public static string AssemblyDefinitionPath(string projectName)
     {
-        return Path.Combine(RootDirectory, projectName, projectName + ".asmdef");
+        return Path.Combine(RootDirectory, projectName, $"{projectName}.asmdef");
     }
 
     public static IReadOnlyCollection<string> RuntimeProjectNames()
@@ -85,7 +85,7 @@ internal static class RepositoryLayout
         }
 
         throw new InvalidOperationException(
-            SolutionFileName + " was not found above " + TestContext.CurrentContext.TestDirectory + ".");
+            $"{SolutionFileName} was not found above {TestContext.CurrentContext.TestDirectory}.");
     }
 }
 }

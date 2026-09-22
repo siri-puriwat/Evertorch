@@ -28,7 +28,7 @@ internal sealed class ScriptedRandomSource : IRandomSource
         int value = m_values.Dequeue();
         if (value < 0 || value >= exclusiveMax)
         {
-            throw new InvalidOperationException("Scripted value " + value + " is outside the requested bound.");
+            throw new InvalidOperationException($"Scripted value {value} is outside the requested bound.");
         }
 
         return value;

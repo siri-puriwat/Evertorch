@@ -153,7 +153,7 @@ public sealed class NavigationGridTests
 
         for (float x = 2.5f; x <= 3.5f; x += 0.05f)
         {
-            Assert.That(grid.CanOccupy(x, 2.5f), Is.True, "x = " + x);
+            Assert.That(grid.CanOccupy(x, 2.5f), Is.True, $"x = {x}");
         }
     }
 

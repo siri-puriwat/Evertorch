@@ -121,7 +121,7 @@ public sealed class SharedIntentPathTests : InputTestFixture
         Assert.That(
             rig.Sent.Count,
             Is.EqualTo(1),
-            "the stick moved the Move action; knob offset " + controls.Knob.anchoredPosition);
+            $"the stick moved the Move action; knob offset {controls.Knob.anchoredPosition}");
         Assert.That(rig.Sent[0].DirectionX, Is.EqualTo(0f).Within(1e-3f));
         Assert.That(rig.Sent[0].DirectionZ, Is.EqualTo(1f).Within(1e-3f));
         Assert.That(rig.Controller.HasPath, Is.False, "touching the stick is not a tap on the ground");

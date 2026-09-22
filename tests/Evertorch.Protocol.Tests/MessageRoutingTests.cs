@@ -98,7 +98,7 @@ public sealed class MessageRoutingTests
         };
 
         string[] actual = ((MessageOpcode[])Enum.GetValues(typeof(MessageOpcode)))
-            .Select(opcode => opcode + "=0x" + ((ushort)opcode).ToString("X4"))
+            .Select(opcode => $"{opcode}=0x{(ushort)opcode:X4}")
             .ToArray();
 
         Assert.That(actual, Is.EqualTo(expected));

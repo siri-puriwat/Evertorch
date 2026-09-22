@@ -76,7 +76,7 @@ public sealed class ContentBuildCommandTests
                 Assert.That(
                     Directory.GetFiles(directory),
                     Has.Length.EqualTo(6),
-                    "five definition files and a manifest in " + side);
+                    $"five definition files and a manifest in {side}");
                 Assert.That(File.Exists(Path.Combine(directory, "manifest.json")), Is.True);
             }
         }
@@ -150,8 +150,8 @@ public sealed class ContentBuildCommandTests
             byte[] second = File.ReadAllBytes(Path.Combine(workspace.OutputDirectory, "server", "monsters.json"));
 
             Assert.That(second, Is.EqualTo(first));
-            Assert.That(Directory.Exists(workspace.OutputDirectory + ".staging"), Is.False);
-            Assert.That(Directory.Exists(workspace.OutputDirectory + ".previous"), Is.False);
+            Assert.That(Directory.Exists($"{workspace.OutputDirectory}.staging"), Is.False);
+            Assert.That(Directory.Exists($"{workspace.OutputDirectory}.previous"), Is.False);
         }
     }
 

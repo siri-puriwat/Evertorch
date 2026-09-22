@@ -19,7 +19,7 @@ public sealed class DefinitionIdLengthTests
 
     private static string OfLength(string kindPrefix, int length)
     {
-        return kindPrefix + "." + new string('a', length - kindPrefix.Length - 1);
+        return $"{kindPrefix}.{new string('a', length - kindPrefix.Length - 1)}";
     }
 
     [Test]

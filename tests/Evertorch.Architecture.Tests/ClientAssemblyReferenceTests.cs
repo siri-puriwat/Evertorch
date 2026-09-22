@@ -85,7 +85,7 @@ public sealed class ClientAssemblyReferenceTests
 
         string serverVersion = RepositoryLayout.PackageVersion("Evertorch.Server", "LiteNetLib");
 
-        Assert.That(source, Does.EndWith("#" + serverVersion + "-upm"));
+        Assert.That(source, Does.EndWith($"#{serverVersion}-upm"));
     }
 }
 }

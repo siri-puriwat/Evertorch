@@ -113,7 +113,7 @@ public sealed class EntitySpawnTests
     public void Write_WhenDefinitionIdExceedsLimit_Throws()
     {
         var message =
-            new EntitySpawn(default, EntityKind.Player, "job." + new string('a', 61), default, default, 0);
+            new EntitySpawn(default, EntityKind.Player, $"job.{new string('a', 61)}", default, default, 0);
         Action write = () => message.Write(new byte[512]);
 
         Assert.That(write, Throws.ArgumentException);
