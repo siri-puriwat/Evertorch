@@ -1,4 +1,5 @@
 using System;
+using Evertorch.Game;
 using TMPro;
 using UnityEngine;
 using UnityEngine.Events;
@@ -345,9 +346,9 @@ public sealed class DevelopmentOverlay : MonoBehaviour
             bool isOpen = connection != null && connection.State != ClientConnectionState.Disconnected;
             m_connection.text = connection == null
                 ? m_client.Status
-                : m_client.Status + "\nState " + connection.State + "   RTT " + connection.RoundTripMilliseconds
-                + " ms   Server " + connection.ServerBuildVersion + "\nMalformed " + connection.MalformedMessages
-                + "   Unexpected " + connection.UnexpectedMessages;
+                : $"{m_client.Status}\nState {connection.State}   RTT {connection.RoundTripMilliseconds} ms"
+                + $"   Server {connection.ServerBuildVersion}"
+                + $"\nMalformed {connection.MalformedMessages}   Unexpected {connection.UnexpectedMessages}";
             m_disconnect.SetActive(isOpen);
             m_connectForm.SetActive(!isOpen);
             RefreshWorld();
@@ -381,25 +382,25 @@ public sealed class DevelopmentOverlay : MonoBehaviour
             }
 
             MovementPredictor predictor = world.Predictor;
+            WorldPosition position = predictor.Position;
             RenderSmoother smoother = world.Smoother;
-            string text = "Tick " + world.LatestServerTick + "   Pos " + predictor.Position.X.ToString("F2") + ", "
-                + predictor.Position.Y.ToString("F2") + ", " + predictor.Position.Z.ToString("F2")
-                + "\nPending " + predictor.PendingCount + "   Ack " + predictor.LastAcknowledgedSequence
-                + "   Dropped " + predictor.DroppedPendingInputs
-                + "\nCorrection last " + smoother.LastCorrection.ToString("F3") + " m   max "
-                + smoother.LargestCorrection.ToString("F3") + " m   snaps " + smoother.Snaps
-                + "\nSnapshots " + world.SnapshotsApplied + "   stale " + world.StaleSnapshots + "   unknown states "
-                + world.UnknownEntityStates + "   remotes " + world.Remotes.Count;
+            string text = $"Tick {world.LatestServerTick}   Pos {position.X:F2}, {position.Y:F2}, {position.Z:F2}"
+                + $"\nPending {predictor.PendingCount}   Ack {predictor.LastAcknowledgedSequence}"
+                + $"   Dropped {predictor.DroppedPendingInputs}"
+                + $"\nCorrection last {smoother.LastCorrection:F3} m   max {smoother.LargestCorrection:F3} m"
+                + $"   snaps {smoother.Snaps}"
+                + $"\nSnapshots {world.SnapshotsApplied}   stale {world.StaleSnapshots}"
+                + $"   unknown states {world.UnknownEntityStates}   remotes {world.Remotes.Count}";
             MovementController? controller = m_client.Controller;
             if (controller != null)
             {
-                text += "\nWalk " + (controller.HasPath ? "active" : "none") + "   refused clicks "
-                    + controller.RejectedMoveRequests + "   cancelled " + controller.CancelledPaths;
+                text += $"\nWalk {(controller.HasPath ? "active" : "none")}"
+                    + $"   refused clicks {controller.RejectedMoveRequests}   cancelled {controller.CancelledPaths}";
             }
 
             if (m_client.Clock != null && m_client.Clock.SkippedTicks > 0)
             {
-                text += "\nSkipped client ticks " + m_client.Clock.SkippedTicks;
+                text += $"\nSkipped client ticks {m_client.Clock.SkippedTicks}";
             }
 
             m_world.text = text;
@@ -415,7 +416,7 @@ public sealed class DevelopmentOverlay : MonoBehaviour
             }
 
             m_linkCounters.text =
-                "Simulated link (each way)   dropped " + link.Dropped + "   reordered " + link.Reordered;
+                $"Simulated link (each way)   dropped {link.Dropped}   reordered {link.Reordered}";
             foreach (LinkSlider slider in m_linkSliders)
             {
                 slider.Show(link);
@@ -465,7 +466,7 @@ public sealed class DevelopmentOverlay : MonoBehaviour
 
             m_shown = value;
             m_slider.SetValueWithoutNotify(value);
-            m_label.text = m_name + " " + value;
+            m_label.text = $"{m_name} {value}";
         }
     }
 }

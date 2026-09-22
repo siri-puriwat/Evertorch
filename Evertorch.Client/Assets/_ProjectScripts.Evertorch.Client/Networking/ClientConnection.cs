@@ -170,11 +170,11 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
         }
         catch (InvalidOperationException exception)
         {
-            Fail("The connection could not be started: " + exception.Message);
+            Fail($"The connection could not be started: {exception.Message}");
         }
         catch (SocketException exception)
         {
-            Fail("The connection could not be started: " + exception.Message);
+            Fail($"The connection could not be started: {exception.Message}");
         }
     }
 
@@ -228,7 +228,7 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
 
         if (!m_maps.TryGetNavigation(entered.Map, out NavigationGrid? grid) || grid == null)
         {
-            Fail("The client content has no map '" + entered.Map.Value + "'.");
+            Fail($"The client content has no map '{entered.Map.Value}'.");
             m_transport.Disconnect();
             return;
         }

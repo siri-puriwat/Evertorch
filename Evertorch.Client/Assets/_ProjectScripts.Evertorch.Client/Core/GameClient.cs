@@ -100,7 +100,7 @@ public sealed class GameClient : MonoBehaviour
         // server replaces the older session. A GUID is random per process, unlike a seeded draw two editors started
         // together could share.
         int suffix = 100000 + Math.Abs(Guid.NewGuid().GetHashCode() % 900000);
-        Identity = "player" + suffix;
+        Identity = $"player{suffix}";
         Character = suffix;
 
         Touch = TouchControls.Create();
@@ -117,7 +117,7 @@ public sealed class GameClient : MonoBehaviour
             yield break;
         }
 
-        Status = "Content " + m_contentLoader.Content.Version;
+        Status = $"Content {m_contentLoader.Content.Version}";
         if (m_connectOnStart)
         {
             Connect();
@@ -220,7 +220,7 @@ public sealed class GameClient : MonoBehaviour
         Connection = new ClientConnection(Link, settings, m_contentLoader.Content);
         Connection.EnteredWorld += OnEnteredWorld;
         Connection.Closed += OnClosed;
-        Status = "Connecting to " + m_host + ":" + m_port;
+        Status = $"Connecting to {m_host}:{m_port}";
         Connection.Connect(m_host, m_port);
     }
 
@@ -241,12 +241,12 @@ public sealed class GameClient : MonoBehaviour
             || map == null
             || !MapSceneResolver.TryResolve(map.SceneKey, out string sceneName))
         {
-            m_leaveReason = "No scene is known for map " + world.Map.Value;
+            m_leaveReason = $"No scene is known for map {world.Map.Value}";
             Disconnect();
             yield break;
         }
 
-        Status = "Loading " + map.DisplayName;
+        Status = $"Loading {map.DisplayName}";
         yield return SceneManager.LoadSceneAsync(sceneName, LoadSceneMode.Single);
 
         // The connection may have closed, or been replaced, while the scene was loading.
@@ -284,7 +284,7 @@ public sealed class GameClient : MonoBehaviour
         m_controller = new MovementController(world.Grid);
         m_clock = new FixedTickClock(1f / Connection.ServerTickRate);
         m_driver = new LocalPlayerDriver(m_controller, new MoveIntentProducer(), world, Connection);
-        Status = "In " + map.DisplayName;
+        Status = $"In {map.DisplayName}";
     }
 
     private void BindInput()
@@ -353,11 +353,11 @@ public sealed class GameClient : MonoBehaviour
         }
         else if (connection.Notice != null)
         {
-            Status = "Disconnected: " + connection.Notice.Reason + " " + connection.Notice.Message;
+            Status = $"Disconnected: {connection.Notice.Reason} {connection.Notice.Message}";
         }
         else
         {
-            Status = "Disconnected: " + connection.DisconnectCause;
+            Status = $"Disconnected: {connection.DisconnectCause}";
         }
     }
 
@@ -399,7 +399,7 @@ public sealed class GameClient : MonoBehaviour
         }
 
         var view = EntityView.Create(
-            "Remote " + remote.Entity.Value,
+            $"Remote {remote.Entity.Value}",
             m_world.Grid.AgentRadius,
             ResolveMaterial(),
             RemoteColor);

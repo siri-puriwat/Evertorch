@@ -35,7 +35,7 @@ public sealed class StreamingContentLoader
         yield return manifestRequest.Send();
         if (manifestRequest.Bytes == null)
         {
-            Fail("No client content was found in StreamingAssets/" + FolderName + ". " + MissingPackageHint);
+            Fail($"No client content was found in StreamingAssets/{FolderName}. {MissingPackageHint}");
             yield break;
         }
 
@@ -53,7 +53,7 @@ public sealed class StreamingContentLoader
             yield return request.Send();
             if (request.Bytes == null)
             {
-                Fail("Content file '" + name + "' could not be read. " + MissingPackageHint);
+                Fail($"Content file '{name}' could not be read. {MissingPackageHint}");
                 yield break;
             }
 
@@ -63,7 +63,7 @@ public sealed class StreamingContentLoader
         Content = ClientContentParser.Parse(manifestRequest.Bytes, files, out string parseError);
         if (Content == null)
         {
-            Fail(parseError + " " + MissingPackageHint);
+            Fail($"{parseError} {MissingPackageHint}");
             yield break;
         }
 
@@ -82,7 +82,7 @@ public sealed class StreamingContentLoader
 
         public FileRequest(string fileName)
         {
-            string path = Application.streamingAssetsPath + "/" + FolderName + "/" + fileName;
+            string path = $"{Application.streamingAssetsPath}/{FolderName}/{fileName}";
             m_url = path.Contains("://") ? path : new Uri(path).AbsoluteUri;
         }
 

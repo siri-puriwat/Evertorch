@@ -46,14 +46,14 @@ public static class ClientContentParser
         {
             if (!files.TryGetValue(entry.path, out byte[]? content))
             {
-                error = "Content file '" + entry.path + "' is missing.";
+                error = $"Content file '{entry.path}' is missing.";
                 return null;
             }
 
             string hash = ComputeHash(content);
             if (!string.Equals(hash, entry.sha256, StringComparison.Ordinal))
             {
-                error = "Content file '" + entry.path + "' does not match the manifest.";
+                error = $"Content file '{entry.path}' does not match the manifest.";
                 return null;
             }
 
@@ -69,7 +69,7 @@ public static class ClientContentParser
 
         if (!files.TryGetValue(MapsFile, out byte[]? mapsBytes) || manifest.files.All(file => file.path != MapsFile))
         {
-            error = "The content package has no '" + MapsFile + "'.";
+            error = $"The content package has no '{MapsFile}'.";
             return null;
         }
 
@@ -89,7 +89,7 @@ public static class ClientContentParser
 
         if (manifest.schemaVersion != SupportedSchemaVersion)
         {
-            error = "The content manifest has schema version " + manifest.schemaVersion + "; expected 1.";
+            error = $"The content manifest has schema version {manifest.schemaVersion}; expected 1.";
             return null;
         }
 
@@ -114,7 +114,7 @@ public static class ClientContentParser
         MapsDto? dto = FromJson<MapsDto>(mapsBytes);
         if (dto == null || dto.definitions == null || dto.schemaVersion != SupportedSchemaVersion)
         {
-            error = "'" + MapsFile + "' is not readable or has an unsupported schema version.";
+            error = $"'{MapsFile}' is not readable or has an unsupported schema version.";
             return null;
         }
 
@@ -123,14 +123,14 @@ public static class ClientContentParser
         {
             if (!MapDefinitionId.TryCreate(map.id, out MapDefinitionId id) || maps.ContainsKey(id))
             {
-                error = "'" + MapsFile + "' has an invalid or repeated map ID.";
+                error = $"'{MapsFile}' has an invalid or repeated map ID.";
                 return null;
             }
 
             NavigationGrid? grid = BuildGrid(map.navigation, out string gridError);
             if (grid == null)
             {
-                error = "Map '" + map.id + "': " + gridError;
+                error = $"Map '{map.id}': {gridError}";
                 return null;
             }
 
@@ -176,7 +176,7 @@ public static class ClientContentParser
             }
             catch (ArgumentException exception)
             {
-                error = "navigation legend '" + entry.symbol + "': " + exception.Message;
+                error = $"navigation legend '{entry.symbol}': {exception.Message}";
                 return null;
             }
         }
@@ -187,7 +187,7 @@ public static class ClientContentParser
             string text = navigation.cellRows[row];
             if (text == null || text.Length != columns)
             {
-                error = "navigation row " + row + " has the wrong length.";
+                error = $"navigation row {row} has the wrong length.";
                 return null;
             }
 
@@ -195,7 +195,7 @@ public static class ClientContentParser
             {
                 if (!legend.TryGetValue(text[column], out NavigationCell cell))
                 {
-                    error = "navigation row " + row + " uses a symbol outside the legend.";
+                    error = $"navigation row {row} uses a symbol outside the legend.";
                     return null;
                 }
 
