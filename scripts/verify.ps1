@@ -60,16 +60,17 @@ try {
     Invoke-Step 'Code style' { dotnet format style $solution --no-restore --verify-no-changes }
     Invoke-Step 'Analyzers' { dotnet format analyzers $solution --no-restore --verify-no-changes }
 
-    # ReSharper cleanup has no verify-only mode, so formatting drift is detected by comparing file hashes.
+    # ReSharper cleanup has no verify-only mode, so drift is detected by comparing file hashes. The profile is the
+    # one Rider runs, so code cleaned in the IDE passes unchanged.
     $before = Get-SourceHashes
-    Invoke-Step 'ReSharper reformat' {
-        dotnet jb cleanupcode $solution '--profile=Built-in: Reformat Code' '--include=**/*.cs' --no-build
+    Invoke-Step 'ReSharper cleanup' {
+        dotnet jb cleanupcode $solution '--profile=Built-in: Full Cleanup' '--include=**/*.cs' --no-build
     }
     $after = Get-SourceHashes
 
     $changed = @($before.Keys | Where-Object { $before[$_] -ne $after[$_] } | Sort-Object)
     if ($changed.Count -gt 0) {
-        Write-Host 'FAILED: ReSharper reformat changed these files (now reformatted in place):'
+        Write-Host 'FAILED: ReSharper cleanup changed these files (now cleaned up in place):'
         $changed | ForEach-Object { Write-Host "  $_" }
         exit 1
     }
