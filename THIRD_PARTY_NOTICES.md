@@ -29,7 +29,6 @@ TextMesh Pro Essential Resources are imported from `com.unity.ugui` 2.0.0 into
 | --- | --- | --- | --- |
 | TextMesh Pro shaders, settings, and font assets | `Assets/TextMesh Pro` | Unity Companion License | <https://unity3d.com/legal/licenses/unity_companion_license> |
 | Liberation Sans font | `Assets/TextMesh Pro/Fonts` | SIL Open Font License 1.1 | `LiberationSans - OFL.txt` |
-| EmojiOne sample sprites | `Assets/TextMesh Pro/Sprites` | EmojiOne terms | `EmojiOne Attribution.txt` |
 
 LiteNetLib is Copyright (c) Ruslan Pyrch.
 
@@ -41,5 +40,3 @@ TextMesh Pro is Copyright (c) Unity Technologies ApS.
 
 Liberation Sans is Copyright (c) 2012 Red Hat, Inc., with digitized data
 Copyright (c) 2010 Google Corporation.
-
-The EmojiOne sample sprites are provided by EmojiOne (<https://www.emojione.com/>).
