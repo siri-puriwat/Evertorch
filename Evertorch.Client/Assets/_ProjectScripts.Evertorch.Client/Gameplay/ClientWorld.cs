@@ -31,6 +31,9 @@ public sealed class ClientWorld
         MapInstance = entered.MapInstance;
         LocalEntity = entered.LocalEntity;
         LocalJob = entered.Job;
+        LocalHealth = entered.CurrentHealth;
+        LocalMaximumHealth = entered.MaximumHealth;
+        AttackRange = entered.AttackRange;
         LatestServerTick = entered.ServerTick;
         m_tickSeconds = 1.0 / serverTickRate;
         Predictor = new MovementPredictor(
@@ -52,6 +55,21 @@ public sealed class ClientWorld
     public EntityId LocalEntity { get; }
 
     public JobDefinitionId LocalJob { get; }
+
+    /// <summary>
+    ///     The local character's exact HP as the server last reported it.
+    /// </summary>
+    public uint LocalHealth { get; private set; }
+
+    public uint LocalMaximumHealth { get; private set; }
+
+    public bool IsLocalDead { get; private set; }
+
+    /// <summary>
+    ///     The basic attack's range, which the client walks within before asking for nothing more: the server checks
+    ///     range itself when a swing begins.
+    /// </summary>
+    public float AttackRange { get; }
 
     public MovementPredictor Predictor { get; }
 
@@ -87,6 +105,14 @@ public sealed class ClientWorld
 
     public event Action? TargetChanged;
 
+    public event Action<AttackStarted>? AttackStartedReceived;
+
+    public event Action<Damage>? DamageReceived;
+
+    public event Action<EntityDied>? EntityDiedReceived;
+
+    public event Action<EntityRevived>? EntityRevivedReceived;
+
     public void OnSpawn(EntitySpawn spawn)
     {
         if (spawn == null)
@@ -105,7 +131,12 @@ public sealed class ClientWorld
             RemoteDespawned?.Invoke(replaced);
         }
 
-        var remote = new RemoteEntity(spawn.Entity, spawn.Kind, spawn.DefinitionId, spawn.StateFlags);
+        var remote = new RemoteEntity(
+            spawn.Entity,
+            spawn.Kind,
+            spawn.DefinitionId,
+            spawn.StateFlags,
+            spawn.HealthPermille);
         remote.Buffer.Add(LatestServerTick * m_tickSeconds, spawn.Position, spawn.Facing);
         m_remotes.Add(spawn.Entity, remote);
         RemoteSpawned?.Invoke(remote);
@@ -132,9 +163,81 @@ public sealed class ClientWorld
         TargetChanged?.Invoke();
     }
 
+    public void OnAttackStarted(AttackStarted started)
+    {
+        if (!Knows(started.Attacker))
+        {
+            UnknownEntityEvents++;
+            return;
+        }
+
+        AttackStartedReceived?.Invoke(started);
+    }
+
+    public void OnDamage(Damage damage)
+    {
+        if (!Knows(damage.Target))
+        {
+            UnknownEntityEvents++;
+            return;
+        }
+
+        if (m_remotes.TryGetValue(damage.Target, out RemoteEntity? remote) && remote.Kind == EntityKind.Monster)
+        {
+            remote.HealthPermille = damage.TargetHealthPermille;
+        }
+
+        DamageReceived?.Invoke(damage);
+    }
+
+    public void OnEntityDied(EntityDied died)
+    {
+        if (died.Entity == LocalEntity)
+        {
+            IsLocalDead = true;
+        }
+        else if (m_remotes.TryGetValue(died.Entity, out RemoteEntity? remote))
+        {
+            remote.StateFlags |= EntityStateFlags.Dead;
+            remote.HealthPermille = 0;
+        }
+        else
+        {
+            UnknownEntityEvents++;
+            return;
+        }
+
+        EntityDiedReceived?.Invoke(died);
+    }
+
+    public void OnEntityRevived(EntityRevived revived)
+    {
+        if (revived.Entity == LocalEntity)
+        {
+            IsLocalDead = false;
+        }
+        else if (m_remotes.TryGetValue(revived.Entity, out RemoteEntity? remote))
+        {
+            remote.StateFlags &= ~EntityStateFlags.Dead;
+        }
+        else
+        {
+            UnknownEntityEvents++;
+            return;
+        }
+
+        EntityRevivedReceived?.Invoke(revived);
+    }
+
+    public void OnCharacterHealth(CharacterHealth health)
+    {
+        LocalHealth = health.Current;
+        LocalMaximumHealth = health.Maximum;
+    }
+
     /// <summary>
-    ///     Appends the monsters this client knows, at their drawn positions: what a click can pick and what target
-    ///     cycling visits.
+    ///     Appends the live monsters this client knows, at their drawn positions: what a click can pick and what
+    ///     target cycling visits.
     /// </summary>
     public void CollectTargetCandidates(List<PickCandidate> candidates)
     {
@@ -142,11 +245,17 @@ public sealed class ClientWorld
         foreach (RemoteEntity remote in m_remotes.Values)
         {
             if (remote.Kind == EntityKind.Monster
+                && !remote.IsDead
                 && remote.Buffer.TrySample(renderTime, out WorldPosition position, out WorldDirection _))
             {
                 candidates.Add(new PickCandidate(remote.Entity, position));
             }
         }
+    }
+
+    private bool Knows(EntityId entity)
+    {
+        return entity == LocalEntity || m_remotes.ContainsKey(entity);
     }
 
     public void OnSnapshot(EntitySnapshot snapshot)

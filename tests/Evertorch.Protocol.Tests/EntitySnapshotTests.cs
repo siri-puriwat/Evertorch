@@ -152,7 +152,7 @@ public sealed class EntitySnapshotTests
     [Test]
     public void TryRead_WhenFlagsContainUnknownBits_ReturnsFalse()
     {
-        byte[] invalid = WireMatrix.With(GoldenBytes, FirstFlagsOffset, 0x03, 0x00);
+        byte[] invalid = WireMatrix.With(GoldenBytes, FirstFlagsOffset, 0x04, 0x00);
 
         Assert.That(EntitySnapshot.TryRead(invalid, out _), Is.False);
     }

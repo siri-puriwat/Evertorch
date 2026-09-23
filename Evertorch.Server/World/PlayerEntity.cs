@@ -15,12 +15,15 @@ public sealed class PlayerEntity : WorldEntity
         JobDefinitionId job,
         WorldPosition position,
         WorldDirection facing,
-        float movementSpeed)
-        : base(id, position, facing, movementSpeed)
+        float movementSpeed,
+        DerivedStats stats,
+        float attackRange)
+        : base(id, position, facing, movementSpeed, stats.MaxHp, attackRange)
     {
         Character = character;
         Owner = owner;
         Job = job;
+        Stats = stats;
     }
 
     public CharacterId Character { get; }
@@ -28,6 +31,11 @@ public sealed class PlayerEntity : WorldEntity
     public ConnectionId Owner { get; }
 
     public JobDefinitionId Job { get; }
+
+    /// <summary>
+    ///     The character's derived statistics from the rules; recalculated only when their inputs change.
+    /// </summary>
+    public DerivedStats Stats { get; }
 
     public override EntityKind Kind => EntityKind.Player;
 

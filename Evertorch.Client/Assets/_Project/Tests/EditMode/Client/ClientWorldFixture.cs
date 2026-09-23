@@ -26,7 +26,10 @@ internal static class ClientWorldFixture
             serverTick,
             position,
             new WorldDirection(0f, 1f),
-            ClientTestGrids.Speed);
+            ClientTestGrids.Speed,
+            71,
+            71,
+            1.5f);
     }
 
     public static EntitySnapshot Snapshot(uint tick, uint acknowledged, params EntityState[] states)

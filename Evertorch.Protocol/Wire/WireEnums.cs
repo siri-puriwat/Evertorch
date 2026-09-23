@@ -5,7 +5,7 @@ namespace Evertorch.Protocol
 /// </summary>
 internal static class WireEnums
 {
-    private const EntityStateFlags KnownStateFlags = EntityStateFlags.Moving;
+    private const EntityStateFlags KnownStateFlags = EntityStateFlags.Moving | EntityStateFlags.Dead;
 
     public static bool IsDefined(DisconnectReason value)
     {
@@ -15,6 +15,11 @@ internal static class WireEnums
     public static bool IsDefined(EntityKind value)
     {
         return value == EntityKind.Player || value == EntityKind.Monster;
+    }
+
+    public static bool IsDefined(CombatResult value)
+    {
+        return value >= CombatResult.Hit && value <= CombatResult.Critical;
     }
 
     public static bool IsDefined(DespawnReason value)

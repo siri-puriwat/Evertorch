@@ -90,7 +90,8 @@ public sealed class ClientConnectionTests
             "job.adventurer",
             ClientTestGrids.Center(3, 8),
             new WorldDirection(0f, 1f),
-            EntityStateFlags.None);
+            EntityStateFlags.None,
+            0);
         EntitySnapshot snapshot = ClientWorldFixture.Snapshot(
             5,
             0,
@@ -122,7 +123,8 @@ public sealed class ClientConnectionTests
             "monster.training_slime",
             ClientTestGrids.Center(4, 8),
             new WorldDirection(0f, 1f),
-            EntityStateFlags.None);
+            EntityStateFlags.None,
+            1000);
         harness.Deliver(ProtocolChannel.Control, Encode(spawn.GetEncodedLength(), spawn.Write));
 
         harness.Connection.SendTarget(slime);

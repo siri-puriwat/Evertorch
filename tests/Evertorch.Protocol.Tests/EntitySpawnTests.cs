@@ -22,7 +22,8 @@ public sealed class EntitySpawnTests
         0x05, 0x00, 0x6A, 0x6F, 0x62, 0x2E, 0x61,
         0x00, 0x00, 0x80, 0x3F, 0x00, 0x00, 0x00, 0x3F, 0x00, 0x00, 0x00, 0xC0,
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80, 0x3F,
-        0x01, 0x00
+        0x01, 0x00,
+        0x00, 0x00
     };
 
     private static readonly byte[] MonsterBytes =
@@ -33,7 +34,8 @@ public sealed class EntitySpawnTests
         0x09, 0x00, 0x6D, 0x6F, 0x6E, 0x73, 0x74, 0x65, 0x72, 0x2E, 0x61,
         0x00, 0x00, 0x40, 0x41, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x41,
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80, 0x3F,
-        0x00, 0x00
+        0x00, 0x00,
+        0xE8, 0x03
     };
 
     private static EntitySpawn Monster => new(
@@ -42,7 +44,8 @@ public sealed class EntitySpawnTests
         "monster.a",
         new WorldPosition(12f, 0f, 12f),
         new WorldDirection(0f, 1f),
-        EntityStateFlags.None);
+        EntityStateFlags.None,
+        1000);
 
     private static EntitySpawn Golden => new(
         new EntityId(0x0123456789ABCDEF),
@@ -50,7 +53,8 @@ public sealed class EntitySpawnTests
         "job.a",
         new WorldPosition(1f, 0.5f, -2f),
         new WorldDirection(0f, 1f),
-        EntityStateFlags.Moving);
+        EntityStateFlags.Moving,
+        0);
 
     [TestCase(0)]
     [TestCase(3)]
@@ -60,7 +64,7 @@ public sealed class EntitySpawnTests
         Assert.That(EntitySpawn.TryRead(WireMatrix.With(GoldenBytes, KindOffset, kind), out _), Is.False);
     }
 
-    [TestCase(0x02, 0x00)]
+    [TestCase(0x04, 0x00)]
     [TestCase(0x01, 0x80)]
     [TestCase(0xFF, 0xFF)]
     public void TryRead_WhenFlagsContainUnknownBits_ReturnsFalse(byte low, byte high)
@@ -91,6 +95,7 @@ public sealed class EntitySpawnTests
         Assert.That(message!.Kind, Is.EqualTo(EntityKind.Monster));
         Assert.That(message.DefinitionId, Is.EqualTo("monster.a"));
         Assert.That(message.Position, Is.EqualTo(new WorldPosition(12f, 0f, 12f)));
+        Assert.That(message.HealthPermille, Is.EqualTo(1000));
     }
 
     [Test]
@@ -118,6 +123,17 @@ public sealed class EntitySpawnTests
 
         Assert.That(EntitySpawn.TryRead(playerKind, out _), Is.False);
         Assert.That(EntitySpawn.TryRead(jobForMonster, out _), Is.False);
+    }
+
+    [Test]
+    public void TryRead_WhenHealthDoesNotFitTheKind_ReturnsFalse()
+    {
+        const int healthOffset = 44;
+        byte[] playerWithHealth = WireMatrix.With(GoldenBytes, 40, 0x01, 0x00);
+        byte[] monsterAboveFull = WireMatrix.With(MonsterBytes, healthOffset, 0xE9, 0x03);
+
+        Assert.That(EntitySpawn.TryRead(playerWithHealth, out _), Is.False);
+        Assert.That(EntitySpawn.TryRead(monsterAboveFull, out _), Is.False);
     }
 
     [Test]
@@ -164,7 +180,7 @@ public sealed class EntitySpawnTests
     public void Write_WhenDefinitionIdExceedsLimit_Throws()
     {
         var message =
-            new EntitySpawn(default, EntityKind.Player, $"job.{new string('a', 61)}", default, default, 0);
+            new EntitySpawn(default, EntityKind.Player, $"job.{new string('a', 61)}", default, default, 0, 0);
         Action write = () => message.Write(new byte[512]);
 
         Assert.That(write, Throws.ArgumentException);

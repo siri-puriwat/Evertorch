@@ -24,7 +24,9 @@ public sealed class WorldSimulation
     private readonly IMovementRules m_movementRules;
     private readonly IRandomSource m_random;
     private readonly JobDefinition m_startingJob;
+    private readonly DerivedStats m_startingStats;
     private readonly float m_startingMovementSpeed;
+    private readonly float m_startingAttackRange;
     private long m_lastEntityId;
 
     public WorldSimulation(
@@ -46,7 +48,10 @@ public sealed class WorldSimulation
         }
 
         m_startingJob = job;
-        m_startingMovementSpeed = CalculateMovementSpeed(job, characterRules, movementRules);
+        m_startingStats = CalculateStats(job, characterRules);
+        var movement = new MovementContext(m_startingStats.MovementSpeed);
+        m_startingMovementSpeed = movementRules.CalculateMovement(movement).Speed;
+        m_startingAttackRange = (float)content.Skills[job.BasicAttack].Range;
 
         foreach (MapDefinition map in content.Maps.Values.OrderBy(map => map.Id.Value, StringComparer.Ordinal))
         {
@@ -79,7 +84,9 @@ public sealed class WorldSimulation
             m_startingJob.Id,
             map.Definition.SpawnPosition,
             MovementModel.NormalizeOrZero(map.Definition.SpawnFacing.X, map.Definition.SpawnFacing.Z),
-            m_startingMovementSpeed);
+            m_startingMovementSpeed,
+            m_startingStats,
+            m_startingAttackRange);
         map.Add(player);
         return player;
     }
@@ -90,7 +97,7 @@ public sealed class WorldSimulation
     }
 
     /// <summary>
-    ///     Places a new monster of <paramref name="spawn" /> at a fresh random point of its area (Gameplay Systems §10).
+    ///     Places a new monster of <paramref name="spawn" /> at a fresh random point of its area.
     /// </summary>
     public MonsterEntity SpawnMonster(MapInstance map, MonsterSpawn spawn)
     {
@@ -113,10 +120,7 @@ public sealed class WorldSimulation
         return new EntityId(m_lastEntityId);
     }
 
-    private static float CalculateMovementSpeed(
-        JobDefinition job,
-        ICharacterRules characterRules,
-        IMovementRules movementRules)
+    private static DerivedStats CalculateStats(JobDefinition job, ICharacterRules characterRules)
     {
         var build = new CharacterBuild(
             StartingLevel,
@@ -127,8 +131,7 @@ public sealed class WorldSimulation
             job.SpiritPerLevel,
             job.UnarmedAttackSpeedPenalty,
             (float)job.BaseSpeed);
-        DerivedStats stats = characterRules.CalculateDerivedStats(build);
-        return movementRules.CalculateMovement(new MovementContext(stats.MovementSpeed)).Speed;
+        return characterRules.CalculateDerivedStats(build);
     }
 }
 }

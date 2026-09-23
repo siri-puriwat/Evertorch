@@ -25,7 +25,8 @@ public sealed class TargetingTests
                 "monster.a",
                 ClientTestGrids.Center(4, 8),
                 new WorldDirection(0f, 1f),
-                EntityStateFlags.None));
+                EntityStateFlags.None,
+                1000));
         return world;
     }
 
@@ -109,7 +110,8 @@ public sealed class TargetingTests
                 "job.adventurer",
                 ClientTestGrids.Center(5, 8),
                 new WorldDirection(0f, 1f),
-                EntityStateFlags.None));
+                EntityStateFlags.None,
+                0));
         var candidates = new List<PickCandidate>();
 
         world.CollectTargetCandidates(candidates);

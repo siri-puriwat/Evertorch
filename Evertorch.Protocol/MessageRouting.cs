@@ -28,6 +28,11 @@ public static class MessageRouting
             case MessageOpcode.EntitySpawn:
             case MessageOpcode.EntityDespawn:
             case MessageOpcode.TargetChanged:
+            case MessageOpcode.AttackStarted:
+            case MessageOpcode.Damage:
+            case MessageOpcode.EntityDied:
+            case MessageOpcode.CharacterHealth:
+            case MessageOpcode.EntityRevived:
             case MessageOpcode.DisconnectNotice:
                 return true;
             case MessageOpcode.MoveInput:

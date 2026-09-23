@@ -220,7 +220,10 @@ public sealed class SessionManager : ITickPhase
                 tick,
                 player.Position,
                 player.Facing,
-                player.MovementSpeed));
+                player.MovementSpeed,
+                (uint)player.CurrentHealth,
+                (uint)player.MaxHealth,
+                player.AttackRange));
         LogWorldEntered(m_logger, session.Connection.Value, request.Character.Value, player.Id.Value, null);
     }
 

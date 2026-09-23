@@ -17,7 +17,10 @@ public sealed class WorldEntered
         uint serverTick,
         WorldPosition position,
         WorldDirection facing,
-        float movementSpeed)
+        float movementSpeed,
+        uint currentHealth,
+        uint maximumHealth,
+        float attackRange)
     {
         Map = map;
         MapInstance = mapInstance;
@@ -27,6 +30,9 @@ public sealed class WorldEntered
         Position = position;
         Facing = facing;
         MovementSpeed = movementSpeed;
+        CurrentHealth = currentHealth;
+        MaximumHealth = maximumHealth;
+        AttackRange = attackRange;
     }
 
     public MapDefinitionId Map { get; }
@@ -52,6 +58,22 @@ public sealed class WorldEntered
     /// </summary>
     public float MovementSpeed { get; }
 
+    /// <summary>
+    ///     The local character's exact HP; never more than <see cref="MaximumHealth" />.
+    /// </summary>
+    public uint CurrentHealth { get; }
+
+    /// <summary>
+    ///     At least 1.
+    /// </summary>
+    public uint MaximumHealth { get; }
+
+    /// <summary>
+    ///     The basic attack's range in world units, which the client walks within before the server lets a swing
+    ///     begin. The server still checks range itself.
+    /// </summary>
+    public float AttackRange { get; }
+
     public static bool TryRead(ReadOnlySpan<byte> source, out WorldEntered? message)
     {
         message = null;
@@ -65,8 +87,14 @@ public sealed class WorldEntered
             || !reader.TryReadPosition(out WorldPosition position)
             || !reader.TryReadDirection(out WorldDirection facing)
             || !reader.TryReadSingle(out float movementSpeed)
+            || !reader.TryReadUInt32(out uint currentHealth)
+            || !reader.TryReadUInt32(out uint maximumHealth)
+            || !reader.TryReadSingle(out float attackRange)
             || !reader.IsAtEnd
             || movementSpeed < 0f
+            || maximumHealth == 0
+            || currentHealth > maximumHealth
+            || attackRange < 0f
             || !MapDefinitionId.TryCreate(mapText, out MapDefinitionId map)
             || !JobDefinitionId.TryCreate(jobText, out JobDefinitionId job))
         {
@@ -81,7 +109,10 @@ public sealed class WorldEntered
             serverTick,
             position,
             facing,
-            movementSpeed);
+            movementSpeed,
+            currentHealth,
+            maximumHealth,
+            attackRange);
         return true;
     }
 
@@ -95,6 +126,9 @@ public sealed class WorldEntered
             + sizeof(uint)
             + 3 * sizeof(float)
             + 2 * sizeof(float)
+            + sizeof(float)
+            + sizeof(uint)
+            + sizeof(uint)
             + sizeof(float);
     }
 
@@ -110,6 +144,9 @@ public sealed class WorldEntered
         writer.WritePosition(Position);
         writer.WriteDirection(Facing);
         writer.WriteSingle(MovementSpeed);
+        writer.WriteUInt32(CurrentHealth);
+        writer.WriteUInt32(MaximumHealth);
+        writer.WriteSingle(AttackRange);
         return writer.Position;
     }
 }

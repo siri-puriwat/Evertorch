@@ -21,6 +21,11 @@ public enum MessageOpcode : ushort
     EntityDespawn = 0x8005,
     EntitySnapshot = 0x8006,
     TargetChanged = 0x8007,
-    DisconnectNotice = 0x8013
+    AttackStarted = 0x8008,
+    Damage = 0x8009,
+    EntityDied = 0x800A,
+    DisconnectNotice = 0x8013,
+    CharacterHealth = 0x8014,
+    EntityRevived = 0x8015
 }
 }

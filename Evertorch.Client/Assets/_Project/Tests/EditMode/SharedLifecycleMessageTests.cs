@@ -44,6 +44,9 @@ public sealed class SharedLifecycleMessageTests
         0x00, 0x00, 0x80, 0x3F, 0x00, 0x00, 0x00, 0x3F, 0x00, 0x00, 0x00, 0xC0,
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80, 0x3F,
         0x00, 0x00, 0xA0, 0x40,
+        0x44, 0x00, 0x00, 0x00,
+        0x44, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0xC0, 0x3F,
     };
 
     private static readonly byte[] EntitySpawnBytes =
@@ -55,6 +58,7 @@ public sealed class SharedLifecycleMessageTests
         0x00, 0x00, 0x80, 0x3F, 0x00, 0x00, 0x00, 0x3F, 0x00, 0x00, 0x00, 0xC0,
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80, 0x3F,
         0x01, 0x00,
+        0x00, 0x00,
     };
 
     private static readonly byte[] MonsterSpawnBytes =
@@ -66,6 +70,7 @@ public sealed class SharedLifecycleMessageTests
         0x00, 0x00, 0x40, 0x41, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x41,
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80, 0x3F,
         0x00, 0x00,
+        0xE8, 0x03,
     };
 
     private static readonly byte[] EntityDespawnBytes =
@@ -147,7 +152,10 @@ public sealed class SharedLifecycleMessageTests
             0x00010203,
             new WorldPosition(1f, 0.5f, -2f),
             new WorldDirection(0f, 1f),
-            5f);
+            5f,
+            68,
+            68,
+            1.5f);
         byte[] buffer = new byte[message.GetEncodedLength()];
         message.Write(buffer);
 
@@ -180,7 +188,8 @@ public sealed class SharedLifecycleMessageTests
             "job.a",
             new WorldPosition(1f, 0.5f, -2f),
             new WorldDirection(0f, 1f),
-            EntityStateFlags.Moving);
+            EntityStateFlags.Moving,
+            0);
         byte[] buffer = new byte[message.GetEncodedLength()];
         message.Write(buffer);
 
@@ -201,7 +210,8 @@ public sealed class SharedLifecycleMessageTests
             "monster.a",
             new WorldPosition(12f, 0f, 12f),
             new WorldDirection(0f, 1f),
-            EntityStateFlags.None);
+            EntityStateFlags.None,
+            1000);
         byte[] buffer = new byte[message.GetEncodedLength()];
         message.Write(buffer);
 

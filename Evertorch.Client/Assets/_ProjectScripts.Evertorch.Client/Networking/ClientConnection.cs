@@ -118,6 +118,61 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
             case MessageOpcode.TargetChanged:
                 OnTargetChanged(payload);
                 break;
+            case MessageOpcode.AttackStarted:
+                if (AttackStarted.TryRead(payload, out AttackStarted started))
+                {
+                    WithWorld(world => world.OnAttackStarted(started));
+                }
+                else
+                {
+                    MalformedMessages++;
+                }
+
+                break;
+            case MessageOpcode.Damage:
+                if (Damage.TryRead(payload, out Damage damage))
+                {
+                    WithWorld(world => world.OnDamage(damage));
+                }
+                else
+                {
+                    MalformedMessages++;
+                }
+
+                break;
+            case MessageOpcode.EntityDied:
+                if (EntityDied.TryRead(payload, out EntityDied died))
+                {
+                    WithWorld(world => world.OnEntityDied(died));
+                }
+                else
+                {
+                    MalformedMessages++;
+                }
+
+                break;
+            case MessageOpcode.CharacterHealth:
+                if (CharacterHealth.TryRead(payload, out CharacterHealth health))
+                {
+                    WithWorld(world => world.OnCharacterHealth(health));
+                }
+                else
+                {
+                    MalformedMessages++;
+                }
+
+                break;
+            case MessageOpcode.EntityRevived:
+                if (EntityRevived.TryRead(payload, out EntityRevived revived))
+                {
+                    WithWorld(world => world.OnEntityRevived(revived));
+                }
+                else
+                {
+                    MalformedMessages++;
+                }
+
+                break;
             case MessageOpcode.DisconnectNotice:
                 OnDisconnectNotice(payload);
                 break;
@@ -323,6 +378,18 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
         else
         {
             World.OnDespawn(despawn);
+        }
+    }
+
+    private void WithWorld(Action<ClientWorld> handle)
+    {
+        if (World == null)
+        {
+            UnexpectedMessages++;
+        }
+        else
+        {
+            handle(World);
         }
     }
 

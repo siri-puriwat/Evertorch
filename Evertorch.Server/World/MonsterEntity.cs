@@ -15,7 +15,7 @@ public sealed class MonsterEntity : WorldEntity
         WorldPosition position,
         WorldDirection facing,
         float movementSpeed)
-        : base(id, position, facing, movementSpeed)
+        : base(id, position, facing, movementSpeed, definition.Hp, (float)definition.AttackRange)
     {
         Definition = definition;
         Spawn = spawn;

@@ -15,7 +15,8 @@ public sealed class EntitySpawn
         string definitionId,
         WorldPosition position,
         WorldDirection facing,
-        EntityStateFlags stateFlags)
+        EntityStateFlags stateFlags,
+        ushort healthPermille)
     {
         Entity = entity;
         Kind = kind;
@@ -23,6 +24,7 @@ public sealed class EntitySpawn
         Position = position;
         Facing = facing;
         StateFlags = stateFlags;
+        HealthPermille = healthPermille;
     }
 
     public EntityId Entity { get; }
@@ -40,6 +42,12 @@ public sealed class EntitySpawn
 
     public EntityStateFlags StateFlags { get; }
 
+    /// <summary>
+    ///     A monster's HP in thousandths of its maximum, for a health bar; 0 for every other kind, whose HP is not
+    ///     shared (Network Protocol §9).
+    /// </summary>
+    public ushort HealthPermille { get; }
+
     public static bool TryRead(ReadOnlySpan<byte> source, out EntitySpawn? message)
     {
         message = null;
@@ -51,6 +59,7 @@ public sealed class EntitySpawn
             || !reader.TryReadPosition(out WorldPosition position)
             || !reader.TryReadDirection(out WorldDirection facing)
             || !reader.TryReadUInt16(out ushort flagsValue)
+            || !reader.TryReadUInt16(out ushort healthPermille)
             || !reader.IsAtEnd)
         {
             return false;
@@ -58,12 +67,22 @@ public sealed class EntitySpawn
 
         var kind = (EntityKind)kindValue;
         var stateFlags = (EntityStateFlags)flagsValue;
-        if (!WireEnums.IsDefined(kind) || !WireEnums.IsDefined(stateFlags) || !IsDefinitionOfKind(kind, definitionId))
+        if (!WireEnums.IsDefined(kind)
+            || !WireEnums.IsDefined(stateFlags)
+            || !IsDefinitionOfKind(kind, definitionId)
+            || !IsHealthValid(kind, healthPermille))
         {
             return false;
         }
 
-        message = new EntitySpawn(new EntityId(entity), kind, definitionId, position, facing, stateFlags);
+        message = new EntitySpawn(
+            new EntityId(entity),
+            kind,
+            definitionId,
+            position,
+            facing,
+            stateFlags,
+            healthPermille);
         return true;
     }
 
@@ -75,6 +94,7 @@ public sealed class EntitySpawn
             + WireText.GetEncodedLength(DefinitionId, ProtocolLimits.MaxDefinitionIdBytes)
             + 3 * sizeof(float)
             + 2 * sizeof(float)
+            + sizeof(ushort)
             + sizeof(ushort);
     }
 
@@ -88,7 +108,13 @@ public sealed class EntitySpawn
         writer.WritePosition(Position);
         writer.WriteDirection(Facing);
         writer.WriteUInt16((ushort)StateFlags);
+        writer.WriteUInt16(HealthPermille);
         return writer.Position;
+    }
+
+    private static bool IsHealthValid(EntityKind kind, ushort healthPermille)
+    {
+        return kind == EntityKind.Monster ? healthPermille <= HealthRatio.Full : healthPermille == 0;
     }
 
     private static bool IsDefinitionOfKind(EntityKind kind, string definitionId)

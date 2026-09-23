@@ -68,7 +68,8 @@ public sealed class VisibilityPhase : ITickPhase
                         entity.DefinitionId,
                         entity.Position,
                         entity.Facing,
-                        entity.StateFlags));
+                        entity.StateFlags,
+                        entity.SharedHealthPermille));
             }
         }
 

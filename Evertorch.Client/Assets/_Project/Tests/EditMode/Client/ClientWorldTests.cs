@@ -163,7 +163,8 @@ public sealed class ClientWorldTests
             "job.adventurer",
             position,
             new WorldDirection(0f, 1f),
-            EntityStateFlags.None);
+            EntityStateFlags.None,
+            0);
     }
 }
 }

@@ -54,7 +54,9 @@ public sealed class InterestGridTests
             new JobDefinitionId("job.adventurer"),
             new WorldPosition(x, 0f, z),
             new WorldDirection(0f, 1f),
-            5f);
+            5f,
+            TestStats.Adventurer,
+            1.5f);
     }
 
     [Test]

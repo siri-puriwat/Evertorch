@@ -49,6 +49,31 @@ public sealed class MessageSender
         m_outbound.Send(connection, m_buffer.AsSpan(0, message.Write(m_buffer)));
     }
 
+    public void Send(ConnectionId connection, AttackStarted message)
+    {
+        m_outbound.Send(connection, m_buffer.AsSpan(0, message.Write(m_buffer)));
+    }
+
+    public void Send(ConnectionId connection, Damage message)
+    {
+        m_outbound.Send(connection, m_buffer.AsSpan(0, message.Write(m_buffer)));
+    }
+
+    public void Send(ConnectionId connection, EntityDied message)
+    {
+        m_outbound.Send(connection, m_buffer.AsSpan(0, message.Write(m_buffer)));
+    }
+
+    public void Send(ConnectionId connection, CharacterHealth message)
+    {
+        m_outbound.Send(connection, m_buffer.AsSpan(0, message.Write(m_buffer)));
+    }
+
+    public void Send(ConnectionId connection, EntityRevived message)
+    {
+        m_outbound.Send(connection, m_buffer.AsSpan(0, message.Write(m_buffer)));
+    }
+
     public void Disconnect(ConnectionId connection, DisconnectReason reason)
     {
         m_outbound.Disconnect(connection, reason, string.Empty);

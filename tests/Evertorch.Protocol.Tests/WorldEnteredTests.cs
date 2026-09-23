@@ -9,6 +9,9 @@ public sealed class WorldEnteredTests
 {
     private const int PositionXOffset = 32;
     private const int MovementSpeedOffset = 52;
+    private const int CurrentHealthOffset = 56;
+    private const int MaximumHealthOffset = 60;
+    private const int AttackRangeOffset = 64;
 
     private static readonly byte[] NotANumber = { 0x00, 0x00, 0xC0, 0x7F };
     private static readonly byte[] PositiveInfinity = { 0x00, 0x00, 0x80, 0x7F };
@@ -24,7 +27,10 @@ public sealed class WorldEnteredTests
         0x03, 0x02, 0x01, 0x00,
         0x00, 0x00, 0x80, 0x3F, 0x00, 0x00, 0x00, 0x3F, 0x00, 0x00, 0x00, 0xC0,
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80, 0x3F,
-        0x00, 0x00, 0xA0, 0x40
+        0x00, 0x00, 0xA0, 0x40,
+        0x44, 0x00, 0x00, 0x00,
+        0x44, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0xC0, 0x3F
     };
 
     private static WorldEntered Golden => new(
@@ -35,7 +41,10 @@ public sealed class WorldEnteredTests
         0x00010203,
         new WorldPosition(1f, 0.5f, -2f),
         new WorldDirection(0f, 1f),
-        5f);
+        5f,
+        68,
+        68,
+        1.5f);
 
     [Test]
     public void TryRead_ForGoldenBytes_ReturnsKnownMessage()
@@ -51,6 +60,9 @@ public sealed class WorldEnteredTests
         Assert.That(message.Position, Is.EqualTo(new WorldPosition(1f, 0.5f, -2f)));
         Assert.That(message.Facing, Is.EqualTo(new WorldDirection(0f, 1f)));
         Assert.That(message.MovementSpeed, Is.EqualTo(5f));
+        Assert.That(message.CurrentHealth, Is.EqualTo(68u));
+        Assert.That(message.MaximumHealth, Is.EqualTo(68u));
+        Assert.That(message.AttackRange, Is.EqualTo(1.5f));
     }
 
     [Test]
@@ -61,6 +73,29 @@ public sealed class WorldEnteredTests
             Assert.That(WorldEntered.TryRead(WireMatrix.With(GoldenBytes, offset, NotANumber), out _), Is.False);
             Assert.That(WorldEntered.TryRead(WireMatrix.With(GoldenBytes, offset, PositiveInfinity), out _), Is.False);
         }
+    }
+
+    [Test]
+    public void TryRead_WhenAttackRangeIsNegativeOrNotFinite_ReturnsFalse()
+    {
+        Assert.That(WorldEntered.TryRead(WireMatrix.With(GoldenBytes, AttackRangeOffset, MinusOne), out _), Is.False);
+        Assert.That(WorldEntered.TryRead(WireMatrix.With(GoldenBytes, AttackRangeOffset, NotANumber), out _), Is.False);
+    }
+
+    [Test]
+    public void TryRead_WhenHealthIsImpossible_ReturnsFalse()
+    {
+        byte[] aboveMaximum = WireMatrix.With(GoldenBytes, CurrentHealthOffset, 0x45, 0x00, 0x00, 0x00);
+        byte[] zeroMaximum = WireMatrix.With(
+            WireMatrix.With(GoldenBytes, CurrentHealthOffset, 0, 0, 0, 0),
+            MaximumHealthOffset,
+            0,
+            0,
+            0,
+            0);
+
+        Assert.That(WorldEntered.TryRead(aboveMaximum, out _), Is.False);
+        Assert.That(WorldEntered.TryRead(zeroMaximum, out _), Is.False);
     }
 
     [Test]
@@ -137,6 +172,9 @@ public sealed class WorldEnteredTests
             0,
             default,
             new WorldDirection(1f, 0f),
+            0f,
+            0,
+            1,
             0f);
         byte[] buffer = new byte[original.GetEncodedLength()];
         original.Write(buffer);
@@ -144,7 +182,7 @@ public sealed class WorldEnteredTests
         bool isRead = WorldEntered.TryRead(buffer, out WorldEntered? message);
 
         Assert.That(isRead, Is.True);
-        Assert.That(buffer.Length, Is.EqualTo(174), "the largest WorldEntered");
+        Assert.That(buffer.Length, Is.EqualTo(186), "the largest WorldEntered");
         Assert.That(message!.Map, Is.EqualTo(longestMap));
         Assert.That(message.Job, Is.EqualTo(longestJob));
     }

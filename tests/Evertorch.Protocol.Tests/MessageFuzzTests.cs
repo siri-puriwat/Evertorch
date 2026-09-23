@@ -47,7 +47,10 @@ public sealed class MessageFuzzTests
                     100,
                     new WorldPosition(1f, 2f, 3f),
                     new WorldDirection(0f, 1f),
-                    5f)),
+                    5f,
+                    60,
+                    68,
+                    1.5f)),
             payload => WorldEntered.TryRead(payload, out WorldEntered? message) ? Encode(message!) : null);
         yield return Case(
             "EntitySpawn",
@@ -58,7 +61,8 @@ public sealed class MessageFuzzTests
                     "job.adventurer",
                     new WorldPosition(1f, 2f, 3f),
                     new WorldDirection(0f, 1f),
-                    EntityStateFlags.Moving)),
+                    EntityStateFlags.Moving,
+                    0)),
             payload => EntitySpawn.TryRead(payload, out EntitySpawn? message) ? Encode(message!) : null);
         yield return Case(
             "EntitySpawn (monster)",
@@ -69,7 +73,8 @@ public sealed class MessageFuzzTests
                     "monster.training_slime",
                     new WorldPosition(12f, 0f, 12f),
                     new WorldDirection(0f, 1f),
-                    EntityStateFlags.None)),
+                    EntityStateFlags.Dead,
+                    600)),
             payload => EntitySpawn.TryRead(payload, out EntitySpawn? message) ? Encode(message!) : null);
         yield return Case(
             "AttackEntity",
@@ -83,6 +88,35 @@ public sealed class MessageFuzzTests
             "Respawn",
             Encode(new Respawn(5)),
             payload => Respawn.TryRead(payload, out Respawn message) ? Encode(message) : null);
+        yield return Case(
+            "AttackStarted",
+            Encode(
+                new AttackStarted(
+                    new EntityId(9),
+                    new EntityId(10),
+                    40,
+                    new AttackTiming(
+                        TimeSpan.FromMilliseconds(960),
+                        TimeSpan.FromMilliseconds(480),
+                        TimeSpan.FromMilliseconds(480),
+                        TimeSpan.FromMilliseconds(240)))),
+            payload => AttackStarted.TryRead(payload, out AttackStarted message) ? Encode(message) : null);
+        yield return Case(
+            "Damage",
+            Encode(new Damage(new EntityId(9), new EntityId(10), CombatResult.Hit, 12, 50, 760)),
+            payload => Damage.TryRead(payload, out Damage message) ? Encode(message) : null);
+        yield return Case(
+            "EntityDied",
+            Encode(new EntityDied(new EntityId(10), new EntityId(9), 60)),
+            payload => EntityDied.TryRead(payload, out EntityDied message) ? Encode(message) : null);
+        yield return Case(
+            "CharacterHealth",
+            Encode(new CharacterHealth(60, 68)),
+            payload => CharacterHealth.TryRead(payload, out CharacterHealth message) ? Encode(message) : null);
+        yield return Case(
+            "EntityRevived",
+            Encode(new EntityRevived(new EntityId(9), new WorldPosition(1f, 2f, 3f), new WorldDirection(0f, 1f), 70)),
+            payload => EntityRevived.TryRead(payload, out EntityRevived message) ? Encode(message) : null);
         yield return Case(
             "TargetChanged",
             Encode(new TargetChanged(new EntityId(9), new EntityId(10))),
@@ -248,6 +282,41 @@ public sealed class MessageFuzzTests
     private static byte[] Encode(EnterWorldRequest message)
     {
         byte[] buffer = new byte[EnterWorldRequest.EncodedLength];
+        message.Write(buffer);
+        return buffer;
+    }
+
+    private static byte[] Encode(AttackStarted message)
+    {
+        byte[] buffer = new byte[AttackStarted.EncodedLength];
+        message.Write(buffer);
+        return buffer;
+    }
+
+    private static byte[] Encode(Damage message)
+    {
+        byte[] buffer = new byte[Damage.EncodedLength];
+        message.Write(buffer);
+        return buffer;
+    }
+
+    private static byte[] Encode(EntityDied message)
+    {
+        byte[] buffer = new byte[EntityDied.EncodedLength];
+        message.Write(buffer);
+        return buffer;
+    }
+
+    private static byte[] Encode(CharacterHealth message)
+    {
+        byte[] buffer = new byte[CharacterHealth.EncodedLength];
+        message.Write(buffer);
+        return buffer;
+    }
+
+    private static byte[] Encode(EntityRevived message)
+    {
+        byte[] buffer = new byte[EntityRevived.EncodedLength];
         message.Write(buffer);
         return buffer;
     }
