@@ -12,6 +12,10 @@ namespace Evertorch.Client
 public sealed class ClientWorld
 {
     private readonly Dictionary<EntityId, RemoteEntity> m_remotes = new();
+
+    // The tick of each entity's latest revival. A snapshot from before it can still arrive afterwards, and must not
+    // put the body back where it died.
+    private readonly Dictionary<EntityId, uint> m_revivalTicks = new();
     private readonly double m_tickSeconds;
 
     public ClientWorld(NavigationGrid grid, WorldEntered entered, uint serverTickRate)
@@ -86,6 +90,11 @@ public sealed class ClientWorld
     public int StaleSnapshots { get; private set; }
 
     public int UnknownEntityStates { get; private set; }
+
+    /// <summary>
+    ///     Entity states from snapshots older than that entity's revival; they are ignored.
+    /// </summary>
+    public int PreRevivalStates { get; private set; }
 
     /// <summary>
     ///     Reliable events that named an entity this client has no spawn for; they are ignored.
@@ -215,10 +224,14 @@ public sealed class ClientWorld
         if (revived.Entity == LocalEntity)
         {
             IsLocalDead = false;
+            Predictor.Teleport(revived.Position, revived.Facing);
+            Smoother.Teleport(revived.Position);
         }
         else if (m_remotes.TryGetValue(revived.Entity, out RemoteEntity? remote))
         {
             remote.StateFlags &= ~EntityStateFlags.Dead;
+            remote.Buffer.Clear();
+            remote.Buffer.Add(revived.ServerTick * m_tickSeconds, revived.Position, revived.Facing);
         }
         else
         {
@@ -226,6 +239,7 @@ public sealed class ClientWorld
             return;
         }
 
+        m_revivalTicks[revived.Entity] = revived.ServerTick;
         EntityRevivedReceived?.Invoke(revived);
     }
 
@@ -280,6 +294,12 @@ public sealed class ClientWorld
 
         foreach (EntityState state in snapshot.Entities)
         {
+            if (IsFromBeforeRevival(state.Entity, snapshot.ServerTick))
+            {
+                PreRevivalStates++;
+                continue;
+            }
+
             if (state.Entity == LocalEntity)
             {
                 WorldPosition before = Predictor.Position;
@@ -297,6 +317,22 @@ public sealed class ClientWorld
                 UnknownEntityStates++;
             }
         }
+    }
+
+    private bool IsFromBeforeRevival(EntityId entity, uint serverTick)
+    {
+        if (!m_revivalTicks.TryGetValue(entity, out uint revivalTick))
+        {
+            return false;
+        }
+
+        if (unchecked((int)(serverTick - revivalTick)) < 0)
+        {
+            return true;
+        }
+
+        m_revivalTicks.Remove(entity);
+        return false;
     }
 
     public void Advance(float deltaSeconds)

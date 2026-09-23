@@ -69,6 +69,15 @@
                     "initialStateCheck": false
                 },
                 {
+                    "name": "Respawn",
+                    "type": "Button",
+                    "id": "0fa7a89f-200f-4469-a4bf-ba414a2429c3",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                },
+                {
                     "name": "MoveTo",
                     "type": "Button",
                     "id": "48f8904b-5230-402e-beb9-08a7a757ea59",
@@ -318,6 +327,28 @@
                     "processors": "",
                     "groups": "Gamepad",
                     "action": "ClearTarget",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "c24e00ad-26e4-40e3-b2ea-f5f00ef55a2f",
+                    "path": "<Keyboard>/r",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "Keyboard&Mouse",
+                    "action": "Respawn",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "b927fdd5-aee4-4ac8-9d0f-6db706fd53e4",
+                    "path": "<Gamepad>/start",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "Gamepad",
+                    "action": "Respawn",
                     "isComposite": false,
                     "isPartOfComposite": false
                 },

@@ -271,6 +271,7 @@ public sealed class DevelopmentOverlay : MonoBehaviour
         private readonly GameClient m_client;
         private readonly TMP_Text m_connection;
         private readonly GameObject m_disconnect;
+        private readonly GameObject m_respawn;
         private readonly GameObject m_connectForm;
         private readonly TMP_InputField m_port;
         private readonly TMP_InputField m_character;
@@ -285,6 +286,7 @@ public sealed class DevelopmentOverlay : MonoBehaviour
             m_client = client;
             m_connection = CreateLabel("Connection", panel);
             m_disconnect = CreateButton("Disconnect", panel, client.Disconnect);
+            m_respawn = CreateButton("Respawn", panel, client.RequestRespawn);
 
             m_connectForm = CreateColumn("Connect", panel);
             Transform form = m_connectForm.transform;
@@ -350,6 +352,7 @@ public sealed class DevelopmentOverlay : MonoBehaviour
                 + $"   Server {connection.ServerBuildVersion}"
                 + $"\nMalformed {connection.MalformedMessages}   Unexpected {connection.UnexpectedMessages}";
             m_disconnect.SetActive(isOpen);
+            m_respawn.SetActive(m_client.World?.IsLocalDead == true);
             m_connectForm.SetActive(!isOpen);
             RefreshWorld();
             RefreshLink();
@@ -384,7 +387,9 @@ public sealed class DevelopmentOverlay : MonoBehaviour
             MovementPredictor predictor = world.Predictor;
             WorldPosition position = predictor.Position;
             RenderSmoother smoother = world.Smoother;
-            string text = $"Tick {world.LatestServerTick}   Pos {position.X:F2}, {position.Y:F2}, {position.Z:F2}"
+            string life = world.IsLocalDead ? "   dead" : string.Empty;
+            string text = $"HP {world.LocalHealth}/{world.LocalMaximumHealth}{life}"
+                + $"\nTick {world.LatestServerTick}   Pos {position.X:F2}, {position.Y:F2}, {position.Z:F2}"
                 + $"\nPending {predictor.PendingCount}   Ack {predictor.LastAcknowledgedSequence}"
                 + $"   Dropped {predictor.DroppedPendingInputs}"
                 + $"\nCorrection last {smoother.LastCorrection:F3} m   max {smoother.LargestCorrection:F3} m"

@@ -80,6 +80,39 @@ public sealed class SharedIntentPathTests : InputTestFixture
     }
 
     [Test]
+    public void Keyboard_WhileDead_ProducesNoMovement()
+    {
+        Keyboard keyboard = InputSystem.AddDevice<Keyboard>();
+        Rig rig = CreateRig();
+        rig.World.OnEntityDied(new EntityDied(rig.World.LocalEntity, default, 1));
+
+        SetKeys(keyboard, Key.W);
+        rig.Tick();
+
+        Assert.That(rig.Sent, Is.Empty);
+        Assert.That(rig.World.Predictor.Position, Is.EqualTo(new WorldPosition(2.5f, 0f, 5.5f)));
+    }
+
+    [Test]
+    public void RespawnKeyAndStartButton_AskToRespawn()
+    {
+        Keyboard keyboard = InputSystem.AddDevice<Keyboard>();
+        Gamepad gamepad = InputSystem.AddDevice<Gamepad>();
+        Rig rig = CreateRig();
+        CombatInputSource source = rig.CreateCombatSource();
+
+        Press(keyboard.rKey);
+        CombatRequest fromKey = source.TakeRequest();
+        Release(keyboard.rKey);
+        Press(gamepad.startButton);
+        CombatRequest fromButton = source.TakeRequest();
+
+        Assert.That(fromKey, Is.EqualTo(CombatRequest.Respawn));
+        Assert.That(fromButton, Is.EqualTo(CombatRequest.Respawn));
+        Assert.That(source.TakeRequest(), Is.EqualTo(CombatRequest.None));
+    }
+
+    [Test]
     public void GamepadStick_ProducesTheSameKindOfIntentAtFullSpeedWhateverTheTilt()
     {
         Gamepad gamepad = InputSystem.AddDevice<Gamepad>();
@@ -425,6 +458,8 @@ public sealed class SharedIntentPathTests : InputTestFixture
         private readonly ClientWorld m_world;
         private readonly Camera m_camera;
         private readonly GrayboxMap m_map;
+        private readonly InputActionAsset m_actions;
+        private CombatInputSource? m_combat;
         private PointerMoveHandler m_handler;
         private uint m_tick;
 
@@ -439,6 +474,7 @@ public sealed class SharedIntentPathTests : InputTestFixture
 
             InputActionAsset actions = InputActionAsset.FromJson(File.ReadAllText(actionsPath));
             m_created.Add(actions);
+            m_actions = actions;
             m_manual = new ManualMoveSource(actions.FindAction("Player/Move", true));
             m_pointer = new PointerMoveSource(actions.FindAction("Player/MoveTo", true));
             m_handler = new PointerMoveHandler(m_pointer, null, null);
@@ -474,6 +510,8 @@ public sealed class SharedIntentPathTests : InputTestFixture
 
         public MovementController Controller { get; }
 
+        public ClientWorld World => m_world;
+
         public List<MoveIntent> Sent { get; } = new List<MoveIntent>();
 
         public List<PickCandidate> Entities { get; } = new List<PickCandidate>();
@@ -493,6 +531,17 @@ public sealed class SharedIntentPathTests : InputTestFixture
             m_created.Add(controls.gameObject);
             m_handler = new PointerMoveHandler(m_pointer, controls, null);
             return controls;
+        }
+
+        public CombatInputSource CreateCombatSource()
+        {
+            m_combat = new CombatInputSource(
+                m_actions.FindAction("Player/Next", true),
+                m_actions.FindAction("Player/Previous", true),
+                m_actions.FindAction("Player/ClearTarget", true),
+                m_actions.FindAction("Player/Attack", true),
+                m_actions.FindAction("Player/Respawn", true));
+            return m_combat;
         }
 
         public DevelopmentOverlay CreateOverlay()
@@ -535,6 +584,7 @@ public sealed class SharedIntentPathTests : InputTestFixture
         public void Dispose()
         {
             m_pointer.Dispose();
+            m_combat?.Dispose();
         }
 
         private static NavigationGrid CreateGrid()

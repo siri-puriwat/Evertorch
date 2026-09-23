@@ -9,6 +9,24 @@ public sealed class MovementControllerTests
     private const float Step = ClientTestGrids.Speed * ClientTestGrids.TickSeconds;
 
     [Test]
+    public void Dead_Controller_RefusesWalksAndProducesNoMovementUntilAlive()
+    {
+        MovementController controller = new MovementController(ClientTestGrids.CreateYard());
+        Assert.That(controller.TryMoveTo(ClientTestGrids.Center(2, 8), ClientTestGrids.Center(6, 8)), Is.True);
+
+        controller.IsDead = true;
+        controller.SetManualDirection(1f, 0f);
+        WorldDirection whileDead = controller.Tick(ClientTestGrids.Center(2, 8), Step);
+        bool isWalkAccepted = controller.TryMoveTo(ClientTestGrids.Center(2, 8), ClientTestGrids.Center(6, 8));
+        controller.IsDead = false;
+
+        Assert.That(whileDead, Is.EqualTo(default(WorldDirection)));
+        Assert.That(isWalkAccepted, Is.False);
+        Assert.That(controller.HasPath, Is.False, "the walk from before the death is dropped");
+        Assert.That(controller.Tick(ClientTestGrids.Center(2, 8), Step), Is.EqualTo(new WorldDirection(1f, 0f)));
+    }
+
+    [Test]
     public void Tick_WithNoInput_IsZero()
     {
         MovementController controller = new MovementController(ClientTestGrids.CreateYard());

@@ -31,6 +31,11 @@ public sealed class RemoteEntityBuffer
         m_samples.Add(new Sample(serverTimeSeconds, position, facing));
     }
 
+    public void Clear()
+    {
+        m_samples.Clear();
+    }
+
     /// <param name="renderTimeSeconds">Server time to draw, already reduced by the interpolation delay.</param>
     public bool TrySample(double renderTimeSeconds, out WorldPosition position, out WorldDirection facing)
     {

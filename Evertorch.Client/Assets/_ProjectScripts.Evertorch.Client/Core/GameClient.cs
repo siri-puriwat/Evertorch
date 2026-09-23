@@ -51,7 +51,7 @@ public sealed class GameClient : MonoBehaviour
     private ManualMoveSource? m_manualSource;
     private PointerMoveSource? m_pointerSource;
     private PointerMoveHandler? m_pointerHandler;
-    private TargetInputSource? m_targetSource;
+    private CombatInputSource? m_combatSource;
     private TargetMarker? m_targetMarker;
     private AutoAttackState? m_autoAttack;
     private MovementController? m_controller;
@@ -138,7 +138,7 @@ public sealed class GameClient : MonoBehaviour
         {
             // A click made while there is no world to walk in is dropped, not saved up for the next one.
             m_pointerSource?.TryTakeRequest(out Vector2 _);
-            m_targetSource?.TakeRequest();
+            m_combatSource?.TakeRequest();
             return;
         }
 
@@ -147,7 +147,7 @@ public sealed class GameClient : MonoBehaviour
         m_targetCandidates.Clear();
         m_world.CollectTargetCandidates(m_targetCandidates);
         HandlePointerRequest();
-        HandleTargetRequest();
+        HandleCombatRequest();
 
         int ticks = m_clock.Advance(Time.unscaledDeltaTime);
         for (int index = 0; index < ticks; index++)
@@ -203,7 +203,7 @@ public sealed class GameClient : MonoBehaviour
     {
         TearDownWorld();
         m_pointerSource?.Dispose();
-        m_targetSource?.Dispose();
+        m_combatSource?.Dispose();
         m_socket?.Dispose();
         m_viewCatalog.Dispose();
         if (m_runtimeMaterial != null)
@@ -253,6 +253,17 @@ public sealed class GameClient : MonoBehaviour
     public void Disconnect()
     {
         Connection?.Disconnect();
+    }
+
+    /// <summary>
+    ///     Asks the server to bring the dead local player back at the map's spawn point.
+    /// </summary>
+    public void RequestRespawn()
+    {
+        if (m_world != null && m_world.IsLocalDead)
+        {
+            Connection?.SendRespawn();
+        }
     }
 
     private void OnEnteredWorld(ClientWorld world)
@@ -344,9 +355,10 @@ public sealed class GameClient : MonoBehaviour
         InputAction? previous = actions?.FindAction("Player/Previous");
         InputAction? clear = actions?.FindAction("Player/ClearTarget");
         InputAction? attack = actions?.FindAction("Player/Attack");
-        if (next != null && previous != null && clear != null && attack != null)
+        InputAction? respawn = actions?.FindAction("Player/Respawn");
+        if (next != null && previous != null && clear != null && attack != null && respawn != null)
         {
-            m_targetSource = new TargetInputSource(next, previous, clear, attack);
+            m_combatSource = new CombatInputSource(next, previous, clear, attack, respawn);
         }
     }
 
@@ -382,29 +394,33 @@ public sealed class GameClient : MonoBehaviour
         }
     }
 
-    private void HandleTargetRequest()
+    private void HandleCombatRequest()
     {
-        if (m_targetSource == null || m_world == null)
+        if (m_combatSource == null || m_world == null)
         {
             return;
         }
 
-        TargetRequest request = m_targetSource.TakeRequest();
-        if (request == TargetRequest.Clear)
+        CombatRequest request = m_combatSource.TakeRequest();
+        if (request == CombatRequest.Clear)
         {
             Connection?.SendTarget(default);
         }
-        else if (request == TargetRequest.Attack)
+        else if (request == CombatRequest.Attack)
         {
             m_autoAttack?.Attack(m_world.Target);
         }
-        else if (request != TargetRequest.None)
+        else if (request == CombatRequest.Respawn)
+        {
+            RequestRespawn();
+        }
+        else if (request != CombatRequest.None)
         {
             EntityId next = m_targetCycler.Choose(
                 m_targetCandidates,
                 m_world.Predictor.Position,
                 m_world.Target,
-                request == TargetRequest.Next);
+                request == CombatRequest.Next);
             if (next != default)
             {
                 Connection?.SendTarget(next);

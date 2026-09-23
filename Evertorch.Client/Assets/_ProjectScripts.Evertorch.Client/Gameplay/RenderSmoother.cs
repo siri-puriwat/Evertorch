@@ -74,6 +74,19 @@ public sealed class RenderSmoother
         m_offsetZ -= shiftZ;
     }
 
+    /// <summary>
+    ///     Draws the player at a new place at once. Unlike a large correction, a move the server announced is not
+    ///     counted as a snap.
+    /// </summary>
+    public void Teleport(WorldPosition position)
+    {
+        m_offsetX = 0f;
+        m_offsetY = 0f;
+        m_offsetZ = 0f;
+        m_previous = position;
+        m_current = position;
+    }
+
     public void Advance(float deltaSeconds)
     {
         if (deltaSeconds <= 0f)

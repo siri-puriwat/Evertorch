@@ -37,6 +37,7 @@ public sealed class LocalPlayerDriver
     {
         MovementPredictor predictor = m_world.Predictor;
         WorldPosition previous = predictor.Position;
+        m_controller.IsDead = m_world.IsLocalDead;
         m_autoAttack?.Tick(previous);
         WorldDirection direction = m_controller.Tick(previous, predictor.StepDistance);
         bool isIdle = direction == default;

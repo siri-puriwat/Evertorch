@@ -105,6 +105,7 @@ public sealed class ClientProjectWiringTests
         Assert.That(
             Paths(actions, "Player/ClearTarget"),
             Is.EquivalentTo(new[] { "<Keyboard>/escape", "<Gamepad>/buttonEast" }));
+        Assert.That(Paths(actions, "Player/Respawn"), Is.EquivalentTo(new[] { "<Keyboard>/r", "<Gamepad>/start" }));
     }
 
     [TestCase("Player/Jump")]

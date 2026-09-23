@@ -45,6 +45,7 @@ public sealed class SessionManager : ITickPhase
     private readonly WorldSimulation m_world;
     private readonly MessageSender m_sender;
     private readonly Targeting m_targeting;
+    private readonly PlayerLife m_life;
     private readonly TimeProvider m_time;
     private readonly ILogger<SessionManager> m_logger;
     private readonly string m_serverBuildVersion;
@@ -60,6 +61,7 @@ public sealed class SessionManager : ITickPhase
         WorldSimulation world,
         MessageSender sender,
         Targeting targeting,
+        PlayerLife life,
         TimeProvider time,
         IOptions<SimulationOptions> simulation,
         IOptions<NetworkOptions> network,
@@ -74,6 +76,7 @@ public sealed class SessionManager : ITickPhase
         m_world = world;
         m_sender = sender;
         m_targeting = targeting;
+        m_life = life;
         m_time = time;
         m_logger = logger;
         m_serverBuildVersion = compatibility.Value.ServerBuildVersion;
@@ -147,7 +150,7 @@ public sealed class SessionManager : ITickPhase
             case InboundEventKind.Attack:
             case InboundEventKind.Cancel:
             case InboundEventKind.Respawn:
-                HandleCommand(session, inboundEvent);
+                HandleCommand(session, inboundEvent, tick);
                 break;
             default:
                 IgnoredEvents++;
@@ -247,7 +250,7 @@ public sealed class SessionManager : ITickPhase
             return;
         }
 
-        if (!m_targeting.TrySelect(session, target))
+        if (session.Player?.IsDead == true || !m_targeting.TrySelect(session, target))
         {
             session.RefusedCommands++;
         }
@@ -255,7 +258,7 @@ public sealed class SessionManager : ITickPhase
 
     // Commands carry one sequence per session (Network Protocol §8). Reliable ordered delivery never leaves a gap, so
     // a sequence that is not newer is a duplicate or a replay and is refused.
-    private void HandleCommand(ClientSession session, InboundEvent command)
+    private void HandleCommand(ClientSession session, InboundEvent command, uint tick)
     {
         if (session.State != SessionState.InWorld || session.Player == null)
         {
@@ -270,12 +273,14 @@ public sealed class SessionManager : ITickPhase
         }
 
         session.LastCommandSequence = command.CommandSequence;
-        bool isAccepted = command.Kind switch
-        {
-            InboundEventKind.Attack => m_targeting.TryAttack(session, command.Target),
-            InboundEventKind.Cancel => Cancel(session.Player),
-            _ => false
-        };
+        bool isAccepted = session.Player.IsDead
+            ? command.Kind == InboundEventKind.Respawn && m_life.TryRespawn(session, tick)
+            : command.Kind switch
+            {
+                InboundEventKind.Attack => m_targeting.TryAttack(session, command.Target),
+                InboundEventKind.Cancel => Cancel(session.Player),
+                _ => false
+            };
 
         if (!isAccepted)
         {

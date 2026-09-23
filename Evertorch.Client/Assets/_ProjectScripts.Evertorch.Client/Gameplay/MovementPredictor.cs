@@ -80,6 +80,18 @@ public sealed class MovementPredictor
     }
 
     /// <summary>
+    ///     Moves the player where the server put it, as on a revival. Inputs not yet acknowledged were sent for the
+    ///     old place, so none is replayed.
+    /// </summary>
+    public void Teleport(WorldPosition position, WorldDirection facing)
+    {
+        Position = position;
+        Facing = facing;
+        IsMoving = false;
+        m_pending.Clear();
+    }
+
+    /// <summary>
     ///     Forgets unacknowledged inputs that ask for no movement. Once the server has acknowledged a stop, any later
     ///     stop that was lost on the way will never be acknowledged, and replaying it changes nothing.
     /// </summary>

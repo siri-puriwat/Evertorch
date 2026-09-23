@@ -53,6 +53,11 @@ public sealed class MovementController
     public bool IsLocked { get; set; }
 
     /// <summary>
+    ///     While the local player is dead the server applies no movement, so no walk is started or kept.
+    /// </summary>
+    public bool IsDead { get; set; }
+
+    /// <summary>
     ///     The latest held direction in world space. Any length is accepted; only the heading is kept.
     /// </summary>
     public void SetManualDirection(float x, float z)
@@ -65,7 +70,7 @@ public sealed class MovementController
     /// </summary>
     public bool TryMoveTo(WorldPosition from, WorldPosition destination)
     {
-        if (!m_pathfinder.TryFindPath(from, destination, PathNodeBudget, m_foundWaypoints))
+        if (IsDead || !m_pathfinder.TryFindPath(from, destination, PathNodeBudget, m_foundWaypoints))
         {
             RejectedMoveRequests++;
             return false;
@@ -120,6 +125,12 @@ public sealed class MovementController
 
     public WorldDirection Tick(WorldPosition position, float stepDistance)
     {
+        if (IsDead)
+        {
+            CancelPath();
+            return default;
+        }
+
         if (m_manualDirection != default)
         {
             CancelPath();

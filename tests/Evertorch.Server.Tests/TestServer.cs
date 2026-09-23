@@ -89,6 +89,7 @@ internal sealed class TestServer
             World,
             sender,
             targeting,
+            new PlayerLife(Sessions, sender),
             Time,
             simulation,
             Options.Create(network),
