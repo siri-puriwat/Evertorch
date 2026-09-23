@@ -114,6 +114,9 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
             case MessageOpcode.EntitySnapshot:
                 OnEntitySnapshot(payload);
                 break;
+            case MessageOpcode.TargetChanged:
+                OnTargetChanged(payload);
+                break;
             case MessageOpcode.DisconnectNotice:
                 OnDisconnectNotice(payload);
                 break;
@@ -140,6 +143,21 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
             int length = new MoveInput(intent).Write(m_sendBuffer);
             SendRouted(MessageOpcode.MoveInput, length);
         }
+    }
+
+    /// <summary>
+    ///     Asks the server to select <paramref name="target" />, or to clear the selection for entity 0. The world
+    ///     shows a target only once the server confirms it.
+    /// </summary>
+    public void SendTarget(EntityId target)
+    {
+        if (State != ClientConnectionState.InWorld)
+        {
+            return;
+        }
+
+        new TargetEntity(target).Write(m_sendBuffer);
+        SendRouted(MessageOpcode.TargetEntity, TargetEntity.EncodedLength);
     }
 
     public event Action<ClientWorld>? EnteredWorld;
@@ -267,6 +285,22 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
         else
         {
             World.OnDespawn(despawn);
+        }
+    }
+
+    private void OnTargetChanged(ReadOnlySpan<byte> payload)
+    {
+        if (!TargetChanged.TryRead(payload, out TargetChanged changed))
+        {
+            MalformedMessages++;
+        }
+        else if (World == null)
+        {
+            UnexpectedMessages++;
+        }
+        else
+        {
+            World.OnTargetChanged(changed);
         }
     }
 

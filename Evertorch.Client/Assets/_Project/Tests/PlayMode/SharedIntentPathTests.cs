@@ -155,6 +155,24 @@ public sealed class SharedIntentPathTests : InputTestFixture
     }
 
     [UnityTest]
+    public IEnumerator MouseClick_OnAMonster_PicksItInsteadOfWalking()
+    {
+        Mouse mouse = InputSystem.AddDevice<Mouse>();
+        Rig rig = CreateRig();
+        yield return null;
+        WorldPosition slime = new WorldPosition(7.5f, 0f, 5.5f);
+        rig.Entities.Add(new PickCandidate(new EntityId(7), slime));
+
+        ClickAt(mouse, rig.ScreenPointOf(new WorldPosition(slime.X, EntityPicker.PickHeight, slime.Z)));
+        PointerMoveResult result = rig.Tick();
+
+        Assert.That(result, Is.EqualTo(PointerMoveResult.Entity));
+        Assert.That(rig.Picked, Is.EqualTo(new EntityId(7)));
+        Assert.That(rig.Controller.HasPath, Is.False, "the ground under the monster is not walked to");
+        Assert.That(rig.Sent, Is.Empty);
+    }
+
+    [UnityTest]
     public IEnumerator TouchTap_OnTheGround_StartsTheSameWalkAsAClick()
     {
         Touchscreen touchscreen = InputSystem.AddDevice<Touchscreen>();
@@ -455,6 +473,10 @@ public sealed class SharedIntentPathTests : InputTestFixture
 
         public List<MoveIntent> Sent { get; } = new List<MoveIntent>();
 
+        public List<PickCandidate> Entities { get; } = new List<PickCandidate>();
+
+        public EntityId Picked { get; private set; }
+
         public WorldPosition Destination => Controller.Path[Controller.Path.Count - 1];
 
         public void Send(MoveIntent intent)
@@ -496,9 +518,12 @@ public sealed class SharedIntentPathTests : InputTestFixture
             PointerMoveResult result = m_handler.Handle(
                 m_camera,
                 m_map.GroundCollider,
+                Entities,
                 Controller,
                 m_world.Predictor.Position,
-                out WorldPosition _);
+                out WorldPosition _,
+                out EntityId picked);
+            Picked = picked;
             m_tick++;
             m_driver.Tick(m_tick);
             return result;

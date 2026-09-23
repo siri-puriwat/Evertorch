@@ -45,10 +45,14 @@ public sealed class GameClient : MonoBehaviour
     private readonly Dictionary<EntityId, EntityView> m_remoteViews = new();
     private readonly StreamingContentLoader m_contentLoader = new();
     private readonly EntityViewCatalog m_viewCatalog = new();
+    private readonly List<PickCandidate> m_targetCandidates = new();
+    private readonly TargetCycler m_targetCycler = new();
     private LiteNetLibClientTransport? m_socket;
     private ManualMoveSource? m_manualSource;
     private PointerMoveSource? m_pointerSource;
     private PointerMoveHandler? m_pointerHandler;
+    private TargetInputSource? m_targetSource;
+    private TargetMarker? m_targetMarker;
     private MovementController? m_controller;
     private LocalPlayerDriver? m_driver;
     private FixedTickClock? m_clock;
@@ -133,12 +137,16 @@ public sealed class GameClient : MonoBehaviour
         {
             // A click made while there is no world to walk in is dropped, not saved up for the next one.
             m_pointerSource?.TryTakeRequest(out Vector2 _);
+            m_targetSource?.TakeRequest();
             return;
         }
 
         float yaw = m_camera == null ? 0f : m_camera.YawDegrees;
         m_manualSource?.Apply(m_controller, yaw);
+        m_targetCandidates.Clear();
+        m_world.CollectTargetCandidates(m_targetCandidates);
         HandlePointerRequest();
+        HandleTargetRequest();
 
         int ticks = m_clock.Advance(Time.unscaledDeltaTime);
         for (int index = 0; index < ticks; index++)
@@ -175,12 +183,26 @@ public sealed class GameClient : MonoBehaviour
         {
             m_marker.Refresh(m_controller.HasPath);
         }
+
+        if (m_targetMarker != null)
+        {
+            if (m_remoteViews.TryGetValue(m_world.Target, out EntityView? target))
+            {
+                Vector3 at = target.transform.position;
+                m_targetMarker.Show(new WorldPosition(at.x, at.y, at.z));
+            }
+            else
+            {
+                m_targetMarker.Hide();
+            }
+        }
     }
 
     private void OnDestroy()
     {
         TearDownWorld();
         m_pointerSource?.Dispose();
+        m_targetSource?.Dispose();
         m_socket?.Dispose();
         m_viewCatalog.Dispose();
         if (m_runtimeMaterial != null)
@@ -262,6 +284,7 @@ public sealed class GameClient : MonoBehaviour
         Material material = ResolveMaterial();
         m_map = GrayboxMap.Create(world.Grid, material);
         m_marker = MoveMarker.Create(material);
+        m_targetMarker = TargetMarker.Create(material);
         m_localView = EntityView.Create(
             "LocalPlayer",
             EntityViewKeys.ForJob(m_contentLoader.Content, world.LocalJob),
@@ -314,6 +337,14 @@ public sealed class GameClient : MonoBehaviour
         m_manualSource = new ManualMoveSource(move);
         m_pointerSource = new PointerMoveSource(moveTo);
         m_pointerHandler = new PointerMoveHandler(m_pointerSource, Touch, m_overlay);
+
+        InputAction? next = actions?.FindAction("Player/Next");
+        InputAction? previous = actions?.FindAction("Player/Previous");
+        InputAction? clear = actions?.FindAction("Player/ClearTarget");
+        if (next != null && previous != null && clear != null)
+        {
+            m_targetSource = new TargetInputSource(next, previous, clear);
+        }
     }
 
     private void HandlePointerRequest()
@@ -327,9 +358,11 @@ public sealed class GameClient : MonoBehaviour
         PointerMoveResult result = m_pointerHandler.Handle(
             Camera.main,
             ground,
+            m_targetCandidates,
             m_controller,
             m_world.Predictor.Position,
-            out WorldPosition point);
+            out WorldPosition point,
+            out EntityId entity);
         if (result == PointerMoveResult.Accepted)
         {
             m_marker?.ShowAccepted(m_controller.Path[m_controller.Path.Count - 1]);
@@ -337,6 +370,37 @@ public sealed class GameClient : MonoBehaviour
         else if (result == PointerMoveResult.Refused)
         {
             m_marker?.ShowRefused(point);
+        }
+        else if (result == PointerMoveResult.Entity)
+        {
+            // Until the attack command exists a click on a monster only asks to select it.
+            Connection?.SendTarget(entity);
+        }
+    }
+
+    private void HandleTargetRequest()
+    {
+        if (m_targetSource == null || m_world == null)
+        {
+            return;
+        }
+
+        TargetRequest request = m_targetSource.TakeRequest();
+        if (request == TargetRequest.Clear)
+        {
+            Connection?.SendTarget(default);
+        }
+        else if (request != TargetRequest.None)
+        {
+            EntityId next = m_targetCycler.Choose(
+                m_targetCandidates,
+                m_world.Predictor.Position,
+                m_world.Target,
+                request == TargetRequest.Next);
+            if (next != default)
+            {
+                Connection?.SendTarget(next);
+            }
         }
     }
 
@@ -388,9 +452,11 @@ public sealed class GameClient : MonoBehaviour
         m_remoteViews.Clear();
         DestroyView(m_localView);
         DestroyView(m_marker);
+        DestroyView(m_targetMarker);
         DestroyView(m_map);
         m_localView = null;
         m_marker = null;
+        m_targetMarker = null;
         m_map = null;
         if (m_camera != null)
         {

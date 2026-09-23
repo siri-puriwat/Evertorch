@@ -16,7 +16,8 @@ public sealed class PlayerSummary
         int roundTripMilliseconds,
         int queuedInputs,
         long staleInputs,
-        long droppedInputs)
+        long droppedInputs,
+        long refusedCommands)
     {
         Connection = connection;
         Character = character;
@@ -27,6 +28,7 @@ public sealed class PlayerSummary
         QueuedInputs = queuedInputs;
         StaleInputs = staleInputs;
         DroppedInputs = droppedInputs;
+        RefusedCommands = refusedCommands;
     }
 
     public ConnectionId Connection { get; }
@@ -49,5 +51,10 @@ public sealed class PlayerSummary
     public long StaleInputs { get; }
 
     public long DroppedInputs { get; }
+
+    /// <summary>
+    ///     Well-formed commands the server refused, such as a target the client may not select.
+    /// </summary>
+    public long RefusedCommands { get; }
 }
 }

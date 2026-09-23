@@ -13,6 +13,11 @@ public enum InboundEventKind
     Move = 5,
 
     /// <summary>
+    ///     A request to select a target; entity 0 clears it.
+    /// </summary>
+    Target = 6,
+
+    /// <summary>
     ///     The peer sent something that is not a well-formed client message on its proper channel.
     /// </summary>
     Malformed = 4

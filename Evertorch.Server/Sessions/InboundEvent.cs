@@ -13,13 +13,15 @@ public readonly struct InboundEvent
         ConnectionId connection,
         ClientHello? hello,
         EnterWorldRequest enterWorld,
-        MoveIntent intent)
+        MoveIntent intent,
+        EntityId target = default)
     {
         Kind = kind;
         Connection = connection;
         Hello = hello;
         EnterWorld = enterWorld;
         Intent = intent;
+        Target = target;
     }
 
     public InboundEventKind Kind { get; }
@@ -31,6 +33,8 @@ public readonly struct InboundEvent
     public EnterWorldRequest EnterWorld { get; }
 
     public MoveIntent Intent { get; }
+
+    public EntityId Target { get; }
 
     public static InboundEvent Connected(ConnectionId connection)
     {
@@ -60,6 +64,11 @@ public readonly struct InboundEvent
     public static InboundEvent ForMove(ConnectionId connection, MoveIntent intent)
     {
         return new InboundEvent(InboundEventKind.Move, connection, null, default, intent);
+    }
+
+    public static InboundEvent ForTarget(ConnectionId connection, EntityId target)
+    {
+        return new InboundEvent(InboundEventKind.Target, connection, null, default, default, target);
     }
 }
 }

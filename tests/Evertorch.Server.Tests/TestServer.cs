@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Evertorch.Game;
 using Evertorch.Protocol;
 using Evertorch.Rules;
@@ -77,6 +78,7 @@ internal sealed class TestServer
         Time = new FakeTimeProvider();
 
         var sender = new MessageSender(Transport);
+        var targeting = new Targeting(sender);
         var handshake = new HandshakeValidator(compatibility, Options.Create(authentication), Content);
         SessionManager = new SessionManager(
             Inbound,
@@ -84,6 +86,7 @@ internal sealed class TestServer
             handshake,
             World,
             sender,
+            targeting,
             Time,
             simulation,
             Options.Create(network),
@@ -97,7 +100,7 @@ internal sealed class TestServer
             {
                 Status,
                 new SnapshotPhase(Sessions, sender, Options.Create(world)),
-                new VisibilityPhase(Sessions, World, sender),
+                new VisibilityPhase(Sessions, World, sender, targeting),
                 new MovementSystem(Sessions, Options.Create(world), simulation),
                 SessionManager,
                 new RecordingPhase(TickPhase.ApplyCommands, "test", new List<string>(), _ => RunAfterCommands())
@@ -205,6 +208,23 @@ internal sealed class TestServer
         Inbound.OnPayload(connection, ProtocolChannel.Input, payload);
     }
 
+    public void SendTarget(ConnectionId connection, EntityId target)
+    {
+        byte[] payload = new byte[TargetEntity.EncodedLength];
+        new TargetEntity(target).Write(payload);
+        Inbound.OnPayload(connection, ProtocolChannel.Control, payload);
+    }
+
+    /// <summary>
+    ///     The monsters of the one map, nearest to <paramref name="position" /> first.
+    /// </summary>
+    public IReadOnlyList<MonsterEntity> MonstersNear(WorldPosition position)
+    {
+        var monsters = new List<MonsterEntity>(World.Maps.First().Monsters);
+        monsters.Sort((left, right) => Distance(left.Position, position).CompareTo(Distance(right.Position, position)));
+        return monsters;
+    }
+
     public void SendEnterWorld(ConnectionId connection, long character)
     {
         byte[] payload = new byte[EnterWorldRequest.EncodedLength];
@@ -244,6 +264,13 @@ internal sealed class TestServer
     {
         PlayerEntity player = PlayerOf(connection);
         player.Position = new WorldPosition(x, player.Position.Y, z);
+    }
+
+    private static float Distance(WorldPosition from, WorldPosition to)
+    {
+        float dx = to.X - from.X;
+        float dz = to.Z - from.Z;
+        return (float)Math.Sqrt(dx * dx + dz * dz);
     }
 
     private static ServerContent WithoutMonsterSpawns(ServerContent content)

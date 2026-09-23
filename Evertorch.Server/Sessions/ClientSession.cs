@@ -33,5 +33,19 @@ public sealed class ClientSession
     ///     Entities this client has been told exist. Visibility changes are sent as the difference from this set.
     /// </summary>
     public HashSet<EntityId> KnownEntities { get; } = new();
+
+    /// <summary>
+    ///     Commands that were well formed but refused: a target that is missing, hidden, or not targetable.
+    /// </summary>
+    public long RefusedCommands { get; set; }
+
+    /// <summary>
+    ///     Whether this client may be told about <paramref name="entity" />: its own entity, or one it has been sent a
+    ///     spawn for. Every event is routed through this so a client never hears of an entity before its spawn.
+    /// </summary>
+    public bool Knows(EntityId entity)
+    {
+        return (Player != null && Player.Id == entity) || KnownEntities.Contains(entity);
+    }
 }
 }

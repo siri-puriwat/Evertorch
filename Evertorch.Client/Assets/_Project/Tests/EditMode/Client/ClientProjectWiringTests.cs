@@ -91,6 +91,36 @@ public sealed class ClientProjectWiringTests
     }
 
     [Test]
+    public void InputActions_TargetingFollowsThePrototypeControls()
+    {
+        InputActionAsset actions = LoadActions();
+
+        Assert.That(Paths(actions, "Player/Attack"), Is.EquivalentTo(new[] { "<Gamepad>/buttonWest" }));
+        Assert.That(
+            Paths(actions, "Player/Next"),
+            Is.EquivalentTo(new[] { "<Keyboard>/tab", "<Gamepad>/rightShoulder" }));
+        Assert.That(
+            Paths(actions, "Player/Previous"),
+            Is.EquivalentTo(new[] { "OneModifier", "<Keyboard>/shift", "<Keyboard>/tab", "<Gamepad>/leftShoulder" }));
+        Assert.That(
+            Paths(actions, "Player/ClearTarget"),
+            Is.EquivalentTo(new[] { "<Keyboard>/escape", "<Gamepad>/buttonEast" }));
+    }
+
+    [TestCase("Player/Jump")]
+    [TestCase("Player/Crouch")]
+    [TestCase("Player/Sprint")]
+    public void InputActions_HaveNoTemplateActionsVersionOneDoesNotUse(string actionPath)
+    {
+        Assert.That(LoadActions().FindAction(actionPath), Is.Null);
+    }
+
+    private static string[] Paths(InputActionAsset actions, string actionPath)
+    {
+        return actions.FindAction(actionPath, true).bindings.Select(binding => binding.path).ToArray();
+    }
+
+    [Test]
     public void LiteNetLib_IsUsedOnlyByTheClientTransportAdapter()
     {
         string root = System.IO.Path.Combine(UnityEngine.Application.dataPath, "_ProjectScripts.Evertorch.Client");

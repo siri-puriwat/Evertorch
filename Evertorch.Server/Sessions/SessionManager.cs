@@ -44,6 +44,7 @@ public sealed class SessionManager : ITickPhase
     private readonly HandshakeValidator m_handshake;
     private readonly WorldSimulation m_world;
     private readonly MessageSender m_sender;
+    private readonly Targeting m_targeting;
     private readonly TimeProvider m_time;
     private readonly ILogger<SessionManager> m_logger;
     private readonly string m_serverBuildVersion;
@@ -58,6 +59,7 @@ public sealed class SessionManager : ITickPhase
         HandshakeValidator handshake,
         WorldSimulation world,
         MessageSender sender,
+        Targeting targeting,
         TimeProvider time,
         IOptions<SimulationOptions> simulation,
         IOptions<NetworkOptions> network,
@@ -71,6 +73,7 @@ public sealed class SessionManager : ITickPhase
         m_handshake = handshake;
         m_world = world;
         m_sender = sender;
+        m_targeting = targeting;
         m_time = time;
         m_logger = logger;
         m_serverBuildVersion = compatibility.Value.ServerBuildVersion;
@@ -137,6 +140,9 @@ public sealed class SessionManager : ITickPhase
                 break;
             case InboundEventKind.Move:
                 HandleMove(session, inboundEvent.Intent);
+                break;
+            case InboundEventKind.Target:
+                HandleTarget(session, inboundEvent.Target);
                 break;
             default:
                 IgnoredEvents++;
@@ -223,6 +229,20 @@ public sealed class SessionManager : ITickPhase
         }
 
         session.Input.Queue.TryEnqueue(intent);
+    }
+
+    private void HandleTarget(ClientSession session, EntityId target)
+    {
+        if (session.State != SessionState.InWorld)
+        {
+            IgnoredEvents++;
+            return;
+        }
+
+        if (!m_targeting.TrySelect(session, target))
+        {
+            session.RefusedCommands++;
+        }
     }
 
     private void ExpireSilentConnections(uint tick)

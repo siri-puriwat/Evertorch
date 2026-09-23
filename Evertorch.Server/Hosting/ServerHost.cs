@@ -57,6 +57,7 @@ public static class ServerHost
         builder.Services.AddSingleton<HandshakeValidator>();
         builder.Services.AddSingleton<WorldSimulation>();
         builder.Services.AddSingleton<MessageSender>();
+        builder.Services.AddSingleton<Targeting>();
         builder.Services.AddSingleton<LiteNetLibServerTransport>();
         builder.Services.AddSingleton<IServerTransport>(services =>
             services.GetRequiredService<LiteNetLibServerTransport>());

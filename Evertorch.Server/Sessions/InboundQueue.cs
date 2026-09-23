@@ -120,6 +120,14 @@ public sealed class InboundQueue
 
                 decoded = InboundEvent.ForMove(connection, new MoveIntent(stop.Sequence, stop.ClientTick, 0f, 0f));
                 return true;
+            case MessageOpcode.TargetEntity:
+                if (!TargetEntity.TryRead(payload, out TargetEntity target))
+                {
+                    return false;
+                }
+
+                decoded = InboundEvent.ForTarget(connection, target.Target);
+                return true;
             default:
                 // A valid client message the server does not handle yet is treated like any other junk.
                 return false;

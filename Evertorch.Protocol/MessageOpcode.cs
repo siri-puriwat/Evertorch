@@ -17,6 +17,7 @@ public enum MessageOpcode : ushort
     EntitySpawn = 0x8004,
     EntityDespawn = 0x8005,
     EntitySnapshot = 0x8006,
+    TargetChanged = 0x8007,
     DisconnectNotice = 0x8013
 }
 }

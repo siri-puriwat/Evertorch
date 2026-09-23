@@ -13,15 +13,17 @@ public sealed class VisibilityPhase : ITickPhase
     private readonly SessionRegistry m_sessions;
     private readonly WorldSimulation m_world;
     private readonly MessageSender m_sender;
+    private readonly Targeting m_targeting;
     private readonly List<WorldEntity> m_visible = new();
     private readonly HashSet<EntityId> m_visibleIds = new();
     private readonly List<EntityId> m_departed = new();
 
-    public VisibilityPhase(SessionRegistry sessions, WorldSimulation world, MessageSender sender)
+    public VisibilityPhase(SessionRegistry sessions, WorldSimulation world, MessageSender sender, Targeting targeting)
     {
         m_sessions = sessions;
         m_world = world;
         m_sender = sender;
+        m_targeting = targeting;
     }
 
     public TickPhase Phase => TickPhase.FinalizeWorld;
@@ -84,6 +86,7 @@ public sealed class VisibilityPhase : ITickPhase
             session.KnownEntities.Remove(departed);
             DespawnReason reason = map.Contains(departed) ? DespawnReason.OutOfRange : DespawnReason.Removed;
             m_sender.Send(session.Connection, new EntityDespawn(departed, reason));
+            m_targeting.ClearIfTargeting(session, departed);
         }
     }
 }

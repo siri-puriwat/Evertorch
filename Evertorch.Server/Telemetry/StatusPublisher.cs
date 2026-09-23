@@ -89,7 +89,8 @@ public sealed class StatusPublisher : ITickPhase
                     roundTrip,
                     session.Input.Queue.Count,
                     session.Input.Queue.Stale,
-                    session.Input.Queue.Dropped));
+                    session.Input.Queue.Dropped,
+                    session.RefusedCommands));
         }
 
         return new ServerStatus(

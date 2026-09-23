@@ -69,11 +69,23 @@ public sealed class ClientWorld
 
     public int UnknownEntityStates { get; private set; }
 
+    /// <summary>
+    ///     Reliable events that named an entity this client has no spawn for; they are ignored.
+    /// </summary>
+    public int UnknownEntityEvents { get; private set; }
+
+    /// <summary>
+    ///     The local player's target as the server last confirmed it; the default value means none.
+    /// </summary>
+    public EntityId Target { get; private set; }
+
     public double RemoteRenderTime => ServerTime.Now - RemoteEntityBuffer.InterpolationDelaySeconds;
 
     public event Action<RemoteEntity>? RemoteSpawned;
 
     public event Action<RemoteEntity>? RemoteDespawned;
+
+    public event Action? TargetChanged;
 
     public void OnSpawn(EntitySpawn spawn)
     {
@@ -105,6 +117,35 @@ public sealed class ClientWorld
         {
             m_remotes.Remove(despawn.Entity);
             RemoteDespawned?.Invoke(remote);
+        }
+    }
+
+    public void OnTargetChanged(TargetChanged changed)
+    {
+        if (changed.Actor != LocalEntity || (changed.Target != default && !m_remotes.ContainsKey(changed.Target)))
+        {
+            UnknownEntityEvents++;
+            return;
+        }
+
+        Target = changed.Target;
+        TargetChanged?.Invoke();
+    }
+
+    /// <summary>
+    ///     Appends the monsters this client knows, at their drawn positions: what a click can pick and what target
+    ///     cycling visits.
+    /// </summary>
+    public void CollectTargetCandidates(List<PickCandidate> candidates)
+    {
+        double renderTime = RemoteRenderTime;
+        foreach (RemoteEntity remote in m_remotes.Values)
+        {
+            if (remote.Kind == EntityKind.Monster
+                && remote.Buffer.TrySample(renderTime, out WorldPosition position, out WorldDirection _))
+            {
+                candidates.Add(new PickCandidate(remote.Entity, position));
+            }
         }
     }
 

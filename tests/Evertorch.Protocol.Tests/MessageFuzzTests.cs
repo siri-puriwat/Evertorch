@@ -72,6 +72,10 @@ public sealed class MessageFuzzTests
                     EntityStateFlags.None)),
             payload => EntitySpawn.TryRead(payload, out EntitySpawn? message) ? Encode(message!) : null);
         yield return Case(
+            "TargetChanged",
+            Encode(new TargetChanged(new EntityId(9), new EntityId(10))),
+            payload => TargetChanged.TryRead(payload, out TargetChanged message) ? Encode(message) : null);
+        yield return Case(
             "EntityDespawn",
             Encode(new EntityDespawn(new EntityId(9), DespawnReason.OutOfRange)),
             payload => EntityDespawn.TryRead(payload, out EntityDespawn message) ? Encode(message) : null);
@@ -232,6 +236,13 @@ public sealed class MessageFuzzTests
     private static byte[] Encode(EnterWorldRequest message)
     {
         byte[] buffer = new byte[EnterWorldRequest.EncodedLength];
+        message.Write(buffer);
+        return buffer;
+    }
+
+    private static byte[] Encode(TargetChanged message)
+    {
+        byte[] buffer = new byte[TargetChanged.EncodedLength];
         message.Write(buffer);
         return buffer;
     }

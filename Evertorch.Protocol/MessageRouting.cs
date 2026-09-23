@@ -24,6 +24,7 @@ public static class MessageRouting
             case MessageOpcode.WorldEntered:
             case MessageOpcode.EntitySpawn:
             case MessageOpcode.EntityDespawn:
+            case MessageOpcode.TargetChanged:
             case MessageOpcode.DisconnectNotice:
                 return true;
             case MessageOpcode.MoveInput:

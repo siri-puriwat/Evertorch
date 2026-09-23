@@ -24,6 +24,7 @@ public sealed class MessageRoutingTests
     [TestCase(MessageOpcode.WorldEntered)]
     [TestCase(MessageOpcode.EntitySpawn)]
     [TestCase(MessageOpcode.EntityDespawn)]
+    [TestCase(MessageOpcode.TargetChanged)]
     [TestCase(MessageOpcode.DisconnectNotice)]
     public void TryGetRoute_ForSessionAndLifecycleMessages_IsReliableOrderedOnControl(MessageOpcode opcode)
     {
@@ -47,7 +48,7 @@ public sealed class MessageRoutingTests
     }
 
     [TestCase((ushort)0)]
-    [TestCase((ushort)0x0006)]
+    [TestCase((ushort)0x0040)]
     [TestCase((ushort)0x7FFF)]
     [TestCase((ushort)0xFFFF)]
     public void TryGetRoute_ForUnassignedOpcode_ReturnsFalse(ushort value)
@@ -68,6 +69,7 @@ public sealed class MessageRoutingTests
     [TestCase(MessageOpcode.WorldEntered, false)]
     [TestCase(MessageOpcode.EntitySpawn, false)]
     [TestCase(MessageOpcode.EntityDespawn, false)]
+    [TestCase(MessageOpcode.TargetChanged, false)]
     [TestCase(MessageOpcode.DisconnectNotice, false)]
     public void IsClientToServer_ForOpcode_FollowsTheDirectionRange(MessageOpcode opcode, bool expected)
     {
@@ -77,7 +79,7 @@ public sealed class MessageRoutingTests
     [TestCase(new byte[0])]
     [TestCase(new byte[] { 0x01 })]
     [TestCase(new byte[] { 0x00, 0x00 })]
-    [TestCase(new byte[] { 0x06, 0x00 })]
+    [TestCase(new byte[] { 0x40, 0x00 })]
     [TestCase(new byte[] { 0x80, 0x01 })]
     public void TryReadOpcode_ForShortOrUnknownPayload_ReturnsFalse(byte[] payload)
     {
@@ -94,7 +96,8 @@ public sealed class MessageRoutingTests
         {
             "None=0x0000", "ClientHello=0x0001", "EnterWorldRequest=0x0002", "MoveInput=0x0003",
             "StopMovement=0x0004", "TargetEntity=0x0005", "ServerHello=0x8001", "WorldEntered=0x8003",
-            "EntitySpawn=0x8004", "EntityDespawn=0x8005", "EntitySnapshot=0x8006", "DisconnectNotice=0x8013"
+            "EntitySpawn=0x8004", "EntityDespawn=0x8005", "EntitySnapshot=0x8006", "TargetChanged=0x8007",
+            "DisconnectNotice=0x8013"
         };
 
         string[] actual = ((MessageOpcode[])Enum.GetValues(typeof(MessageOpcode)))
@@ -115,9 +118,9 @@ public sealed class MessageRoutingTests
     }
 
     [Test]
-    public void ProtocolVersion_IsThree()
+    public void ProtocolVersion_IsFour()
     {
-        Assert.That(ProtocolConstants.ProtocolVersion, Is.EqualTo(3));
+        Assert.That(ProtocolConstants.ProtocolVersion, Is.EqualTo(4));
     }
 
     [Test]

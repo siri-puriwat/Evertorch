@@ -111,6 +111,45 @@ public sealed class ClientConnectionTests
     }
 
     [Test]
+    public void TargetChanged_ReachesTheWorld_AndSendTargetGoesOutReliably()
+    {
+        Harness harness = new Harness();
+        harness.EnterWorld();
+        EntityId slime = new EntityId(300);
+        EntitySpawn spawn = new EntitySpawn(
+            slime,
+            EntityKind.Monster,
+            "monster.training_slime",
+            ClientTestGrids.Center(4, 8),
+            new WorldDirection(0f, 1f),
+            EntityStateFlags.None);
+        harness.Deliver(ProtocolChannel.Control, Encode(spawn.GetEncodedLength(), spawn.Write));
+
+        harness.Connection.SendTarget(slime);
+        TargetChanged changed = new TargetChanged(ClientWorldFixture.LocalEntity, slime);
+        harness.Deliver(ProtocolChannel.Control, Encode(TargetChanged.EncodedLength, changed.Write));
+
+        FakeClientTransport.SentMessage sent = harness.Transport.Sent.Last();
+        Assert.That(sent.Channel, Is.EqualTo(ProtocolChannel.Control));
+        Assert.That(sent.Delivery, Is.EqualTo(MessageDelivery.ReliableOrdered));
+        Assert.That(TargetEntity.TryRead(sent.Payload, out TargetEntity request), Is.True);
+        Assert.That(request.Target, Is.EqualTo(slime));
+        Assert.That(harness.Connection.World!.Target, Is.EqualTo(slime));
+    }
+
+    [Test]
+    public void SendTarget_BeforeTheWorldIsEntered_SendsNothing()
+    {
+        Harness harness = new Harness();
+        harness.ConnectAndReceiveHello();
+        int before = harness.Transport.Sent.Count;
+
+        harness.Connection.SendTarget(new EntityId(300));
+
+        Assert.That(harness.Transport.Sent.Count, Is.EqualTo(before));
+    }
+
+    [Test]
     public void Send_MovingIntent_GoesOutAsMoveInputOnTheInputChannel()
     {
         Harness harness = new Harness();

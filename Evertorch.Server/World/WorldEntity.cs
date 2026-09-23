@@ -39,6 +39,11 @@ public abstract class WorldEntity
     public EntityStateFlags StateFlags { get; set; }
 
     /// <summary>
+    ///     The entity this one has selected; the default value means none.
+    /// </summary>
+    public EntityId Target { get; set; }
+
+    /// <summary>
     ///     World units per second after the movement rules were applied; never a value a client supplied.
     /// </summary>
     public float MovementSpeed { get; }

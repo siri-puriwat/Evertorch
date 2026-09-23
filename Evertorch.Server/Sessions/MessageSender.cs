@@ -44,6 +44,11 @@ public sealed class MessageSender
         m_outbound.Send(connection, m_buffer.AsSpan(0, message.Write(m_buffer)));
     }
 
+    public void Send(ConnectionId connection, TargetChanged message)
+    {
+        m_outbound.Send(connection, m_buffer.AsSpan(0, message.Write(m_buffer)));
+    }
+
     public void Disconnect(ConnectionId connection, DisconnectReason reason)
     {
         m_outbound.Disconnect(connection, reason, string.Empty);
