@@ -39,6 +39,7 @@ public sealed class SharedLifecycleMessageTests
         0x05, 0x00, 0x6D, 0x61, 0x70, 0x2E, 0x61,
         0x01, 0x00, 0x00, 0x00,
         0xEF, 0xCD, 0xAB, 0x89, 0x67, 0x45, 0x23, 0x01,
+        0x05, 0x00, 0x6A, 0x6F, 0x62, 0x2E, 0x61,
         0x03, 0x02, 0x01, 0x00,
         0x00, 0x00, 0x80, 0x3F, 0x00, 0x00, 0x00, 0x3F, 0x00, 0x00, 0x00, 0xC0,
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80, 0x3F,
@@ -131,6 +132,7 @@ public sealed class SharedLifecycleMessageTests
             new MapDefinitionId("map.a"),
             1,
             new EntityId(0x0123456789ABCDEF),
+            new JobDefinitionId("job.a"),
             0x00010203,
             new WorldPosition(1f, 0.5f, -2f),
             new WorldDirection(0f, 1f),
@@ -143,6 +145,7 @@ public sealed class SharedLifecycleMessageTests
         Assert.That(buffer, Is.EqualTo(WorldEnteredBytes));
         Assert.That(isRead, Is.True);
         Assert.That(read!.Map, Is.EqualTo(new MapDefinitionId("map.a")));
+        Assert.That(read.Job, Is.EqualTo(new JobDefinitionId("job.a")));
         Assert.That(read.Position, Is.EqualTo(new WorldPosition(1f, 0.5f, -2f)));
         Assert.That(read.MovementSpeed, Is.EqualTo(5f));
     }
@@ -151,8 +154,8 @@ public sealed class SharedLifecycleMessageTests
     public void WorldEntered_WithNotANumber_IsRejected()
     {
         byte[] invalid = (byte[])WorldEnteredBytes.Clone();
-        invalid[27] = 0xC0;
-        invalid[28] = 0x7F;
+        invalid[34] = 0xC0;
+        invalid[35] = 0x7F;
 
         Assert.That(WorldEntered.TryRead(invalid, out WorldEntered? _), Is.False);
     }

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
@@ -16,6 +17,9 @@ public static class ClientContentParser
 {
     public const string ManifestFile = "manifest.json";
     public const string MapsFile = "maps.json";
+    public const string JobsFile = "jobs.json";
+    public const string MonstersFile = "monsters.json";
+    public const string ItemsFile = "items.json";
 
     private const int SupportedSchemaVersion = 1;
 
@@ -67,14 +71,53 @@ public static class ClientContentParser
             return null;
         }
 
-        if (!files.TryGetValue(MapsFile, out byte[]? mapsBytes) || manifest.files.All(file => file.path != MapsFile))
+        if (!TryGetListedFile(manifest, files, MapsFile, out byte[] mapsBytes, out error)
+            || !TryGetListedFile(manifest, files, JobsFile, out byte[] jobsBytes, out error)
+            || !TryGetListedFile(manifest, files, MonstersFile, out byte[] monstersBytes, out error)
+            || !TryGetListedFile(manifest, files, ItemsFile, out byte[] itemsBytes, out error))
         {
-            error = $"The content package has no '{MapsFile}'.";
             return null;
         }
 
         Dictionary<MapDefinitionId, ClientMap>? maps = ParseMaps(mapsBytes, out error);
-        return maps == null ? null : new ClientContent(version, maps);
+        if (maps == null)
+        {
+            return null;
+        }
+
+        Dictionary<JobDefinitionId, ClientJob>? jobs = ParseJobs(jobsBytes, out error);
+        if (jobs == null)
+        {
+            return null;
+        }
+
+        Dictionary<MonsterDefinitionId, ClientMonster>? monsters = ParseMonsters(monstersBytes, out error);
+        if (monsters == null)
+        {
+            return null;
+        }
+
+        Dictionary<ItemDefinitionId, ClientItem>? items = ParseItems(itemsBytes, out error);
+        return items == null ? null : new ClientContent(version, maps, jobs, monsters, items);
+    }
+
+    private static bool TryGetListedFile(
+        ManifestDto manifest,
+        IReadOnlyDictionary<string, byte[]> files,
+        string name,
+        out byte[] content,
+        out string error)
+    {
+        if (!files.TryGetValue(name, out byte[]? found) || manifest.files.All(file => file.path != name))
+        {
+            content = Array.Empty<byte>();
+            error = $"The content package has no '{name}'.";
+            return false;
+        }
+
+        content = found;
+        error = string.Empty;
+        return true;
     }
 
     private static ManifestDto? ParseManifest(byte[] manifestBytes, out string error)
@@ -138,6 +181,139 @@ public static class ClientContentParser
         }
 
         return maps;
+    }
+
+    private static Dictionary<JobDefinitionId, ClientJob>? ParseJobs(byte[] jobsBytes, out string error)
+    {
+        error = string.Empty;
+        JobsDto? dto = FromJson<JobsDto>(jobsBytes);
+        if (dto == null || dto.definitions == null || dto.schemaVersion != SupportedSchemaVersion)
+        {
+            error = $"'{JobsFile}' is not readable or has an unsupported schema version.";
+            return null;
+        }
+
+        var jobs = new Dictionary<JobDefinitionId, ClientJob>();
+        foreach (JobDto job in dto.definitions)
+        {
+            if (!JobDefinitionId.TryCreate(job.id, out JobDefinitionId id) || jobs.ContainsKey(id))
+            {
+                error = $"'{JobsFile}' has an invalid or repeated job ID.";
+                return null;
+            }
+
+            if (!IsLogicalKey(job.prefab))
+            {
+                error = $"Job '{job.id}': prefab is not a logical key.";
+                return null;
+            }
+
+            jobs.Add(id, new ClientJob(id, job.displayName ?? string.Empty, job.prefab));
+        }
+
+        return jobs;
+    }
+
+    private static Dictionary<MonsterDefinitionId, ClientMonster>? ParseMonsters(
+        byte[] monstersBytes,
+        out string error)
+    {
+        error = string.Empty;
+        MonstersDto? dto = FromJson<MonstersDto>(monstersBytes);
+        if (dto == null || dto.definitions == null || dto.schemaVersion != SupportedSchemaVersion)
+        {
+            error = $"'{MonstersFile}' is not readable or has an unsupported schema version.";
+            return null;
+        }
+
+        var monsters = new Dictionary<MonsterDefinitionId, ClientMonster>();
+        foreach (MonsterDto monster in dto.definitions)
+        {
+            if (!MonsterDefinitionId.TryCreate(monster.id, out MonsterDefinitionId id) || monsters.ContainsKey(id))
+            {
+                error = $"'{MonstersFile}' has an invalid or repeated monster ID.";
+                return null;
+            }
+
+            if (!IsLogicalKey(monster.prefab))
+            {
+                error = $"Monster '{monster.id}': prefab is not a logical key.";
+                return null;
+            }
+
+            if (!IsLogicalKey(monster.icon))
+            {
+                error = $"Monster '{monster.id}': icon is not a logical key.";
+                return null;
+            }
+
+            monsters.Add(
+                id,
+                new ClientMonster(id, monster.displayName ?? string.Empty, monster.prefab, monster.icon));
+        }
+
+        return monsters;
+    }
+
+    private static Dictionary<ItemDefinitionId, ClientItem>? ParseItems(byte[] itemsBytes, out string error)
+    {
+        error = string.Empty;
+        ItemsDto? dto = FromJson<ItemsDto>(itemsBytes);
+        if (dto == null || dto.definitions == null || dto.schemaVersion != SupportedSchemaVersion)
+        {
+            error = $"'{ItemsFile}' is not readable or has an unsupported schema version.";
+            return null;
+        }
+
+        var items = new Dictionary<ItemDefinitionId, ClientItem>();
+        foreach (ItemDto item in dto.definitions)
+        {
+            if (!ItemDefinitionId.TryCreate(item.id, out ItemDefinitionId id) || items.ContainsKey(id))
+            {
+                error = $"'{ItemsFile}' has an invalid or repeated item ID.";
+                return null;
+            }
+
+            if (!IsLogicalKey(item.model))
+            {
+                error = $"Item '{item.id}': model is not a logical key.";
+                return null;
+            }
+
+            if (!IsLogicalKey(item.icon))
+            {
+                error = $"Item '{item.id}': icon is not a logical key.";
+                return null;
+            }
+
+            items.Add(id, new ClientItem(id, item.displayName ?? string.Empty, item.model, item.icon));
+        }
+
+        return items;
+    }
+
+    // The content tools enforce the same grammar. It is checked again here because a key that is a path would still
+    // resolve as an Addressables address, which the logical-key rule exists to prevent.
+    private static bool IsLogicalKey([NotNullWhen(true)] string? key)
+    {
+        if (string.IsNullOrEmpty(key))
+        {
+            return false;
+        }
+
+        foreach (char character in key)
+        {
+            bool isAllowed = (character >= 'a' && character <= 'z')
+                || (character >= '0' && character <= '9')
+                || character == '_'
+                || character == '-';
+            if (!isAllowed)
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private static NavigationGrid? BuildGrid(NavigationDto? navigation, out string error)
@@ -350,6 +526,53 @@ public static class ClientContentParser
         public string? axis = string.Empty;
         public float heightAtMin = 0f;
         public float heightAtMax = 0f;
+    }
+
+    [Serializable]
+    private sealed class JobsDto
+    {
+        public int schemaVersion = 0;
+        public JobDto[] definitions = Array.Empty<JobDto>();
+    }
+
+    [Serializable]
+    private sealed class JobDto
+    {
+        public string? id = string.Empty;
+        public string? displayName = string.Empty;
+        public string? prefab = string.Empty;
+    }
+
+    [Serializable]
+    private sealed class MonstersDto
+    {
+        public int schemaVersion = 0;
+        public MonsterDto[] definitions = Array.Empty<MonsterDto>();
+    }
+
+    [Serializable]
+    private sealed class MonsterDto
+    {
+        public string? id = string.Empty;
+        public string? displayName = string.Empty;
+        public string? prefab = string.Empty;
+        public string? icon = string.Empty;
+    }
+
+    [Serializable]
+    private sealed class ItemsDto
+    {
+        public int schemaVersion = 0;
+        public ItemDto[] definitions = Array.Empty<ItemDto>();
+    }
+
+    [Serializable]
+    private sealed class ItemDto
+    {
+        public string? id = string.Empty;
+        public string? displayName = string.Empty;
+        public string? model = string.Empty;
+        public string? icon = string.Empty;
     }
     // ReSharper restore InconsistentNaming, RedundantDefaultMemberInitializer
 }

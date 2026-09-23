@@ -123,7 +123,7 @@ public sealed class SessionHandshakeTests
         ConnectionId connection = server.Connect();
         server.SendHello(
             connection,
-            2,
+            ProtocolConstants.ProtocolVersion - 1,
             TestServer.BuildVersion,
             server.RequiredClientContentVersion,
             TestServer.DevelopmentToken);

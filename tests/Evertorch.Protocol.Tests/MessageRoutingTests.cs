@@ -115,9 +115,9 @@ public sealed class MessageRoutingTests
     }
 
     [Test]
-    public void ProtocolVersion_IsOne()
+    public void ProtocolVersion_IsTwo()
     {
-        Assert.That(ProtocolConstants.ProtocolVersion, Is.EqualTo(1));
+        Assert.That(ProtocolConstants.ProtocolVersion, Is.EqualTo(2));
     }
 
     [Test]

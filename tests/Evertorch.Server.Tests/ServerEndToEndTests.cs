@@ -108,6 +108,7 @@ public sealed class ServerEndToEndTests
         Assert.That(Opcodes(Control(first)).Last(), Is.EqualTo(MessageOpcode.EntitySpawn));
         WorldEntered.TryRead(Control(second)[1].Payload, out WorldEntered? entered);
         Assert.That(entered!.Map, Is.EqualTo(new MapDefinitionId("map.training_ground")));
+        Assert.That(entered.Job, Is.EqualTo(new JobDefinitionId("job.adventurer")));
         Assert.That(entered.MovementSpeed, Is.EqualTo(5f));
 
         Assert.That(second.WaitFor(() => Snapshots(second).Any(snapshot => snapshot.Entities.Count == 2)), Is.True);

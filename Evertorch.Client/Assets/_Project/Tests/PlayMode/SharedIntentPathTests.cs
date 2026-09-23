@@ -430,6 +430,7 @@ public sealed class SharedIntentPathTests : InputTestFixture
                 new MapDefinitionId("map.training_ground"),
                 1,
                 new EntityId(100),
+                new JobDefinitionId("job.adventurer"),
                 0,
                 new WorldPosition(2.5f, 0f, 5.5f),
                 new WorldDirection(0f, 1f),

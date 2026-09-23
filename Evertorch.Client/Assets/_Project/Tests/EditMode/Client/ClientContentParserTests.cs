@@ -22,6 +22,18 @@ public sealed class ClientContentParserTests
         + "{\"symbol\":\"c\",\"surface\":\"floor\",\"axis\":\"x\",\"heightAtMin\":0,\"heightAtMax\":0.25}],"
         + "\"cellRows\":[\"abc\",\"bba\"]}}]}";
 
+    private const string Jobs =
+        "{\"schemaVersion\":1,\"definitions\":[{\"id\":\"job.adventurer\",\"displayName\":\"Adventurer\","
+        + "\"prefab\":\"character_adventurer\"}]}";
+
+    private const string Monsters =
+        "{\"schemaVersion\":1,\"definitions\":[{\"id\":\"monster.training_slime\",\"displayName\":\"Training Slime\","
+        + "\"level\":1,\"prefab\":\"monster_training_slime\",\"icon\":\"monster_training_slime_icon\"}]}";
+
+    private const string Items =
+        "{\"schemaVersion\":1,\"definitions\":[{\"id\":\"item.material.slime_gel\",\"displayName\":\"Slime Gel\","
+        + "\"type\":\"material\",\"stackLimit\":999,\"icon\":\"item_slime_gel\",\"model\":\"pickup_slime_gel\"}]}";
+
     [Test]
     public void Parse_ValidPackage_BuildsTheMapAndItsGrid()
     {
@@ -44,6 +56,48 @@ public sealed class ClientContentParserTests
         Assert.That(grid.GetCell(2, 0).Axis, Is.EqualTo(RampAxis.X));
         Assert.That(grid.GetCell(2, 0).HeightAtMax, Is.EqualTo(0.25f));
         Assert.That(grid.GetCell(2, 1).Surface, Is.EqualTo(NavigationSurface.Wall));
+    }
+
+    [Test]
+    public void Parse_ValidPackage_ReadsJobsMonstersAndItems()
+    {
+        Package package = new Package(Maps);
+
+        ClientContent? content = ClientContentParser.Parse(package.Manifest, package.Files, out string error);
+
+        Assert.That(error, Is.Empty);
+        Assert.That(content!.Jobs.Count(), Is.EqualTo(1));
+        Assert.That(content.Monsters.Count(), Is.EqualTo(1));
+        Assert.That(content.Items.Count(), Is.EqualTo(1));
+        Assert.That(content.TryGetJob(new JobDefinitionId("job.adventurer"), out ClientJob? job), Is.True);
+        Assert.That(job!.DisplayName, Is.EqualTo("Adventurer"));
+        Assert.That(job.PrefabKey, Is.EqualTo("character_adventurer"));
+        Assert.That(
+            content.TryGetMonster(new MonsterDefinitionId("monster.training_slime"), out ClientMonster? monster),
+            Is.True);
+        Assert.That(monster!.DisplayName, Is.EqualTo("Training Slime"));
+        Assert.That(monster.PrefabKey, Is.EqualTo("monster_training_slime"));
+        Assert.That(monster.IconKey, Is.EqualTo("monster_training_slime_icon"));
+        Assert.That(content.TryGetItem(new ItemDefinitionId("item.material.slime_gel"), out ClientItem? item), Is.True);
+        Assert.That(item!.DisplayName, Is.EqualTo("Slime Gel"));
+        Assert.That(item.ModelKey, Is.EqualTo("pickup_slime_gel"));
+        Assert.That(item.IconKey, Is.EqualTo("item_slime_gel"));
+    }
+
+    [Test]
+    public void Parse_ValidPackage_FindsNoUnknownDefinition()
+    {
+        Package package = new Package(Maps);
+        ClientContent? content = ClientContentParser.Parse(package.Manifest, package.Files, out string _);
+
+        Assert.That(content!.TryGetJob(new JobDefinitionId("job.unknown"), out ClientJob? job), Is.False);
+        Assert.That(job, Is.Null);
+        Assert.That(
+            content.TryGetMonster(new MonsterDefinitionId("monster.unknown"), out ClientMonster? monster),
+            Is.False);
+        Assert.That(monster, Is.Null);
+        Assert.That(content.TryGetItem(new ItemDefinitionId("item.unknown"), out ClientItem? item), Is.False);
+        Assert.That(item, Is.Null);
     }
 
     [Test]
@@ -83,6 +137,20 @@ public sealed class ClientContentParserTests
 
         Assert.That(content, Is.Null);
         Assert.That(error, Does.Contain("items.json").And.Contain("missing"));
+    }
+
+    [TestCase(ClientContentParser.MapsFile)]
+    [TestCase(ClientContentParser.JobsFile)]
+    [TestCase(ClientContentParser.MonstersFile)]
+    [TestCase(ClientContentParser.ItemsFile)]
+    public void Parse_WhenARequiredFileIsNotInThePackage_IsRefused(string fileName)
+    {
+        Package package = Package.Without(fileName);
+
+        ClientContent? content = ClientContentParser.Parse(package.Manifest, package.Files, out string error);
+
+        Assert.That(content, Is.Null);
+        Assert.That(error, Is.EqualTo($"The content package has no '{fileName}'."));
     }
 
     [Test]
@@ -135,7 +203,7 @@ public sealed class ClientContentParserTests
         IReadOnlyList<string> names = ClientContentParser.ReadFileList(package.Manifest, out string error);
 
         Assert.That(error, Is.Empty);
-        Assert.That(names, Is.EquivalentTo(new[] { "items.json", "maps.json" }));
+        Assert.That(names, Is.EquivalentTo(new[] { "items.json", "jobs.json", "maps.json", "monsters.json" }));
     }
 
     [TestCase("\"surface\":\"wall\"", "\"surface\":\"lava\"", "legend")]
@@ -151,6 +219,87 @@ public sealed class ClientContentParserTests
     {
         Assert.That(Maps, Does.Contain(oldText));
         Package package = new Package(Maps.Replace(oldText, newText));
+
+        ClientContent? content = ClientContentParser.Parse(package.Manifest, package.Files, out string error);
+
+        Assert.That(content, Is.Null);
+        Assert.That(error, Does.Contain(expected));
+    }
+
+    [TestCase(
+        ClientContentParser.JobsFile,
+        "\"id\":\"job.adventurer\"",
+        "\"id\":\"monster.adventurer\"",
+        "invalid or repeated job ID")]
+    [TestCase(
+        ClientContentParser.JobsFile,
+        "}]}",
+        "},{\"id\":\"job.adventurer\",\"displayName\":\"Again\",\"prefab\":\"other\"}]}",
+        "invalid or repeated job ID")]
+    [TestCase(
+        ClientContentParser.JobsFile,
+        "\"prefab\":\"character_adventurer\"",
+        "\"prefab\":\"\"",
+        "Job 'job.adventurer': prefab is not a logical key")]
+    [TestCase(
+        ClientContentParser.JobsFile,
+        ",\"prefab\":\"character_adventurer\"",
+        "",
+        "Job 'job.adventurer': prefab is not a logical key")]
+    [TestCase(
+        ClientContentParser.JobsFile,
+        "\"schemaVersion\":1",
+        "\"schemaVersion\":2",
+        "'jobs.json' is not readable or has an unsupported schema version")]
+    [TestCase(
+        ClientContentParser.MonstersFile,
+        "\"id\":\"monster.training_slime\"",
+        "\"id\":\"item.training_slime\"",
+        "invalid or repeated monster ID")]
+    [TestCase(
+        ClientContentParser.MonstersFile,
+        "\"prefab\":\"monster_training_slime\"",
+        "\"prefab\":\"prefabs/monster_training_slime\"",
+        "Monster 'monster.training_slime': prefab is not a logical key")]
+    [TestCase(
+        ClientContentParser.MonstersFile,
+        "\"icon\":\"monster_training_slime_icon\"",
+        "\"icon\":\"slime icon\"",
+        "Monster 'monster.training_slime': icon is not a logical key")]
+    [TestCase(
+        ClientContentParser.MonstersFile,
+        "\"schemaVersion\":1",
+        "\"schemaVersion\":2",
+        "'monsters.json' is not readable or has an unsupported schema version")]
+    [TestCase(
+        ClientContentParser.ItemsFile,
+        "\"id\":\"item.material.slime_gel\"",
+        "\"id\":\"job.slime_gel\"",
+        "invalid or repeated item ID")]
+    [TestCase(
+        ClientContentParser.ItemsFile,
+        "\"model\":\"pickup_slime_gel\"",
+        "\"model\":\"Pickup_Slime_Gel\"",
+        "Item 'item.material.slime_gel': model is not a logical key")]
+    [TestCase(
+        ClientContentParser.ItemsFile,
+        "\"icon\":\"item_slime_gel\"",
+        "\"icon\":\"Assets/item_slime_gel.png\"",
+        "Item 'item.material.slime_gel': icon is not a logical key")]
+    [TestCase(
+        ClientContentParser.ItemsFile,
+        "\"schemaVersion\":1",
+        "\"schemaVersion\":2",
+        "'items.json' is not readable or has an unsupported schema version")]
+    public void Parse_ForMalformedDefinitions_IsRefusedWithAReason(
+        string fileName,
+        string oldText,
+        string newText,
+        string expected)
+    {
+        string original = Package.DefaultTexts(Maps)[fileName];
+        Assert.That(original, Does.Contain(oldText));
+        Package package = Package.With(fileName, original.Replace(oldText, newText));
 
         ClientContent? content = ClientContentParser.Parse(package.Manifest, package.Files, out string error);
 
@@ -180,17 +329,26 @@ public sealed class ClientContentParserTests
         Assert.That(map!.Navigation.Columns, Is.EqualTo(48));
         Assert.That(map.Navigation.CanOccupy(0f, 0f), Is.True, "players spawn at the origin");
         Assert.That(MapSceneResolver.TryResolve(map.SceneKey, out string _), Is.True);
+        Assert.That(content.TryGetJob(new JobDefinitionId("job.adventurer"), out ClientJob? job), Is.True);
+        Assert.That(job!.PrefabKey, Is.EqualTo("character_adventurer"));
+        Assert.That(
+            content.TryGetMonster(new MonsterDefinitionId("monster.training_slime"), out ClientMonster? monster),
+            Is.True);
+        Assert.That(monster!.PrefabKey, Is.EqualTo("monster_training_slime"));
+        Assert.That(content.TryGetItem(new ItemDefinitionId("item.material.slime_gel"), out ClientItem? item), Is.True);
+        Assert.That(item!.ModelKey, Is.EqualTo("pickup_slime_gel"));
     }
 
     private sealed class Package
     {
         public Package(string maps, string? versionOverride = null)
+            : this(DefaultTexts(maps), versionOverride)
         {
-            Files = new Dictionary<string, byte[]>
-            {
-                ["items.json"] = Encoding.UTF8.GetBytes("{\"schemaVersion\":1,\"definitions\":[]}"),
-                [ClientContentParser.MapsFile] = Encoding.UTF8.GetBytes(maps),
-            };
+        }
+
+        private Package(IReadOnlyDictionary<string, string> texts, string? versionOverride = null)
+        {
+            Files = texts.ToDictionary(pair => pair.Key, pair => Encoding.UTF8.GetBytes(pair.Value));
 
             StringBuilder listing = new StringBuilder();
             StringBuilder entries = new StringBuilder();
@@ -212,6 +370,31 @@ public sealed class ClientContentParserTests
         public byte[] Manifest { get; }
 
         public string Version { get; }
+
+        public static Dictionary<string, string> DefaultTexts(string maps)
+        {
+            return new Dictionary<string, string>
+            {
+                [ClientContentParser.MapsFile] = maps,
+                [ClientContentParser.JobsFile] = Jobs,
+                [ClientContentParser.MonstersFile] = Monsters,
+                [ClientContentParser.ItemsFile] = Items,
+            };
+        }
+
+        public static Package With(string fileName, string text)
+        {
+            Dictionary<string, string> texts = DefaultTexts(Maps);
+            texts[fileName] = text;
+            return new Package(texts);
+        }
+
+        public static Package Without(string fileName)
+        {
+            Dictionary<string, string> texts = DefaultTexts(Maps);
+            texts.Remove(fileName);
+            return new Package(texts);
+        }
 
         private static string Hash(byte[] content)
         {

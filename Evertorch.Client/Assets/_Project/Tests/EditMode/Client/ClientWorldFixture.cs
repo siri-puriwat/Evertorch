@@ -9,6 +9,8 @@ internal static class ClientWorldFixture
 
     public static readonly EntityId LocalEntity = new EntityId(100);
 
+    public static readonly JobDefinitionId LocalJob = new JobDefinitionId("job.adventurer");
+
     public static ClientWorld Create(NavigationGrid grid, WorldPosition position, uint serverTick = 0)
     {
         return new ClientWorld(grid, Entered(position, serverTick), TickRate);
@@ -20,6 +22,7 @@ internal static class ClientWorldFixture
             new MapDefinitionId("map.training_ground"),
             1,
             LocalEntity,
+            LocalJob,
             serverTick,
             position,
             new WorldDirection(0f, 1f),

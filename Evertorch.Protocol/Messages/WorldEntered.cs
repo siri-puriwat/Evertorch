@@ -13,6 +13,7 @@ public sealed class WorldEntered
         MapDefinitionId map,
         uint mapInstance,
         EntityId localEntity,
+        JobDefinitionId job,
         uint serverTick,
         WorldPosition position,
         WorldDirection facing,
@@ -21,6 +22,7 @@ public sealed class WorldEntered
         Map = map;
         MapInstance = mapInstance;
         LocalEntity = localEntity;
+        Job = job;
         ServerTick = serverTick;
         Position = position;
         Facing = facing;
@@ -32,6 +34,12 @@ public sealed class WorldEntered
     public uint MapInstance { get; }
 
     public EntityId LocalEntity { get; }
+
+    /// <summary>
+    ///     The local entity's job. The server never sends a client an <see cref="EntitySpawn" /> for its own entity, so
+    ///     this is how the client learns which view to show for itself.
+    /// </summary>
+    public JobDefinitionId Job { get; }
 
     public uint ServerTick { get; }
 
@@ -52,13 +60,15 @@ public sealed class WorldEntered
             || !reader.TryReadString(ProtocolLimits.MaxDefinitionIdBytes, out string mapText)
             || !reader.TryReadUInt32(out uint mapInstance)
             || !reader.TryReadInt64(out long localEntity)
+            || !reader.TryReadString(ProtocolLimits.MaxDefinitionIdBytes, out string jobText)
             || !reader.TryReadUInt32(out uint serverTick)
             || !reader.TryReadPosition(out WorldPosition position)
             || !reader.TryReadDirection(out WorldDirection facing)
             || !reader.TryReadSingle(out float movementSpeed)
             || !reader.IsAtEnd
             || movementSpeed < 0f
-            || !MapDefinitionId.TryCreate(mapText, out MapDefinitionId map))
+            || !MapDefinitionId.TryCreate(mapText, out MapDefinitionId map)
+            || !JobDefinitionId.TryCreate(jobText, out JobDefinitionId job))
         {
             return false;
         }
@@ -67,6 +77,7 @@ public sealed class WorldEntered
             map,
             mapInstance,
             new EntityId(localEntity),
+            job,
             serverTick,
             position,
             facing,
@@ -80,6 +91,7 @@ public sealed class WorldEntered
             + WireText.GetEncodedLength(Map.Value, ProtocolLimits.MaxDefinitionIdBytes)
             + sizeof(uint)
             + sizeof(long)
+            + WireText.GetEncodedLength(Job.Value, ProtocolLimits.MaxDefinitionIdBytes)
             + sizeof(uint)
             + 3 * sizeof(float)
             + 2 * sizeof(float)
@@ -93,6 +105,7 @@ public sealed class WorldEntered
         writer.WriteString(Map.Value, ProtocolLimits.MaxDefinitionIdBytes);
         writer.WriteUInt32(MapInstance);
         writer.WriteInt64(LocalEntity.Value);
+        writer.WriteString(Job.Value, ProtocolLimits.MaxDefinitionIdBytes);
         writer.WriteUInt32(ServerTick);
         writer.WritePosition(Position);
         writer.WriteDirection(Facing);

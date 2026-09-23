@@ -7,8 +7,8 @@ namespace Evertorch.Protocol.Tests
 [TestFixture]
 public sealed class WorldEnteredTests
 {
-    private const int PositionXOffset = 25;
-    private const int MovementSpeedOffset = 45;
+    private const int PositionXOffset = 32;
+    private const int MovementSpeedOffset = 52;
 
     private static readonly byte[] NotANumber = { 0x00, 0x00, 0xC0, 0x7F };
     private static readonly byte[] PositiveInfinity = { 0x00, 0x00, 0x80, 0x7F };
@@ -20,6 +20,7 @@ public sealed class WorldEnteredTests
         0x05, 0x00, 0x6D, 0x61, 0x70, 0x2E, 0x61,
         0x01, 0x00, 0x00, 0x00,
         0xEF, 0xCD, 0xAB, 0x89, 0x67, 0x45, 0x23, 0x01,
+        0x05, 0x00, 0x6A, 0x6F, 0x62, 0x2E, 0x61,
         0x03, 0x02, 0x01, 0x00,
         0x00, 0x00, 0x80, 0x3F, 0x00, 0x00, 0x00, 0x3F, 0x00, 0x00, 0x00, 0xC0,
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80, 0x3F,
@@ -30,6 +31,7 @@ public sealed class WorldEnteredTests
         new MapDefinitionId("map.a"),
         1,
         new EntityId(0x0123456789ABCDEF),
+        new JobDefinitionId("job.a"),
         0x00010203,
         new WorldPosition(1f, 0.5f, -2f),
         new WorldDirection(0f, 1f),
@@ -44,6 +46,7 @@ public sealed class WorldEnteredTests
         Assert.That(message!.Map, Is.EqualTo(new MapDefinitionId("map.a")));
         Assert.That(message.MapInstance, Is.EqualTo(1u));
         Assert.That(message.LocalEntity, Is.EqualTo(new EntityId(0x0123456789ABCDEF)));
+        Assert.That(message.Job, Is.EqualTo(new JobDefinitionId("job.a")));
         Assert.That(message.ServerTick, Is.EqualTo(0x00010203u));
         Assert.That(message.Position, Is.EqualTo(new WorldPosition(1f, 0.5f, -2f)));
         Assert.That(message.Facing, Is.EqualTo(new WorldDirection(0f, 1f)));
@@ -58,6 +61,14 @@ public sealed class WorldEnteredTests
             Assert.That(WorldEntered.TryRead(WireMatrix.With(GoldenBytes, offset, NotANumber), out _), Is.False);
             Assert.That(WorldEntered.TryRead(WireMatrix.With(GoldenBytes, offset, PositiveInfinity), out _), Is.False);
         }
+    }
+
+    [Test]
+    public void TryRead_WhenJobIdIsOfAnotherKind_ReturnsFalse()
+    {
+        byte[] mapId = WireMatrix.With(GoldenBytes, 23, 0x6D, 0x61, 0x70);
+
+        Assert.That(WorldEntered.TryRead(mapId, out _), Is.False);
     }
 
     [Test]
@@ -114,17 +125,28 @@ public sealed class WorldEnteredTests
     }
 
     [Test]
-    public void Write_WithLongestMapId_RoundTrips()
+    public void Write_WithLongestIds_RoundTrips()
     {
-        var longest = new MapDefinitionId($"map.{new string('a', 60)}");
-        var original = new WorldEntered(longest, 0, default, 0, default, new WorldDirection(1f, 0f), 0f);
+        var longestMap = new MapDefinitionId($"map.{new string('a', 60)}");
+        var longestJob = new JobDefinitionId($"job.{new string('b', 60)}");
+        var original = new WorldEntered(
+            longestMap,
+            0,
+            default,
+            longestJob,
+            0,
+            default,
+            new WorldDirection(1f, 0f),
+            0f);
         byte[] buffer = new byte[original.GetEncodedLength()];
         original.Write(buffer);
 
         bool isRead = WorldEntered.TryRead(buffer, out WorldEntered? message);
 
         Assert.That(isRead, Is.True);
-        Assert.That(message!.Map, Is.EqualTo(longest));
+        Assert.That(buffer.Length, Is.EqualTo(174), "the largest WorldEntered");
+        Assert.That(message!.Map, Is.EqualTo(longestMap));
+        Assert.That(message.Job, Is.EqualTo(longestJob));
     }
 }
 }

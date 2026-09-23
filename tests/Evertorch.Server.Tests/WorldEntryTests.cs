@@ -114,7 +114,8 @@ public sealed class WorldEntryTests
         ConnectionId connection = server.EnterWorld(7);
 
         WorldEntered.TryRead(server.Transport.ControlSentTo(connection).Last().Payload, out WorldEntered? entered);
-        Assert.That(entered!.MovementSpeed, Is.EqualTo((float)job.BaseSpeed));
+        Assert.That(entered!.Job, Is.EqualTo(job.Id), "the client learns its own job only from WorldEntered");
+        Assert.That(entered.MovementSpeed, Is.EqualTo((float)job.BaseSpeed));
         Assert.That(server.PlayerOf(connection).MovementSpeed, Is.EqualTo((float)job.BaseSpeed));
         Assert.That(server.PlayerOf(connection).Job, Is.EqualTo(job.Id));
     }

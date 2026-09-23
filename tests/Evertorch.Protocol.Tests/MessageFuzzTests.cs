@@ -43,6 +43,7 @@ public sealed class MessageFuzzTests
                     new MapDefinitionId("map.training_ground"),
                     1,
                     new EntityId(9),
+                    new JobDefinitionId("job.adventurer"),
                     100,
                     new WorldPosition(1f, 2f, 3f),
                     new WorldDirection(0f, 1f),

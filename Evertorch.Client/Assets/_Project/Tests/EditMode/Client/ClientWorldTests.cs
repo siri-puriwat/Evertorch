@@ -17,6 +17,7 @@ public sealed class ClientWorldTests
         ClientWorld world = ClientWorldFixture.Create(ClientTestGrids.CreateYard(), Start, 500);
 
         Assert.That(world.LocalEntity, Is.EqualTo(ClientWorldFixture.LocalEntity));
+        Assert.That(world.LocalJob, Is.EqualTo(ClientWorldFixture.LocalJob));
         Assert.That(world.Map.Value, Is.EqualTo("map.training_ground"));
         Assert.That(world.Predictor.Position, Is.EqualTo(Start));
         Assert.That(world.Predictor.StepDistance, Is.EqualTo(0.25f).Within(1e-6f));

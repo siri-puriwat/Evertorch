@@ -205,6 +205,7 @@ public sealed class SessionManager : ITickPhase
                 map.Definition.Id,
                 map.InstanceNumber,
                 player.Id,
+                player.Job,
                 tick,
                 player.Position,
                 player.Facing,

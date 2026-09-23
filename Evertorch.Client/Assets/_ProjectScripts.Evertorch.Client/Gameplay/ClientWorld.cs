@@ -30,6 +30,7 @@ public sealed class ClientWorld
         Map = entered.Map;
         MapInstance = entered.MapInstance;
         LocalEntity = entered.LocalEntity;
+        LocalJob = entered.Job;
         LatestServerTick = entered.ServerTick;
         m_tickSeconds = 1.0 / serverTickRate;
         Predictor = new MovementPredictor(
@@ -49,6 +50,8 @@ public sealed class ClientWorld
     public uint MapInstance { get; }
 
     public EntityId LocalEntity { get; }
+
+    public JobDefinitionId LocalJob { get; }
 
     public MovementPredictor Predictor { get; }
 
