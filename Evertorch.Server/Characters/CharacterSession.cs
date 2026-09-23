@@ -5,17 +5,23 @@ namespace Evertorch.Server
 {
 /// <summary>
 ///     One character in the world, and everything about it that outlives a single connection (Network Protocol §3,
-///     Persistence §7): its entity, its account, its command sequence, and its checkpoint schedule. At most one exists
-///     per character.
+///     Persistence §7): its entity, its account, its inventory, its command sequence, and its checkpoint schedule. At
+///     most one exists per character.
 /// </summary>
 public sealed class CharacterSession
 {
-    public CharacterSession(CharacterId character, AccountId account, PlayerEntity player, MapInstance map)
+    public CharacterSession(
+        CharacterId character,
+        AccountId account,
+        PlayerEntity player,
+        MapInstance map,
+        CharacterInventory inventory)
     {
         Character = character;
         Account = account;
         Player = player;
         Map = map;
+        Inventory = inventory;
     }
 
     public CharacterId Character { get; }
@@ -25,6 +31,8 @@ public sealed class CharacterSession
     public PlayerEntity Player { get; }
 
     public MapInstance Map { get; }
+
+    public CharacterInventory Inventory { get; }
 
     /// <summary>
     ///     The connection controlling the character, or null while none does.

@@ -89,6 +89,11 @@ public readonly struct InboundEvent
         return new InboundEvent(InboundEventKind.CreateCharacter, connection, null, default, default, name: name);
     }
 
+    public static InboundEvent ForInventoryResync(ConnectionId connection)
+    {
+        return new InboundEvent(InboundEventKind.InventoryResync, connection, null, default, default);
+    }
+
     public static InboundEvent ForCommand(InboundEventKind kind, ConnectionId connection, uint commandSequence)
     {
         return new InboundEvent(kind, connection, null, default, default, default, commandSequence);

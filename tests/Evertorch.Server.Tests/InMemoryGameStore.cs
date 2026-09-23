@@ -218,6 +218,24 @@ internal sealed class InMemoryGameStore : IGameStore
         }
     }
 
+    /// <summary>
+    ///     Adds <paramref name="rows" /> stacks of <paramref name="item" /> to character <paramref name="id" /> and sets
+    ///     its inventory revision, as earlier pickups would have left them.
+    /// </summary>
+    public void GiveItems(long id, string item, int rows, int quantity, uint revision)
+    {
+        lock (m_gate)
+        {
+            Row row = m_characters[id];
+            for (int index = 0; index < rows; index++)
+            {
+                row.Items.Add(new StoredItem(++m_lastItem, item, quantity));
+            }
+
+            row.InventoryRevision = revision;
+        }
+    }
+
     public void Disable(string loginNormalized)
     {
         lock (m_gate)

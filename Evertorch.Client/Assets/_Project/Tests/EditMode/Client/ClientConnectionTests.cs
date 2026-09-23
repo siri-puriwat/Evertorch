@@ -332,6 +332,59 @@ public sealed class ClientConnectionTests
     }
 
     [Test]
+    public void InventoryChanged_WithARevisionGap_SendsOneResyncRequest()
+    {
+        var harness = new Harness();
+        harness.EnterWorld();
+        var part = new InventorySnapshot(4, 0, 1, Array.Empty<InventoryEntry>());
+        harness.Deliver(ProtocolChannel.Control, Encode(part.GetEncodedLength(), part.Write));
+        int before = harness.Transport.Sent.Count;
+        var gel = new ItemDefinitionId("item.material.slime_gel");
+        var skipped = new InventoryChanged(5, 6, new[] { new InventoryEntry(11, gel, 1) });
+        var next = new InventoryChanged(6, 7, new[] { new InventoryEntry(11, gel, 2) });
+
+        harness.Deliver(ProtocolChannel.Control, Encode(skipped.GetEncodedLength(), skipped.Write));
+        harness.Deliver(ProtocolChannel.Control, Encode(next.GetEncodedLength(), next.Write));
+
+        FakeClientTransport.SentMessage[] sent = harness.Transport.Sent.Skip(before).ToArray();
+        Assert.That(sent.Length, Is.EqualTo(1));
+        Assert.That(InventoryResyncRequest.TryRead(sent[0].Payload, out _), Is.True);
+        Assert.That(sent[0].Channel, Is.EqualTo(ProtocolChannel.Control));
+        Assert.That(sent[0].Delivery, Is.EqualTo(MessageDelivery.ReliableOrdered));
+        Assert.That(harness.Connection.World!.Inventory.Rows, Is.Empty);
+    }
+
+    [Test]
+    public void InventorySnapshot_InTheWorld_ReachesTheWorldsInventory()
+    {
+        var harness = new Harness();
+        harness.EnterWorld();
+        var part = new InventorySnapshot(
+            4,
+            0,
+            1,
+            new[] { new InventoryEntry(11, new ItemDefinitionId("item.material.slime_gel"), 3) });
+
+        harness.Deliver(ProtocolChannel.Control, Encode(part.GetEncodedLength(), part.Write));
+
+        Assert.That(harness.Connection.World!.Inventory.IsCurrent, Is.True);
+        Assert.That(harness.Connection.World.Inventory.Revision, Is.EqualTo(4u));
+        Assert.That(harness.Connection.World.Inventory.Rows.Single().Quantity, Is.EqualTo(3u));
+    }
+
+    [Test]
+    public void InventorySnapshot_OutsideTheWorld_IsUnexpected()
+    {
+        var harness = new Harness();
+        harness.ConnectAndReceiveHello();
+        var part = new InventorySnapshot(4, 0, 1, Array.Empty<InventoryEntry>());
+
+        harness.Deliver(ProtocolChannel.Control, Encode(part.GetEncodedLength(), part.Write));
+
+        Assert.That(harness.Connection.UnexpectedMessages, Is.EqualTo(1));
+    }
+
+    [Test]
     public void LocalError_NeverContainsTheSessionToken()
     {
         var missingMap = new Harness { HasMap = false };

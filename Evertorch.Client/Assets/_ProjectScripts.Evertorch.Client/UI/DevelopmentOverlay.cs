@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text;
 using Evertorch.Game;
 using Evertorch.Protocol;
 using TMPro;
@@ -462,12 +463,41 @@ public sealed class DevelopmentOverlay : MonoBehaviour
                 text += $"\nLast refused command: {world.LastRejection}";
             }
 
+            text += InventoryText(world.Inventory);
+
             if (m_client.Clock != null && m_client.Clock.SkippedTicks > 0)
             {
                 text += $"\nSkipped client ticks {m_client.Clock.SkippedTicks}";
             }
 
             m_world.text = text;
+        }
+
+        // A placeholder list until the game has an inventory window.
+        private string InventoryText(ClientInventory inventory)
+        {
+            if (!inventory.IsCurrent)
+            {
+                return "\nInventory: waiting for the server";
+            }
+
+            var text = new StringBuilder($"\nInventory (revision {inventory.Revision})");
+            if (inventory.Rows.Count == 0)
+            {
+                text.Append(": empty");
+            }
+
+            foreach (InventoryEntry row in inventory.Rows)
+            {
+                string name = m_client.Content != null
+                    && m_client.Content.TryGetItem(row.Item, out ClientItem? item)
+                    && item != null
+                        ? item.DisplayName
+                        : row.Item.Value;
+                text.Append($"\n  {name} x {row.Quantity}");
+            }
+
+            return text.ToString();
         }
 
         private void RefreshLink()

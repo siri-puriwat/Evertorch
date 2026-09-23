@@ -160,6 +160,14 @@ public sealed class InboundQueue
 
                 decoded = InboundEvent.ForCommand(InboundEventKind.Logout, connection, logout.CommandSequence);
                 return true;
+            case MessageOpcode.InventoryResyncRequest:
+                if (!InventoryResyncRequest.TryRead(payload, out _))
+                {
+                    return false;
+                }
+
+                decoded = InboundEvent.ForInventoryResync(connection);
+                return true;
             case MessageOpcode.CreateCharacter:
                 if (!CreateCharacter.TryRead(payload, out CreateCharacter? create) || create == null)
                 {

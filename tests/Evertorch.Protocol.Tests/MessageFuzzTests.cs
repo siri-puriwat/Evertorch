@@ -119,6 +119,37 @@ public sealed class MessageFuzzTests
             Encode(new EntityRevived(new EntityId(9), new WorldPosition(1f, 2f, 3f), new WorldDirection(0f, 1f), 70)),
             payload => EntityRevived.TryRead(payload, out EntityRevived message) ? Encode(message) : null);
         yield return Case(
+            "InventoryResyncRequest",
+            Encode(new InventoryResyncRequest()),
+            payload => InventoryResyncRequest.TryRead(payload, out InventoryResyncRequest message)
+                ? Encode(message)
+                : null);
+        yield return Case(
+            "InventorySnapshot",
+            Encode(
+                new InventorySnapshot(
+                    7,
+                    1,
+                    3,
+                    new[]
+                    {
+                        new InventoryEntry(11, new ItemDefinitionId("item.material.slime_gel"), 999),
+                        new InventoryEntry(12, new ItemDefinitionId("item.a"), 1)
+                    })),
+            payload => InventorySnapshot.TryRead(payload, out InventorySnapshot? message) ? Encode(message!) : null);
+        yield return Case(
+            "InventoryChanged",
+            Encode(
+                new InventoryChanged(
+                    7,
+                    8,
+                    new[]
+                    {
+                        new InventoryEntry(11, new ItemDefinitionId("item.material.slime_gel"), 0),
+                        new InventoryEntry(12, new ItemDefinitionId("item.a"), 2)
+                    })),
+            payload => InventoryChanged.TryRead(payload, out InventoryChanged? message) ? Encode(message!) : null);
+        yield return Case(
             "CommandRejected",
             Encode(new CommandRejected(0x01020304, CommandRejectionReason.Busy)),
             payload => CommandRejected.TryRead(payload, out CommandRejected message) ? Encode(message) : null);
@@ -283,6 +314,27 @@ public sealed class MessageFuzzTests
     }
 
     private static byte[] Encode(EntitySpawn message)
+    {
+        byte[] buffer = new byte[message.GetEncodedLength()];
+        message.Write(buffer);
+        return buffer;
+    }
+
+    private static byte[] Encode(InventoryResyncRequest message)
+    {
+        byte[] buffer = new byte[InventoryResyncRequest.EncodedLength];
+        message.Write(buffer);
+        return buffer;
+    }
+
+    private static byte[] Encode(InventorySnapshot message)
+    {
+        byte[] buffer = new byte[message.GetEncodedLength()];
+        message.Write(buffer);
+        return buffer;
+    }
+
+    private static byte[] Encode(InventoryChanged message)
     {
         byte[] buffer = new byte[message.GetEncodedLength()];
         message.Write(buffer);

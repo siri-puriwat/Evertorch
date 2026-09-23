@@ -94,6 +94,9 @@ public sealed class LiveServerCombatTests : InputTestFixture
         Assert.That(client.World, Is.Not.Null, $"{client.Status} server output: {server.JoinOutput()}");
         ClientWorld world = client.World!;
         world.ItemDroppedReceived += m_dropped.Add;
+        yield return WaitUntil(() => world.Inventory.IsCurrent, StartTimeoutSeconds);
+        Assert.That(world.Inventory.IsCurrent, Is.True, "the baseline ends with the inventory snapshot");
+        Assert.That(world.Inventory.Rows, Is.Empty, "a new character carries nothing");
 
         int kills = 0;
         int respawns = 0;

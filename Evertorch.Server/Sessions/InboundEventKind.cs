@@ -43,6 +43,11 @@ public enum InboundEventKind
     Logout = 11,
 
     /// <summary>
+    ///     A request for a whole inventory after the client saw a revision it could not apply.
+    /// </summary>
+    InventoryResync = 12,
+
+    /// <summary>
     ///     The peer sent something that is not a well-formed client message on its proper channel.
     /// </summary>
     Malformed = 4

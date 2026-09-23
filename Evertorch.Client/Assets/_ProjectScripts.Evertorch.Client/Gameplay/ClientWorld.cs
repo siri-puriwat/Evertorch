@@ -85,6 +85,8 @@ public sealed class ClientWorld
 
     public ServerTimeEstimator ServerTime { get; } = new();
 
+    public ClientInventory Inventory { get; } = new();
+
     public IReadOnlyDictionary<EntityId, RemoteEntity> Remotes => m_remotes;
 
     public uint LatestServerTick { get; private set; }

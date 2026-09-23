@@ -139,7 +139,7 @@ public sealed class VisibilityTests
     }
 
     [Test]
-    public void WorldEntered_IsFollowedBySpawnsOfVisibleEntities_OnControlChannel()
+    public void WorldEntered_IsFollowedBySpawnsOfVisibleEntitiesThenTheInventory_OnControlChannel()
     {
         TestServer server = CreateServer();
         ConnectionId first = server.EnterWorld(1);
@@ -148,13 +148,16 @@ public sealed class VisibilityTests
         MessageOpcode[] expected =
         {
             MessageOpcode.ServerHello, MessageOpcode.CharacterList, MessageOpcode.CreateCharacterResult,
-            MessageOpcode.CharacterList, MessageOpcode.WorldEntered, MessageOpcode.EntitySpawn
+            MessageOpcode.CharacterList, MessageOpcode.WorldEntered, MessageOpcode.EntitySpawn,
+            MessageOpcode.InventorySnapshot
         };
         Assert.That(server.Transport.ControlOpcodesSentTo(second), Is.EqualTo(expected));
         Assert.That(server.Transport.ControlSentTo(second).Select(message => message.Channel),
             Is.All.EqualTo(ProtocolChannel.Control));
 
-        EntitySpawn.TryRead(server.Transport.ControlSentTo(second).Last().Payload, out EntitySpawn? spawn);
+        EntitySpawn.TryRead(
+            server.Transport.ControlSentTo(second).Last(message => message.Opcode == MessageOpcode.EntitySpawn).Payload,
+            out EntitySpawn? spawn);
         PlayerEntity firstPlayer = server.PlayerOf(first);
         Assert.That(spawn!.Entity, Is.EqualTo(firstPlayer.Id));
         Assert.That(spawn.Kind, Is.EqualTo(EntityKind.Player));

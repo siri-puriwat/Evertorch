@@ -62,6 +62,11 @@ public sealed class ClientSession
     public HashSet<EntityId> KnownEntities { get; } = new();
 
     /// <summary>
+    ///     The client is owed a whole <c>InventorySnapshot</c>: it entered, attached, or asked for a resynchronization.
+    /// </summary>
+    public bool NeedsInventorySnapshot { get; set; }
+
+    /// <summary>
     ///     Commands that were well formed but refused: a target that is missing, hidden, or not targetable.
     /// </summary>
     public long RefusedCommands { get; set; }

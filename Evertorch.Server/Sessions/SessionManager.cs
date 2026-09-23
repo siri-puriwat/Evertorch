@@ -193,6 +193,9 @@ public sealed class SessionManager : ITickPhase
             case InboundEventKind.Target:
                 HandleTarget(session, inboundEvent.Target);
                 break;
+            case InboundEventKind.InventoryResync:
+                HandleInventoryResync(session);
+                break;
             case InboundEventKind.Attack:
             case InboundEventKind.Cancel:
             case InboundEventKind.Respawn:
@@ -505,12 +508,14 @@ public sealed class SessionManager : ITickPhase
     }
 
     // The full baseline starts here: WorldEntered now, then a spawn for everything in view from this tick's visibility
-    // pass, because a new connection knows no entity yet. The movement sequence starts afresh with the connection;
-    // the command sequence belongs to the character and continues (Network Protocol §3, §8).
+    // pass, because a new connection knows no entity yet, then the whole inventory. The movement sequence starts
+    // afresh with the connection; the command sequence belongs to the character and continues (Network Protocol §3,
+    // §8, §9).
     private void EnterAs(ClientSession session, CharacterSession character, uint tick)
     {
         session.Input = new PlayerInputState(m_maxQueuedInputs);
         session.KnownEntities.Clear();
+        session.NeedsInventorySnapshot = true;
         session.State = SessionState.InWorld;
         PlayerEntity player = character.Player;
         MapInstance map = character.Map;
@@ -560,6 +565,19 @@ public sealed class SessionManager : ITickPhase
         }
 
         session.Input.Queue.TryEnqueue(intent);
+    }
+
+    // Answered once per tick however often it is asked, so a client cannot make the server send more than one
+    // inventory per tick.
+    private void HandleInventoryResync(ClientSession session)
+    {
+        if (session.State != SessionState.InWorld)
+        {
+            IgnoredEvents++;
+            return;
+        }
+
+        session.NeedsInventorySnapshot = true;
     }
 
     private void HandleTarget(ClientSession session, EntityId target)

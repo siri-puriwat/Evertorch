@@ -140,6 +140,7 @@ internal sealed class TestServer
             Status,
             new SnapshotPhase(Sessions, sender, Options.Create(world)),
             new VisibilityPhase(Sessions, World, sender, targeting),
+            new InventorySyncPhase(Sessions, sender),
             new MovementSystem(Sessions, World, Options.Create(world), simulation),
             Combat,
             Drops,
@@ -400,6 +401,13 @@ internal sealed class TestServer
         SendEnterWorld(connection, character);
         TickUntil(() => SessionOf(connection).State == SessionState.InWorld);
         return connection;
+    }
+
+    public void SendInventoryResync(ConnectionId connection)
+    {
+        byte[] payload = new byte[InventoryResyncRequest.EncodedLength];
+        new InventoryResyncRequest().Write(payload);
+        Inbound.OnPayload(connection, ProtocolChannel.Control, payload);
     }
 
     public void SendLogout(ConnectionId connection, uint commandSequence)

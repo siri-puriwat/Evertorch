@@ -25,6 +25,7 @@ public static class MessageRouting
             case MessageOpcode.Respawn:
             case MessageOpcode.CreateCharacter:
             case MessageOpcode.Logout:
+            case MessageOpcode.InventoryResyncRequest:
             case MessageOpcode.ServerHello:
             case MessageOpcode.WorldEntered:
             case MessageOpcode.EntitySpawn:
@@ -41,6 +42,8 @@ public static class MessageRouting
             case MessageOpcode.CreateCharacterResult:
             case MessageOpcode.LogoutComplete:
             case MessageOpcode.CommandRejected:
+            case MessageOpcode.InventorySnapshot:
+            case MessageOpcode.InventoryChanged:
                 return true;
             case MessageOpcode.MoveInput:
             case MessageOpcode.StopMovement:

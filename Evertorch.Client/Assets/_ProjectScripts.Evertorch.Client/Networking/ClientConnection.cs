@@ -217,6 +217,28 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
                 }
 
                 break;
+            case MessageOpcode.InventorySnapshot:
+                if (InventorySnapshot.TryRead(payload, out InventorySnapshot? part) && part != null)
+                {
+                    WithWorld(world => ResyncIf(world.Inventory.OnSnapshot(part)));
+                }
+                else
+                {
+                    MalformedMessages++;
+                }
+
+                break;
+            case MessageOpcode.InventoryChanged:
+                if (InventoryChanged.TryRead(payload, out InventoryChanged? change) && change != null)
+                {
+                    WithWorld(world => ResyncIf(world.Inventory.OnChanged(change)));
+                }
+                else
+                {
+                    MalformedMessages++;
+                }
+
+                break;
             case MessageOpcode.DisconnectNotice:
                 OnDisconnectNotice(payload);
                 break;
@@ -600,6 +622,14 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
         else
         {
             MalformedMessages++;
+        }
+    }
+
+    private void ResyncIf(bool isNeeded)
+    {
+        if (isNeeded && State == ClientConnectionState.InWorld)
+        {
+            SendRouted(MessageOpcode.InventoryResyncRequest, new InventoryResyncRequest().Write(m_sendBuffer));
         }
     }
 

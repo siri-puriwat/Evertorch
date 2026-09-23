@@ -67,7 +67,12 @@ public sealed class CharacterLifetime
             return null;
         }
 
-        var character = new CharacterSession(new CharacterId(stored.Id), stored.Account, player!, map!)
+        var character = new CharacterSession(
+            new CharacterId(stored.Id),
+            stored.Account,
+            player!,
+            map!,
+            CharacterInventory.FromStored(stored))
         {
             Connection = owner,
             NextCheckpointTick = tick + m_checkpointIntervalTicks
