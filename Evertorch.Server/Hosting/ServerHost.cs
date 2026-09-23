@@ -48,6 +48,8 @@ public static class ServerHost
         builder.Services.AddSingleton<IValidateOptions<DatabaseOptions>, DatabaseOptionsValidator>();
         builder.Services.AddSingleton<IGameStore>(services =>
             new PostgresGameStore(services.GetRequiredService<IOptions<DatabaseOptions>>().Value.ConnectionString));
+        AddOptions<PersistenceOptions, PersistenceOptionsValidator>(builder, PersistenceOptions.SectionName);
+        builder.Services.AddSingleton<PersistenceWorker>();
 
         // Registered before every other hosted service, so it runs before the simulation starts.
         builder.Services.AddHostedService<DatabaseStartupCheck>();

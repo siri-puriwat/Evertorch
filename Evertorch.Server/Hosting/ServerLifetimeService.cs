@@ -3,6 +3,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace Evertorch.Server
 {
@@ -32,6 +33,8 @@ public sealed class ServerLifetimeService : IHostedService, IDisposable
     private readonly ServerContent m_content;
     private readonly ServerRandom m_random;
     private readonly IServerTransport m_transport;
+    private readonly PersistenceWorker m_persistence;
+    private readonly int m_drainTimeoutMs;
     private readonly FixedStepLoop m_loop;
     private readonly IHostApplicationLifetime m_lifetime;
     private readonly ILogger<ServerLifetimeService> m_logger;
@@ -46,6 +49,8 @@ public sealed class ServerLifetimeService : IHostedService, IDisposable
         WorldSimulation world,
         ServerRandom random,
         IServerTransport transport,
+        PersistenceWorker persistence,
+        IOptions<PersistenceOptions> persistenceOptions,
         FixedStepLoop loop,
         IHostApplicationLifetime lifetime,
         ILogger<ServerLifetimeService> logger)
@@ -54,6 +59,8 @@ public sealed class ServerLifetimeService : IHostedService, IDisposable
         m_content = content;
         m_random = random;
         m_transport = transport;
+        m_persistence = persistence;
+        m_drainTimeoutMs = persistenceOptions.Value.CommandTimeoutMs;
         m_loop = loop;
         m_lifetime = lifetime;
         m_logger = logger;
@@ -88,6 +95,7 @@ public sealed class ServerLifetimeService : IHostedService, IDisposable
             m_content.Maps.Count,
             null);
         LogRandomSeed(m_logger, m_random.Seed, m_random.IsConfigured ? "configured" : "drawn at startup", null);
+        m_persistence.Start();
 
         // A dedicated foreground thread keeps tick timing away from thread-pool starvation and keeps the process
         // alive until the current tick has finished.
@@ -105,7 +113,8 @@ public sealed class ServerLifetimeService : IHostedService, IDisposable
 
     public async Task StopAsync(CancellationToken cancellationToken)
     {
-        // Stop admitting, let the tick in progress finish, then tell the remaining clients why they are dropped.
+        // Stop admitting, let the tick in progress finish, give the database writer a bounded time to finish its
+        // queue (System Architecture §13), then tell the remaining clients why they are dropped.
         m_transport.CloseAdmission();
         m_stop.Cancel();
 
@@ -117,6 +126,7 @@ public sealed class ServerLifetimeService : IHostedService, IDisposable
                 .ConfigureAwait(false);
         }
 
+        m_persistence.Stop(m_drainTimeoutMs);
         m_transport.Stop();
     }
 

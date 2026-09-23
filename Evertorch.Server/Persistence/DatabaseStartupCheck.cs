@@ -1,10 +1,7 @@
-using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using Evertorch.Persistence;
 using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
 
 namespace Evertorch.Server
 {
@@ -15,57 +12,24 @@ namespace Evertorch.Server
 /// </summary>
 public sealed class DatabaseStartupCheck : IHostedService
 {
-    private const int TimeoutMs = 5000;
+    private readonly PersistenceWorker m_persistence;
 
-    private static readonly Action<ILogger, int, string, Exception?> LogMigrationsPending =
-        LoggerMessage.Define<int, string>(
-            LogLevel.Critical,
-            new EventId(4001, "MigrationsPending"),
-            "The database has {Count} pending migration(s): {Migrations}. Apply them with scripts/db-migrate.ps1.");
-
-    private static readonly Action<ILogger, Exception?> LogDatabaseUnavailable =
-        LoggerMessage.Define(
-            LogLevel.Warning,
-            new EventId(4002, "DatabaseUnavailable"),
-            "The database cannot be reached; the server starts without it.");
-
-    private static readonly Action<ILogger, Exception?> LogDatabaseReady =
-        LoggerMessage.Define(
-            LogLevel.Information,
-            new EventId(4003, "DatabaseReady"),
-            "The database is reachable and its schema is current.");
-
-    private readonly IGameStore m_store;
-    private readonly ILogger<DatabaseStartupCheck> m_logger;
-
-    public DatabaseStartupCheck(IGameStore store, ILogger<DatabaseStartupCheck> logger)
+    public DatabaseStartupCheck(PersistenceWorker persistence)
     {
-        m_store = store;
-        m_logger = logger;
+        m_persistence = persistence;
     }
 
-    public async Task StartAsync(CancellationToken cancellationToken)
+    // The probe logs what it finds. Unreachable leaves the writer probing, and a pending migration it finds later
+    // keeps the server unready (Persistence §2).
+    public Task StartAsync(CancellationToken cancellationToken)
     {
-        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeout.CancelAfter(TimeoutMs);
-        IReadOnlyList<string> pending;
-        try
-        {
-            pending = await m_store.GetPendingMigrationsAsync(timeout.Token).ConfigureAwait(false);
-        }
-        catch (StoreUnavailableException exception)
-        {
-            LogDatabaseUnavailable(m_logger, exception.InnerException);
-            return;
-        }
-
+        IReadOnlyList<string> pending = m_persistence.Probe();
         if (pending.Count > 0)
         {
-            LogMigrationsPending(m_logger, pending.Count, string.Join(", ", pending), null);
             throw new PendingMigrationsException(pending);
         }
 
-        LogDatabaseReady(m_logger, null);
+        return Task.CompletedTask;
     }
 
     public Task StopAsync(CancellationToken cancellationToken)

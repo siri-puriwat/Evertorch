@@ -40,6 +40,7 @@ public sealed class SessionManager : ITickPhase
             "Handling input from connection {Connection} failed; the connection was closed.");
 
     private readonly InboundQueue m_inbound;
+    private readonly PersistenceWorker m_persistence;
     private readonly SessionRegistry m_sessions;
     private readonly HandshakeValidator m_handshake;
     private readonly WorldSimulation m_world;
@@ -56,6 +57,7 @@ public sealed class SessionManager : ITickPhase
 
     public SessionManager(
         InboundQueue inbound,
+        PersistenceWorker persistence,
         SessionRegistry sessions,
         HandshakeValidator handshake,
         WorldSimulation world,
@@ -71,6 +73,7 @@ public sealed class SessionManager : ITickPhase
     {
         m_maxQueuedInputs = worldOptions.Value.MaxQueuedInputs;
         m_inbound = inbound;
+        m_persistence = persistence;
         m_sessions = sessions;
         m_handshake = handshake;
         m_world = world;
@@ -96,6 +99,24 @@ public sealed class SessionManager : ITickPhase
 
     public void Execute(in TickContext context)
     {
+        // Database results first, at a fixed point in the tick, so this tick's commands already see them
+        // (Persistence §9).
+        while (m_persistence.TryDequeueCompletion(out PersistenceJob job))
+        {
+            try
+            {
+                job.Complete();
+            }
+            catch (Exception exception)
+            {
+                LogSessionFaulted(m_logger, job.Connection.Value, exception);
+                if (m_sessions.TryGet(job.Connection, out ClientSession? faulted) && faulted != null)
+                {
+                    Close(faulted, DisconnectReason.InternalError);
+                }
+            }
+        }
+
         while (m_inbound.TryDequeue(out InboundEvent inboundEvent))
         {
             try

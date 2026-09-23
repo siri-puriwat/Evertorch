@@ -44,7 +44,8 @@ internal sealed class TestServer
         IRandomSource? combatRandom = null,
         bool withMonsterAi = true,
         IRandomSource? dropRandom = null,
-        int itemDropLifetimeMs = 60000)
+        int itemDropLifetimeMs = 60000,
+        PersistenceOptions? persistence = null)
     {
         Content = withMonsters ? RepositoryContent.Value : RepositoryContentWithoutMonsters.Value;
         var network = new NetworkOptions
@@ -81,12 +82,19 @@ internal sealed class TestServer
             Random);
         Log = new CapturingLogger<SessionManager>();
         Time = new FakeTimeProvider();
+        Store = new InMemoryGameStore();
+        PersistenceLog = new CapturingLogger<PersistenceWorker>();
+        Persistence = new PersistenceWorker(
+            Store,
+            Options.Create(persistence ?? new PersistenceOptions { RetryBaseDelayMs = 1 }),
+            PersistenceLog);
 
         var sender = new MessageSender(Transport);
         var targeting = new Targeting(sender);
         var handshake = new HandshakeValidator(compatibility, Options.Create(authentication), Content);
         SessionManager = new SessionManager(
             Inbound,
+            Persistence,
             Sessions,
             handshake,
             World,
@@ -156,6 +164,21 @@ internal sealed class TestServer
 
     public CapturingLogger<SessionManager> Log { get; }
 
+    public InMemoryGameStore Store { get; }
+
+    /// <summary>
+    ///     The real writer, run on the test thread: <see cref="Tick" /> first lets it finish every job queued so far,
+    ///     so a job queued in one tick completes at the start of the next.
+    /// </summary>
+    public PersistenceWorker Persistence { get; }
+
+    public CapturingLogger<PersistenceWorker> PersistenceLog { get; }
+
+    /// <summary>
+    ///     When false, <see cref="Tick" /> leaves queued database work alone, as a slow database would.
+    /// </summary>
+    public bool RunsPersistence { get; set; } = true;
+
     public FakeTimeProvider Time { get; }
 
     public uint RequiredClientContentVersion { get; }
@@ -167,6 +190,11 @@ internal sealed class TestServer
         for (int index = 0; index < count; index++)
         {
             m_tick++;
+            if (RunsPersistence)
+            {
+                Persistence.RunUntilIdle();
+            }
+
             m_pipeline.Execute(new TickContext(m_tick, 1f / TickRate));
         }
 
