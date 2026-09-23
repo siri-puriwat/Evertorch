@@ -11,6 +11,9 @@ public enum EntityKind : byte
     Player = 1,
 
     /// <summary>Carries a monster definition ID.</summary>
-    Monster = 2
+    Monster = 2,
+
+    /// <summary>An item lying on the ground; carries an item definition ID.</summary>
+    ItemDrop = 3
 }
 }

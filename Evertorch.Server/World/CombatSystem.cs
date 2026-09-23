@@ -21,6 +21,7 @@ public sealed class CombatSystem : ITickPhase
     private readonly SessionRegistry m_sessions;
     private readonly MessageSender m_sender;
     private readonly Targeting m_targeting;
+    private readonly ItemDropSystem m_drops;
     private readonly ICombatRules m_rules;
     private readonly IRandomSource m_random;
     private readonly int m_tickRate;
@@ -33,6 +34,7 @@ public sealed class CombatSystem : ITickPhase
         SessionRegistry sessions,
         MessageSender sender,
         Targeting targeting,
+        ItemDropSystem drops,
         ICombatRules rules,
         IRandomSource random,
         IOptions<WorldOptions> worldOptions,
@@ -42,6 +44,7 @@ public sealed class CombatSystem : ITickPhase
         m_sessions = sessions;
         m_sender = sender;
         m_targeting = targeting;
+        m_drops = drops;
         m_rules = rules;
         m_random = random;
         m_tickRate = simulation.Value.TickRate;
@@ -104,6 +107,11 @@ public sealed class CombatSystem : ITickPhase
                 EntityId known = source != null && session.Knows(source.Id) ? source.Id : default;
                 m_sender.Send(session.Connection, new EntityDied(entity.Id, known, tick));
             }
+        }
+
+        if (entity is MonsterEntity monster)
+        {
+            m_drops.DropLoot(map, monster, tick);
         }
     }
 

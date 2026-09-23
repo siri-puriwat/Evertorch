@@ -157,6 +157,33 @@ public sealed class CombatEventWorldTests
     }
 
     [Test]
+    public void ItemDropped_ForAKnownDrop_IsAnnouncedAndForAnythingElseCounted()
+    {
+        ClientWorld world = CreateWorld();
+        var drop = new EntityId(400);
+        var announced = new List<ItemDropped>();
+        world.ItemDroppedReceived += announced.Add;
+        world.OnSpawn(
+            new EntitySpawn(
+                drop,
+                EntityKind.ItemDrop,
+                "item.material.slime_gel",
+                ClientTestGrids.Center(4, 8),
+                new WorldDirection(0f, 1f),
+                EntityStateFlags.None,
+                0));
+
+        world.OnItemDropped(new ItemDropped(drop, "item.material.slime_gel", 2, ClientTestGrids.Center(4, 8)));
+        world.OnItemDropped(new ItemDropped(Slime, "item.material.slime_gel", 1, ClientTestGrids.Center(4, 8)));
+        world.OnItemDropped(new ItemDropped(new EntityId(999), "item.material.slime_gel", 1, default));
+
+        Assert.That(announced.Count, Is.EqualTo(1));
+        Assert.That(announced[0].Amount, Is.EqualTo(2u));
+        Assert.That(world.UnknownEntityEvents, Is.EqualTo(2));
+        Assert.That(world.Remotes[drop].Kind, Is.EqualTo(EntityKind.ItemDrop));
+    }
+
+    [Test]
     public void Events_AboutEntitiesWithoutASpawn_AreCountedAndIgnored()
     {
         ClientWorld world = CreateWorld();

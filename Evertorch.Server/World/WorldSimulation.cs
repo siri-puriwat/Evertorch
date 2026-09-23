@@ -115,6 +115,19 @@ public sealed class WorldSimulation
         return monster;
     }
 
+    public ItemDropEntity SpawnItemDrop(
+        MapInstance map,
+        ItemDefinitionId item,
+        uint amount,
+        WorldPosition position,
+        uint tick,
+        long expiresAtMs)
+    {
+        var drop = new ItemDropEntity(NextEntityId(), item, amount, position, tick, expiresAtMs);
+        map.Add(drop);
+        return drop;
+    }
+
     private EntityId NextEntityId()
     {
         m_lastEntityId++;

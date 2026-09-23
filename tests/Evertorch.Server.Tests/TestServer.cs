@@ -42,7 +42,9 @@ internal sealed class TestServer
         bool withMonsters = false,
         ulong randomSeed = 1,
         IRandomSource? combatRandom = null,
-        bool withMonsterAi = true)
+        bool withMonsterAi = true,
+        IRandomSource? dropRandom = null,
+        int itemDropLifetimeMs = 60000)
     {
         Content = withMonsters ? RepositoryContent.Value : RepositoryContentWithoutMonsters.Value;
         var network = new NetworkOptions
@@ -57,7 +59,8 @@ internal sealed class TestServer
             InputHoldTimeoutMs = inputHoldTimeoutMs,
             MaxQueuedInputs = maxQueuedInputs,
             SnapshotIntervalTicks = snapshotIntervalTicks,
-            RandomSeed = randomSeed
+            RandomSeed = randomSeed,
+            ItemDropLifetimeMs = itemDropLifetimeMs
         };
         var authentication = new DevelopmentAuthenticationOptions
         {
@@ -96,11 +99,13 @@ internal sealed class TestServer
             compatibility,
             Options.Create(world),
             Log);
+        Drops = new ItemDropSystem(World, dropRandom ?? Random, Options.Create(world), simulation);
         Combat = new CombatSystem(
             World,
             Sessions,
             sender,
             targeting,
+            Drops,
             new RenewalCombatRules(),
             combatRandom ?? Random,
             Options.Create(world),
@@ -114,6 +119,7 @@ internal sealed class TestServer
             new VisibilityPhase(Sessions, World, sender, targeting),
             new MovementSystem(Sessions, World, Options.Create(world), simulation),
             Combat,
+            Drops,
             SessionManager,
             new RecordingPhase(TickPhase.ApplyCommands, "test", new List<string>(), _ => RunAfterCommands())
         };
@@ -131,6 +137,8 @@ internal sealed class TestServer
     public ServerRandom Random { get; }
 
     public CombatSystem Combat { get; }
+
+    public ItemDropSystem Drops { get; }
 
     public InMemoryServerTransport Transport { get; }
 

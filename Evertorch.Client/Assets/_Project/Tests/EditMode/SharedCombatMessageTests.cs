@@ -93,6 +93,31 @@ public sealed class SharedCombatMessageTests
     }
 
     [Test]
+    public void ItemDropped_WriteAndRead_MatchGoldenBytes()
+    {
+        byte[] golden =
+        {
+            0x0D, 0x80,
+            0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x17, 0x00,
+            0x69, 0x74, 0x65, 0x6D, 0x2E, 0x6D, 0x61, 0x74, 0x65, 0x72, 0x69, 0x61,
+            0x6C, 0x2E, 0x73, 0x6C, 0x69, 0x6D, 0x65, 0x5F, 0x67, 0x65, 0x6C,
+            0x02, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x48, 0x41, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x38, 0x41,
+        };
+        var message = new ItemDropped(new EntityId(7), "item.material.slime_gel", 2, new WorldPosition(12.5f, 0f, 11.5f));
+        byte[] written = new byte[message.GetEncodedLength()];
+        message.Write(written);
+
+        bool isRead = ItemDropped.TryRead(golden, out ItemDropped? read);
+
+        Assert.That(written, Is.EqualTo(golden));
+        Assert.That(isRead, Is.True);
+        Assert.That(read!.Amount, Is.EqualTo(2u));
+        Assert.That(ProtocolConstants.ProtocolVersion, Is.EqualTo(7));
+    }
+
+    [Test]
     public void AttackEntity_WriteAndRead_MatchGoldenBytes()
     {
         byte[] buffer = new byte[AttackEntity.EncodedLength];

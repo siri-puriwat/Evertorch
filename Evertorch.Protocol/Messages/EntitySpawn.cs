@@ -125,6 +125,8 @@ public sealed class EntitySpawn
                 return JobDefinitionId.TryCreate(definitionId, out JobDefinitionId _);
             case EntityKind.Monster:
                 return MonsterDefinitionId.TryCreate(definitionId, out MonsterDefinitionId _);
+            case EntityKind.ItemDrop:
+                return ItemDefinitionId.TryCreate(definitionId, out ItemDefinitionId _);
             default:
                 return false;
         }

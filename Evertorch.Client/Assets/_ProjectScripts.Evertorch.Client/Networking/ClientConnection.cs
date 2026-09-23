@@ -173,6 +173,17 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
                 }
 
                 break;
+            case MessageOpcode.ItemDropped:
+                if (ItemDropped.TryRead(payload, out ItemDropped? dropped) && dropped != null)
+                {
+                    WithWorld(world => world.OnItemDropped(dropped));
+                }
+                else
+                {
+                    MalformedMessages++;
+                }
+
+                break;
             case MessageOpcode.DisconnectNotice:
                 OnDisconnectNotice(payload);
                 break;

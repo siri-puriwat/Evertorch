@@ -28,6 +28,12 @@ public static class EntityViewKeys
                 && content.TryGetMonster(id, out ClientMonster? monster)
                 && monster != null:
                 return monster.PrefabKey;
+            case EntityKind.ItemDrop
+                when content != null
+                && ItemDefinitionId.TryCreate(definitionId, out ItemDefinitionId itemId)
+                && content.TryGetItem(itemId, out ClientItem? item)
+                && item != null:
+                return item.ModelKey;
             default:
                 return string.Empty;
         }

@@ -11,6 +11,7 @@ public sealed class MapInstance
     private readonly Dictionary<EntityId, WorldEntity> m_entities = new();
     private readonly Dictionary<EntityId, PlayerEntity> m_players = new();
     private readonly Dictionary<EntityId, MonsterEntity> m_monsters = new();
+    private readonly Dictionary<EntityId, ItemDropEntity> m_itemDrops = new();
 
     public MapInstance(MapDefinition definition, uint instanceNumber, InterestGrid interest)
     {
@@ -31,6 +32,8 @@ public sealed class MapInstance
 
     public IReadOnlyCollection<MonsterEntity> Monsters => m_monsters.Values;
 
+    public IReadOnlyCollection<ItemDropEntity> ItemDrops => m_itemDrops.Values;
+
     public void Add(WorldEntity entity)
     {
         m_entities.Add(entity.Id, entity);
@@ -42,6 +45,9 @@ public sealed class MapInstance
             case MonsterEntity monster:
                 m_monsters.Add(monster.Id, monster);
                 break;
+            case ItemDropEntity drop:
+                m_itemDrops.Add(drop.Id, drop);
+                break;
         }
 
         Interest.Update(entity);
@@ -52,6 +58,7 @@ public sealed class MapInstance
         Interest.Remove(entity);
         m_players.Remove(entity.Id);
         m_monsters.Remove(entity.Id);
+        m_itemDrops.Remove(entity.Id);
         return m_entities.Remove(entity.Id);
     }
 

@@ -57,7 +57,7 @@ public sealed class EntitySpawnTests
         0);
 
     [TestCase(0)]
-    [TestCase(3)]
+    [TestCase(4)]
     [TestCase(255)]
     public void TryRead_WhenKindIsUnknown_ReturnsFalse(byte kind)
     {
@@ -70,6 +70,29 @@ public sealed class EntitySpawnTests
     public void TryRead_WhenFlagsContainUnknownBits_ReturnsFalse(byte low, byte high)
     {
         Assert.That(EntitySpawn.TryRead(WireMatrix.With(GoldenBytes, FlagsOffset, low, high), out _), Is.False);
+    }
+
+    [Test]
+    public void ItemDrop_WithAnItemId_RoundTripsAndRefusesOtherIdsAndHealth()
+    {
+        var drop = new EntitySpawn(
+            new EntityId(11),
+            EntityKind.ItemDrop,
+            "item.material.slime_gel",
+            new WorldPosition(12.5f, 0f, 11.5f),
+            new WorldDirection(0f, 1f),
+            EntityStateFlags.None,
+            0);
+        byte[] bytes = new byte[drop.GetEncodedLength()];
+        drop.Write(bytes);
+        byte[] withHealth = WireMatrix.With(bytes, bytes.Length - 2, 0x01, 0x00);
+        byte[] monsterAsDrop = WireMatrix.With(WireMatrix.With(MonsterBytes, KindOffset, 0x03), 44, 0x00, 0x00);
+
+        Assert.That(EntitySpawn.TryRead(bytes, out EntitySpawn? read), Is.True);
+        Assert.That(read!.Kind, Is.EqualTo(EntityKind.ItemDrop));
+        Assert.That(read.DefinitionId, Is.EqualTo("item.material.slime_gel"));
+        Assert.That(EntitySpawn.TryRead(withHealth, out _), Is.False);
+        Assert.That(EntitySpawn.TryRead(monsterAsDrop, out _), Is.False);
     }
 
     [Test]

@@ -44,12 +44,12 @@ public sealed class VisibilityPhase : ITickPhase
         {
             if (session.State == SessionState.InWorld && session.Player != null && session.Map != null)
             {
-                Update(session, session.Player, session.Map);
+                Update(session, session.Player, session.Map, context.Tick);
             }
         }
     }
 
-    private void Update(ClientSession session, PlayerEntity observer, MapInstance map)
+    private void Update(ClientSession session, PlayerEntity observer, MapInstance map, uint tick)
     {
         m_visible.Clear();
         m_visibleIds.Clear();
@@ -70,6 +70,13 @@ public sealed class VisibilityPhase : ITickPhase
                         entity.Facing,
                         entity.StateFlags,
                         entity.SharedHealthPermille));
+                if (entity is ItemDropEntity drop && drop.DroppedTick == tick)
+                {
+                    // Only a client that sees the drop land is told what fell; one that walks up later sees the item.
+                    m_sender.Send(
+                        session.Connection,
+                        new ItemDropped(drop.Id, drop.DefinitionId, drop.Amount, drop.Position));
+                }
             }
         }
 

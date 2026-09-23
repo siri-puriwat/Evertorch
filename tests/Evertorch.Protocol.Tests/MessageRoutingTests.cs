@@ -31,6 +31,7 @@ public sealed class MessageRoutingTests
     [TestCase(MessageOpcode.AttackStarted)]
     [TestCase(MessageOpcode.Damage)]
     [TestCase(MessageOpcode.EntityDied)]
+    [TestCase(MessageOpcode.ItemDropped)]
     [TestCase(MessageOpcode.CharacterHealth)]
     [TestCase(MessageOpcode.EntityRevived)]
     [TestCase(MessageOpcode.DisconnectNotice)]
@@ -83,6 +84,7 @@ public sealed class MessageRoutingTests
     [TestCase(MessageOpcode.TargetChanged, false)]
     [TestCase(MessageOpcode.AttackStarted, false)]
     [TestCase(MessageOpcode.EntityRevived, false)]
+    [TestCase(MessageOpcode.ItemDropped, false)]
     [TestCase(MessageOpcode.DisconnectNotice, false)]
     public void IsClientToServer_ForOpcode_FollowsTheDirectionRange(MessageOpcode opcode, bool expected)
     {
@@ -111,7 +113,8 @@ public sealed class MessageRoutingTests
             "StopMovement=0x0004", "TargetEntity=0x0005", "AttackEntity=0x0006", "CancelAction=0x0007",
             "Respawn=0x000C", "ServerHello=0x8001", "WorldEntered=0x8003",
             "EntitySpawn=0x8004", "EntityDespawn=0x8005", "EntitySnapshot=0x8006", "TargetChanged=0x8007",
-            "AttackStarted=0x8008", "Damage=0x8009", "EntityDied=0x800A", "DisconnectNotice=0x8013",
+            "AttackStarted=0x8008", "Damage=0x8009", "EntityDied=0x800A", "ItemDropped=0x800D",
+            "DisconnectNotice=0x8013",
             "CharacterHealth=0x8014", "EntityRevived=0x8015"
         };
 
@@ -133,9 +136,9 @@ public sealed class MessageRoutingTests
     }
 
     [Test]
-    public void ProtocolVersion_IsSix()
+    public void ProtocolVersion_IsSeven()
     {
-        Assert.That(ProtocolConstants.ProtocolVersion, Is.EqualTo(6));
+        Assert.That(ProtocolConstants.ProtocolVersion, Is.EqualTo(7));
     }
 
     [Test]

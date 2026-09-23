@@ -60,6 +60,11 @@ public sealed class WorldOptions
     ///     How long a dead monster's body stays before it despawns (monster AI research note).
     /// </summary>
     public int MonsterCorpseMs { get; set; } = 1000;
+
+    /// <summary>
+    ///     How long a monster's drop lies on the ground before it despawns (drops research note).
+    /// </summary>
+    public int ItemDropLifetimeMs { get; set; } = 60000;
 }
 
 internal sealed class WorldOptionsValidator : IValidateOptions<WorldOptions>
@@ -89,6 +94,7 @@ internal sealed class WorldOptionsValidator : IValidateOptions<WorldOptions>
 
         AddRangeFailure(failures, "InputHoldTimeoutMs", options.InputHoldTimeoutMs, 0, 5000);
         AddRangeFailure(failures, "MonsterCorpseMs", options.MonsterCorpseMs, 0, 60000);
+        AddRangeFailure(failures, "ItemDropLifetimeMs", options.ItemDropLifetimeMs, 1000, 3600000);
         AddRangeFailure(failures, "MaxQueuedInputs", options.MaxQueuedInputs, 1, 64);
         AddRangeFailure(failures, "MaxClientTickDrift", options.MaxClientTickDrift, 1, 100000);
         AddRangeFailure(failures, "SnapshotIntervalTicks", options.SnapshotIntervalTicks, 1, 120);

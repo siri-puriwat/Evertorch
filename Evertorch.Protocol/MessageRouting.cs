@@ -31,6 +31,7 @@ public static class MessageRouting
             case MessageOpcode.AttackStarted:
             case MessageOpcode.Damage:
             case MessageOpcode.EntityDied:
+            case MessageOpcode.ItemDropped:
             case MessageOpcode.CharacterHealth:
             case MessageOpcode.EntityRevived:
             case MessageOpcode.DisconnectNotice:

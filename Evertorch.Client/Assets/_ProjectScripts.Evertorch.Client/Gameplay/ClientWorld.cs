@@ -122,6 +122,8 @@ public sealed class ClientWorld
 
     public event Action<EntityRevived>? EntityRevivedReceived;
 
+    public event Action<ItemDropped>? ItemDroppedReceived;
+
     public void OnSpawn(EntitySpawn spawn)
     {
         if (spawn == null)
@@ -241,6 +243,25 @@ public sealed class ClientWorld
 
         m_revivalTicks[revived.Entity] = revived.ServerTick;
         EntityRevivedReceived?.Invoke(revived);
+    }
+
+    /// <summary>
+    ///     A drop this client saw land; its spawn came just before. Clients that meet the drop later never hear this.
+    /// </summary>
+    public void OnItemDropped(ItemDropped dropped)
+    {
+        if (dropped == null)
+        {
+            throw new ArgumentNullException(nameof(dropped));
+        }
+
+        if (!m_remotes.TryGetValue(dropped.Entity, out RemoteEntity? remote) || remote.Kind != EntityKind.ItemDrop)
+        {
+            UnknownEntityEvents++;
+            return;
+        }
+
+        ItemDroppedReceived?.Invoke(dropped);
     }
 
     public void OnCharacterHealth(CharacterHealth health)

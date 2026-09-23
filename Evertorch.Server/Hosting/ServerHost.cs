@@ -72,6 +72,8 @@ public static class ServerHost
         builder.Services.AddSingleton<CombatSystem>();
         builder.Services.AddSingleton<ITickPhase>(services => services.GetRequiredService<CombatSystem>());
         builder.Services.AddSingleton<ITickPhase, MonsterAiSystem>();
+        builder.Services.AddSingleton<ItemDropSystem>();
+        builder.Services.AddSingleton<ITickPhase>(services => services.GetRequiredService<ItemDropSystem>());
         builder.Services.AddSingleton<ITickPhase, VisibilityPhase>();
         builder.Services.AddSingleton<ITickPhase, SnapshotPhase>();
         builder.Services.AddSingleton<StatusPublisher>();

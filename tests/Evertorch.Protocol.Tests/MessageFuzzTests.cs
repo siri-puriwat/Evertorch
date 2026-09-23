@@ -118,6 +118,10 @@ public sealed class MessageFuzzTests
             Encode(new EntityRevived(new EntityId(9), new WorldPosition(1f, 2f, 3f), new WorldDirection(0f, 1f), 70)),
             payload => EntityRevived.TryRead(payload, out EntityRevived message) ? Encode(message) : null);
         yield return Case(
+            "ItemDropped",
+            Encode(new ItemDropped(new EntityId(11), "item.material.slime_gel", 2, new WorldPosition(1f, 2f, 3f))),
+            payload => ItemDropped.TryRead(payload, out ItemDropped? message) ? Encode(message!) : null);
+        yield return Case(
             "TargetChanged",
             Encode(new TargetChanged(new EntityId(9), new EntityId(10))),
             payload => TargetChanged.TryRead(payload, out TargetChanged message) ? Encode(message) : null);
@@ -245,6 +249,13 @@ public sealed class MessageFuzzTests
     }
 
     private static byte[] Encode(EntitySpawn message)
+    {
+        byte[] buffer = new byte[message.GetEncodedLength()];
+        message.Write(buffer);
+        return buffer;
+    }
+
+    private static byte[] Encode(ItemDropped message)
     {
         byte[] buffer = new byte[message.GetEncodedLength()];
         message.Write(buffer);

@@ -24,6 +24,7 @@ public enum MessageOpcode : ushort
     AttackStarted = 0x8008,
     Damage = 0x8009,
     EntityDied = 0x800A,
+    ItemDropped = 0x800D,
     DisconnectNotice = 0x8013,
     CharacterHealth = 0x8014,
     EntityRevived = 0x8015
