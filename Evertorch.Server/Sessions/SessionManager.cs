@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Evertorch.Game;
+using Evertorch.Persistence;
 using Evertorch.Protocol;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -33,6 +34,12 @@ public sealed class SessionManager : ITickPhase
             new EventId(2003, "SessionClosed"),
             "Connection {Connection} closed.");
 
+    private static readonly Action<ILogger, long, long, Exception?> LogAuthenticated =
+        LoggerMessage.Define<long, long>(
+            LogLevel.Information,
+            new EventId(2005, "SessionAuthenticated"),
+            "Connection {Connection} signed in to account {Account}.");
+
     private static readonly Action<ILogger, long, Exception?> LogSessionFaulted =
         LoggerMessage.Define<long>(
             LogLevel.Error,
@@ -43,6 +50,7 @@ public sealed class SessionManager : ITickPhase
     private readonly PersistenceWorker m_persistence;
     private readonly SessionRegistry m_sessions;
     private readonly HandshakeValidator m_handshake;
+    private readonly ISessionTokenValidator m_tokens;
     private readonly WorldSimulation m_world;
     private readonly MessageSender m_sender;
     private readonly Targeting m_targeting;
@@ -60,6 +68,7 @@ public sealed class SessionManager : ITickPhase
         PersistenceWorker persistence,
         SessionRegistry sessions,
         HandshakeValidator handshake,
+        ISessionTokenValidator tokens,
         WorldSimulation world,
         MessageSender sender,
         Targeting targeting,
@@ -76,6 +85,7 @@ public sealed class SessionManager : ITickPhase
         m_persistence = persistence;
         m_sessions = sessions;
         m_handshake = handshake;
+        m_tokens = tokens;
         m_world = world;
         m_sender = sender;
         m_targeting = targeting;
@@ -195,9 +205,50 @@ public sealed class SessionManager : ITickPhase
             return;
         }
 
+        // Admission needs the database (Persistence §9): without it the connection is refused as not ready.
+        string token = hello.SessionToken;
+        ConnectionId connection = session.Connection;
+        var authentication = new PersistenceJob<AccountId?>(
+            "authenticate",
+            connection,
+            0,
+            (store, cancellation) => m_tokens.ValidateAsync(token, store, cancellation),
+            (outcome, account) => CompleteAuthentication(connection, outcome, account));
+        if (!m_persistence.TryEnqueue(authentication))
+        {
+            LogHandshakeRejected(m_logger, connection.Value, DisconnectReason.ServerNotReady, null);
+            Close(session, DisconnectReason.ServerNotReady);
+            return;
+        }
+
+        session.State = SessionState.Authenticating;
+    }
+
+    private void CompleteAuthentication(ConnectionId connection, PersistenceOutcome outcome, AccountId? account)
+    {
+        // Connection numbers are never reused, so a session found here is the one that asked.
+        if (!m_sessions.TryGet(connection, out ClientSession? session)
+            || session == null
+            || session.State != SessionState.Authenticating)
+        {
+            return;
+        }
+
+        DisconnectReason refusal = outcome != PersistenceOutcome.Succeeded ? DisconnectReason.ServerNotReady
+            : account == null ? DisconnectReason.AuthenticationFailed
+            : DisconnectReason.None;
+        if (refusal != DisconnectReason.None)
+        {
+            LogHandshakeRejected(m_logger, connection.Value, refusal, null);
+            Close(session, refusal);
+            return;
+        }
+
+        session.Account = account;
         session.State = SessionState.Authenticated;
+        LogAuthenticated(m_logger, connection.Value, account!.Value.Value, null);
         m_sender.Send(
-            session.Connection,
+            connection,
             new ServerHello(
                 ProtocolConstants.ProtocolVersion,
                 m_serverBuildVersion,

@@ -15,7 +15,7 @@ public sealed class WorldEntryTests
     {
         var server = new TestServer();
         ConnectionId connection = server.Connect();
-        server.SendHello(connection);
+        server.SignIn(connection);
         server.SendEnterWorld(connection, character);
 
         server.Tick();

@@ -92,12 +92,13 @@ public sealed class TelemetryTests
     {
         var server = new TestServer();
         server.EnterWorld(7);
+        server.TickUntilPublished();
         var output = new StringWriter();
 
         CreateConsole(server).Execute("status", output);
 
         string text = output.ToString();
-        Assert.That(text, Does.Contain("tick 1 at 20 Hz"));
+        Assert.That(text, Does.Contain($"tick {server.Status.Current.Tick} at 20 Hz"));
         Assert.That(text, Does.Contain("sessions connected 1, in world 1"));
         Assert.That(text, Does.Contain("network bytes in 1000, out 2000"));
         Assert.That(text, Does.Contain("map map.training_ground: 1 players"));
@@ -178,6 +179,7 @@ public sealed class TelemetryTests
     {
         var server = new TestServer();
         ConnectionId connection = server.EnterWorld(7);
+        server.TickUntilPublished();
         ServerStatus published = server.Status.Current;
         WorldPosition publishedPosition = published.Players.Single().Position;
 

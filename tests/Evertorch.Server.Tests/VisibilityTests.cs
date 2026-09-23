@@ -18,7 +18,7 @@ public sealed class VisibilityTests
     private static ConnectionId Enter(TestServer server, long character, float x, float z)
     {
         ConnectionId connection = server.Connect();
-        server.SendHello(connection);
+        server.SignIn(connection, $"{TestServer.DevelopmentToken}{character}");
         server.SendEnterWorld(connection, character);
 
         // Moved off the spawn point before the first visibility pass, so nobody ever sees it there.

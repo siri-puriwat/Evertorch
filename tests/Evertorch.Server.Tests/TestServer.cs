@@ -91,12 +91,14 @@ internal sealed class TestServer
 
         var sender = new MessageSender(Transport);
         var targeting = new Targeting(sender);
-        var handshake = new HandshakeValidator(compatibility, Options.Create(authentication), Content);
+        var tokens = new DevelopmentTokenValidator(Options.Create(authentication), Time);
+        var handshake = new HandshakeValidator(compatibility, tokens, Content);
         SessionManager = new SessionManager(
             Inbound,
             Persistence,
             Sessions,
             handshake,
+            tokens,
             World,
             sender,
             targeting,
@@ -316,15 +318,60 @@ internal sealed class TestServer
     }
 
     /// <summary>
-    ///     Connects, completes the handshake, enters the world, and runs the tick that processes all three.
+    ///     Sends a hello and ticks until the account lookup it starts has answered: the session is then signed in, or
+    ///     closed. The hello's tick queues the lookup and the next tick applies its result.
+    /// </summary>
+    public void SignIn(ConnectionId connection, string token = DevelopmentToken)
+    {
+        SendHello(connection, ProtocolConstants.ProtocolVersion, BuildVersion, RequiredClientContentVersion, token);
+        TickUntil(() => !Sessions.TryGet(connection, out ClientSession? session)
+            || (session!.State != SessionState.Authenticating
+                && session.State != SessionState.AwaitingHello));
+    }
+
+    /// <summary>
+    ///     Connects, signs in, enters the world, and returns after the tick that sent <c>WorldEntered</c>.
     /// </summary>
     public ConnectionId EnterWorld(long character)
     {
         ConnectionId connection = Connect();
-        SendHello(connection);
+        SignIn(connection, $"{DevelopmentToken}{character}");
         SendEnterWorld(connection, character);
-        Tick();
+        TickUntil(() => SessionOf(connection).State == SessionState.InWorld);
         return connection;
+    }
+
+    /// <summary>
+    ///     Ticks up to and including the next tick on which the status is published (once per second).
+    /// </summary>
+    public void TickUntilPublished()
+    {
+        ServerStatus before = Status.Current;
+        for (int ticks = 0; ticks < TickRate; ticks++)
+        {
+            Tick();
+            if (!ReferenceEquals(Status.Current, before))
+            {
+                return;
+            }
+        }
+    }
+
+    /// <summary>
+    ///     Ticks until <paramref name="condition" /> holds, at most 20 ticks, and fails the test otherwise.
+    /// </summary>
+    public void TickUntil(Func<bool> condition)
+    {
+        for (int ticks = 0; ticks < 20; ticks++)
+        {
+            Tick();
+            if (condition())
+            {
+                return;
+            }
+        }
+
+        throw new InvalidOperationException("The server did not reach the expected state within 20 ticks.");
     }
 
     public PlayerEntity PlayerOf(ConnectionId connection)

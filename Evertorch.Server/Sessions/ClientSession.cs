@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using Evertorch.Game;
+using Evertorch.Persistence;
 
 namespace Evertorch.Server
 {
@@ -19,6 +20,11 @@ public sealed class ClientSession
     public uint ConnectedAtTick { get; }
 
     public SessionState State { get; set; }
+
+    /// <summary>
+    ///     The account the session token named, once authentication succeeded. The token itself is never kept.
+    /// </summary>
+    public AccountId? Account { get; set; }
 
     public MapInstance? Map { get; set; }
 

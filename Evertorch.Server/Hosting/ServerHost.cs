@@ -71,6 +71,7 @@ public static class ServerHost
 
         builder.Services.AddSingleton<InboundQueue>();
         builder.Services.AddSingleton<SessionRegistry>();
+        builder.Services.AddSingleton<ISessionTokenValidator, DevelopmentTokenValidator>();
         builder.Services.AddSingleton<HandshakeValidator>();
         builder.Services.AddSingleton<WorldSimulation>();
         builder.Services.AddSingleton<MessageSender>();

@@ -97,7 +97,7 @@ public sealed class SessionHandshakeTests
         server.SendHello(connection);
         server.SendHello(connection);
 
-        server.Tick();
+        server.Tick(2);
 
         Assert.That(server.Transport.ControlOpcodesSentTo(connection), Is.EqualTo(new[] { MessageOpcode.ServerHello }));
         Assert.That(server.SessionManager.IgnoredEvents, Is.EqualTo(1));
@@ -169,7 +169,7 @@ public sealed class SessionHandshakeTests
         ConnectionId connection = server.Connect();
         server.SendHello(connection);
 
-        server.Tick();
+        server.Tick(2);
 
         InMemoryServerTransport.SentMessage sent = server.Transport.ControlSentTo(connection).Single();
         Assert.That(ServerHello.TryRead(sent.Payload, out ServerHello? hello), Is.True);
@@ -216,7 +216,7 @@ public sealed class SessionHandshakeTests
         server.SendHello(refused, 7, TestServer.BuildVersion, server.RequiredClientContentVersion, SecretToken);
         server.SendEnterWorld(accepted, 5);
 
-        server.Tick();
+        server.Tick(2);
 
         Assert.That(server.Log.Entries, Is.Not.Empty);
         Assert.That(

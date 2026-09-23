@@ -60,7 +60,8 @@ public sealed class InboundQueueTests
         server.SendHello(faulty);
         server.SendHello(healthy);
 
-        server.Tick();
+        // The hello's tick starts the account lookup; the next applies it and answers, which fails for the faulty peer.
+        server.Tick(2);
 
         Assert.That(server.Transport.Disconnects[faulty], Is.EqualTo(DisconnectReason.InternalError));
         Assert.That(server.Sessions.TryGet(faulty, out _), Is.False);

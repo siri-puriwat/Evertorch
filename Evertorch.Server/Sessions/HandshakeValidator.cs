@@ -10,19 +10,16 @@ namespace Evertorch.Server
 /// </summary>
 public sealed class HandshakeValidator
 {
-    private const string DevelopmentTokenPrefix = "dev:";
-    private const int MaxDevelopmentIdentityLength = 64;
-
     private readonly CompatibilityOptions m_compatibility;
-    private readonly bool m_isDevelopmentAuthenticationEnabled;
+    private readonly ISessionTokenValidator m_tokens;
 
     public HandshakeValidator(
         IOptions<CompatibilityOptions> compatibility,
-        IOptions<DevelopmentAuthenticationOptions> developmentAuthentication,
+        ISessionTokenValidator tokens,
         ServerContent content)
     {
         m_compatibility = compatibility.Value;
-        m_isDevelopmentAuthenticationEnabled = developmentAuthentication.Value.Enabled;
+        m_tokens = tokens;
         if (!ContentVersionCodec.TryToWire(content.ClientContentVersion, out uint required))
         {
             throw new InvalidOperationException("The loaded client content version cannot be sent in a handshake.");
@@ -34,7 +31,9 @@ public sealed class HandshakeValidator
     public uint RequiredClientContentVersion { get; }
 
     /// <summary>
-    ///     Returns <see cref="DisconnectReason.None" /> when the hello is accepted.
+    ///     Returns <see cref="DisconnectReason.None" /> when the hello may go on to authentication: every version
+    ///     matches and the token is well formed. Whether the token names an account is decided later, off the tick
+    ///     thread.
     /// </summary>
     public DisconnectReason Validate(ClientHello hello)
     {
@@ -53,40 +52,9 @@ public sealed class HandshakeValidator
             return DisconnectReason.ContentUpdateRequired;
         }
 
-        return IsAcceptedToken(hello.SessionToken) ? DisconnectReason.None : DisconnectReason.AuthenticationFailed;
-    }
-
-    // Real session tokens arrive with accounts. Until then only an explicitly enabled development identity passes.
-    private bool IsAcceptedToken(string token)
-    {
-        if (!m_isDevelopmentAuthenticationEnabled
-            || !token.StartsWith(DevelopmentTokenPrefix, StringComparison.Ordinal))
-        {
-            return false;
-        }
-
-        int identityLength = token.Length - DevelopmentTokenPrefix.Length;
-        if (identityLength < 1 || identityLength > MaxDevelopmentIdentityLength)
-        {
-            return false;
-        }
-
-        for (int index = DevelopmentTokenPrefix.Length; index < token.Length; index++)
-        {
-            char character = token[index];
-            bool isAllowed = (character >= 'a' && character <= 'z')
-                || (character >= 'A' && character <= 'Z')
-                || (character >= '0' && character <= '9')
-                || character == '_'
-                || character == '-'
-                || character == '.';
-            if (!isAllowed)
-            {
-                return false;
-            }
-        }
-
-        return true;
+        return m_tokens.IsWellFormed(hello.SessionToken)
+            ? DisconnectReason.None
+            : DisconnectReason.AuthenticationFailed;
     }
 }
 }

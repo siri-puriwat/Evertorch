@@ -58,10 +58,8 @@ public sealed class SnapshotTests
         var server = new TestServer(interestCellSize: 4f, interestNeighborRadius: 1);
         ConnectionId observer = server.EnterWorld(1);
         ConnectionId neighbour = server.EnterWorld(2);
-        ConnectionId distant = server.Connect();
-        server.SendHello(distant);
-        server.SendEnterWorld(distant, 3);
-        server.AfterCommandsOnce(() => server.Place(distant, 20f, 0.5f));
+        ConnectionId distant = server.EnterWorld(3);
+        server.Place(distant, 20f, 0.5f);
 
         server.Tick();
 
@@ -147,11 +145,14 @@ public sealed class SnapshotTests
         var server = new TestServer(snapshotIntervalTicks: 2);
         ConnectionId connection = server.EnterWorld(1);
         server.Transport.ClearSent();
+        uint entered = server.CurrentTick;
 
         server.Tick(6);
 
         uint[] ticks = server.Transport.SnapshotsSentTo(connection).Select(snapshot => snapshot.ServerTick).ToArray();
-        Assert.That(ticks, Is.EqualTo(new uint[] { 2, 4, 6 }));
+        uint[] expected = Enumerable.Range((int)entered + 1, 6).Where(tick => tick % 2 == 0).Select(tick => (uint)tick)
+            .ToArray();
+        Assert.That(ticks, Is.EqualTo(expected));
     }
 }
 }

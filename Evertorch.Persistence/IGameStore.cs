@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
@@ -18,5 +19,11 @@ public interface IGameStore
     ///     The migrations this build knows that the database has not applied, oldest first.
     /// </summary>
     Task<IReadOnlyList<string>> GetPendingMigrationsAsync(CancellationToken cancellationToken);
+
+    /// <summary>
+    ///     The account of <paramref name="loginNormalized" />, created on first use (Persistence §4), with its last
+    ///     login set to <paramref name="now" />. Null when the account exists but is disabled.
+    /// </summary>
+    Task<AccountId?> ProvisionAccountAsync(string loginNormalized, DateTime now, CancellationToken cancellationToken);
 }
 }
