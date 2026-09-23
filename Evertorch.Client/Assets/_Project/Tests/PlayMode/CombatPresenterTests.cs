@@ -145,6 +145,104 @@ public sealed class CombatPresenterTests
     }
 
     [Test]
+    public void Presentation_ChangesNoCommandIntentOrLock_WhateverTheFrameRate()
+    {
+        List<string> without = RunFight(false, 0);
+
+        List<string> everyFrame = RunFight(true, 1);
+        List<string> manyFrames = RunFight(true, 3);
+        List<string> skippedFrames = RunFight(true, -7);
+
+        Assert.That(without.Count, Is.GreaterThan(60));
+        Assert.That(without, Has.Some.Contains("locked=True"), "the fight included a lock");
+        Assert.That(without, Has.Some.StartsWith("attack"));
+        Assert.That(everyFrame, Is.EqualTo(without));
+        Assert.That(manyFrames, Is.EqualTo(without));
+        Assert.That(skippedFrames, Is.EqualTo(without));
+    }
+
+    /// <summary>
+    /// The local player attacks the slime and is hit back; <paramref name="framesPerTick" /> is how often the
+    /// presenter draws per client tick, or with a negative value, once every that many ticks.
+    /// </summary>
+    private List<string> RunFight(bool isPresented, int framesPerTick)
+    {
+        ClientWorld world = CreateWorld();
+        var log = new RecordingSink();
+        var controller = new MovementController(world.Grid);
+        var autoAttack = new AutoAttackState(world, controller, log, 0.05);
+        var driver = new LocalPlayerDriver(controller, new MoveIntentProducer(), world, log, autoAttack);
+        Dictionary<EntityId, EntityView> remotes = CreateViews(out EntityView local);
+        CombatPresenter? presenter = isPresented ? CreatePresenter(world) : null;
+        var swing = new AttackTiming(
+            System.TimeSpan.FromMilliseconds(940),
+            System.TimeSpan.FromMilliseconds(470),
+            System.TimeSpan.FromMilliseconds(470),
+            System.TimeSpan.FromMilliseconds(235));
+
+        autoAttack.Attack(Slime);
+        for (uint tick = 1; tick <= 80; tick++)
+        {
+            if (tick == 20)
+            {
+                world.OnAttackStarted(new AttackStarted(Local, Slime, 20, swing));
+            }
+            else if (tick == 30)
+            {
+                world.OnDamage(new Damage(Local, Slime, CombatResult.Critical, 30, 30, 400));
+                world.OnDamage(new Damage(Slime, Local, CombatResult.Hit, 7, 30, 0));
+                world.OnCharacterHealth(new CharacterHealth(64, 71));
+            }
+            else if (tick == 50)
+            {
+                world.OnEntityDied(new EntityDied(Slime, Local, 50));
+            }
+
+            driver.Tick(tick);
+            RemoteEntity slime = world.Remotes[Slime];
+            log.Add(
+                $"{tick} locked={controller.IsLocked} chasing={controller.IsChasing} active={autoAttack.IsActive}"
+                + $" dead={world.IsLocalDead} hp={world.LocalHealth} target={world.Target.Value}"
+                + $" slime={slime.IsDead},{slime.HealthPermille}");
+            world.Advance(0.05f);
+            int frames = framesPerTick >= 0 ? framesPerTick : tick % (uint)-framesPerTick == 0 ? 1 : 0;
+            for (int frame = 0; frame < frames; frame++)
+            {
+                presenter?.Present(local, remotes, null);
+            }
+        }
+
+        presenter?.Dispose();
+        m_presenter = null;
+        return log.Entries;
+    }
+
+    private sealed class RecordingSink : ICombatCommandSink, IMoveIntentSink
+    {
+        public List<string> Entries { get; } = new List<string>();
+
+        public void Add(string entry)
+        {
+            Entries.Add(entry);
+        }
+
+        public void SendAttack(EntityId target)
+        {
+            Entries.Add($"attack {target.Value}");
+        }
+
+        public void SendCancel()
+        {
+            Entries.Add("cancel");
+        }
+
+        public void Send(MoveIntent intent)
+        {
+            Entries.Add($"move {intent.Sequence} {intent.DirectionX:R} {intent.DirectionZ:R}");
+        }
+    }
+
+    [Test]
     public void Despawn_OfAMonster_RemovesItsBar()
     {
         ClientWorld world = CreateWorld();
