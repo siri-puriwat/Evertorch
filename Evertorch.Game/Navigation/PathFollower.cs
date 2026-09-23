@@ -1,12 +1,11 @@
 using System;
 using System.Collections.Generic;
-using Evertorch.Game;
 
-namespace Evertorch.Client
+namespace Evertorch.Game
 {
 /// <summary>
-///     Turns a list of waypoints into one direction per client tick. It only steers; the shared movement model and the
-///     server still decide where the body ends up.
+///     Turns a list of waypoints into one direction per tick. It only steers; the shared movement model and the
+///     server still decide where the body ends up. The client follows its walks with it and the server its monsters.
 /// </summary>
 public sealed class PathFollower
 {

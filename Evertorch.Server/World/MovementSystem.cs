@@ -14,15 +14,18 @@ public sealed class MovementSystem : ITickPhase
     private const int MillisecondsPerSecond = 1000;
 
     private readonly SessionRegistry m_sessions;
+    private readonly WorldSimulation m_world;
     private readonly int m_holdTicks;
     private readonly int m_maxClientTickDrift;
 
     public MovementSystem(
         SessionRegistry sessions,
+        WorldSimulation worldSimulation,
         IOptions<WorldOptions> world,
         IOptions<SimulationOptions> simulation)
     {
         m_sessions = sessions;
+        m_world = worldSimulation;
         m_maxClientTickDrift = world.Value.MaxClientTickDrift;
 
         long holdTicks = (long)world.Value.InputHoldTimeoutMs * simulation.Value.TickRate / MillisecondsPerSecond;
@@ -43,6 +46,39 @@ public sealed class MovementSystem : ITickPhase
                 Move(session.Player, session.Map, session.Input, context);
             }
         }
+
+        foreach (MapInstance map in m_world.Maps)
+        {
+            foreach (MonsterEntity monster in map.Monsters)
+            {
+                MoveMonster(monster, map, context);
+            }
+        }
+    }
+
+    // A monster walks the direction its AI chose last tick, at its own speed, with the same movement model.
+    private static void MoveMonster(MonsterEntity monster, MapInstance map, in TickContext context)
+    {
+        WorldDirection direction = monster.IsDead || monster.Combat.IsSwinging
+            ? default
+            : monster.Brain.DesiredDirection;
+        MovementStep step = MovementModel.Step(
+            map.Definition.Navigation,
+            monster.Position,
+            monster.Facing,
+            direction,
+            monster.MovementSpeed,
+            context.DeltaSeconds);
+
+        monster.Position = step.Position;
+        monster.Facing = step.Facing;
+        monster.VelocityX = step.VelocityX;
+        monster.VelocityY = step.VelocityY;
+        monster.VelocityZ = step.VelocityZ;
+        monster.StateFlags = step.IsMoving
+            ? monster.StateFlags | EntityStateFlags.Moving
+            : monster.StateFlags & ~EntityStateFlags.Moving;
+        monster.Combat.HasMovedThisTick = step.IsMoving;
     }
 
     private void Move(PlayerEntity player, MapInstance map, PlayerInputState input, in TickContext context)

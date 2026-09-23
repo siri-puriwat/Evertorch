@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Linq;
 using Evertorch.Game;
 using NUnit.Framework;
@@ -23,6 +24,30 @@ public sealed class ClientApproachTests
         slime.CurrentHealth = 1_000_000;
         rig.AdvanceUntil(() => client.Connection.World != null && client.World.Remotes.ContainsKey(slime.Id), 3000);
         return (rig, client, slime);
+    }
+
+    [TestCase(50)]
+    [TestCase(100)]
+    public void Attack_OnARoamingSlime_KillsIt(int oneWayLatencyMs)
+    {
+        var rig = new ClientServerRig(true, new SureHitRandom());
+        SimulatedClient client = rig.AddClient(7, 3, 17);
+        client.Link.LatencyMilliseconds = oneWayLatencyMs;
+        rig.ConnectAll();
+        MapInstance map = rig.Server.World.Maps.Single();
+        MonsterEntity slime = rig.Server.MonstersNear(map.Definition.SpawnPosition).First();
+        rig.AdvanceUntil(() => client.Connection.World != null && client.World.Remotes.ContainsKey(slime.Id), 3000);
+        rig.AdvanceUntil(() => slime.Brain.State == MonsterAiState.Roam, LimitMilliseconds);
+        Assume.That(slime.Brain.State, Is.EqualTo(MonsterAiState.Roam), "attacked while it walks");
+        var deaths = new List<EntityId>();
+        client.World.EntityDiedReceived += died => deaths.Add(died.Entity);
+
+        client.AutoAttack!.Attack(slime.Id);
+        int took = rig.AdvanceUntil(() => deaths.Contains(slime.Id), 30000);
+
+        Assert.That(took, Is.GreaterThan(0), "four hits of 13 kill the 50 HP slime");
+        Assert.That(client.AutoAttack.CancelsSent, Is.Zero);
+        Assert.That(client.World.Smoother.Snaps, Is.Zero);
     }
 
     [Test]

@@ -191,6 +191,12 @@ public sealed class CombatSystem : ITickPhase
             }
         }
 
+        if (target is MonsterEntity monster && amount > 0 && monster.Brain.State != MonsterAiState.ReturnHome)
+        {
+            // A passive monster turns on whoever damages it; while it walks home it ignores damage.
+            monster.Brain.LastAttacker = attacker.Id;
+        }
+
         if (target is PlayerEntity player && amount > 0)
         {
             m_sender.Send(player.Owner, new CharacterHealth((uint)player.CurrentHealth, (uint)player.MaxHealth));

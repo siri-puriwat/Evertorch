@@ -55,6 +55,11 @@ public sealed class WorldOptions
     ///     the interpolated position the client measured its approach against.
     /// </summary>
     public float AttackRangeTolerance { get; set; } = 0.5f;
+
+    /// <summary>
+    ///     How long a dead monster's body stays before it despawns (monster AI research note).
+    /// </summary>
+    public int MonsterCorpseMs { get; set; } = 1000;
 }
 
 internal sealed class WorldOptionsValidator : IValidateOptions<WorldOptions>
@@ -83,6 +88,7 @@ internal sealed class WorldOptionsValidator : IValidateOptions<WorldOptions>
         }
 
         AddRangeFailure(failures, "InputHoldTimeoutMs", options.InputHoldTimeoutMs, 0, 5000);
+        AddRangeFailure(failures, "MonsterCorpseMs", options.MonsterCorpseMs, 0, 60000);
         AddRangeFailure(failures, "MaxQueuedInputs", options.MaxQueuedInputs, 1, 64);
         AddRangeFailure(failures, "MaxClientTickDrift", options.MaxClientTickDrift, 1, 100000);
         AddRangeFailure(failures, "SnapshotIntervalTicks", options.SnapshotIntervalTicks, 1, 120);

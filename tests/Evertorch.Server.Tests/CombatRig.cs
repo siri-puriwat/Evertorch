@@ -18,7 +18,7 @@ internal sealed class CombatRig
 
     public CombatRig(float distance = 1.2f, IRandomSource? combatRandom = null)
     {
-        Server = new TestServer(withMonsters: true, combatRandom: combatRandom);
+        Server = new TestServer(withMonsters: true, combatRandom: combatRandom, withMonsterAi: false);
         Player = Server.EnterWorld(1);
         Map = Server.World.Maps.Single();
         Slime = Server.MonstersNear(Map.Definition.SpawnPosition).First();

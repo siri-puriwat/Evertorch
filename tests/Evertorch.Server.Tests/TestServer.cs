@@ -41,7 +41,8 @@ internal sealed class TestServer
         int snapshotIntervalTicks = 1,
         bool withMonsters = false,
         ulong randomSeed = 1,
-        IRandomSource? combatRandom = null)
+        IRandomSource? combatRandom = null,
+        bool withMonsterAi = true)
     {
         Content = withMonsters ? RepositoryContent.Value : RepositoryContentWithoutMonsters.Value;
         var network = new NetworkOptions
@@ -105,17 +106,22 @@ internal sealed class TestServer
             simulation);
         Metrics = new ServerMetrics(new TickLogObserver(new CapturingLogger<TickLogObserver>(), new FakeClock()));
         Status = new StatusPublisher(Metrics, Inbound, Sessions, SessionManager, World, Transport, simulation);
-        m_pipeline = new TickPipeline(
-            new ITickPhase[]
-            {
-                Status,
-                new SnapshotPhase(Sessions, sender, Options.Create(world)),
-                new VisibilityPhase(Sessions, World, sender, targeting),
-                new MovementSystem(Sessions, Options.Create(world), simulation),
-                Combat,
-                SessionManager,
-                new RecordingPhase(TickPhase.ApplyCommands, "test", new List<string>(), _ => RunAfterCommands())
-            });
+        var phases = new List<ITickPhase>
+        {
+            Status,
+            new SnapshotPhase(Sessions, sender, Options.Create(world)),
+            new VisibilityPhase(Sessions, World, sender, targeting),
+            new MovementSystem(Sessions, World, Options.Create(world), simulation),
+            Combat,
+            SessionManager,
+            new RecordingPhase(TickPhase.ApplyCommands, "test", new List<string>(), _ => RunAfterCommands())
+        };
+        if (withMonsterAi)
+        {
+            phases.Add(new MonsterAiSystem(World, Random, Options.Create(world), simulation));
+        }
+
+        m_pipeline = new TickPipeline(phases);
         RequiredClientContentVersion = handshake.RequiredClientContentVersion;
     }
 

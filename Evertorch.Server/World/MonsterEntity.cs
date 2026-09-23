@@ -27,6 +27,8 @@ public sealed class MonsterEntity : WorldEntity
 
     public WorldPosition Home => Spawn.Center;
 
+    public MonsterBrain Brain { get; } = new();
+
     public override EntityKind Kind => EntityKind.Monster;
 
     public override string DefinitionId => Definition.Id.Value;
