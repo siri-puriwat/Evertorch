@@ -53,6 +53,10 @@ public static class Program
             {
                 exitCode = 1;
             }
+            catch (PendingMigrationsException)
+            {
+                exitCode = 1;
+            }
         }
 
         // Only now: disposing the host flushes the console logger, so the hint follows the host's own report.

@@ -3,6 +3,7 @@ $ErrorActionPreference = 'Stop'
 
 $root = Split-Path -Parent $PSScriptRoot
 $solution = Join-Path $root 'Evertorch.sln'
+. (Join-Path $PSScriptRoot 'DevDatabase.ps1')
 
 function Invoke-Step([string] $name, [scriptblock] $action) {
     Write-Host "==> $name"
@@ -36,6 +37,13 @@ function Get-ContentPackageHashes([string] $directory) {
 
 Push-Location $root
 try {
+    # The database tests start PostgreSQL 18 with Testcontainers and are never skipped (Persistence section 11).
+    Write-Host '==> Docker engine'
+    if (-not (Test-DockerEngine)) {
+        Write-Host 'FAILED: Docker engine. The database tests need Docker running; start Docker Desktop and run again.'
+        exit 1
+    }
+
     Invoke-Step 'Restore tools' { dotnet tool restore }
     Invoke-Step 'Restore packages' { dotnet restore $solution }
     Invoke-Step 'Build' { dotnet build $solution -c Release --no-restore }

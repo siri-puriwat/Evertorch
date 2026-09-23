@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Threading.Tasks;
 using Evertorch.Protocol;
 using NUnit.Framework;
 using UnityEngine;
@@ -30,6 +31,7 @@ public sealed class LiveServerCombatTests : InputTestFixture
     private const float FightTimeoutSeconds = 180f;
 
     private readonly List<ItemDropped> m_dropped = new();
+    private LiveDatabase? m_database;
     private LiveServer? m_server;
     private GameObject? m_client;
     private InputActionAsset? m_actions;
@@ -45,6 +47,8 @@ public sealed class LiveServerCombatTests : InputTestFixture
 
         m_server?.Dispose();
         m_server = null;
+        m_database?.Dispose();
+        m_database = null;
         if (m_actions != null)
         {
             Object.Destroy(m_actions);
@@ -70,8 +74,13 @@ public sealed class LiveServerCombatTests : InputTestFixture
             Assert.Inconclusive(LiveServer.MissingPrerequisites);
         }
 
+        Task<LiveDatabase> starting = LiveDatabase.StartAsync();
+        yield return new WaitUntil(() => starting.IsCompleted);
+        Assert.That(starting.IsFaulted, Is.False, starting.Exception?.GetBaseException().Message);
+        LiveDatabase database = m_database = starting.Result;
+
         LiveServer server = m_server = new LiveServer();
-        server.Start("--World:RandomSeed=11");
+        server.Start(database, "--World:RandomSeed=11");
         yield return WaitUntil(() => server.TryReadListeningPort(out int _), StartTimeoutSeconds);
         Assert.That(server.TryReadListeningPort(out int port), Is.True, $"server output: {server.JoinOutput()}");
 

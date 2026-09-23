@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Globalization;
 using System.Text.RegularExpressions;
+using System.Threading.Tasks;
 using Evertorch.Game;
 using NUnit.Framework;
 using UnityEngine;
@@ -19,6 +20,7 @@ public sealed class LiveServerConvergenceTests
     private const float StepTimeoutSeconds = 15f;
     private const float ConvergedDistance = 1e-3f;
 
+    private LiveDatabase? m_database;
     private LiveServer? m_server;
     private LiteNetLibClientTransport? m_socket;
 
@@ -29,6 +31,8 @@ public sealed class LiveServerConvergenceTests
         m_socket = null;
         m_server?.Dispose();
         m_server = null;
+        m_database?.Dispose();
+        m_database = null;
     }
 
     [UnityTest]
@@ -43,8 +47,13 @@ public sealed class LiveServerConvergenceTests
         ClientContent? content = LiveServer.LoadClientContent(out string contentError);
         Assert.That(content, Is.Not.Null, contentError);
 
+        Task<LiveDatabase> starting = LiveDatabase.StartAsync();
+        yield return new WaitUntil(() => starting.IsCompleted);
+        Assert.That(starting.IsFaulted, Is.False, starting.Exception?.GetBaseException().Message);
+        LiveDatabase database = m_database = starting.Result;
+
         LiveServer server = m_server = new LiveServer();
-        server.Start();
+        server.Start(database);
         yield return WaitUntil(() => server.TryReadListeningPort(out int _), StartTimeoutSeconds);
         Assert.That(server.TryReadListeningPort(out int port), Is.True, $"server output: {server.JoinOutput()}");
 

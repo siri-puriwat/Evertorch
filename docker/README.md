@@ -13,6 +13,20 @@ deployment configuration.
 
 The database listens on `127.0.0.1` only.
 
+## Schema
+
+The schema is created by EF Core migrations in `Evertorch.Persistence/Migrations`.
+The game server never applies them: it refuses to start while one is pending.
+
+- Apply pending migrations to this database: `scripts/db-migrate.ps1` (it
+  builds the connection from `.env`; pass `-ConnectionString` for another
+  database).
+- `scripts/run-server.cmd` starts this database, migrates it, and gives the
+  server its connection string, so local play needs nothing else.
+- Database tests start their own throwaway `postgres:18` containers with
+  Testcontainers and never touch this database. `scripts/verify.ps1` therefore
+  needs Docker running.
+
 ## Application configuration
 
 Runtime configuration is external to compiled code: JSON files for non-secret
@@ -23,7 +37,9 @@ environment variables or .NET user secrets and are never committed.
 | --- | --- | --- |
 | Database connection | `ConnectionStrings:Evertorch` | `ConnectionStrings__Evertorch` |
 
-Example for a local shell, using the values chosen in `.env`:
+The server refuses to start without it. The IDE launch profiles do not set it:
+set the environment variable first, or use `scripts/run-server.cmd`. Example
+for a local shell, using the values chosen in `.env`:
 
 ```text
 ConnectionStrings__Evertorch=Host=127.0.0.1;Port=5432;Database=evertorch_dev;Username=evertorch;Password=<local password>

@@ -8,8 +8,19 @@ own license.
 | Package | Version | Used by | License | Project |
 | --- | --- | --- | --- | --- |
 | LiteNetLib | 2.1.4 | `Evertorch.Server` | MIT | <https://github.com/RevenantX/LiteNetLib> |
+| Microsoft.EntityFrameworkCore | 10.0.12 | `Evertorch.Persistence` | MIT | <https://github.com/dotnet/efcore> |
+| Microsoft.EntityFrameworkCore.Relational | 10.0.12 | `Evertorch.Persistence` | MIT | <https://github.com/dotnet/efcore> |
+| Microsoft.EntityFrameworkCore.Design | 10.0.12 | `Evertorch.Persistence` (migrations tooling only, not shipped) | MIT | <https://github.com/dotnet/efcore> |
 | Microsoft.Extensions.Hosting | 10.0.12 | `Evertorch.Server` | MIT | <https://github.com/dotnet/runtime> |
+| Npgsql.EntityFrameworkCore.PostgreSQL | 10.0.3 | `Evertorch.Persistence` | PostgreSQL License | <https://github.com/npgsql/efcore.pg> |
 | YamlDotNet | 18.1.0 | `Evertorch.Tools` | MIT | <https://github.com/aaubry/YamlDotNet> |
+
+Test and development tools, not shipped with the server or the client:
+
+| Package | Version | Used by | License | Project |
+| --- | --- | --- | --- | --- |
+| Testcontainers.PostgreSql | 4.15.0 | `Evertorch.Persistence.Tests`, `Evertorch.Server.Tests` | MIT | <https://github.com/testcontainers/testcontainers-dotnet> |
+| dotnet-ef (local tool) | 10.0.12 | `scripts/db-migrate.ps1` | MIT | <https://github.com/dotnet/efcore> |
 
 ## Unity packages
 
@@ -32,7 +43,12 @@ TextMesh Pro Essential Resources are imported from `com.unity.ugui` 2.0.0 into
 
 LiteNetLib is Copyright (c) Ruslan Pyrch.
 
-Microsoft.Extensions.Hosting is Copyright (c) .NET Foundation and Contributors.
+Microsoft.Extensions.Hosting, Entity Framework Core, and dotnet-ef are Copyright (c) .NET Foundation and
+Contributors.
+
+Npgsql.EntityFrameworkCore.PostgreSQL is Copyright 2025 (c) The Npgsql Development Team.
+
+Testcontainers for .NET is Copyright (c) 2019 - 2026 Andre Hofmeister and other authors.
 
 YamlDotNet is Copyright (c) Antoine Aubry and contributors.
 

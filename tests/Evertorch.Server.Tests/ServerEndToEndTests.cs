@@ -25,7 +25,7 @@ public sealed class ServerEndToEndTests
         string[] args = enableDevelopmentAuthentication
             ? new[] { "--Network:Port=0", "--DevelopmentAuthentication:Enabled=true" }
             : new[] { "--Network:Port=0" };
-        IHost host = ServerHost.CreateBuilder(args, root.Path).Build();
+        IHost host = TestHosts.CreateBuilder(args, root.Path).Build();
         host.Start();
         return host;
     }

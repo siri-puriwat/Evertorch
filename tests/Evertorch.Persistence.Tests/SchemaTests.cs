@@ -1,0 +1,291 @@
+using System;
+using System.Collections.Generic;
+using System.Threading;
+using Npgsql;
+using NUnit.Framework;
+
+namespace Evertorch.Persistence.Tests
+{
+/// <summary>
+///     The schema's own guarantees (Persistence §4, §11), proven with plain SQL so that no store code can hide a
+///     missing constraint.
+/// </summary>
+[TestFixture]
+public sealed class SchemaTests
+{
+    private const string CheckViolation = "23514";
+    private const string UniqueViolation = "23505";
+    private const string ForeignKeyViolation = "23503";
+    private const string RestrictViolation = "23001";
+    private const string ValueTooLong = "22001";
+
+    private PostgresFixture m_database = null!;
+    private Sql m_sql = null!;
+
+    [OneTimeSetUp]
+    public void StartDatabase()
+    {
+        m_database = PostgresFixture.Start();
+        m_sql = new Sql(m_database.ConnectionString);
+    }
+
+    [OneTimeTearDown]
+    public void StopDatabase()
+    {
+        m_database.Dispose();
+    }
+
+    [TestCase("Abc")]
+    [TestCase("Bad Name")]
+    [TestCase("Bad_Name")]
+    [TestCase("Näme1")]
+    [TestCase("")]
+    public void Character_WithAnInvalidName_IsRejected(string name)
+    {
+        long account = m_sql.InsertAccount();
+
+        AssertFailsWith(CheckViolation, Sql.CharacterInsert(account, name, name.ToLowerInvariant(), 0));
+    }
+
+    [TestCase("Abcd")]
+    [TestCase("Abcdefghijklmnopqrstuvw")]
+    public void Character_WithANameAtTheLengthBounds_IsStored(string baseName)
+    {
+        long account = m_sql.InsertAccount();
+        string name = $"{baseName.Substring(0, baseName.Length - 3)}{Guid.NewGuid():N}".Substring(0, baseName.Length);
+
+        long id = m_sql.InsertCharacter(account, name);
+
+        Assert.That(id, Is.Positive);
+    }
+
+    [TestCase(-1L)]
+    [TestCase(4294967296L)]
+    public void Character_WithAnInventoryRevisionOutsideThirtyTwoBits_IsRejected(long revision)
+    {
+        long account = m_sql.InsertAccount();
+        string name = Sql.UniqueName("Rev");
+
+        AssertFailsWith(CheckViolation, Sql.CharacterInsert(account, name, name.ToLowerInvariant(), revision));
+    }
+
+    [TestCase(0)]
+    [TestCase(-5)]
+    [TestCase(1_000_001)]
+    public void InventoryItem_WithAQuantityOutsideItsBounds_IsRejected(int quantity)
+    {
+        long character = NewCharacter();
+
+        AssertFailsWith(CheckViolation, Sql.ItemInsert(character, quantity));
+    }
+
+    [TestCase(1)]
+    [TestCase(1_000_000)]
+    public void InventoryItem_AtTheQuantityBounds_IsStored(int quantity)
+    {
+        long character = NewCharacter();
+
+        long id = m_sql.InsertItem(character, quantity);
+
+        Assert.That(id, Is.Positive);
+    }
+
+    private long NewCharacter()
+    {
+        long account = m_sql.InsertAccount();
+        return m_sql.InsertCharacter(account, Sql.UniqueName("Chr"));
+    }
+
+    private long NewLedgerEntry()
+    {
+        long character = NewCharacter();
+        return m_sql.Scalar(Sql.LedgerInsert(Guid.NewGuid(), character, "pickup"));
+    }
+
+    private void AssertFailsWith(string sqlState, string commandText)
+    {
+        PostgresException? failure = null;
+        try
+        {
+            m_sql.Execute(commandText);
+        }
+        catch (PostgresException exception)
+        {
+            failure = exception;
+        }
+
+        Assert.That(failure, Is.Not.Null, $"expected SQLSTATE {sqlState} from: {commandText}");
+        Assert.That(failure!.SqlState, Is.EqualTo(sqlState), failure.MessageText);
+    }
+
+    [Test]
+    public void Account_WithARepeatedLogin_IsRejected()
+    {
+        string login = $"dev:{Guid.NewGuid():N}";
+        string insert =
+            $"INSERT INTO accounts (login_normalized, status, created_at) VALUES ('{login}', 'active', now())";
+        m_sql.Execute(insert);
+
+        AssertFailsWith(UniqueViolation, insert);
+    }
+
+    [Test]
+    public void Character_AtTheLargestInventoryRevision_IsStored()
+    {
+        long account = m_sql.InsertAccount();
+        string name = Sql.UniqueName("Max");
+
+        long id = m_sql.Scalar(Sql.CharacterInsert(account, name, name.ToLowerInvariant(), uint.MaxValue));
+
+        Assert.That(id, Is.Positive);
+    }
+
+    [Test]
+    public void Character_OfAMissingAccount_IsRejected()
+    {
+        string name = Sql.UniqueName("Orp");
+
+        AssertFailsWith(ForeignKeyViolation, Sql.CharacterInsert(long.MaxValue, name, name.ToLowerInvariant(), 0));
+    }
+
+    [Test]
+    public void Character_WhoseNormalizedNameIsNotItsLowerCase_IsRejected()
+    {
+        long account = m_sql.InsertAccount();
+        string name = Sql.UniqueName("Ann");
+
+        AssertFailsWith(CheckViolation, Sql.CharacterInsert(account, name, name, 0));
+    }
+
+    [Test]
+    public void Character_WithANameLongerThanTwentyThree_IsRejectedByTheColumn()
+    {
+        long account = m_sql.InsertAccount();
+        const string name = "Abcdefghijklmnopqrstuvwx";
+
+        AssertFailsWith(ValueTooLong, Sql.CharacterInsert(account, name, name.ToLowerInvariant(), 0));
+    }
+
+    [Test]
+    public void Character_WithANameTakenInAnotherCase_IsRejected()
+    {
+        long first = m_sql.InsertAccount();
+        long second = m_sql.InsertAccount();
+        string name = Sql.UniqueName("Dup");
+        m_sql.InsertCharacter(first, name);
+        string otherCase = name.ToUpperInvariant();
+
+        AssertFailsWith(UniqueViolation, Sql.CharacterInsert(second, otherCase, name.ToLowerInvariant(), 0));
+    }
+
+    [Test]
+    public void Equipment_ForTheCharactersOwnItem_IsStoredOncePerSlot()
+    {
+        long character = NewCharacter();
+        long weapon = m_sql.InsertItem(character, 1);
+        long armor = m_sql.InsertItem(character, 1);
+        m_sql.Execute(Sql.EquipmentInsert(character, "Weapon", weapon));
+        m_sql.Execute(Sql.EquipmentInsert(character, "Armor", armor));
+
+        AssertFailsWith(UniqueViolation, Sql.EquipmentInsert(character, "Weapon", armor));
+    }
+
+    [Test]
+    public void Equipment_HoldingAnotherCharactersItem_IsRejected()
+    {
+        long owner = NewCharacter();
+        long other = NewCharacter();
+        long item = m_sql.InsertItem(owner, 1);
+
+        AssertFailsWith(ForeignKeyViolation, Sql.EquipmentInsert(other, "Weapon", item));
+    }
+
+    [Test]
+    public void Equipment_HoldingOneItemInTwoSlots_IsRejected()
+    {
+        long character = NewCharacter();
+        long item = m_sql.InsertItem(character, 1);
+        m_sql.Execute(Sql.EquipmentInsert(character, "Weapon", item));
+
+        AssertFailsWith(UniqueViolation, Sql.EquipmentInsert(character, "Armor", item));
+    }
+
+    [Test]
+    public void Equipment_InAnUnknownSlot_IsRejected()
+    {
+        long character = NewCharacter();
+        long item = m_sql.InsertItem(character, 1);
+
+        AssertFailsWith(CheckViolation, Sql.EquipmentInsert(character, "Ring", item));
+    }
+
+    [Test]
+    public void InventoryItem_OfAMissingCharacter_IsRejected()
+    {
+        AssertFailsWith(ForeignKeyViolation, Sql.ItemInsert(long.MaxValue, 1));
+    }
+
+    [Test]
+    public void Ledger_RowDelete_IsRejected()
+    {
+        long entry = NewLedgerEntry();
+
+        AssertFailsWith(RestrictViolation, $"DELETE FROM economy_ledger WHERE id = {entry}");
+        Assert.That(m_sql.Scalar($"SELECT count(*) FROM economy_ledger WHERE id = {entry}"), Is.EqualTo(1));
+    }
+
+    [Test]
+    public void Ledger_RowUpdate_IsRejected()
+    {
+        long entry = NewLedgerEntry();
+
+        AssertFailsWith(RestrictViolation, $"UPDATE economy_ledger SET quantity_delta = 99 WHERE id = {entry}");
+        Assert.That(
+            m_sql.Scalar($"SELECT quantity_delta FROM economy_ledger WHERE id = {entry}"),
+            Is.EqualTo(1));
+    }
+
+    [Test]
+    public void Ledger_Truncate_IsRejected()
+    {
+        long entry = NewLedgerEntry();
+
+        AssertFailsWith(RestrictViolation, "TRUNCATE economy_ledger CASCADE");
+        Assert.That(m_sql.Scalar($"SELECT count(*) FROM economy_ledger WHERE id = {entry}"), Is.EqualTo(1));
+    }
+
+    [Test]
+    public void Ledger_WithARepeatedOperationId_IsRejected()
+    {
+        long character = NewCharacter();
+        var operation = Guid.NewGuid();
+        m_sql.Scalar(Sql.LedgerInsert(operation, character, "pickup"));
+
+        AssertFailsWith(UniqueViolation, Sql.LedgerInsert(operation, character, "pickup"));
+    }
+
+    [Test]
+    public void Ledger_WithAnUnknownOperationType_IsRejected()
+    {
+        long character = NewCharacter();
+
+        AssertFailsWith(CheckViolation, Sql.LedgerInsert(Guid.NewGuid(), character, "gift"));
+    }
+
+    [Test]
+    public void Migrations_AppliedFromZero_LeaveNonePending()
+    {
+        IReadOnlyList<string> pending =
+            EvertorchDatabase.GetPendingMigrationsAsync(m_database.ConnectionString, CancellationToken.None)
+                .GetAwaiter()
+                .GetResult();
+
+        Assert.That(pending, Is.Empty);
+        Assert.That(
+            m_sql.Scalar(
+                "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name IN "
+                + "('accounts', 'characters', 'inventory_items', 'equipment', 'economy_ledger')"),
+            Is.EqualTo(5));
+    }
+}
+}

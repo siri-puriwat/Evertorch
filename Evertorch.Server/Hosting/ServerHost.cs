@@ -1,6 +1,8 @@
 using System;
 using System.IO;
+using Evertorch.Persistence;
 using Evertorch.Rules;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
@@ -37,6 +39,18 @@ public static class ServerHost
         // Resolved while the lifetime service is constructed, so a bad package stops the host before any thread or
         // socket exists.
         builder.Services.AddSingleton(services => LoadContent(services, contentRootPath));
+
+        builder.Services
+            .AddOptions<DatabaseOptions>()
+            .Configure(options => options.ConnectionString =
+                builder.Configuration.GetConnectionString(DatabaseOptions.ConnectionName) ?? string.Empty)
+            .ValidateOnStart();
+        builder.Services.AddSingleton<IValidateOptions<DatabaseOptions>, DatabaseOptionsValidator>();
+        builder.Services.AddSingleton<IGameStore>(services =>
+            new PostgresGameStore(services.GetRequiredService<IOptions<DatabaseOptions>>().Value.ConnectionString));
+
+        // Registered before every other hosted service, so it runs before the simulation starts.
+        builder.Services.AddHostedService<DatabaseStartupCheck>();
 
         AddOptions<NetworkOptions, NetworkOptionsValidator>(builder, NetworkOptions.SectionName);
         AddOptions<CompatibilityOptions, CompatibilityOptionsValidator>(builder, CompatibilityOptions.SectionName);

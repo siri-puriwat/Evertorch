@@ -106,7 +106,7 @@ public sealed class RealClientOverSocketTests
         PackageFixture.WriteTo(
             Path.Combine(root.Path, "content", "server"),
             PackageFixture.BuildRepositoryPackage());
-        using IHost host = ServerHost
+        using IHost host = TestHosts
             .CreateBuilder(new[] { "--Network:Port=0", "--DevelopmentAuthentication:Enabled=true" }, root.Path)
             .Build();
         host.Start();

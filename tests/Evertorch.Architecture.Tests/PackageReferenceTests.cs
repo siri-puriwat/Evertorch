@@ -13,7 +13,13 @@ public sealed class PackageReferenceTests
             ["Evertorch.Game"] = new string[0],
             ["Evertorch.Protocol"] = new string[0],
             ["Evertorch.Rules"] = new string[0],
-            ["Evertorch.Persistence"] = new string[0],
+            ["Evertorch.Persistence"] = new[]
+            {
+                "Microsoft.EntityFrameworkCore",
+                "Microsoft.EntityFrameworkCore.Relational",
+                "Microsoft.EntityFrameworkCore.Design",
+                "Npgsql.EntityFrameworkCore.PostgreSQL"
+            },
             ["Evertorch.Server"] = new[] { "LiteNetLib", "Microsoft.Extensions.Hosting" },
             ["Evertorch.Tools"] = new[] { "YamlDotNet" }
         };

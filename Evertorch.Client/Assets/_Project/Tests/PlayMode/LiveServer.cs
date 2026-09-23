@@ -72,9 +72,10 @@ internal sealed class LiveServer : IDisposable
     }
 
     /// <summary>
-    ///     Starts the server on a port it picks itself, so nothing can take one between a probe and the bind.
+    ///     Starts the server on a port it picks itself, so nothing can take one between a probe and the bind, with
+    ///     <paramref name="database" /> as its database.
     /// </summary>
-    public void Start(string extraArguments = "")
+    public void Start(LiveDatabase database, string extraArguments = "")
     {
         var start = new ProcessStartInfo
         {
@@ -88,6 +89,9 @@ internal sealed class LiveServer : IDisposable
             RedirectStandardOutput = true,
             RedirectStandardError = true
         };
+
+        // The environment rather than an argument, as the launcher does.
+        start.EnvironmentVariables["ConnectionStrings__Evertorch"] = database.ConnectionString;
         m_process = new Process { StartInfo = start };
         m_process.OutputDataReceived += (_, line) => Record(line.Data);
         m_process.ErrorDataReceived += (_, line) => Record(line.Data);

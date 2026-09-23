@@ -5,9 +5,18 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Testcontainers.PostgreSql" Version="4.15.0" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\Evertorch.Server\Evertorch.Server.csproj" />
     <!-- Test-only: builds real packages so the server reader is proven against the actual writer. -->
     <ProjectReference Include="..\..\Evertorch.Tools\Evertorch.Tools.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The database container setup belongs to the persistence tests (Coding Standards §10). -->
+    <Compile Include="..\Evertorch.Persistence.Tests\PostgresFixture.cs" Link="Database\PostgresFixture.cs" />
   </ItemGroup>
 
   <ItemGroup>
