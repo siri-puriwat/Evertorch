@@ -53,6 +53,7 @@ public sealed class GameClient : MonoBehaviour
     private PointerMoveHandler? m_pointerHandler;
     private TargetInputSource? m_targetSource;
     private TargetMarker? m_targetMarker;
+    private AutoAttackState? m_autoAttack;
     private MovementController? m_controller;
     private LocalPlayerDriver? m_driver;
     private FixedTickClock? m_clock;
@@ -313,7 +314,8 @@ public sealed class GameClient : MonoBehaviour
         BindInput();
         m_controller = new MovementController(world.Grid);
         m_clock = new FixedTickClock(1f / Connection.ServerTickRate);
-        m_driver = new LocalPlayerDriver(m_controller, new MoveIntentProducer(), world, Connection);
+        m_autoAttack = new AutoAttackState(world, m_controller, Connection, 1.0 / Connection.ServerTickRate);
+        m_driver = new LocalPlayerDriver(m_controller, new MoveIntentProducer(), world, Connection, m_autoAttack);
         Status = $"In {map.DisplayName}";
     }
 
@@ -341,9 +343,10 @@ public sealed class GameClient : MonoBehaviour
         InputAction? next = actions?.FindAction("Player/Next");
         InputAction? previous = actions?.FindAction("Player/Previous");
         InputAction? clear = actions?.FindAction("Player/ClearTarget");
-        if (next != null && previous != null && clear != null)
+        InputAction? attack = actions?.FindAction("Player/Attack");
+        if (next != null && previous != null && clear != null && attack != null)
         {
-            m_targetSource = new TargetInputSource(next, previous, clear);
+            m_targetSource = new TargetInputSource(next, previous, clear, attack);
         }
     }
 
@@ -365,6 +368,7 @@ public sealed class GameClient : MonoBehaviour
             out EntityId entity);
         if (result == PointerMoveResult.Accepted)
         {
+            m_autoAttack?.OnWalkRequested();
             m_marker?.ShowAccepted(m_controller.Path[m_controller.Path.Count - 1]);
         }
         else if (result == PointerMoveResult.Refused)
@@ -373,8 +377,8 @@ public sealed class GameClient : MonoBehaviour
         }
         else if (result == PointerMoveResult.Entity)
         {
-            // Until the attack command exists a click on a monster only asks to select it.
-            Connection?.SendTarget(entity);
+            // A click or tap on a monster attacks it, as in the reference game (Prototype Content §4).
+            m_autoAttack?.Attack(entity);
         }
     }
 
@@ -389,6 +393,10 @@ public sealed class GameClient : MonoBehaviour
         if (request == TargetRequest.Clear)
         {
             Connection?.SendTarget(default);
+        }
+        else if (request == TargetRequest.Attack)
+        {
+            m_autoAttack?.Attack(m_world.Target);
         }
         else if (request != TargetRequest.None)
         {
@@ -442,6 +450,7 @@ public sealed class GameClient : MonoBehaviour
 
         m_world = null;
         m_driver = null;
+        m_autoAttack = null;
         m_controller = null;
         m_clock = null;
         foreach (EntityView view in m_remoteViews.Values)

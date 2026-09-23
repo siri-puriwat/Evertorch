@@ -12,19 +12,23 @@ public sealed class TargetInputSource : IDisposable
     private readonly InputAction m_next;
     private readonly InputAction m_previous;
     private readonly InputAction m_clear;
+    private readonly InputAction m_attack;
     private TargetRequest m_request;
 
-    public TargetInputSource(InputAction next, InputAction previous, InputAction clear)
+    public TargetInputSource(InputAction next, InputAction previous, InputAction clear, InputAction attack)
     {
         m_next = next ?? throw new ArgumentNullException(nameof(next));
         m_previous = previous ?? throw new ArgumentNullException(nameof(previous));
         m_clear = clear ?? throw new ArgumentNullException(nameof(clear));
+        m_attack = attack ?? throw new ArgumentNullException(nameof(attack));
         m_next.performed += OnNext;
         m_previous.performed += OnPrevious;
         m_clear.performed += OnClear;
+        m_attack.performed += OnAttack;
         m_next.Enable();
         m_previous.Enable();
         m_clear.Enable();
+        m_attack.Enable();
     }
 
     public void Dispose()
@@ -32,6 +36,7 @@ public sealed class TargetInputSource : IDisposable
         m_next.performed -= OnNext;
         m_previous.performed -= OnPrevious;
         m_clear.performed -= OnClear;
+        m_attack.performed -= OnAttack;
     }
 
     public TargetRequest TakeRequest()
@@ -60,6 +65,11 @@ public sealed class TargetInputSource : IDisposable
     private void OnClear(InputAction.CallbackContext context)
     {
         m_request = TargetRequest.Clear;
+    }
+
+    private void OnAttack(InputAction.CallbackContext context)
+    {
+        m_request = TargetRequest.Attack;
     }
 }
 }

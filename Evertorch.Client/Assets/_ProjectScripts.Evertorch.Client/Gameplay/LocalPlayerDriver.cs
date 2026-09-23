@@ -12,6 +12,7 @@ public sealed class LocalPlayerDriver
     private readonly MoveIntentProducer m_producer;
     private readonly ClientWorld m_world;
     private readonly IMoveIntentSink m_sink;
+    private readonly AutoAttackState? m_autoAttack;
     private bool m_wasMoving;
     private bool m_isStopOutstanding;
     private uint m_firstStopSequence;
@@ -20,12 +21,14 @@ public sealed class LocalPlayerDriver
         MovementController controller,
         MoveIntentProducer producer,
         ClientWorld world,
-        IMoveIntentSink sink)
+        IMoveIntentSink sink,
+        AutoAttackState? autoAttack = null)
     {
         m_controller = controller ?? throw new ArgumentNullException(nameof(controller));
         m_producer = producer ?? throw new ArgumentNullException(nameof(producer));
         m_world = world ?? throw new ArgumentNullException(nameof(world));
         m_sink = sink ?? throw new ArgumentNullException(nameof(sink));
+        m_autoAttack = autoAttack;
     }
 
     public int IntentsSent { get; private set; }
@@ -34,6 +37,7 @@ public sealed class LocalPlayerDriver
     {
         MovementPredictor predictor = m_world.Predictor;
         WorldPosition previous = predictor.Position;
+        m_autoAttack?.Tick(previous);
         WorldDirection direction = m_controller.Tick(previous, predictor.StepDistance);
         bool isIdle = direction == default;
 

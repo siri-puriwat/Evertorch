@@ -5,17 +5,24 @@ using Evertorch.Game;
 namespace Evertorch.Client
 {
 /// <summary>
-///     Chooses this tick's direction from the two ways a player can ask to move: a held direction, or a point to walk
-///     to. A held direction always wins and ends the walk in the same tick it is seen.
+///     Chooses this tick's direction from the ways a player can ask to move: a held direction, a point to walk to,
+///     or a target to walk up to. A held direction always wins and ends the walk in the same tick it is seen. While
+///     a swing is committed the direction is zero; a walk requested meanwhile starts after the impact.
 /// </summary>
 public sealed class MovementController
 {
     public const int PathNodeBudget = 8192;
 
+    /// <summary>
+    ///     How far a chased target may move from where its path was aimed before the path is found again.
+    /// </summary>
+    public const float ChaseRepathDistance = 0.5f;
+
     private readonly GridPathfinder m_pathfinder;
     private readonly PathFollower m_follower = new();
     private readonly List<WorldPosition> m_foundWaypoints = new();
     private WorldDirection m_manualDirection;
+    private WorldPosition m_chaseGoal;
 
     public MovementController(NavigationGrid grid)
     {
@@ -31,6 +38,19 @@ public sealed class MovementController
     public int RejectedMoveRequests { get; private set; }
 
     public int CancelledPaths { get; private set; }
+
+    public bool HasManualDirection => m_manualDirection != default;
+
+    /// <summary>
+    ///     Whether the active path is an approach to a target rather than a walk the player asked for.
+    /// </summary>
+    public bool IsChasing { get; private set; }
+
+    /// <summary>
+    ///     Set from a swing's start until its impact (Gameplay Systems §7): the server applies movement as zero then,
+    ///     and so does the prediction.
+    /// </summary>
+    public bool IsLocked { get; set; }
 
     /// <summary>
     ///     The latest held direction in world space. Any length is accepted; only the heading is kept.
@@ -52,7 +72,39 @@ public sealed class MovementController
         }
 
         m_follower.Follow(m_foundWaypoints);
+        IsChasing = false;
         return true;
+    }
+
+    /// <summary>
+    ///     Walks toward a target's drawn position, finding the path again only when the target has moved on. The
+    ///     approach produces ordinary movement intents; the server only checks range.
+    /// </summary>
+    public void Chase(WorldPosition from, WorldPosition target)
+    {
+        if (IsChasing && m_follower.IsActive && HorizontalDistance(m_chaseGoal, target) <= ChaseRepathDistance)
+        {
+            return;
+        }
+
+        if (m_pathfinder.TryFindPath(from, target, PathNodeBudget, m_foundWaypoints))
+        {
+            m_follower.Follow(m_foundWaypoints);
+            m_chaseGoal = target;
+            IsChasing = true;
+        }
+    }
+
+    /// <summary>
+    ///     Ends an approach that has arrived; a walk the player asked for is left alone.
+    /// </summary>
+    public void StopChase()
+    {
+        if (IsChasing)
+        {
+            m_follower.Cancel();
+            IsChasing = false;
+        }
     }
 
     public void CancelPath()
@@ -63,6 +115,7 @@ public sealed class MovementController
         }
 
         m_follower.Cancel();
+        IsChasing = false;
     }
 
     public WorldDirection Tick(WorldPosition position, float stepDistance)
@@ -70,10 +123,17 @@ public sealed class MovementController
         if (m_manualDirection != default)
         {
             CancelPath();
-            return m_manualDirection;
+            return IsLocked ? default : m_manualDirection;
         }
 
-        return m_follower.Advance(position, stepDistance);
+        return IsLocked ? default : m_follower.Advance(position, stepDistance);
+    }
+
+    private static float HorizontalDistance(WorldPosition a, WorldPosition b)
+    {
+        float dx = a.X - b.X;
+        float dz = a.Z - b.Z;
+        return (float)Math.Sqrt(dx * dx + dz * dz);
     }
 }
 }

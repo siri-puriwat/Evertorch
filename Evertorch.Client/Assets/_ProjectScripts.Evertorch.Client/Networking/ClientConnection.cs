@@ -9,7 +9,7 @@ namespace Evertorch.Client
 ///     Runs the client side of the protocol over a transport: hello, world entry, and then the routing of world
 ///     messages into a <see cref="ClientWorld" />. It trusts nothing it receives beyond what decodes cleanly.
 /// </summary>
-public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
+public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink, ICombatCommandSink
 {
     private readonly IClientTransport m_transport;
     private readonly ClientConnectionSettings m_settings;
@@ -182,6 +182,32 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
         }
     }
 
+    /// <summary>
+    ///     Asks the server to attack <paramref name="target" /> repeatedly. Commands share one sequence per connection,
+    ///     starting at 1, which the server uses to drop duplicates.
+    /// </summary>
+    public void SendAttack(EntityId target)
+    {
+        if (State != ClientConnectionState.InWorld)
+        {
+            return;
+        }
+
+        new AttackEntity(target, NextCommandSequence()).Write(m_sendBuffer);
+        SendRouted(MessageOpcode.AttackEntity, AttackEntity.EncodedLength);
+    }
+
+    public void SendCancel()
+    {
+        if (State != ClientConnectionState.InWorld)
+        {
+            return;
+        }
+
+        new CancelAction(NextCommandSequence()).Write(m_sendBuffer);
+        SendRouted(MessageOpcode.CancelAction, CancelAction.EncodedLength);
+    }
+
     public void Send(MoveIntent intent)
     {
         if (State != ClientConnectionState.InWorld)
@@ -214,32 +240,6 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
 
         new TargetEntity(target).Write(m_sendBuffer);
         SendRouted(MessageOpcode.TargetEntity, TargetEntity.EncodedLength);
-    }
-
-    /// <summary>
-    ///     Asks the server to attack <paramref name="target" /> repeatedly. Commands share one sequence per connection,
-    ///     starting at 1, which the server uses to drop duplicates.
-    /// </summary>
-    public void SendAttack(EntityId target)
-    {
-        if (State != ClientConnectionState.InWorld)
-        {
-            return;
-        }
-
-        new AttackEntity(target, NextCommandSequence()).Write(m_sendBuffer);
-        SendRouted(MessageOpcode.AttackEntity, AttackEntity.EncodedLength);
-    }
-
-    public void SendCancel()
-    {
-        if (State != ClientConnectionState.InWorld)
-        {
-            return;
-        }
-
-        new CancelAction(NextCommandSequence()).Write(m_sendBuffer);
-        SendRouted(MessageOpcode.CancelAction, CancelAction.EncodedLength);
     }
 
     public void SendRespawn()

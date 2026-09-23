@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Evertorch.Client;
+using Evertorch.Rules;
 
 namespace Evertorch.Server.Tests
 {
@@ -16,7 +17,12 @@ internal sealed class ClientServerRig
     private readonly List<int> m_phases = new();
     private int m_nowMilliseconds;
 
-    public TestServer Server { get; } = new();
+    public ClientServerRig(bool withMonsters = false, IRandomSource? combatRandom = null)
+    {
+        Server = new TestServer(withMonsters: withMonsters, combatRandom: combatRandom);
+    }
+
+    public TestServer Server { get; }
 
     public int NowMilliseconds => m_nowMilliseconds;
 
