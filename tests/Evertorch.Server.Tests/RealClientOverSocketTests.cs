@@ -100,6 +100,69 @@ public sealed class RealClientOverSocketTests
         }
     }
 
+    private static ClientConnection EnterOverSocket(
+        LiteNetLibClientTransport socket,
+        ServerContent content,
+        int port,
+        string identity,
+        string name)
+    {
+        var connection = new ClientConnection(
+            socket,
+            new ClientConnectionSettings(
+                CompatibilityOptions.DefaultBuildVersion,
+                content.ClientContentVersion,
+                $"dev:{identity}"),
+            new ContentMaps(content));
+        var selection = new AutoEnter(connection, name);
+        connection.Connect("127.0.0.1", port);
+        bool isEntered = PumpUntil(
+            connection,
+            null,
+            () =>
+            {
+                selection.Poll();
+                return connection.World?.Inventory.IsCurrent == true;
+            });
+        Assert.That(isEntered, Is.True, $"entered the world: {connection.LocalError} {connection.DisconnectCause}");
+        return connection;
+    }
+
+    [Test]
+    public void Client_ReconnectingOverTheSocket_GetsTheSameEntityAndAFreshBaselineWithoutASecondLoad()
+    {
+        using var root = new TemporaryDirectory();
+        PackageFixture.WriteTo(
+            Path.Combine(root.Path, "content", "server"),
+            PackageFixture.BuildRepositoryPackage());
+        var store = new InMemoryGameStore();
+        using IHost host = TestHosts
+            .CreateBuilder(new[] { "--Network:Port=0", "--DevelopmentAuthentication:Enabled=true" }, root.Path, store)
+            .Build();
+        host.Start();
+        int port = host.Services.GetRequiredService<IServerTransport>().LocalPort;
+        ServerContent content = host.Services.GetRequiredService<ServerContent>();
+
+        using var firstSocket = new LiteNetLibClientTransport("evertorch", 5000);
+        ClientConnection first = EnterOverSocket(firstSocket, content, port, "socket-reconnect", "Socket23");
+        EntityId entity = first.World!.LocalEntity;
+        long character = first.Characters.Single().Character.Value;
+        first.Disconnect();
+        Assert.That(PumpUntil(first, null, () => first.State == ClientConnectionState.Disconnected), Is.True);
+
+        using var secondSocket = new LiteNetLibClientTransport("evertorch", 5000);
+        ClientConnection second = EnterOverSocket(secondSocket, content, port, "socket-reconnect", "Socket23");
+
+        Assert.That(second.World!.LocalEntity, Is.EqualTo(entity), "attached to the retained entity");
+        Assert.That(second.World.Inventory.IsCurrent, Is.True, "the baseline ended with the inventory");
+        Assert.That(store.Loads[character], Is.EqualTo(1), "no second copy was loaded");
+        Assert.That(second.MalformedMessages + second.UnexpectedMessages, Is.Zero);
+        Assert.That(
+            host.Services.GetRequiredService<SessionRegistry>().Characters,
+            Has.Count.EqualTo(1));
+        host.StopAsync().GetAwaiter().GetResult();
+    }
+
     [Test]
     public void Client_WalksOverALossyLink_AndEndsWhereTheServerReportsIt()
     {
