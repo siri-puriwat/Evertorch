@@ -24,6 +24,11 @@ public sealed class EntityView : MonoBehaviour
     private Vector3 m_bodyPosition;
     private Vector3 m_bodyScale;
 
+    /// <summary>
+    ///     The Addressables key the body was requested with; empty when the content did not know the entity.
+    /// </summary>
+    public string Key { get; private set; } = string.Empty;
+
     public bool HasBody { get; private set; }
 
     public bool IsPlaceholder { get; private set; }
@@ -38,6 +43,7 @@ public sealed class EntityView : MonoBehaviour
         var root = new GameObject(objectName);
         EntityView view = root.AddComponent<EntityView>();
         view.m_tint = tint;
+        view.Key = key;
         catalog.Request(key, prefab => view.AttachBody(prefab, catalog));
         return view;
     }

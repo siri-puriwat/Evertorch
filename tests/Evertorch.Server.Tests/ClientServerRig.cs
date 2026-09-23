@@ -17,9 +17,12 @@ internal sealed class ClientServerRig
     private readonly List<int> m_phases = new();
     private int m_nowMilliseconds;
 
-    public ClientServerRig(bool withMonsters = false, IRandomSource? combatRandom = null)
+    public ClientServerRig(
+        bool withMonsters = false,
+        IRandomSource? combatRandom = null,
+        IRandomSource? dropRandom = null)
     {
-        Server = new TestServer(withMonsters: withMonsters, combatRandom: combatRandom);
+        Server = new TestServer(withMonsters: withMonsters, combatRandom: combatRandom, dropRandom: dropRandom);
     }
 
     public TestServer Server { get; }

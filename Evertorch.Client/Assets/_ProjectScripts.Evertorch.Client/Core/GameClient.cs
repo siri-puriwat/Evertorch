@@ -96,6 +96,8 @@ public sealed class GameClient : MonoBehaviour
 
     public CombatPresenter? Combat => m_combat;
 
+    public IReadOnlyDictionary<EntityId, EntityView> RemoteViews => m_remoteViews;
+
     public MovementController? Controller => m_controller;
 
     public FixedTickClock? Clock => m_clock;

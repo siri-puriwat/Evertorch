@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using Evertorch.Game;
+using Evertorch.Protocol;
 using NUnit.Framework;
 
 namespace Evertorch.Server.Tests
@@ -65,6 +66,34 @@ public sealed class ClientApproachTests
         Assert.That(client.World.Smoother.Snaps, Is.Zero);
         Assert.That(client.World.Smoother.LargestCorrection, Is.LessThan(1e-3f));
         Assert.That(rig.Server.SessionOf(rig.Server.Sessions.Sessions.Single().Connection).RefusedCommands, Is.Zero);
+    }
+
+    [Test]
+    public void Attack_UntilTheSlimeDies_ShowsTheClientTheSlimeGelItDropped()
+    {
+        // The slime's one drop entry rolls 0, below any chance, and draws the smallest amount.
+        var rig = new ClientServerRig(true, new SureHitRandom(), new ScriptedRandom(0));
+        SimulatedClient client = rig.AddClient(7, 3, 17);
+        client.Link.LatencyMilliseconds = 50;
+        rig.ConnectAll();
+        MapInstance map = rig.Server.World.Maps.Single();
+        MonsterEntity slime = rig.Server.MonstersNear(map.Definition.SpawnPosition).First();
+        rig.AdvanceUntil(() => client.Connection.World != null && client.World.Remotes.ContainsKey(slime.Id), 3000);
+        var dropped = new List<ItemDropped>();
+        client.World.ItemDroppedReceived += dropped.Add;
+
+        client.AutoAttack!.Attack(slime.Id);
+        int took = rig.AdvanceUntil(() => dropped.Count > 0, 30000);
+
+        Assert.That(took, Is.GreaterThan(0), "the slime died and dropped");
+        ItemDropped gel = dropped.Single();
+        Assert.That(gel.ItemId, Is.EqualTo("item.material.slime_gel"));
+        Assert.That(gel.Amount, Is.EqualTo(1u));
+        Assert.That(client.World.Remotes[gel.Entity].Kind, Is.EqualTo(EntityKind.ItemDrop));
+        Assert.That(client.World.Remotes[gel.Entity].DefinitionId, Is.EqualTo("item.material.slime_gel"));
+        Assert.That(map.ItemDrops.Single().Id, Is.EqualTo(gel.Entity));
+        Assert.That(client.World.Remotes[slime.Id].IsDead, Is.True);
+        Assert.That(client.AutoAttack.CancelsSent, Is.Zero);
     }
 
     [Test]

@@ -1,10 +1,6 @@
 using System;
 using System.Collections;
-using System.Collections.Generic;
-using System.Diagnostics;
 using System.Globalization;
-using System.IO;
-using System.Linq;
 using System.Text.RegularExpressions;
 using Evertorch.Game;
 using NUnit.Framework;
@@ -16,17 +12,14 @@ namespace Evertorch.Client.Tests.PlayMode
 /// <summary>
 /// Unity's runtime on one side and the real .NET server process on the other, over a simulated bad link. This is
 /// the one place that proves both runtimes compute the same movement while messages are delayed and lost.
-/// Needs <c>scripts/verify.ps1</c> (or a Release build plus a content build) to have produced the server first.
 /// </summary>
 public sealed class LiveServerConvergenceTests
 {
     private const float StartTimeoutSeconds = 30f;
     private const float StepTimeoutSeconds = 15f;
     private const float ConvergedDistance = 1e-3f;
-    private const string ServerDll = "artifacts/bin/Evertorch.Server/release/Evertorch.Server.dll";
 
-    private readonly List<string> m_serverOutput = new List<string>();
-    private Process? m_server;
+    private LiveServer? m_server;
     private LiteNetLibClientTransport? m_socket;
 
     [TearDown]
@@ -34,41 +27,26 @@ public sealed class LiveServerConvergenceTests
     {
         m_socket?.Dispose();
         m_socket = null;
-        if (m_server != null)
-        {
-            if (!m_server.HasExited)
-            {
-                m_server.Kill();
-                m_server.WaitForExit(5000);
-            }
-
-            m_server.Dispose();
-            m_server = null;
-        }
+        m_server?.Dispose();
+        m_server = null;
     }
 
     [UnityTest]
     public IEnumerator Client_OnABadLink_EndsWhereTheServerProcessSaysItIs()
     {
-        string repository = Path.GetFullPath(Path.Combine(Application.dataPath, "..", ".."));
-        string serverDll = Path.Combine(repository, ServerDll);
-        string serverContent = Path.Combine(repository, "artifacts", "content", "server");
-        bool hasClientPackage = HasClientPackage();
-        if (!File.Exists(serverDll) || !Directory.Exists(serverContent) || !hasClientPackage)
+        if (!LiveServer.IsBuilt())
         {
-            Assert.Inconclusive(
-                "Needs the built server, its content package, and the client package. "
-                + $"Run scripts/verify.ps1 and {StreamingContentLoader.MissingPackageHint}");
+            Assert.Inconclusive(LiveServer.MissingPrerequisites);
         }
 
         // A package that is present but refused is a defect, not a missing prerequisite.
-        ClientContent? content = LoadClientContent(out string contentError);
+        ClientContent? content = LiveServer.LoadClientContent(out string contentError);
         Assert.That(content, Is.Not.Null, contentError);
 
-        // The server picks its own free port, so nothing can take one between a probe and the bind.
-        StartServer(serverDll, serverContent);
-        yield return WaitUntil(() => TryReadListeningPort(out int _), StartTimeoutSeconds);
-        Assert.That(TryReadListeningPort(out int port), Is.True, $"server output: {JoinOutput()}");
+        LiveServer server = m_server = new LiveServer();
+        server.Start();
+        yield return WaitUntil(() => server.TryReadListeningPort(out int _), StartTimeoutSeconds);
+        Assert.That(server.TryReadListeningPort(out int port), Is.True, $"server output: {server.JoinOutput()}");
 
         m_socket = new LiteNetLibClientTransport("evertorch", 5000);
         LossyTransport link = new LossyTransport(m_socket, 9, () => Time.realtimeSinceStartupAsDouble)
@@ -93,7 +71,7 @@ public sealed class LiveServerConvergenceTests
         Assert.That(
             connection.State,
             Is.EqualTo(ClientConnectionState.InWorld),
-            $"{connection.LocalError} {connection.DisconnectCause} server output: {JoinOutput()}");
+            $"{connection.LocalError} {connection.DisconnectCause} server output: {server.JoinOutput()}");
 
         ClientWorld world = connection.World!;
         MovementController controller = new MovementController(world.Grid);
@@ -109,43 +87,24 @@ public sealed class LiveServerConvergenceTests
 
         // The server republishes what its console reads once a second, so wait out one full period of quiet.
         yield return Simulate(connection, driver, world, clock, 1.5f, () => false);
-        lock (m_serverOutput)
-        {
-            m_serverOutput.Clear();
-        }
+        server.ClearOutput();
 
-        m_server!.StandardInput.WriteLine("players");
-        yield return WaitUntil(() => HasOutput(" at ("), StepTimeoutSeconds);
+        server.SendCommand("players");
+        yield return WaitUntil(() => server.HasOutput(" at ("), StepTimeoutSeconds);
 
         WorldPosition predicted = world.Predictor.Position;
-        Assert.That(TryReadServerPosition(out float serverX, out float serverZ), Is.True, JoinOutput());
+        Assert.That(TryReadServerPosition(server, out float serverX, out float serverZ), Is.True, server.JoinOutput());
         Assert.That(predicted.X, Is.GreaterThan(3f), "the player really walked");
         Assert.That(link.Dropped, Is.GreaterThan(0), "the link really lost messages");
         Assert.That(world.Smoother.Snaps, Is.EqualTo(0));
-        Assert.That(predicted.X, Is.EqualTo(serverX).Within(ConvergedDistance), $"server output: {JoinOutput()}");
+        Assert.That(
+            predicted.X,
+            Is.EqualTo(serverX).Within(ConvergedDistance),
+            $"server output: {server.JoinOutput()}");
         Assert.That(predicted.Z, Is.EqualTo(serverZ).Within(ConvergedDistance));
-        UnityEngine.Debug.Log(
+        Debug.Log(
             $"Live convergence: client {predicted}, server ({serverX}, {serverZ}), largest correction "
             + $"{world.Smoother.LargestCorrection} m, dropped {link.Dropped}, reordered {link.Reordered}");
-    }
-
-    private static bool HasClientPackage()
-    {
-        return File.Exists(
-            Path.Combine(
-                Application.streamingAssetsPath,
-                StreamingContentLoader.FolderName,
-                ClientContentParser.ManifestFile));
-    }
-
-    private static ClientContent? LoadClientContent(out string error)
-    {
-        string folder = Path.Combine(Application.streamingAssetsPath, StreamingContentLoader.FolderName);
-        byte[] manifest = File.ReadAllBytes(Path.Combine(folder, ClientContentParser.ManifestFile));
-        Dictionary<string, byte[]> files = ClientContentParser
-            .ReadFileList(manifest, out error)
-            .ToDictionary(name => name, name => File.ReadAllBytes(Path.Combine(folder, name)));
-        return ClientContentParser.Parse(manifest, files, out error);
     }
 
     private static IEnumerator WaitUntil(Func<bool> condition, float timeoutSeconds)
@@ -180,91 +139,19 @@ public sealed class LiveServerConvergenceTests
         }
     }
 
-    private void StartServer(string serverDll, string serverContent)
-    {
-        ProcessStartInfo start = new ProcessStartInfo
-        {
-            FileName = "dotnet",
-            Arguments = $"\"{serverDll}\" --Network:Port=0 --DevelopmentAuthentication:Enabled=true"
-                + $" --Content:ServerPackagePath=\"{serverContent}\"",
-            WorkingDirectory = Path.GetDirectoryName(serverDll),
-            UseShellExecute = false,
-            CreateNoWindow = true,
-            RedirectStandardInput = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-        };
-        m_server = new Process { StartInfo = start };
-        m_server.OutputDataReceived += (_, line) => Record(line.Data);
-        m_server.ErrorDataReceived += (_, line) => Record(line.Data);
-        m_server.Start();
-        m_server.BeginOutputReadLine();
-        m_server.BeginErrorReadLine();
-    }
-
-    private void Record(string? line)
-    {
-        if (line != null)
-        {
-            lock (m_serverOutput)
-            {
-                m_serverOutput.Add(line);
-            }
-        }
-    }
-
-    private bool HasOutput(string text)
-    {
-        lock (m_serverOutput)
-        {
-            return m_serverOutput.Any(line => line.Contains(text));
-        }
-    }
-
-    private string JoinOutput()
-    {
-        lock (m_serverOutput)
-        {
-            return string.Join(" / ", m_serverOutput);
-        }
-    }
-
-    private bool TryReadListeningPort(out int port)
-    {
-        port = 0;
-        Regex listening = new Regex(@"Listening for clients on [^:]+:(\d+)");
-        lock (m_serverOutput)
-        {
-            foreach (string line in m_serverOutput)
-            {
-                Match match = listening.Match(line);
-                if (match.Success)
-                {
-                    port = int.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture);
-                    return true;
-                }
-            }
-        }
-
-        return false;
-    }
-
-    private bool TryReadServerPosition(out float x, out float z)
+    private static bool TryReadServerPosition(LiveServer server, out float x, out float z)
     {
         x = 0f;
         z = 0f;
         Regex position = new Regex(@" at \(([^,]+), ([^,]+), ([^)]+)\)");
-        lock (m_serverOutput)
+        foreach (string line in server.Output())
         {
-            foreach (string line in m_serverOutput)
+            Match match = position.Match(line);
+            if (match.Success)
             {
-                Match match = position.Match(line);
-                if (match.Success)
-                {
-                    x = float.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture);
-                    z = float.Parse(match.Groups[3].Value, CultureInfo.InvariantCulture);
-                    return true;
-                }
+                x = float.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture);
+                z = float.Parse(match.Groups[3].Value, CultureInfo.InvariantCulture);
+                return true;
             }
         }
 
