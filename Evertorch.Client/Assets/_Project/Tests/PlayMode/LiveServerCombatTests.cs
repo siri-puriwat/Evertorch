@@ -20,9 +20,10 @@ using Object = UnityEngine.Object;
 namespace Evertorch.Client.Tests.PlayMode
 {
 /// <summary>
-///     The whole client against the real server process (Milestone 3 verification "the player can kill the training
-///     slime and see a slime-gel drop"): <see cref="GameClient" /> with the project's input actions, driven only by
-///     simulated keys and buttons: Tab to target, the gamepad's West button to attack, R to respawn.
+///     The whole client against the real server process and a real database (Milestone 3 verification "the player can
+///     kill the training slime and see a slime-gel drop"; Milestone 4 verification "a pickup is committed before
+///     success and survives a server restart"): <see cref="GameClient" /> with the project's input actions, driven only
+///     by simulated keys and buttons: Tab to target, the gamepad's West button to attack, R to respawn, F to pick up.
 /// </summary>
 public sealed class LiveServerCombatTests : InputTestFixture
 {
@@ -33,6 +34,8 @@ public sealed class LiveServerCombatTests : InputTestFixture
     private const float FightTimeoutSeconds = 180f;
 
     private readonly List<ItemDropped> m_dropped = new();
+    private int m_kills;
+    private int m_respawns;
     private LiveDatabase? m_database;
     private LiveServer? m_server;
     private GameObject? m_client;
@@ -57,6 +60,10 @@ public sealed class LiveServerCombatTests : InputTestFixture
             m_actions = null;
         }
 
+        m_dropped.Clear();
+        m_kills = 0;
+        m_respawns = 0;
+
         // Leave the next test an empty scene rather than the map, whose camera and ground would still be there.
         Scene loaded = SceneManager.GetActiveScene();
         Scene empty = SceneManager.CreateScene($"Empty {Guid.NewGuid():N}");
@@ -70,80 +77,112 @@ public sealed class LiveServerCombatTests : InputTestFixture
     [UnityTest]
     public IEnumerator Player_FightsSlimesWithKeysAndButtons_UntilOneDropsGelThatIsDrawnFromItsModel()
     {
-        string actionsPath = Path.Combine(Application.dataPath, ActionsAsset);
-        if (!LiveServer.IsBuilt() || !File.Exists(actionsPath))
-        {
-            Assert.Inconclusive(LiveServer.MissingPrerequisites);
-        }
-
-        Task<LiveDatabase> starting = LiveDatabase.StartAsync();
-        yield return new WaitUntil(() => starting.IsCompleted);
-        Assert.That(starting.IsFaulted, Is.False, starting.Exception?.GetBaseException().Message);
-        LiveDatabase database = m_database = starting.Result;
-
-        LiveServer server = m_server = new LiveServer();
-        server.Start(database, "--World:RandomSeed=11");
-        yield return WaitUntil(() => server.TryReadListeningPort(out int _), StartTimeoutSeconds);
-        Assert.That(server.TryReadListeningPort(out int port), Is.True, $"server output: {server.JoinOutput()}");
+        string actionsPath = RequirePrerequisites();
+        yield return StartDatabaseAndServer();
+        Assert.That(m_server!.TryReadListeningPort(out int port), Is.True, $"server output: {m_server.JoinOutput()}");
 
         Keyboard keyboard = InputSystem.AddDevice<Keyboard>();
         Gamepad gamepad = InputSystem.AddDevice<Gamepad>();
         GameClient client = CreateClient(port, actionsPath);
         yield return CreateAndEnterThroughTheOverlay(client, "LiveFighter");
         yield return WaitUntil(() => client.World != null && client.Combat != null, StartTimeoutSeconds);
-        Assert.That(client.World, Is.Not.Null, $"{client.Status} server output: {server.JoinOutput()}");
+        Assert.That(client.World, Is.Not.Null, $"{client.Status} server output: {m_server.JoinOutput()}");
         ClientWorld world = client.World!;
-        world.ItemDroppedReceived += m_dropped.Add;
         yield return WaitUntil(() => world.Inventory.IsCurrent, StartTimeoutSeconds);
         Assert.That(world.Inventory.IsCurrent, Is.True, "the baseline ends with the inventory snapshot");
         Assert.That(world.Inventory.Rows, Is.Empty, "a new character carries nothing");
 
-        int kills = 0;
-        int respawns = 0;
-        world.EntityDiedReceived += died =>
-        {
-            if (died.Entity != world.LocalEntity)
-            {
-                kills++;
-            }
-        };
-        EntityId attacking = default;
-        float deadline = Time.realtimeSinceStartup + FightTimeoutSeconds;
-        while (Time.realtimeSinceStartup < deadline && FindGelView(client) == null)
-        {
-            if (world.IsLocalDead)
-            {
-                yield return Tap(keyboard.rKey);
-                respawns++;
-                yield return WaitUntil(() => !world.IsLocalDead, 5f);
-                attacking = default;
-            }
-            else if (world.Target == default)
-            {
-                yield return Tap(keyboard.tabKey);
-                yield return WaitUntil(() => world.Target != default, 2f);
-            }
-            else if (world.Target != attacking)
-            {
-                attacking = world.Target;
-                yield return Tap(gamepad.buttonWest);
-            }
-            else
-            {
-                yield return null;
-            }
-        }
+        yield return FightUntilGelDrops(client, world, keyboard, gamepad);
 
         EntityView? gel = FindGelView(client);
         Assert.That(
             gel,
             Is.Not.Null,
-            $"kills {kills}, respawns {respawns}, drops {m_dropped.Count}, status {client.Status}");
+            $"kills {m_kills}, respawns {m_respawns}, drops {m_dropped.Count}, status {client.Status}");
         Assert.That(gel!.HasBody, Is.True);
         Assert.That(gel.IsPlaceholder, Is.False, "the body is the pickup_slime_gel prefab, not the placeholder");
         Assert.That(m_dropped.Any(dropped => dropped.ItemId == SlimeGel), Is.True);
-        Assert.That(kills, Is.GreaterThanOrEqualTo(1));
-        Debug.Log($"Live combat: {kills} kills, {respawns} respawns, {m_dropped.Count} drops announced");
+        Assert.That(m_kills, Is.GreaterThanOrEqualTo(1));
+        Debug.Log($"Live combat: {m_kills} kills, {m_respawns} respawns, {m_dropped.Count} drops announced");
+    }
+
+    [UnityTest]
+    public IEnumerator Player_PicksUpTheGelWithTheKey_AndStillOwnsItAfterAReconnectAndAServerRestart()
+    {
+        string actionsPath = RequirePrerequisites();
+        yield return StartDatabaseAndServer();
+        Assert.That(m_server!.TryReadListeningPort(out int port), Is.True, $"server output: {m_server.JoinOutput()}");
+
+        Keyboard keyboard = InputSystem.AddDevice<Keyboard>();
+        Gamepad gamepad = InputSystem.AddDevice<Gamepad>();
+        GameClient client = CreateClient(port, actionsPath);
+        yield return CreateAndEnterThroughTheOverlay(client, "LivePicker");
+        yield return WaitUntil(() => client.World?.Inventory.IsCurrent == true, StartTimeoutSeconds);
+        Assert.That(client.World, Is.Not.Null, $"{client.Status} server output: {m_server.JoinOutput()}");
+        ClientWorld world = client.World!;
+        yield return FightUntilGelDrops(client, world, keyboard, gamepad);
+        Assert.That(FindGelView(client), Is.Not.Null, $"kills {m_kills}, respawns {m_respawns}");
+
+        var pickedUp = new List<ItemPickedUp>();
+        world.ItemPickedUpReceived += pickedUp.Add;
+        yield return WaitUntil(() => !world.IsLocalDead, 5f);
+        yield return Tap(keyboard.fKey);
+        yield return WaitUntil(() => HeldGel(world) > 0, StartTimeoutSeconds);
+        uint held = HeldGel(world);
+        Assert.That(held, Is.GreaterThan(0u), $"last refusal {world.LastRejection}, status {client.Status}");
+        Assert.That(pickedUp.Any(picked => picked.Recipient == world.LocalEntity), Is.True);
+        uint revision = world.Inventory.Revision;
+
+        client.Disconnect();
+        yield return WaitUntil(() => client.World == null, StartTimeoutSeconds);
+        yield return ReconnectAndEnter(client);
+        Assert.That(HeldGel(client.World!), Is.EqualTo(held), "the retained character still holds the gel");
+        Assert.That(client.World!.Inventory.Revision, Is.EqualTo(revision));
+
+        // Killed, not stopped: nothing is saved on the way out, so only what was committed can come back.
+        client.Disconnect();
+        yield return WaitUntil(() => client.World == null, StartTimeoutSeconds);
+        m_server.Dispose();
+        m_server = new LiveServer();
+        m_server.Start(m_database!, "--World:RandomSeed=11");
+        LiveServer restarted = m_server;
+        yield return WaitUntil(() => restarted.TryReadListeningPort(out int _), StartTimeoutSeconds);
+        Assert.That(restarted.TryReadListeningPort(out int restartedPort), Is.True, restarted.JoinOutput());
+        client.Port = restartedPort;
+        yield return ReconnectAndEnter(client);
+        Assert.That(HeldGel(client.World!), Is.EqualTo(held), "the gel was loaded from the database");
+        Assert.That(client.World!.Inventory.Revision, Is.EqualTo(revision));
+        Debug.Log($"Live pickup: {held} gel kept across a reconnect and a server restart, revision {revision}");
+    }
+
+    private static string RequirePrerequisites()
+    {
+        string actionsPath = Path.Combine(Application.dataPath, ActionsAsset);
+        if (!LiveServer.IsBuilt() || !File.Exists(actionsPath))
+        {
+            Assert.Inconclusive(LiveServer.MissingPrerequisites);
+        }
+
+        return actionsPath;
+    }
+
+    private static uint HeldGel(ClientWorld world)
+    {
+        if (!world.Inventory.IsCurrent)
+        {
+            return 0u;
+        }
+
+        uint held = 0u;
+        foreach (InventoryEntry row in world.Inventory.Rows)
+        {
+            if (row.Item.Value == SlimeGel)
+            {
+                held += row.Quantity;
+            }
+        }
+
+        return held;
     }
 
     private static EntityView? FindGelView(GameClient client)
@@ -196,12 +235,75 @@ public sealed class LiveServerCombatTests : InputTestFixture
         enter.onClick.Invoke();
     }
 
+    private static IEnumerator ReconnectAndEnter(GameClient client)
+    {
+        client.Connect();
+        yield return WaitUntil(
+            () => client.Connection?.State == ClientConnectionState.SelectingCharacter
+                && client.Connection.Characters.Count > 0,
+            StartTimeoutSeconds);
+        Assert.That(client.Connection!.Characters.Count, Is.EqualTo(1), client.Status);
+        client.EnterWorld(client.Connection.Characters[0].Character);
+        yield return WaitUntil(() => client.World?.Inventory.IsCurrent == true, StartTimeoutSeconds);
+        Assert.That(client.World?.Inventory.IsCurrent, Is.True, client.Status);
+    }
+
     private static IEnumerator WaitUntil(Func<bool> condition, float timeoutSeconds)
     {
         float deadline = Time.realtimeSinceStartup + timeoutSeconds;
         while (!condition() && Time.realtimeSinceStartup < deadline)
         {
             yield return null;
+        }
+    }
+
+    private IEnumerator StartDatabaseAndServer()
+    {
+        Task<LiveDatabase> starting = LiveDatabase.StartAsync();
+        yield return new WaitUntil(() => starting.IsCompleted);
+        Assert.That(starting.IsFaulted, Is.False, starting.Exception?.GetBaseException().Message);
+        m_database = starting.Result;
+
+        LiveServer server = m_server = new LiveServer();
+        server.Start(m_database, "--World:RandomSeed=11");
+        yield return WaitUntil(() => server.TryReadListeningPort(out int _), StartTimeoutSeconds);
+    }
+
+    private IEnumerator FightUntilGelDrops(GameClient client, ClientWorld world, Keyboard keyboard, Gamepad gamepad)
+    {
+        world.ItemDroppedReceived += m_dropped.Add;
+        world.EntityDiedReceived += died =>
+        {
+            if (died.Entity != world.LocalEntity)
+            {
+                m_kills++;
+            }
+        };
+        EntityId attacking = default;
+        float deadline = Time.realtimeSinceStartup + FightTimeoutSeconds;
+        while (Time.realtimeSinceStartup < deadline && FindGelView(client) == null)
+        {
+            if (world.IsLocalDead)
+            {
+                yield return Tap(keyboard.rKey);
+                m_respawns++;
+                yield return WaitUntil(() => !world.IsLocalDead, 5f);
+                attacking = default;
+            }
+            else if (world.Target == default)
+            {
+                yield return Tap(keyboard.tabKey);
+                yield return WaitUntil(() => world.Target != default, 2f);
+            }
+            else if (world.Target != attacking)
+            {
+                attacking = world.Target;
+                yield return Tap(gamepad.buttonWest);
+            }
+            else
+            {
+                yield return null;
+            }
         }
     }
 
