@@ -5,42 +5,31 @@ using UnityEngine;
 namespace Evertorch.Client
 {
 /// <summary>
-///     A placeholder body for one entity. It is told where to stand every frame and decides nothing.
+///     The drawn body of one entity. It is told where to stand every frame and decides nothing. The body is a prefab
+///     loaded by its content key, or an explicit placeholder when the key does not resolve.
 /// </summary>
 public sealed class EntityView : MonoBehaviour
 {
-    private const float BodyHeight = 1.6f;
+    private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
+    private static readonly Vector3 PlaceholderScale = new(0.6f, 1.6f, 0.6f);
 
-    private Material? m_material;
+    private Color? m_tint;
 
-    private void OnDestroy()
+    public bool HasBody { get; private set; }
+
+    public bool IsPlaceholder { get; private set; }
+
+    public static EntityView Create(string objectName, string key, EntityViewCatalog catalog, Color? tint)
     {
-        if (m_material != null)
+        if (catalog == null)
         {
-            Destroy(m_material);
-        }
-    }
-
-    public static EntityView Create(string objectName, float radius, Material baseMaterial, Color color)
-    {
-        if (baseMaterial == null)
-        {
-            throw new ArgumentNullException(nameof(baseMaterial));
+            throw new ArgumentNullException(nameof(catalog));
         }
 
         var root = new GameObject(objectName);
         EntityView view = root.AddComponent<EntityView>();
-        view.m_material = new Material(baseMaterial) { color = color };
-
-        var body = GameObject.CreatePrimitive(PrimitiveType.Capsule);
-        Attach(body, root.transform, view.m_material);
-        body.transform.localPosition = new Vector3(0f, BodyHeight * 0.5f, 0f);
-        body.transform.localScale = new Vector3(radius * 2f, BodyHeight * 0.5f, radius * 2f);
-
-        var nose = GameObject.CreatePrimitive(PrimitiveType.Cube);
-        Attach(nose, root.transform, view.m_material);
-        nose.transform.localPosition = new Vector3(0f, BodyHeight * 0.75f, radius);
-        nose.transform.localScale = new Vector3(radius * 0.5f, radius * 0.5f, radius);
+        view.m_tint = tint;
+        catalog.Request(key, prefab => view.AttachBody(prefab, catalog));
         return view;
     }
 
@@ -53,12 +42,55 @@ public sealed class EntityView : MonoBehaviour
         }
     }
 
-    private static void Attach(GameObject part, Transform parent, Material material)
+    private void AttachBody(GameObject? prefab, EntityViewCatalog catalog)
     {
-        // Bodies must not catch the ground clicks meant for the map.
-        Destroy(part.GetComponent<Collider>());
-        part.transform.SetParent(parent, false);
-        part.GetComponent<MeshRenderer>().sharedMaterial = material;
+        // The load may finish after the entity has despawned.
+        if (this == null || HasBody)
+        {
+            return;
+        }
+
+        GameObject body;
+        if (prefab == null)
+        {
+            body = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            body.transform.localPosition = new Vector3(0f, PlaceholderScale.y * 0.5f, 0f);
+            body.transform.localScale = PlaceholderScale;
+            body.GetComponent<MeshRenderer>().sharedMaterial = catalog.GetPlaceholderMaterial();
+            IsPlaceholder = true;
+        }
+        else
+        {
+            body = Instantiate(prefab);
+            ApplyTint(body);
+        }
+
+        body.name = "Body";
+        body.transform.SetParent(transform, false);
+
+        // Bodies must not catch the ground clicks meant for the map; entities are picked by their own test.
+        foreach (Collider part in body.GetComponentsInChildren<Collider>(true))
+        {
+            DestroyImmediate(part);
+        }
+
+        HasBody = true;
+    }
+
+    private void ApplyTint(GameObject body)
+    {
+        if (m_tint == null)
+        {
+            return;
+        }
+
+        var block = new MaterialPropertyBlock();
+        foreach (Renderer part in body.GetComponentsInChildren<Renderer>(true))
+        {
+            part.GetPropertyBlock(block);
+            block.SetColor(BaseColorId, m_tint.Value);
+            part.SetPropertyBlock(block);
+        }
     }
 }
 }

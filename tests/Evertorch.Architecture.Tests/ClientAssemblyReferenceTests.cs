@@ -10,6 +10,7 @@ namespace Evertorch.Architecture.Tests
 public sealed class ClientAssemblyReferenceTests
 {
     private const string ClientAssembly = "Assets/_ProjectScripts.Evertorch.Client/Evertorch.Client.asmdef";
+    private const string EditorAssembly = "Assets/_Project/Editor/Evertorch.Client.Editor.asmdef";
     private const string EditModeTests = "Assets/_Project/Tests/EditMode/Evertorch.Client.Tests.EditMode.asmdef";
     private const string PlayModeTests = "Assets/_Project/Tests/PlayMode/Evertorch.Client.Tests.PlayMode.asmdef";
 
@@ -19,6 +20,7 @@ public sealed class ClientAssemblyReferenceTests
     };
 
     [TestCase(ClientAssembly)]
+    [TestCase(EditorAssembly)]
     [TestCase(EditModeTests)]
     [TestCase(PlayModeTests)]
     public void ClientSideAssembly_NeverReferencesAServerSideAssembly(string assemblyDefinition)
@@ -68,9 +70,28 @@ public sealed class ClientAssemblyReferenceTests
                     "LiteNetLib",
                     "Unity.InputSystem",
                     "Unity.TextMeshPro",
-                    "UnityEngine.UI"
+                    "UnityEngine.UI",
+                    "Unity.Addressables",
+                    "Unity.ResourceManager"
                 }));
         Assert.That(PrecompiledReferences(ClientAssembly), Is.Empty);
+    }
+
+    [Test]
+    public void EditorAssembly_ReferencesTheClientAndAddressablesForTheKeyCheck()
+    {
+        Assert.That(
+            References(EditorAssembly),
+            Is.EquivalentTo(
+                new[]
+                {
+                    "Evertorch.Client",
+                    "Evertorch.Game",
+                    "Unity.Addressables",
+                    "Unity.Addressables.Editor",
+                    "Unity.ResourceManager"
+                }));
+        Assert.That(PrecompiledReferences(EditorAssembly), Is.Empty);
     }
 
     [Test]

@@ -37,6 +37,10 @@
 /Evertorch.Client/Assets/StreamingAssets/
 /Evertorch.Client/Assets/StreamingAssets.meta
 
+# Written by every Addressables content build to keep its runtime types from being stripped.
+/Evertorch.Client/Assets/AddressableAssetsData/link.xml
+/Evertorch.Client/Assets/AddressableAssetsData/link.xml.meta
+
 # Generated Unity and crash artifacts.
 *.pidb
 *.pdb

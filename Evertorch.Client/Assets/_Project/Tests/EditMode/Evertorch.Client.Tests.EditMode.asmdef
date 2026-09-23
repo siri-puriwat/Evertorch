@@ -3,6 +3,9 @@
   "rootNamespace": "Evertorch.Client.Tests.EditMode",
   "references": [
     "Evertorch.Client",
+    "Evertorch.Client.Editor",
+    "Unity.Addressables",
+    "Unity.Addressables.Editor",
     "Evertorch.Game",
     "Evertorch.Protocol",
     "Unity.InputSystem",

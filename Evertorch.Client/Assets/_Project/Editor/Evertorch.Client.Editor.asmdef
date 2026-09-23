@@ -2,7 +2,11 @@
   "name": "Evertorch.Client.Editor",
   "rootNamespace": "Evertorch.Client.Editor",
   "references": [
-    "Evertorch.Client"
+    "Evertorch.Client",
+    "Evertorch.Game",
+    "Unity.Addressables",
+    "Unity.Addressables.Editor",
+    "Unity.ResourceManager"
   ],
   "includePlatforms": [
     "Editor"

@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using Evertorch.Game;
+using Evertorch.Protocol;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.SceneManagement;
@@ -43,6 +44,7 @@ public sealed class GameClient : MonoBehaviour
 
     private readonly Dictionary<EntityId, EntityView> m_remoteViews = new();
     private readonly StreamingContentLoader m_contentLoader = new();
+    private readonly EntityViewCatalog m_viewCatalog = new();
     private LiteNetLibClientTransport? m_socket;
     private ManualMoveSource? m_manualSource;
     private PointerMoveSource? m_pointerSource;
@@ -180,6 +182,7 @@ public sealed class GameClient : MonoBehaviour
         TearDownWorld();
         m_pointerSource?.Dispose();
         m_socket?.Dispose();
+        m_viewCatalog.Dispose();
         if (m_runtimeMaterial != null)
         {
             Destroy(m_runtimeMaterial);
@@ -259,7 +262,7 @@ public sealed class GameClient : MonoBehaviour
         Material material = ResolveMaterial();
         m_map = GrayboxMap.Create(world.Grid, material);
         m_marker = MoveMarker.Create(material);
-        m_localView = EntityView.Create("LocalPlayer", world.Grid.AgentRadius, material, LocalColor);
+        m_localView = EntityView.Create("LocalPlayer", ResolveJobKey(world.LocalJob), m_viewCatalog, LocalColor);
         foreach (RemoteEntity remote in world.Remotes.Values)
         {
             AddRemoteView(remote);
@@ -400,8 +403,8 @@ public sealed class GameClient : MonoBehaviour
 
         var view = EntityView.Create(
             $"Remote {remote.Entity.Value}",
-            m_world.Grid.AgentRadius,
-            ResolveMaterial(),
+            ResolveViewKey(remote),
+            m_viewCatalog,
             RemoteColor);
         if (remote.Buffer.TrySample(double.MinValue, out WorldPosition position, out WorldDirection facing))
         {
@@ -418,6 +421,27 @@ public sealed class GameClient : MonoBehaviour
             m_remoteViews.Remove(remote.Entity);
             DestroyView(view);
         }
+    }
+
+    private string ResolveViewKey(RemoteEntity remote)
+    {
+        if (remote.Kind == EntityKind.Player && JobDefinitionId.TryCreate(remote.DefinitionId, out JobDefinitionId job))
+        {
+            return ResolveJobKey(job);
+        }
+
+        return string.Empty;
+    }
+
+    private string ResolveJobKey(JobDefinitionId job)
+    {
+        ClientContent? content = m_contentLoader.Content;
+        if (content != null && content.TryGetJob(job, out ClientJob? definition) && definition != null)
+        {
+            return definition.PrefabKey;
+        }
+
+        return string.Empty;
     }
 
     private Material ResolveMaterial()
