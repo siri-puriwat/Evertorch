@@ -140,7 +140,7 @@ public sealed class WorldEntryTests
     }
 
     [Test]
-    public void EnterWorld_WithCharacterAlreadyInWorld_ReplacesOlderSession()
+    public void EnterWorld_WithCharacterAlreadyInWorld_AttachesAndClosesTheOlderConnection()
     {
         var server = new TestServer();
         ConnectionId older = server.EnterWorld(7);
@@ -151,7 +151,8 @@ public sealed class WorldEntryTests
         Assert.That(server.Transport.Disconnects[older], Is.EqualTo(DisconnectReason.SessionReplaced));
         Assert.That(server.Sessions.TryGet(older, out _), Is.False);
         Assert.That(server.World.Maps.Single().Players.Select(player => player.Owner), Is.EqualTo(new[] { newer }));
-        Assert.That(server.PlayerOf(newer).Id, Is.Not.EqualTo(olderEntity));
+        Assert.That(server.PlayerOf(newer).Id, Is.EqualTo(olderEntity), "the same entity, not a second copy");
+        Assert.That(server.Store.Loads[7], Is.EqualTo(1), "nothing was loaded for the attach");
     }
 }
 }

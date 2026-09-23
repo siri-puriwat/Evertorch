@@ -65,12 +65,12 @@ public sealed class ClientConnectionTests
             Deliver(ProtocolChannel.Control, Encode(list.GetEncodedLength(), list.Write));
         }
 
-        public void EnterWorld()
+        public void EnterWorld(uint lastCommandSequence = 0)
         {
             ConnectAndReceiveHello();
             ReceiveList(Entry(7, "Ann0"));
             Connection.EnterWorld(new CharacterId(7));
-            WorldEntered entered = ClientWorldFixture.Entered(Start);
+            WorldEntered entered = ClientWorldFixture.Entered(Start, lastCommandSequence: lastCommandSequence);
             Deliver(ProtocolChannel.Control, Encode(entered.GetEncodedLength(), entered.Write));
             Connection.Poll();
         }
@@ -113,6 +113,23 @@ public sealed class ClientConnectionTests
 
         Assert.That(announced, Is.EqualTo(1));
         Assert.That(harness.Connection.Characters.Select(entry => entry.Name), Is.EqualTo(new[] { "Ann0", "Bob12" }));
+    }
+
+    [Test]
+    public void Commands_AfterEnteringACharacterThatUsedSequences_ContinueAfterTheReportedOne()
+    {
+        var harness = new Harness();
+        harness.EnterWorld(41);
+        int before = harness.Transport.Sent.Count;
+
+        harness.Connection.SendAttack(new EntityId(300));
+        harness.Connection.SendCancel();
+
+        FakeClientTransport.SentMessage[] sent = harness.Transport.Sent.Skip(before).ToArray();
+        Assert.That(AttackEntity.TryRead(sent[0].Payload, out AttackEntity attack), Is.True);
+        Assert.That(CancelAction.TryRead(sent[1].Payload, out CancelAction cancel), Is.True);
+        Assert.That(attack.CommandSequence, Is.EqualTo(42u));
+        Assert.That(cancel.CommandSequence, Is.EqualTo(43u));
     }
 
     [Test]

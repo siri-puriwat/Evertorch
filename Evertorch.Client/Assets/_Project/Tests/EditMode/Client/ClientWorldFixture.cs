@@ -16,7 +16,11 @@ internal static class ClientWorldFixture
         return new ClientWorld(grid, Entered(position, serverTick), TickRate);
     }
 
-    public static WorldEntered Entered(WorldPosition position, uint serverTick = 0)
+    public static WorldEntered Entered(
+        WorldPosition position,
+        uint serverTick = 0,
+        uint health = 71,
+        uint lastCommandSequence = 0)
     {
         return new WorldEntered(
             new MapDefinitionId("map.training_ground"),
@@ -27,9 +31,10 @@ internal static class ClientWorldFixture
             position,
             new WorldDirection(0f, 1f),
             ClientTestGrids.Speed,
+            health,
             71,
-            71,
-            1.5f);
+            1.5f,
+            lastCommandSequence);
     }
 
     public static EntitySnapshot Snapshot(uint tick, uint acknowledged, params EntityState[] states)

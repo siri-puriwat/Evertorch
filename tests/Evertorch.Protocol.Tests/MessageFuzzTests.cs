@@ -50,7 +50,8 @@ public sealed class MessageFuzzTests
                     5f,
                     60,
                     68,
-                    1.5f)),
+                    1.5f,
+                    41)),
             payload => WorldEntered.TryRead(payload, out WorldEntered? message) ? Encode(message!) : null);
         yield return Case(
             "EntitySpawn",

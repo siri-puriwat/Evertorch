@@ -38,6 +38,22 @@ public sealed class ClientWorldTests
     }
 
     [Test]
+    public void Constructor_WithNoHealthLeft_EntersTheLocalPlayerDead()
+    {
+        var world = new ClientWorld(
+            ClientTestGrids.CreateYard(),
+            ClientWorldFixture.Entered(Start, 500, 0),
+            ClientWorldFixture.TickRate);
+        var alive = new ClientWorld(
+            ClientTestGrids.CreateYard(),
+            ClientWorldFixture.Entered(Start, 500),
+            ClientWorldFixture.TickRate);
+
+        Assert.That(world.IsLocalDead, Is.True);
+        Assert.That(alive.IsLocalDead, Is.False);
+    }
+
+    [Test]
     public void OnDespawn_RemovesTheEntityAndAnnouncesIt()
     {
         ClientWorld world = ClientWorldFixture.Create(ClientTestGrids.CreateYard(), Start);

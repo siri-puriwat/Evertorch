@@ -20,7 +20,8 @@ public sealed class WorldEntered
         float movementSpeed,
         uint currentHealth,
         uint maximumHealth,
-        float attackRange)
+        float attackRange,
+        uint lastCommandSequence = 0)
     {
         Map = map;
         MapInstance = mapInstance;
@@ -33,6 +34,7 @@ public sealed class WorldEntered
         CurrentHealth = currentHealth;
         MaximumHealth = maximumHealth;
         AttackRange = attackRange;
+        LastCommandSequence = lastCommandSequence;
     }
 
     public MapDefinitionId Map { get; }
@@ -74,6 +76,13 @@ public sealed class WorldEntered
     /// </summary>
     public float AttackRange { get; }
 
+    /// <summary>
+    ///     The newest command sequence the server has processed for the character, 0 when none. The sequence belongs
+    ///     to the character session and continues across a reconnect, so the client numbers its next command after it
+    ///     (Network Protocol §8).
+    /// </summary>
+    public uint LastCommandSequence { get; }
+
     public static bool TryRead(ReadOnlySpan<byte> source, out WorldEntered? message)
     {
         message = null;
@@ -90,6 +99,7 @@ public sealed class WorldEntered
             || !reader.TryReadUInt32(out uint currentHealth)
             || !reader.TryReadUInt32(out uint maximumHealth)
             || !reader.TryReadSingle(out float attackRange)
+            || !reader.TryReadUInt32(out uint lastCommandSequence)
             || !reader.IsAtEnd
             || movementSpeed < 0f
             || maximumHealth == 0
@@ -112,7 +122,8 @@ public sealed class WorldEntered
             movementSpeed,
             currentHealth,
             maximumHealth,
-            attackRange);
+            attackRange,
+            lastCommandSequence);
         return true;
     }
 
@@ -129,7 +140,8 @@ public sealed class WorldEntered
             + sizeof(float)
             + sizeof(uint)
             + sizeof(uint)
-            + sizeof(float);
+            + sizeof(float)
+            + sizeof(uint);
     }
 
     public int Write(Span<byte> destination)
@@ -147,6 +159,7 @@ public sealed class WorldEntered
         writer.WriteUInt32(CurrentHealth);
         writer.WriteUInt32(MaximumHealth);
         writer.WriteSingle(AttackRange);
+        writer.WriteUInt32(LastCommandSequence);
         return writer.Position;
     }
 }

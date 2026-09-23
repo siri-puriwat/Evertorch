@@ -37,6 +37,11 @@ public sealed class CharacterSession
     public uint LastCommandSequence { get; set; }
 
     /// <summary>
+    ///     While no connection controls the character: the first tick on which its reconnect grace period is over.
+    /// </summary>
+    public uint? GraceEndsTick { get; set; }
+
+    /// <summary>
     ///     The first tick on which the next interval checkpoint is due.
     /// </summary>
     public uint NextCheckpointTick { get; set; }

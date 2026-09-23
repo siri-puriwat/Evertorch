@@ -46,7 +46,8 @@ public sealed class SharedLifecycleMessageTests
         0x00, 0x00, 0xA0, 0x40,
         0x44, 0x00, 0x00, 0x00,
         0x44, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0xC0, 0x3F
+        0x00, 0x00, 0xC0, 0x3F,
+        0x0D, 0x0C, 0x0B, 0x0A
     };
 
     private static readonly byte[] EntitySpawnBytes =
@@ -268,7 +269,8 @@ public sealed class SharedLifecycleMessageTests
             5f,
             68,
             68,
-            1.5f);
+            1.5f,
+            0x0A0B0C0D);
         byte[] buffer = new byte[message.GetEncodedLength()];
         message.Write(buffer);
 
@@ -280,6 +282,7 @@ public sealed class SharedLifecycleMessageTests
         Assert.That(read.Job, Is.EqualTo(new JobDefinitionId("job.a")));
         Assert.That(read.Position, Is.EqualTo(new WorldPosition(1f, 0.5f, -2f)));
         Assert.That(read.MovementSpeed, Is.EqualTo(5f));
+        Assert.That(read.LastCommandSequence, Is.EqualTo(0x0A0B0C0Du));
     }
 }
 }

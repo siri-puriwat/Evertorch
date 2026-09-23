@@ -493,6 +493,10 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
         }
 
         World = new ClientWorld(grid, entered, ServerTickRate);
+
+        // The command sequence belongs to the character, not the connection: after a reconnect it goes on from the
+        // newest the server processed, or every command would look like a replay (Network Protocol §8).
+        m_commandSequence = entered.LastCommandSequence;
         State = ClientConnectionState.InWorld;
         EnteredWorld?.Invoke(World);
     }

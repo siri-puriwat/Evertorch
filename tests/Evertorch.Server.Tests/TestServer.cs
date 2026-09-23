@@ -47,7 +47,8 @@ internal sealed class TestServer
         IRandomSource? dropRandom = null,
         int itemDropLifetimeMs = 60000,
         PersistenceOptions? persistence = null,
-        IGameStore? store = null)
+        IGameStore? store = null,
+        int reconnectGraceMs = 0)
     {
         Content = withMonsters ? RepositoryContent.Value : RepositoryContentWithoutMonsters.Value;
         var network = new NetworkOptions
@@ -99,6 +100,7 @@ internal sealed class TestServer
             Persistence,
             Time,
             Options.Create(persistence ?? new PersistenceOptions()),
+            Options.Create(new SessionOptions { ReconnectGraceMs = reconnectGraceMs }),
             simulation,
             new CapturingLogger<CharacterLifetime>());
         var tokens = new DevelopmentTokenValidator(Options.Create(authentication), Time);

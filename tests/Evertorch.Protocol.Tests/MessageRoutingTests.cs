@@ -142,9 +142,9 @@ public sealed class MessageRoutingTests
     }
 
     [Test]
-    public void ProtocolVersion_IsNine()
+    public void ProtocolVersion_IsTen()
     {
-        Assert.That(ProtocolConstants.ProtocolVersion, Is.EqualTo(9));
+        Assert.That(ProtocolConstants.ProtocolVersion, Is.EqualTo(10));
     }
 
     [Test]

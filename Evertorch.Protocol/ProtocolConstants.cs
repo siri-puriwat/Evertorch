@@ -5,7 +5,7 @@ public static class ProtocolConstants
     /// <summary>
     ///     Raised whenever a field's meaning, order, width, or required semantics change. Client and server must match.
     /// </summary>
-    public const ushort ProtocolVersion = 9;
+    public const ushort ProtocolVersion = 10;
 
     /// <summary>
     ///     The first value of the server-to-client opcode range.

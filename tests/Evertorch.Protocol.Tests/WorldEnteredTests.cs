@@ -30,7 +30,8 @@ public sealed class WorldEnteredTests
         0x00, 0x00, 0xA0, 0x40,
         0x44, 0x00, 0x00, 0x00,
         0x44, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0xC0, 0x3F
+        0x00, 0x00, 0xC0, 0x3F,
+        0x0D, 0x0C, 0x0B, 0x0A
     };
 
     private static WorldEntered Golden => new(
@@ -44,7 +45,8 @@ public sealed class WorldEnteredTests
         5f,
         68,
         68,
-        1.5f);
+        1.5f,
+        0x0A0B0C0D);
 
     [Test]
     public void TryRead_ForGoldenBytes_ReturnsKnownMessage()
@@ -63,6 +65,7 @@ public sealed class WorldEnteredTests
         Assert.That(message.CurrentHealth, Is.EqualTo(68u));
         Assert.That(message.MaximumHealth, Is.EqualTo(68u));
         Assert.That(message.AttackRange, Is.EqualTo(1.5f));
+        Assert.That(message.LastCommandSequence, Is.EqualTo(0x0A0B0C0Du));
     }
 
     [Test]
@@ -182,7 +185,7 @@ public sealed class WorldEnteredTests
         bool isRead = WorldEntered.TryRead(buffer, out WorldEntered? message);
 
         Assert.That(isRead, Is.True);
-        Assert.That(buffer.Length, Is.EqualTo(186), "the largest WorldEntered");
+        Assert.That(buffer.Length, Is.EqualTo(190), "the largest WorldEntered");
         Assert.That(message!.Map, Is.EqualTo(longestMap));
         Assert.That(message.Job, Is.EqualTo(longestJob));
     }

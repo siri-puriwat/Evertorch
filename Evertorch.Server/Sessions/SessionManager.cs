@@ -156,6 +156,7 @@ public sealed class SessionManager : ITickPhase
         }
 
         ExpireSilentConnections(context.Tick);
+        m_lifetime.ExpireGracePeriods(context.Tick);
     }
 
     private void Handle(InboundEvent inboundEvent, uint tick)
@@ -410,10 +411,25 @@ public sealed class SessionManager : ITickPhase
             return;
         }
 
-        // The older connection's checkpoint is queued before the load, so the load reads it (Persistence §9).
-        if (m_sessions.TryGetByCharacter(request.Character, out ClientSession? previous) && previous != null)
+        // A character still in the world, retained or controlled by an older connection, is attached to: the same
+        // entity, no second copy loaded (Network Protocol §3, Persistence §7).
+        if (m_sessions.TryGetCharacter(request.Character, out CharacterSession? existing) && existing != null)
         {
-            Close(previous, DisconnectReason.SessionReplaced);
+            if (existing.IsLoggingOut)
+            {
+                IgnoredEvents++;
+                return;
+            }
+
+            ClientSession? older = existing.Connection;
+            m_lifetime.Attach(existing, session);
+            if (older != null)
+            {
+                Close(older, DisconnectReason.SessionReplaced);
+            }
+
+            EnterAs(session, existing, m_currentTick);
+            return;
         }
 
         AccountId account = session.Account!.Value;
@@ -485,12 +501,21 @@ public sealed class SessionManager : ITickPhase
         }
 
         session.Character = character;
+        EnterAs(session, character, tick);
+    }
+
+    // The full baseline starts here: WorldEntered now, then a spawn for everything in view from this tick's visibility
+    // pass, because a new connection knows no entity yet. The movement sequence starts afresh with the connection;
+    // the command sequence belongs to the character and continues (Network Protocol §3, §8).
+    private void EnterAs(ClientSession session, CharacterSession character, uint tick)
+    {
         session.Input = new PlayerInputState(m_maxQueuedInputs);
+        session.KnownEntities.Clear();
         session.State = SessionState.InWorld;
         PlayerEntity player = character.Player;
         MapInstance map = character.Map;
         m_sender.Send(
-            connection,
+            session.Connection,
             new WorldEntered(
                 map.Definition.Id,
                 map.InstanceNumber,
@@ -502,8 +527,9 @@ public sealed class SessionManager : ITickPhase
                 player.MovementSpeed,
                 (uint)player.CurrentHealth,
                 (uint)player.MaxHealth,
-                player.AttackRange));
-        LogWorldEntered(m_logger, connection.Value, requested.Value, player.Id.Value, null);
+                player.AttackRange,
+                character.LastCommandSequence));
+        LogWorldEntered(m_logger, session.Connection.Value, character.Character.Value, player.Id.Value, null);
     }
 
     private static bool Owns(ClientSession session, CharacterId character)
@@ -663,9 +689,18 @@ public sealed class SessionManager : ITickPhase
 
     private void Remove(ClientSession session)
     {
-        if (session.Character != null)
+        CharacterSession? character = session.Character;
+        if (character != null)
         {
-            m_lifetime.CheckpointAndRemove(session.Character);
+            // A player who asked to leave is not kept for a reconnect.
+            if (character.IsLoggingOut)
+            {
+                m_lifetime.CheckpointAndRemove(character);
+            }
+            else
+            {
+                m_lifetime.Detach(character, m_currentTick);
+            }
         }
 
         m_sessions.Remove(session);

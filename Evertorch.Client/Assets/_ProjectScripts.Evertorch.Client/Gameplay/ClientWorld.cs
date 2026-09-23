@@ -38,6 +38,9 @@ public sealed class ClientWorld
         LocalJob = entered.Job;
         LocalHealth = entered.CurrentHealth;
         LocalMaximumHealth = entered.MaximumHealth;
+
+        // A reconnect to a character that died during its grace period enters it dead (Gameplay Systems §10.1).
+        IsLocalDead = entered.CurrentHealth == 0;
         AttackRange = entered.AttackRange;
         LatestServerTick = entered.ServerTick;
         m_tickSeconds = 1.0 / serverTickRate;
