@@ -77,6 +77,20 @@ public sealed class AutoAttackStateTests
     }
 
     [Test]
+    public void Attack_WhileDead_SendsNothingAndDoesNotChase()
+    {
+        var rig = new Rig(ClientTestGrids.Center(8, 8));
+        rig.World.OnEntityDied(new EntityDied(ClientWorldFixture.LocalEntity, Slime, 5));
+
+        rig.AutoAttack.Attack(Slime);
+        rig.AutoAttack.Tick(rig.World.Predictor.Position);
+
+        Assert.That(rig.Sent, Is.Empty);
+        Assert.That(rig.AutoAttack.IsActive, Is.False);
+        Assert.That(rig.Controller.IsChasing, Is.False);
+    }
+
+    [Test]
     public void Attack_FromAfar_SendsOneRequestAndChasesUntilInRange()
     {
         var rig = new Rig(ClientTestGrids.Center(6, 8));

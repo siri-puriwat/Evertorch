@@ -62,6 +62,42 @@ public sealed class MonsterAiTests
         Assert.That(slime.Target, Is.EqualTo(server.PlayerOf(player).Id), "the slime turned on its attacker");
     }
 
+    /// <summary>
+    ///     Moves the provoked slime's target 16–20 m from its home and ticks until the chase passes the leash.
+    /// </summary>
+    private static bool LeadPastTheLeash(TestServer server, ConnectionId player, MonsterEntity slime)
+    {
+        NavigationGrid grid = server.World.Maps.Single().Definition.Navigation;
+        var pathfinder = new GridPathfinder(grid);
+        var waypoints = new List<WorldPosition>();
+        WorldPosition? far = null;
+        for (int row = 0; row < grid.Rows && far == null; row++)
+        {
+            for (int column = 0; column < grid.Columns && far == null; column++)
+            {
+                WorldPosition center = grid.GetCellCenter(column, row);
+                float distance = Distance(center, slime.Home);
+                if (distance > 16f
+                    && distance < 20f
+                    && grid.CanOccupy(center.X, center.Z)
+                    && pathfinder.TryFindPath(slime.Position, center, 8192, waypoints))
+                {
+                    far = center;
+                }
+            }
+        }
+
+        server.PlayerOf(player).Position = far!.Value;
+        bool hasLeashed = false;
+        for (int tick = 0; tick < 400 && !hasLeashed; tick++)
+        {
+            server.Tick();
+            hasLeashed = slime.Brain.State == MonsterAiState.ReturnHome;
+        }
+
+        return hasLeashed;
+    }
+
     [Test]
     public void DeadMonster_StaysAsACorpseThenRespawnsAsANewEntity()
     {
@@ -123,33 +159,8 @@ public sealed class MonsterAiTests
     {
         (TestServer server, ConnectionId player, MonsterEntity slime) = EnterBesideASlime();
         Provoke(server, player, slime);
-        NavigationGrid grid = server.World.Maps.Single().Definition.Navigation;
-        var pathfinder = new GridPathfinder(grid);
-        var waypoints = new List<WorldPosition>();
-        WorldPosition? far = null;
-        for (int row = 0; row < grid.Rows && far == null; row++)
-        {
-            for (int column = 0; column < grid.Columns && far == null; column++)
-            {
-                WorldPosition center = grid.GetCellCenter(column, row);
-                float distance = Distance(center, slime.Home);
-                if (distance > 16f
-                    && distance < 20f
-                    && grid.CanOccupy(center.X, center.Z)
-                    && pathfinder.TryFindPath(slime.Position, center, 8192, waypoints))
-                {
-                    far = center;
-                }
-            }
-        }
 
-        server.PlayerOf(player).Position = far!.Value;
-        bool hasLeashed = false;
-        for (int tick = 0; tick < 400 && !hasLeashed; tick++)
-        {
-            server.Tick();
-            hasLeashed = slime.Brain.State == MonsterAiState.ReturnHome;
-        }
+        bool hasLeashed = LeadPastTheLeash(server, player, slime);
 
         Assert.That(hasLeashed, Is.True);
         Assert.That(slime.Target, Is.EqualTo(default(EntityId)));
@@ -165,6 +176,32 @@ public sealed class MonsterAiTests
         Assert.That(slime.Brain.State, Is.EqualTo(MonsterAiState.Idle));
         Assert.That(arrivedAt, Is.LessThanOrEqualTo(MonsterAiSystem.HomeArrivalDistance));
         Assert.That(slime.CurrentHealth, Is.LessThan(slime.MaxHealth), "no healing on the way home");
+    }
+
+    [Test]
+    public void Leash_WhileWalkingHome_TakesHitsWithoutTurningOnTheAttacker()
+    {
+        (TestServer server, ConnectionId player, MonsterEntity slime) = EnterBesideASlime();
+        Provoke(server, player, slime);
+        Assert.That(LeadPastTheLeash(server, player, slime), Is.True);
+        PlayerEntity attacker = server.PlayerOf(player);
+        slime.CurrentHealth = slime.MaxHealth;
+
+        server.SendAttack(player, slime.Id, 3);
+        for (int tick = 0; tick < 300 && slime.Brain.State == MonsterAiState.ReturnHome; tick++)
+        {
+            if (Distance(attacker.Position, slime.Position) > 1.6f)
+            {
+                StandBeside(server, attacker, slime.Position, 1.2f);
+            }
+
+            server.Tick();
+            Assert.That(slime.Target, Is.EqualTo(default(EntityId)), "damage on the way home acquires nothing");
+            Assert.That(slime.Brain.LastAttacker, Is.EqualTo(default(EntityId)));
+        }
+
+        Assert.That(slime.CurrentHealth, Is.LessThan(slime.MaxHealth), "it was hit on the way home");
+        Assert.That(slime.Brain.State, Is.EqualTo(MonsterAiState.Idle));
     }
 
     [Test]
