@@ -48,6 +48,11 @@ public enum InboundEventKind
     InventoryResync = 12,
 
     /// <summary>
+    ///     A request to pick up the drop <see cref="InboundEvent.Target" />, carrying a command sequence.
+    /// </summary>
+    Pickup = 13,
+
+    /// <summary>
     ///     The peer sent something that is not a well-formed client message on its proper channel.
     /// </summary>
     Malformed = 4

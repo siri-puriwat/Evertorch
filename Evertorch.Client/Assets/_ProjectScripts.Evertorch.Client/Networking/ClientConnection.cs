@@ -12,7 +12,8 @@ namespace Evertorch.Client
 ///     routing of world messages into a <see cref="ClientWorld" />. It trusts nothing it receives beyond what decodes
 ///     cleanly.
 /// </summary>
-public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink, ICombatCommandSink
+public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink, ICombatCommandSink,
+    IPickupCommandSink
 {
     private readonly IClientTransport m_transport;
     private readonly ClientConnectionSettings m_settings;
@@ -206,6 +207,17 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
                 }
 
                 break;
+            case MessageOpcode.ItemPickedUp:
+                if (ItemPickedUp.TryRead(payload, out ItemPickedUp? pickedUp) && pickedUp != null)
+                {
+                    WithWorld(world => world.OnItemPickedUp(pickedUp));
+                }
+                else
+                {
+                    MalformedMessages++;
+                }
+
+                break;
             case MessageOpcode.CommandRejected:
                 if (CommandRejected.TryRead(payload, out CommandRejected rejected))
                 {
@@ -293,6 +305,22 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
             int length = new MoveInput(intent).Write(m_sendBuffer);
             SendRouted(MessageOpcode.MoveInput, length);
         }
+    }
+
+    /// <summary>
+    ///     Asks the server to pick up <paramref name="drop" />; it shares the command sequence with attacks.
+    /// </summary>
+    public uint SendPickup(EntityId drop)
+    {
+        if (State != ClientConnectionState.InWorld)
+        {
+            return 0;
+        }
+
+        uint sequence = NextCommandSequence();
+        new PickupItem(drop, sequence).Write(m_sendBuffer);
+        SendRouted(MessageOpcode.PickupItem, PickupItem.EncodedLength);
+        return sequence;
     }
 
     /// <summary>

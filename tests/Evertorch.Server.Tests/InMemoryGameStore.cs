@@ -18,6 +18,7 @@ internal sealed class InMemoryGameStore : IGameStore
     private readonly Dictionary<string, long> m_accounts = new(StringComparer.Ordinal);
     private readonly HashSet<string> m_disabledLogins = new(StringComparer.Ordinal);
     private readonly Dictionary<long, Row> m_characters = new();
+    private readonly Dictionary<Guid, LedgerEntry> m_ledger = new();
     private long m_lastAccount;
     private long m_lastCharacter;
     private long m_lastItem;
@@ -45,6 +46,28 @@ internal sealed class InMemoryGameStore : IGameStore
     ///     How many times each character was loaded.
     /// </summary>
     public Dictionary<long, int> Loads { get; } = new();
+
+    /// <summary>
+    ///     How many of the next pickup commits succeed and then throw as if the connection dropped before the answer:
+    ///     the ambiguous failure of Persistence §5.
+    /// </summary>
+    public int AmbiguousPickupFailures { get; set; }
+
+    /// <summary>
+    ///     Every pickup commit attempted, in order, including ones that changed nothing.
+    /// </summary>
+    public List<PickupCommit> PickupCommits { get; } = new();
+
+    public int LedgerCount
+    {
+        get
+        {
+            lock (m_gate)
+            {
+                return m_ledger.Count;
+            }
+        }
+    }
 
     public int AccountCount
     {
@@ -157,6 +180,32 @@ internal sealed class InMemoryGameStore : IGameStore
         return Task.CompletedTask;
     }
 
+    public Task<PickupResult> CommitPickupAsync(PickupCommit pickup, CancellationToken cancellationToken)
+    {
+        ThrowIfUnavailable();
+        lock (m_gate)
+        {
+            PickupCommits.Add(pickup);
+            PickupResult result = Find(pickup.DropId, pickup.CharacterId) ?? Commit(pickup);
+            if (AmbiguousPickupFailures > 0 && result.Status == PickupStatus.Committed)
+            {
+                AmbiguousPickupFailures--;
+                throw new StoreUnavailableException(new TimeoutException("scripted loss of the commit's answer"));
+            }
+
+            return Task.FromResult(result);
+        }
+    }
+
+    public Task<PickupResult?> FindPickupAsync(Guid dropId, long characterId, CancellationToken cancellationToken)
+    {
+        ThrowIfUnavailable();
+        lock (m_gate)
+        {
+            return Task.FromResult(Find(dropId, characterId));
+        }
+    }
+
     public Task<IReadOnlyList<string>> ListStoredDefinitionIdsAsync(CancellationToken cancellationToken)
     {
         ThrowIfUnavailable();
@@ -244,6 +293,52 @@ internal sealed class InMemoryGameStore : IGameStore
         }
     }
 
+    private PickupResult? Find(Guid dropId, long characterId)
+    {
+        if (!m_ledger.TryGetValue(dropId, out LedgerEntry? entry))
+        {
+            return null;
+        }
+
+        if (entry.Character != characterId)
+        {
+            return new PickupResult(PickupStatus.TakenByOther, 0, null);
+        }
+
+        Row row = m_characters[characterId];
+        return new PickupResult(
+            PickupStatus.Committed,
+            row.InventoryRevision,
+            row.Items.SingleOrDefault(item => item.Id == entry.Item));
+    }
+
+    private PickupResult Commit(PickupCommit pickup)
+    {
+        Row row = m_characters[pickup.CharacterId];
+        int index = row.Items.FindIndex(item => item.ItemDefinitionId == pickup.ItemDefinitionId);
+        int held = index >= 0 ? row.Items[index].Quantity : 0;
+        if (held > pickup.StackLimit - pickup.Amount || (index < 0 && row.Items.Count >= pickup.MaxRows))
+        {
+            return new PickupResult(PickupStatus.InventoryFull, row.InventoryRevision, null);
+        }
+
+        StoredItem stack = index >= 0
+            ? new StoredItem(row.Items[index].Id, pickup.ItemDefinitionId, held + pickup.Amount)
+            : new StoredItem(++m_lastItem, pickup.ItemDefinitionId, pickup.Amount);
+        if (index >= 0)
+        {
+            row.Items[index] = stack;
+        }
+        else
+        {
+            row.Items.Add(stack);
+        }
+
+        row.InventoryRevision = unchecked(row.InventoryRevision + 1);
+        m_ledger.Add(pickup.DropId, new LedgerEntry(pickup.CharacterId, stack.Id));
+        return new PickupResult(PickupStatus.Committed, row.InventoryRevision, stack);
+    }
+
     private IReadOnlyList<CharacterSummary> List(AccountId account)
     {
         return m_characters
@@ -259,6 +354,19 @@ internal sealed class InMemoryGameStore : IGameStore
         {
             throw new StoreUnavailableException(new TimeoutException("scripted outage"));
         }
+    }
+
+    private sealed class LedgerEntry
+    {
+        public LedgerEntry(long character, long item)
+        {
+            Character = character;
+            Item = item;
+        }
+
+        public long Character { get; }
+
+        public long Item { get; }
     }
 
     private sealed class Row

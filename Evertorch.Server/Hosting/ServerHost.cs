@@ -79,6 +79,8 @@ public static class ServerHost
         builder.Services.AddSingleton<Targeting>();
         builder.Services.AddSingleton<PlayerLife>();
         builder.Services.AddSingleton<CharacterLifetime>();
+        builder.Services.AddSingleton<PickupSystem>();
+        builder.Services.AddSingleton<ITickPhase>(services => services.GetRequiredService<PickupSystem>());
         builder.Services.AddSingleton<LiteNetLibServerTransport>();
         builder.Services.AddSingleton<IServerTransport>(services =>
             services.GetRequiredService<LiteNetLibServerTransport>());

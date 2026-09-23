@@ -98,6 +98,11 @@ public sealed class ClientProjectWiringTests
             Paths(actions, "Player/ClearTarget"),
             Is.EquivalentTo(new[] { "<Keyboard>/escape", "<Gamepad>/buttonEast" }));
         Assert.That(Paths(actions, "Player/Respawn"), Is.EquivalentTo(new[] { "<Keyboard>/r", "<Gamepad>/start" }));
+        Assert.That(
+            Paths(actions, "Player/Pickup"),
+            Is.EquivalentTo(new[] { "<Keyboard>/f", "<Gamepad>/buttonNorth" }));
+        Assert.That(actions.FindAction("Player/Pickup", true).interactions, Is.Empty, "a press, not a hold");
+        Assert.That(actions.FindAction("Player/Interact"), Is.Null, "the template's Interact is replaced");
     }
 
     [Test]

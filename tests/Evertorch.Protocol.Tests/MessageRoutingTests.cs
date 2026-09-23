@@ -21,6 +21,7 @@ public sealed class MessageRoutingTests
     [TestCase(MessageOpcode.EnterWorldRequest)]
     [TestCase(MessageOpcode.TargetEntity)]
     [TestCase(MessageOpcode.AttackEntity)]
+    [TestCase(MessageOpcode.PickupItem)]
     [TestCase(MessageOpcode.CancelAction)]
     [TestCase(MessageOpcode.Respawn)]
     [TestCase(MessageOpcode.CreateCharacter)]
@@ -35,6 +36,7 @@ public sealed class MessageRoutingTests
     [TestCase(MessageOpcode.Damage)]
     [TestCase(MessageOpcode.EntityDied)]
     [TestCase(MessageOpcode.ItemDropped)]
+    [TestCase(MessageOpcode.ItemPickedUp)]
     [TestCase(MessageOpcode.CharacterHealth)]
     [TestCase(MessageOpcode.EntityRevived)]
     [TestCase(MessageOpcode.DisconnectNotice)]
@@ -81,6 +83,7 @@ public sealed class MessageRoutingTests
     [TestCase(MessageOpcode.TargetEntity, true)]
     [TestCase(MessageOpcode.AttackEntity, true)]
     [TestCase(MessageOpcode.CancelAction, true)]
+    [TestCase(MessageOpcode.PickupItem, true)]
     [TestCase(MessageOpcode.Respawn, true)]
     [TestCase(MessageOpcode.MoveInput, true)]
     [TestCase(MessageOpcode.StopMovement, true)]
@@ -94,6 +97,7 @@ public sealed class MessageRoutingTests
     [TestCase(MessageOpcode.AttackStarted, false)]
     [TestCase(MessageOpcode.EntityRevived, false)]
     [TestCase(MessageOpcode.ItemDropped, false)]
+    [TestCase(MessageOpcode.ItemPickedUp, false)]
     [TestCase(MessageOpcode.DisconnectNotice, false)]
     public void IsClientToServer_ForOpcode_FollowsTheDirectionRange(MessageOpcode opcode, bool expected)
     {
@@ -120,11 +124,12 @@ public sealed class MessageRoutingTests
         {
             "None=0x0000", "ClientHello=0x0001", "EnterWorldRequest=0x0002", "MoveInput=0x0003",
             "StopMovement=0x0004", "TargetEntity=0x0005", "AttackEntity=0x0006", "CancelAction=0x0007",
-            "Respawn=0x000C", "CreateCharacter=0x000D", "Logout=0x000E", "InventoryResyncRequest=0x000F",
+            "PickupItem=0x0009", "Respawn=0x000C", "CreateCharacter=0x000D", "Logout=0x000E",
+            "InventoryResyncRequest=0x000F",
             "ServerHello=0x8001", "WorldEntered=0x8003",
             "EntitySpawn=0x8004", "EntityDespawn=0x8005", "EntitySnapshot=0x8006", "TargetChanged=0x8007",
             "AttackStarted=0x8008", "Damage=0x8009", "EntityDied=0x800A", "ItemDropped=0x800D",
-            "InventorySnapshot=0x800F",
+            "ItemPickedUp=0x800E", "InventorySnapshot=0x800F",
             "InventoryChanged=0x8010",
             "DisconnectNotice=0x8013",
             "CharacterHealth=0x8014", "EntityRevived=0x8015", "CharacterList=0x8016",
@@ -150,9 +155,9 @@ public sealed class MessageRoutingTests
     }
 
     [Test]
-    public void ProtocolVersion_IsTwelve()
+    public void ProtocolVersion_IsThirteen()
     {
-        Assert.That(ProtocolConstants.ProtocolVersion, Is.EqualTo(12));
+        Assert.That(ProtocolConstants.ProtocolVersion, Is.EqualTo(13));
     }
 
     [Test]

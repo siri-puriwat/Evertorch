@@ -122,8 +122,29 @@ public sealed class CharacterLifetime
     /// </summary>
     public void CheckpointAndRemove(CharacterSession character)
     {
+        // A pickup in flight still needs its character when its result comes back (Persistence §7).
+        if (character.Pickup != null)
+        {
+            Release(character);
+            character.GraceEndsTick = null;
+            character.IsRemovalDeferred = true;
+            return;
+        }
+
         QueueCheckpoint(character);
         Remove(character);
+    }
+
+    /// <summary>
+    ///     The character's pickup settled; a removal that waited for it happens now.
+    /// </summary>
+    public void OnPickupSettled(CharacterSession character)
+    {
+        if (character.IsRemovalDeferred)
+        {
+            character.IsRemovalDeferred = false;
+            CheckpointAndRemove(character);
+        }
     }
 
     /// <summary>
@@ -187,6 +208,7 @@ public sealed class CharacterLifetime
         Release(character);
         character.Connection = session;
         character.GraceEndsTick = null;
+        character.IsRemovalDeferred = false;
         character.Player.Owner = session.Connection;
         session.Character = character;
     }

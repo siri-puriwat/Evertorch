@@ -22,6 +22,7 @@ public static class MessageRouting
             case MessageOpcode.TargetEntity:
             case MessageOpcode.AttackEntity:
             case MessageOpcode.CancelAction:
+            case MessageOpcode.PickupItem:
             case MessageOpcode.Respawn:
             case MessageOpcode.CreateCharacter:
             case MessageOpcode.Logout:
@@ -35,6 +36,7 @@ public static class MessageRouting
             case MessageOpcode.Damage:
             case MessageOpcode.EntityDied:
             case MessageOpcode.ItemDropped:
+            case MessageOpcode.ItemPickedUp:
             case MessageOpcode.CharacterHealth:
             case MessageOpcode.EntityRevived:
             case MessageOpcode.DisconnectNotice:

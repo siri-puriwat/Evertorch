@@ -45,6 +45,8 @@ internal sealed class SimulatedClient : IMapProvider
 
     public AutoAttackState? AutoAttack { get; private set; }
 
+    public PickupState? Pickup { get; private set; }
+
     public ClientWorld World => Connection.World ?? throw new InvalidOperationException("Not in the world yet.");
 
     public uint LastSequence => m_producer.LastSequence;
@@ -64,7 +66,8 @@ internal sealed class SimulatedClient : IMapProvider
         {
             Controller = new MovementController(Connection.World.Grid);
             AutoAttack = new AutoAttackState(Connection.World, Controller, Connection, 1.0 / Connection.ServerTickRate);
-            m_driver = new LocalPlayerDriver(Controller, m_producer, Connection.World, Connection, AutoAttack);
+            Pickup = new PickupState(Connection.World, Controller, Connection);
+            m_driver = new LocalPlayerDriver(Controller, m_producer, Connection.World, Connection, AutoAttack, Pickup);
         }
     }
 

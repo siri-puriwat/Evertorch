@@ -84,6 +84,11 @@ public readonly struct InboundEvent
         return new InboundEvent(InboundEventKind.Attack, connection, null, default, default, target, commandSequence);
     }
 
+    public static InboundEvent ForPickup(ConnectionId connection, EntityId drop, uint commandSequence)
+    {
+        return new InboundEvent(InboundEventKind.Pickup, connection, null, default, default, drop, commandSequence);
+    }
+
     public static InboundEvent ForCreateCharacter(ConnectionId connection, string name)
     {
         return new InboundEvent(InboundEventKind.CreateCharacter, connection, null, default, default, name: name);

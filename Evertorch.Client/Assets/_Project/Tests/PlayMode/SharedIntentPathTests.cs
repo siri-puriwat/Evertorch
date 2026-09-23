@@ -113,6 +113,25 @@ public sealed class SharedIntentPathTests : InputTestFixture
     }
 
     [Test]
+    public void PickupKeyAndNorthButton_AskToPickUp()
+    {
+        Keyboard keyboard = InputSystem.AddDevice<Keyboard>();
+        Gamepad gamepad = InputSystem.AddDevice<Gamepad>();
+        Rig rig = CreateRig();
+        CombatInputSource source = rig.CreateCombatSource();
+
+        Press(keyboard.fKey);
+        CombatRequest fromKey = source.TakeRequest();
+        Release(keyboard.fKey);
+        Press(gamepad.buttonNorth);
+        CombatRequest fromButton = source.TakeRequest();
+
+        Assert.That(fromKey, Is.EqualTo(CombatRequest.Pickup));
+        Assert.That(fromButton, Is.EqualTo(CombatRequest.Pickup));
+        Assert.That(source.TakeRequest(), Is.EqualTo(CombatRequest.None));
+    }
+
+    [Test]
     public void GamepadStick_ProducesTheSameKindOfIntentAtFullSpeedWhateverTheTilt()
     {
         Gamepad gamepad = InputSystem.AddDevice<Gamepad>();
@@ -540,7 +559,8 @@ public sealed class SharedIntentPathTests : InputTestFixture
                 m_actions.FindAction("Player/Previous", true),
                 m_actions.FindAction("Player/ClearTarget", true),
                 m_actions.FindAction("Player/Attack", true),
-                m_actions.FindAction("Player/Respawn", true));
+                m_actions.FindAction("Player/Respawn", true),
+                m_actions.FindAction("Player/Pickup", true));
             return m_combat;
         }
 

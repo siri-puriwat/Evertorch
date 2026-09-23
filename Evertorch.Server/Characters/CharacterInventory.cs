@@ -19,7 +19,7 @@ public sealed class CharacterInventory
         m_rows.AddRange(rows);
     }
 
-    public uint Revision { get; }
+    public uint Revision { get; set; }
 
     public IReadOnlyList<InventoryEntry> Rows => m_rows;
 
@@ -35,6 +35,24 @@ public sealed class CharacterInventory
         }
 
         return new CharacterInventory(stored.InventoryRevision, rows);
+    }
+
+    /// <summary>
+    ///     Takes a committed change: <paramref name="row" /> as it is now, at <paramref name="revision" />.
+    /// </summary>
+    public void Apply(uint revision, InventoryEntry row)
+    {
+        int index = m_rows.FindIndex(existing => existing.InventoryItem == row.InventoryItem);
+        if (index >= 0)
+        {
+            m_rows[index] = row;
+        }
+        else
+        {
+            m_rows.Add(row);
+        }
+
+        Revision = revision;
     }
 
     public IReadOnlyList<InventorySnapshot> CreateSnapshot()

@@ -385,6 +385,34 @@ public sealed class ClientConnectionTests
     }
 
     [Test]
+    public void ItemPickedUp_ForAKnownDrop_ReachesTheWorld()
+    {
+        var harness = new Harness();
+        harness.EnterWorld();
+        var spawn = new EntitySpawn(
+            new EntityId(400),
+            EntityKind.ItemDrop,
+            "item.material.slime_gel",
+            Start,
+            new WorldDirection(0f, 1f),
+            EntityStateFlags.None,
+            0);
+        harness.Deliver(ProtocolChannel.Control, Encode(spawn.GetEncodedLength(), spawn.Write));
+        var received = new List<ItemPickedUp>();
+        harness.Connection.World!.ItemPickedUpReceived += received.Add;
+        var pickedUp = new ItemPickedUp(
+            new EntityId(400),
+            ClientWorldFixture.LocalEntity,
+            new ItemDefinitionId("item.material.slime_gel"),
+            2);
+
+        harness.Deliver(ProtocolChannel.Control, Encode(pickedUp.GetEncodedLength(), pickedUp.Write));
+
+        Assert.That(received.Count, Is.EqualTo(1));
+        Assert.That(received[0].Amount, Is.EqualTo(2u));
+    }
+
+    [Test]
     public void LocalError_NeverContainsTheSessionToken()
     {
         var missingMap = new Harness { HasMap = false };
@@ -492,6 +520,36 @@ public sealed class ClientConnectionTests
         Assert.That(logout.CommandSequence, Is.EqualTo(2u));
         Assert.That(harness.Connection.State, Is.EqualTo(ClientConnectionState.InWorld));
         Assert.That(harness.Connection.World, Is.Not.Null);
+    }
+
+    [Test]
+    public void SendPickup_InTheWorld_SharesTheCommandSequenceWithAttacks()
+    {
+        var harness = new Harness();
+        harness.EnterWorld(4);
+        harness.Connection.SendAttack(new EntityId(300));
+
+        uint sequence = harness.Connection.SendPickup(new EntityId(400));
+
+        FakeClientTransport.SentMessage sent = harness.Transport.Sent.Last();
+        Assert.That(sequence, Is.EqualTo(6u));
+        Assert.That(PickupItem.TryRead(sent.Payload, out PickupItem pickup), Is.True);
+        Assert.That(pickup.Drop, Is.EqualTo(new EntityId(400)));
+        Assert.That(pickup.CommandSequence, Is.EqualTo(6u));
+        Assert.That(sent.Channel, Is.EqualTo(ProtocolChannel.Control));
+    }
+
+    [Test]
+    public void SendPickup_OutsideTheWorld_SendsNothing()
+    {
+        var harness = new Harness();
+        harness.ConnectAndReceiveHello();
+        int before = harness.Transport.Sent.Count;
+
+        uint sequence = harness.Connection.SendPickup(new EntityId(400));
+
+        Assert.That(sequence, Is.Zero);
+        Assert.That(harness.Transport.Sent.Count, Is.EqualTo(before));
     }
 
     [Test]

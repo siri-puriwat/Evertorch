@@ -51,7 +51,8 @@ public sealed class ItemDropSystem : ITickPhase
             m_expired.Clear();
             foreach (ItemDropEntity drop in map.ItemDrops)
             {
-                if (now >= drop.ExpiresAtMs)
+                // A reserved drop waits for its pickup's commit; if the pickup fails, it expires on the next pass.
+                if (now >= drop.ExpiresAtMs && !drop.IsReserved)
                 {
                     m_expired.Add(drop);
                 }
@@ -89,9 +90,10 @@ public sealed class ItemDropSystem : ITickPhase
     }
 
     /// <summary>
-    ///     Rolls every entry of the monster's drop table in order: its chance, then its amount when it drops.
+    ///     Rolls every entry of the monster's drop table in order: its chance, then its amount when it drops. The
+    ///     drops belong first to <paramref name="killer" />, or to nobody when no character killed the monster.
     /// </summary>
-    public void DropLoot(MapInstance map, MonsterEntity monster, uint tick)
+    public void DropLoot(MapInstance map, MonsterEntity monster, CharacterId killer, uint tick)
     {
         long expiresAtMs = ToMilliseconds(tick) + m_lifetimeMs;
         int placed = 0;
@@ -104,7 +106,7 @@ public sealed class ItemDropSystem : ITickPhase
 
             int amount = entry.MinAmount + m_random.Next(entry.MaxAmount - entry.MinAmount + 1);
             WorldPosition position = Place(map.Definition.Navigation, monster.Position, placed);
-            m_world.SpawnItemDrop(map, entry.Item, (uint)amount, position, tick, expiresAtMs);
+            m_world.SpawnItemDrop(map, entry.Item, (uint)amount, position, tick, expiresAtMs, killer);
             placed++;
         }
     }

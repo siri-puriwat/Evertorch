@@ -119,6 +119,15 @@ public sealed class MessageFuzzTests
             Encode(new EntityRevived(new EntityId(9), new WorldPosition(1f, 2f, 3f), new WorldDirection(0f, 1f), 70)),
             payload => EntityRevived.TryRead(payload, out EntityRevived message) ? Encode(message) : null);
         yield return Case(
+            "PickupItem",
+            Encode(new PickupItem(new EntityId(7), 9)),
+            payload => PickupItem.TryRead(payload, out PickupItem message) ? Encode(message) : null);
+        yield return Case(
+            "ItemPickedUp",
+            Encode(new ItemPickedUp(new EntityId(7), new EntityId(3), new ItemDefinitionId("item.material.slime_gel"),
+                2)),
+            payload => ItemPickedUp.TryRead(payload, out ItemPickedUp? message) ? Encode(message!) : null);
+        yield return Case(
             "InventoryResyncRequest",
             Encode(new InventoryResyncRequest()),
             payload => InventoryResyncRequest.TryRead(payload, out InventoryResyncRequest message)
@@ -314,6 +323,20 @@ public sealed class MessageFuzzTests
     }
 
     private static byte[] Encode(EntitySpawn message)
+    {
+        byte[] buffer = new byte[message.GetEncodedLength()];
+        message.Write(buffer);
+        return buffer;
+    }
+
+    private static byte[] Encode(PickupItem message)
+    {
+        byte[] buffer = new byte[PickupItem.EncodedLength];
+        message.Write(buffer);
+        return buffer;
+    }
+
+    private static byte[] Encode(ItemPickedUp message)
     {
         byte[] buffer = new byte[message.GetEncodedLength()];
         message.Write(buffer);

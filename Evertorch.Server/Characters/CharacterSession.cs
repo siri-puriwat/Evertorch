@@ -63,5 +63,20 @@ public sealed class CharacterSession
     ///     The checkpoint whose completion finishes the logout; a completion of any other checkpoint does not.
     /// </summary>
     public PersistenceJob? LogoutCheckpoint { get; set; }
+
+    /// <summary>
+    ///     The sequence of the accepted <c>Logout</c>, answered if its checkpoint fails.
+    /// </summary>
+    public uint LogoutSequence { get; set; }
+
+    /// <summary>
+    ///     The pickup being committed, if any. Logout and removal wait for it (Persistence §7).
+    /// </summary>
+    public PendingPickup? Pickup { get; set; }
+
+    /// <summary>
+    ///     The character was to leave the world while a pickup was in flight; it leaves once the pickup settles.
+    /// </summary>
+    public bool IsRemovalDeferred { get; set; }
 }
 }

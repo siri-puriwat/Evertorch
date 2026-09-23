@@ -32,6 +32,19 @@ public sealed class ServerHostTests
         return host.Services.GetRequiredService<IOptions<SimulationOptions>>().Value;
     }
 
+    [TestCase("-0.5")]
+    [TestCase("10.5")]
+    public void Start_WithPickupRangeOutsideZeroToTen_FailsNamingTheKey(string range)
+    {
+        using var root = new TemporaryDirectory();
+        root.Write("appsettings.json", $"{{ \"World\": {{ \"PickupRange\": {range} }} }}");
+        WriteValidContent(root);
+        using IHost host = TestHosts.CreateBuilder(EphemeralPort, root.Path).Build();
+        Action start = () => host.Start();
+
+        Assert.That(start, Throws.InstanceOf<OptionsValidationException>().With.Message.Contains("World:PickupRange"));
+    }
+
     [Test]
     public void CreateBuilder_WithCommandLineOverride_WinsOverEnvironment()
     {

@@ -11,6 +11,9 @@ public enum DespawnReason : byte
     OutOfRange = 1,
 
     /// <summary>The entity left the world.</summary>
-    Removed = 2
+    Removed = 2,
+
+    /// <summary>The item drop was picked up; <see cref="ItemPickedUp" /> came just before.</summary>
+    PickedUp = 3
 }
 }

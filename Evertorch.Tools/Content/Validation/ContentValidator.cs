@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using Evertorch.Game;
 
 namespace Evertorch.Tools
 {
@@ -34,6 +35,12 @@ public static class ContentValidator
             known.UnionWith(content.DeclaredIds);
         }
 
+        var stackLimits = new Dictionary<string, int>(StringComparer.Ordinal);
+        foreach (AuthoredItem item in content.Items)
+        {
+            stackLimits[item.Definition.Id.Value] = item.Definition.StackLimit;
+        }
+
         foreach (AuthoredMonster monster in content.Monsters)
         {
             for (int index = 0; index < monster.Definition.Drops.Count; index++)
@@ -46,6 +53,7 @@ public static class ContentValidator
                     monster.Source,
                     fieldPath,
                     diagnostics);
+                RequireWithinStackLimit(monster, index, stackLimits, diagnostics);
             }
         }
 
@@ -106,6 +114,32 @@ public static class ContentValidator
         }
 
         return new HashSet<string>(firstFileById.Keys, StringComparer.Ordinal);
+    }
+
+    // A pickup is all or nothing (Gameplay Systems §11), so a drop larger than one stack could never be picked up.
+    private static void RequireWithinStackLimit(
+        AuthoredMonster monster,
+        int index,
+        Dictionary<string, int> stackLimits,
+        List<ContentDiagnostic> diagnostics)
+    {
+        MonsterDrop drop = monster.Definition.Drops[index];
+        if (!stackLimits.TryGetValue(drop.Item.Value, out int stackLimit) || drop.MaxAmount <= stackLimit)
+        {
+            return;
+        }
+
+        string fieldPath = string.Format(CultureInfo.InvariantCulture, "drops[{0}].amount.max", index);
+        diagnostics.Add(
+            new ContentDiagnostic(
+                monster.Source.File,
+                fieldPath,
+                monster.Source.LineOf(fieldPath),
+                string.Format(
+                    CultureInfo.InvariantCulture,
+                    "exceeds the stack limit {0} of item '{1}'",
+                    stackLimit,
+                    drop.Item.Value)));
     }
 
     private static void RequireReference(

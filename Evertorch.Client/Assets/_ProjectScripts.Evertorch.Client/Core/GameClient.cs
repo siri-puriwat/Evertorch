@@ -46,6 +46,7 @@ public sealed class GameClient : MonoBehaviour
     private readonly StreamingContentLoader m_contentLoader = new();
     private readonly EntityViewCatalog m_viewCatalog = new();
     private readonly List<PickCandidate> m_targetCandidates = new();
+    private readonly List<PickCandidate> m_pointerCandidates = new();
     private readonly TargetCycler m_targetCycler = new();
     private LiteNetLibClientTransport? m_socket;
     private ManualMoveSource? m_manualSource;
@@ -54,6 +55,7 @@ public sealed class GameClient : MonoBehaviour
     private CombatInputSource? m_combatSource;
     private TargetMarker? m_targetMarker;
     private AutoAttackState? m_autoAttack;
+    private PickupState? m_pickup;
     private MovementController? m_controller;
     private LocalPlayerDriver? m_driver;
     private FixedTickClock? m_clock;
@@ -152,6 +154,9 @@ public sealed class GameClient : MonoBehaviour
         m_manualSource?.Apply(m_controller, yaw);
         m_targetCandidates.Clear();
         m_world.CollectTargetCandidates(m_targetCandidates);
+        m_pointerCandidates.Clear();
+        m_pointerCandidates.AddRange(m_targetCandidates);
+        m_world.CollectDropCandidates(m_pointerCandidates);
         HandlePointerRequest();
         HandleCombatRequest();
 
@@ -394,7 +399,14 @@ public sealed class GameClient : MonoBehaviour
         m_controller = new MovementController(world.Grid);
         m_clock = new FixedTickClock(1f / Connection.ServerTickRate);
         m_autoAttack = new AutoAttackState(world, m_controller, Connection, 1.0 / Connection.ServerTickRate);
-        m_driver = new LocalPlayerDriver(m_controller, new MoveIntentProducer(), world, Connection, m_autoAttack);
+        m_pickup = new PickupState(world, m_controller, Connection);
+        m_driver = new LocalPlayerDriver(
+            m_controller,
+            new MoveIntentProducer(),
+            world,
+            Connection,
+            m_autoAttack,
+            m_pickup);
         Status = $"In {map.DisplayName}";
     }
 
@@ -424,9 +436,10 @@ public sealed class GameClient : MonoBehaviour
         InputAction? clear = actions?.FindAction("Player/ClearTarget");
         InputAction? attack = actions?.FindAction("Player/Attack");
         InputAction? respawn = actions?.FindAction("Player/Respawn");
-        if (next != null && previous != null && clear != null && attack != null && respawn != null)
+        InputAction? pickup = actions?.FindAction("Player/Pickup");
+        if (next != null && previous != null && clear != null && attack != null && respawn != null && pickup != null)
         {
-            m_combatSource = new CombatInputSource(next, previous, clear, attack, respawn);
+            m_combatSource = new CombatInputSource(next, previous, clear, attack, respawn, pickup);
         }
     }
 
@@ -441,7 +454,7 @@ public sealed class GameClient : MonoBehaviour
         PointerMoveResult result = m_pointerHandler.Handle(
             Camera.main,
             ground,
-            m_targetCandidates,
+            m_pointerCandidates,
             m_controller,
             m_world.Predictor.Position,
             out WorldPosition point,
@@ -449,6 +462,7 @@ public sealed class GameClient : MonoBehaviour
         if (result == PointerMoveResult.Accepted)
         {
             m_autoAttack?.OnWalkRequested();
+            m_pickup?.Cancel();
             m_marker?.ShowAccepted(m_controller.Path[m_controller.Path.Count - 1]);
         }
         else if (result == PointerMoveResult.Refused)
@@ -457,8 +471,16 @@ public sealed class GameClient : MonoBehaviour
         }
         else if (result == PointerMoveResult.Entity)
         {
-            // A click or tap on a monster attacks it, as in the reference game (Prototype Content §4).
-            m_autoAttack?.Attack(entity);
+            // A click or tap on a monster attacks it and one on a drop picks it up, as in the reference game
+            // (Prototype Content §4).
+            if (m_world.Remotes.TryGetValue(entity, out RemoteEntity? remote) && remote.Kind == EntityKind.ItemDrop)
+            {
+                StartPickup(entity);
+            }
+            else
+            {
+                Attack(entity);
+            }
         }
     }
 
@@ -476,7 +498,15 @@ public sealed class GameClient : MonoBehaviour
         }
         else if (request == CombatRequest.Attack)
         {
-            m_autoAttack?.Attack(m_world.Target);
+            Attack(m_world.Target);
+        }
+        else if (request == CombatRequest.Pickup)
+        {
+            EntityId drop = m_world.NearestDrop(m_world.Predictor.Position, PickupState.KeyReach);
+            if (drop != default)
+            {
+                StartPickup(drop);
+            }
         }
         else if (request == CombatRequest.Respawn)
         {
@@ -494,6 +524,19 @@ public sealed class GameClient : MonoBehaviour
                 Connection?.SendTarget(next);
             }
         }
+    }
+
+    private void Attack(EntityId target)
+    {
+        m_pickup?.Cancel();
+        m_autoAttack?.Attack(target);
+    }
+
+    // A pickup replaces an auto-attack, whose chase would otherwise pull the character away from the drop.
+    private void StartPickup(EntityId drop)
+    {
+        m_autoAttack?.OnWalkRequested();
+        m_pickup?.Pickup(drop);
     }
 
     private void OnClosed()
@@ -537,6 +580,7 @@ public sealed class GameClient : MonoBehaviour
         m_world = null;
         m_driver = null;
         m_autoAttack = null;
+        m_pickup = null;
         m_controller = null;
         m_clock = null;
         foreach (EntityView view in m_remoteViews.Values)

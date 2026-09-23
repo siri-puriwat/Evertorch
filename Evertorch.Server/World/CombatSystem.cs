@@ -111,7 +111,8 @@ public sealed class CombatSystem : ITickPhase
 
         if (entity is MonsterEntity monster)
         {
-            m_drops.DropLoot(map, monster, tick);
+            CharacterId killer = source is PlayerEntity player ? player.Character : default;
+            m_drops.DropLoot(map, monster, killer, tick);
         }
     }
 

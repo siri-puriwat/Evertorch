@@ -24,7 +24,7 @@ internal static class WireEnums
 
     public static bool IsDefined(DespawnReason value)
     {
-        return value == DespawnReason.OutOfRange || value == DespawnReason.Removed;
+        return value == DespawnReason.OutOfRange || value == DespawnReason.Removed || value == DespawnReason.PickedUp;
     }
 
     public static bool IsDefined(CreateCharacterOutcome value)

@@ -185,9 +185,13 @@ public sealed class WorldSimulation
         uint amount,
         WorldPosition position,
         uint tick,
-        long expiresAtMs)
+        long expiresAtMs,
+        CharacterId priority)
     {
-        var drop = new ItemDropEntity(NextEntityId(), item, amount, position, tick, expiresAtMs);
+        // Not from the seeded random: a drop's identity must be unique across restarts, and drawing it from the
+        // gameplay random would change every roll after it.
+        var drop = new ItemDropEntity(NextEntityId(), Guid.NewGuid(), item, amount, position, tick, expiresAtMs,
+            priority);
         map.Add(drop);
         return drop;
     }

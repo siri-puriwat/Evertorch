@@ -20,6 +20,7 @@ public sealed class EntityDespawnTests
 
     [TestCase(DespawnReason.OutOfRange)]
     [TestCase(DespawnReason.Removed)]
+    [TestCase(DespawnReason.PickedUp)]
     public void TryRead_AfterWrite_RoundTripsReason(DespawnReason reason)
     {
         byte[] buffer = new byte[EntityDespawn.EncodedLength];
@@ -33,7 +34,7 @@ public sealed class EntityDespawnTests
     }
 
     [TestCase(0)]
-    [TestCase(3)]
+    [TestCase(4)]
     [TestCase(255)]
     public void TryRead_WhenReasonIsUnknown_ReturnsFalse(byte reason)
     {

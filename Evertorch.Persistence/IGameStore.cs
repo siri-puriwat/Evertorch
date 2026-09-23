@@ -53,6 +53,21 @@ public interface IGameStore
     Task SaveCheckpointAsync(CharacterCheckpoint checkpoint, CancellationToken cancellationToken);
 
     /// <summary>
+    ///     Adds the drop to the character's inventory in one transaction with its ledger row (Persistence §5): the
+    ///     character row is locked, capacity and stack limit are checked again, the item merges into its row, the
+    ///     inventory revision goes up by one, and the ledger records the drop's ID. A drop already in the ledger
+    ///     changes nothing and reports who has it.
+    /// </summary>
+    Task<PickupResult> CommitPickupAsync(PickupCommit pickup, CancellationToken cancellationToken);
+
+    /// <summary>
+    ///     What became of a drop whose commit may or may not have happened: null when the ledger has no entry for it,
+    ///     else <see cref="PickupStatus.Committed" /> with the inventory as it is now when
+    ///     <paramref name="characterId" /> holds it, or <see cref="PickupStatus.TakenByOther" />.
+    /// </summary>
+    Task<PickupResult?> FindPickupAsync(Guid dropId, long characterId, CancellationToken cancellationToken);
+
+    /// <summary>
     ///     Every distinct job, map, and item definition ID stored for any character, for the startup comparison with
     ///     the loaded content (Persistence §8).
     /// </summary>

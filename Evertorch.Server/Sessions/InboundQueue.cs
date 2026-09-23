@@ -136,6 +136,14 @@ public sealed class InboundQueue
 
                 decoded = InboundEvent.ForAttack(connection, attack.Target, attack.CommandSequence);
                 return true;
+            case MessageOpcode.PickupItem:
+                if (!PickupItem.TryRead(payload, out PickupItem pickup))
+                {
+                    return false;
+                }
+
+                decoded = InboundEvent.ForPickup(connection, pickup.Drop, pickup.CommandSequence);
+                return true;
             case MessageOpcode.CancelAction:
                 if (!CancelAction.TryRead(payload, out CancelAction cancel))
                 {

@@ -62,6 +62,7 @@ public sealed class SessionManager : ITickPhase
     private readonly Targeting m_targeting;
     private readonly PlayerLife m_life;
     private readonly CharacterLifetime m_lifetime;
+    private readonly PickupSystem m_pickups;
     private readonly TimeProvider m_time;
     private readonly ILogger<SessionManager> m_logger;
     private readonly string m_serverBuildVersion;
@@ -82,6 +83,7 @@ public sealed class SessionManager : ITickPhase
         Targeting targeting,
         PlayerLife life,
         CharacterLifetime lifetime,
+        PickupSystem pickups,
         TimeProvider time,
         IOptions<SimulationOptions> simulation,
         IOptions<NetworkOptions> network,
@@ -100,6 +102,8 @@ public sealed class SessionManager : ITickPhase
         m_targeting = targeting;
         m_life = life;
         m_lifetime = lifetime;
+        m_pickups = pickups;
+        m_pickups.Settled += OnPickupSettled;
         m_time = time;
         m_logger = logger;
         m_serverBuildVersion = compatibility.Value.ServerBuildVersion;
@@ -200,6 +204,7 @@ public sealed class SessionManager : ITickPhase
             case InboundEventKind.Cancel:
             case InboundEventKind.Respawn:
             case InboundEventKind.Logout:
+            case InboundEventKind.Pickup:
                 HandleCommand(session, inboundEvent, tick);
                 break;
             default:
@@ -644,6 +649,7 @@ public sealed class SessionManager : ITickPhase
                 : CommandRejectionReason.InvalidTarget,
             InboundEventKind.Cancel => Cancel(player),
             InboundEventKind.Logout => TryLogout(session, command.CommandSequence),
+            InboundEventKind.Pickup => m_pickups.TryStart(session, command.Target, command.CommandSequence, tick),
             _ => CommandRejectionReason.NotAllowedNow
         };
     }
@@ -660,8 +666,9 @@ public sealed class SessionManager : ITickPhase
         return CommandRejectionReason.None;
     }
 
-    // Logout stops new commands and writes the final checkpoint; only once it is written does the character leave
-    // (Persistence §7). Without the database the logout is refused and the player stays.
+    // Logout stops new commands, waits for a pickup in flight, and writes the final checkpoint; only once it is
+    // written does the character leave (Persistence §7). Without the database the logout is refused and the player
+    // stays.
     private CommandRejectionReason TryLogout(ClientSession session, uint commandSequence)
     {
         CharacterSession character = session.Character!;
@@ -671,20 +678,34 @@ public sealed class SessionManager : ITickPhase
         }
 
         character.IsLoggingOut = true;
+        character.LogoutSequence = commandSequence;
         character.Player.Combat.IsAutoAttacking = false;
         session.Input!.Direction = default;
-        ConnectionId connection = session.Connection;
-        character.LogoutCheckpoint = m_lifetime.QueueCheckpoint(
-            character,
-            outcome => CompleteLogout(connection, character, commandSequence, outcome));
+        if (character.Pickup == null)
+        {
+            QueueLogoutCheckpoint(session, character);
+        }
+
         return CommandRejectionReason.None;
     }
 
-    private void CompleteLogout(
-        ConnectionId connection,
-        CharacterSession character,
-        uint commandSequence,
-        PersistenceOutcome outcome)
+    private void OnPickupSettled(CharacterSession character)
+    {
+        if (character.IsLoggingOut && character.LogoutCheckpoint == null && character.Connection != null)
+        {
+            QueueLogoutCheckpoint(character.Connection, character);
+        }
+    }
+
+    private void QueueLogoutCheckpoint(ClientSession session, CharacterSession character)
+    {
+        ConnectionId connection = session.Connection;
+        character.LogoutCheckpoint = m_lifetime.QueueCheckpoint(
+            character,
+            outcome => CompleteLogout(connection, character, outcome));
+    }
+
+    private void CompleteLogout(ConnectionId connection, CharacterSession character, PersistenceOutcome outcome)
     {
         if (!character.IsLoggingOut
             || !m_sessions.TryGet(connection, out ClientSession? session)
@@ -698,7 +719,7 @@ public sealed class SessionManager : ITickPhase
         {
             character.IsLoggingOut = false;
             character.LogoutCheckpoint = null;
-            Reject(session, commandSequence, CommandRejectionReason.ServiceUnavailable);
+            Reject(session, character.LogoutSequence, CommandRejectionReason.ServiceUnavailable);
             return;
         }
 

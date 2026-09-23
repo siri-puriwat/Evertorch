@@ -65,6 +65,12 @@ public sealed class WorldOptions
     ///     How long a monster's drop lies on the ground before it despawns (drops research note).
     /// </summary>
     public int ItemDropLifetimeMs { get; set; } = 60000;
+
+    /// <summary>
+    ///     How far, center to center on X and Z, a player reaches to pick up a drop; the attack tolerance is added
+    ///     (Gameplay Systems §11).
+    /// </summary>
+    public float PickupRange { get; set; } = 1.5f;
 }
 
 internal sealed class WorldOptionsValidator : IValidateOptions<WorldOptions>
@@ -90,6 +96,11 @@ internal sealed class WorldOptionsValidator : IValidateOptions<WorldOptions>
         if (!(options.AttackRangeTolerance >= 0f && options.AttackRangeTolerance <= 5f))
         {
             failures.Add($"{WorldOptions.SectionName}:AttackRangeTolerance must be between 0 and 5.");
+        }
+
+        if (!(options.PickupRange >= 0f && options.PickupRange <= 10f))
+        {
+            failures.Add($"{WorldOptions.SectionName}:PickupRange must be between 0 and 10.");
         }
 
         AddRangeFailure(failures, "InputHoldTimeoutMs", options.InputHoldTimeoutMs, 0, 5000);

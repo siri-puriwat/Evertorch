@@ -103,6 +103,16 @@ internal sealed class TestServer
             Options.Create(new SessionOptions { ReconnectGraceMs = reconnectGraceMs }),
             simulation,
             new CapturingLogger<CharacterLifetime>());
+        Pickups = new PickupSystem(
+            Sessions,
+            Persistence,
+            sender,
+            Lifetime,
+            Content,
+            Time,
+            Options.Create(world),
+            simulation,
+            new CapturingLogger<PickupSystem>());
         var tokens = new DevelopmentTokenValidator(Options.Create(authentication), Time);
         var handshake = new HandshakeValidator(compatibility, tokens, Content);
         SessionManager = new SessionManager(
@@ -116,6 +126,7 @@ internal sealed class TestServer
             targeting,
             new PlayerLife(Sessions, sender),
             Lifetime,
+            Pickups,
             Time,
             simulation,
             Options.Create(network),
@@ -146,7 +157,8 @@ internal sealed class TestServer
             Drops,
             SessionManager,
             new RecordingPhase(TickPhase.ApplyCommands, "test", new List<string>(), _ => RunAfterCommands()),
-            new CheckpointScheduler(Sessions, Lifetime)
+            new CheckpointScheduler(Sessions, Lifetime),
+            Pickups
         };
         if (withMonsterAi)
         {
@@ -164,6 +176,8 @@ internal sealed class TestServer
     public CombatSystem Combat { get; }
 
     public ItemDropSystem Drops { get; }
+
+    public PickupSystem Pickups { get; }
 
     public InMemoryServerTransport Transport { get; }
 
@@ -407,6 +421,13 @@ internal sealed class TestServer
     {
         byte[] payload = new byte[InventoryResyncRequest.EncodedLength];
         new InventoryResyncRequest().Write(payload);
+        Inbound.OnPayload(connection, ProtocolChannel.Control, payload);
+    }
+
+    public void SendPickup(ConnectionId connection, EntityId drop, uint commandSequence)
+    {
+        byte[] payload = new byte[PickupItem.EncodedLength];
+        new PickupItem(drop, commandSequence).Write(payload);
         Inbound.OnPayload(connection, ProtocolChannel.Control, payload);
     }
 

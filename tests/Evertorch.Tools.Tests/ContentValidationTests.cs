@@ -40,6 +40,12 @@ public sealed class ContentValidationTests
     [TestCase(Monster, "chance: 0.7321", "chance: .nan", "drops[0].chance", "finite number")]
     [TestCase(Monster, "{ min: 1, max: 2 }", "{ min: 3, max: 2 }", "drops[0].amount.min", "greater than max")]
     [TestCase(Monster, "{ min: 1, max: 2 }", "{ min: 0, max: 2 }", "drops[0].amount.min", "between 1 and")]
+    [TestCase(
+        Monster,
+        "{ min: 1, max: 2 }",
+        "{ min: 1, max: 1000 }",
+        "drops[0].amount.max",
+        "exceeds the stack limit 999 of item 'item.material.slime_gel'")]
     [TestCase(Monster, "attackIntervalMs: 12347", "attackIntervalMs: 0", "combat.attackIntervalMs", "between 1 and")]
     [TestCase(Monster, "scanIntervalMs: 139", "scanIntervalMs: 0", "ai.scanIntervalMs", "between 1 and")]
     [TestCase(Monster, "roamRadius: 6.4375", "roamRadius: -1", "ai.roamRadius", "between 0 and")]

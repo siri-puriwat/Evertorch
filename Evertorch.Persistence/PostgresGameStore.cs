@@ -18,6 +18,10 @@ public sealed class PostgresGameStore : IGameStore
 {
     private const int StartingLevel = 1;
     private const string NameIndex = "ux_characters_name_normalized";
+    private const string LedgerIndex = "ux_economy_ledger_operation_id";
+
+    // The inventory revision is an unsigned 32-bit number stored in a bigint; it wraps to 0.
+    private const long RevisionModulus = 1L << 32;
 
     private readonly string m_connectionString;
     private readonly DbContextOptions<EvertorchDbContext> m_options;
@@ -188,6 +192,97 @@ RETURNING id AS ""Id"", status AS ""Status""")
             cancellationToken);
     }
 
+    public Task<PickupResult> CommitPickupAsync(PickupCommit pickup, CancellationToken cancellationToken)
+    {
+        return RunAsync(
+            async context =>
+            {
+                await using (IDbContextTransaction transaction =
+                             await context.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false))
+                {
+                    // Locked before the ledger is read, so a retry of the same pickup waits for the first and then
+                    // finds it instead of adding the item twice.
+                    CharacterRow character = await LockCharacterAsync(context, pickup.CharacterId, cancellationToken)
+                        .ConfigureAwait(false);
+                    PickupResult? earlier = await FindAsync(context, pickup.DropId, pickup.CharacterId,
+                        cancellationToken).ConfigureAwait(false);
+                    if (earlier != null)
+                    {
+                        return earlier;
+                    }
+
+                    List<InventoryItemRow> rows = await context.InventoryItems
+                        .Where(row => row.CharacterId == pickup.CharacterId)
+                        .ToListAsync(cancellationToken)
+                        .ConfigureAwait(false);
+                    InventoryItemRow? stack =
+                        rows.FirstOrDefault(row => row.ItemDefinitionId == pickup.ItemDefinitionId);
+                    int held = stack?.Quantity ?? 0;
+                    if (held > pickup.StackLimit - pickup.Amount || (stack == null && rows.Count >= pickup.MaxRows))
+                    {
+                        return new PickupResult(PickupStatus.InventoryFull, (uint)character.InventoryRevision, null);
+                    }
+
+                    if (stack == null)
+                    {
+                        stack = new InventoryItemRow
+                        {
+                            CharacterId = pickup.CharacterId,
+                            ItemDefinitionId = pickup.ItemDefinitionId,
+                            Quantity = pickup.Amount
+                        };
+                        context.InventoryItems.Add(stack);
+                    }
+                    else
+                    {
+                        stack.Quantity += pickup.Amount;
+                        stack.Version++;
+                    }
+
+                    character.InventoryRevision = (character.InventoryRevision + 1) % RevisionModulus;
+                    character.Version++;
+                    await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+                    context.Ledger.Add(
+                        new LedgerRow
+                        {
+                            OperationId = pickup.DropId,
+                            ActorCharacterId = pickup.CharacterId,
+                            OperationType = LedgerRow.PickupOperation,
+                            ItemInstanceId = stack.Id,
+                            ItemDefinitionId = pickup.ItemDefinitionId,
+                            QuantityDelta = pickup.Amount,
+                            CreatedAt = pickup.At
+                        });
+                    try
+                    {
+                        await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+                    }
+                    catch (DbUpdateException exception) when (IsUniqueViolation(exception, LedgerIndex))
+                    {
+                        // Another character's commit of the same drop won the race.
+                        await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
+                        context.ChangeTracker.Clear();
+                        return await FindAsync(context, pickup.DropId, pickup.CharacterId, cancellationToken)
+                                .ConfigureAwait(false)
+                            ?? throw new InvalidOperationException(
+                                $"Drop {pickup.DropId} clashed but is not in the ledger.");
+                    }
+
+                    await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+                    return new PickupResult(
+                        PickupStatus.Committed,
+                        (uint)character.InventoryRevision,
+                        new StoredItem(stack.Id, stack.ItemDefinitionId, stack.Quantity));
+                }
+            },
+            cancellationToken);
+    }
+
+    public Task<PickupResult?> FindPickupAsync(Guid dropId, long characterId, CancellationToken cancellationToken)
+    {
+        return RunAsync(context => FindAsync(context, dropId, characterId, cancellationToken), cancellationToken);
+    }
+
     public Task<IReadOnlyList<string>> ListStoredDefinitionIdsAsync(CancellationToken cancellationToken)
     {
         return RunAsync(
@@ -260,6 +355,54 @@ RETURNING id AS ""Id"", status AS ""Status""")
         {
             throw new InvalidOperationException($"Account {account.Value} does not exist.");
         }
+    }
+
+    private static async Task<CharacterRow> LockCharacterAsync(
+        EvertorchDbContext context,
+        long characterId,
+        CancellationToken cancellationToken)
+    {
+        List<CharacterRow> locked = await context.Characters
+            .FromSql($"SELECT * FROM characters WHERE id = {characterId} FOR UPDATE")
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        return locked.Count == 1
+            ? locked[0]
+            : throw new InvalidOperationException($"Character {characterId} does not exist.");
+    }
+
+    private static async Task<PickupResult?> FindAsync(
+        EvertorchDbContext context,
+        Guid dropId,
+        long characterId,
+        CancellationToken cancellationToken)
+    {
+        LedgerRow? entry = await context.Ledger
+            .AsNoTracking()
+            .SingleOrDefaultAsync(row => row.OperationId == dropId, cancellationToken)
+            .ConfigureAwait(false);
+        if (entry == null)
+        {
+            return null;
+        }
+
+        if (entry.ActorCharacterId != characterId)
+        {
+            return new PickupResult(PickupStatus.TakenByOther, 0, null);
+        }
+
+        long revision = await context.Characters
+            .Where(row => row.Id == characterId)
+            .Select(row => row.InventoryRevision)
+            .SingleAsync(cancellationToken)
+            .ConfigureAwait(false);
+        StoredItem? item = await context.InventoryItems
+            .AsNoTracking()
+            .Where(row => row.Id == entry.ItemInstanceId)
+            .Select(row => new StoredItem(row.Id, row.ItemDefinitionId, row.Quantity))
+            .SingleOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
+        return new PickupResult(PickupStatus.Committed, (uint)revision, item);
     }
 
     private static bool IsUniqueViolation(DbUpdateException exception, string index)

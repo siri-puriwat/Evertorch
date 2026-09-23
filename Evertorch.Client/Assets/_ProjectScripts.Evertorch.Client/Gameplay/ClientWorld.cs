@@ -136,6 +136,11 @@ public sealed class ClientWorld
     public event Action<ItemDropped>? ItemDroppedReceived;
 
     /// <summary>
+    ///     A drop this client knows was picked up; its despawn follows.
+    /// </summary>
+    public event Action<ItemPickedUp>? ItemPickedUpReceived;
+
+    /// <summary>
     ///     A command of this client was refused; <see cref="CommandRejected.CommandSequence" /> says which.
     /// </summary>
     public event Action<CommandRejected>? CommandRejectedReceived;
@@ -288,6 +293,22 @@ public sealed class ClientWorld
         ItemDroppedReceived?.Invoke(dropped);
     }
 
+    public void OnItemPickedUp(ItemPickedUp pickedUp)
+    {
+        if (pickedUp == null)
+        {
+            throw new ArgumentNullException(nameof(pickedUp));
+        }
+
+        if (!m_remotes.TryGetValue(pickedUp.Drop, out RemoteEntity? remote) || remote.Kind != EntityKind.ItemDrop)
+        {
+            UnknownEntityEvents++;
+            return;
+        }
+
+        ItemPickedUpReceived?.Invoke(pickedUp);
+    }
+
     public void OnCharacterHealth(CharacterHealth health)
     {
         LocalHealth = health.Current;
@@ -310,6 +331,51 @@ public sealed class ClientWorld
                 candidates.Add(new PickCandidate(remote.Entity, position));
             }
         }
+    }
+
+    /// <summary>
+    ///     Appends the drops this client knows, at their drawn positions: what a click or tap picks up.
+    /// </summary>
+    public void CollectDropCandidates(List<PickCandidate> candidates)
+    {
+        double renderTime = RemoteRenderTime;
+        foreach (RemoteEntity remote in m_remotes.Values)
+        {
+            if (remote.Kind == EntityKind.ItemDrop
+                && remote.Buffer.TrySample(renderTime, out WorldPosition position, out WorldDirection _))
+            {
+                candidates.Add(new PickCandidate(remote.Entity, position));
+            }
+        }
+    }
+
+    /// <summary>
+    ///     The drawn drop nearest to <paramref name="position" /> within <paramref name="reach" />, or default.
+    /// </summary>
+    public EntityId NearestDrop(WorldPosition position, float reach)
+    {
+        EntityId nearest = default;
+        float best = reach;
+        double renderTime = RemoteRenderTime;
+        foreach (RemoteEntity remote in m_remotes.Values)
+        {
+            if (remote.Kind != EntityKind.ItemDrop
+                || !remote.Buffer.TrySample(renderTime, out WorldPosition at, out WorldDirection _))
+            {
+                continue;
+            }
+
+            float dx = at.X - position.X;
+            float dz = at.Z - position.Z;
+            float distance = (float)Math.Sqrt(dx * dx + dz * dz);
+            if (distance < best || (distance == best && nearest != default && remote.Entity.Value < nearest.Value))
+            {
+                best = distance;
+                nearest = remote.Entity;
+            }
+        }
+
+        return nearest;
     }
 
     private bool Knows(EntityId entity)
