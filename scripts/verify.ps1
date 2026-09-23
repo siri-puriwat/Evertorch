@@ -39,7 +39,32 @@ try {
     Invoke-Step 'Restore tools' { dotnet tool restore }
     Invoke-Step 'Restore packages' { dotnet restore $solution }
     Invoke-Step 'Build' { dotnet build $solution -c Release --no-restore }
-    Invoke-Step 'Test' { dotnet test $solution -c Release --no-build }
+    # Results go to trx files so that a failure names its tests even when the console output is not kept.
+    $testResults = Join-Path $root 'artifacts/test-results'
+    if (Test-Path $testResults) {
+        Remove-Item -Recurse -Force $testResults
+    }
+
+    Write-Host '==> Test'
+    dotnet test $solution -c Release --no-build --logger trx --results-directory $testResults
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "FAILED: Test (exit code $LASTEXITCODE). Tests that did not pass:"
+        foreach ($file in Get-ChildItem -Path $testResults -Filter '*.trx' -ErrorAction SilentlyContinue) {
+            [xml] $trx = Get-Content -Raw -LiteralPath $file.FullName
+            $classes = @{}
+            foreach ($definition in $trx.TestRun.TestDefinitions.UnitTest) {
+                $classes[$definition.id] = $definition.TestMethod.className
+            }
+
+            foreach ($result in $trx.TestRun.Results.UnitTestResult) {
+                if ($result.outcome -ne 'Passed' -and $result.outcome -ne 'NotExecuted') {
+                    Write-Host "  $($result.outcome): $($classes[$result.testId]).$($result.testName)"
+                }
+            }
+        }
+        Write-Host "Results: $testResults"
+        exit 1
+    }
 
     # Canonical content must validate, and building it twice must give byte-identical packages.
     $tools = Join-Path $root 'artifacts/bin/Evertorch.Tools/release/Evertorch.Tools.dll'

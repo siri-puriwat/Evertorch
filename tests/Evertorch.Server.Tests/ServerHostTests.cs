@@ -36,6 +36,7 @@ public sealed class ServerHostTests
     public void CreateBuilder_WithCommandLineOverride_WinsOverEnvironment()
     {
         using var root = new TemporaryDirectory();
+        string? previousTickRate = Environment.GetEnvironmentVariable(TickRateVariable);
         Environment.SetEnvironmentVariable(TickRateVariable, "40");
         try
         {
@@ -46,7 +47,7 @@ public sealed class ServerHostTests
         }
         finally
         {
-            Environment.SetEnvironmentVariable(TickRateVariable, null);
+            Environment.SetEnvironmentVariable(TickRateVariable, previousTickRate);
         }
     }
 
@@ -55,6 +56,7 @@ public sealed class ServerHostTests
     {
         using var root = new TemporaryDirectory();
         root.Write("appsettings.json", "{ \"Simulation\": { \"TickRate\": 30 } }");
+        string? previousTickRate = Environment.GetEnvironmentVariable(TickRateVariable);
         Environment.SetEnvironmentVariable(TickRateVariable, "40");
         try
         {
@@ -64,7 +66,7 @@ public sealed class ServerHostTests
         }
         finally
         {
-            Environment.SetEnvironmentVariable(TickRateVariable, null);
+            Environment.SetEnvironmentVariable(TickRateVariable, previousTickRate);
         }
     }
 
