@@ -48,7 +48,7 @@ public sealed class AddressablesKeyCheckTests
     {
         ClientContent content = kind switch
         {
-            "job" => CreateContent(jobPrefab: "absent_key"),
+            "job" => CreateContent("absent_key"),
             "monster" => CreateContent(monsterPrefab: "absent_key"),
             _ => CreateContent(itemModel: "absent_key")
         };

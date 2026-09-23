@@ -8,7 +8,7 @@ namespace Evertorch.Client.Tests.EditMode
 [TestFixture]
 public sealed class TargetingTests
 {
-    private static readonly WorldPosition Origin = new WorldPosition(0f, 0f, 0f);
+    private static readonly WorldPosition Origin = new(0f, 0f, 0f);
 
     private static PickCandidate Candidate(long entity, float x, float z)
     {
@@ -28,6 +28,24 @@ public sealed class TargetingTests
                 EntityStateFlags.None,
                 1000));
         return world;
+    }
+
+    [TestCase(0.69f, true)]
+    [TestCase(0.71f, false)]
+    public void TryPick_ForARayPassingBesideAMonster_HitsOnlyWithinThePickRadius(float offset, bool expected)
+    {
+        var candidates = new List<PickCandidate> { Candidate(1, offset, 5f) };
+        var eye = new WorldPosition(0f, EntityPicker.PickHeight, 0f);
+
+        Assert.That(EntityPicker.TryPick(eye, 0f, 0f, 1f, candidates, out EntityId _), Is.EqualTo(expected));
+    }
+
+    [Test]
+    public void Choose_ForEquallyNearCandidates_OrdersByEntityId()
+    {
+        var candidates = new List<PickCandidate> { Candidate(9, 0f, 2f), Candidate(4, 2f, 0f) };
+
+        Assert.That(new TargetCycler().Choose(candidates, Origin, default, true), Is.EqualTo(new EntityId(4)));
     }
 
     [Test]
@@ -53,14 +71,6 @@ public sealed class TargetingTests
     }
 
     [Test]
-    public void Choose_ForEquallyNearCandidates_OrdersByEntityId()
-    {
-        var candidates = new List<PickCandidate> { Candidate(9, 0f, 2f), Candidate(4, 2f, 0f) };
-
-        Assert.That(new TargetCycler().Choose(candidates, Origin, default, true), Is.EqualTo(new EntityId(4)));
-    }
-
-    [Test]
     public void Choose_WithNoCandidates_ChoosesNothing()
     {
         var cycler = new TargetCycler();
@@ -69,39 +79,9 @@ public sealed class TargetingTests
     }
 
     [Test]
-    public void OnTargetChanged_ForAnotherActorOrAnUnknownTarget_IsCountedAndIgnored()
-    {
-        EntityId monster = new EntityId(300);
-        ClientWorld world = CreateWorldWithMonster(monster);
-
-        world.OnTargetChanged(new TargetChanged(new EntityId(999), monster));
-        world.OnTargetChanged(new TargetChanged(ClientWorldFixture.LocalEntity, new EntityId(301)));
-
-        Assert.That(world.Target, Is.EqualTo(default(EntityId)));
-        Assert.That(world.UnknownEntityEvents, Is.EqualTo(2));
-    }
-
-    [Test]
-    public void OnTargetChanged_ForAKnownMonster_SetsTheTargetAndZeroClearsIt()
-    {
-        EntityId monster = new EntityId(300);
-        ClientWorld world = CreateWorldWithMonster(monster);
-        int changes = 0;
-        world.TargetChanged += () => changes++;
-
-        world.OnTargetChanged(new TargetChanged(ClientWorldFixture.LocalEntity, monster));
-        EntityId selected = world.Target;
-        world.OnTargetChanged(new TargetChanged(ClientWorldFixture.LocalEntity, default));
-
-        Assert.That(selected, Is.EqualTo(monster));
-        Assert.That(world.Target, Is.EqualTo(default(EntityId)));
-        Assert.That(changes, Is.EqualTo(2));
-    }
-
-    [Test]
     public void CollectTargetCandidates_ListsMonstersButNotPlayers()
     {
-        EntityId monster = new EntityId(300);
+        var monster = new EntityId(300);
         ClientWorld world = CreateWorldWithMonster(monster);
         world.OnSpawn(
             new EntitySpawn(
@@ -121,6 +101,36 @@ public sealed class TargetingTests
     }
 
     [Test]
+    public void OnTargetChanged_ForAKnownMonster_SetsTheTargetAndZeroClearsIt()
+    {
+        var monster = new EntityId(300);
+        ClientWorld world = CreateWorldWithMonster(monster);
+        int changes = 0;
+        world.TargetChanged += () => changes++;
+
+        world.OnTargetChanged(new TargetChanged(ClientWorldFixture.LocalEntity, monster));
+        EntityId selected = world.Target;
+        world.OnTargetChanged(new TargetChanged(ClientWorldFixture.LocalEntity, default));
+
+        Assert.That(selected, Is.EqualTo(monster));
+        Assert.That(world.Target, Is.EqualTo(default(EntityId)));
+        Assert.That(changes, Is.EqualTo(2));
+    }
+
+    [Test]
+    public void OnTargetChanged_ForAnotherActorOrAnUnknownTarget_IsCountedAndIgnored()
+    {
+        var monster = new EntityId(300);
+        ClientWorld world = CreateWorldWithMonster(monster);
+
+        world.OnTargetChanged(new TargetChanged(new EntityId(999), monster));
+        world.OnTargetChanged(new TargetChanged(ClientWorldFixture.LocalEntity, new EntityId(301)));
+
+        Assert.That(world.Target, Is.EqualTo(default(EntityId)));
+        Assert.That(world.UnknownEntityEvents, Is.EqualTo(2));
+    }
+
+    [Test]
     public void TryPick_AlongARayThroughTwoMonsters_TakesTheNearer()
     {
         var candidates = new List<PickCandidate> { Candidate(2, 0f, 10f), Candidate(1, 0f, 5f) };
@@ -130,16 +140,6 @@ public sealed class TargetingTests
 
         Assert.That(isPicked, Is.True);
         Assert.That(picked, Is.EqualTo(new EntityId(1)));
-    }
-
-    [TestCase(0.69f, true)]
-    [TestCase(0.71f, false)]
-    public void TryPick_ForARayPassingBesideAMonster_HitsOnlyWithinThePickRadius(float offset, bool expected)
-    {
-        var candidates = new List<PickCandidate> { Candidate(1, offset, 5f) };
-        var eye = new WorldPosition(0f, EntityPicker.PickHeight, 0f);
-
-        Assert.That(EntityPicker.TryPick(eye, 0f, 0f, 1f, candidates, out EntityId _), Is.EqualTo(expected));
     }
 
     [Test]

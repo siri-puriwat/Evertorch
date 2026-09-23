@@ -15,8 +15,8 @@ using EntityId = Evertorch.Game.EntityId;
 namespace Evertorch.Client.Tests.PlayMode
 {
 /// <summary>
-/// Simulated devices drive the project's real input actions and the client's real input sources. Whatever the
-/// device, the only thing that comes out is a <see cref="MoveIntent"/> from the one producer.
+///     Simulated devices drive the project's real input actions and the client's real input sources. Whatever the
+///     device, the only thing that comes out is a <see cref="MoveIntent" /> from the one producer.
 /// </summary>
 public sealed class SharedIntentPathTests : InputTestFixture
 {
@@ -34,10 +34,10 @@ public sealed class SharedIntentPathTests : InputTestFixture
         "#...##...#",
         "#........#",
         "#........#",
-        "##########",
+        "##########"
     };
 
-    private readonly List<Object> m_created = new List<Object>();
+    private readonly List<Object> m_created = new();
     private Rig? m_rig;
 
     public override void Setup()
@@ -176,7 +176,7 @@ public sealed class SharedIntentPathTests : InputTestFixture
         Mouse mouse = InputSystem.AddDevice<Mouse>();
         Rig rig = CreateRig();
         yield return null;
-        WorldPosition target = new WorldPosition(7.5f, 0f, 5.5f);
+        var target = new WorldPosition(7.5f, 0f, 5.5f);
 
         ClickAt(mouse, rig.ScreenPointOf(target));
         PointerMoveResult result = rig.Tick();
@@ -193,7 +193,7 @@ public sealed class SharedIntentPathTests : InputTestFixture
         Mouse mouse = InputSystem.AddDevice<Mouse>();
         Rig rig = CreateRig();
         yield return null;
-        WorldPosition slime = new WorldPosition(7.5f, 0f, 5.5f);
+        var slime = new WorldPosition(7.5f, 0f, 5.5f);
         rig.Entities.Add(new PickCandidate(new EntityId(7), slime));
 
         ClickAt(mouse, rig.ScreenPointOf(new WorldPosition(slime.X, EntityPicker.PickHeight, slime.Z)));
@@ -211,7 +211,7 @@ public sealed class SharedIntentPathTests : InputTestFixture
         Touchscreen touchscreen = InputSystem.AddDevice<Touchscreen>();
         Rig rig = CreateRig();
         yield return null;
-        WorldPosition target = new WorldPosition(7.5f, 0f, 5.5f);
+        var target = new WorldPosition(7.5f, 0f, 5.5f);
         Vector2 screenPoint = rig.ScreenPointOf(target);
 
         BeginTouch(1, screenPoint, screen: touchscreen);
@@ -472,7 +472,7 @@ public sealed class SharedIntentPathTests : InputTestFixture
                 Assert.Ignore("The input actions asset is only readable from the editor project.");
             }
 
-            InputActionAsset actions = InputActionAsset.FromJson(File.ReadAllText(actionsPath));
+            var actions = InputActionAsset.FromJson(File.ReadAllText(actionsPath));
             m_created.Add(actions);
             m_actions = actions;
             m_manual = new ManualMoveSource(actions.FindAction("Player/Move", true));
@@ -480,7 +480,7 @@ public sealed class SharedIntentPathTests : InputTestFixture
             m_handler = new PointerMoveHandler(m_pointer, null, null);
 
             NavigationGrid grid = CreateGrid();
-            WorldEntered entered = new WorldEntered(
+            var entered = new WorldEntered(
                 new MapDefinitionId("map.training_ground"),
                 1,
                 new EntityId(100),
@@ -496,12 +496,12 @@ public sealed class SharedIntentPathTests : InputTestFixture
             Controller = new MovementController(grid);
             m_driver = new LocalPlayerDriver(Controller, new MoveIntentProducer(), m_world, this);
 
-            Material material = new Material(Shader.Find("Universal Render Pipeline/Lit"));
+            var material = new Material(Shader.Find("Universal Render Pipeline/Lit"));
             m_created.Add(material);
             m_map = GrayboxMap.Create(grid, material);
             m_created.Add(m_map.gameObject);
 
-            GameObject cameraObject = new GameObject("TestCamera");
+            var cameraObject = new GameObject("TestCamera");
             m_created.Add(cameraObject);
             m_camera = cameraObject.AddComponent<Camera>();
             m_camera.transform.position = new Vector3(5f, 30f, 4f);
@@ -512,9 +512,9 @@ public sealed class SharedIntentPathTests : InputTestFixture
 
         public ClientWorld World => m_world;
 
-        public List<MoveIntent> Sent { get; } = new List<MoveIntent>();
+        public List<MoveIntent> Sent { get; } = new();
 
-        public List<PickCandidate> Entities { get; } = new List<PickCandidate>();
+        public List<PickCandidate> Entities { get; } = new();
 
         public EntityId Picked { get; private set; }
 
@@ -527,7 +527,7 @@ public sealed class SharedIntentPathTests : InputTestFixture
 
         public TouchControls CreateTouchControls()
         {
-            TouchControls controls = TouchControls.Create();
+            var controls = TouchControls.Create();
             m_created.Add(controls.gameObject);
             m_handler = new PointerMoveHandler(m_pointer, controls, null);
             return controls;
@@ -547,10 +547,10 @@ public sealed class SharedIntentPathTests : InputTestFixture
         public DevelopmentOverlay CreateOverlay()
         {
             // Never activated, so the client neither loads content nor connects; the overlay only reads its state.
-            GameObject clientObject = new GameObject("TestClient");
+            var clientObject = new GameObject("TestClient");
             clientObject.SetActive(false);
             m_created.Add(clientObject);
-            DevelopmentOverlay overlay = DevelopmentOverlay.Create(clientObject.AddComponent<GameClient>());
+            var overlay = DevelopmentOverlay.Create(clientObject.AddComponent<GameClient>());
             m_created.Add(overlay.gameObject);
             m_handler = new PointerMoveHandler(m_pointer, null, overlay);
             return overlay;
@@ -562,7 +562,7 @@ public sealed class SharedIntentPathTests : InputTestFixture
         }
 
         /// <summary>
-        /// One client frame in the order <see cref="GameClient"/> runs it: held direction, pointer request, tick.
+        ///     One client frame in the order <see cref="GameClient" /> runs it: held direction, pointer request, tick.
         /// </summary>
         public PointerMoveResult Tick()
         {
@@ -591,14 +591,14 @@ public sealed class SharedIntentPathTests : InputTestFixture
         {
             int rows = Yard.Length;
             int columns = Yard[0].Length;
-            NavigationCell[] cells = new NavigationCell[rows * columns];
+            var cells = new NavigationCell[rows * columns];
             for (int row = 0; row < rows; row++)
             {
                 string text = Yard[rows - 1 - row];
                 for (int column = 0; column < columns; column++)
                 {
                     NavigationSurface surface = text[column] == '.' ? NavigationSurface.Floor : NavigationSurface.Wall;
-                    cells[(row * columns) + column] = NavigationCell.Level(surface, 0f);
+                    cells[row * columns + column] = NavigationCell.Level(surface, 0f);
                 }
             }
 

@@ -7,9 +7,9 @@ internal static class ClientWorldFixture
 {
     public const uint TickRate = 20;
 
-    public static readonly EntityId LocalEntity = new EntityId(100);
+    public static readonly EntityId LocalEntity = new(100);
 
-    public static readonly JobDefinitionId LocalJob = new JobDefinitionId("job.adventurer");
+    public static readonly JobDefinitionId LocalJob = new("job.adventurer");
 
     public static ClientWorld Create(NavigationGrid grid, WorldPosition position, uint serverTick = 0)
     {

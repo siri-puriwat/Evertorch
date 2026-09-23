@@ -1,40 +1,20 @@
+using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
 using NUnit.Framework;
 using UnityEditor;
+using UnityEngine;
 using UnityEngine.InputSystem;
 
 namespace Evertorch.Client.Tests.EditMode
 {
 /// <summary>
-/// Checks on project assets the client code relies on by name, so a rename fails here instead of at runtime.
+///     Checks on project assets the client code relies on by name, so a rename fails here instead of at runtime.
 /// </summary>
 [TestFixture]
 public sealed class ClientProjectWiringTests
 {
     private const string ActionsPath = "Assets/_Project/Settings/InputSystem_Actions.inputactions";
-
-    [Test]
-    public void MapSceneResolver_KnownKey_NamesASceneThatIsInTheBuild()
-    {
-        bool found = MapSceneResolver.TryResolve("map_training_ground", out string sceneName);
-
-        string[] buildScenes = EditorBuildSettings.scenes
-            .Where(scene => scene.enabled)
-            .Select(scene => System.IO.Path.GetFileNameWithoutExtension(scene.path))
-            .ToArray();
-        Assert.That(found, Is.True);
-        Assert.That(buildScenes, Does.Contain(sceneName));
-        Assert.That(buildScenes.First(), Is.EqualTo("00_Bootstrap"), "the client starts in the bootstrap scene");
-    }
-
-    [Test]
-    public void BootstrapScene_IsTheFirstSceneInTheBuild()
-    {
-        string first = System.IO.Path.GetFileNameWithoutExtension(EditorBuildSettings.scenes[0].path);
-
-        Assert.That(first, Is.EqualTo(BootstrapRedirect.BootstrapScene));
-    }
 
     [TestCase("10_TrainingGround", false, true)]
     [TestCase("10_TrainingGround", true, false)]
@@ -48,27 +28,39 @@ public sealed class ClientProjectWiringTests
         Assert.That(BootstrapRedirect.ShouldRedirect(activeScene, hasGameClient), Is.EqualTo(expected));
     }
 
-    [Test]
-    public void MapSceneResolver_ResolvedScene_IsAMapScene()
-    {
-        MapSceneResolver.TryResolve("map_training_ground", out string sceneName);
-
-        Assert.That(MapSceneResolver.IsMapScene(sceneName), Is.True);
-        Assert.That(MapSceneResolver.IsMapScene(BootstrapRedirect.BootstrapScene), Is.False);
-    }
-
-    [Test]
-    public void MapSceneResolver_UnknownKey_IsRefused()
-    {
-        Assert.That(MapSceneResolver.TryResolve("map_nowhere", out string sceneName), Is.False);
-        Assert.That(sceneName, Is.Empty);
-    }
-
     [TestCase("Player/Move")]
     [TestCase("Player/MoveTo")]
     public void InputActions_HaveTheActionsTheClientBinds(string actionPath)
     {
         Assert.That(LoadActions().FindAction(actionPath), Is.Not.Null);
+    }
+
+    [TestCase("Player/Jump")]
+    [TestCase("Player/Crouch")]
+    [TestCase("Player/Sprint")]
+    public void InputActions_HaveNoTemplateActionsVersionOneDoesNotUse(string actionPath)
+    {
+        Assert.That(LoadActions().FindAction(actionPath), Is.Null);
+    }
+
+    private static string[] Paths(InputActionAsset actions, string actionPath)
+    {
+        return actions.FindAction(actionPath, true).bindings.Select(binding => binding.path).ToArray();
+    }
+
+    private static InputActionAsset LoadActions()
+    {
+        InputActionAsset asset = AssetDatabase.LoadAssetAtPath<InputActionAsset>(ActionsPath);
+        Assert.That(asset, Is.Not.Null, ActionsPath);
+        return asset;
+    }
+
+    [Test]
+    public void BootstrapScene_IsTheFirstSceneInTheBuild()
+    {
+        string first = Path.GetFileNameWithoutExtension(EditorBuildSettings.scenes[0].path);
+
+        Assert.That(first, Is.EqualTo(BootstrapRedirect.BootstrapScene));
     }
 
     [Test]
@@ -108,39 +100,49 @@ public sealed class ClientProjectWiringTests
         Assert.That(Paths(actions, "Player/Respawn"), Is.EquivalentTo(new[] { "<Keyboard>/r", "<Gamepad>/start" }));
     }
 
-    [TestCase("Player/Jump")]
-    [TestCase("Player/Crouch")]
-    [TestCase("Player/Sprint")]
-    public void InputActions_HaveNoTemplateActionsVersionOneDoesNotUse(string actionPath)
-    {
-        Assert.That(LoadActions().FindAction(actionPath), Is.Null);
-    }
-
-    private static string[] Paths(InputActionAsset actions, string actionPath)
-    {
-        return actions.FindAction(actionPath, true).bindings.Select(binding => binding.path).ToArray();
-    }
-
     [Test]
     public void LiteNetLib_IsUsedOnlyByTheClientTransportAdapter()
     {
-        string root = System.IO.Path.Combine(UnityEngine.Application.dataPath, "_ProjectScripts.Evertorch.Client");
-        Regex usesLibrary = new Regex(@"LiteNetLib\s*[;.]");
+        string root = Path.Combine(Application.dataPath, "_ProjectScripts.Evertorch.Client");
+        var usesLibrary = new Regex(@"LiteNetLib\s*[;.]");
 
-        string[] files = System.IO.Directory
-            .GetFiles(root, "*.cs", System.IO.SearchOption.AllDirectories)
-            .Where(file => usesLibrary.IsMatch(System.IO.File.ReadAllText(file)))
-            .Select(file => System.IO.Path.GetFileName(file))
+        string[] files = Directory
+            .GetFiles(root, "*.cs", SearchOption.AllDirectories)
+            .Where(file => usesLibrary.IsMatch(File.ReadAllText(file)))
+            .Select(file => Path.GetFileName(file))
             .ToArray();
 
         Assert.That(files, Is.EqualTo(new[] { "LiteNetLibClientTransport.cs" }));
     }
 
-    private static InputActionAsset LoadActions()
+    [Test]
+    public void MapSceneResolver_KnownKey_NamesASceneThatIsInTheBuild()
     {
-        InputActionAsset asset = AssetDatabase.LoadAssetAtPath<InputActionAsset>(ActionsPath);
-        Assert.That(asset, Is.Not.Null, ActionsPath);
-        return asset;
+        bool found = MapSceneResolver.TryResolve("map_training_ground", out string sceneName);
+
+        string[] buildScenes = EditorBuildSettings.scenes
+            .Where(scene => scene.enabled)
+            .Select(scene => Path.GetFileNameWithoutExtension(scene.path))
+            .ToArray();
+        Assert.That(found, Is.True);
+        Assert.That(buildScenes, Does.Contain(sceneName));
+        Assert.That(buildScenes.First(), Is.EqualTo("00_Bootstrap"), "the client starts in the bootstrap scene");
+    }
+
+    [Test]
+    public void MapSceneResolver_ResolvedScene_IsAMapScene()
+    {
+        MapSceneResolver.TryResolve("map_training_ground", out string sceneName);
+
+        Assert.That(MapSceneResolver.IsMapScene(sceneName), Is.True);
+        Assert.That(MapSceneResolver.IsMapScene(BootstrapRedirect.BootstrapScene), Is.False);
+    }
+
+    [Test]
+    public void MapSceneResolver_UnknownKey_IsRefused()
+    {
+        Assert.That(MapSceneResolver.TryResolve("map_nowhere", out string sceneName), Is.False);
+        Assert.That(sceneName, Is.Empty);
     }
 }
 }

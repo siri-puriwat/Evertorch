@@ -14,13 +14,13 @@ public sealed class SharedLifecycleMessageTests
         0x01, 0x00,
         0x05, 0x00, 0x30, 0x2E, 0x32, 0x2E, 0x30,
         0xD1, 0x6B, 0x32, 0x11,
-        0x07, 0x00, 0x64, 0x65, 0x76, 0x3A, 0x61, 0x6E, 0x6E,
+        0x07, 0x00, 0x64, 0x65, 0x76, 0x3A, 0x61, 0x6E, 0x6E
     };
 
     private static readonly byte[] EnterWorldRequestBytes =
     {
         0x02, 0x00,
-        0x08, 0x07, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01,
+        0x08, 0x07, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01
     };
 
     private static readonly byte[] ServerHelloBytes =
@@ -30,7 +30,7 @@ public sealed class SharedLifecycleMessageTests
         0x05, 0x00, 0x30, 0x2E, 0x32, 0x2E, 0x30,
         0xD1, 0x6B, 0x32, 0x11,
         0x14, 0x00, 0x00, 0x00,
-        0xE6, 0xD5, 0xC4, 0xB3, 0xA2, 0x01, 0x00, 0x00,
+        0xE6, 0xD5, 0xC4, 0xB3, 0xA2, 0x01, 0x00, 0x00
     };
 
     private static readonly byte[] WorldEnteredBytes =
@@ -46,7 +46,7 @@ public sealed class SharedLifecycleMessageTests
         0x00, 0x00, 0xA0, 0x40,
         0x44, 0x00, 0x00, 0x00,
         0x44, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0xC0, 0x3F,
+        0x00, 0x00, 0xC0, 0x3F
     };
 
     private static readonly byte[] EntitySpawnBytes =
@@ -58,7 +58,7 @@ public sealed class SharedLifecycleMessageTests
         0x00, 0x00, 0x80, 0x3F, 0x00, 0x00, 0x00, 0x3F, 0x00, 0x00, 0x00, 0xC0,
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80, 0x3F,
         0x01, 0x00,
-        0x00, 0x00,
+        0x00, 0x00
     };
 
     private static readonly byte[] MonsterSpawnBytes =
@@ -70,27 +70,44 @@ public sealed class SharedLifecycleMessageTests
         0x00, 0x00, 0x40, 0x41, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x41,
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80, 0x3F,
         0x00, 0x00,
-        0xE8, 0x03,
+        0xE8, 0x03
     };
 
     private static readonly byte[] EntityDespawnBytes =
     {
         0x05, 0x80,
         0xEF, 0xCD, 0xAB, 0x89, 0x67, 0x45, 0x23, 0x01,
-        0x02,
+        0x02
     };
 
     private static readonly byte[] DisconnectNoticeBytes =
     {
         0x13, 0x80,
         0x03,
-        0x06, 0x00, 0x55, 0x70, 0x64, 0x61, 0x74, 0x65,
+        0x06, 0x00, 0x55, 0x70, 0x64, 0x61, 0x74, 0x65
     };
+
+    private static byte[] WithKind(byte[] golden, byte kind)
+    {
+        byte[] copy = (byte[])golden.Clone();
+        copy[10] = kind;
+        return copy;
+    }
+
+    [Test]
+    public void ClientHello_WithInvalidUtf8_IsRejected()
+    {
+        byte[] invalid = (byte[])ClientHelloBytes.Clone();
+        invalid[17] = 0xC3;
+        invalid[18] = 0x28;
+
+        Assert.That(ClientHello.TryRead(invalid, out ClientHello? _), Is.False);
+    }
 
     [Test]
     public void ClientHello_WriteAndRead_MatchGoldenBytes()
     {
-        ClientHello message = new ClientHello(1, "0.2.0", 0x11326BD1, "dev:ann");
+        var message = new ClientHello(1, "0.2.0", 0x11326BD1, "dev:ann");
         byte[] buffer = new byte[message.GetEncodedLength()];
         message.Write(buffer);
 
@@ -104,13 +121,28 @@ public sealed class SharedLifecycleMessageTests
     }
 
     [Test]
-    public void ClientHello_WithInvalidUtf8_IsRejected()
+    public void ContentVersionCodec_ForManifestVersion_UsesTheFirstEightDigits()
     {
-        byte[] invalid = (byte[])ClientHelloBytes.Clone();
-        invalid[17] = 0xC3;
-        invalid[18] = 0x28;
+        bool isConverted = ContentVersionCodec.TryToWire("11326bd1bdfe0c49", out uint wire);
 
-        Assert.That(ClientHello.TryRead(invalid, out ClientHello? _), Is.False);
+        Assert.That(isConverted, Is.True);
+        Assert.That(wire, Is.EqualTo(0x11326BD1u));
+        Assert.That(ContentVersionCodec.TryToWire("11326BD1BDFE0C49", out uint _), Is.False);
+    }
+
+    [Test]
+    public void DisconnectNotice_WriteAndRead_MatchGoldenBytes()
+    {
+        var message = new DisconnectNotice(DisconnectReason.ContentUpdateRequired, "Update");
+        byte[] buffer = new byte[message.GetEncodedLength()];
+        message.Write(buffer);
+
+        bool isRead = DisconnectNotice.TryRead(DisconnectNoticeBytes, out DisconnectNotice? read);
+
+        Assert.That(buffer, Is.EqualTo(DisconnectNoticeBytes));
+        Assert.That(isRead, Is.True);
+        Assert.That(read!.Reason, Is.EqualTo(DisconnectReason.ContentUpdateRequired));
+        Assert.That(read.Message, Is.EqualTo("Update"));
     }
 
     [Test]
@@ -127,62 +159,22 @@ public sealed class SharedLifecycleMessageTests
     }
 
     [Test]
-    public void ServerHello_WriteAndRead_MatchGoldenBytes()
+    public void EntityDespawn_WriteAndRead_MatchGoldenBytes()
     {
-        ServerHello message = new ServerHello(1, "0.2.0", 0x11326BD1, 20, 0x000001A2B3C4D5E6);
-        byte[] buffer = new byte[message.GetEncodedLength()];
-        message.Write(buffer);
+        byte[] buffer = new byte[EntityDespawn.EncodedLength];
+        new EntityDespawn(new EntityId(0x0123456789ABCDEF), DespawnReason.Removed).Write(buffer);
 
-        bool isRead = ServerHello.TryRead(ServerHelloBytes, out ServerHello? read);
+        bool isRead = EntityDespawn.TryRead(EntityDespawnBytes, out EntityDespawn read);
 
-        Assert.That(buffer, Is.EqualTo(ServerHelloBytes));
+        Assert.That(buffer, Is.EqualTo(EntityDespawnBytes));
         Assert.That(isRead, Is.True);
-        Assert.That(read!.ServerTickRate, Is.EqualTo(20u));
-        Assert.That(read.ServerTimeUnixMilliseconds, Is.EqualTo(0x000001A2B3C4D5E6));
-    }
-
-    [Test]
-    public void WorldEntered_WriteAndRead_MatchGoldenBytes()
-    {
-        WorldEntered message = new WorldEntered(
-            new MapDefinitionId("map.a"),
-            1,
-            new EntityId(0x0123456789ABCDEF),
-            new JobDefinitionId("job.a"),
-            0x00010203,
-            new WorldPosition(1f, 0.5f, -2f),
-            new WorldDirection(0f, 1f),
-            5f,
-            68,
-            68,
-            1.5f);
-        byte[] buffer = new byte[message.GetEncodedLength()];
-        message.Write(buffer);
-
-        bool isRead = WorldEntered.TryRead(WorldEnteredBytes, out WorldEntered? read);
-
-        Assert.That(buffer, Is.EqualTo(WorldEnteredBytes));
-        Assert.That(isRead, Is.True);
-        Assert.That(read!.Map, Is.EqualTo(new MapDefinitionId("map.a")));
-        Assert.That(read.Job, Is.EqualTo(new JobDefinitionId("job.a")));
-        Assert.That(read.Position, Is.EqualTo(new WorldPosition(1f, 0.5f, -2f)));
-        Assert.That(read.MovementSpeed, Is.EqualTo(5f));
-    }
-
-    [Test]
-    public void WorldEntered_WithNotANumber_IsRejected()
-    {
-        byte[] invalid = (byte[])WorldEnteredBytes.Clone();
-        invalid[34] = 0xC0;
-        invalid[35] = 0x7F;
-
-        Assert.That(WorldEntered.TryRead(invalid, out WorldEntered? _), Is.False);
+        Assert.That(read.Reason, Is.EqualTo(DespawnReason.Removed));
     }
 
     [Test]
     public void EntitySpawn_WriteAndRead_MatchGoldenBytes()
     {
-        EntitySpawn message = new EntitySpawn(
+        var message = new EntitySpawn(
             new EntityId(0x0123456789ABCDEF),
             EntityKind.Player,
             "job.a",
@@ -199,6 +191,19 @@ public sealed class SharedLifecycleMessageTests
         Assert.That(isRead, Is.True);
         Assert.That(read!.DefinitionId, Is.EqualTo("job.a"));
         Assert.That(read.StateFlags, Is.EqualTo(EntityStateFlags.Moving));
+    }
+
+    [Test]
+    public void MessageRouting_ForLifecycleMessages_UsesTheControlChannel()
+    {
+        bool hasRoute = MessageRouting.TryGetRoute(
+            MessageOpcode.EntitySpawn,
+            out ProtocolChannel channel,
+            out MessageDelivery delivery);
+
+        Assert.That(hasRoute, Is.True);
+        Assert.That(channel, Is.EqualTo(ProtocolChannel.Control));
+        Assert.That(delivery, Is.EqualTo(MessageDelivery.ReliableOrdered));
     }
 
     [Test]
@@ -224,62 +229,57 @@ public sealed class SharedLifecycleMessageTests
         Assert.That(isJobAccepted, Is.False);
     }
 
-    private static byte[] WithKind(byte[] golden, byte kind)
-    {
-        byte[] copy = (byte[])golden.Clone();
-        copy[10] = kind;
-        return copy;
-    }
-
     [Test]
-    public void EntityDespawn_WriteAndRead_MatchGoldenBytes()
+    public void ServerHello_WriteAndRead_MatchGoldenBytes()
     {
-        byte[] buffer = new byte[EntityDespawn.EncodedLength];
-        new EntityDespawn(new EntityId(0x0123456789ABCDEF), DespawnReason.Removed).Write(buffer);
-
-        bool isRead = EntityDespawn.TryRead(EntityDespawnBytes, out EntityDespawn read);
-
-        Assert.That(buffer, Is.EqualTo(EntityDespawnBytes));
-        Assert.That(isRead, Is.True);
-        Assert.That(read.Reason, Is.EqualTo(DespawnReason.Removed));
-    }
-
-    [Test]
-    public void DisconnectNotice_WriteAndRead_MatchGoldenBytes()
-    {
-        DisconnectNotice message = new DisconnectNotice(DisconnectReason.ContentUpdateRequired, "Update");
+        var message = new ServerHello(1, "0.2.0", 0x11326BD1, 20, 0x000001A2B3C4D5E6);
         byte[] buffer = new byte[message.GetEncodedLength()];
         message.Write(buffer);
 
-        bool isRead = DisconnectNotice.TryRead(DisconnectNoticeBytes, out DisconnectNotice? read);
+        bool isRead = ServerHello.TryRead(ServerHelloBytes, out ServerHello? read);
 
-        Assert.That(buffer, Is.EqualTo(DisconnectNoticeBytes));
+        Assert.That(buffer, Is.EqualTo(ServerHelloBytes));
         Assert.That(isRead, Is.True);
-        Assert.That(read!.Reason, Is.EqualTo(DisconnectReason.ContentUpdateRequired));
-        Assert.That(read.Message, Is.EqualTo("Update"));
+        Assert.That(read!.ServerTickRate, Is.EqualTo(20u));
+        Assert.That(read.ServerTimeUnixMilliseconds, Is.EqualTo(0x000001A2B3C4D5E6));
     }
 
     [Test]
-    public void ContentVersionCodec_ForManifestVersion_UsesTheFirstEightDigits()
+    public void WorldEntered_WithNotANumber_IsRejected()
     {
-        bool isConverted = ContentVersionCodec.TryToWire("11326bd1bdfe0c49", out uint wire);
+        byte[] invalid = (byte[])WorldEnteredBytes.Clone();
+        invalid[34] = 0xC0;
+        invalid[35] = 0x7F;
 
-        Assert.That(isConverted, Is.True);
-        Assert.That(wire, Is.EqualTo(0x11326BD1u));
-        Assert.That(ContentVersionCodec.TryToWire("11326BD1BDFE0C49", out uint _), Is.False);
+        Assert.That(WorldEntered.TryRead(invalid, out WorldEntered? _), Is.False);
     }
 
     [Test]
-    public void MessageRouting_ForLifecycleMessages_UsesTheControlChannel()
+    public void WorldEntered_WriteAndRead_MatchGoldenBytes()
     {
-        bool hasRoute = MessageRouting.TryGetRoute(
-            MessageOpcode.EntitySpawn,
-            out ProtocolChannel channel,
-            out MessageDelivery delivery);
+        var message = new WorldEntered(
+            new MapDefinitionId("map.a"),
+            1,
+            new EntityId(0x0123456789ABCDEF),
+            new JobDefinitionId("job.a"),
+            0x00010203,
+            new WorldPosition(1f, 0.5f, -2f),
+            new WorldDirection(0f, 1f),
+            5f,
+            68,
+            68,
+            1.5f);
+        byte[] buffer = new byte[message.GetEncodedLength()];
+        message.Write(buffer);
 
-        Assert.That(hasRoute, Is.True);
-        Assert.That(channel, Is.EqualTo(ProtocolChannel.Control));
-        Assert.That(delivery, Is.EqualTo(MessageDelivery.ReliableOrdered));
+        bool isRead = WorldEntered.TryRead(WorldEnteredBytes, out WorldEntered? read);
+
+        Assert.That(buffer, Is.EqualTo(WorldEnteredBytes));
+        Assert.That(isRead, Is.True);
+        Assert.That(read!.Map, Is.EqualTo(new MapDefinitionId("map.a")));
+        Assert.That(read.Job, Is.EqualTo(new JobDefinitionId("job.a")));
+        Assert.That(read.Position, Is.EqualTo(new WorldPosition(1f, 0.5f, -2f)));
+        Assert.That(read.MovementSpeed, Is.EqualTo(5f));
     }
 }
 }

@@ -91,6 +91,24 @@ try {
     Invoke-Step 'ReSharper cleanup' {
         dotnet jb cleanupcode $solution '--profile=Built-in: Full Cleanup' '--include=**/*.cs' --no-build
     }
+
+    # Client code outside the folders linked into Evertorch.sln is reached through the solution Unity generates,
+    # which exists only once Unity has opened the project. --no-build is required: building the Unity projects
+    # fails, and the tool then exits without cleaning anything.
+    $clientSolution = Join-Path $root 'Evertorch.Client/Evertorch.Client.sln'
+    $isClientChecked = Test-Path $clientSolution
+    if ($isClientChecked) {
+        Invoke-Step 'ReSharper cleanup (client)' {
+            dotnet jb cleanupcode $clientSolution '--profile=Built-in: Full Cleanup' `
+                '--include=Assets/_Project/**/*.cs;Assets/_ProjectScripts.Evertorch.Client/**/*.cs' --no-build
+        }
+    }
+    else {
+        Write-Host '==> ReSharper cleanup (client): SKIPPED'
+        Write-Host "    $clientSolution does not exist. Open Evertorch.Client in Unity once so it generates the"
+        Write-Host '    solution, then run this script again.'
+    }
+
     $after = Get-SourceHashes
 
     $changed = @($before.Keys | Where-Object { $before[$_] -ne $after[$_] } | Sort-Object)
@@ -100,7 +118,12 @@ try {
         exit 1
     }
 
-    Write-Host 'All checks passed.'
+    if ($isClientChecked) {
+        Write-Host 'All checks passed.'
+    }
+    else {
+        Write-Host 'All checks passed except the client cleanup, which was skipped (see above).'
+    }
 }
 finally {
     Pop-Location

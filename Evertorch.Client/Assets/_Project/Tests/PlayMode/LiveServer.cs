@@ -10,14 +10,14 @@ using UnityEngine;
 namespace Evertorch.Client.Tests.PlayMode
 {
 /// <summary>
-/// The real .NET server as a child process, for tests that run Unity's runtime against it. Needs
-/// <c>scripts/verify.ps1</c> (or a Release build plus a content build) to have produced the server first.
+///     The real .NET server as a child process, for tests that run Unity's runtime against it. Needs
+///     <c>scripts/verify.ps1</c> (or a Release build plus a content build) to have produced the server first.
 /// </summary>
 internal sealed class LiveServer : IDisposable
 {
     private const string ServerDll = "artifacts/bin/Evertorch.Server/release/Evertorch.Server.dll";
 
-    private readonly List<string> m_output = new List<string>();
+    private readonly List<string> m_output = new();
     private Process? m_process;
 
     public static string MissingPrerequisites =>
@@ -30,6 +30,23 @@ internal sealed class LiveServer : IDisposable
 
     private static string ContentPath => Path.Combine(Repository, "artifacts", "content", "server");
 
+    public void Dispose()
+    {
+        if (m_process == null)
+        {
+            return;
+        }
+
+        if (!m_process.HasExited)
+        {
+            m_process.Kill();
+            m_process.WaitForExit(5000);
+        }
+
+        m_process.Dispose();
+        m_process = null;
+    }
+
     public static bool IsBuilt()
     {
         return File.Exists(DllPath) && Directory.Exists(ContentPath) && HasClientPackage();
@@ -39,7 +56,7 @@ internal sealed class LiveServer : IDisposable
     {
         string folder = Path.Combine(Application.streamingAssetsPath, StreamingContentLoader.FolderName);
         byte[] manifest = File.ReadAllBytes(Path.Combine(folder, ClientContentParser.ManifestFile));
-        Dictionary<string, byte[]> files = ClientContentParser
+        var files = ClientContentParser
             .ReadFileList(manifest, out error)
             .ToDictionary(name => name, name => File.ReadAllBytes(Path.Combine(folder, name)));
         return ClientContentParser.Parse(manifest, files, out error);
@@ -55,11 +72,11 @@ internal sealed class LiveServer : IDisposable
     }
 
     /// <summary>
-    /// Starts the server on a port it picks itself, so nothing can take one between a probe and the bind.
+    ///     Starts the server on a port it picks itself, so nothing can take one between a probe and the bind.
     /// </summary>
     public void Start(string extraArguments = "")
     {
-        ProcessStartInfo start = new ProcessStartInfo
+        var start = new ProcessStartInfo
         {
             FileName = "dotnet",
             Arguments = $"\"{DllPath}\" --Network:Port=0 --DevelopmentAuthentication:Enabled=true"
@@ -69,7 +86,7 @@ internal sealed class LiveServer : IDisposable
             CreateNoWindow = true,
             RedirectStandardInput = true,
             RedirectStandardOutput = true,
-            RedirectStandardError = true,
+            RedirectStandardError = true
         };
         m_process = new Process { StartInfo = start };
         m_process.OutputDataReceived += (_, line) => Record(line.Data);
@@ -113,7 +130,7 @@ internal sealed class LiveServer : IDisposable
     public bool TryReadListeningPort(out int port)
     {
         port = 0;
-        Regex listening = new Regex(@"Listening for clients on [^:]+:(\d+)");
+        var listening = new Regex(@"Listening for clients on [^:]+:(\d+)");
         foreach (string line in Output())
         {
             Match match = listening.Match(line);
@@ -125,23 +142,6 @@ internal sealed class LiveServer : IDisposable
         }
 
         return false;
-    }
-
-    public void Dispose()
-    {
-        if (m_process == null)
-        {
-            return;
-        }
-
-        if (!m_process.HasExited)
-        {
-            m_process.Kill();
-            m_process.WaitForExit(5000);
-        }
-
-        m_process.Dispose();
-        m_process = null;
     }
 
     private void Record(string? line)

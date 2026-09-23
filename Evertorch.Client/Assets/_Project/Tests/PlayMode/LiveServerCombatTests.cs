@@ -4,11 +4,11 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
-using Evertorch.Game;
 using Evertorch.Protocol;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.InputSystem.Controls;
 using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
 using EntityId = Evertorch.Game.EntityId;
@@ -17,9 +17,9 @@ using Object = UnityEngine.Object;
 namespace Evertorch.Client.Tests.PlayMode
 {
 /// <summary>
-/// The whole client against the real server process (Milestone 3 verification "the player can kill the training
-/// slime and see a slime-gel drop"): <see cref="GameClient" /> with the project's input actions, driven only by
-/// simulated keys and buttons: Tab to target, the gamepad's West button to attack, R to respawn.
+///     The whole client against the real server process (Milestone 3 verification "the player can kill the training
+///     slime and see a slime-gel drop"): <see cref="GameClient" /> with the project's input actions, driven only by
+///     simulated keys and buttons: Tab to target, the gamepad's West button to attack, R to respawn.
 /// </summary>
 public sealed class LiveServerCombatTests : InputTestFixture
 {
@@ -29,7 +29,7 @@ public sealed class LiveServerCombatTests : InputTestFixture
     private const float StartTimeoutSeconds = 30f;
     private const float FightTimeoutSeconds = 180f;
 
-    private readonly List<ItemDropped> m_dropped = new List<ItemDropped>();
+    private readonly List<ItemDropped> m_dropped = new();
     private LiveServer? m_server;
     private GameObject? m_client;
     private InputActionAsset? m_actions;
@@ -180,7 +180,7 @@ public sealed class LiveServerCombatTests : InputTestFixture
         return client;
     }
 
-    private IEnumerator Tap(UnityEngine.InputSystem.Controls.ButtonControl button)
+    private IEnumerator Tap(ButtonControl button)
     {
         Press(button);
         yield return null;

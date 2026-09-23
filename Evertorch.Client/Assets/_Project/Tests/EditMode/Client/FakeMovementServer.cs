@@ -5,15 +5,15 @@ using Evertorch.Protocol;
 namespace Evertorch.Client.Tests.EditMode
 {
 /// <summary>
-/// The server's movement contract in miniature: newest-sequence-wins, one input per tick, a short hold when none
-/// arrives, the shared movement step, and a snapshot that acknowledges the last input applied.
+///     The server's movement contract in miniature: newest-sequence-wins, one input per tick, a short hold when none
+///     arrives, the shared movement step, and a snapshot that acknowledges the last input applied.
 /// </summary>
 internal sealed class FakeMovementServer
 {
     private const int HoldTicks = 5;
 
     private readonly NavigationGrid m_grid;
-    private readonly Queue<MoveIntent> m_queue = new Queue<MoveIntent>();
+    private readonly Queue<MoveIntent> m_queue = new();
     private readonly EntityId m_entity;
     private WorldDirection m_heldDirection;
     private int m_ticksWithoutInput;
@@ -75,7 +75,7 @@ internal sealed class FakeMovementServer
             ClientTestGrids.TickSeconds);
         Position = step.Position;
         Facing = step.Facing;
-        EntityState state = new EntityState(
+        var state = new EntityState(
             m_entity,
             Position,
             Facing,

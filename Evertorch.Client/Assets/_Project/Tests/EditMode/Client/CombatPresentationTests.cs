@@ -9,8 +9,8 @@ namespace Evertorch.Client.Tests.EditMode
 [TestFixture]
 public sealed class CombatPresentationTests
 {
-    private static readonly EntityId Slime = new EntityId(300);
-    private static readonly EntityId Local = new EntityId(100);
+    private static readonly EntityId Slime = new(300);
+    private static readonly EntityId Local = new(100);
 
     // The adventurer's swing: 940 ms interval, impact at 470 ms, 235 ms of recovery.
     private static readonly AttackTiming Adventurer = Timing(940, 470, 470, 235);
@@ -22,18 +22,6 @@ public sealed class CombatPresentationTests
             TimeSpan.FromMilliseconds(windup),
             TimeSpan.FromMilliseconds(impact),
             TimeSpan.FromMilliseconds(recovery));
-    }
-
-    [Test]
-    public void LungeWeight_RisesToOneExactlyAtImpactAndReturnsByTheEndOfRecovery()
-    {
-        Assert.That(CombatAnimation.LungeWeight(-0.01, Adventurer), Is.Zero);
-        Assert.That(CombatAnimation.LungeWeight(0.0, Adventurer), Is.Zero);
-        Assert.That(CombatAnimation.LungeWeight(0.2, Adventurer), Is.GreaterThan(0f).And.LessThan(1f));
-        Assert.That(CombatAnimation.LungeWeight(0.47, Adventurer), Is.EqualTo(1f));
-        Assert.That(CombatAnimation.LungeWeight(0.6, Adventurer), Is.GreaterThan(0f).And.LessThan(1f));
-        Assert.That(CombatAnimation.LungeWeight(0.705, Adventurer), Is.Zero);
-        Assert.That(CombatAnimation.LungeWeight(0.9, Adventurer), Is.Zero);
     }
 
     [TestCase(940, 470, 470, 235)]
@@ -67,55 +55,24 @@ public sealed class CombatPresentationTests
     }
 
     [Test]
+    public void LungeWeight_RisesToOneExactlyAtImpactAndReturnsByTheEndOfRecovery()
+    {
+        Assert.That(CombatAnimation.LungeWeight(-0.01, Adventurer), Is.Zero);
+        Assert.That(CombatAnimation.LungeWeight(0.0, Adventurer), Is.Zero);
+        Assert.That(CombatAnimation.LungeWeight(0.2, Adventurer), Is.GreaterThan(0f).And.LessThan(1f));
+        Assert.That(CombatAnimation.LungeWeight(0.47, Adventurer), Is.EqualTo(1f));
+        Assert.That(CombatAnimation.LungeWeight(0.6, Adventurer), Is.GreaterThan(0f).And.LessThan(1f));
+        Assert.That(CombatAnimation.LungeWeight(0.705, Adventurer), Is.Zero);
+        Assert.That(CombatAnimation.LungeWeight(0.9, Adventurer), Is.Zero);
+    }
+
+    [Test]
     public void SquashWeight_IsFullAtImpactAndGoneAQuarterSecondLater()
     {
         Assert.That(CombatAnimation.SquashWeight(-0.01), Is.Zero);
         Assert.That(CombatAnimation.SquashWeight(0.0), Is.EqualTo(1f));
         Assert.That(CombatAnimation.SquashWeight(0.125), Is.EqualTo(0.5f).Within(1e-5f));
         Assert.That(CombatAnimation.SquashWeight(CombatAnimation.SquashSeconds), Is.Zero);
-    }
-
-    [Test]
-    public void Timeline_ShowsARemoteHitOnlyWhenTheInterpolatedTimeReachesIt()
-    {
-        var timeline = new CombatTimeline();
-        var due = new List<HitMark>();
-        timeline.AddHit(new HitMark(Slime, 2.0, false, CombatResult.Hit, 12, 760));
-
-        timeline.CollectDueHits(5.0, 1.99, due);
-        int beforeItsTime = due.Count;
-        timeline.CollectDueHits(5.0, 2.0, due);
-
-        Assert.That(beforeItsTime, Is.Zero, "the local clock does not move a remote hit");
-        Assert.That(due.Count, Is.EqualTo(1));
-        Assert.That(due[0].Amount, Is.EqualTo(12u));
-        Assert.That(timeline.PendingHits, Is.Zero);
-        Assert.That(timeline.Squash(Slime, 5.0, 2.0), Is.EqualTo(1f));
-    }
-
-    [Test]
-    public void Timeline_KeepsTheLocalSwingOnTheLocalClock()
-    {
-        var timeline = new CombatTimeline();
-
-        timeline.BeginSwing(Local, 10.0, Adventurer, true);
-
-        Assert.That(timeline.Lunge(Local, 10.47, 0.0), Is.EqualTo(1f).Within(1e-4f));
-        Assert.That(timeline.Lunge(Local, 10.0, 99.0), Is.Zero);
-        Assert.That(timeline.Lunge(Slime, 10.47, 10.47), Is.Zero, "no swing, no lunge");
-    }
-
-    [Test]
-    public void Timeline_ShowsAMissWithoutASquash()
-    {
-        var timeline = new CombatTimeline();
-        var due = new List<HitMark>();
-
-        timeline.AddHit(new HitMark(Slime, 1.0, false, CombatResult.Miss, 0, 1000));
-        timeline.CollectDueHits(0.0, 1.0, due);
-
-        Assert.That(due.Count, Is.EqualTo(1));
-        Assert.That(timeline.Squash(Slime, 0.0, 1.0), Is.Zero);
     }
 
     [Test]
@@ -146,6 +103,49 @@ public sealed class CombatPresentationTests
         Assert.That(due, Is.Empty);
         Assert.That(timeline.Lunge(Slime, 1.47, 1.47), Is.Zero);
         Assert.That(timeline.Squash(Slime, 1.47, 1.47), Is.Zero);
+    }
+
+    [Test]
+    public void Timeline_KeepsTheLocalSwingOnTheLocalClock()
+    {
+        var timeline = new CombatTimeline();
+
+        timeline.BeginSwing(Local, 10.0, Adventurer, true);
+
+        Assert.That(timeline.Lunge(Local, 10.47, 0.0), Is.EqualTo(1f).Within(1e-4f));
+        Assert.That(timeline.Lunge(Local, 10.0, 99.0), Is.Zero);
+        Assert.That(timeline.Lunge(Slime, 10.47, 10.47), Is.Zero, "no swing, no lunge");
+    }
+
+    [Test]
+    public void Timeline_ShowsAMissWithoutASquash()
+    {
+        var timeline = new CombatTimeline();
+        var due = new List<HitMark>();
+
+        timeline.AddHit(new HitMark(Slime, 1.0, false, CombatResult.Miss, 0, 1000));
+        timeline.CollectDueHits(0.0, 1.0, due);
+
+        Assert.That(due.Count, Is.EqualTo(1));
+        Assert.That(timeline.Squash(Slime, 0.0, 1.0), Is.Zero);
+    }
+
+    [Test]
+    public void Timeline_ShowsARemoteHitOnlyWhenTheInterpolatedTimeReachesIt()
+    {
+        var timeline = new CombatTimeline();
+        var due = new List<HitMark>();
+        timeline.AddHit(new HitMark(Slime, 2.0, false, CombatResult.Hit, 12, 760));
+
+        timeline.CollectDueHits(5.0, 1.99, due);
+        int beforeItsTime = due.Count;
+        timeline.CollectDueHits(5.0, 2.0, due);
+
+        Assert.That(beforeItsTime, Is.Zero, "the local clock does not move a remote hit");
+        Assert.That(due.Count, Is.EqualTo(1));
+        Assert.That(due[0].Amount, Is.EqualTo(12u));
+        Assert.That(timeline.PendingHits, Is.Zero);
+        Assert.That(timeline.Squash(Slime, 5.0, 2.0), Is.EqualTo(1f));
     }
 }
 }

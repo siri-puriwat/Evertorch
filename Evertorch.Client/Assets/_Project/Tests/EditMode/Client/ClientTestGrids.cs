@@ -4,6 +4,10 @@ namespace Evertorch.Client.Tests.EditMode
 {
 internal static class ClientTestGrids
 {
+    public const float Speed = 5f;
+
+    public const float TickSeconds = 0.05f;
+
     // One-metre cells, origin at zero, north row first. 'o' is a sealed-off pocket nobody can walk into.
     public static readonly string[] Yard =
     {
@@ -16,11 +20,8 @@ internal static class ClientTestGrids
         "#....#..#o##",
         "#.......####",
         "#..........#",
-        "############",
+        "############"
     };
-
-    public const float Speed = 5f;
-    public const float TickSeconds = 0.05f;
 
     public static NavigationGrid CreateYard()
     {
@@ -36,7 +37,7 @@ internal static class ClientTestGrids
     {
         int rows = northFirstRows.Length;
         int columns = northFirstRows[0].Length;
-        NavigationCell[] cells = new NavigationCell[rows * columns];
+        var cells = new NavigationCell[rows * columns];
         for (int row = 0; row < rows; row++)
         {
             string text = northFirstRows[rows - 1 - row];
@@ -45,7 +46,7 @@ internal static class ClientTestGrids
                 NavigationSurface surface = text[column] == '.' || text[column] == 'o'
                     ? NavigationSurface.Floor
                     : NavigationSurface.Wall;
-                cells[(row * columns) + column] = NavigationCell.Level(surface, 0f);
+                cells[row * columns + column] = NavigationCell.Level(surface, 0f);
             }
         }
 

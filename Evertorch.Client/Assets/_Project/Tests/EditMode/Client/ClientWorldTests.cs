@@ -9,7 +9,19 @@ namespace Evertorch.Client.Tests.EditMode
 public sealed class ClientWorldTests
 {
     private static readonly WorldPosition Start = ClientTestGrids.Center(2, 8);
-    private static readonly EntityId Other = new EntityId(200);
+    private static readonly EntityId Other = new(200);
+
+    private static EntitySpawn Spawn(EntityId entity, WorldPosition position)
+    {
+        return new EntitySpawn(
+            entity,
+            EntityKind.Player,
+            "job.adventurer",
+            position,
+            new WorldDirection(0f, 1f),
+            EntityStateFlags.None,
+            0);
+    }
 
     [Test]
     public void Constructor_TakesTheLocalPlayerFromWorldEntered()
@@ -26,35 +38,10 @@ public sealed class ClientWorldTests
     }
 
     [Test]
-    public void OnSpawn_AddsARemoteEntityAndAnnouncesIt()
-    {
-        ClientWorld world = ClientWorldFixture.Create(ClientTestGrids.CreateYard(), Start);
-        List<RemoteEntity> spawned = new List<RemoteEntity>();
-        world.RemoteSpawned += spawned.Add;
-
-        world.OnSpawn(Spawn(Other, ClientTestGrids.Center(3, 8)));
-
-        Assert.That(spawned.Count, Is.EqualTo(1));
-        Assert.That(world.Remotes[Other].DefinitionId, Is.EqualTo("job.adventurer"));
-        Assert.That(world.Remotes[Other].Kind, Is.EqualTo(EntityKind.Player));
-        Assert.That(world.Remotes[Other].Buffer.Count, Is.EqualTo(1), "drawable before the first snapshot");
-    }
-
-    [Test]
-    public void OnSpawn_ForTheLocalEntity_IsIgnored()
-    {
-        ClientWorld world = ClientWorldFixture.Create(ClientTestGrids.CreateYard(), Start);
-
-        world.OnSpawn(Spawn(ClientWorldFixture.LocalEntity, Start));
-
-        Assert.That(world.Remotes.Count, Is.EqualTo(0));
-    }
-
-    [Test]
     public void OnDespawn_RemovesTheEntityAndAnnouncesIt()
     {
         ClientWorld world = ClientWorldFixture.Create(ClientTestGrids.CreateYard(), Start);
-        List<EntityId> despawned = new List<EntityId>();
+        var despawned = new List<EntityId>();
         world.RemoteDespawned += remote => despawned.Add(remote.Entity);
         world.OnSpawn(Spawn(Other, ClientTestGrids.Center(3, 8)));
 
@@ -63,6 +50,18 @@ public sealed class ClientWorldTests
 
         Assert.That(world.Remotes.Count, Is.EqualTo(0));
         Assert.That(despawned, Is.EqualTo(new[] { Other }));
+    }
+
+    [Test]
+    public void OnSnapshot_AcrossTickWrapAround_TreatsTheWrappedTickAsNewer()
+    {
+        ClientWorld world = ClientWorldFixture.Create(ClientTestGrids.CreateYard(), Start, uint.MaxValue - 1);
+
+        world.OnSnapshot(
+            ClientWorldFixture.Snapshot(2, 0, ClientWorldFixture.State(ClientWorldFixture.LocalEntity, Start)));
+
+        Assert.That(world.StaleSnapshots, Is.EqualTo(0));
+        Assert.That(world.LatestServerTick, Is.EqualTo(2u));
     }
 
     [Test]
@@ -102,33 +101,6 @@ public sealed class ClientWorldTests
     }
 
     [Test]
-    public void OnSnapshot_WithTheSameTick_IsStillApplied()
-    {
-        ClientWorld world = ClientWorldFixture.Create(ClientTestGrids.CreateYard(), Start);
-        world.OnSpawn(Spawn(Other, ClientTestGrids.Center(3, 8)));
-        world.OnSnapshot(
-            ClientWorldFixture.Snapshot(10, 0, ClientWorldFixture.State(ClientWorldFixture.LocalEntity, Start)));
-
-        world.OnSnapshot(
-            ClientWorldFixture.Snapshot(10, 0, ClientWorldFixture.State(Other, ClientTestGrids.Center(4, 8))));
-
-        Assert.That(world.StaleSnapshots, Is.EqualTo(0));
-        Assert.That(world.Remotes[Other].Buffer.Count, Is.EqualTo(2), "the second part of a split snapshot");
-    }
-
-    [Test]
-    public void OnSnapshot_AcrossTickWrapAround_TreatsTheWrappedTickAsNewer()
-    {
-        ClientWorld world = ClientWorldFixture.Create(ClientTestGrids.CreateYard(), Start, uint.MaxValue - 1);
-
-        world.OnSnapshot(
-            ClientWorldFixture.Snapshot(2, 0, ClientWorldFixture.State(ClientWorldFixture.LocalEntity, Start)));
-
-        Assert.That(world.StaleSnapshots, Is.EqualTo(0));
-        Assert.That(world.LatestServerTick, Is.EqualTo(2u));
-    }
-
-    [Test]
     public void OnSnapshot_ThatMovesTheLocalPlayerFar_SnapsTheDrawnPosition()
     {
         ClientWorld world = ClientWorldFixture.Create(ClientTestGrids.CreateYard(), Start);
@@ -145,7 +117,7 @@ public sealed class ClientWorldTests
     public void OnSnapshot_ThatNudgesTheLocalPlayer_IsSmoothed()
     {
         ClientWorld world = ClientWorldFixture.Create(ClientTestGrids.CreateYard(), Start);
-        WorldPosition near = new WorldPosition(Start.X + 0.3f, 0f, Start.Z);
+        var near = new WorldPosition(Start.X + 0.3f, 0f, Start.Z);
 
         world.OnSnapshot(
             ClientWorldFixture.Snapshot(1, 0, ClientWorldFixture.State(ClientWorldFixture.LocalEntity, near)));
@@ -155,16 +127,44 @@ public sealed class ClientWorldTests
         Assert.That(world.Smoother.Sample(1f).X, Is.EqualTo(Start.X).Within(1e-5f));
     }
 
-    private static EntitySpawn Spawn(EntityId entity, WorldPosition position)
+    [Test]
+    public void OnSnapshot_WithTheSameTick_IsStillApplied()
     {
-        return new EntitySpawn(
-            entity,
-            EntityKind.Player,
-            "job.adventurer",
-            position,
-            new WorldDirection(0f, 1f),
-            EntityStateFlags.None,
-            0);
+        ClientWorld world = ClientWorldFixture.Create(ClientTestGrids.CreateYard(), Start);
+        world.OnSpawn(Spawn(Other, ClientTestGrids.Center(3, 8)));
+        world.OnSnapshot(
+            ClientWorldFixture.Snapshot(10, 0, ClientWorldFixture.State(ClientWorldFixture.LocalEntity, Start)));
+
+        world.OnSnapshot(
+            ClientWorldFixture.Snapshot(10, 0, ClientWorldFixture.State(Other, ClientTestGrids.Center(4, 8))));
+
+        Assert.That(world.StaleSnapshots, Is.EqualTo(0));
+        Assert.That(world.Remotes[Other].Buffer.Count, Is.EqualTo(2), "the second part of a split snapshot");
+    }
+
+    [Test]
+    public void OnSpawn_AddsARemoteEntityAndAnnouncesIt()
+    {
+        ClientWorld world = ClientWorldFixture.Create(ClientTestGrids.CreateYard(), Start);
+        var spawned = new List<RemoteEntity>();
+        world.RemoteSpawned += spawned.Add;
+
+        world.OnSpawn(Spawn(Other, ClientTestGrids.Center(3, 8)));
+
+        Assert.That(spawned.Count, Is.EqualTo(1));
+        Assert.That(world.Remotes[Other].DefinitionId, Is.EqualTo("job.adventurer"));
+        Assert.That(world.Remotes[Other].Kind, Is.EqualTo(EntityKind.Player));
+        Assert.That(world.Remotes[Other].Buffer.Count, Is.EqualTo(1), "drawable before the first snapshot");
+    }
+
+    [Test]
+    public void OnSpawn_ForTheLocalEntity_IsIgnored()
+    {
+        ClientWorld world = ClientWorldFixture.Create(ClientTestGrids.CreateYard(), Start);
+
+        world.OnSpawn(Spawn(ClientWorldFixture.LocalEntity, Start));
+
+        Assert.That(world.Remotes.Count, Is.EqualTo(0));
     }
 }
 }

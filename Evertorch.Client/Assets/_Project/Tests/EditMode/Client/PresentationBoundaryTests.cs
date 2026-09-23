@@ -7,21 +7,21 @@ using UnityEngine;
 namespace Evertorch.Client.Tests.EditMode
 {
 /// <summary>
-/// Client animation never decides damage or attack readiness (Evertorch Spec §3.3; Milestone 3 verification). The
-/// presentation code may read the client world and draw; it may not send, move, lock, or change what the client
-/// believes. The gameplay code, in turn, never reads the presentation.
+///     Client animation never decides damage or attack readiness (Evertorch Spec §3.3; Milestone 3 verification). The
+///     presentation code may read the client world and draw; it may not send, move, lock, or change what the client
+///     believes. The gameplay code, in turn, never reads the presentation.
 /// </summary>
 [TestFixture]
 public sealed class PresentationBoundaryTests
 {
-    private static readonly Regex Forbidden = new Regex(
+    private static readonly Regex Forbidden = new(
         @"ClientConnection|ICombatCommandSink|IMoveIntentSink|\bSend\w*\(|AutoAttackState|MovementController"
         + @"|LocalPlayerDriver|MovementPredictor|\.Predictor\b|\.IsLocked\b|RequestRespawn"
         + @"|\.On(Spawn|Despawn|Snapshot|TargetChanged|AttackStarted|Damage|EntityDied|EntityRevived|ItemDropped"
         + @"|CharacterHealth)\("
         + @"|\.(HealthPermille|StateFlags|CurrentHealth)\s*=[^=]");
 
-    private static readonly Regex UsesPresentation = new Regex(
+    private static readonly Regex UsesPresentation = new(
         @"\b(CombatAnimation|CombatTimeline|CombatPresenter|HitMark|FloatingNumber|HealthBar|EntityView)\b"
         + @"|\bAnimator\b|AnimationEvent");
 
@@ -41,16 +41,16 @@ public sealed class PresentationBoundaryTests
     }
 
     [Test]
-    public void Presentation_NeverSendsMovesLocksOrChangesTheClientWorld()
-    {
-        Assert.That(Offenders("Presentation", Forbidden), Is.Empty);
-    }
-
-    [Test]
     public void Gameplay_NeverReadsThePresentation()
     {
         Assert.That(Offenders("Gameplay", UsesPresentation), Is.Empty);
         Assert.That(Offenders("Networking", UsesPresentation), Is.Empty);
+    }
+
+    [Test]
+    public void Presentation_NeverSendsMovesLocksOrChangesTheClientWorld()
+    {
+        Assert.That(Offenders("Presentation", Forbidden), Is.Empty);
     }
 
     [Test]

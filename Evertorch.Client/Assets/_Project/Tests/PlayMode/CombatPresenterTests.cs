@@ -1,21 +1,23 @@
+using System;
 using System.Collections.Generic;
 using Evertorch.Game;
 using Evertorch.Protocol;
 using NUnit.Framework;
 using UnityEngine;
 using EntityId = Evertorch.Game.EntityId;
+using Object = UnityEngine.Object;
 
 namespace Evertorch.Client.Tests.PlayMode
 {
 /// <summary>
-/// The presenter turns the world's combat events into views, on the monster's interpolated timeline.
+///     The presenter turns the world's combat events into views, on the monster's interpolated timeline.
 /// </summary>
 public sealed class CombatPresenterTests
 {
-    private static readonly EntityId Local = new EntityId(100);
-    private static readonly EntityId Slime = new EntityId(300);
+    private static readonly EntityId Local = new(100);
+    private static readonly EntityId Slime = new(300);
 
-    private readonly List<Object> m_created = new List<Object>();
+    private readonly List<Object> m_created = new();
     private CombatPresenter? m_presenter;
 
     [TearDown]
@@ -46,7 +48,7 @@ public sealed class CombatPresenterTests
 
     private ClientWorld CreateWorld()
     {
-        NavigationCell[] cells = new NavigationCell[8 * 8];
+        var cells = new NavigationCell[8 * 8];
         for (int index = 0; index < cells.Length; index++)
         {
             cells[index] = NavigationCell.Level(NavigationSurface.Floor, 0f);
@@ -162,8 +164,8 @@ public sealed class CombatPresenterTests
     }
 
     /// <summary>
-    /// The local player attacks the slime and is hit back; <paramref name="framesPerTick" /> is how often the
-    /// presenter draws per client tick, or with a negative value, once every that many ticks.
+    ///     The local player attacks the slime and is hit back; <paramref name="framesPerTick" /> is how often the
+    ///     presenter draws per client tick, or with a negative value, once every that many ticks.
     /// </summary>
     private List<string> RunFight(bool isPresented, int framesPerTick)
     {
@@ -175,10 +177,10 @@ public sealed class CombatPresenterTests
         Dictionary<EntityId, EntityView> remotes = CreateViews(out EntityView local);
         CombatPresenter? presenter = isPresented ? CreatePresenter(world) : null;
         var swing = new AttackTiming(
-            System.TimeSpan.FromMilliseconds(940),
-            System.TimeSpan.FromMilliseconds(470),
-            System.TimeSpan.FromMilliseconds(470),
-            System.TimeSpan.FromMilliseconds(235));
+            TimeSpan.FromMilliseconds(940),
+            TimeSpan.FromMilliseconds(470),
+            TimeSpan.FromMilliseconds(470),
+            TimeSpan.FromMilliseconds(235));
 
         autoAttack.Attack(Slime);
         for (uint tick = 1; tick <= 80; tick++)
@@ -217,14 +219,22 @@ public sealed class CombatPresenterTests
         return log.Entries;
     }
 
+    [Test]
+    public void Despawn_OfAMonster_RemovesItsBar()
+    {
+        ClientWorld world = CreateWorld();
+        Dictionary<EntityId, EntityView> remotes = CreateViews(out EntityView local);
+        CombatPresenter presenter = CreatePresenter(world);
+        presenter.Present(local, remotes, null);
+
+        world.OnDespawn(new EntityDespawn(Slime, DespawnReason.Removed));
+
+        Assert.That(presenter.TryGetHealthBar(Slime, out HealthBar? _), Is.False);
+    }
+
     private sealed class RecordingSink : ICombatCommandSink, IMoveIntentSink
     {
-        public List<string> Entries { get; } = new List<string>();
-
-        public void Add(string entry)
-        {
-            Entries.Add(entry);
-        }
+        public List<string> Entries { get; } = new();
 
         public void SendAttack(EntityId target)
         {
@@ -240,19 +250,11 @@ public sealed class CombatPresenterTests
         {
             Entries.Add($"move {intent.Sequence} {intent.DirectionX:R} {intent.DirectionZ:R}");
         }
-    }
 
-    [Test]
-    public void Despawn_OfAMonster_RemovesItsBar()
-    {
-        ClientWorld world = CreateWorld();
-        Dictionary<EntityId, EntityView> remotes = CreateViews(out EntityView local);
-        CombatPresenter presenter = CreatePresenter(world);
-        presenter.Present(local, remotes, null);
-
-        world.OnDespawn(new EntityDespawn(Slime, DespawnReason.Removed));
-
-        Assert.That(presenter.TryGetHealthBar(Slime, out HealthBar? _), Is.False);
+        public void Add(string entry)
+        {
+            Entries.Add(entry);
+        }
     }
 }
 }

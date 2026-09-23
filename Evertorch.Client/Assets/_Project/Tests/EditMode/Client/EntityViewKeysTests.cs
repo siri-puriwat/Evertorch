@@ -21,6 +21,25 @@ public sealed class EntityViewKeysTests
             new Dictionary<ItemDefinitionId, ClientItem> { { item.Id, item } });
     }
 
+    [TestCase(EntityKind.Monster, "monster.unknown")]
+    [TestCase(EntityKind.ItemDrop, "item.material.unknown")]
+    [TestCase(EntityKind.ItemDrop, "monster.a")]
+    [TestCase(EntityKind.Monster, "job.a")]
+    [TestCase(EntityKind.Player, "monster.a")]
+    [TestCase(EntityKind.None, "job.a")]
+    public void ForEntity_WhenTheContentDoesNotKnowIt_IsEmpty(EntityKind kind, string definitionId)
+    {
+        Assert.That(EntityViewKeys.ForEntity(CreateContent(), kind, definitionId), Is.Empty);
+    }
+
+    [Test]
+    public void ForEntity_ForAKnownItemDrop_UsesTheItemModelKey()
+    {
+        Assert.That(
+            EntityViewKeys.ForEntity(CreateContent(), EntityKind.ItemDrop, "item.material.a"),
+            Is.EqualTo("pickup_a"));
+    }
+
     [Test]
     public void ForEntity_ForAKnownMonster_UsesItsPrefabKey()
     {
@@ -33,25 +52,6 @@ public sealed class EntityViewKeysTests
     public void ForEntity_ForAKnownPlayerJob_UsesTheJobPrefabKey()
     {
         Assert.That(EntityViewKeys.ForEntity(CreateContent(), EntityKind.Player, "job.a"), Is.EqualTo("character_a"));
-    }
-
-    [Test]
-    public void ForEntity_ForAKnownItemDrop_UsesTheItemModelKey()
-    {
-        Assert.That(
-            EntityViewKeys.ForEntity(CreateContent(), EntityKind.ItemDrop, "item.material.a"),
-            Is.EqualTo("pickup_a"));
-    }
-
-    [TestCase(EntityKind.Monster, "monster.unknown")]
-    [TestCase(EntityKind.ItemDrop, "item.material.unknown")]
-    [TestCase(EntityKind.ItemDrop, "monster.a")]
-    [TestCase(EntityKind.Monster, "job.a")]
-    [TestCase(EntityKind.Player, "monster.a")]
-    [TestCase(EntityKind.None, "job.a")]
-    public void ForEntity_WhenTheContentDoesNotKnowIt_IsEmpty(EntityKind kind, string definitionId)
-    {
-        Assert.That(EntityViewKeys.ForEntity(CreateContent(), kind, definitionId), Is.Empty);
     }
 }
 }

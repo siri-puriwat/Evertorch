@@ -34,134 +34,18 @@ public sealed class ClientContentParserTests
         "{\"schemaVersion\":1,\"definitions\":[{\"id\":\"item.material.slime_gel\",\"displayName\":\"Slime Gel\","
         + "\"type\":\"material\",\"stackLimit\":999,\"icon\":\"item_slime_gel\",\"model\":\"pickup_slime_gel\"}]}";
 
-    [Test]
-    public void Parse_ValidPackage_BuildsTheMapAndItsGrid()
-    {
-        Package package = new Package(Maps);
-
-        ClientContent? content = ClientContentParser.Parse(package.Manifest, package.Files, out string error);
-
-        Assert.That(error, Is.Empty);
-        Assert.That(content, Is.Not.Null);
-        Assert.That(content!.Version, Is.EqualTo(package.Version));
-        Assert.That(content.TryGetMap(new MapDefinitionId("map.training_ground"), out ClientMap? map), Is.True);
-        Assert.That(map!.DisplayName, Is.EqualTo("Training Ground"));
-        Assert.That(map.SceneKey, Is.EqualTo("map_training_ground"));
-        NavigationGrid grid = map.Navigation;
-        Assert.That(grid.Columns, Is.EqualTo(3));
-        Assert.That(grid.Rows, Is.EqualTo(2));
-        Assert.That(grid.OriginX, Is.EqualTo(-1f));
-        Assert.That(grid.OriginZ, Is.EqualTo(-2f));
-        Assert.That(grid.GetCell(0, 0).Surface, Is.EqualTo(NavigationSurface.Wall), "row 0 is the southern edge");
-        Assert.That(grid.GetCell(2, 0).Axis, Is.EqualTo(RampAxis.X));
-        Assert.That(grid.GetCell(2, 0).HeightAtMax, Is.EqualTo(0.25f));
-        Assert.That(grid.GetCell(2, 1).Surface, Is.EqualTo(NavigationSurface.Wall));
-    }
-
-    [Test]
-    public void Parse_ValidPackage_ReadsJobsMonstersAndItems()
-    {
-        Package package = new Package(Maps);
-
-        ClientContent? content = ClientContentParser.Parse(package.Manifest, package.Files, out string error);
-
-        Assert.That(error, Is.Empty);
-        Assert.That(content!.Jobs.Count(), Is.EqualTo(1));
-        Assert.That(content.Monsters.Count(), Is.EqualTo(1));
-        Assert.That(content.Items.Count(), Is.EqualTo(1));
-        Assert.That(content.TryGetJob(new JobDefinitionId("job.adventurer"), out ClientJob? job), Is.True);
-        Assert.That(job!.DisplayName, Is.EqualTo("Adventurer"));
-        Assert.That(job.PrefabKey, Is.EqualTo("character_adventurer"));
-        Assert.That(
-            content.TryGetMonster(new MonsterDefinitionId("monster.training_slime"), out ClientMonster? monster),
-            Is.True);
-        Assert.That(monster!.DisplayName, Is.EqualTo("Training Slime"));
-        Assert.That(monster.PrefabKey, Is.EqualTo("monster_training_slime"));
-        Assert.That(monster.IconKey, Is.EqualTo("monster_training_slime_icon"));
-        Assert.That(content.TryGetItem(new ItemDefinitionId("item.material.slime_gel"), out ClientItem? item), Is.True);
-        Assert.That(item!.DisplayName, Is.EqualTo("Slime Gel"));
-        Assert.That(item.ModelKey, Is.EqualTo("pickup_slime_gel"));
-        Assert.That(item.IconKey, Is.EqualTo("item_slime_gel"));
-    }
-
-    [Test]
-    public void Parse_ValidPackage_FindsNoUnknownDefinition()
-    {
-        Package package = new Package(Maps);
-        ClientContent? content = ClientContentParser.Parse(package.Manifest, package.Files, out string _);
-
-        Assert.That(content!.TryGetJob(new JobDefinitionId("job.unknown"), out ClientJob? job), Is.False);
-        Assert.That(job, Is.Null);
-        Assert.That(
-            content.TryGetMonster(new MonsterDefinitionId("monster.unknown"), out ClientMonster? monster),
-            Is.False);
-        Assert.That(monster, Is.Null);
-        Assert.That(content.TryGetItem(new ItemDefinitionId("item.unknown"), out ClientItem? item), Is.False);
-        Assert.That(item, Is.Null);
-    }
-
-    [Test]
-    public void Parse_ValidPackage_ServesTheGridThroughTheMapProvider()
-    {
-        Package package = new Package(Maps);
-        ClientContent? content = ClientContentParser.Parse(package.Manifest, package.Files, out string _);
-
-        bool found = content!.TryGetNavigation(new MapDefinitionId("map.training_ground"), out NavigationGrid? grid);
-        bool missing = content.TryGetNavigation(new MapDefinitionId("map.elsewhere"), out NavigationGrid? none);
-
-        Assert.That(found, Is.True);
-        Assert.That(grid, Is.Not.Null);
-        Assert.That(missing, Is.False);
-        Assert.That(none, Is.Null);
-    }
-
-    [Test]
-    public void Parse_WhenAFileWasEdited_IsRefused()
-    {
-        Package package = new Package(Maps);
-        package.Files[ClientContentParser.MapsFile] = Encoding.UTF8.GetBytes(Maps.Replace("\"abc\"", "\"bbc\""));
-
-        ClientContent? content = ClientContentParser.Parse(package.Manifest, package.Files, out string error);
-
-        Assert.That(content, Is.Null);
-        Assert.That(error, Does.Contain("maps.json").And.Contain("does not match"));
-    }
-
-    [Test]
-    public void Parse_WhenAListedFileIsAbsent_IsRefused()
-    {
-        Package package = new Package(Maps);
-        package.Files.Remove("items.json");
-
-        ClientContent? content = ClientContentParser.Parse(package.Manifest, package.Files, out string error);
-
-        Assert.That(content, Is.Null);
-        Assert.That(error, Does.Contain("items.json").And.Contain("missing"));
-    }
-
     [TestCase(ClientContentParser.MapsFile)]
     [TestCase(ClientContentParser.JobsFile)]
     [TestCase(ClientContentParser.MonstersFile)]
     [TestCase(ClientContentParser.ItemsFile)]
     public void Parse_WhenARequiredFileIsNotInThePackage_IsRefused(string fileName)
     {
-        Package package = Package.Without(fileName);
+        var package = Package.Without(fileName);
 
         ClientContent? content = ClientContentParser.Parse(package.Manifest, package.Files, out string error);
 
         Assert.That(content, Is.Null);
         Assert.That(error, Is.EqualTo($"The content package has no '{fileName}'."));
-    }
-
-    [Test]
-    public void Parse_WhenTheVersionDoesNotBelongToTheFiles_IsRefused()
-    {
-        Package package = new Package(Maps, "0123456789abcdef");
-
-        ClientContent? content = ClientContentParser.Parse(package.Manifest, package.Files, out string error);
-
-        Assert.That(content, Is.Null);
-        Assert.That(error, Does.Contain("content version"));
     }
 
     [TestCase("not json at all")]
@@ -195,17 +79,6 @@ public sealed class ClientContentParserTests
         Assert.That(error, Is.Not.Empty);
     }
 
-    [Test]
-    public void ReadFileList_ForAValidManifest_ListsItsFiles()
-    {
-        Package package = new Package(Maps);
-
-        IReadOnlyList<string> names = ClientContentParser.ReadFileList(package.Manifest, out string error);
-
-        Assert.That(error, Is.Empty);
-        Assert.That(names, Is.EquivalentTo(new[] { "items.json", "jobs.json", "maps.json", "monsters.json" }));
-    }
-
     [TestCase("\"surface\":\"wall\"", "\"surface\":\"lava\"", "legend")]
     [TestCase("\"axis\":\"x\"", "\"axis\":\"y\"", "legend")]
     [TestCase("\"symbol\":\"b\"", "\"symbol\":\"a\"", "legend")]
@@ -218,7 +91,7 @@ public sealed class ClientContentParserTests
     public void Parse_ForMalformedMaps_IsRefusedWithAReason(string oldText, string newText, string expected)
     {
         Assert.That(Maps, Does.Contain(oldText));
-        Package package = new Package(Maps.Replace(oldText, newText));
+        var package = new Package(Maps.Replace(oldText, newText));
 
         ClientContent? content = ClientContentParser.Parse(package.Manifest, package.Files, out string error);
 
@@ -299,44 +172,12 @@ public sealed class ClientContentParserTests
     {
         string original = Package.DefaultTexts(Maps)[fileName];
         Assert.That(original, Does.Contain(oldText));
-        Package package = Package.With(fileName, original.Replace(oldText, newText));
+        var package = Package.With(fileName, original.Replace(oldText, newText));
 
         ClientContent? content = ClientContentParser.Parse(package.Manifest, package.Files, out string error);
 
         Assert.That(content, Is.Null);
         Assert.That(error, Does.Contain(expected));
-    }
-
-    [Test]
-    public void Parse_TheGeneratedPackageInStreamingAssets_YieldsTheTrainingGround()
-    {
-        string folder = Path.Combine(Application.streamingAssetsPath, StreamingContentLoader.FolderName);
-        string manifestPath = Path.Combine(folder, ClientContentParser.ManifestFile);
-        if (!File.Exists(manifestPath))
-        {
-            Assert.Ignore($"No generated client package is present. {StreamingContentLoader.MissingPackageHint}");
-        }
-
-        byte[] manifest = File.ReadAllBytes(manifestPath);
-        Dictionary<string, byte[]> files = ClientContentParser
-            .ReadFileList(manifest, out string _)
-            .ToDictionary(name => name, name => File.ReadAllBytes(Path.Combine(folder, name)));
-
-        ClientContent? content = ClientContentParser.Parse(manifest, files, out string error);
-
-        Assert.That(error, Is.Empty);
-        Assert.That(content!.TryGetMap(new MapDefinitionId("map.training_ground"), out ClientMap? map), Is.True);
-        Assert.That(map!.Navigation.Columns, Is.EqualTo(48));
-        Assert.That(map.Navigation.CanOccupy(0f, 0f), Is.True, "players spawn at the origin");
-        Assert.That(MapSceneResolver.TryResolve(map.SceneKey, out string _), Is.True);
-        Assert.That(content.TryGetJob(new JobDefinitionId("job.adventurer"), out ClientJob? job), Is.True);
-        Assert.That(job!.PrefabKey, Is.EqualTo("character_adventurer"));
-        Assert.That(
-            content.TryGetMonster(new MonsterDefinitionId("monster.training_slime"), out ClientMonster? monster),
-            Is.True);
-        Assert.That(monster!.PrefabKey, Is.EqualTo("monster_training_slime"));
-        Assert.That(content.TryGetItem(new ItemDefinitionId("item.material.slime_gel"), out ClientItem? item), Is.True);
-        Assert.That(item!.ModelKey, Is.EqualTo("pickup_slime_gel"));
     }
 
     private sealed class Package
@@ -350,8 +191,8 @@ public sealed class ClientContentParserTests
         {
             Files = texts.ToDictionary(pair => pair.Key, pair => Encoding.UTF8.GetBytes(pair.Value));
 
-            StringBuilder listing = new StringBuilder();
-            StringBuilder entries = new StringBuilder();
+            var listing = new StringBuilder();
+            var entries = new StringBuilder();
             foreach (string name in Files.Keys.OrderBy(name => name, StringComparer.Ordinal))
             {
                 string hash = Hash(Files[name]);
@@ -378,7 +219,7 @@ public sealed class ClientContentParserTests
                 [ClientContentParser.MapsFile] = maps,
                 [ClientContentParser.JobsFile] = Jobs,
                 [ClientContentParser.MonstersFile] = Monsters,
-                [ClientContentParser.ItemsFile] = Items,
+                [ClientContentParser.ItemsFile] = Items
             };
         }
 
@@ -398,11 +239,170 @@ public sealed class ClientContentParserTests
 
         private static string Hash(byte[] content)
         {
-            using (SHA256 sha256 = SHA256.Create())
+            using (var sha256 = SHA256.Create())
             {
                 return string.Concat(sha256.ComputeHash(content).Select(value => value.ToString("x2")));
             }
         }
+    }
+
+    [Test]
+    public void Parse_TheGeneratedPackageInStreamingAssets_YieldsTheTrainingGround()
+    {
+        string folder = Path.Combine(Application.streamingAssetsPath, StreamingContentLoader.FolderName);
+        string manifestPath = Path.Combine(folder, ClientContentParser.ManifestFile);
+        if (!File.Exists(manifestPath))
+        {
+            Assert.Ignore($"No generated client package is present. {StreamingContentLoader.MissingPackageHint}");
+        }
+
+        byte[] manifest = File.ReadAllBytes(manifestPath);
+        var files = ClientContentParser
+            .ReadFileList(manifest, out string _)
+            .ToDictionary(name => name, name => File.ReadAllBytes(Path.Combine(folder, name)));
+
+        ClientContent? content = ClientContentParser.Parse(manifest, files, out string error);
+
+        Assert.That(error, Is.Empty);
+        Assert.That(content!.TryGetMap(new MapDefinitionId("map.training_ground"), out ClientMap? map), Is.True);
+        Assert.That(map!.Navigation.Columns, Is.EqualTo(48));
+        Assert.That(map.Navigation.CanOccupy(0f, 0f), Is.True, "players spawn at the origin");
+        Assert.That(MapSceneResolver.TryResolve(map.SceneKey, out string _), Is.True);
+        Assert.That(content.TryGetJob(new JobDefinitionId("job.adventurer"), out ClientJob? job), Is.True);
+        Assert.That(job!.PrefabKey, Is.EqualTo("character_adventurer"));
+        Assert.That(
+            content.TryGetMonster(new MonsterDefinitionId("monster.training_slime"), out ClientMonster? monster),
+            Is.True);
+        Assert.That(monster!.PrefabKey, Is.EqualTo("monster_training_slime"));
+        Assert.That(content.TryGetItem(new ItemDefinitionId("item.material.slime_gel"), out ClientItem? item), Is.True);
+        Assert.That(item!.ModelKey, Is.EqualTo("pickup_slime_gel"));
+    }
+
+    [Test]
+    public void Parse_ValidPackage_BuildsTheMapAndItsGrid()
+    {
+        var package = new Package(Maps);
+
+        ClientContent? content = ClientContentParser.Parse(package.Manifest, package.Files, out string error);
+
+        Assert.That(error, Is.Empty);
+        Assert.That(content, Is.Not.Null);
+        Assert.That(content!.Version, Is.EqualTo(package.Version));
+        Assert.That(content.TryGetMap(new MapDefinitionId("map.training_ground"), out ClientMap? map), Is.True);
+        Assert.That(map!.DisplayName, Is.EqualTo("Training Ground"));
+        Assert.That(map.SceneKey, Is.EqualTo("map_training_ground"));
+        NavigationGrid grid = map.Navigation;
+        Assert.That(grid.Columns, Is.EqualTo(3));
+        Assert.That(grid.Rows, Is.EqualTo(2));
+        Assert.That(grid.OriginX, Is.EqualTo(-1f));
+        Assert.That(grid.OriginZ, Is.EqualTo(-2f));
+        Assert.That(grid.GetCell(0, 0).Surface, Is.EqualTo(NavigationSurface.Wall), "row 0 is the southern edge");
+        Assert.That(grid.GetCell(2, 0).Axis, Is.EqualTo(RampAxis.X));
+        Assert.That(grid.GetCell(2, 0).HeightAtMax, Is.EqualTo(0.25f));
+        Assert.That(grid.GetCell(2, 1).Surface, Is.EqualTo(NavigationSurface.Wall));
+    }
+
+    [Test]
+    public void Parse_ValidPackage_FindsNoUnknownDefinition()
+    {
+        var package = new Package(Maps);
+        ClientContent? content = ClientContentParser.Parse(package.Manifest, package.Files, out string _);
+
+        Assert.That(content!.TryGetJob(new JobDefinitionId("job.unknown"), out ClientJob? job), Is.False);
+        Assert.That(job, Is.Null);
+        Assert.That(
+            content.TryGetMonster(new MonsterDefinitionId("monster.unknown"), out ClientMonster? monster),
+            Is.False);
+        Assert.That(monster, Is.Null);
+        Assert.That(content.TryGetItem(new ItemDefinitionId("item.unknown"), out ClientItem? item), Is.False);
+        Assert.That(item, Is.Null);
+    }
+
+    [Test]
+    public void Parse_ValidPackage_ReadsJobsMonstersAndItems()
+    {
+        var package = new Package(Maps);
+
+        ClientContent? content = ClientContentParser.Parse(package.Manifest, package.Files, out string error);
+
+        Assert.That(error, Is.Empty);
+        Assert.That(content!.Jobs.Count(), Is.EqualTo(1));
+        Assert.That(content.Monsters.Count(), Is.EqualTo(1));
+        Assert.That(content.Items.Count(), Is.EqualTo(1));
+        Assert.That(content.TryGetJob(new JobDefinitionId("job.adventurer"), out ClientJob? job), Is.True);
+        Assert.That(job!.DisplayName, Is.EqualTo("Adventurer"));
+        Assert.That(job.PrefabKey, Is.EqualTo("character_adventurer"));
+        Assert.That(
+            content.TryGetMonster(new MonsterDefinitionId("monster.training_slime"), out ClientMonster? monster),
+            Is.True);
+        Assert.That(monster!.DisplayName, Is.EqualTo("Training Slime"));
+        Assert.That(monster.PrefabKey, Is.EqualTo("monster_training_slime"));
+        Assert.That(monster.IconKey, Is.EqualTo("monster_training_slime_icon"));
+        Assert.That(content.TryGetItem(new ItemDefinitionId("item.material.slime_gel"), out ClientItem? item), Is.True);
+        Assert.That(item!.DisplayName, Is.EqualTo("Slime Gel"));
+        Assert.That(item.ModelKey, Is.EqualTo("pickup_slime_gel"));
+        Assert.That(item.IconKey, Is.EqualTo("item_slime_gel"));
+    }
+
+    [Test]
+    public void Parse_ValidPackage_ServesTheGridThroughTheMapProvider()
+    {
+        var package = new Package(Maps);
+        ClientContent? content = ClientContentParser.Parse(package.Manifest, package.Files, out string _);
+
+        bool found = content!.TryGetNavigation(new MapDefinitionId("map.training_ground"), out NavigationGrid? grid);
+        bool missing = content.TryGetNavigation(new MapDefinitionId("map.elsewhere"), out NavigationGrid? none);
+
+        Assert.That(found, Is.True);
+        Assert.That(grid, Is.Not.Null);
+        Assert.That(missing, Is.False);
+        Assert.That(none, Is.Null);
+    }
+
+    [Test]
+    public void Parse_WhenAFileWasEdited_IsRefused()
+    {
+        var package = new Package(Maps);
+        package.Files[ClientContentParser.MapsFile] = Encoding.UTF8.GetBytes(Maps.Replace("\"abc\"", "\"bbc\""));
+
+        ClientContent? content = ClientContentParser.Parse(package.Manifest, package.Files, out string error);
+
+        Assert.That(content, Is.Null);
+        Assert.That(error, Does.Contain("maps.json").And.Contain("does not match"));
+    }
+
+    [Test]
+    public void Parse_WhenAListedFileIsAbsent_IsRefused()
+    {
+        var package = new Package(Maps);
+        package.Files.Remove("items.json");
+
+        ClientContent? content = ClientContentParser.Parse(package.Manifest, package.Files, out string error);
+
+        Assert.That(content, Is.Null);
+        Assert.That(error, Does.Contain("items.json").And.Contain("missing"));
+    }
+
+    [Test]
+    public void Parse_WhenTheVersionDoesNotBelongToTheFiles_IsRefused()
+    {
+        var package = new Package(Maps, "0123456789abcdef");
+
+        ClientContent? content = ClientContentParser.Parse(package.Manifest, package.Files, out string error);
+
+        Assert.That(content, Is.Null);
+        Assert.That(error, Does.Contain("content version"));
+    }
+
+    [Test]
+    public void ReadFileList_ForAValidManifest_ListsItsFiles()
+    {
+        var package = new Package(Maps);
+
+        IReadOnlyList<string> names = ClientContentParser.ReadFileList(package.Manifest, out string error);
+
+        Assert.That(error, Is.Empty);
+        Assert.That(names, Is.EquivalentTo(new[] { "items.json", "jobs.json", "maps.json", "monsters.json" }));
     }
 }
 }

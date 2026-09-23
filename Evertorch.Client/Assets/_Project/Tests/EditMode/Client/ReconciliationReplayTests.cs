@@ -7,8 +7,8 @@ using NUnit.Framework;
 namespace Evertorch.Client.Tests.EditMode
 {
 /// <summary>
-/// The whole local-player loop (controller, intent producer, predictor, smoother) against a miniature server, with
-/// the link between them misbehaving in a scripted way.
+///     The whole local-player loop (controller, intent producer, predictor, smoother) against a miniature server, with
+///     the link between them misbehaving in a scripted way.
 /// </summary>
 [TestFixture]
 public sealed class ReconciliationReplayTests
@@ -19,145 +19,14 @@ public sealed class ReconciliationReplayTests
 
     private static readonly WorldPosition Start = ClientTestGrids.Center(2, 8);
 
-    [Test]
-    public void PerfectLink_PredictionNeverNeedsCorrecting()
-    {
-        Scenario scenario = new Scenario(0, 0, (tick, isUplink) => true);
-
-        scenario.Run();
-
-        Assert.That(scenario.World.Smoother.LargestCorrection, Is.LessThan(1e-4f));
-        scenario.AssertConverged();
-    }
-
-    [Test]
-    public void DelayedSnapshots_AreReplayedOverWithoutVisibleError()
-    {
-        Scenario scenario = new Scenario(4, 4, (tick, isUplink) => true);
-
-        scenario.Run();
-
-        Assert.That(scenario.World.Smoother.LargestCorrection, Is.LessThan(1e-4f));
-        Assert.That(scenario.LargestPendingCount, Is.GreaterThan(4), "inputs were really waiting for their ack");
-        scenario.AssertConverged();
-    }
-
-    [Test]
-    public void MissingSnapshots_DoNotDisturbThePrediction()
-    {
-        Scenario scenario = new Scenario(2, 2, (tick, isUplink) => isUplink || tick % 3 != 0);
-
-        scenario.Run();
-
-        Assert.That(scenario.World.Smoother.LargestCorrection, Is.LessThan(1e-4f));
-        scenario.AssertConverged();
-    }
-
-    [Test]
-    public void LostInputs_CauseSmallCorrectionsAndStillConverge()
-    {
-        Scenario scenario = new Scenario(2, 2, (tick, isUplink) => !isUplink || tick % 4 != 0);
-
-        scenario.Run();
-
-        Assert.That(scenario.World.Smoother.LargestCorrection, Is.GreaterThan(0f));
-        Assert.That(scenario.World.Smoother.LargestCorrection, Is.LessThan(RenderSmoother.TeleportThreshold));
-        Assert.That(scenario.World.Smoother.Snaps, Is.EqualTo(0));
-        scenario.AssertConverged();
-    }
-
-    [Test]
-    public void ReorderedSnapshots_TheOlderOneIsIgnored()
-    {
-        Scenario scenario = new Scenario(2, 2, (tick, isUplink) => true)
-        {
-            SwapSnapshotsEvery = 5,
-        };
-
-        scenario.Run();
-
-        Assert.That(scenario.World.StaleSnapshots, Is.GreaterThan(0));
-        Assert.That(scenario.World.Smoother.LargestCorrection, Is.LessThan(1e-4f));
-        scenario.AssertConverged();
-    }
-
-    [Test]
-    public void ReorderedAndLostInputs_StillConverge()
-    {
-        Scenario scenario = new Scenario(3, 1, (tick, isUplink) => !isUplink || tick % 7 != 0)
-        {
-            SwapInputsEvery = 4,
-        };
-
-        scenario.Run();
-
-        Assert.That(scenario.Server.StaleInputs, Is.GreaterThan(0), "an overtaken input reached the server late");
-        Assert.That(scenario.World.Smoother.Snaps, Is.EqualTo(0));
-        scenario.AssertConverged();
-    }
-
-    [Test]
-    public void LostStop_IsRepeatedUntilTheServerAcknowledgesIt()
-    {
-        int stopTick = MoveTicks + 1;
-        Scenario scenario = new Scenario(1, 1, (tick, isUplink) => !isUplink || tick < stopTick || tick > stopTick + 2);
-
-        scenario.Run();
-
-        scenario.AssertConverged();
-        Assert.That(scenario.IntentsSentWhileIdle, Is.GreaterThan(3), "the stop was sent again after it was lost");
-    }
-
-    [Test]
-    public void StopsLostAfterTheAcknowledgedOne_DoNotLingerAsPendingInputs()
-    {
-        int stopTick = MoveTicks + 1;
-        Scenario scenario = new Scenario(3, 3, (tick, isUplink) => !isUplink || tick <= stopTick);
-
-        scenario.Run();
-
-        scenario.AssertConverged();
-    }
-
-    [Test]
-    public void IdlePlayer_SendsNothing()
-    {
-        Scenario scenario = new Scenario(1, 1, (tick, isUplink) => true)
-        {
-            MoveTickCount = 0,
-        };
-
-        scenario.Run();
-
-        Assert.That(scenario.Driver.IntentsSent, Is.EqualTo(0));
-    }
-
-    [Test]
-    public void WalkToAPoint_EndsWhereTheServerSaysItDoes()
-    {
-        Scenario scenario = new Scenario(3, 3, (tick, isUplink) => !isUplink || tick % 9 != 0)
-        {
-            MoveTickCount = 0,
-            Destination = ClientTestGrids.Center(7, 5),
-            SettleTickCount = 160,
-        };
-
-        scenario.Run();
-
-        scenario.AssertConverged();
-        // Half a step of arrival slack plus one step a late correction may still shift the body by.
-        Assert.That(scenario.Server.Position.X, Is.EqualTo(7.5f).Within(0.4f));
-        Assert.That(scenario.Server.Position.Z, Is.EqualTo(5.5f).Within(0.4f));
-    }
-
     private sealed class Scenario : IMoveIntentSink
     {
         private readonly int m_uplinkDelay;
         private readonly int m_downlinkDelay;
         private readonly Func<int, bool, bool> m_delivers;
-        private readonly List<KeyValuePair<int, MoveIntent>> m_uplink = new List<KeyValuePair<int, MoveIntent>>();
-        private readonly List<KeyValuePair<int, EntitySnapshot>> m_downlink =
-            new List<KeyValuePair<int, EntitySnapshot>>();
+        private readonly List<KeyValuePair<int, MoveIntent>> m_uplink = new();
+
+        private readonly List<KeyValuePair<int, EntitySnapshot>> m_downlink = new();
 
         private readonly MovementController m_controller;
         private int m_tick;
@@ -285,6 +154,137 @@ public sealed class ReconciliationReplayTests
                 }
             }
         }
+    }
+
+    [Test]
+    public void DelayedSnapshots_AreReplayedOverWithoutVisibleError()
+    {
+        var scenario = new Scenario(4, 4, (tick, isUplink) => true);
+
+        scenario.Run();
+
+        Assert.That(scenario.World.Smoother.LargestCorrection, Is.LessThan(1e-4f));
+        Assert.That(scenario.LargestPendingCount, Is.GreaterThan(4), "inputs were really waiting for their ack");
+        scenario.AssertConverged();
+    }
+
+    [Test]
+    public void IdlePlayer_SendsNothing()
+    {
+        var scenario = new Scenario(1, 1, (tick, isUplink) => true)
+        {
+            MoveTickCount = 0
+        };
+
+        scenario.Run();
+
+        Assert.That(scenario.Driver.IntentsSent, Is.EqualTo(0));
+    }
+
+    [Test]
+    public void LostInputs_CauseSmallCorrectionsAndStillConverge()
+    {
+        var scenario = new Scenario(2, 2, (tick, isUplink) => !isUplink || tick % 4 != 0);
+
+        scenario.Run();
+
+        Assert.That(scenario.World.Smoother.LargestCorrection, Is.GreaterThan(0f));
+        Assert.That(scenario.World.Smoother.LargestCorrection, Is.LessThan(RenderSmoother.TeleportThreshold));
+        Assert.That(scenario.World.Smoother.Snaps, Is.EqualTo(0));
+        scenario.AssertConverged();
+    }
+
+    [Test]
+    public void LostStop_IsRepeatedUntilTheServerAcknowledgesIt()
+    {
+        int stopTick = MoveTicks + 1;
+        var scenario = new Scenario(1, 1, (tick, isUplink) => !isUplink || tick < stopTick || tick > stopTick + 2);
+
+        scenario.Run();
+
+        scenario.AssertConverged();
+        Assert.That(scenario.IntentsSentWhileIdle, Is.GreaterThan(3), "the stop was sent again after it was lost");
+    }
+
+    [Test]
+    public void MissingSnapshots_DoNotDisturbThePrediction()
+    {
+        var scenario = new Scenario(2, 2, (tick, isUplink) => isUplink || tick % 3 != 0);
+
+        scenario.Run();
+
+        Assert.That(scenario.World.Smoother.LargestCorrection, Is.LessThan(1e-4f));
+        scenario.AssertConverged();
+    }
+
+    [Test]
+    public void PerfectLink_PredictionNeverNeedsCorrecting()
+    {
+        var scenario = new Scenario(0, 0, (tick, isUplink) => true);
+
+        scenario.Run();
+
+        Assert.That(scenario.World.Smoother.LargestCorrection, Is.LessThan(1e-4f));
+        scenario.AssertConverged();
+    }
+
+    [Test]
+    public void ReorderedAndLostInputs_StillConverge()
+    {
+        var scenario = new Scenario(3, 1, (tick, isUplink) => !isUplink || tick % 7 != 0)
+        {
+            SwapInputsEvery = 4
+        };
+
+        scenario.Run();
+
+        Assert.That(scenario.Server.StaleInputs, Is.GreaterThan(0), "an overtaken input reached the server late");
+        Assert.That(scenario.World.Smoother.Snaps, Is.EqualTo(0));
+        scenario.AssertConverged();
+    }
+
+    [Test]
+    public void ReorderedSnapshots_TheOlderOneIsIgnored()
+    {
+        var scenario = new Scenario(2, 2, (tick, isUplink) => true)
+        {
+            SwapSnapshotsEvery = 5
+        };
+
+        scenario.Run();
+
+        Assert.That(scenario.World.StaleSnapshots, Is.GreaterThan(0));
+        Assert.That(scenario.World.Smoother.LargestCorrection, Is.LessThan(1e-4f));
+        scenario.AssertConverged();
+    }
+
+    [Test]
+    public void StopsLostAfterTheAcknowledgedOne_DoNotLingerAsPendingInputs()
+    {
+        int stopTick = MoveTicks + 1;
+        var scenario = new Scenario(3, 3, (tick, isUplink) => !isUplink || tick <= stopTick);
+
+        scenario.Run();
+
+        scenario.AssertConverged();
+    }
+
+    [Test]
+    public void WalkToAPoint_EndsWhereTheServerSaysItDoes()
+    {
+        var scenario = new Scenario(3, 3, (tick, isUplink) => !isUplink || tick % 9 != 0)
+        {
+            MoveTickCount = 0,
+            Destination = ClientTestGrids.Center(7, 5),
+            SettleTickCount = 160
+        };
+
+        scenario.Run();
+
+        scenario.AssertConverged();
+        // Half a step of arrival slack plus one step a late correction may still shift the body by.
+        Assert.That(scenario.Server.Position.X, Is.EqualTo(7.5f).Within(0.4f));
+        Assert.That(scenario.Server.Position.Z, Is.EqualTo(5.5f).Within(0.4f));
     }
 }
 }

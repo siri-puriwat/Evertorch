@@ -10,8 +10,8 @@ using UnityEngine.TestTools;
 namespace Evertorch.Client.Tests.PlayMode
 {
 /// <summary>
-/// Unity's runtime on one side and the real .NET server process on the other, over a simulated bad link. This is
-/// the one place that proves both runtimes compute the same movement while messages are delayed and lost.
+///     Unity's runtime on one side and the real .NET server process on the other, over a simulated bad link. This is
+///     the one place that proves both runtimes compute the same movement while messages are delayed and lost.
 /// </summary>
 public sealed class LiveServerConvergenceTests
 {
@@ -49,14 +49,14 @@ public sealed class LiveServerConvergenceTests
         Assert.That(server.TryReadListeningPort(out int port), Is.True, $"server output: {server.JoinOutput()}");
 
         m_socket = new LiteNetLibClientTransport("evertorch", 5000);
-        LossyTransport link = new LossyTransport(m_socket, 9, () => Time.realtimeSinceStartupAsDouble)
+        var link = new LossyTransport(m_socket, 9, () => Time.realtimeSinceStartupAsDouble)
         {
             LatencyMilliseconds = 60,
             JitterMilliseconds = 15,
             LossPercent = 10,
-            ReorderPercent = 5,
+            ReorderPercent = 5
         };
-        ClientConnection connection = new ClientConnection(
+        var connection = new ClientConnection(
             link,
             new ClientConnectionSettings("0.2.0-dev", content!.Version, "dev:playmode", new CharacterId(31)),
             content);
@@ -74,9 +74,9 @@ public sealed class LiveServerConvergenceTests
             $"{connection.LocalError} {connection.DisconnectCause} server output: {server.JoinOutput()}");
 
         ClientWorld world = connection.World!;
-        MovementController controller = new MovementController(world.Grid);
-        LocalPlayerDriver driver = new LocalPlayerDriver(controller, new MoveIntentProducer(), world, connection);
-        FixedTickClock clock = new FixedTickClock(1f / connection.ServerTickRate);
+        var controller = new MovementController(world.Grid);
+        var driver = new LocalPlayerDriver(controller, new MoveIntentProducer(), world, connection);
+        var clock = new FixedTickClock(1f / connection.ServerTickRate);
 
         controller.SetManualDirection(1f, 0.5f);
         yield return Simulate(connection, driver, world, clock, 1.5f, () => false);
@@ -143,7 +143,7 @@ public sealed class LiveServerConvergenceTests
     {
         x = 0f;
         z = 0f;
-        Regex position = new Regex(@" at \(([^,]+), ([^,]+), ([^)]+)\)");
+        var position = new Regex(@" at \(([^,]+), ([^,]+), ([^)]+)\)");
         foreach (string line in server.Output())
         {
             Match match = position.Match(line);

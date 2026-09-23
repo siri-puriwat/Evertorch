@@ -11,7 +11,8 @@ namespace Evertorch.Client.Tests.PlayMode
 /// </summary>
 public sealed class EntityViewCatalogTests
 {
-    private const int FrameLimit = 300;
+    // Real time, not frames: in batch mode frames are not throttled, and 300 of them pass before the first load ends.
+    private const float TimeoutSeconds = 10f;
 
     private EntityViewCatalog? m_catalog;
     private EntityView? m_view;
@@ -57,7 +58,8 @@ public sealed class EntityViewCatalogTests
 
     private static IEnumerator WaitForBody(EntityView view)
     {
-        for (int frame = 0; frame < FrameLimit && !view.HasBody; frame++)
+        float deadline = Time.realtimeSinceStartup + TimeoutSeconds;
+        while (!view.HasBody && Time.realtimeSinceStartup < deadline)
         {
             yield return null;
         }

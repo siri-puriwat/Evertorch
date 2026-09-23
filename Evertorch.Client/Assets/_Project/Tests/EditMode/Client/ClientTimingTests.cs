@@ -5,44 +5,33 @@ namespace Evertorch.Client.Tests.EditMode
 [TestFixture]
 public sealed class ClientTimingTests
 {
-    [Test]
-    public void ServerTimeEstimator_StartsAtTheFirstObservationAndRunsOnLocalTime()
+    [TestCase(0f)]
+    [TestCase(-1f)]
+    [TestCase(float.NaN)]
+    [TestCase(float.PositiveInfinity)]
+    public void FixedTickClock_WithUnusableFrameTime_DoesNothing(float deltaSeconds)
     {
-        ServerTimeEstimator estimator = new ServerTimeEstimator();
+        var clock = new FixedTickClock(0.05f);
 
-        estimator.Advance(3.0);
-        estimator.Observe(100.0);
-        estimator.Advance(0.25);
-
-        Assert.That(estimator.Now, Is.EqualTo(100.25).Within(1e-9));
+        Assert.That(clock.Advance(deltaSeconds), Is.EqualTo(0));
+        Assert.That(clock.Alpha, Is.EqualTo(0f));
     }
 
     [Test]
-    public void ServerTimeEstimator_LeansTowardObservationsWithoutJumping()
+    public void FixedTickClock_AfterALongStall_DropsTheBacklogAndCountsIt()
     {
-        ServerTimeEstimator estimator = new ServerTimeEstimator();
-        estimator.Observe(100.0);
+        var clock = new FixedTickClock(0.05f);
 
-        estimator.Observe(100.2);
+        int due = clock.Advance(1.01f);
 
-        Assert.That(estimator.Now, Is.EqualTo(100.02).Within(1e-9));
-    }
-
-    [Test]
-    public void ServerTimeEstimator_WhenFarOff_StartsOver()
-    {
-        ServerTimeEstimator estimator = new ServerTimeEstimator();
-        estimator.Observe(100.0);
-
-        estimator.Observe(100.0 + ServerTimeEstimator.ResetThresholdSeconds + 0.1);
-
-        Assert.That(estimator.Now, Is.EqualTo(100.6).Within(1e-9));
+        Assert.That(due, Is.EqualTo(FixedTickClock.MaxTicksPerAdvance));
+        Assert.That(clock.SkippedTicks, Is.EqualTo(20 - FixedTickClock.MaxTicksPerAdvance));
     }
 
     [Test]
     public void FixedTickClock_TurnsFrameTimeIntoWholeTicksAndARemainder()
     {
-        FixedTickClock clock = new FixedTickClock(0.05f);
+        var clock = new FixedTickClock(0.05f);
 
         int first = clock.Advance(0.12f);
         float alpha = clock.Alpha;
@@ -56,26 +45,37 @@ public sealed class ClientTimingTests
     }
 
     [Test]
-    public void FixedTickClock_AfterALongStall_DropsTheBacklogAndCountsIt()
+    public void ServerTimeEstimator_LeansTowardObservationsWithoutJumping()
     {
-        FixedTickClock clock = new FixedTickClock(0.05f);
+        var estimator = new ServerTimeEstimator();
+        estimator.Observe(100.0);
 
-        int due = clock.Advance(1.01f);
+        estimator.Observe(100.2);
 
-        Assert.That(due, Is.EqualTo(FixedTickClock.MaxTicksPerAdvance));
-        Assert.That(clock.SkippedTicks, Is.EqualTo(20 - FixedTickClock.MaxTicksPerAdvance));
+        Assert.That(estimator.Now, Is.EqualTo(100.02).Within(1e-9));
     }
 
-    [TestCase(0f)]
-    [TestCase(-1f)]
-    [TestCase(float.NaN)]
-    [TestCase(float.PositiveInfinity)]
-    public void FixedTickClock_WithUnusableFrameTime_DoesNothing(float deltaSeconds)
+    [Test]
+    public void ServerTimeEstimator_StartsAtTheFirstObservationAndRunsOnLocalTime()
     {
-        FixedTickClock clock = new FixedTickClock(0.05f);
+        var estimator = new ServerTimeEstimator();
 
-        Assert.That(clock.Advance(deltaSeconds), Is.EqualTo(0));
-        Assert.That(clock.Alpha, Is.EqualTo(0f));
+        estimator.Advance(3.0);
+        estimator.Observe(100.0);
+        estimator.Advance(0.25);
+
+        Assert.That(estimator.Now, Is.EqualTo(100.25).Within(1e-9));
+    }
+
+    [Test]
+    public void ServerTimeEstimator_WhenFarOff_StartsOver()
+    {
+        var estimator = new ServerTimeEstimator();
+        estimator.Observe(100.0);
+
+        estimator.Observe(100.0 + ServerTimeEstimator.ResetThresholdSeconds + 0.1);
+
+        Assert.That(estimator.Now, Is.EqualTo(100.6).Within(1e-9));
     }
 }
 }

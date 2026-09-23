@@ -6,11 +6,7 @@ namespace Evertorch.Client.Tests.EditMode
 {
 internal sealed class FakeClientTransport : IClientTransport
 {
-    private readonly Queue<Action<IClientTransportListener>> m_events = new Queue<Action<IClientTransportListener>>();
-
-    public bool IsConnected { get; private set; }
-
-    public int RoundTripMilliseconds => 30;
+    private readonly Queue<Action<IClientTransportListener>> m_events = new();
 
     public string Host { get; private set; } = string.Empty;
 
@@ -20,7 +16,11 @@ internal sealed class FakeClientTransport : IClientTransport
 
     public bool ThrowOnConnect { get; set; }
 
-    public List<SentMessage> Sent { get; } = new List<SentMessage>();
+    public List<SentMessage> Sent { get; } = new();
+
+    public bool IsConnected { get; private set; }
+
+    public int RoundTripMilliseconds => 30;
 
     public void Connect(string host, int port)
     {
@@ -37,8 +37,8 @@ internal sealed class FakeClientTransport : IClientTransport
     {
         DisconnectCalls++;
         IsConnected = false;
-        m_events.Enqueue(
-            listener => listener.OnDisconnected(TransportDisconnectCause.ClosedLocally, ReadOnlySpan<byte>.Empty));
+        m_events.Enqueue(listener =>
+            listener.OnDisconnected(TransportDisconnectCause.ClosedLocally, ReadOnlySpan<byte>.Empty));
     }
 
     public void Send(ProtocolChannel channel, MessageDelivery delivery, ReadOnlySpan<byte> payload)
