@@ -47,7 +47,10 @@ public static class ServerHost
             .ValidateOnStart();
         builder.Services.AddSingleton<IValidateOptions<DatabaseOptions>, DatabaseOptionsValidator>();
         builder.Services.AddSingleton<IGameStore>(services =>
-            new PostgresGameStore(services.GetRequiredService<IOptions<DatabaseOptions>>().Value.ConnectionString));
+            new PostgresGameStore(
+                services.GetRequiredService<IOptions<DatabaseOptions>>().Value.ConnectionString,
+                TimeSpan.FromMilliseconds(services.GetRequiredService<IOptions<PersistenceOptions>>().Value
+                    .CommandTimeoutMs)));
         AddOptions<PersistenceOptions, PersistenceOptionsValidator>(builder, PersistenceOptions.SectionName);
         AddOptions<SessionOptions, SessionOptionsValidator>(builder, SessionOptions.SectionName);
         builder.Services.AddSingleton<PersistenceWorker>();

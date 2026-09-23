@@ -26,15 +26,20 @@ public sealed class PostgresGameStore : IGameStore
     private readonly string m_connectionString;
     private readonly DbContextOptions<EvertorchDbContext> m_options;
 
-    public PostgresGameStore(string connectionString)
+    /// <param name="connectionString">The PostgreSQL connection string.</param>
+    /// <param name="operationTimeout">
+    ///     When given, the longest any one connection may take to open or to run a command, whatever the connection
+    ///     string says.
+    /// </param>
+    public PostgresGameStore(string connectionString, TimeSpan? operationTimeout = null)
     {
         if (!EvertorchDatabase.TryValidateConnectionString(connectionString, out string error))
         {
             throw new ArgumentException($"The connection string {error}.", nameof(connectionString));
         }
 
-        m_connectionString = connectionString;
-        m_options = EvertorchDatabase.CreateOptions(connectionString);
+        m_connectionString = operationTimeout is TimeSpan bound ? Bounded(connectionString, bound) : connectionString;
+        m_options = EvertorchDatabase.CreateOptions(m_connectionString);
     }
 
     public Task<IReadOnlyList<string>> GetPendingMigrationsAsync(CancellationToken cancellationToken)
@@ -299,6 +304,21 @@ RETURNING id AS ""Id"", status AS ""Status""")
                     .ToList();
             },
             cancellationToken);
+    }
+
+    // A frozen server answers neither a query nor its cancellation. Npgsql then waits 15 s to open a connection and
+    // far longer for a cancelled command, so a cancellation token alone does not bound the operation; its own
+    // timeouts do, and a cancellation breaks the connection at once instead of waiting for the server's reply.
+    private static string Bounded(string connectionString, TimeSpan bound)
+    {
+        int seconds = (int)Math.Max(1.0, Math.Ceiling(bound.TotalSeconds));
+        var builder = new NpgsqlConnectionStringBuilder(connectionString)
+        {
+            Timeout = seconds,
+            CommandTimeout = seconds,
+            CancellationTimeout = -1
+        };
+        return builder.ConnectionString;
     }
 
     private static CharacterRow NewRow(AccountId account, NewCharacter character)
