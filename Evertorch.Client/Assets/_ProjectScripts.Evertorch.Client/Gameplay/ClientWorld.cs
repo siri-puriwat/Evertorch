@@ -112,6 +112,11 @@ public sealed class ClientWorld
 
     public double RemoteRenderTime => ServerTime.Now - RemoteEntityBuffer.InterpolationDelaySeconds;
 
+    /// <summary>
+    ///     Why the last refused command was refused, for feedback; <see cref="CommandRejectionReason.None" /> before any.
+    /// </summary>
+    public CommandRejectionReason LastRejection { get; private set; }
+
     public event Action<RemoteEntity>? RemoteSpawned;
 
     public event Action<RemoteEntity>? RemoteDespawned;
@@ -127,6 +132,11 @@ public sealed class ClientWorld
     public event Action<EntityRevived>? EntityRevivedReceived;
 
     public event Action<ItemDropped>? ItemDroppedReceived;
+
+    /// <summary>
+    ///     A command of this client was refused; <see cref="CommandRejected.CommandSequence" /> says which.
+    /// </summary>
+    public event Action<CommandRejected>? CommandRejectedReceived;
 
     public void OnSpawn(EntitySpawn spawn)
     {
@@ -254,6 +264,12 @@ public sealed class ClientWorld
     /// <summary>
     ///     A drop this client saw land; its spawn came just before. Clients that meet the drop later never hear this.
     /// </summary>
+    public void OnCommandRejected(CommandRejected rejected)
+    {
+        LastRejection = rejected.Reason;
+        CommandRejectedReceived?.Invoke(rejected);
+    }
+
     public void OnItemDropped(ItemDropped dropped)
     {
         if (dropped == null)

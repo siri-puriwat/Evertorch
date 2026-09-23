@@ -40,6 +40,7 @@ public static class MessageRouting
             case MessageOpcode.CharacterList:
             case MessageOpcode.CreateCharacterResult:
             case MessageOpcode.LogoutComplete:
+            case MessageOpcode.CommandRejected:
                 return true;
             case MessageOpcode.MoveInput:
             case MessageOpcode.StopMovement:

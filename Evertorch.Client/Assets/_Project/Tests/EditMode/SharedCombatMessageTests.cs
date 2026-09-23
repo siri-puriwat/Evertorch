@@ -50,6 +50,21 @@ public sealed class SharedCombatMessageTests
     }
 
     [Test]
+    public void CommandRejected_WriteAndRead_MatchGoldenBytes()
+    {
+        byte[] golden = { 0x18, 0x80, 0x78, 0x56, 0x34, 0x12, 0x07 };
+        byte[] buffer = new byte[CommandRejected.EncodedLength];
+        new CommandRejected(0x12345678, CommandRejectionReason.Busy).Write(buffer);
+
+        bool isRead = CommandRejected.TryRead(golden, out CommandRejected read);
+
+        Assert.That(buffer, Is.EqualTo(golden));
+        Assert.That(isRead, Is.True);
+        Assert.That(read.CommandSequence, Is.EqualTo(0x12345678u));
+        Assert.That(read.Reason, Is.EqualTo(CommandRejectionReason.Busy));
+    }
+
+    [Test]
     public void ItemDropped_WriteAndRead_MatchGoldenBytes()
     {
         byte[] golden =
@@ -72,7 +87,7 @@ public sealed class SharedCombatMessageTests
         Assert.That(written, Is.EqualTo(golden));
         Assert.That(isRead, Is.True);
         Assert.That(read!.Amount, Is.EqualTo(2u));
-        Assert.That(ProtocolConstants.ProtocolVersion, Is.EqualTo(10));
+        Assert.That(ProtocolConstants.ProtocolVersion, Is.EqualTo(11));
     }
 
     [Test]

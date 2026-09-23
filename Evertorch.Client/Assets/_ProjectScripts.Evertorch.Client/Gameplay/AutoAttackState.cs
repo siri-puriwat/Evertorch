@@ -29,6 +29,7 @@ public sealed class AutoAttackState
     private int m_ticksInRangeWithoutSwing;
     private bool m_isClosingIn;
     private bool m_isAwaitingConfirmation;
+    private uint m_attackSequence;
 
     public AutoAttackState(
         ClientWorld world,
@@ -48,6 +49,7 @@ public sealed class AutoAttackState
         m_stalledTicks = (int)Math.Ceiling(StalledSeconds / tickSeconds);
         m_world.AttackStartedReceived += OnAttackStarted;
         m_world.TargetChanged += OnTargetChanged;
+        m_world.CommandRejectedReceived += OnCommandRejected;
     }
 
     public bool IsActive { get; private set; }
@@ -66,7 +68,7 @@ public sealed class AutoAttackState
             return;
         }
 
-        m_commands.SendAttack(target);
+        m_attackSequence = m_commands.SendAttack(target);
 
         // The server answers only a change of target, so only then is there a reply to wait for.
         m_isAwaitingConfirmation = target != m_world.Target;
@@ -194,6 +196,16 @@ public sealed class AutoAttackState
         m_commands.SendCancel();
         CancelsSent++;
         End();
+    }
+
+    // The server refused the attack this chase is for (Network Protocol §11), so there is nothing to walk up to. A
+    // refusal of an older attack says nothing about the current one.
+    private void OnCommandRejected(CommandRejected rejected)
+    {
+        if (IsActive && m_attackSequence != 0 && rejected.CommandSequence == m_attackSequence)
+        {
+            End();
+        }
     }
 
     private void End()

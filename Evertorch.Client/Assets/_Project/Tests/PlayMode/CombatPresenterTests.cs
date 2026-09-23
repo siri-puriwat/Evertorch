@@ -236,9 +236,10 @@ public sealed class CombatPresenterTests
     {
         public List<string> Entries { get; } = new();
 
-        public void SendAttack(EntityId target)
+        public uint SendAttack(EntityId target)
         {
             Entries.Add($"attack {target.Value}");
+            return (uint)Entries.Count;
         }
 
         public void SendCancel()

@@ -457,6 +457,11 @@ public sealed class DevelopmentOverlay : MonoBehaviour
                     + $"   refused clicks {controller.RejectedMoveRequests}   cancelled {controller.CancelledPaths}";
             }
 
+            if (world.LastRejection != CommandRejectionReason.None)
+            {
+                text += $"\nLast refused command: {world.LastRejection}";
+            }
+
             if (m_client.Clock != null && m_client.Clock.SkippedTicks > 0)
             {
                 text += $"\nSkipped client ticks {m_client.Clock.SkippedTicks}";

@@ -206,6 +206,17 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
                 }
 
                 break;
+            case MessageOpcode.CommandRejected:
+                if (CommandRejected.TryRead(payload, out CommandRejected rejected))
+                {
+                    WithWorld(world => world.OnCommandRejected(rejected));
+                }
+                else
+                {
+                    MalformedMessages++;
+                }
+
+                break;
             case MessageOpcode.DisconnectNotice:
                 OnDisconnectNotice(payload);
                 break;
@@ -219,15 +230,17 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
     ///     Asks the server to attack <paramref name="target" /> repeatedly. Commands share one sequence per connection,
     ///     starting at 1, which the server uses to drop duplicates.
     /// </summary>
-    public void SendAttack(EntityId target)
+    public uint SendAttack(EntityId target)
     {
         if (State != ClientConnectionState.InWorld)
         {
-            return;
+            return 0;
         }
 
-        new AttackEntity(target, NextCommandSequence()).Write(m_sendBuffer);
+        uint sequence = NextCommandSequence();
+        new AttackEntity(target, sequence).Write(m_sendBuffer);
         SendRouted(MessageOpcode.AttackEntity, AttackEntity.EncodedLength);
+        return sequence;
     }
 
     public void SendCancel()

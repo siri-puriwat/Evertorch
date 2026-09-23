@@ -32,6 +32,7 @@ public enum MessageOpcode : ushort
     EntityRevived = 0x8015,
     CharacterList = 0x8016,
     CreateCharacterResult = 0x8017,
+    CommandRejected = 0x8018,
     LogoutComplete = 0x8019
 }
 }

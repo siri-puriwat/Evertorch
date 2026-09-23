@@ -288,7 +288,15 @@ public sealed class CharacterLifetimeTests
         Assert.That(server.SessionOf(connection).State, Is.EqualTo(SessionState.InWorld));
         Assert.That(server.SessionOf(connection).Character!.IsLoggingOut, Is.False);
         Assert.That(server.Transport.ControlOpcodesSentTo(connection), Has.None.EqualTo(MessageOpcode.LogoutComplete));
-        Assert.That(server.SessionOf(connection).RefusedCommands, Is.Zero, "commands work again");
+        Assert.That(
+            server.SessionOf(connection).RefusedCommands,
+            Is.EqualTo(1),
+            "only the logout was refused; the cancel after it worked");
+        InMemoryServerTransport.SentMessage rejected = server.Transport.ControlSentTo(connection)
+            .Single(message => message.Opcode == MessageOpcode.CommandRejected);
+        CommandRejected.TryRead(rejected.Payload, out CommandRejected refusal);
+        Assert.That(refusal.CommandSequence, Is.EqualTo(1u));
+        Assert.That(refusal.Reason, Is.EqualTo(CommandRejectionReason.ServiceUnavailable));
     }
 
     [Test]

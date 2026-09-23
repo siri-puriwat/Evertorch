@@ -40,6 +40,7 @@ public sealed class MessageRoutingTests
     [TestCase(MessageOpcode.CharacterList)]
     [TestCase(MessageOpcode.CreateCharacterResult)]
     [TestCase(MessageOpcode.LogoutComplete)]
+    [TestCase(MessageOpcode.CommandRejected)]
     public void TryGetRoute_ForSessionAndLifecycleMessages_IsReliableOrderedOnControl(MessageOpcode opcode)
     {
         MessageRouting.TryGetRoute(opcode, out ProtocolChannel channel, out MessageDelivery delivery);
@@ -121,7 +122,8 @@ public sealed class MessageRoutingTests
             "AttackStarted=0x8008", "Damage=0x8009", "EntityDied=0x800A", "ItemDropped=0x800D",
             "DisconnectNotice=0x8013",
             "CharacterHealth=0x8014", "EntityRevived=0x8015", "CharacterList=0x8016",
-            "CreateCharacterResult=0x8017", "LogoutComplete=0x8019"
+            "CreateCharacterResult=0x8017", "CommandRejected=0x8018",
+            "LogoutComplete=0x8019"
         };
 
         string[] actual = ((MessageOpcode[])Enum.GetValues(typeof(MessageOpcode)))
@@ -142,9 +144,9 @@ public sealed class MessageRoutingTests
     }
 
     [Test]
-    public void ProtocolVersion_IsTen()
+    public void ProtocolVersion_IsEleven()
     {
-        Assert.That(ProtocolConstants.ProtocolVersion, Is.EqualTo(10));
+        Assert.That(ProtocolConstants.ProtocolVersion, Is.EqualTo(11));
     }
 
     [Test]

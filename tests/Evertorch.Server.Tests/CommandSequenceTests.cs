@@ -110,7 +110,10 @@ public sealed class CommandSequenceTests
 
         Assert.That(server.SessionOf(player).RefusedCommands, Is.EqualTo(1));
         Assert.That(server.PlayerOf(player).Position, Is.EqualTo(before));
-        Assert.That(server.Transport.ControlSentTo(player), Is.Empty);
+        Assert.That(
+            server.Transport.ControlOpcodesSentTo(player),
+            Is.EqualTo(new[] { MessageOpcode.CommandRejected }),
+            "a respawn while alive is answered as not allowed now");
     }
 }
 }

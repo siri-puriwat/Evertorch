@@ -116,6 +116,24 @@ public sealed class ClientConnectionTests
     }
 
     [Test]
+    public void CommandRejected_InTheWorld_ReachesTheWorldWithItsSequence()
+    {
+        var harness = new Harness();
+        harness.EnterWorld();
+        uint sequence = harness.Connection.SendAttack(new EntityId(300));
+        var rejections = new List<CommandRejected>();
+        harness.Connection.World!.CommandRejectedReceived += rejections.Add;
+        var rejected = new CommandRejected(sequence, CommandRejectionReason.InvalidTarget);
+
+        harness.Deliver(ProtocolChannel.Control, Encode(CommandRejected.EncodedLength, rejected.Write));
+
+        Assert.That(sequence, Is.EqualTo(1u));
+        Assert.That(rejections.Count, Is.EqualTo(1));
+        Assert.That(rejections[0].CommandSequence, Is.EqualTo(1u));
+        Assert.That(harness.Connection.World.LastRejection, Is.EqualTo(CommandRejectionReason.InvalidTarget));
+    }
+
+    [Test]
     public void Commands_AfterEnteringACharacterThatUsedSequences_ContinueAfterTheReportedOne()
     {
         var harness = new Harness();

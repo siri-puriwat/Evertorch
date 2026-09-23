@@ -7,7 +7,11 @@ namespace Evertorch.Client
 /// </summary>
 public interface ICombatCommandSink
 {
-    void SendAttack(EntityId target);
+    /// <summary>
+    ///     Returns the command sequence the request carried, so a refusal of it can be recognised; 0 when nothing was
+    ///     sent.
+    /// </summary>
+    uint SendAttack(EntityId target);
 
     void SendCancel();
 }

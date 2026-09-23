@@ -119,6 +119,10 @@ public sealed class MessageFuzzTests
             Encode(new EntityRevived(new EntityId(9), new WorldPosition(1f, 2f, 3f), new WorldDirection(0f, 1f), 70)),
             payload => EntityRevived.TryRead(payload, out EntityRevived message) ? Encode(message) : null);
         yield return Case(
+            "CommandRejected",
+            Encode(new CommandRejected(0x01020304, CommandRejectionReason.Busy)),
+            payload => CommandRejected.TryRead(payload, out CommandRejected message) ? Encode(message) : null);
+        yield return Case(
             "Logout",
             Encode(new Logout(0x01020304)),
             payload => Logout.TryRead(payload, out Logout message) ? Encode(message) : null);
@@ -281,6 +285,13 @@ public sealed class MessageFuzzTests
     private static byte[] Encode(EntitySpawn message)
     {
         byte[] buffer = new byte[message.GetEncodedLength()];
+        message.Write(buffer);
+        return buffer;
+    }
+
+    private static byte[] Encode(CommandRejected message)
+    {
+        byte[] buffer = new byte[CommandRejected.EncodedLength];
         message.Write(buffer);
         return buffer;
     }

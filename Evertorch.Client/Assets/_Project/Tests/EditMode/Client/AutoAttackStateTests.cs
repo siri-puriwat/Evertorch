@@ -48,9 +48,13 @@ public sealed class AutoAttackStateTests
 
         public List<string> Sent { get; } = new();
 
-        public void SendAttack(EntityId target)
+        public uint LastSequence { get; private set; }
+
+        public uint SendAttack(EntityId target)
         {
             Sent.Add($"attack {target.Value}");
+            LastSequence++;
+            return LastSequence;
         }
 
         public void SendCancel()
@@ -147,6 +151,22 @@ public sealed class AutoAttackStateTests
     }
 
     [Test]
+    public void Attack_WhenAnOlderAttackIsRejected_KeepsChasing()
+    {
+        var rig = new Rig(ClientTestGrids.Center(6, 8));
+        SpawnOtherSlime(rig, ClientTestGrids.Center(6, 9));
+        rig.AutoAttack.Attack(OtherSlime);
+        uint older = rig.LastSequence;
+        rig.AutoAttack.Attack(Slime);
+
+        rig.World.OnCommandRejected(new CommandRejected(older, CommandRejectionReason.InvalidTarget));
+        rig.Tick();
+
+        Assert.That(rig.AutoAttack.IsActive, Is.True);
+        Assert.That(rig.AutoAttack.Target, Is.EqualTo(Slime));
+    }
+
+    [Test]
     public void Attack_WhenTheOldTargetDiesBeforeTheNewOneIsConfirmed_KeepsAttackingTheNewOne()
     {
         var rig = new Rig(ClientTestGrids.Center(6, 8));
@@ -160,6 +180,23 @@ public sealed class AutoAttackStateTests
 
         Assert.That(rig.AutoAttack.IsActive, Is.True);
         Assert.That(rig.AutoAttack.Target, Is.EqualTo(OtherSlime));
+    }
+
+    [Test]
+    public void Attack_WhenTheServerRejectsIt_EndsTheChaseWithoutACancel()
+    {
+        var rig = new Rig(ClientTestGrids.Center(6, 8));
+        rig.AutoAttack.Attack(Slime);
+        rig.Tick();
+
+        rig.World.OnCommandRejected(new CommandRejected(rig.LastSequence, CommandRejectionReason.InvalidTarget));
+        WorldDirection direction = rig.Tick();
+
+        Assert.That(rig.AutoAttack.IsActive, Is.False);
+        Assert.That(rig.Controller.IsChasing, Is.False);
+        Assert.That(direction, Is.EqualTo(default(WorldDirection)));
+        Assert.That(rig.Sent, Is.EqualTo(new[] { "attack 300" }), "the server already refused; nothing to cancel");
+        Assert.That(rig.World.LastRejection, Is.EqualTo(CommandRejectionReason.InvalidTarget));
     }
 
     [Test]

@@ -595,36 +595,61 @@ public sealed class SessionManager : ITickPhase
         }
 
         session.LastCommandSequence = command.CommandSequence;
-        bool isAccepted = session.Character!.IsLoggingOut ? false
-            : session.Player.IsDead ? command.Kind == InboundEventKind.Respawn && m_life.TryRespawn(session, tick)
-            : command.Kind switch
-            {
-                InboundEventKind.Attack => m_targeting.TryAttack(session, command.Target),
-                InboundEventKind.Cancel => Cancel(session.Player),
-                InboundEventKind.Logout => TryLogout(session),
-                _ => false
-            };
-
-        if (!isAccepted)
+        CommandRejectionReason refusal = Apply(session, command, tick);
+        if (refusal != CommandRejectionReason.None)
         {
-            session.RefusedCommands++;
+            Reject(session, command.CommandSequence, refusal);
         }
     }
 
-    private static bool Cancel(PlayerEntity player)
+    // Every refusal of a sequenced command is answered with its own sequence (Network Protocol §11); only a stale
+    // sequence, which only a faulty or hostile client sends, goes unanswered.
+    private CommandRejectionReason Apply(ClientSession session, InboundEvent command, uint tick)
+    {
+        PlayerEntity player = session.Player!;
+        if (session.Character!.IsLoggingOut)
+        {
+            return CommandRejectionReason.NotAllowedNow;
+        }
+
+        if (player.IsDead)
+        {
+            return command.Kind == InboundEventKind.Respawn && m_life.TryRespawn(session, tick)
+                ? CommandRejectionReason.None
+                : CommandRejectionReason.NotAllowedNow;
+        }
+
+        return command.Kind switch
+        {
+            InboundEventKind.Attack => m_targeting.TryAttack(session, command.Target)
+                ? CommandRejectionReason.None
+                : CommandRejectionReason.InvalidTarget,
+            InboundEventKind.Cancel => Cancel(player),
+            InboundEventKind.Logout => TryLogout(session, command.CommandSequence),
+            _ => CommandRejectionReason.NotAllowedNow
+        };
+    }
+
+    private void Reject(ClientSession session, uint commandSequence, CommandRejectionReason reason)
+    {
+        session.RefusedCommands++;
+        m_sender.Send(session.Connection, new CommandRejected(commandSequence, reason));
+    }
+
+    private static CommandRejectionReason Cancel(PlayerEntity player)
     {
         player.Combat.IsAutoAttacking = false;
-        return true;
+        return CommandRejectionReason.None;
     }
 
     // Logout stops new commands and writes the final checkpoint; only once it is written does the character leave
     // (Persistence §7). Without the database the logout is refused and the player stays.
-    private bool TryLogout(ClientSession session)
+    private CommandRejectionReason TryLogout(ClientSession session, uint commandSequence)
     {
         CharacterSession character = session.Character!;
         if (!m_persistence.IsAvailable)
         {
-            return false;
+            return CommandRejectionReason.ServiceUnavailable;
         }
 
         character.IsLoggingOut = true;
@@ -633,11 +658,15 @@ public sealed class SessionManager : ITickPhase
         ConnectionId connection = session.Connection;
         character.LogoutCheckpoint = m_lifetime.QueueCheckpoint(
             character,
-            outcome => CompleteLogout(connection, character, outcome));
-        return true;
+            outcome => CompleteLogout(connection, character, commandSequence, outcome));
+        return CommandRejectionReason.None;
     }
 
-    private void CompleteLogout(ConnectionId connection, CharacterSession character, PersistenceOutcome outcome)
+    private void CompleteLogout(
+        ConnectionId connection,
+        CharacterSession character,
+        uint commandSequence,
+        PersistenceOutcome outcome)
     {
         if (!character.IsLoggingOut
             || !m_sessions.TryGet(connection, out ClientSession? session)
@@ -651,6 +680,7 @@ public sealed class SessionManager : ITickPhase
         {
             character.IsLoggingOut = false;
             character.LogoutCheckpoint = null;
+            Reject(session, commandSequence, CommandRejectionReason.ServiceUnavailable);
             return;
         }
 

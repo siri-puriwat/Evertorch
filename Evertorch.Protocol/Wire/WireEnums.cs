@@ -32,6 +32,11 @@ internal static class WireEnums
         return value >= CreateCharacterOutcome.Created && value <= CreateCharacterOutcome.ServiceUnavailable;
     }
 
+    public static bool IsDefined(CommandRejectionReason value)
+    {
+        return value >= CommandRejectionReason.InvalidTarget && value <= CommandRejectionReason.Busy;
+    }
+
     public static bool IsDefined(EntityStateFlags value)
     {
         return (value & ~KnownStateFlags) == 0;

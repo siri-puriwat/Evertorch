@@ -69,6 +69,28 @@ public sealed class ClientApproachTests
     }
 
     [Test]
+    public void Attack_ThatTheServerRefuses_EndsTheClientsChase()
+    {
+        var rig = new ClientServerRig();
+        SimulatedClient attacker = rig.AddClient(7, 1, 17);
+        SimulatedClient other = rig.AddClient(8, 2, 29);
+        rig.ConnectAll();
+        rig.AdvanceUntil(() => attacker.Connection.World != null && other.Connection.World != null, 3000);
+        EntityId otherEntity = other.World.LocalEntity;
+        rig.AdvanceUntil(() => attacker.World.Remotes.ContainsKey(otherEntity), 3000);
+        var rejections = new List<CommandRejected>();
+        attacker.World.CommandRejectedReceived += rejections.Add;
+
+        // Players are not targetable in version 1; before CommandRejected the client chased such a target forever.
+        attacker.AutoAttack!.Attack(otherEntity);
+        int took = rig.AdvanceUntil(() => !attacker.AutoAttack.IsActive, 3000);
+
+        Assert.That(took, Is.GreaterThan(0), "the chase ended");
+        Assert.That(rejections.Single().Reason, Is.EqualTo(CommandRejectionReason.InvalidTarget));
+        Assert.That(attacker.AutoAttack.CancelsSent, Is.Zero);
+    }
+
+    [Test]
     public void Attack_UntilTheSlimeDies_ShowsTheClientTheSlimeGelItDropped()
     {
         // The slime's one drop entry rolls 0, below any chance, and draws the smallest amount.
