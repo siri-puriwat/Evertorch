@@ -13,9 +13,10 @@ public sealed class ClientWorld
 {
     private readonly Dictionary<EntityId, RemoteEntity> m_remotes = new();
 
-    // The tick of each entity's latest revival. A snapshot from before it can still arrive afterwards, and must not
-    // put the body back where it died.
-    private readonly Dictionary<EntityId, uint> m_revivalTicks = new();
+    // The tick of each entity's latest death or revival. Snapshots are unreliable and the events reliable, so a
+    // snapshot from before either can still arrive afterwards; it must neither raise a corpse nor put a revived body
+    // back where it died.
+    private readonly Dictionary<EntityId, uint> m_lifeChangeTicks = new();
     private readonly double m_tickSeconds;
 
     public ClientWorld(NavigationGrid grid, WorldEntered entered, uint serverTickRate)
@@ -92,9 +93,9 @@ public sealed class ClientWorld
     public int UnknownEntityStates { get; private set; }
 
     /// <summary>
-    ///     Entity states from snapshots older than that entity's revival; they are ignored.
+    ///     Entity states from snapshots older than that entity's latest death or revival; they are ignored.
     /// </summary>
-    public int PreRevivalStates { get; private set; }
+    public int SupersededStates { get; private set; }
 
     /// <summary>
     ///     Reliable events that named an entity this client has no spawn for; they are ignored.
@@ -218,6 +219,8 @@ public sealed class ClientWorld
             return;
         }
 
+        m_lifeChangeTicks[died.Entity] = died.ServerTick;
+
         EntityDiedReceived?.Invoke(died);
     }
 
@@ -241,7 +244,7 @@ public sealed class ClientWorld
             return;
         }
 
-        m_revivalTicks[revived.Entity] = revived.ServerTick;
+        m_lifeChangeTicks[revived.Entity] = revived.ServerTick;
         EntityRevivedReceived?.Invoke(revived);
     }
 
@@ -315,9 +318,9 @@ public sealed class ClientWorld
 
         foreach (EntityState state in snapshot.Entities)
         {
-            if (IsFromBeforeRevival(state.Entity, snapshot.ServerTick))
+            if (IsFromBeforeLifeChange(state.Entity, snapshot.ServerTick))
             {
-                PreRevivalStates++;
+                SupersededStates++;
                 continue;
             }
 
@@ -325,7 +328,16 @@ public sealed class ClientWorld
             {
                 WorldPosition before = Predictor.Position;
                 Predictor.Reconcile(state, snapshot.LastProcessedInputSequence);
-                Smoother.OnCorrected(before, Predictor.Position);
+                if (IsLocalDead)
+                {
+                    // A dead body only moves by reviving. The snapshot of the revival tick can overtake the reliable
+                    // EntityRevived, and that move is a teleport, not a correction.
+                    Smoother.Teleport(Predictor.Position);
+                }
+                else
+                {
+                    Smoother.OnCorrected(before, Predictor.Position);
+                }
             }
             else if (m_remotes.TryGetValue(state.Entity, out RemoteEntity? remote))
             {
@@ -340,19 +352,19 @@ public sealed class ClientWorld
         }
     }
 
-    private bool IsFromBeforeRevival(EntityId entity, uint serverTick)
+    private bool IsFromBeforeLifeChange(EntityId entity, uint serverTick)
     {
-        if (!m_revivalTicks.TryGetValue(entity, out uint revivalTick))
+        if (!m_lifeChangeTicks.TryGetValue(entity, out uint changeTick))
         {
             return false;
         }
 
-        if (unchecked((int)(serverTick - revivalTick)) < 0)
+        if (unchecked((int)(serverTick - changeTick)) < 0)
         {
             return true;
         }
 
-        m_revivalTicks.Remove(entity);
+        m_lifeChangeTicks.Remove(entity);
         return false;
     }
 

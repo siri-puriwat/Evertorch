@@ -28,6 +28,7 @@ public sealed class AutoAttackState
     private int m_lockTicksRemaining;
     private int m_ticksInRangeWithoutSwing;
     private bool m_isClosingIn;
+    private bool m_isAwaitingConfirmation;
 
     public AutoAttackState(
         ClientWorld world,
@@ -66,10 +67,19 @@ public sealed class AutoAttackState
         }
 
         m_commands.SendAttack(target);
+
+        // The server answers only a change of target, so only then is there a reply to wait for.
+        m_isAwaitingConfirmation = target != m_world.Target;
         Target = target;
         IsActive = true;
         m_isClosingIn = false;
         m_ticksInRangeWithoutSwing = 0;
+
+        // An attack replaces a walk the player asked for: a walk in progress would keep every swing from starting.
+        if (!m_controller.IsChasing)
+        {
+            m_controller.CancelPath();
+        }
     }
 
     /// <summary>
@@ -96,6 +106,12 @@ public sealed class AutoAttackState
 
         if (!IsActive)
         {
+            return;
+        }
+
+        if (m_world.IsLocalDead)
+        {
+            End();
             return;
         }
 
@@ -152,10 +168,22 @@ public sealed class AutoAttackState
     }
 
     // The server ends an auto-attack by clearing or replacing the target: the target died, left view, or the
-    // player picked another.
+    // player picked another. Until the server confirms the target asked for, a change is older news that crossed
+    // the request, such as the confirmation of the previous target or its death.
     private void OnTargetChanged()
     {
-        if (IsActive && m_world.Target != Target)
+        if (!IsActive)
+        {
+            return;
+        }
+
+        if (m_isAwaitingConfirmation)
+        {
+            m_isAwaitingConfirmation = m_world.Target != Target;
+            return;
+        }
+
+        if (m_world.Target != Target)
         {
             End();
         }
@@ -171,6 +199,7 @@ public sealed class AutoAttackState
     private void End()
     {
         IsActive = false;
+        m_isAwaitingConfirmation = false;
         Target = default;
         m_controller.StopChase();
     }

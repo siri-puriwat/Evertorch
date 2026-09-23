@@ -76,6 +76,93 @@ public sealed class AutoAttackStateTests
         }
     }
 
+    private static readonly EntityId OtherSlime = new EntityId(301);
+
+    private static void SpawnOtherSlime(Rig rig, WorldPosition at)
+    {
+        rig.World.OnSpawn(
+            new EntitySpawn(
+                OtherSlime,
+                EntityKind.Monster,
+                "monster.a",
+                at,
+                new WorldDirection(0f, 1f),
+                EntityStateFlags.None,
+                1000));
+    }
+
+    private static void Confirm(Rig rig, EntityId target)
+    {
+        rig.World.OnTargetChanged(new TargetChanged(ClientWorldFixture.LocalEntity, target));
+    }
+
+    [Test]
+    public void Attack_OnASecondMonsterBeforeTheFirstIsConfirmed_KeepsAttackingTheSecond()
+    {
+        var rig = new Rig(ClientTestGrids.Center(6, 8));
+        SpawnOtherSlime(rig, ClientTestGrids.Center(8, 8));
+        rig.AutoAttack.Attack(Slime);
+        rig.AutoAttack.Attack(OtherSlime);
+
+        Confirm(rig, Slime);
+        bool isActiveAfterTheOlderReply = rig.AutoAttack.IsActive;
+        Confirm(rig, OtherSlime);
+        rig.Tick();
+
+        Assert.That(isActiveAfterTheOlderReply, Is.True, "the reply to the first click crossed the second");
+        Assert.That(rig.AutoAttack.IsActive, Is.True);
+        Assert.That(rig.AutoAttack.Target, Is.EqualTo(OtherSlime));
+        Assert.That(rig.Controller.IsChasing, Is.True);
+        Confirm(rig, default);
+        Assert.That(rig.AutoAttack.IsActive, Is.False, "once confirmed, a clear from the server ends it");
+    }
+
+    [Test]
+    public void Attack_WhenTheOldTargetDiesBeforeTheNewOneIsConfirmed_KeepsAttackingTheNewOne()
+    {
+        var rig = new Rig(ClientTestGrids.Center(6, 8));
+        SpawnOtherSlime(rig, ClientTestGrids.Center(8, 8));
+        rig.AutoAttack.Attack(Slime);
+        Confirm(rig, Slime);
+
+        rig.AutoAttack.Attack(OtherSlime);
+        Confirm(rig, default);
+        Confirm(rig, OtherSlime);
+
+        Assert.That(rig.AutoAttack.IsActive, Is.True);
+        Assert.That(rig.AutoAttack.Target, Is.EqualTo(OtherSlime));
+    }
+
+    [Test]
+    public void Attack_DuringAWalk_EndsTheWalkSoTheSwingCanStart()
+    {
+        WorldPosition start = ClientTestGrids.Center(1, 8);
+        var rig = new Rig(new WorldPosition(start.X + 1.2f, start.Y, start.Z));
+        Assert.That(rig.Controller.TryMoveTo(start, ClientTestGrids.Center(9, 1)), Is.True);
+
+        rig.AutoAttack.Attack(Slime);
+        WorldDirection direction = rig.Tick();
+
+        Assert.That(rig.Controller.HasPath, Is.False);
+        Assert.That(direction, Is.EqualTo(default(WorldDirection)), "the target is in range: stand and swing");
+        Assert.That(rig.Sent, Is.EqualTo(new[] { "attack 300" }), "no cancel for the player's own walk");
+    }
+
+    [Test]
+    public void LocalDeath_WithoutAClearFromTheServer_EndsTheAttackWithoutACancel()
+    {
+        var rig = new Rig(ClientTestGrids.Center(6, 8));
+        rig.AutoAttack.Attack(Slime);
+        Confirm(rig, Slime);
+
+        rig.World.OnEntityDied(new EntityDied(ClientWorldFixture.LocalEntity, Slime, 5));
+        rig.Tick();
+
+        Assert.That(rig.AutoAttack.IsActive, Is.False);
+        Assert.That(rig.Controller.IsChasing, Is.False);
+        Assert.That(rig.Sent, Is.EqualTo(new[] { "attack 300" }));
+    }
+
     [Test]
     public void Attack_WhileDead_SendsNothingAndDoesNotChase()
     {

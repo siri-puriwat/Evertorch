@@ -215,9 +215,16 @@ public sealed class MonsterAiSystem : ITickPhase
     {
         MonsterBrain brain = monster.Brain;
         PlayerEntity? target = LivePlayer(map, monster.Target);
-        if (monster.Combat.IsSwinging || (target != null && IsInReach(map, monster, target)))
+        if (monster.Combat.IsSwinging)
         {
-            // A monster never walks during its own swing or while its target is in reach.
+            // A monster never walks during its own swing. The path is kept: a monster that leashed mid-swing still
+            // walks home once the swing is over.
+            brain.DesiredDirection = default;
+            return;
+        }
+
+        if (target != null && IsInReach(map, monster, target))
+        {
             brain.Path.Cancel();
             brain.DesiredDirection = default;
             return;

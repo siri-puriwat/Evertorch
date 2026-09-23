@@ -122,9 +122,51 @@ public sealed class CombatEventWorldTests
             ClientWorldFixture.Snapshot(12, 0, ClientWorldFixture.State(ClientWorldFixture.LocalEntity, spawnPoint)));
 
         Assert.That(afterLateSnapshot, Is.EqualTo(spawnPoint));
-        Assert.That(world.PreRevivalStates, Is.EqualTo(1));
+        Assert.That(world.SupersededStates, Is.EqualTo(1));
         Assert.That(world.Predictor.Position, Is.EqualTo(spawnPoint));
         Assert.That(world.Smoother.Snaps, Is.Zero);
+    }
+
+    [Test]
+    public void Snapshot_OfTheRevivalTick_ArrivingBeforeEntityRevived_MovesTheLocalPlayerWithoutASnap()
+    {
+        ClientWorld world = CreateWorld();
+        WorldPosition spawnPoint = ClientTestGrids.Center(6, 3);
+        world.OnEntityDied(new EntityDied(ClientWorldFixture.LocalEntity, Slime, 9));
+
+        world.OnSnapshot(
+            ClientWorldFixture.Snapshot(12, 0, ClientWorldFixture.State(ClientWorldFixture.LocalEntity, spawnPoint)));
+        WorldPosition drawnBeforeTheRevival = world.Smoother.Sample(1f);
+        world.OnEntityRevived(
+            new EntityRevived(ClientWorldFixture.LocalEntity, spawnPoint, new WorldDirection(0f, 1f), 12));
+
+        Assert.That(drawnBeforeTheRevival, Is.EqualTo(spawnPoint));
+        Assert.That(world.Smoother.Snaps, Is.Zero, "the unreliable snapshot overtook the reliable revival");
+        Assert.That(world.Predictor.Position, Is.EqualTo(spawnPoint));
+        Assert.That(world.IsLocalDead, Is.False);
+    }
+
+    [Test]
+    public void Snapshot_FromBeforeAMonstersDeath_DoesNotRaiseTheCorpse()
+    {
+        ClientWorld world = CreateWorld();
+
+        world.OnEntityDied(new EntityDied(Slime, ClientWorldFixture.LocalEntity, 9));
+        world.OnSnapshot(ClientWorldFixture.Snapshot(8, 0, ClientWorldFixture.State(Slime, ClientTestGrids.Center(4, 8))));
+        bool isDeadAfterTheLateSnapshot = world.Remotes[Slime].IsDead;
+        var corpse = new EntityState(
+            Slime,
+            ClientTestGrids.Center(4, 8),
+            new WorldDirection(0f, 1f),
+            0f,
+            0f,
+            0f,
+            EntityStateFlags.Dead);
+        world.OnSnapshot(ClientWorldFixture.Snapshot(9, 0, corpse));
+
+        Assert.That(isDeadAfterTheLateSnapshot, Is.True, "a state from before the death is ignored");
+        Assert.That(world.SupersededStates, Is.EqualTo(1));
+        Assert.That(world.Remotes[Slime].IsDead, Is.True);
     }
 
     [Test]
@@ -150,7 +192,7 @@ public sealed class CombatEventWorldTests
 
         RemoteEntity remote = world.Remotes[other];
         Assert.That(remote.IsDead, Is.False, "a state from before the revival is ignored");
-        Assert.That(world.PreRevivalStates, Is.EqualTo(1));
+        Assert.That(world.SupersededStates, Is.EqualTo(1));
         Assert.That(remote.Buffer.Count, Is.EqualTo(1));
         Assert.That(remote.Buffer.TrySample(0.0, out WorldPosition drawn, out WorldDirection _), Is.True);
         Assert.That(drawn, Is.EqualTo(spawnPoint));

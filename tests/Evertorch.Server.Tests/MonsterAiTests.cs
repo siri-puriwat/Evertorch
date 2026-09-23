@@ -155,6 +155,36 @@ public sealed class MonsterAiTests
     }
 
     [Test]
+    public void Leash_DuringItsOwnSwing_StillWalksHomeAfterTheSwing()
+    {
+        (TestServer server, ConnectionId player, MonsterEntity slime) = EnterBesideASlime();
+        Provoke(server, player, slime);
+        Assert.That(LeadPastTheLeash(server, player, slime), Is.True);
+        var timing = new AttackTiming(
+            TimeSpan.FromMilliseconds(1200),
+            TimeSpan.FromMilliseconds(600),
+            TimeSpan.FromMilliseconds(600),
+            TimeSpan.FromMilliseconds(300));
+        uint now = server.CurrentTick;
+
+        // The swing it began just before the leash resolves on its old target; the walk home waits for it.
+        slime.Combat.BeginSwing(server.PlayerOf(player).Id, now, (now - 1) * 50L, timing);
+        server.Tick(4);
+        MonsterAiState duringTheSwing = slime.Brain.State;
+        float arrivedAt = float.MaxValue;
+        for (int tick = 0; tick < 400 && slime.Brain.State == MonsterAiState.ReturnHome; tick++)
+        {
+            server.Tick();
+            arrivedAt = Distance(slime.Position, slime.Home);
+        }
+
+        Assert.That(duringTheSwing, Is.EqualTo(MonsterAiState.ReturnHome));
+        Assert.That(slime.Brain.State, Is.EqualTo(MonsterAiState.Idle));
+        Assert.That(arrivedAt, Is.LessThanOrEqualTo(MonsterAiSystem.HomeArrivalDistance),
+            "idle at home, not where it swung");
+    }
+
+    [Test]
     public void Leash_WhenTheChaseLeadsTooFarFromHome_ReturnsHomeAndDropsTheTarget()
     {
         (TestServer server, ConnectionId player, MonsterEntity slime) = EnterBesideASlime();
