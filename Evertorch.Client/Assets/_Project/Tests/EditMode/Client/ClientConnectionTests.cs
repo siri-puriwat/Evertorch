@@ -309,6 +309,37 @@ public sealed class ClientConnectionTests
     }
 
     [Test]
+    public void LogoutComplete_LeavesTheWorldForCharacterSelection()
+    {
+        var harness = new Harness();
+        harness.EnterWorld();
+        int left = 0;
+        harness.Connection.LeftWorld += () => left++;
+        harness.Connection.SendLogout();
+
+        harness.Deliver(ProtocolChannel.Control, Encode(LogoutComplete.EncodedLength, new LogoutComplete().Write));
+        harness.ReceiveList(Entry(7, "Ann0"));
+
+        Assert.That(left, Is.EqualTo(1));
+        Assert.That(harness.Connection.World, Is.Null);
+        Assert.That(harness.Connection.State, Is.EqualTo(ClientConnectionState.SelectingCharacter));
+        Assert.That(harness.Connection.Characters.Count, Is.EqualTo(1));
+        Assert.That(harness.ClosedCount, Is.Zero, "the connection stays open");
+    }
+
+    [Test]
+    public void LogoutComplete_OutsideTheWorld_IsUnexpected()
+    {
+        var harness = new Harness();
+        harness.ConnectAndReceiveHello();
+
+        harness.Deliver(ProtocolChannel.Control, Encode(LogoutComplete.EncodedLength, new LogoutComplete().Write));
+
+        Assert.That(harness.Connection.UnexpectedMessages, Is.EqualTo(1));
+        Assert.That(harness.Connection.State, Is.EqualTo(ClientConnectionState.SelectingCharacter));
+    }
+
+    [Test]
     public void Payload_OnTheWrongChannel_IsCountedAndIgnored()
     {
         var harness = new Harness();
@@ -358,6 +389,21 @@ public sealed class ClientConnectionTests
 
         Assert.That(new[] { isCreated, isEntered }, Is.All.False);
         Assert.That(harness.Transport.Sent.Count, Is.EqualTo(before));
+    }
+
+    [Test]
+    public void SendLogout_InTheWorld_UsesTheCommandSequenceAndKeepsTheWorldUntilConfirmed()
+    {
+        var harness = new Harness();
+        harness.EnterWorld();
+        harness.Connection.SendAttack(new EntityId(300));
+
+        harness.Connection.SendLogout();
+
+        Assert.That(Logout.TryRead(harness.Transport.Sent.Last().Payload, out Logout logout), Is.True);
+        Assert.That(logout.CommandSequence, Is.EqualTo(2u));
+        Assert.That(harness.Connection.State, Is.EqualTo(ClientConnectionState.InWorld));
+        Assert.That(harness.Connection.World, Is.Not.Null);
     }
 
     [Test]

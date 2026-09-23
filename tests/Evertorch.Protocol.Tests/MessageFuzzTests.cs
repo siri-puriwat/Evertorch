@@ -118,6 +118,14 @@ public sealed class MessageFuzzTests
             Encode(new EntityRevived(new EntityId(9), new WorldPosition(1f, 2f, 3f), new WorldDirection(0f, 1f), 70)),
             payload => EntityRevived.TryRead(payload, out EntityRevived message) ? Encode(message) : null);
         yield return Case(
+            "Logout",
+            Encode(new Logout(0x01020304)),
+            payload => Logout.TryRead(payload, out Logout message) ? Encode(message) : null);
+        yield return Case(
+            "LogoutComplete",
+            Encode(new LogoutComplete()),
+            payload => LogoutComplete.TryRead(payload, out LogoutComplete message) ? Encode(message) : null);
+        yield return Case(
             "CreateCharacter",
             Encode(new CreateCharacter("Ann0")),
             payload => CreateCharacter.TryRead(payload, out CreateCharacter? message) ? Encode(message!) : null);
@@ -215,7 +223,8 @@ public sealed class MessageFuzzTests
         for (int iteration = 0; iteration < MutationsPerMessage; iteration++)
         {
             byte[] payload = (byte[])valid.Clone();
-            int changes = random.Next(1, 4);
+            // A message that is only its opcode has no body to mutate; resizing still exercises it.
+            int changes = payload.Length > 2 ? random.Next(1, 4) : 0;
             for (int change = 0; change < changes; change++)
             {
                 payload[random.Next(2, payload.Length)] = (byte)random.Next(256);
@@ -271,6 +280,20 @@ public sealed class MessageFuzzTests
     private static byte[] Encode(EntitySpawn message)
     {
         byte[] buffer = new byte[message.GetEncodedLength()];
+        message.Write(buffer);
+        return buffer;
+    }
+
+    private static byte[] Encode(Logout message)
+    {
+        byte[] buffer = new byte[Logout.EncodedLength];
+        message.Write(buffer);
+        return buffer;
+    }
+
+    private static byte[] Encode(LogoutComplete message)
+    {
+        byte[] buffer = new byte[LogoutComplete.EncodedLength];
         message.Write(buffer);
         return buffer;
     }

@@ -34,6 +34,7 @@ public sealed class ServerLifetimeService : IHostedService, IDisposable
     private readonly ServerRandom m_random;
     private readonly IServerTransport m_transport;
     private readonly PersistenceWorker m_persistence;
+    private readonly CharacterLifetime m_characters;
     private readonly int m_drainTimeoutMs;
     private readonly FixedStepLoop m_loop;
     private readonly IHostApplicationLifetime m_lifetime;
@@ -50,6 +51,7 @@ public sealed class ServerLifetimeService : IHostedService, IDisposable
         ServerRandom random,
         IServerTransport transport,
         PersistenceWorker persistence,
+        CharacterLifetime characters,
         IOptions<PersistenceOptions> persistenceOptions,
         FixedStepLoop loop,
         IHostApplicationLifetime lifetime,
@@ -60,6 +62,7 @@ public sealed class ServerLifetimeService : IHostedService, IDisposable
         m_random = random;
         m_transport = transport;
         m_persistence = persistence;
+        m_characters = characters;
         m_drainTimeoutMs = persistenceOptions.Value.CommandTimeoutMs;
         m_loop = loop;
         m_lifetime = lifetime;
@@ -126,6 +129,8 @@ public sealed class ServerLifetimeService : IHostedService, IDisposable
                 .ConfigureAwait(false);
         }
 
+        // The simulation thread has ended, so reading the world from this thread is safe now.
+        m_characters.CheckpointAll();
         m_persistence.Stop(m_drainTimeoutMs);
         m_transport.Stop();
     }

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Evertorch.Game;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Npgsql;
@@ -113,6 +114,94 @@ RETURNING id AS ""Id"", status AS ""Status""")
                         row.Id,
                         await ListAsync(context, account, cancellationToken).ConfigureAwait(false));
                 }
+            },
+            cancellationToken);
+    }
+
+    public Task<StoredCharacter?> LoadCharacterAsync(
+        AccountId account,
+        long characterId,
+        CancellationToken cancellationToken)
+    {
+        return RunAsync(
+            async context =>
+            {
+                CharacterRow? row = await context.Characters
+                    .AsNoTracking()
+                    .SingleOrDefaultAsync(
+                        character => character.Id == characterId && character.AccountId == account.Value,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+                if (row == null)
+                {
+                    return null;
+                }
+
+                List<StoredItem> items = await context.InventoryItems
+                    .AsNoTracking()
+                    .Where(item => item.CharacterId == characterId)
+                    .OrderBy(item => item.Id)
+                    .Select(item => new StoredItem(item.Id, item.ItemDefinitionId, item.Quantity))
+                    .ToListAsync(cancellationToken)
+                    .ConfigureAwait(false);
+                return new StoredCharacter(
+                    row.Id,
+                    account,
+                    row.Name,
+                    row.JobDefinitionId,
+                    row.BaseLevel,
+                    new PrimaryStats(row.Str, row.Agi, row.Vit, row.Int, row.Dex, row.Luk),
+                    row.Hp,
+                    row.MapDefinitionId,
+                    new WorldPosition(row.PositionX, row.PositionY, row.PositionZ),
+                    (uint)row.InventoryRevision,
+                    items);
+            },
+            cancellationToken);
+    }
+
+    public Task SaveCheckpointAsync(CharacterCheckpoint checkpoint, CancellationToken cancellationToken)
+    {
+        return RunAsync(
+            async context =>
+            {
+                string map = checkpoint.Map.Value;
+                float x = checkpoint.Position.X;
+                float y = checkpoint.Position.Y;
+                float z = checkpoint.Position.Z;
+                int health = checkpoint.Health;
+                DateTime at = checkpoint.At;
+                return await context.Characters
+                    .Where(row => row.Id == checkpoint.CharacterId)
+                    .ExecuteUpdateAsync(
+                        update => update
+                            .SetProperty(row => row.MapDefinitionId, map)
+                            .SetProperty(row => row.PositionX, x)
+                            .SetProperty(row => row.PositionY, y)
+                            .SetProperty(row => row.PositionZ, z)
+                            .SetProperty(row => row.Hp, health)
+                            .SetProperty(row => row.LastPlayedAt, at)
+                            .SetProperty(row => row.Version, row => row.Version + 1),
+                        cancellationToken)
+                    .ConfigureAwait(false);
+            },
+            cancellationToken);
+    }
+
+    public Task<IReadOnlyList<string>> ListStoredDefinitionIdsAsync(CancellationToken cancellationToken)
+    {
+        return RunAsync(
+            async context =>
+            {
+                List<string> jobs = await context.Characters.Select(row => row.JobDefinitionId).Distinct()
+                    .ToListAsync(cancellationToken).ConfigureAwait(false);
+                List<string> maps = await context.Characters.Select(row => row.MapDefinitionId).Distinct()
+                    .ToListAsync(cancellationToken).ConfigureAwait(false);
+                List<string> items = await context.InventoryItems.Select(row => row.ItemDefinitionId).Distinct()
+                    .ToListAsync(cancellationToken).ConfigureAwait(false);
+                return (IReadOnlyList<string>)jobs.Concat(maps).Concat(items).Distinct()
+                    .OrderBy(id => id, StringComparer.Ordinal)
+                    .ToList();
             },
             cancellationToken);
     }

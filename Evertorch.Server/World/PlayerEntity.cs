@@ -30,7 +30,10 @@ public sealed class PlayerEntity : WorldEntity
 
     public CharacterId Character { get; }
 
-    public ConnectionId Owner { get; }
+    /// <summary>
+    ///     The connection that controls the player; default while none does.
+    /// </summary>
+    public ConnectionId Owner { get; set; }
 
     public JobDefinitionId Job { get; }
 

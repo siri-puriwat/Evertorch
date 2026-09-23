@@ -41,5 +41,21 @@ public interface IGameStore
         NewCharacter character,
         int maxCharacters,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    ///     The character with its inventory, or null when the account owns no such character.
+    /// </summary>
+    Task<StoredCharacter?> LoadCharacterAsync(AccountId account, long characterId, CancellationToken cancellationToken);
+
+    /// <summary>
+    ///     Writes the checkpoint over the character's map, position, and HP, and records when it was last played.
+    /// </summary>
+    Task SaveCheckpointAsync(CharacterCheckpoint checkpoint, CancellationToken cancellationToken);
+
+    /// <summary>
+    ///     Every distinct job, map, and item definition ID stored for any character, for the startup comparison with
+    ///     the loaded content (Persistence §8).
+    /// </summary>
+    Task<IReadOnlyList<string>> ListStoredDefinitionIdsAsync(CancellationToken cancellationToken);
 }
 }

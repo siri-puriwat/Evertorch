@@ -37,9 +37,19 @@ public sealed class ClientSession
     /// </summary>
     public bool IsCreatingCharacter { get; set; }
 
-    public MapInstance? Map { get; set; }
+    /// <summary>
+    ///     The character this connection controls in the world, if any.
+    /// </summary>
+    public CharacterSession? Character { get; set; }
 
-    public PlayerEntity? Player { get; set; }
+    /// <summary>
+    ///     The character this connection is loading from the database, or default.
+    /// </summary>
+    public CharacterId LoadingCharacter { get; set; }
+
+    public MapInstance? Map => Character?.Map;
+
+    public PlayerEntity? Player => Character?.Player;
 
     /// <summary>
     ///     Present once the session is in the world.
@@ -57,9 +67,20 @@ public sealed class ClientSession
     public long RefusedCommands { get; set; }
 
     /// <summary>
-    ///     The newest command sequence processed for this session; 0 before the first command.
+    ///     The newest command sequence processed for the controlled character; 0 before the first command or without
+    ///     a character. It belongs to the character, not to the connection (Network Protocol §8).
     /// </summary>
-    public uint LastCommandSequence { get; set; }
+    public uint LastCommandSequence
+    {
+        get => Character?.LastCommandSequence ?? 0;
+        set
+        {
+            if (Character != null)
+            {
+                Character.LastCommandSequence = value;
+            }
+        }
+    }
 
     /// <summary>
     ///     Whether this client may be told about <paramref name="entity" />: its own entity, or one it has been sent a

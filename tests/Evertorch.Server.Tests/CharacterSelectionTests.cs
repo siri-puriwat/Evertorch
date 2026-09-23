@@ -235,7 +235,7 @@ public sealed class CharacterSelectionTests
         CreateCharacterResult created = Create(server, connection, "Ann0");
 
         server.SendEnterWorld(connection, created.Character.Value);
-        server.Tick();
+        server.TickUntil(() => server.SessionOf(connection).State == SessionState.InWorld);
 
         Assert.That(server.PlayerOf(connection).Character, Is.EqualTo(created.Character));
         Assert.That(server.Transport.ControlOpcodesSentTo(connection).First(), Is.EqualTo(MessageOpcode.WorldEntered));

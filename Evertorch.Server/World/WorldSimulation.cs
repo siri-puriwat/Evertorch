@@ -22,12 +22,11 @@ public sealed class WorldSimulation
     private readonly Dictionary<MapDefinitionId, MapInstance> m_maps = new();
     private readonly Dictionary<MapInstance, MonsterPlacement> m_placements = new();
     private readonly ServerContent m_content;
+    private readonly ICharacterRules m_characterRules;
     private readonly IMovementRules m_movementRules;
     private readonly IRandomSource m_random;
     private readonly JobDefinition m_startingJob;
     private readonly DerivedStats m_startingStats;
-    private readonly float m_startingMovementSpeed;
-    private readonly float m_startingAttackRange;
     private long m_lastEntityId;
 
     public WorldSimulation(
@@ -38,6 +37,7 @@ public sealed class WorldSimulation
         IRandomSource random)
     {
         m_content = content;
+        m_characterRules = characterRules;
         m_movementRules = movementRules;
         m_random = random;
         WorldOptions world = options.Value;
@@ -49,10 +49,7 @@ public sealed class WorldSimulation
         }
 
         m_startingJob = job;
-        m_startingStats = CalculateStats(job, characterRules);
-        var movement = new MovementContext(m_startingStats.MovementSpeed);
-        m_startingMovementSpeed = movementRules.CalculateMovement(movement).Speed;
-        m_startingAttackRange = (float)content.Skills[job.BasicAttack].Range;
+        m_startingStats = CalculateStats(job, StartingLevel, job.StartingStats, characterRules);
 
         foreach (MapDefinition map in content.Maps.Values.OrderBy(map => map.Id.Value, StringComparer.Ordinal))
         {
@@ -91,24 +88,72 @@ public sealed class WorldSimulation
     }
 
     /// <summary>
-    ///     Places a new player at the spawn point of the starting job's map.
+    ///     Places a stored character in the world (Persistence §6, §8): its stored job, level, and statistics, on its
+    ///     stored map. It stands where it was checkpointed, at the map's spawn point with full HP when it was
+    ///     checkpointed dead, and at the spawn point with its HP when its spot is no longer standable. Returns false, placing
+    ///     nothing, when the content
+    ///     does not define its job, its map, or one of its items; <paramref name="problem" /> then names what is
+    ///     missing.
     /// </summary>
-    public PlayerEntity SpawnPlayer(CharacterId character, ConnectionId owner, out MapInstance map)
+    public bool TrySpawnPlayer(
+        StoredCharacter stored,
+        ConnectionId owner,
+        out PlayerEntity? player,
+        out MapInstance? map,
+        out string problem)
     {
-        map = m_maps[m_startingJob.StartingMap];
-        var player = new PlayerEntity(
+        player = null;
+        map = null;
+        if (!JobDefinitionId.TryCreate(stored.JobDefinitionId, out JobDefinitionId jobId)
+            || !m_content.Jobs.TryGetValue(jobId, out JobDefinition? job))
+        {
+            problem = $"job '{stored.JobDefinitionId}'";
+            return false;
+        }
+
+        if (!MapDefinitionId.TryCreate(stored.MapDefinitionId, out MapDefinitionId mapId)
+            || !m_maps.TryGetValue(mapId, out MapInstance? instance))
+        {
+            problem = $"map '{stored.MapDefinitionId}'";
+            return false;
+        }
+
+        foreach (StoredItem item in stored.Items)
+        {
+            if (!ItemDefinitionId.TryCreate(item.ItemDefinitionId, out ItemDefinitionId itemId)
+                || !m_content.Items.ContainsKey(itemId))
+            {
+                problem = $"item '{item.ItemDefinitionId}'";
+                return false;
+            }
+        }
+
+        int level = Math.Max(StartingLevel, stored.BaseLevel);
+        DerivedStats stats = CalculateStats(job, level, stored.Stats, m_characterRules);
+        MapDefinition definition = instance.Definition;
+        NavigationGrid grid = definition.Navigation;
+        bool isStandable = grid.CanOccupy(stored.Position.X, stored.Position.Z)
+            && grid.TrySampleHeight(stored.Position.X, stored.Position.Z, out float _);
+        bool wasDead = stored.Health <= 0;
+        WorldPosition position = wasDead || !isStandable ? definition.SpawnPosition : stored.Position;
+        int health = wasDead ? stats.MaxHp : Math.Min(stored.Health, stats.MaxHp);
+        float speed = m_movementRules.CalculateMovement(new MovementContext(stats.MovementSpeed)).Speed;
+        player = new PlayerEntity(
             NextEntityId(),
-            character,
+            new CharacterId(stored.Id),
             owner,
-            m_startingJob.Id,
-            map.Definition.SpawnPosition,
-            MovementModel.NormalizeOrZero(map.Definition.SpawnFacing.X, map.Definition.SpawnFacing.Z),
-            m_startingMovementSpeed,
-            m_startingJob.StartingStats,
-            m_startingStats,
-            m_startingAttackRange);
-        map.Add(player);
-        return player;
+            job.Id,
+            position,
+            MovementModel.NormalizeOrZero(definition.SpawnFacing.X, definition.SpawnFacing.Z),
+            speed,
+            stored.Stats,
+            stats,
+            (float)m_content.Skills[job.BasicAttack].Range);
+        player.CurrentHealth = health;
+        instance.Add(player);
+        map = instance;
+        problem = string.Empty;
+        return true;
     }
 
     public void RemovePlayer(MapInstance map, PlayerEntity player)
@@ -153,11 +198,15 @@ public sealed class WorldSimulation
         return new EntityId(m_lastEntityId);
     }
 
-    private static DerivedStats CalculateStats(JobDefinition job, ICharacterRules characterRules)
+    private static DerivedStats CalculateStats(
+        JobDefinition job,
+        int level,
+        PrimaryStats primary,
+        ICharacterRules characterRules)
     {
         var build = new CharacterBuild(
-            StartingLevel,
-            job.StartingStats,
+            level,
+            primary,
             job.HealthBase,
             job.HealthPerLevel,
             job.SpiritBase,

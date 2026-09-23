@@ -138,7 +138,7 @@ public sealed class SessionHandshakeTests
     {
         var server = new TestServer(false);
         ConnectionId connection = server.Connect();
-        server.SendHello(connection, 9, "0.1.0", 0, "nonsense");
+        server.SendHello(connection, ProtocolConstants.ProtocolVersion + 1, "0.1.0", 0, "nonsense");
 
         server.Tick();
 

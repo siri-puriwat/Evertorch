@@ -232,6 +232,7 @@ public sealed class GameClient : MonoBehaviour
         {
             Connection.CharactersChanged -= OnCharactersChanged;
             Connection.EnteredWorld -= OnEnteredWorld;
+            Connection.LeftWorld -= OnLeftWorld;
             Connection.Closed -= OnClosed;
         }
 
@@ -254,6 +255,7 @@ public sealed class GameClient : MonoBehaviour
         Connection = new ClientConnection(Link, settings, m_contentLoader.Content);
         Connection.CharactersChanged += OnCharactersChanged;
         Connection.EnteredWorld += OnEnteredWorld;
+        Connection.LeftWorld += OnLeftWorld;
         Connection.Closed += OnClosed;
         Status = $"Connecting to {m_host}:{m_port}";
         Connection.Connect(m_host, m_port);
@@ -272,6 +274,18 @@ public sealed class GameClient : MonoBehaviour
         if (Connection != null && Connection.CreateCharacter(name))
         {
             Status = $"Creating {name}";
+        }
+    }
+
+    /// <summary>
+    ///     Leaves the world for character selection once the server has saved the character.
+    /// </summary>
+    public void Logout()
+    {
+        if (Connection != null && Connection.State == ClientConnectionState.InWorld)
+        {
+            Connection.SendLogout();
+            Status = "Logging out";
         }
     }
 
@@ -311,6 +325,12 @@ public sealed class GameClient : MonoBehaviour
             CreateCharacterOutcome.LimitReached => "Refused: an account holds at most 3 characters",
             _ => "The server cannot create characters right now; try again"
         };
+    }
+
+    private void OnLeftWorld()
+    {
+        TearDownWorld();
+        Status = "Logged out: choose or create a character";
     }
 
     private void OnEnteredWorld(ClientWorld world)

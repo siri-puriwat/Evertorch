@@ -38,6 +38,11 @@ public enum InboundEventKind
     CreateCharacter = 10,
 
     /// <summary>
+    ///     A request to leave the world for character selection, carrying a command sequence.
+    /// </summary>
+    Logout = 11,
+
+    /// <summary>
     ///     The peer sent something that is not a well-formed client message on its proper channel.
     /// </summary>
     Malformed = 4

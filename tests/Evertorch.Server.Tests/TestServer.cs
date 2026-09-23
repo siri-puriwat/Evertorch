@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Evertorch.Game;
+using Evertorch.Persistence;
 using Evertorch.Protocol;
 using Evertorch.Rules;
 using Microsoft.Extensions.Options;
@@ -45,7 +46,8 @@ internal sealed class TestServer
         bool withMonsterAi = true,
         IRandomSource? dropRandom = null,
         int itemDropLifetimeMs = 60000,
-        PersistenceOptions? persistence = null)
+        PersistenceOptions? persistence = null,
+        IGameStore? store = null)
     {
         Content = withMonsters ? RepositoryContent.Value : RepositoryContentWithoutMonsters.Value;
         var network = new NetworkOptions
@@ -82,15 +84,23 @@ internal sealed class TestServer
             Random);
         Log = new CapturingLogger<SessionManager>();
         Time = new FakeTimeProvider();
-        Store = new InMemoryGameStore();
+        GameStore = store ?? new InMemoryGameStore();
         PersistenceLog = new CapturingLogger<PersistenceWorker>();
         Persistence = new PersistenceWorker(
-            Store,
+            GameStore,
             Options.Create(persistence ?? new PersistenceOptions { RetryBaseDelayMs = 1 }),
             PersistenceLog);
 
         var sender = new MessageSender(Transport);
         var targeting = new Targeting(sender);
+        Lifetime = new CharacterLifetime(
+            World,
+            Sessions,
+            Persistence,
+            Time,
+            Options.Create(persistence ?? new PersistenceOptions()),
+            simulation,
+            new CapturingLogger<CharacterLifetime>());
         var tokens = new DevelopmentTokenValidator(Options.Create(authentication), Time);
         var handshake = new HandshakeValidator(compatibility, tokens, Content);
         SessionManager = new SessionManager(
@@ -103,6 +113,7 @@ internal sealed class TestServer
             sender,
             targeting,
             new PlayerLife(Sessions, sender),
+            Lifetime,
             Time,
             simulation,
             Options.Create(network),
@@ -131,7 +142,8 @@ internal sealed class TestServer
             Combat,
             Drops,
             SessionManager,
-            new RecordingPhase(TickPhase.ApplyCommands, "test", new List<string>(), _ => RunAfterCommands())
+            new RecordingPhase(TickPhase.ApplyCommands, "test", new List<string>(), _ => RunAfterCommands()),
+            new CheckpointScheduler(Sessions, Lifetime)
         };
         if (withMonsterAi)
         {
@@ -166,7 +178,15 @@ internal sealed class TestServer
 
     public CapturingLogger<SessionManager> Log { get; }
 
-    public InMemoryGameStore Store { get; }
+    /// <summary>
+    ///     The store the server writes to: in memory unless a test supplied another, such as PostgreSQL.
+    /// </summary>
+    public IGameStore GameStore { get; }
+
+    public InMemoryGameStore Store => GameStore as InMemoryGameStore
+        ?? throw new InvalidOperationException("This server runs on a real database, not the in-memory store.");
+
+    public CharacterLifetime Lifetime { get; }
 
     /// <summary>
     ///     The real writer, run on the test thread: <see cref="Tick" /> first lets it finish every job queued so far,
@@ -357,6 +377,34 @@ internal sealed class TestServer
             SendCreateCharacter(connection, $"Tester{character}");
             TickUntil(() => SessionOf(connection).Characters!.Any(owned => owned.Id == character));
         }
+    }
+
+    /// <summary>
+    ///     Connects, signs in as <c>dev:&lt;identity&gt;</c>, creates the character <paramref name="name" /> unless the
+    ///     account has it, and enters the world with it, whatever store the server uses.
+    /// </summary>
+    public ConnectionId EnterWorldAs(string identity, string name)
+    {
+        ConnectionId connection = Connect();
+        SignIn(connection, $"dev:{identity}");
+        TickUntil(() => SessionOf(connection).Characters != null);
+        if (SessionOf(connection).Characters!.All(owned => owned.Name != name))
+        {
+            SendCreateCharacter(connection, name);
+            TickUntil(() => SessionOf(connection).Characters!.Any(owned => owned.Name == name));
+        }
+
+        long character = SessionOf(connection).Characters!.Single(owned => owned.Name == name).Id;
+        SendEnterWorld(connection, character);
+        TickUntil(() => SessionOf(connection).State == SessionState.InWorld);
+        return connection;
+    }
+
+    public void SendLogout(ConnectionId connection, uint commandSequence)
+    {
+        byte[] payload = new byte[Logout.EncodedLength];
+        new Logout(commandSequence).Write(payload);
+        Inbound.OnPayload(connection, ProtocolChannel.Control, payload);
     }
 
     public void SendCreateCharacter(ConnectionId connection, string name)

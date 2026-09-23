@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading;
 using Evertorch.Client;
 using Evertorch.Game;
+using Evertorch.Persistence;
 using Evertorch.Protocol;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -106,8 +107,9 @@ public sealed class RealClientOverSocketTests
         PackageFixture.WriteTo(
             Path.Combine(root.Path, "content", "server"),
             PackageFixture.BuildRepositoryPackage());
+        var store = new InMemoryGameStore();
         using IHost host = TestHosts
-            .CreateBuilder(new[] { "--Network:Port=0", "--DevelopmentAuthentication:Enabled=true" }, root.Path)
+            .CreateBuilder(new[] { "--Network:Port=0", "--DevelopmentAuthentication:Enabled=true" }, root.Path, store)
             .Build();
         host.Start();
         int port = host.Services.GetRequiredService<IServerTransport>().LocalPort;
@@ -174,6 +176,10 @@ public sealed class RealClientOverSocketTests
             PumpUntil(connection, null, () => connection.State == ClientConnectionState.Disconnected),
             Is.True);
         Assert.That(connection.Notice, Is.Not.Null, "the shutdown notice reached the client's own transport");
+        Assert.That(
+            store.Checkpoints,
+            Has.Some.Matches<CharacterCheckpoint>(checkpoint => checkpoint.Position.X > 3f),
+            "the controlled shutdown checkpointed the character where it walked to");
         Assert.That(connection.Notice!.Reason, Is.EqualTo(DisconnectReason.Maintenance));
     }
 }

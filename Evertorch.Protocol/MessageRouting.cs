@@ -24,6 +24,7 @@ public static class MessageRouting
             case MessageOpcode.CancelAction:
             case MessageOpcode.Respawn:
             case MessageOpcode.CreateCharacter:
+            case MessageOpcode.Logout:
             case MessageOpcode.ServerHello:
             case MessageOpcode.WorldEntered:
             case MessageOpcode.EntitySpawn:
@@ -38,6 +39,7 @@ public static class MessageRouting
             case MessageOpcode.DisconnectNotice:
             case MessageOpcode.CharacterList:
             case MessageOpcode.CreateCharacterResult:
+            case MessageOpcode.LogoutComplete:
                 return true;
             case MessageOpcode.MoveInput:
             case MessageOpcode.StopMovement:

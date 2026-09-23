@@ -4,15 +4,18 @@ using Evertorch.Game;
 namespace Evertorch.Server
 {
 /// <summary>
-///     Every live session, by connection and, once in the world, by character. Tick thread only.
+///     Every live connection, and every character in the world with the connection that controls it, if any. Tick
+///     thread only.
 /// </summary>
 public sealed class SessionRegistry
 {
     private readonly Dictionary<ConnectionId, ClientSession> m_byConnection = new();
 
-    private readonly Dictionary<CharacterId, ClientSession> m_byCharacter = new();
+    private readonly Dictionary<CharacterId, CharacterSession> m_characters = new();
 
     public IReadOnlyCollection<ClientSession> Sessions => m_byConnection.Values;
+
+    public IReadOnlyCollection<CharacterSession> Characters => m_characters.Values;
 
     public void Add(ClientSession session)
     {
@@ -24,25 +27,37 @@ public sealed class SessionRegistry
         return m_byConnection.TryGetValue(connection, out session);
     }
 
-    public bool TryGetByCharacter(CharacterId character, out ClientSession? session)
+    public bool TryGetCharacter(CharacterId character, out CharacterSession? session)
     {
-        return m_byCharacter.TryGetValue(character, out session);
+        return m_characters.TryGetValue(character, out session);
     }
 
-    public void BindCharacter(ClientSession session, CharacterId character)
+    /// <summary>
+    ///     The connection controlling <paramref name="character" />, when one does.
+    /// </summary>
+    public bool TryGetByCharacter(CharacterId character, out ClientSession? session)
     {
-        m_byCharacter[character] = session;
+        session = m_characters.TryGetValue(character, out CharacterSession? owned) ? owned?.Connection : null;
+        return session != null;
+    }
+
+    public void AddCharacter(CharacterSession character)
+    {
+        m_characters.Add(character.Character, character);
+    }
+
+    public void RemoveCharacter(CharacterSession character)
+    {
+        if (m_characters.TryGetValue(character.Character, out CharacterSession? registered)
+            && ReferenceEquals(registered, character))
+        {
+            m_characters.Remove(character.Character);
+        }
     }
 
     public void Remove(ClientSession session)
     {
         m_byConnection.Remove(session.Connection);
-        if (session.Player != null
-            && m_byCharacter.TryGetValue(session.Player.Character, out ClientSession? bound)
-            && ReferenceEquals(bound, session))
-        {
-            m_byCharacter.Remove(session.Player.Character);
-        }
     }
 }
 }

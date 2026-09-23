@@ -40,6 +40,12 @@ public sealed class SessionManager : ITickPhase
             new EventId(2005, "SessionAuthenticated"),
             "Connection {Connection} signed in to account {Account}.");
 
+    private static readonly Action<ILogger, long, string, Exception?> LogCharacterContentMismatch =
+        LoggerMessage.Define<long, string>(
+            LogLevel.Warning,
+            new EventId(2006, "CharacterContentMismatch"),
+            "Character {Character} was not entered: the loaded content has no {Definition}. Its stored data is kept.");
+
     private static readonly Action<ILogger, long, Exception?> LogSessionFaulted =
         LoggerMessage.Define<long>(
             LogLevel.Error,
@@ -55,6 +61,7 @@ public sealed class SessionManager : ITickPhase
     private readonly MessageSender m_sender;
     private readonly Targeting m_targeting;
     private readonly PlayerLife m_life;
+    private readonly CharacterLifetime m_lifetime;
     private readonly TimeProvider m_time;
     private readonly ILogger<SessionManager> m_logger;
     private readonly string m_serverBuildVersion;
@@ -62,6 +69,7 @@ public sealed class SessionManager : ITickPhase
     private readonly uint m_handshakeTimeoutTicks;
     private readonly int m_maxQueuedInputs;
     private readonly List<ClientSession> m_expired = new();
+    private uint m_currentTick;
 
     public SessionManager(
         InboundQueue inbound,
@@ -73,6 +81,7 @@ public sealed class SessionManager : ITickPhase
         MessageSender sender,
         Targeting targeting,
         PlayerLife life,
+        CharacterLifetime lifetime,
         TimeProvider time,
         IOptions<SimulationOptions> simulation,
         IOptions<NetworkOptions> network,
@@ -90,6 +99,7 @@ public sealed class SessionManager : ITickPhase
         m_sender = sender;
         m_targeting = targeting;
         m_life = life;
+        m_lifetime = lifetime;
         m_time = time;
         m_logger = logger;
         m_serverBuildVersion = compatibility.Value.ServerBuildVersion;
@@ -109,6 +119,7 @@ public sealed class SessionManager : ITickPhase
 
     public void Execute(in TickContext context)
     {
+        m_currentTick = context.Tick;
         // Database results first, at a fixed point in the tick, so this tick's commands already see them
         // (Persistence §9).
         while (m_persistence.TryDequeueCompletion(out PersistenceJob job))
@@ -184,6 +195,7 @@ public sealed class SessionManager : ITickPhase
             case InboundEventKind.Attack:
             case InboundEventKind.Cancel:
             case InboundEventKind.Respawn:
+            case InboundEventKind.Logout:
                 HandleCommand(session, inboundEvent, tick);
                 break;
             default:
@@ -388,27 +400,97 @@ public sealed class SessionManager : ITickPhase
             return;
         }
 
-        // A character of another account is refused exactly like one that does not exist (Network Protocol §4).
-        if (session.State != SessionState.Authenticated || !Owns(session, request.Character))
+        // A character of another account is refused exactly like one that does not exist (Network Protocol §4), and
+        // so is one another connection is still loading.
+        if (session.State != SessionState.Authenticated
+            || !Owns(session, request.Character)
+            || IsLoadingElsewhere(request.Character))
         {
             IgnoredEvents++;
             return;
         }
 
+        // The older connection's checkpoint is queued before the load, so the load reads it (Persistence §9).
         if (m_sessions.TryGetByCharacter(request.Character, out ClientSession? previous) && previous != null)
         {
             Close(previous, DisconnectReason.SessionReplaced);
         }
 
-        PlayerEntity player = m_world.SpawnPlayer(request.Character, session.Connection, out MapInstance map);
-        session.Player = player;
-        session.Map = map;
+        AccountId account = session.Account!.Value;
+        ConnectionId connection = session.Connection;
+        long character = request.Character.Value;
+        var load = new PersistenceJob<StoredCharacter?>(
+            "load character",
+            connection,
+            character,
+            (store, cancellation) => store.LoadCharacterAsync(account, character, cancellation),
+            (outcome, stored) => CompleteLoad(connection, outcome, stored));
+        if (!m_persistence.TryEnqueue(load))
+        {
+            LogHandshakeRejected(m_logger, connection.Value, DisconnectReason.ServerNotReady, null);
+            Close(session, DisconnectReason.ServerNotReady);
+            return;
+        }
+
+        session.State = SessionState.EnteringWorld;
+        session.LoadingCharacter = request.Character;
+    }
+
+    private bool IsLoadingElsewhere(CharacterId character)
+    {
+        foreach (ClientSession other in m_sessions.Sessions)
+        {
+            if (other.State == SessionState.EnteringWorld && other.LoadingCharacter == character)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private void CompleteLoad(ConnectionId connection, PersistenceOutcome outcome, StoredCharacter? stored)
+    {
+        if (!m_sessions.TryGet(connection, out ClientSession? session)
+            || session == null
+            || session.State != SessionState.EnteringWorld)
+        {
+            return;
+        }
+
+        CharacterId requested = session.LoadingCharacter;
+        session.LoadingCharacter = default;
+        if (outcome != PersistenceOutcome.Succeeded)
+        {
+            // Entering needs the database (Persistence §9): without it the connection is not ready.
+            LogHandshakeRejected(m_logger, connection.Value, DisconnectReason.ServerNotReady, null);
+            Close(session, DisconnectReason.ServerNotReady);
+            return;
+        }
+
+        session.State = SessionState.Authenticated;
+        if (stored == null)
+        {
+            IgnoredEvents++;
+            return;
+        }
+
+        uint tick = m_currentTick;
+        CharacterSession? character = m_lifetime.Spawn(stored, session, tick, out string problem);
+        if (character == null)
+        {
+            LogCharacterContentMismatch(m_logger, requested.Value, problem, null);
+            IgnoredEvents++;
+            return;
+        }
+
+        session.Character = character;
         session.Input = new PlayerInputState(m_maxQueuedInputs);
         session.State = SessionState.InWorld;
-        m_sessions.BindCharacter(session, request.Character);
-
+        PlayerEntity player = character.Player;
+        MapInstance map = character.Map;
         m_sender.Send(
-            session.Connection,
+            connection,
             new WorldEntered(
                 map.Definition.Id,
                 map.InstanceNumber,
@@ -421,7 +503,7 @@ public sealed class SessionManager : ITickPhase
                 (uint)player.CurrentHealth,
                 (uint)player.MaxHealth,
                 player.AttackRange));
-        LogWorldEntered(m_logger, session.Connection.Value, request.Character.Value, player.Id.Value, null);
+        LogWorldEntered(m_logger, connection.Value, requested.Value, player.Id.Value, null);
     }
 
     private static bool Owns(ClientSession session, CharacterId character)
@@ -445,7 +527,7 @@ public sealed class SessionManager : ITickPhase
     // Only queued here. The movement phase applies at most one input per tick, whatever arrives.
     private void HandleMove(ClientSession session, MoveIntent intent)
     {
-        if (session.State != SessionState.InWorld || session.Input == null)
+        if (session.State != SessionState.InWorld || session.Input == null || session.Character!.IsLoggingOut)
         {
             IgnoredEvents++;
             return;
@@ -462,7 +544,9 @@ public sealed class SessionManager : ITickPhase
             return;
         }
 
-        if (session.Player?.IsDead == true || !m_targeting.TrySelect(session, target))
+        if (session.Player?.IsDead == true
+            || session.Character?.IsLoggingOut == true
+            || !m_targeting.TrySelect(session, target))
         {
             session.RefusedCommands++;
         }
@@ -485,12 +569,13 @@ public sealed class SessionManager : ITickPhase
         }
 
         session.LastCommandSequence = command.CommandSequence;
-        bool isAccepted = session.Player.IsDead
-            ? command.Kind == InboundEventKind.Respawn && m_life.TryRespawn(session, tick)
+        bool isAccepted = session.Character!.IsLoggingOut ? false
+            : session.Player.IsDead ? command.Kind == InboundEventKind.Respawn && m_life.TryRespawn(session, tick)
             : command.Kind switch
             {
                 InboundEventKind.Attack => m_targeting.TryAttack(session, command.Target),
                 InboundEventKind.Cancel => Cancel(session.Player),
+                InboundEventKind.Logout => TryLogout(session),
                 _ => false
             };
 
@@ -504,6 +589,51 @@ public sealed class SessionManager : ITickPhase
     {
         player.Combat.IsAutoAttacking = false;
         return true;
+    }
+
+    // Logout stops new commands and writes the final checkpoint; only once it is written does the character leave
+    // (Persistence §7). Without the database the logout is refused and the player stays.
+    private bool TryLogout(ClientSession session)
+    {
+        CharacterSession character = session.Character!;
+        if (!m_persistence.IsAvailable)
+        {
+            return false;
+        }
+
+        character.IsLoggingOut = true;
+        character.Player.Combat.IsAutoAttacking = false;
+        session.Input!.Direction = default;
+        ConnectionId connection = session.Connection;
+        character.LogoutCheckpoint = m_lifetime.QueueCheckpoint(
+            character,
+            outcome => CompleteLogout(connection, character, outcome));
+        return true;
+    }
+
+    private void CompleteLogout(ConnectionId connection, CharacterSession character, PersistenceOutcome outcome)
+    {
+        if (!character.IsLoggingOut
+            || !m_sessions.TryGet(connection, out ClientSession? session)
+            || session == null
+            || session.Character != character)
+        {
+            return;
+        }
+
+        if (outcome != PersistenceOutcome.Succeeded)
+        {
+            character.IsLoggingOut = false;
+            character.LogoutCheckpoint = null;
+            return;
+        }
+
+        m_lifetime.Remove(character);
+        session.Input = null;
+        session.KnownEntities.Clear();
+        session.State = SessionState.Authenticated;
+        m_sender.Send(connection, new LogoutComplete());
+        QueueCharacterList(session);
     }
 
     private void ExpireSilentConnections(uint tick)
@@ -533,9 +663,9 @@ public sealed class SessionManager : ITickPhase
 
     private void Remove(ClientSession session)
     {
-        if (session.Player != null && session.Map != null)
+        if (session.Character != null)
         {
-            m_world.RemovePlayer(session.Map, session.Player);
+            m_lifetime.CheckpointAndRemove(session.Character);
         }
 
         m_sessions.Remove(session);

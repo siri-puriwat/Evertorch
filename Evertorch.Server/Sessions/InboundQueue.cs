@@ -152,6 +152,14 @@ public sealed class InboundQueue
 
                 decoded = InboundEvent.ForCommand(InboundEventKind.Respawn, connection, respawn.CommandSequence);
                 return true;
+            case MessageOpcode.Logout:
+                if (!Logout.TryRead(payload, out Logout logout))
+                {
+                    return false;
+                }
+
+                decoded = InboundEvent.ForCommand(InboundEventKind.Logout, connection, logout.CommandSequence);
+                return true;
             case MessageOpcode.CreateCharacter:
                 if (!CreateCharacter.TryRead(payload, out CreateCharacter? create) || create == null)
                 {

@@ -277,6 +277,7 @@ public sealed class DevelopmentOverlay : MonoBehaviour
         private readonly TMP_Text m_connection;
         private readonly GameObject m_disconnect;
         private readonly GameObject m_respawn;
+        private readonly GameObject m_logout;
         private readonly GameObject m_connectForm;
         private readonly TMP_InputField m_port;
         private readonly GameObject m_characters;
@@ -296,6 +297,7 @@ public sealed class DevelopmentOverlay : MonoBehaviour
             m_connection = CreateLabel("Connection", panel);
             m_disconnect = CreateButton("Disconnect", panel, client.Disconnect);
             m_respawn = CreateButton("Respawn", panel, client.RequestRespawn);
+            m_logout = CreateButton("Logout", panel, client.Logout);
 
             m_connectForm = CreateColumn("Connect", panel);
             Transform form = m_connectForm.transform;
@@ -371,6 +373,7 @@ public sealed class DevelopmentOverlay : MonoBehaviour
                 + $"\nMalformed {connection.MalformedMessages}   Unexpected {connection.UnexpectedMessages}";
             m_disconnect.SetActive(isOpen);
             m_respawn.SetActive(m_client.World?.IsLocalDead == true);
+            m_logout.SetActive(connection != null && connection.State == ClientConnectionState.InWorld);
             m_connectForm.SetActive(!isOpen);
             RefreshCharacters(connection);
             RefreshWorld();

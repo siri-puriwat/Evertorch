@@ -85,11 +85,27 @@ public sealed class SharedCharacterMessageTests
     }
 
     [Test]
+    public void LogoutAndLogoutComplete_WriteAndRead_MatchGoldenBytes()
+    {
+        byte[] logout = new byte[Logout.EncodedLength];
+        new Logout(0x12345678).Write(logout);
+        byte[] complete = new byte[LogoutComplete.EncodedLength];
+        new LogoutComplete().Write(complete);
+
+        Assert.That(logout, Is.EqualTo(new byte[] { 0x0E, 0x00, 0x78, 0x56, 0x34, 0x12 }));
+        Assert.That(Logout.TryRead(logout, out Logout read), Is.True);
+        Assert.That(read.CommandSequence, Is.EqualTo(0x12345678u));
+        Assert.That(complete, Is.EqualTo(new byte[] { 0x19, 0x80 }));
+        Assert.That(LogoutComplete.TryRead(complete, out LogoutComplete _), Is.True);
+    }
+
+    [Test]
     public void MessageRouting_ForCharacterMessages_UsesTheControlChannel()
     {
         foreach (MessageOpcode opcode in new[]
                  {
-                     MessageOpcode.CreateCharacter, MessageOpcode.CharacterList, MessageOpcode.CreateCharacterResult
+                     MessageOpcode.CreateCharacter, MessageOpcode.CharacterList, MessageOpcode.CreateCharacterResult,
+                     MessageOpcode.Logout, MessageOpcode.LogoutComplete
                  })
         {
             Assert.That(MessageRouting.TryGetRoute(opcode, out ProtocolChannel channel, out MessageDelivery delivery));

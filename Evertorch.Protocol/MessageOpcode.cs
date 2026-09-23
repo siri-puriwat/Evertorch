@@ -16,6 +16,7 @@ public enum MessageOpcode : ushort
     CancelAction = 0x0007,
     Respawn = 0x000C,
     CreateCharacter = 0x000D,
+    Logout = 0x000E,
     ServerHello = 0x8001,
     WorldEntered = 0x8003,
     EntitySpawn = 0x8004,
@@ -30,6 +31,7 @@ public enum MessageOpcode : ushort
     CharacterHealth = 0x8014,
     EntityRevived = 0x8015,
     CharacterList = 0x8016,
-    CreateCharacterResult = 0x8017
+    CreateCharacterResult = 0x8017,
+    LogoutComplete = 0x8019
 }
 }

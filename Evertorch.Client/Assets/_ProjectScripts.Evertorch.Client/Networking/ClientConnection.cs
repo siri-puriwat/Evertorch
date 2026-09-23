@@ -125,6 +125,9 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
             case MessageOpcode.CreateCharacterResult:
                 OnCreateCharacterResult(payload);
                 break;
+            case MessageOpcode.LogoutComplete:
+                OnLogoutComplete(payload);
+                break;
             case MessageOpcode.EntitySpawn:
                 OnEntitySpawn(payload);
                 break;
@@ -284,6 +287,21 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
     }
 
     /// <summary>
+    ///     Asks to leave the world for character selection. The world stays until the server confirms with
+    ///     <c>LogoutComplete</c>, which it sends only after the character's checkpoint is written.
+    /// </summary>
+    public void SendLogout()
+    {
+        if (State != ClientConnectionState.InWorld)
+        {
+            return;
+        }
+
+        new Logout(NextCommandSequence()).Write(m_sendBuffer);
+        SendRouted(MessageOpcode.Logout, Logout.EncodedLength);
+    }
+
+    /// <summary>
     ///     Asks for a new character on the account. False, sending nothing, unless characters are being selected and
     ///     the name fits the protocol; the server applies the naming policy and answers with
     ///     <see cref="LastCreateOutcome" /> and a new list.
@@ -324,6 +342,11 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
     public event Action? CharactersChanged;
 
     public event Action<ClientWorld>? EnteredWorld;
+
+    /// <summary>
+    ///     Raised when a logout completes: the world is gone and characters are being selected again.
+    /// </summary>
+    public event Action? LeftWorld;
 
     public event Action? Closed;
 
@@ -410,6 +433,25 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
 
         Characters = list.Characters;
         CharactersChanged?.Invoke();
+    }
+
+    private void OnLogoutComplete(ReadOnlySpan<byte> payload)
+    {
+        if (!LogoutComplete.TryRead(payload, out LogoutComplete _))
+        {
+            MalformedMessages++;
+            return;
+        }
+
+        if (State != ClientConnectionState.InWorld)
+        {
+            UnexpectedMessages++;
+            return;
+        }
+
+        World = null;
+        State = ClientConnectionState.SelectingCharacter;
+        LeftWorld?.Invoke();
     }
 
     private void OnCreateCharacterResult(ReadOnlySpan<byte> payload)

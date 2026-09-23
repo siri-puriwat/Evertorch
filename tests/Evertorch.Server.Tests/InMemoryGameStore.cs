@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Evertorch.Game;
 using Evertorch.Persistence;
 
 namespace Evertorch.Server.Tests
@@ -15,9 +17,10 @@ internal sealed class InMemoryGameStore : IGameStore
     private readonly object m_gate = new();
     private readonly Dictionary<string, long> m_accounts = new(StringComparer.Ordinal);
     private readonly HashSet<string> m_disabledLogins = new(StringComparer.Ordinal);
-    private readonly Dictionary<long, StoredCharacter> m_characters = new();
+    private readonly Dictionary<long, Row> m_characters = new();
     private long m_lastAccount;
     private long m_lastCharacter;
+    private long m_lastItem;
 
     public IReadOnlyList<string> PendingMigrations { get; set; } = Array.Empty<string>();
 
@@ -32,6 +35,16 @@ internal sealed class InMemoryGameStore : IGameStore
     ///     Every login provisioned, in order, including repeats.
     /// </summary>
     public List<string> Logins { get; } = new();
+
+    /// <summary>
+    ///     Every checkpoint written, in order.
+    /// </summary>
+    public List<CharacterCheckpoint> Checkpoints { get; } = new();
+
+    /// <summary>
+    ///     How many times each character was loaded.
+    /// </summary>
+    public Dictionary<long, int> Loads { get; } = new();
 
     public int AccountCount
     {
@@ -95,19 +108,65 @@ internal sealed class InMemoryGameStore : IGameStore
                 return Task.FromResult(new CharacterCreation(CharacterCreationStatus.LimitReached, 0, List(account)));
             }
 
-            foreach (StoredCharacter stored in m_characters.Values)
+            if (m_characters.Values.Any(row => string.Equals(
+                    row.Name,
+                    character.Name,
+                    StringComparison.OrdinalIgnoreCase)))
             {
-                if (string.Equals(stored.Character.Name, character.Name, StringComparison.OrdinalIgnoreCase))
-                {
-                    return Task.FromResult(new CharacterCreation(CharacterCreationStatus.NameTaken, 0, List(account)));
-                }
+                return Task.FromResult(new CharacterCreation(CharacterCreationStatus.NameTaken, 0, List(account)));
             }
 
             long id = NextCharacterId ?? m_lastCharacter + 1;
             NextCharacterId = null;
             m_lastCharacter = Math.Max(m_lastCharacter, id);
-            m_characters.Add(id, new StoredCharacter(account, character));
+            m_characters.Add(id, new Row(account, character));
             return Task.FromResult(new CharacterCreation(CharacterCreationStatus.Created, id, List(account)));
+        }
+    }
+
+    public Task<StoredCharacter?> LoadCharacterAsync(
+        AccountId account,
+        long characterId,
+        CancellationToken cancellationToken)
+    {
+        ThrowIfUnavailable();
+        lock (m_gate)
+        {
+            Loads[characterId] = Loads.TryGetValue(characterId, out int count) ? count + 1 : 1;
+            StoredCharacter? stored = m_characters.TryGetValue(characterId, out Row? row) && row.Account == account
+                ? row.ToStored(characterId)
+                : null;
+            return Task.FromResult(stored);
+        }
+    }
+
+    public Task SaveCheckpointAsync(CharacterCheckpoint checkpoint, CancellationToken cancellationToken)
+    {
+        ThrowIfUnavailable();
+        lock (m_gate)
+        {
+            Checkpoints.Add(checkpoint);
+            if (m_characters.TryGetValue(checkpoint.CharacterId, out Row? row))
+            {
+                row.Map = checkpoint.Map.Value;
+                row.Position = checkpoint.Position;
+                row.Health = checkpoint.Health;
+            }
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public Task<IReadOnlyList<string>> ListStoredDefinitionIdsAsync(CancellationToken cancellationToken)
+    {
+        ThrowIfUnavailable();
+        lock (m_gate)
+        {
+            IReadOnlyList<string> ids = m_characters.Values
+                .SelectMany(row => new[] { row.Job, row.Map }.Concat(row.Items.Select(item => item.ItemDefinitionId)))
+                .Distinct()
+                .ToList();
+            return Task.FromResult(ids);
         }
     }
 
@@ -118,7 +177,44 @@ internal sealed class InMemoryGameStore : IGameStore
     {
         lock (m_gate)
         {
-            return m_characters[id].Character;
+            return m_characters[id].Created;
+        }
+    }
+
+    /// <summary>
+    ///     The stored state of character <paramref name="id" />, as a load would return it.
+    /// </summary>
+    public StoredCharacter Stored(long id)
+    {
+        lock (m_gate)
+        {
+            return m_characters[id].ToStored(id);
+        }
+    }
+
+    /// <summary>
+    ///     Changes what is stored for character <paramref name="id" />, as a content change or an earlier session
+    ///     would have left it.
+    /// </summary>
+    public void Edit(
+        long id,
+        string? job = null,
+        string? map = null,
+        WorldPosition? position = null,
+        int? health = null,
+        string? item = null)
+    {
+        lock (m_gate)
+        {
+            Row row = m_characters[id];
+            row.Job = job ?? row.Job;
+            row.Map = map ?? row.Map;
+            row.Position = position ?? row.Position;
+            row.Health = health ?? row.Health;
+            if (item != null)
+            {
+                row.Items.Add(new StoredItem(++m_lastItem, item, 1));
+            }
         }
     }
 
@@ -132,18 +228,11 @@ internal sealed class InMemoryGameStore : IGameStore
 
     private IReadOnlyList<CharacterSummary> List(AccountId account)
     {
-        var characters = new List<CharacterSummary>();
-        foreach (KeyValuePair<long, StoredCharacter> pair in m_characters)
-        {
-            if (pair.Value.Account == account)
-            {
-                characters.Add(new CharacterSummary(pair.Key, pair.Value.Character.Name, pair.Value.Character.Job.Value,
-                    1));
-            }
-        }
-
-        characters.Sort((left, right) => left.Id.CompareTo(right.Id));
-        return characters;
+        return m_characters
+            .Where(pair => pair.Value.Account == account)
+            .OrderBy(pair => pair.Key)
+            .Select(pair => new CharacterSummary(pair.Key, pair.Value.Name, pair.Value.Job, 1))
+            .ToList();
     }
 
     private void ThrowIfUnavailable()
@@ -154,17 +243,52 @@ internal sealed class InMemoryGameStore : IGameStore
         }
     }
 
-    private sealed class StoredCharacter
+    private sealed class Row
     {
-        public StoredCharacter(AccountId account, NewCharacter character)
+        public Row(AccountId account, NewCharacter created)
         {
             Account = account;
-            Character = character;
+            Created = created;
+            Name = created.Name;
+            Job = created.Job.Value;
+            Map = created.Map.Value;
+            Position = created.Position;
+            Health = created.Health;
         }
 
         public AccountId Account { get; }
 
-        public NewCharacter Character { get; }
+        public NewCharacter Created { get; }
+
+        public string Name { get; }
+
+        public string Job { get; set; }
+
+        public string Map { get; set; }
+
+        public WorldPosition Position { get; set; }
+
+        public int Health { get; set; }
+
+        public uint InventoryRevision { get; set; }
+
+        public List<StoredItem> Items { get; } = new();
+
+        public StoredCharacter ToStored(long id)
+        {
+            return new StoredCharacter(
+                id,
+                Account,
+                Name,
+                Job,
+                1,
+                Created.Stats,
+                Health,
+                Map,
+                Position,
+                InventoryRevision,
+                Items.ToList());
+        }
     }
 }
 }

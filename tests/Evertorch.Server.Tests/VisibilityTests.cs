@@ -20,8 +20,10 @@ public sealed class VisibilityTests
         ConnectionId connection = server.Connect();
         server.SignInWithCharacter(connection, character);
         server.SendEnterWorld(connection, character);
+        server.Tick();
 
-        // Moved off the spawn point before the first visibility pass, so nobody ever sees it there.
+        // The load answers at the start of the next tick. Moved off the spawn point before that tick's visibility
+        // pass, so nobody ever sees it there.
         server.AfterCommandsOnce(() => server.Place(connection, x, z));
         server.Tick();
         return connection;

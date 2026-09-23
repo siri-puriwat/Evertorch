@@ -77,6 +77,7 @@ public static class ServerHost
         builder.Services.AddSingleton<MessageSender>();
         builder.Services.AddSingleton<Targeting>();
         builder.Services.AddSingleton<PlayerLife>();
+        builder.Services.AddSingleton<CharacterLifetime>();
         builder.Services.AddSingleton<LiteNetLibServerTransport>();
         builder.Services.AddSingleton<IServerTransport>(services =>
             services.GetRequiredService<LiteNetLibServerTransport>());
@@ -93,6 +94,7 @@ public static class ServerHost
         builder.Services.AddSingleton<ITickPhase>(services => services.GetRequiredService<ItemDropSystem>());
         builder.Services.AddSingleton<ITickPhase, VisibilityPhase>();
         builder.Services.AddSingleton<ITickPhase, SnapshotPhase>();
+        builder.Services.AddSingleton<ITickPhase, CheckpointScheduler>();
         builder.Services.AddSingleton<StatusPublisher>();
         builder.Services.AddSingleton<ITickPhase>(services => services.GetRequiredService<StatusPublisher>());
 
