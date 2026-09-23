@@ -15,6 +15,7 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
     private readonly ClientConnectionSettings m_settings;
     private readonly IMapProvider m_maps;
     private readonly byte[] m_sendBuffer = new byte[ProtocolLimits.MaxClientPayloadBytes];
+    private uint m_commandSequence;
 
     public ClientConnection(IClientTransport transport, ClientConnectionSettings settings, IMapProvider maps)
     {
@@ -158,6 +159,43 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
 
         new TargetEntity(target).Write(m_sendBuffer);
         SendRouted(MessageOpcode.TargetEntity, TargetEntity.EncodedLength);
+    }
+
+    /// <summary>
+    ///     Asks the server to attack <paramref name="target" /> repeatedly. Commands share one sequence per connection,
+    ///     starting at 1, which the server uses to drop duplicates.
+    /// </summary>
+    public void SendAttack(EntityId target)
+    {
+        if (State != ClientConnectionState.InWorld)
+        {
+            return;
+        }
+
+        new AttackEntity(target, NextCommandSequence()).Write(m_sendBuffer);
+        SendRouted(MessageOpcode.AttackEntity, AttackEntity.EncodedLength);
+    }
+
+    public void SendCancel()
+    {
+        if (State != ClientConnectionState.InWorld)
+        {
+            return;
+        }
+
+        new CancelAction(NextCommandSequence()).Write(m_sendBuffer);
+        SendRouted(MessageOpcode.CancelAction, CancelAction.EncodedLength);
+    }
+
+    public void SendRespawn()
+    {
+        if (State != ClientConnectionState.InWorld)
+        {
+            return;
+        }
+
+        new Respawn(NextCommandSequence()).Write(m_sendBuffer);
+        SendRouted(MessageOpcode.Respawn, Respawn.EncodedLength);
     }
 
     public event Action<ClientWorld>? EnteredWorld;
@@ -331,6 +369,12 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
         {
             MalformedMessages++;
         }
+    }
+
+    private uint NextCommandSequence()
+    {
+        m_commandSequence++;
+        return m_commandSequence;
     }
 
     private void SendRouted(MessageOpcode opcode, int length)

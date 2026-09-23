@@ -138,6 +138,42 @@ public sealed class ClientConnectionTests
     }
 
     [Test]
+    public void Commands_ShareOneSequenceStartingAtOne_OnTheReliableChannel()
+    {
+        Harness harness = new Harness();
+        harness.EnterWorld();
+        int before = harness.Transport.Sent.Count;
+
+        harness.Connection.SendAttack(new EntityId(300));
+        harness.Connection.SendCancel();
+        harness.Connection.SendRespawn();
+
+        FakeClientTransport.SentMessage[] sent = harness.Transport.Sent.Skip(before).ToArray();
+        Assert.That(sent.Select(message => message.Channel), Is.All.EqualTo(ProtocolChannel.Control));
+        Assert.That(AttackEntity.TryRead(sent[0].Payload, out AttackEntity attack), Is.True);
+        Assert.That(CancelAction.TryRead(sent[1].Payload, out CancelAction cancel), Is.True);
+        Assert.That(Respawn.TryRead(sent[2].Payload, out Respawn respawn), Is.True);
+        Assert.That(attack.Target, Is.EqualTo(new EntityId(300)));
+        Assert.That(
+            new[] { attack.CommandSequence, cancel.CommandSequence, respawn.CommandSequence },
+            Is.EqualTo(new[] { 1u, 2u, 3u }));
+    }
+
+    [Test]
+    public void Commands_BeforeTheWorldIsEntered_SendNothing()
+    {
+        Harness harness = new Harness();
+        harness.ConnectAndReceiveHello();
+        int before = harness.Transport.Sent.Count;
+
+        harness.Connection.SendAttack(new EntityId(300));
+        harness.Connection.SendCancel();
+        harness.Connection.SendRespawn();
+
+        Assert.That(harness.Transport.Sent.Count, Is.EqualTo(before));
+    }
+
+    [Test]
     public void SendTarget_BeforeTheWorldIsEntered_SendsNothing()
     {
         Harness harness = new Harness();

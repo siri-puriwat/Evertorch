@@ -20,6 +20,9 @@ public sealed class MessageRoutingTests
     [TestCase(MessageOpcode.ClientHello)]
     [TestCase(MessageOpcode.EnterWorldRequest)]
     [TestCase(MessageOpcode.TargetEntity)]
+    [TestCase(MessageOpcode.AttackEntity)]
+    [TestCase(MessageOpcode.CancelAction)]
+    [TestCase(MessageOpcode.Respawn)]
     [TestCase(MessageOpcode.ServerHello)]
     [TestCase(MessageOpcode.WorldEntered)]
     [TestCase(MessageOpcode.EntitySpawn)]
@@ -61,6 +64,9 @@ public sealed class MessageRoutingTests
     [TestCase(MessageOpcode.ClientHello, true)]
     [TestCase(MessageOpcode.EnterWorldRequest, true)]
     [TestCase(MessageOpcode.TargetEntity, true)]
+    [TestCase(MessageOpcode.AttackEntity, true)]
+    [TestCase(MessageOpcode.CancelAction, true)]
+    [TestCase(MessageOpcode.Respawn, true)]
     [TestCase(MessageOpcode.MoveInput, true)]
     [TestCase(MessageOpcode.StopMovement, true)]
     [TestCase(MessageOpcode.EntitySnapshot, false)]
@@ -95,7 +101,8 @@ public sealed class MessageRoutingTests
         string[] expected =
         {
             "None=0x0000", "ClientHello=0x0001", "EnterWorldRequest=0x0002", "MoveInput=0x0003",
-            "StopMovement=0x0004", "TargetEntity=0x0005", "ServerHello=0x8001", "WorldEntered=0x8003",
+            "StopMovement=0x0004", "TargetEntity=0x0005", "AttackEntity=0x0006", "CancelAction=0x0007",
+            "Respawn=0x000C", "ServerHello=0x8001", "WorldEntered=0x8003",
             "EntitySpawn=0x8004", "EntityDespawn=0x8005", "EntitySnapshot=0x8006", "TargetChanged=0x8007",
             "DisconnectNotice=0x8013"
         };
@@ -118,9 +125,9 @@ public sealed class MessageRoutingTests
     }
 
     [Test]
-    public void ProtocolVersion_IsFour()
+    public void ProtocolVersion_IsFive()
     {
-        Assert.That(ProtocolConstants.ProtocolVersion, Is.EqualTo(4));
+        Assert.That(ProtocolConstants.ProtocolVersion, Is.EqualTo(5));
     }
 
     [Test]

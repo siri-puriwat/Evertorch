@@ -128,6 +128,30 @@ public sealed class InboundQueue
 
                 decoded = InboundEvent.ForTarget(connection, target.Target);
                 return true;
+            case MessageOpcode.AttackEntity:
+                if (!AttackEntity.TryRead(payload, out AttackEntity attack))
+                {
+                    return false;
+                }
+
+                decoded = InboundEvent.ForAttack(connection, attack.Target, attack.CommandSequence);
+                return true;
+            case MessageOpcode.CancelAction:
+                if (!CancelAction.TryRead(payload, out CancelAction cancel))
+                {
+                    return false;
+                }
+
+                decoded = InboundEvent.ForCommand(InboundEventKind.Cancel, connection, cancel.CommandSequence);
+                return true;
+            case MessageOpcode.Respawn:
+                if (!Respawn.TryRead(payload, out Respawn respawn))
+                {
+                    return false;
+                }
+
+                decoded = InboundEvent.ForCommand(InboundEventKind.Respawn, connection, respawn.CommandSequence);
+                return true;
             default:
                 // A valid client message the server does not handle yet is treated like any other junk.
                 return false;

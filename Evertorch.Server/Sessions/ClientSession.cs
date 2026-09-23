@@ -40,6 +40,11 @@ public sealed class ClientSession
     public long RefusedCommands { get; set; }
 
     /// <summary>
+    ///     The newest command sequence processed for this session; 0 before the first command.
+    /// </summary>
+    public uint LastCommandSequence { get; set; }
+
+    /// <summary>
     ///     Whether this client may be told about <paramref name="entity" />: its own entity, or one it has been sent a
     ///     spawn for. Every event is routed through this so a client never hears of an entity before its spawn.
     /// </summary>

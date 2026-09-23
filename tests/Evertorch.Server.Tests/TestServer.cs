@@ -208,6 +208,33 @@ internal sealed class TestServer
         Inbound.OnPayload(connection, ProtocolChannel.Input, payload);
     }
 
+    public void SendAttack(ConnectionId connection, EntityId target, uint commandSequence)
+    {
+        byte[] payload = new byte[AttackEntity.EncodedLength];
+        new AttackEntity(target, commandSequence).Write(payload);
+        Inbound.OnPayload(connection, ProtocolChannel.Control, payload);
+    }
+
+    public void SendCancel(ConnectionId connection, uint commandSequence)
+    {
+        byte[] payload = new byte[CancelAction.EncodedLength];
+        new CancelAction(commandSequence).Write(payload);
+        Inbound.OnPayload(connection, ProtocolChannel.Control, payload);
+    }
+
+    public void SendRespawn(ConnectionId connection, uint commandSequence)
+    {
+        byte[] payload = new byte[Respawn.EncodedLength];
+        new Respawn(commandSequence).Write(payload);
+        Inbound.OnPayload(connection, ProtocolChannel.Control, payload);
+    }
+
+    public ClientSession SessionOf(ConnectionId connection)
+    {
+        Sessions.TryGet(connection, out ClientSession? session);
+        return session!;
+    }
+
     public void SendTarget(ConnectionId connection, EntityId target)
     {
         byte[] payload = new byte[TargetEntity.EncodedLength];

@@ -20,6 +20,9 @@ public static class MessageRouting
             case MessageOpcode.ClientHello:
             case MessageOpcode.EnterWorldRequest:
             case MessageOpcode.TargetEntity:
+            case MessageOpcode.AttackEntity:
+            case MessageOpcode.CancelAction:
+            case MessageOpcode.Respawn:
             case MessageOpcode.ServerHello:
             case MessageOpcode.WorldEntered:
             case MessageOpcode.EntitySpawn:

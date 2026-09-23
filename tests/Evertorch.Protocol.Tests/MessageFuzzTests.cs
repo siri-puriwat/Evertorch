@@ -72,6 +72,18 @@ public sealed class MessageFuzzTests
                     EntityStateFlags.None)),
             payload => EntitySpawn.TryRead(payload, out EntitySpawn? message) ? Encode(message!) : null);
         yield return Case(
+            "AttackEntity",
+            Encode(new AttackEntity(new EntityId(9), 3)),
+            payload => AttackEntity.TryRead(payload, out AttackEntity message) ? Encode(message) : null);
+        yield return Case(
+            "CancelAction",
+            Encode(new CancelAction(4)),
+            payload => CancelAction.TryRead(payload, out CancelAction message) ? Encode(message) : null);
+        yield return Case(
+            "Respawn",
+            Encode(new Respawn(5)),
+            payload => Respawn.TryRead(payload, out Respawn message) ? Encode(message) : null);
+        yield return Case(
             "TargetChanged",
             Encode(new TargetChanged(new EntityId(9), new EntityId(10))),
             payload => TargetChanged.TryRead(payload, out TargetChanged message) ? Encode(message) : null);
@@ -236,6 +248,27 @@ public sealed class MessageFuzzTests
     private static byte[] Encode(EnterWorldRequest message)
     {
         byte[] buffer = new byte[EnterWorldRequest.EncodedLength];
+        message.Write(buffer);
+        return buffer;
+    }
+
+    private static byte[] Encode(AttackEntity message)
+    {
+        byte[] buffer = new byte[AttackEntity.EncodedLength];
+        message.Write(buffer);
+        return buffer;
+    }
+
+    private static byte[] Encode(CancelAction message)
+    {
+        byte[] buffer = new byte[CancelAction.EncodedLength];
+        message.Write(buffer);
+        return buffer;
+    }
+
+    private static byte[] Encode(Respawn message)
+    {
+        byte[] buffer = new byte[Respawn.EncodedLength];
         message.Write(buffer);
         return buffer;
     }

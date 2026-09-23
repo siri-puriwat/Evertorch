@@ -144,6 +144,11 @@ public sealed class SessionManager : ITickPhase
             case InboundEventKind.Target:
                 HandleTarget(session, inboundEvent.Target);
                 break;
+            case InboundEventKind.Attack:
+            case InboundEventKind.Cancel:
+            case InboundEventKind.Respawn:
+                HandleCommand(session, inboundEvent);
+                break;
             default:
                 IgnoredEvents++;
                 break;
@@ -240,6 +245,36 @@ public sealed class SessionManager : ITickPhase
         }
 
         if (!m_targeting.TrySelect(session, target))
+        {
+            session.RefusedCommands++;
+        }
+    }
+
+    // Commands carry one sequence per session (Network Protocol §8). Reliable ordered delivery never leaves a gap, so
+    // a sequence that is not newer is a duplicate or a replay and is refused.
+    private void HandleCommand(ClientSession session, InboundEvent command)
+    {
+        if (session.State != SessionState.InWorld || session.Player == null)
+        {
+            IgnoredEvents++;
+            return;
+        }
+
+        if (unchecked((int)(command.CommandSequence - session.LastCommandSequence)) <= 0)
+        {
+            session.RefusedCommands++;
+            return;
+        }
+
+        session.LastCommandSequence = command.CommandSequence;
+        bool isAccepted = command.Kind switch
+        {
+            InboundEventKind.Attack => command.Target != default && m_targeting.TrySelect(session, command.Target),
+            InboundEventKind.Cancel => true,
+            _ => false
+        };
+
+        if (!isAccepted)
         {
             session.RefusedCommands++;
         }
