@@ -56,9 +56,11 @@ public sealed class StatusPublisher : ITickPhase
     private ServerStatus Build(uint tick)
     {
         var playersPerMap = new Dictionary<string, int>();
+        var monstersPerMap = new Dictionary<string, int>();
         foreach (MapInstance map in m_world.Maps)
         {
             playersPerMap[map.Definition.Id.Value] = map.Players.Count;
+            monstersPerMap[map.Definition.Id.Value] = map.Monsters.Count;
         }
 
         var players = new List<PlayerSummary>();
@@ -105,6 +107,7 @@ public sealed class StatusPublisher : ITickPhase
             inWorld,
             m_transport.GetStatistics(),
             playersPerMap,
+            monstersPerMap,
             players);
     }
 }

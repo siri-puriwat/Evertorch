@@ -83,6 +83,20 @@ public sealed class ServerEndToEndTests
             .ToArray();
     }
 
+    private static EntitySpawn[] Spawns(TestNetClient client, EntityKind kind)
+    {
+        return Control(client)
+            .Select(message => EntitySpawn.TryRead(message.Payload, out EntitySpawn? spawn) ? spawn : null)
+            .Where(spawn => spawn != null && spawn.Kind == kind)
+            .Select(spawn => spawn!)
+            .ToArray();
+    }
+
+    private static bool Mentions(EntitySnapshot snapshot, EntityId entity)
+    {
+        return snapshot.Entities.Any(state => state.Entity == entity);
+    }
+
     [Test]
     public void Client_OverLoopbackSocket_CompletesHandshakeEntersWorldAndSeesAnotherPlayer()
     {
@@ -96,9 +110,14 @@ public sealed class ServerEndToEndTests
         EnterWorld(first, port, contentVersion, 1);
         EnterWorld(second, port, contentVersion, 2);
 
-        Assert.That(first.WaitFor(() => Control(first).Length >= 3), Is.True, "the first client never saw the second");
-        Assert.That(second.WaitFor(() => Control(second).Length >= 3), Is.True,
+        Assert.That(first.WaitFor(() => Spawns(first, EntityKind.Player).Length == 1), Is.True,
+            "the first client never saw the second");
+        Assert.That(second.WaitFor(() => Spawns(second, EntityKind.Player).Length == 1), Is.True,
             "the second client never saw the first");
+        Assert.That(
+            Spawns(second, EntityKind.Monster).Select(spawn => spawn.DefinitionId),
+            Is.EqualTo(Enumerable.Repeat("monster.training_slime", 4)),
+            "the training ground's four slimes are in view of its spawn point");
         Assert.That(Opcodes(Control(second)).Take(3), Is.EqualTo(new[]
         {
             MessageOpcode.ServerHello,
@@ -111,8 +130,9 @@ public sealed class ServerEndToEndTests
         Assert.That(entered.Job, Is.EqualTo(new JobDefinitionId("job.adventurer")));
         Assert.That(entered.MovementSpeed, Is.EqualTo(5f));
 
-        Assert.That(second.WaitFor(() => Snapshots(second).Any(snapshot => snapshot.Entities.Count == 2)), Is.True);
-        EntitySnapshot both = Snapshots(second).Last(snapshot => snapshot.Entities.Count == 2);
+        EntityId firstEntity = Spawns(second, EntityKind.Player)[0].Entity;
+        Assert.That(second.WaitFor(() => Snapshots(second).Any(snapshot => Mentions(snapshot, firstEntity))), Is.True);
+        EntitySnapshot both = Snapshots(second).Last(snapshot => Mentions(snapshot, firstEntity));
         Assert.That(
             both.Entities[0].Entity,
             Is.EqualTo(entered.LocalEntity),

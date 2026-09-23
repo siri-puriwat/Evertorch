@@ -20,6 +20,10 @@ internal sealed class TestServer
     private static readonly Lazy<ServerContent> RepositoryContent =
         new(() => ServerContentLoader.Load(PackageFixture.BuildRepositoryPackage()));
 
+    // Most server tests are about players; without monsters their message counts stay exact.
+    private static readonly Lazy<ServerContent> RepositoryContentWithoutMonsters =
+        new(() => WithoutMonsterSpawns(RepositoryContent.Value));
+
     private readonly TickPipeline m_pipeline;
     private readonly List<Action> m_afterCommands = new();
     private long m_lastConnection;
@@ -33,9 +37,11 @@ internal sealed class TestServer
         int interestNeighborRadius = 1,
         int inputHoldTimeoutMs = 250,
         int maxQueuedInputs = 3,
-        int snapshotIntervalTicks = 1)
+        int snapshotIntervalTicks = 1,
+        bool withMonsters = false,
+        ulong randomSeed = 1)
     {
-        Content = RepositoryContent.Value;
+        Content = withMonsters ? RepositoryContent.Value : RepositoryContentWithoutMonsters.Value;
         var network = new NetworkOptions
         {
             HandshakeTimeoutMs = handshakeTimeoutMs,
@@ -47,7 +53,8 @@ internal sealed class TestServer
             InterestNeighborRadius = interestNeighborRadius,
             InputHoldTimeoutMs = inputHoldTimeoutMs,
             MaxQueuedInputs = maxQueuedInputs,
-            SnapshotIntervalTicks = snapshotIntervalTicks
+            SnapshotIntervalTicks = snapshotIntervalTicks,
+            RandomSeed = randomSeed
         };
         var authentication = new DevelopmentAuthenticationOptions
         {
@@ -56,6 +63,7 @@ internal sealed class TestServer
         IOptions<CompatibilityOptions> compatibility = Options.Create(new CompatibilityOptions());
         IOptions<SimulationOptions> simulation = Options.Create(new SimulationOptions { TickRate = TickRate });
 
+        Random = ServerRandom.FromOptions(world);
         Transport = new InMemoryServerTransport();
         Inbound = new InboundQueue(Options.Create(network));
         Sessions = new SessionRegistry();
@@ -63,7 +71,8 @@ internal sealed class TestServer
             Content,
             Options.Create(world),
             new RenewalCharacterRules(),
-            new RenewalMovementRules());
+            new RenewalMovementRules(),
+            Random);
         Log = new CapturingLogger<SessionManager>();
         Time = new FakeTimeProvider();
 
@@ -88,7 +97,7 @@ internal sealed class TestServer
             {
                 Status,
                 new SnapshotPhase(Sessions, sender, Options.Create(world)),
-                new VisibilityPhase(Sessions, sender),
+                new VisibilityPhase(Sessions, World, sender),
                 new MovementSystem(Sessions, Options.Create(world), simulation),
                 SessionManager,
                 new RecordingPhase(TickPhase.ApplyCommands, "test", new List<string>(), _ => RunAfterCommands())
@@ -97,6 +106,8 @@ internal sealed class TestServer
     }
 
     public ServerContent Content { get; }
+
+    public ServerRandom Random { get; }
 
     public InMemoryServerTransport Transport { get; }
 
@@ -233,6 +244,32 @@ internal sealed class TestServer
     {
         PlayerEntity player = PlayerOf(connection);
         player.Position = new WorldPosition(x, player.Position.Y, z);
+    }
+
+    private static ServerContent WithoutMonsterSpawns(ServerContent content)
+    {
+        var maps = new Dictionary<MapDefinitionId, MapDefinition>();
+        foreach (MapDefinition map in content.Maps.Values)
+        {
+            maps.Add(
+                map.Id,
+                new MapDefinition(
+                    map.Id,
+                    map.DisplayName,
+                    map.SpawnPosition,
+                    map.SpawnFacing,
+                    Array.Empty<MonsterSpawn>(),
+                    map.Navigation));
+        }
+
+        return new ServerContent(
+            content.ServerContentVersion,
+            content.ClientContentVersion,
+            new Dictionary<ItemDefinitionId, ItemDefinition>(content.Items),
+            new Dictionary<MonsterDefinitionId, MonsterDefinition>(content.Monsters),
+            new Dictionary<SkillDefinitionId, SkillDefinition>(content.Skills),
+            new Dictionary<JobDefinitionId, JobDefinition>(content.Jobs),
+            maps);
     }
 }
 }

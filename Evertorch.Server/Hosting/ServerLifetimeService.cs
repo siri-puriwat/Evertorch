@@ -23,7 +23,14 @@ public sealed class ServerLifetimeService : IHostedService, IDisposable
             new EventId(1003, "ContentLoaded"),
             "Content loaded: server {ServerContentVersion}, client {ClientContentVersion}, {Maps} maps.");
 
+    private static readonly Action<ILogger, ulong, string, Exception?> LogRandomSeed =
+        LoggerMessage.Define<ulong, string>(
+            LogLevel.Information,
+            new EventId(1004, "RandomSeedChosen"),
+            "Random seed {Seed} ({Origin}).");
+
     private readonly ServerContent m_content;
+    private readonly ServerRandom m_random;
     private readonly IServerTransport m_transport;
     private readonly FixedStepLoop m_loop;
     private readonly IHostApplicationLifetime m_lifetime;
@@ -37,6 +44,7 @@ public sealed class ServerLifetimeService : IHostedService, IDisposable
     public ServerLifetimeService(
         ServerContent content,
         WorldSimulation world,
+        ServerRandom random,
         IServerTransport transport,
         FixedStepLoop loop,
         IHostApplicationLifetime lifetime,
@@ -44,6 +52,7 @@ public sealed class ServerLifetimeService : IHostedService, IDisposable
     {
         _ = world;
         m_content = content;
+        m_random = random;
         m_transport = transport;
         m_loop = loop;
         m_lifetime = lifetime;
@@ -78,6 +87,7 @@ public sealed class ServerLifetimeService : IHostedService, IDisposable
             m_content.ClientContentVersion,
             m_content.Maps.Count,
             null);
+        LogRandomSeed(m_logger, m_random.Seed, m_random.IsConfigured ? "configured" : "drawn at startup", null);
 
         // A dedicated foreground thread keeps tick timing away from thread-pool starvation and keeps the process
         // alive until the current tick has finished.

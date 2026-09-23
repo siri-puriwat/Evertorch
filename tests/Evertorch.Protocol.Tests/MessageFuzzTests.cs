@@ -61,6 +61,17 @@ public sealed class MessageFuzzTests
                     EntityStateFlags.Moving)),
             payload => EntitySpawn.TryRead(payload, out EntitySpawn? message) ? Encode(message!) : null);
         yield return Case(
+            "EntitySpawn (monster)",
+            Encode(
+                new EntitySpawn(
+                    new EntityId(10),
+                    EntityKind.Monster,
+                    "monster.training_slime",
+                    new WorldPosition(12f, 0f, 12f),
+                    new WorldDirection(0f, 1f),
+                    EntityStateFlags.None)),
+            payload => EntitySpawn.TryRead(payload, out EntitySpawn? message) ? Encode(message!) : null);
+        yield return Case(
             "EntityDespawn",
             Encode(new EntityDespawn(new EntityId(9), DespawnReason.OutOfRange)),
             payload => EntityDespawn.TryRead(payload, out EntityDespawn message) ? Encode(message) : null);

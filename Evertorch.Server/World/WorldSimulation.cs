@@ -16,7 +16,13 @@ public sealed class WorldSimulation
     private const int StartingLevel = 1;
     private const uint FirstInstanceNumber = 1;
 
+    private static readonly WorldDirection MonsterFacing = new(0f, 1f);
+
     private readonly Dictionary<MapDefinitionId, MapInstance> m_maps = new();
+    private readonly Dictionary<MapInstance, MonsterPlacement> m_placements = new();
+    private readonly ServerContent m_content;
+    private readonly IMovementRules m_movementRules;
+    private readonly IRandomSource m_random;
     private readonly JobDefinition m_startingJob;
     private readonly float m_startingMovementSpeed;
     private long m_lastEntityId;
@@ -25,8 +31,12 @@ public sealed class WorldSimulation
         ServerContent content,
         IOptions<WorldOptions> options,
         ICharacterRules characterRules,
-        IMovementRules movementRules)
+        IMovementRules movementRules,
+        IRandomSource random)
     {
+        m_content = content;
+        m_movementRules = movementRules;
+        m_random = random;
         WorldOptions world = options.Value;
         if (!JobDefinitionId.TryCreate(world.StartingJob, out JobDefinitionId startingJob)
             || !content.Jobs.TryGetValue(startingJob, out JobDefinition? job))
@@ -41,7 +51,16 @@ public sealed class WorldSimulation
         foreach (MapDefinition map in content.Maps.Values.OrderBy(map => map.Id.Value, StringComparer.Ordinal))
         {
             var interest = new InterestGrid(world.InterestCellSize, world.InterestNeighborRadius);
-            m_maps.Add(map.Id, new MapInstance(map, FirstInstanceNumber, interest));
+            var instance = new MapInstance(map, FirstInstanceNumber, interest);
+            m_maps.Add(map.Id, instance);
+            m_placements.Add(instance, new MonsterPlacement(map.Navigation));
+            foreach (MonsterSpawn spawn in map.MonsterSpawns)
+            {
+                for (int index = 0; index < spawn.Count; index++)
+                {
+                    SpawnMonster(instance, spawn);
+                }
+            }
         }
     }
 
@@ -53,9 +72,8 @@ public sealed class WorldSimulation
     public PlayerEntity SpawnPlayer(CharacterId character, ConnectionId owner, out MapInstance map)
     {
         map = m_maps[m_startingJob.StartingMap];
-        m_lastEntityId++;
         var player = new PlayerEntity(
-            new EntityId(m_lastEntityId),
+            NextEntityId(),
             character,
             owner,
             m_startingJob.Id,
@@ -69,6 +87,30 @@ public sealed class WorldSimulation
     public void RemovePlayer(MapInstance map, PlayerEntity player)
     {
         map.Remove(player);
+    }
+
+    /// <summary>
+    ///     Places a new monster of <paramref name="spawn" /> at a fresh random point of its area (Gameplay Systems §10).
+    /// </summary>
+    public MonsterEntity SpawnMonster(MapInstance map, MonsterSpawn spawn)
+    {
+        MonsterDefinition definition = m_content.Monsters[spawn.Monster];
+        float speed = m_movementRules.CalculateMovement(new MovementContext((float)definition.BaseSpeed)).Speed;
+        var monster = new MonsterEntity(
+            NextEntityId(),
+            definition,
+            spawn,
+            m_placements[map].ChooseSpawnPoint(spawn, m_random),
+            MonsterFacing,
+            speed);
+        map.Add(monster);
+        return monster;
+    }
+
+    private EntityId NextEntityId()
+    {
+        m_lastEntityId++;
+        return new EntityId(m_lastEntityId);
     }
 
     private static float CalculateMovementSpeed(

@@ -44,6 +44,11 @@ public sealed class WorldOptions
     ///     A snapshot is sent every this many ticks.
     /// </summary>
     public int SnapshotIntervalTicks { get; set; } = 1;
+
+    /// <summary>
+    ///     Seed of the server's random source. Unset draws a seed at startup and logs it, so a run can be replayed.
+    /// </summary>
+    public ulong? RandomSeed { get; set; }
 }
 
 internal sealed class WorldOptionsValidator : IValidateOptions<WorldOptions>

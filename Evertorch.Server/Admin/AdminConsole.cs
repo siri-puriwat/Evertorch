@@ -93,7 +93,8 @@ public sealed class AdminConsole
                 status.Transport.PacketsLost));
         foreach (KeyValuePair<string, int> map in status.PlayersPerMap)
         {
-            output.WriteLine(Format("map {0}: {1} players", map.Key, map.Value));
+            status.MonstersPerMap.TryGetValue(map.Key, out int monsters);
+            output.WriteLine(Format("map {0}: {1} players, {2} monsters", map.Key, map.Value, monsters));
         }
     }
 

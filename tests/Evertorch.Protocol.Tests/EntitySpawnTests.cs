@@ -25,6 +25,25 @@ public sealed class EntitySpawnTests
         0x01, 0x00
     };
 
+    private static readonly byte[] MonsterBytes =
+    {
+        0x04, 0x80,
+        0x2A, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x02,
+        0x09, 0x00, 0x6D, 0x6F, 0x6E, 0x73, 0x74, 0x65, 0x72, 0x2E, 0x61,
+        0x00, 0x00, 0x40, 0x41, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x41,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80, 0x3F,
+        0x00, 0x00
+    };
+
+    private static EntitySpawn Monster => new(
+        new EntityId(42),
+        EntityKind.Monster,
+        "monster.a",
+        new WorldPosition(12f, 0f, 12f),
+        new WorldDirection(0f, 1f),
+        EntityStateFlags.None);
+
     private static EntitySpawn Golden => new(
         new EntityId(0x0123456789ABCDEF),
         EntityKind.Player,
@@ -34,7 +53,7 @@ public sealed class EntitySpawnTests
         EntityStateFlags.Moving);
 
     [TestCase(0)]
-    [TestCase(2)]
+    [TestCase(3)]
     [TestCase(255)]
     public void TryRead_WhenKindIsUnknown_ReturnsFalse(byte kind)
     {
@@ -64,6 +83,17 @@ public sealed class EntitySpawnTests
     }
 
     [Test]
+    public void TryRead_ForMonsterBytes_ReturnsKnownMonster()
+    {
+        bool isRead = EntitySpawn.TryRead(MonsterBytes, out EntitySpawn? message);
+
+        Assert.That(isRead, Is.True);
+        Assert.That(message!.Kind, Is.EqualTo(EntityKind.Monster));
+        Assert.That(message.DefinitionId, Is.EqualTo("monster.a"));
+        Assert.That(message.Position, Is.EqualTo(new WorldPosition(12f, 0f, 12f)));
+    }
+
+    [Test]
     public void TryRead_WhenAnyFloatIsNotFinite_ReturnsFalse()
     {
         for (int offset = PositionXOffset; offset < FlagsOffset; offset += sizeof(float))
@@ -78,6 +108,16 @@ public sealed class EntitySpawnTests
         byte[] mapId = WireMatrix.With(GoldenBytes, DefinitionTextOffset, 0x6D, 0x61, 0x70);
 
         Assert.That(EntitySpawn.TryRead(mapId, out _), Is.False);
+    }
+
+    [Test]
+    public void TryRead_WhenDefinitionIsNotAMonsterForAMonster_ReturnsFalse()
+    {
+        byte[] playerKind = WireMatrix.With(MonsterBytes, KindOffset, 0x01);
+        byte[] jobForMonster = WireMatrix.With(GoldenBytes, KindOffset, 0x02);
+
+        Assert.That(EntitySpawn.TryRead(playerKind, out _), Is.False);
+        Assert.That(EntitySpawn.TryRead(jobForMonster, out _), Is.False);
     }
 
     [Test]
@@ -107,6 +147,17 @@ public sealed class EntitySpawnTests
 
         Assert.That(written, Is.EqualTo(GoldenBytes.Length));
         Assert.That(buffer, Is.EqualTo(GoldenBytes));
+    }
+
+    [Test]
+    public void Write_ForKnownMonster_ProducesMonsterBytes()
+    {
+        byte[] buffer = new byte[Monster.GetEncodedLength()];
+
+        int written = Monster.Write(buffer);
+
+        Assert.That(written, Is.EqualTo(MonsterBytes.Length));
+        Assert.That(buffer, Is.EqualTo(MonsterBytes));
     }
 
     [Test]

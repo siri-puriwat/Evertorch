@@ -8,6 +8,9 @@ public enum EntityKind : byte
     None = 0,
 
     /// <summary>Carries a job definition ID.</summary>
-    Player = 1
+    Player = 1,
+
+    /// <summary>Carries a monster definition ID.</summary>
+    Monster = 2
 }
 }

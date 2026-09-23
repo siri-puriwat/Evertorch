@@ -57,6 +57,17 @@ public sealed class SharedLifecycleMessageTests
         0x01, 0x00,
     };
 
+    private static readonly byte[] MonsterSpawnBytes =
+    {
+        0x04, 0x80,
+        0x2A, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x02,
+        0x09, 0x00, 0x6D, 0x6F, 0x6E, 0x73, 0x74, 0x65, 0x72, 0x2E, 0x61,
+        0x00, 0x00, 0x40, 0x41, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x41,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80, 0x3F,
+        0x00, 0x00,
+    };
+
     private static readonly byte[] EntityDespawnBytes =
     {
         0x05, 0x80,
@@ -179,6 +190,35 @@ public sealed class SharedLifecycleMessageTests
         Assert.That(isRead, Is.True);
         Assert.That(read!.DefinitionId, Is.EqualTo("job.a"));
         Assert.That(read.StateFlags, Is.EqualTo(EntityStateFlags.Moving));
+    }
+
+    [Test]
+    public void MonsterSpawn_WriteAndRead_MatchGoldenBytes()
+    {
+        var message = new EntitySpawn(
+            new EntityId(42),
+            EntityKind.Monster,
+            "monster.a",
+            new WorldPosition(12f, 0f, 12f),
+            new WorldDirection(0f, 1f),
+            EntityStateFlags.None);
+        byte[] buffer = new byte[message.GetEncodedLength()];
+        message.Write(buffer);
+
+        bool isRead = EntitySpawn.TryRead(MonsterSpawnBytes, out EntitySpawn? read);
+        bool isJobAccepted = EntitySpawn.TryRead(WithKind(EntitySpawnBytes, 0x02), out EntitySpawn? _);
+
+        Assert.That(buffer, Is.EqualTo(MonsterSpawnBytes));
+        Assert.That(isRead, Is.True);
+        Assert.That(read!.Kind, Is.EqualTo(EntityKind.Monster));
+        Assert.That(isJobAccepted, Is.False);
+    }
+
+    private static byte[] WithKind(byte[] golden, byte kind)
+    {
+        byte[] copy = (byte[])golden.Clone();
+        copy[10] = kind;
+        return copy;
     }
 
     [Test]

@@ -5,12 +5,12 @@ using Evertorch.Game;
 namespace Evertorch.Server
 {
 /// <summary>
-///     Buckets a map's players into square cells so "who is near whom" costs a few cell lookups rather than a
+///     Buckets a map's entities into square cells so "who is near whom" costs a few cell lookups rather than a
 ///     comparison of every pair. A player is interested in its own cell and the cells within the neighbour radius.
 /// </summary>
 public sealed class InterestGrid
 {
-    private readonly Dictionary<long, List<PlayerEntity>> m_cells = new();
+    private readonly Dictionary<long, List<WorldEntity>> m_cells = new();
     private readonly Dictionary<EntityId, long> m_cellByEntity = new();
     private readonly float m_cellSize;
     private readonly int m_neighborRadius;
@@ -34,7 +34,7 @@ public sealed class InterestGrid
     /// <summary>
     ///     Adds the entity or moves it to the cell its current position falls in.
     /// </summary>
-    public void Update(PlayerEntity entity)
+    public void Update(WorldEntity entity)
     {
         long cell = ToKey(ToCell(entity.Position.X), ToCell(entity.Position.Z));
         if (m_cellByEntity.TryGetValue(entity.Id, out long previous))
@@ -47,9 +47,9 @@ public sealed class InterestGrid
             RemoveFromCell(entity, previous);
         }
 
-        if (!m_cells.TryGetValue(cell, out List<PlayerEntity>? occupants))
+        if (!m_cells.TryGetValue(cell, out List<WorldEntity>? occupants))
         {
-            occupants = new List<PlayerEntity>();
+            occupants = new List<WorldEntity>();
             m_cells.Add(cell, occupants);
         }
 
@@ -57,7 +57,7 @@ public sealed class InterestGrid
         m_cellByEntity[entity.Id] = cell;
     }
 
-    public void Remove(PlayerEntity entity)
+    public void Remove(WorldEntity entity)
     {
         if (m_cellByEntity.TryGetValue(entity.Id, out long cell))
         {
@@ -69,7 +69,7 @@ public sealed class InterestGrid
     /// <summary>
     ///     Appends every other entity in the observer's area of interest.
     /// </summary>
-    public void CollectVisible(PlayerEntity observer, List<PlayerEntity> visible)
+    public void CollectVisible(WorldEntity observer, List<WorldEntity> visible)
     {
         int centerColumn = ToCell(observer.Position.X);
         int centerRow = ToCell(observer.Position.Z);
@@ -77,12 +77,12 @@ public sealed class InterestGrid
         {
             for (int column = centerColumn - m_neighborRadius; column <= centerColumn + m_neighborRadius; column++)
             {
-                if (!m_cells.TryGetValue(ToKey(column, row), out List<PlayerEntity>? occupants))
+                if (!m_cells.TryGetValue(ToKey(column, row), out List<WorldEntity>? occupants))
                 {
                     continue;
                 }
 
-                foreach (PlayerEntity occupant in occupants)
+                foreach (WorldEntity occupant in occupants)
                 {
                     if (occupant.Id != observer.Id)
                     {
@@ -103,9 +103,9 @@ public sealed class InterestGrid
         return (int)Math.Floor(coordinate / m_cellSize);
     }
 
-    private void RemoveFromCell(PlayerEntity entity, long cell)
+    private void RemoveFromCell(WorldEntity entity, long cell)
     {
-        if (!m_cells.TryGetValue(cell, out List<PlayerEntity>? occupants))
+        if (!m_cells.TryGetValue(cell, out List<WorldEntity>? occupants))
         {
             return;
         }

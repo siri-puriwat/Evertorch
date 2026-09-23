@@ -38,9 +38,9 @@ public sealed class InterestGridTests
         Assert.That(Visible(grid, observer).Contains(other), Is.EqualTo(expected));
     }
 
-    private static List<PlayerEntity> Visible(InterestGrid grid, PlayerEntity observer)
+    private static List<WorldEntity> Visible(InterestGrid grid, PlayerEntity observer)
     {
-        var visible = new List<PlayerEntity>();
+        var visible = new List<WorldEntity>();
         grid.CollectVisible(observer, visible);
         return visible;
     }

@@ -11,14 +11,16 @@ namespace Evertorch.Server
 public sealed class VisibilityPhase : ITickPhase
 {
     private readonly SessionRegistry m_sessions;
+    private readonly WorldSimulation m_world;
     private readonly MessageSender m_sender;
-    private readonly List<PlayerEntity> m_visible = new();
+    private readonly List<WorldEntity> m_visible = new();
     private readonly HashSet<EntityId> m_visibleIds = new();
     private readonly List<EntityId> m_departed = new();
 
-    public VisibilityPhase(SessionRegistry sessions, MessageSender sender)
+    public VisibilityPhase(SessionRegistry sessions, WorldSimulation world, MessageSender sender)
     {
         m_sessions = sessions;
+        m_world = world;
         m_sender = sender;
     }
 
@@ -26,13 +28,13 @@ public sealed class VisibilityPhase : ITickPhase
 
     public void Execute(in TickContext context)
     {
-        // Every player is moved to its current cell before anyone looks around. Doing both in one pass would let
+        // Every entity is moved to its current cell before anyone looks around. Doing both in one pass would let
         // an observer see a neighbour in the cell it stood in last tick.
-        foreach (ClientSession session in m_sessions.Sessions)
+        foreach (MapInstance map in m_world.Maps)
         {
-            if (session.State == SessionState.InWorld && session.Player != null && session.Map != null)
+            foreach (WorldEntity entity in map.Entities)
             {
-                session.Map.Interest.Update(session.Player);
+                map.Interest.Update(entity);
             }
         }
 
@@ -51,7 +53,7 @@ public sealed class VisibilityPhase : ITickPhase
         m_visibleIds.Clear();
         map.Interest.CollectVisible(observer, m_visible);
 
-        foreach (PlayerEntity entity in m_visible)
+        foreach (WorldEntity entity in m_visible)
         {
             m_visibleIds.Add(entity.Id);
             if (session.KnownEntities.Add(entity.Id))
@@ -60,8 +62,8 @@ public sealed class VisibilityPhase : ITickPhase
                     session.Connection,
                     new EntitySpawn(
                         entity.Id,
-                        EntityKind.Player,
-                        entity.Job.Value,
+                        entity.Kind,
+                        entity.DefinitionId,
                         entity.Position,
                         entity.Facing,
                         entity.StateFlags));

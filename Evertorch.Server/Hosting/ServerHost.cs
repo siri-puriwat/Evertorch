@@ -48,6 +48,9 @@ public static class ServerHost
         builder.Services.AddSingleton(TimeProvider.System);
         builder.Services.AddSingleton<ICharacterRules, RenewalCharacterRules>();
         builder.Services.AddSingleton<IMovementRules, RenewalMovementRules>();
+        builder.Services.AddSingleton(services =>
+            ServerRandom.FromOptions(services.GetRequiredService<IOptions<WorldOptions>>().Value));
+        builder.Services.AddSingleton<IRandomSource>(services => services.GetRequiredService<ServerRandom>());
 
         builder.Services.AddSingleton<InboundQueue>();
         builder.Services.AddSingleton<SessionRegistry>();

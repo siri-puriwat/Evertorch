@@ -24,6 +24,7 @@ public sealed class ServerStatus
         int inWorldSessions,
         TransportStatistics transport,
         IReadOnlyDictionary<string, int> playersPerMap,
+        IReadOnlyDictionary<string, int> monstersPerMap,
         IReadOnlyList<PlayerSummary> players)
     {
         Tick = tick;
@@ -40,6 +41,7 @@ public sealed class ServerStatus
         InWorldSessions = inWorldSessions;
         Transport = transport;
         PlayersPerMap = playersPerMap;
+        MonstersPerMap = monstersPerMap;
         Players = players;
     }
 
@@ -57,6 +59,7 @@ public sealed class ServerStatus
         0,
         0,
         default,
+        new Dictionary<string, int>(),
         new Dictionary<string, int>(),
         new PlayerSummary[0]);
 
@@ -87,6 +90,8 @@ public sealed class ServerStatus
     public TransportStatistics Transport { get; }
 
     public IReadOnlyDictionary<string, int> PlayersPerMap { get; }
+
+    public IReadOnlyDictionary<string, int> MonstersPerMap { get; }
 
     public IReadOnlyList<PlayerSummary> Players { get; }
 }

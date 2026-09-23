@@ -43,16 +43,16 @@ public sealed class SnapshotPhase : ITickPhase
         }
     }
 
-    private static EntityState ToState(PlayerEntity player)
+    private static EntityState ToState(WorldEntity entity)
     {
         return new EntityState(
-            player.Id,
-            player.Position,
-            player.Facing,
-            player.VelocityX,
-            player.VelocityY,
-            player.VelocityZ,
-            player.StateFlags);
+            entity.Id,
+            entity.Position,
+            entity.Facing,
+            entity.VelocityX,
+            entity.VelocityY,
+            entity.VelocityZ,
+            entity.StateFlags);
     }
 
     private void Send(ClientSession session, PlayerEntity own, MapInstance map, uint tick)
@@ -62,7 +62,7 @@ public sealed class SnapshotPhase : ITickPhase
         m_states.Add(ToState(own));
         foreach (EntityId known in session.KnownEntities)
         {
-            if (map.TryGetPlayer(known, out PlayerEntity? other) && other != null)
+            if (map.TryGetEntity(known, out WorldEntity? other) && other != null)
             {
                 m_states.Add(ToState(other));
             }

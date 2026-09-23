@@ -78,7 +78,9 @@ public sealed class MovementSystem : ITickPhase
         player.VelocityX = step.VelocityX;
         player.VelocityY = step.VelocityY;
         player.VelocityZ = step.VelocityZ;
-        player.StateFlags = step.IsMoving ? EntityStateFlags.Moving : EntityStateFlags.None;
+        player.StateFlags = step.IsMoving
+            ? player.StateFlags | EntityStateFlags.Moving
+            : player.StateFlags & ~EntityStateFlags.Moving;
     }
 
     private void TrackClientTick(PlayerInputState input, uint clientTick, uint serverTick)

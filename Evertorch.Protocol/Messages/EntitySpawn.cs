@@ -93,7 +93,15 @@ public sealed class EntitySpawn
 
     private static bool IsDefinitionOfKind(EntityKind kind, string definitionId)
     {
-        return kind == EntityKind.Player && JobDefinitionId.TryCreate(definitionId, out JobDefinitionId _);
+        switch (kind)
+        {
+            case EntityKind.Player:
+                return JobDefinitionId.TryCreate(definitionId, out JobDefinitionId _);
+            case EntityKind.Monster:
+                return MonsterDefinitionId.TryCreate(definitionId, out MonsterDefinitionId _);
+            default:
+                return false;
+        }
     }
 }
 }

@@ -4,9 +4,9 @@ using Evertorch.Protocol;
 namespace Evertorch.Server
 {
 /// <summary>
-///     A player's authoritative presence on one map. Only the tick thread reads or writes it.
+///     A player's authoritative presence on one map.
 /// </summary>
-public sealed class PlayerEntity
+public sealed class PlayerEntity : WorldEntity
 {
     public PlayerEntity(
         EntityId id,
@@ -16,17 +16,12 @@ public sealed class PlayerEntity
         WorldPosition position,
         WorldDirection facing,
         float movementSpeed)
+        : base(id, position, facing, movementSpeed)
     {
-        Id = id;
         Character = character;
         Owner = owner;
         Job = job;
-        Position = position;
-        Facing = facing;
-        MovementSpeed = movementSpeed;
     }
-
-    public EntityId Id { get; }
 
     public CharacterId Character { get; }
 
@@ -34,21 +29,8 @@ public sealed class PlayerEntity
 
     public JobDefinitionId Job { get; }
 
-    public WorldPosition Position { get; set; }
+    public override EntityKind Kind => EntityKind.Player;
 
-    public WorldDirection Facing { get; set; }
-
-    public float VelocityX { get; set; }
-
-    public float VelocityY { get; set; }
-
-    public float VelocityZ { get; set; }
-
-    public EntityStateFlags StateFlags { get; set; }
-
-    /// <summary>
-    ///     World units per second after the movement rules were applied; never a value the client supplied.
-    /// </summary>
-    public float MovementSpeed { get; }
+    public override string DefinitionId => Job.Value;
 }
 }

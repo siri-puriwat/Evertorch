@@ -14,7 +14,7 @@ internal static class WireEnums
 
     public static bool IsDefined(EntityKind value)
     {
-        return value == EntityKind.Player;
+        return value == EntityKind.Player || value == EntityKind.Monster;
     }
 
     public static bool IsDefined(DespawnReason value)
