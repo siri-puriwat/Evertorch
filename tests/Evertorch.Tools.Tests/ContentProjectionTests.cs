@@ -19,7 +19,7 @@ public sealed class ContentProjectionTests
     {
         "3917", "3918", "73219", "73220", "54321", "7613", "2917", "1553", "1027", "4.0625", "1.5625", "12347",
         "6.125", "12.375", "0.7321", "1.8125", "60413", "8123", "20417", "3119", "5.1875", "3.4375", "7.5625",
-        "12.6875", "14.3125", "6.875", "86421"
+        "12.6875", "14.3125", "6.875", "86421", "6.4375", "4111", "5227", "139"
     };
 
     private static readonly string[] ServerOnlyFieldNames =
@@ -29,7 +29,7 @@ public sealed class ContentProjectionTests
         "leashRadius", "drops", "chance", "amount", "minAmount", "maxAmount", "range", "damageType",
         "startingStats", "health", "spirit", "healthBase", "healthPerLevel", "spiritBase", "spiritPerLevel",
         "unarmedAttackSpeedPenalty", "startingMap", "basicAttack", "spawnPoint", "monsterSpawns", "respawnMs",
-        "serverContentVersion"
+        "serverContentVersion", "roamRadius", "idlePauseMs", "idlePauseMinMs", "idlePauseMaxMs", "scanIntervalMs"
     };
 
     private static ContentPackages BuildValid(ContentWorkspace workspace)

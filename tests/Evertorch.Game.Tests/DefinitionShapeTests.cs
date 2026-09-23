@@ -119,10 +119,18 @@ public sealed class DefinitionShapeTests
             MonsterBehavior.Passive,
             6.0,
             12.0,
+            6.0,
+            4000,
+            5000,
+            100,
             new[] { drop });
 
         Assert.That(monster.Id.Value, Is.EqualTo("monster.training_slime"));
         Assert.That(monster.DisplayName, Is.EqualTo("Training Slime"));
+        Assert.That(monster.RoamRadius, Is.EqualTo(6.0));
+        Assert.That(monster.IdlePauseMinMs, Is.EqualTo(4000));
+        Assert.That(monster.IdlePauseMaxMs, Is.EqualTo(5000));
+        Assert.That(monster.ScanIntervalMs, Is.EqualTo(100));
         Assert.That(monster.Level, Is.EqualTo(1));
         Assert.That(monster.Hp, Is.EqualTo(50));
         Assert.That(monster.PhysicalAttack, Is.EqualTo(7));

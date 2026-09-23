@@ -41,6 +41,11 @@ public sealed class ContentValidationTests
     [TestCase(Monster, "{ min: 1, max: 2 }", "{ min: 3, max: 2 }", "drops[0].amount.min", "greater than max")]
     [TestCase(Monster, "{ min: 1, max: 2 }", "{ min: 0, max: 2 }", "drops[0].amount.min", "between 1 and")]
     [TestCase(Monster, "attackIntervalMs: 12347", "attackIntervalMs: 0", "combat.attackIntervalMs", "between 1 and")]
+    [TestCase(Monster, "scanIntervalMs: 139", "scanIntervalMs: 0", "ai.scanIntervalMs", "between 1 and")]
+    [TestCase(Monster, "roamRadius: 6.4375", "roamRadius: -1", "ai.roamRadius", "between 0 and")]
+    [TestCase(Monster, "{ min: 4111, max: 5227 }", "{ min: 5228, max: 5227 }", "ai.idlePauseMs.min",
+        "greater than max")]
+    [TestCase(Monster, "{ min: 4111, max: 5227 }", "{ min: -1, max: 5227 }", "ai.idlePauseMs.min", "between 0 and")]
     [TestCase(Monster, "attackRange: 1.5625", "attackRange: 0", "combat.attackRange", "greater than 0")]
     [TestCase(Monster, "hp: 54321", "hp: 0", "stats.hp", "between 1 and")]
     [TestCase(Monster, "level: 1", "level: 0", "level", "between 1 and")]

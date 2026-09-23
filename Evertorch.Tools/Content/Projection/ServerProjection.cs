@@ -128,6 +128,10 @@ internal static class ServerProjection
             writer.WriteString("behavior", EnumText.Of(monster.Behavior));
             writer.WriteNumber("perceptionRadius", monster.PerceptionRadius);
             writer.WriteNumber("leashRadius", monster.LeashRadius);
+            writer.WriteNumber("roamRadius", monster.RoamRadius);
+            writer.WriteNumber("idlePauseMinMs", monster.IdlePauseMinMs);
+            writer.WriteNumber("idlePauseMaxMs", monster.IdlePauseMaxMs);
+            writer.WriteNumber("scanIntervalMs", monster.ScanIntervalMs);
             writer.WriteStartArray("drops");
             foreach (MonsterDrop drop in monster.Drops)
             {

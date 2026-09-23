@@ -42,6 +42,16 @@ internal static class MonsterDefinitionReader
         MonsterBehavior behavior = ai.RequiredEnum<MonsterBehavior>("behavior");
         double perceptionRadius = ai.RequiredDouble("perceptionRadius", 0d, ContentLimits.MaxDistance, false);
         double leashRadius = ai.RequiredDouble("leashRadius", 0d, ContentLimits.MaxDistance, true);
+        double roamRadius = ai.RequiredDouble("roamRadius", 0d, ContentLimits.MaxDistance, false);
+        YamlFieldReader idlePause = ai.RequiredMapping("idlePauseMs");
+        int idlePauseMinMs = idlePause.RequiredInt("min", 0, ContentLimits.MaxDurationMs);
+        int idlePauseMaxMs = idlePause.RequiredInt("max", 0, ContentLimits.MaxDurationMs);
+        if (idlePauseMinMs > idlePauseMaxMs)
+        {
+            idlePause.ReportField("min", "must not be greater than max");
+        }
+
+        int scanIntervalMs = ai.RequiredInt("scanIntervalMs", 1, ContentLimits.MaxDurationMs);
 
         var drops = new List<MonsterDrop>();
         foreach (YamlFieldReader drop in root.OptionalMappingSequence("drops"))
@@ -74,6 +84,10 @@ internal static class MonsterDefinitionReader
             behavior,
             perceptionRadius,
             leashRadius,
+            roamRadius,
+            idlePauseMinMs,
+            idlePauseMaxMs,
+            scanIntervalMs,
             drops);
         return new AuthoredMonster(root.ToSource(), definition, prefab, icon);
     }

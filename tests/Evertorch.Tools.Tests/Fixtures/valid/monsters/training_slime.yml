@@ -16,6 +16,9 @@ ai:
   behavior: passive
   perceptionRadius: 6.125
   leashRadius: 12.375
+  roamRadius: 6.4375
+  idlePauseMs: { min: 4111, max: 5227 }
+  scanIntervalMs: 139
 drops:
   - item: item.material.slime_gel
     chance: 0.7321

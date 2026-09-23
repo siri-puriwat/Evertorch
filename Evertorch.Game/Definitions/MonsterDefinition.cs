@@ -19,6 +19,10 @@ public sealed class MonsterDefinition
         MonsterBehavior behavior,
         double perceptionRadius,
         double leashRadius,
+        double roamRadius,
+        int idlePauseMinMs,
+        int idlePauseMaxMs,
+        int scanIntervalMs,
         IReadOnlyList<MonsterDrop> drops)
     {
         Id = id;
@@ -35,6 +39,10 @@ public sealed class MonsterDefinition
         Behavior = behavior;
         PerceptionRadius = perceptionRadius;
         LeashRadius = leashRadius;
+        RoamRadius = roamRadius;
+        IdlePauseMinMs = idlePauseMinMs;
+        IdlePauseMaxMs = idlePauseMaxMs;
+        ScanIntervalMs = scanIntervalMs;
         Drops = drops;
     }
 
@@ -66,6 +74,17 @@ public sealed class MonsterDefinition
     public double PerceptionRadius { get; }
 
     public double LeashRadius { get; }
+
+    /// <summary>Roam targets are drawn within this distance of the monster's home.</summary>
+    public double RoamRadius { get; }
+
+    /// <summary>The shortest pause before the next roam; both bounds are inclusive.</summary>
+    public int IdlePauseMinMs { get; }
+
+    public int IdlePauseMaxMs { get; }
+
+    /// <summary>The cadence of the AI's decisions: acquiring, scanning, re-pathing, and the leash.</summary>
+    public int ScanIntervalMs { get; }
 
     public IReadOnlyList<MonsterDrop> Drops { get; }
 }

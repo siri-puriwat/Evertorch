@@ -130,6 +130,21 @@ public sealed class ServerContentLoaderTests
         return new string[0];
     }
 
+    [TestCase("\"idlePauseMinMs\": 4000", "\"idlePauseMinMs\": 5001", "idlePauseMinMs: must not be greater than")]
+    [TestCase("\"scanIntervalMs\": 100", "\"scanIntervalMs\": 0", "scanIntervalMs: must be at least 1")]
+    [TestCase("\"roamRadius\": 6", "\"roamRadius\": -6", "roamRadius: must not be negative")]
+    [TestCase("\"roamRadius\": 6,", "", "roamRadius")]
+    public void Load_WhenAMonsterAiFieldIsMissingOrOutOfRange_Fails(string oldText, string newText, string problem)
+    {
+        Dictionary<string, byte[]> files = PackageFixture.BuildRepositoryPackage();
+        PackageFixture.Replace(files, Monsters, oldText, newText);
+
+        IReadOnlyList<string> problems = ProblemsOf(files);
+
+        Assert.That(problems, Has.Count.EqualTo(1));
+        Assert.That(problems[0], Does.Contain(problem));
+    }
+
     [Test]
     public void LoadFromDirectory_ForWrittenPackage_Loads()
     {

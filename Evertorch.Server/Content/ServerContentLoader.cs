@@ -315,6 +315,15 @@ public static class ServerContentLoader
         MonsterBehavior behavior = entry.RequiredEnum<MonsterBehavior>("behavior");
         double perceptionRadius = RequiredNonNegative(entry, "perceptionRadius");
         double leashRadius = RequiredNonNegative(entry, "leashRadius");
+        double roamRadius = RequiredNonNegative(entry, "roamRadius");
+        int idlePauseMinMs = entry.RequiredInt("idlePauseMinMs", 0);
+        int idlePauseMaxMs = entry.RequiredInt("idlePauseMaxMs", 0);
+        if (idlePauseMinMs > idlePauseMaxMs)
+        {
+            entry.Report("idlePauseMinMs", "must not be greater than idlePauseMaxMs");
+        }
+
+        int scanIntervalMs = entry.RequiredInt("scanIntervalMs", 1);
 
         var drops = new List<MonsterDrop>();
         foreach (PackageObjectReader drop in entry.RequiredObjectArray("drops"))
@@ -358,6 +367,10 @@ public static class ServerContentLoader
             behavior,
             perceptionRadius,
             leashRadius,
+            roamRadius,
+            idlePauseMinMs,
+            idlePauseMaxMs,
+            scanIntervalMs,
             drops.AsReadOnly());
     }
 
