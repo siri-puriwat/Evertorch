@@ -152,6 +152,14 @@ public sealed class InboundQueue
 
                 decoded = InboundEvent.ForCommand(InboundEventKind.Respawn, connection, respawn.CommandSequence);
                 return true;
+            case MessageOpcode.CreateCharacter:
+                if (!CreateCharacter.TryRead(payload, out CreateCharacter? create) || create == null)
+                {
+                    return false;
+                }
+
+                decoded = InboundEvent.ForCreateCharacter(connection, create.Name);
+                return true;
             default:
                 // A valid client message the server does not handle yet is treated like any other junk.
                 return false;

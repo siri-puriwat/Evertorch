@@ -27,6 +27,11 @@ internal static class WireEnums
         return value == DespawnReason.OutOfRange || value == DespawnReason.Removed;
     }
 
+    public static bool IsDefined(CreateCharacterOutcome value)
+    {
+        return value >= CreateCharacterOutcome.Created && value <= CreateCharacterOutcome.ServiceUnavailable;
+    }
+
     public static bool IsDefined(EntityStateFlags value)
     {
         return (value & ~KnownStateFlags) == 0;

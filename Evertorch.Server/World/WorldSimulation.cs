@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Evertorch.Game;
+using Evertorch.Persistence;
 using Evertorch.Rules;
 using Microsoft.Extensions.Options;
 
@@ -70,6 +71,24 @@ public sealed class WorldSimulation
     }
 
     public IReadOnlyCollection<MapInstance> Maps => m_maps.Values;
+
+    /// <summary>
+    ///     A new character named <paramref name="name" />: <c>World:StartingJob</c> at level 1, the job's starting
+    ///     statistics, full HP and SP, at its starting map's spawn point (Persistence §4).
+    /// </summary>
+    public NewCharacter CreateCharacter(string name, DateTime now)
+    {
+        MapDefinition map = m_maps[m_startingJob.StartingMap].Definition;
+        return new NewCharacter(
+            name,
+            m_startingJob.Id,
+            m_startingJob.StartingStats,
+            m_startingStats.MaxHp,
+            m_startingStats.MaxSp,
+            map.Id,
+            map.SpawnPosition,
+            now);
+    }
 
     /// <summary>
     ///     Places a new player at the spawn point of the starting job's map.

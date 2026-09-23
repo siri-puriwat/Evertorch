@@ -44,7 +44,7 @@ public sealed class ClientAuthorityTests
                 new[]
                 {
                     "ClientHello", "EnterWorldRequest", "MoveInput", "StopMovement", "TargetEntity",
-                    "AttackEntity", "CancelAction", "Respawn"
+                    "AttackEntity", "CancelAction", "Respawn", "CreateCharacter"
                 }),
             "a new client message must be checked against the rules below before it joins this list");
     }

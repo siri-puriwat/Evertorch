@@ -33,6 +33,11 @@ public enum InboundEventKind
     Respawn = 9,
 
     /// <summary>
+    ///     A request to create a character named <see cref="InboundEvent.Name" /> on the signed-in account.
+    /// </summary>
+    CreateCharacter = 10,
+
+    /// <summary>
     ///     The peer sent something that is not a well-formed client message on its proper channel.
     /// </summary>
     Malformed = 4

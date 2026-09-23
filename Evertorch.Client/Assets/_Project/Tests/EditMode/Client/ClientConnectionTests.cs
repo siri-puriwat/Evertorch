@@ -31,7 +31,7 @@ public sealed class ClientConnectionTests
             Transport = new FakeClientTransport();
             Connection = new ClientConnection(
                 Transport,
-                new ClientConnectionSettings("0.2.0-dev", contentVersion, Token, new CharacterId(7)),
+                new ClientConnectionSettings("0.2.0-dev", contentVersion, Token),
                 this);
             Connection.Closed += () => ClosedCount++;
         }
@@ -59,9 +59,17 @@ public sealed class ClientConnectionTests
             Deliver(ProtocolChannel.Control, Encode(hello.GetEncodedLength(), hello.Write));
         }
 
+        public void ReceiveList(params CharacterListEntry[] characters)
+        {
+            var list = new CharacterList(characters);
+            Deliver(ProtocolChannel.Control, Encode(list.GetEncodedLength(), list.Write));
+        }
+
         public void EnterWorld()
         {
             ConnectAndReceiveHello();
+            ReceiveList(Entry(7, "Ann0"));
+            Connection.EnterWorld(new CharacterId(7));
             WorldEntered entered = ClientWorldFixture.Entered(Start);
             Deliver(ProtocolChannel.Control, Encode(entered.GetEncodedLength(), entered.Write));
             Connection.Poll();
@@ -72,6 +80,39 @@ public sealed class ClientConnectionTests
             Transport.Deliver(channel, payload);
             Connection.Poll();
         }
+    }
+
+    private static CharacterListEntry Entry(long character, string name)
+    {
+        return new CharacterListEntry(new CharacterId(character), name, new JobDefinitionId("job.adventurer"), 1);
+    }
+
+    [Test]
+    public void CharacterList_BeforeTheHello_IsUnexpected()
+    {
+        var harness = new Harness();
+        harness.Connection.Connect("127.0.0.1", 7777);
+        harness.Transport.CompleteConnect();
+        harness.Connection.Poll();
+
+        harness.ReceiveList(Entry(7, "Ann0"));
+
+        Assert.That(harness.Connection.UnexpectedMessages, Is.EqualTo(1));
+        Assert.That(harness.Connection.Characters, Is.Empty);
+    }
+
+    [Test]
+    public void CharacterList_WhileSelecting_IsKeptAndAnnounced()
+    {
+        var harness = new Harness();
+        harness.ConnectAndReceiveHello();
+        int announced = 0;
+        harness.Connection.CharactersChanged += () => announced++;
+
+        harness.ReceiveList(Entry(7, "Ann0"), Entry(9, "Bob12"));
+
+        Assert.That(announced, Is.EqualTo(1));
+        Assert.That(harness.Connection.Characters.Select(entry => entry.Name), Is.EqualTo(new[] { "Ann0", "Bob12" }));
     }
 
     [Test]
@@ -165,6 +206,36 @@ public sealed class ClientConnectionTests
     }
 
     [Test]
+    public void CreateCharacter_WhileSelecting_SendsTheNameAndKeepsTheAnswer()
+    {
+        var harness = new Harness();
+        harness.ConnectAndReceiveHello();
+        harness.ReceiveList();
+
+        bool isSent = harness.Connection.CreateCharacter("Ann0");
+        var result = new CreateCharacterResult(CreateCharacterOutcome.NameTaken, default);
+        harness.Deliver(ProtocolChannel.Control, Encode(CreateCharacterResult.EncodedLength, result.Write));
+
+        Assert.That(isSent, Is.True);
+        Assert.That(CreateCharacter.TryRead(harness.Transport.Sent.Last().Payload, out CreateCharacter? sent), Is.True);
+        Assert.That(sent!.Name, Is.EqualTo("Ann0"));
+        Assert.That(harness.Connection.LastCreateOutcome, Is.EqualTo(CreateCharacterOutcome.NameTaken));
+    }
+
+    [Test]
+    public void CreateCharacter_WithANameTooLongForTheWire_SendsNothing()
+    {
+        var harness = new Harness();
+        harness.ConnectAndReceiveHello();
+        int before = harness.Transport.Sent.Count;
+
+        bool isSent = harness.Connection.CreateCharacter("Abcdefghijklmnopqrstuvwx");
+
+        Assert.That(isSent, Is.False);
+        Assert.That(harness.Transport.Sent.Count, Is.EqualTo(before));
+    }
+
+    [Test]
     public void Disconnect_ForgetsTheWorld()
     {
         var harness = new Harness();
@@ -206,6 +277,23 @@ public sealed class ClientConnectionTests
 
         Assert.That(harness.Connection.Notice, Is.Null);
         Assert.That(harness.Connection.DisconnectCause, Is.EqualTo(TransportDisconnectCause.TimedOut));
+    }
+
+    [Test]
+    public void EnterWorld_ForAListedCharacter_SendsTheRequestAndWaitsForTheWorld()
+    {
+        var harness = new Harness();
+        harness.ConnectAndReceiveHello();
+        harness.ReceiveList(Entry(7, "Ann0"));
+
+        bool isSent = harness.Connection.EnterWorld(new CharacterId(7));
+
+        FakeClientTransport.SentMessage sent = harness.Transport.Sent.Last();
+        Assert.That(isSent, Is.True);
+        Assert.That(sent.Channel, Is.EqualTo(ProtocolChannel.Control));
+        Assert.That(EnterWorldRequest.TryRead(sent.Payload, out EnterWorldRequest request), Is.True);
+        Assert.That(request.Character, Is.EqualTo(new CharacterId(7)));
+        Assert.That(harness.Connection.State, Is.EqualTo(ClientConnectionState.EnteringWorld));
     }
 
     [Test]
@@ -256,6 +344,20 @@ public sealed class ClientConnectionTests
 
         Assert.That(harness.Connection.MalformedMessages, Is.EqualTo(4));
         Assert.That(harness.Connection.State, Is.EqualTo(ClientConnectionState.InWorld));
+    }
+
+    [Test]
+    public void SelectionRequests_OutsideSelection_SendNothing()
+    {
+        var harness = new Harness();
+        harness.EnterWorld();
+        int before = harness.Transport.Sent.Count;
+
+        bool isCreated = harness.Connection.CreateCharacter("Ann0");
+        bool isEntered = harness.Connection.EnterWorld(new CharacterId(7));
+
+        Assert.That(new[] { isCreated, isEntered }, Is.All.False);
+        Assert.That(harness.Transport.Sent.Count, Is.EqualTo(before));
     }
 
     [Test]
@@ -313,16 +415,21 @@ public sealed class ClientConnectionTests
     }
 
     [Test]
-    public void ServerHello_IsAnsweredWithTheEnterWorldRequest()
+    public void ServerHello_StartsCharacterSelectionWithoutEnteringAnything()
     {
         var harness = new Harness();
-        harness.ConnectAndReceiveHello();
+        int sentBefore;
 
-        FakeClientTransport.SentMessage sent = harness.Transport.Sent.Last();
-        Assert.That(EnterWorldRequest.TryRead(sent.Payload, out EnterWorldRequest request), Is.True);
-        Assert.That(request.Character, Is.EqualTo(new CharacterId(7)));
+        harness.Connection.Connect("127.0.0.1", 7777);
+        harness.Transport.CompleteConnect();
+        harness.Connection.Poll();
+        sentBefore = harness.Transport.Sent.Count;
+        var hello = new ServerHello(ProtocolConstants.ProtocolVersion, "0.2.0-dev", 0x11326bd1u, 20, 0);
+        harness.Deliver(ProtocolChannel.Control, Encode(hello.GetEncodedLength(), hello.Write));
+
+        Assert.That(harness.Transport.Sent.Count, Is.EqualTo(sentBefore));
         Assert.That(harness.Connection.ServerTickRate, Is.EqualTo(20u));
-        Assert.That(harness.Connection.State, Is.EqualTo(ClientConnectionState.EnteringWorld));
+        Assert.That(harness.Connection.State, Is.EqualTo(ClientConnectionState.SelectingCharacter));
     }
 
     [Test]

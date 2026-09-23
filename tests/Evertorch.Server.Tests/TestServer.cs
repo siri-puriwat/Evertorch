@@ -330,15 +330,41 @@ internal sealed class TestServer
     }
 
     /// <summary>
-    ///     Connects, signs in, enters the world, and returns after the tick that sent <c>WorldEntered</c>.
+    ///     Connects, signs in as its own account, creates the character <c>Tester&lt;n&gt;</c> with ID
+    ///     <paramref name="character" /> when the account has none, enters the world, and returns after the tick that
+    ///     sent <c>WorldEntered</c>.
     /// </summary>
     public ConnectionId EnterWorld(long character)
     {
         ConnectionId connection = Connect();
-        SignIn(connection, $"{DevelopmentToken}{character}");
+        SignInWithCharacter(connection, character);
         SendEnterWorld(connection, character);
         TickUntil(() => SessionOf(connection).State == SessionState.InWorld);
         return connection;
+    }
+
+    /// <summary>
+    ///     Signs in as the account <c>dev:tester&lt;n&gt;</c> and makes sure it owns the character
+    ///     <paramref name="character" />, named <c>Tester&lt;n&gt;</c>, without entering the world.
+    /// </summary>
+    public void SignInWithCharacter(ConnectionId connection, long character)
+    {
+        SignIn(connection, $"{DevelopmentToken}{character}");
+        TickUntil(() => SessionOf(connection).Characters != null);
+        if (SessionOf(connection).Characters!.All(owned => owned.Id != character))
+        {
+            Store.NextCharacterId = character;
+            SendCreateCharacter(connection, $"Tester{character}");
+            TickUntil(() => SessionOf(connection).Characters!.Any(owned => owned.Id == character));
+        }
+    }
+
+    public void SendCreateCharacter(ConnectionId connection, string name)
+    {
+        var message = new CreateCharacter(name);
+        byte[] payload = new byte[message.GetEncodedLength()];
+        message.Write(payload);
+        Inbound.OnPayload(connection, ProtocolChannel.Control, payload);
     }
 
     /// <summary>

@@ -20,7 +20,9 @@ public sealed class WorldEntryTests
 
         server.Tick();
 
-        Assert.That(server.Transport.ControlOpcodesSentTo(connection), Is.EqualTo(new[] { MessageOpcode.ServerHello }));
+        Assert.That(
+            server.Transport.ControlOpcodesSentTo(connection),
+            Is.EqualTo(new[] { MessageOpcode.ServerHello, MessageOpcode.CharacterList }));
         Assert.That(server.World.Maps.Single().Players, Is.Empty);
         Assert.That(server.SessionManager.IgnoredEvents, Is.EqualTo(1));
     }
@@ -126,15 +128,15 @@ public sealed class WorldEntryTests
         var server = new TestServer();
         ConnectionId connection = server.EnterWorld(7);
         EntityId entity = server.PlayerOf(connection).Id;
-        server.SendEnterWorld(connection, 8);
+        server.Transport.ClearSent();
+        server.SendEnterWorld(connection, 7);
 
         server.Tick();
 
         Assert.That(server.PlayerOf(connection).Id, Is.EqualTo(entity));
         Assert.That(server.World.Maps.Single().Players, Has.Count.EqualTo(1));
-        Assert.That(
-            server.Transport.ControlOpcodesSentTo(connection),
-            Is.EqualTo(new[] { MessageOpcode.ServerHello, MessageOpcode.WorldEntered }));
+        Assert.That(server.Transport.ControlOpcodesSentTo(connection), Is.Empty);
+        Assert.That(server.SessionManager.IgnoredEvents, Is.EqualTo(1));
     }
 
     [Test]

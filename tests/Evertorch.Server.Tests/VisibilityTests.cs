@@ -18,7 +18,7 @@ public sealed class VisibilityTests
     private static ConnectionId Enter(TestServer server, long character, float x, float z)
     {
         ConnectionId connection = server.Connect();
-        server.SignIn(connection, $"{TestServer.DevelopmentToken}{character}");
+        server.SignInWithCharacter(connection, character);
         server.SendEnterWorld(connection, character);
 
         // Moved off the spawn point before the first visibility pass, so nobody ever sees it there.
@@ -143,7 +143,11 @@ public sealed class VisibilityTests
         ConnectionId first = server.EnterWorld(1);
         ConnectionId second = server.EnterWorld(2);
 
-        MessageOpcode[] expected = { MessageOpcode.ServerHello, MessageOpcode.WorldEntered, MessageOpcode.EntitySpawn };
+        MessageOpcode[] expected =
+        {
+            MessageOpcode.ServerHello, MessageOpcode.CharacterList, MessageOpcode.CreateCharacterResult,
+            MessageOpcode.CharacterList, MessageOpcode.WorldEntered, MessageOpcode.EntitySpawn
+        };
         Assert.That(server.Transport.ControlOpcodesSentTo(second), Is.EqualTo(expected));
         Assert.That(server.Transport.ControlSentTo(second).Select(message => message.Channel),
             Is.All.EqualTo(ProtocolChannel.Control));

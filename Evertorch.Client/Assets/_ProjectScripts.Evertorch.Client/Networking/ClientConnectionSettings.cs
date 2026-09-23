@@ -1,20 +1,14 @@
 using System;
-using Evertorch.Game;
 
 namespace Evertorch.Client
 {
 public sealed class ClientConnectionSettings
 {
-    public ClientConnectionSettings(
-        string buildVersion,
-        string contentVersion,
-        string sessionToken,
-        CharacterId character)
+    public ClientConnectionSettings(string buildVersion, string contentVersion, string sessionToken)
     {
         BuildVersion = buildVersion ?? throw new ArgumentNullException(nameof(buildVersion));
         ContentVersion = contentVersion ?? throw new ArgumentNullException(nameof(contentVersion));
         SessionToken = sessionToken ?? throw new ArgumentNullException(nameof(sessionToken));
-        Character = character;
     }
 
     public string BuildVersion { get; }
@@ -25,7 +19,5 @@ public sealed class ClientConnectionSettings
     public string ContentVersion { get; }
 
     public string SessionToken { get; }
-
-    public CharacterId Character { get; }
 }
 }

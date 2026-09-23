@@ -14,6 +14,7 @@ internal sealed class SimulatedClient : IMapProvider
 
     private readonly TestServer m_server;
     private readonly MoveIntentProducer m_producer = new();
+    private readonly AutoEnter m_selection;
     private LocalPlayerDriver? m_driver;
     private uint m_clientTick;
 
@@ -27,9 +28,11 @@ internal sealed class SimulatedClient : IMapProvider
             new ClientConnectionSettings(
                 BuildVersion,
                 server.Content.ClientContentVersion,
-                TestServer.DevelopmentToken + character,
-                new CharacterId(character)),
+                TestServer.DevelopmentToken + character),
             this);
+
+        // The character gets the number the test asked for, so server-side lookups by character keep working.
+        m_selection = new AutoEnter(Connection, $"Sim{character}", () => server.Store.NextCharacterId = character);
     }
 
     public LoopbackClientTransport Loopback { get; }
@@ -56,6 +59,7 @@ internal sealed class SimulatedClient : IMapProvider
     public void Poll()
     {
         Connection.Poll();
+        m_selection.Poll();
         if (Controller == null && Connection.World != null)
         {
             Controller = new MovementController(Connection.World.Grid);

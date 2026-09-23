@@ -7,11 +7,13 @@ using System.Reflection;
 using System.Threading.Tasks;
 using Evertorch.Protocol;
 using NUnit.Framework;
+using TMPro;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.InputSystem.Controls;
 using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
+using UnityEngine.UI;
 using EntityId = Evertorch.Game.EntityId;
 using Object = UnityEngine.Object;
 
@@ -87,6 +89,7 @@ public sealed class LiveServerCombatTests : InputTestFixture
         Keyboard keyboard = InputSystem.AddDevice<Keyboard>();
         Gamepad gamepad = InputSystem.AddDevice<Gamepad>();
         GameClient client = CreateClient(port, actionsPath);
+        yield return CreateAndEnterThroughTheOverlay(client, "LiveFighter");
         yield return WaitUntil(() => client.World != null && client.Combat != null, StartTimeoutSeconds);
         Assert.That(client.World, Is.Not.Null, $"{client.Status} server output: {server.JoinOutput()}");
         ClientWorld world = client.World!;
@@ -161,6 +164,33 @@ public sealed class LiveServerCombatTests : InputTestFixture
         }
 
         return null;
+    }
+
+    // The development overlay's own name field and buttons, as a player uses them to pick a character.
+    private static IEnumerator CreateAndEnterThroughTheOverlay(GameClient client, string name)
+    {
+        yield return WaitUntil(() => client.Connection != null, StartTimeoutSeconds);
+        ClientConnection connection = client.Connection!;
+        bool hasList = false;
+        connection.CharactersChanged += () => hasList = true;
+        yield return WaitUntil(() => hasList, StartTimeoutSeconds);
+        Assert.That(hasList, Is.True, $"no character list: {client.Status}");
+
+        TMP_InputField field = client.GetComponentsInChildren<TMP_InputField>(true)
+            .Single(candidate => candidate.transform.parent.name == "New name");
+        field.text = name;
+        Button create = client.GetComponentsInChildren<Button>(true)
+            .Single(button => button.name == "Create character");
+        Assert.That(create.gameObject.activeInHierarchy, Is.True, "the overlay shows character creation");
+        create.onClick.Invoke();
+        yield return WaitUntil(() => connection.Characters.Any(entry => entry.Name == name), StartTimeoutSeconds);
+        Assert.That(connection.LastCreateOutcome, Is.EqualTo(CreateCharacterOutcome.Created), client.Status);
+
+        // The overlay refreshes its buttons in its own Update.
+        yield return null;
+        Button enter = client.GetComponentsInChildren<Button>(true).Single(button => button.name == "Enter 1");
+        Assert.That(enter.gameObject.activeInHierarchy, Is.True, "the new character can be entered");
+        enter.onClick.Invoke();
     }
 
     private static IEnumerator WaitUntil(Func<bool> condition, float timeoutSeconds)

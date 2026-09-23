@@ -172,6 +172,9 @@ public sealed class SessionManager : ITickPhase
             case InboundEventKind.EnterWorld:
                 HandleEnterWorld(session, inboundEvent.EnterWorld, tick);
                 break;
+            case InboundEventKind.CreateCharacter:
+                HandleCreateCharacter(session, inboundEvent.Name!);
+                break;
             case InboundEventKind.Move:
                 HandleMove(session, inboundEvent.Intent);
                 break;
@@ -255,6 +258,125 @@ public sealed class SessionManager : ITickPhase
                 m_handshake.RequiredClientContentVersion,
                 m_tickRate,
                 m_time.GetUtcNow().ToUnixTimeMilliseconds()));
+        QueueCharacterList(session);
+    }
+
+    // The list after ServerHello is part of admission: without the database the connection is not ready.
+    private void QueueCharacterList(ClientSession session)
+    {
+        AccountId account = session.Account!.Value;
+        ConnectionId connection = session.Connection;
+        var list = new PersistenceJob<IReadOnlyList<CharacterSummary>>(
+            "list characters",
+            connection,
+            0,
+            (store, cancellation) => store.ListCharactersAsync(account, cancellation),
+            (outcome, characters) => CompleteCharacterList(connection, outcome, characters));
+        if (!m_persistence.TryEnqueue(list))
+        {
+            LogHandshakeRejected(m_logger, connection.Value, DisconnectReason.ServerNotReady, null);
+            Close(session, DisconnectReason.ServerNotReady);
+        }
+    }
+
+    private void CompleteCharacterList(
+        ConnectionId connection,
+        PersistenceOutcome outcome,
+        IReadOnlyList<CharacterSummary> characters)
+    {
+        if (!m_sessions.TryGet(connection, out ClientSession? session) || session == null)
+        {
+            return;
+        }
+
+        if (outcome != PersistenceOutcome.Succeeded)
+        {
+            LogHandshakeRejected(m_logger, connection.Value, DisconnectReason.ServerNotReady, null);
+            Close(session, DisconnectReason.ServerNotReady);
+            return;
+        }
+
+        SendCharacterList(session, characters);
+    }
+
+    private void SendCharacterList(ClientSession session, IReadOnlyList<CharacterSummary> characters)
+    {
+        session.Characters = characters;
+        var entries = new List<CharacterListEntry>(characters.Count);
+        foreach (CharacterSummary character in characters)
+        {
+            // A job text that is not even an ID cannot travel; the character stays in the database untouched
+            // (Persistence §8) but cannot be chosen.
+            if (JobDefinitionId.TryCreate(character.JobDefinitionId, out JobDefinitionId job))
+            {
+                ushort level = (ushort)Math.Clamp(character.BaseLevel, 1, ushort.MaxValue);
+                entries.Add(new CharacterListEntry(new CharacterId(character.Id), character.Name, job, level));
+            }
+        }
+
+        m_sender.Send(session.Connection, new CharacterList(entries));
+    }
+
+    private void HandleCreateCharacter(ClientSession session, string name)
+    {
+        if (session.State != SessionState.Authenticated || session.Characters == null || session.IsCreatingCharacter)
+        {
+            IgnoredEvents++;
+            return;
+        }
+
+        CreateCharacterOutcome refusal = !CharacterNamePolicy.IsValid(name) ? CreateCharacterOutcome.NameInvalid
+            : session.Characters.Count >= CharacterList.MaxEntries ? CreateCharacterOutcome.LimitReached
+            : CreateCharacterOutcome.None;
+        if (refusal == CreateCharacterOutcome.None)
+        {
+            AccountId account = session.Account!.Value;
+            ConnectionId connection = session.Connection;
+            NewCharacter character = m_world.CreateCharacter(name, m_time.GetUtcNow().UtcDateTime);
+            var create = new PersistenceJob<CharacterCreation>(
+                "create character",
+                connection,
+                0,
+                (store, cancellation) =>
+                    store.CreateCharacterAsync(account, character, CharacterList.MaxEntries, cancellation),
+                (outcome, creation) => CompleteCreateCharacter(connection, outcome, creation));
+            if (m_persistence.TryEnqueue(create))
+            {
+                session.IsCreatingCharacter = true;
+                return;
+            }
+
+            refusal = CreateCharacterOutcome.ServiceUnavailable;
+        }
+
+        m_sender.Send(session.Connection, new CreateCharacterResult(refusal, default));
+        SendCharacterList(session, session.Characters);
+    }
+
+    private void CompleteCreateCharacter(ConnectionId connection, PersistenceOutcome outcome,
+        CharacterCreation creation)
+    {
+        if (!m_sessions.TryGet(connection, out ClientSession? session) || session == null)
+        {
+            return;
+        }
+
+        session.IsCreatingCharacter = false;
+        if (outcome != PersistenceOutcome.Succeeded)
+        {
+            m_sender.Send(connection, new CreateCharacterResult(CreateCharacterOutcome.ServiceUnavailable, default));
+            SendCharacterList(session, session.Characters ?? Array.Empty<CharacterSummary>());
+            return;
+        }
+
+        CreateCharacterOutcome result = creation.Status switch
+        {
+            CharacterCreationStatus.Created => CreateCharacterOutcome.Created,
+            CharacterCreationStatus.NameTaken => CreateCharacterOutcome.NameTaken,
+            _ => CreateCharacterOutcome.LimitReached
+        };
+        m_sender.Send(connection, new CreateCharacterResult(result, new CharacterId(creation.CharacterId)));
+        SendCharacterList(session, creation.Characters);
     }
 
     private void HandleEnterWorld(ClientSession session, EnterWorldRequest request, uint tick)
@@ -266,8 +388,8 @@ public sealed class SessionManager : ITickPhase
             return;
         }
 
-        // Until characters are persisted any positive ID names a character; ownership checks arrive with accounts.
-        if (session.State != SessionState.Authenticated || request.Character.Value <= 0)
+        // A character of another account is refused exactly like one that does not exist (Network Protocol §4).
+        if (session.State != SessionState.Authenticated || !Owns(session, request.Character))
         {
             IgnoredEvents++;
             return;
@@ -300,6 +422,24 @@ public sealed class SessionManager : ITickPhase
                 (uint)player.MaxHealth,
                 player.AttackRange));
         LogWorldEntered(m_logger, session.Connection.Value, request.Character.Value, player.Id.Value, null);
+    }
+
+    private static bool Owns(ClientSession session, CharacterId character)
+    {
+        if (session.Characters == null)
+        {
+            return false;
+        }
+
+        foreach (CharacterSummary owned in session.Characters)
+        {
+            if (owned.Id == character.Value)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     // Only queued here. The movement phase applies at most one input per tick, whatever arrives.

@@ -7,6 +7,7 @@
     "Evertorch.Protocol",
     "Unity.InputSystem",
     "Unity.InputSystem.TestFramework",
+    "Unity.TextMeshPro",
     "UnityEngine.TestRunner",
     "UnityEngine.UI"
   ],

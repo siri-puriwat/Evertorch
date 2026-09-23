@@ -26,6 +26,17 @@ public sealed class ClientSession
     /// </summary>
     public AccountId? Account { get; set; }
 
+    /// <summary>
+    ///     The account's characters as last sent in <c>CharacterList</c>; null until the first list arrives.
+    ///     <c>EnterWorldRequest</c> is accepted only for one of them.
+    /// </summary>
+    public IReadOnlyList<CharacterSummary>? Characters { get; set; }
+
+    /// <summary>
+    ///     A <c>CreateCharacter</c> is waiting for the database; another is ignored until it answers.
+    /// </summary>
+    public bool IsCreatingCharacter { get; set; }
+
     public MapInstance? Map { get; set; }
 
     public PlayerEntity? Player { get; set; }

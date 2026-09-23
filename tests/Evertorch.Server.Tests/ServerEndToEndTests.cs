@@ -35,12 +35,20 @@ public sealed class ServerEndToEndTests
         client.Connect(port, "evertorch");
         Assert.That(client.WaitFor(() => client.IsConnected), Is.True, "the client did not connect");
         client.Send(Hello(contentVersion), ProtocolChannel.Control, DeliveryMethod.ReliableOrdered);
-        Assert.That(client.WaitFor(() => Control(client).Length >= 1), Is.True, "no ServerHello arrived");
+        Assert.That(client.WaitFor(() => Control(client).Length >= 2), Is.True, "no ServerHello and list arrived");
+
+        var create = new CreateCharacter($"Tester{character}");
+        byte[] creation = new byte[create.GetEncodedLength()];
+        create.Write(creation);
+        client.Send(creation, ProtocolChannel.Control, DeliveryMethod.ReliableOrdered);
+        Assert.That(client.WaitFor(() => Control(client).Length >= 4), Is.True, "no creation result and list arrived");
+        CreateCharacterResult.TryRead(Control(client)[2].Payload, out CreateCharacterResult created);
+        Assert.That(created.Outcome, Is.EqualTo(CreateCharacterOutcome.Created));
 
         byte[] request = new byte[EnterWorldRequest.EncodedLength];
-        new EnterWorldRequest(new CharacterId(character)).Write(request);
+        new EnterWorldRequest(created.Character).Write(request);
         client.Send(request, ProtocolChannel.Control, DeliveryMethod.ReliableOrdered);
-        Assert.That(client.WaitFor(() => Control(client).Length >= 2), Is.True, "no WorldEntered arrived");
+        Assert.That(client.WaitFor(() => Control(client).Length >= 5), Is.True, "no WorldEntered arrived");
     }
 
     private static byte[] Hello(uint contentVersion)
@@ -118,14 +126,17 @@ public sealed class ServerEndToEndTests
             Spawns(second, EntityKind.Monster).Select(spawn => spawn.DefinitionId),
             Is.EqualTo(Enumerable.Repeat("monster.training_slime", 4)),
             "the training ground's four slimes are in view of its spawn point");
-        Assert.That(Opcodes(Control(second)).Take(3), Is.EqualTo(new[]
+        Assert.That(Opcodes(Control(second)).Take(6), Is.EqualTo(new[]
         {
             MessageOpcode.ServerHello,
+            MessageOpcode.CharacterList,
+            MessageOpcode.CreateCharacterResult,
+            MessageOpcode.CharacterList,
             MessageOpcode.WorldEntered,
             MessageOpcode.EntitySpawn
         }));
         Assert.That(Opcodes(Control(first)).Last(), Is.EqualTo(MessageOpcode.EntitySpawn));
-        WorldEntered.TryRead(Control(second)[1].Payload, out WorldEntered? entered);
+        WorldEntered.TryRead(Control(second)[4].Payload, out WorldEntered? entered);
         Assert.That(entered!.Map, Is.EqualTo(new MapDefinitionId("map.training_ground")));
         Assert.That(entered.Job, Is.EqualTo(new JobDefinitionId("job.adventurer")));
         Assert.That(entered.MovementSpeed, Is.EqualTo(5f));

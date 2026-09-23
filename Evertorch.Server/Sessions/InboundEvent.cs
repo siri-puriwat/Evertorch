@@ -15,7 +15,8 @@ public readonly struct InboundEvent
         EnterWorldRequest enterWorld,
         MoveIntent intent,
         EntityId target = default,
-        uint commandSequence = 0)
+        uint commandSequence = 0,
+        string? name = null)
     {
         Kind = kind;
         Connection = connection;
@@ -24,6 +25,7 @@ public readonly struct InboundEvent
         Intent = intent;
         Target = target;
         CommandSequence = commandSequence;
+        Name = name;
     }
 
     public InboundEventKind Kind { get; }
@@ -39,6 +41,8 @@ public readonly struct InboundEvent
     public EntityId Target { get; }
 
     public uint CommandSequence { get; }
+
+    public string? Name { get; }
 
     public static InboundEvent Connected(ConnectionId connection)
     {
@@ -78,6 +82,11 @@ public readonly struct InboundEvent
     public static InboundEvent ForAttack(ConnectionId connection, EntityId target, uint commandSequence)
     {
         return new InboundEvent(InboundEventKind.Attack, connection, null, default, default, target, commandSequence);
+    }
+
+    public static InboundEvent ForCreateCharacter(ConnectionId connection, string name)
+    {
+        return new InboundEvent(InboundEventKind.CreateCharacter, connection, null, default, default, name: name);
     }
 
     public static InboundEvent ForCommand(InboundEventKind kind, ConnectionId connection, uint commandSequence)

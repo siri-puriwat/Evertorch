@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using Evertorch.Game;
+using Evertorch.Protocol;
 using TMPro;
 using UnityEngine;
 using UnityEngine.Events;
@@ -25,6 +27,9 @@ public sealed class DevelopmentOverlay : MonoBehaviour
     private const float FontSize = 14f;
     private const float HandleWidth = 10f;
     private const int FieldCharacterLimit = 64;
+
+    // The naming policy's longest name; the server enforces the rest.
+    private const int CharacterNamePolicyLength = 23;
 
     private static readonly Color PanelColor = new(0.08f, 0.09f, 0.11f, 0.85f);
     private static readonly Color ControlColor = new(0.24f, 0.27f, 0.32f, 1f);
@@ -274,7 +279,11 @@ public sealed class DevelopmentOverlay : MonoBehaviour
         private readonly GameObject m_respawn;
         private readonly GameObject m_connectForm;
         private readonly TMP_InputField m_port;
-        private readonly TMP_InputField m_character;
+        private readonly GameObject m_characters;
+        private readonly TMP_Text m_charactersLabel;
+        private readonly GameObject[] m_enterButtons = new GameObject[CharacterList.MaxEntries];
+        private readonly TMP_Text[] m_enterLabels = new TMP_Text[CharacterList.MaxEntries];
+        private readonly TMP_InputField m_name;
         private readonly TMP_Text m_world;
         private readonly GameObject m_link;
         private readonly TMP_Text m_linkCounters;
@@ -295,12 +304,21 @@ public sealed class DevelopmentOverlay : MonoBehaviour
             m_port = CreateField(form, "Port", client.Port.ToString(), TMP_InputField.ContentType.IntegerNumber);
             CreateField(form, "Identity", client.Identity, TMP_InputField.ContentType.Standard)
                 .onValueChanged.AddListener(value => client.Identity = value);
-            m_character = CreateField(
-                form,
-                "Character",
-                client.Character.ToString(),
-                TMP_InputField.ContentType.IntegerNumber);
             CreateButton("Connect", form, Connect);
+
+            m_characters = CreateColumn("Characters", panel);
+            Transform characters = m_characters.transform;
+            m_charactersLabel = CreateLabel("Heading", characters);
+            for (int slot = 0; slot < CharacterList.MaxEntries; slot++)
+            {
+                int chosen = slot;
+                m_enterButtons[slot] = CreateButton($"Enter {slot + 1}", characters, () => Enter(chosen));
+                m_enterLabels[slot] = m_enterButtons[slot].GetComponentInChildren<TMP_Text>();
+            }
+
+            m_name = CreateField(characters, "New name", string.Empty, TMP_InputField.ContentType.Alphanumeric);
+            m_name.characterLimit = CharacterNamePolicyLength;
+            CreateButton("Create character", characters, () => client.CreateCharacter(m_name.text));
 
             m_world = CreateLabel("World", panel);
 
@@ -354,6 +372,7 @@ public sealed class DevelopmentOverlay : MonoBehaviour
             m_disconnect.SetActive(isOpen);
             m_respawn.SetActive(m_client.World?.IsLocalDead == true);
             m_connectForm.SetActive(!isOpen);
+            RefreshCharacters(connection);
             RefreshWorld();
             RefreshLink();
 
@@ -367,11 +386,43 @@ public sealed class DevelopmentOverlay : MonoBehaviour
 
         private void Connect()
         {
-            if (int.TryParse(m_port.text, out int port) && long.TryParse(m_character.text, out long character))
+            if (int.TryParse(m_port.text, out int port))
             {
                 m_client.Port = port;
-                m_client.Character = character;
                 m_client.Connect();
+            }
+        }
+
+        private void Enter(int slot)
+        {
+            IReadOnlyList<CharacterListEntry>? characters = m_client.Connection?.Characters;
+            if (characters != null && slot < characters.Count)
+            {
+                m_client.EnterWorld(characters[slot].Character);
+            }
+        }
+
+        private void RefreshCharacters(ClientConnection? connection)
+        {
+            bool isSelecting = connection != null && connection.State == ClientConnectionState.SelectingCharacter;
+            m_characters.SetActive(isSelecting);
+            if (!isSelecting)
+            {
+                return;
+            }
+
+            IReadOnlyList<CharacterListEntry> characters = connection!.Characters;
+            m_charactersLabel.text =
+                $"Characters of {m_client.Identity} ({characters.Count}/{CharacterList.MaxEntries})";
+            for (int slot = 0; slot < m_enterButtons.Length; slot++)
+            {
+                bool hasCharacter = slot < characters.Count;
+                m_enterButtons[slot].SetActive(hasCharacter);
+                if (hasCharacter)
+                {
+                    CharacterListEntry character = characters[slot];
+                    m_enterLabels[slot].text = $"Enter {character.Name} (level {character.BaseLevel})";
+                }
             }
         }
 

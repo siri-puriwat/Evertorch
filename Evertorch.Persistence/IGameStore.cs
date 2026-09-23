@@ -25,5 +25,21 @@ public interface IGameStore
     ///     login set to <paramref name="now" />. Null when the account exists but is disabled.
     /// </summary>
     Task<AccountId?> ProvisionAccountAsync(string loginNormalized, DateTime now, CancellationToken cancellationToken);
+
+    /// <summary>
+    ///     The account's characters, oldest first.
+    /// </summary>
+    Task<IReadOnlyList<CharacterSummary>> ListCharactersAsync(AccountId account, CancellationToken cancellationToken);
+
+    /// <summary>
+    ///     Creates <paramref name="character" /> on the account unless it already holds
+    ///     <paramref name="maxCharacters" /> or the name is taken, in one transaction that locks the account, so two
+    ///     creations at once cannot pass the limit together.
+    /// </summary>
+    Task<CharacterCreation> CreateCharacterAsync(
+        AccountId account,
+        NewCharacter character,
+        int maxCharacters,
+        CancellationToken cancellationToken);
 }
 }

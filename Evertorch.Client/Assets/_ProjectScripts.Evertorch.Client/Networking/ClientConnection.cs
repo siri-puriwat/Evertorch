@@ -1,13 +1,16 @@
 using System;
+using System.Collections.Generic;
 using System.Net.Sockets;
+using System.Text;
 using Evertorch.Game;
 using Evertorch.Protocol;
 
 namespace Evertorch.Client
 {
 /// <summary>
-///     Runs the client side of the protocol over a transport: hello, world entry, and then the routing of world
-///     messages into a <see cref="ClientWorld" />. It trusts nothing it receives beyond what decodes cleanly.
+///     Runs the client side of the protocol over a transport: hello, character selection, world entry, and then the
+///     routing of world messages into a <see cref="ClientWorld" />. It trusts nothing it receives beyond what decodes
+///     cleanly.
 /// </summary>
 public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink, ICombatCommandSink
 {
@@ -27,6 +30,16 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
     public ClientConnectionState State { get; private set; }
 
     public ClientWorld? World { get; private set; }
+
+    /// <summary>
+    ///     The account's characters as the server last listed them; empty until the first list.
+    /// </summary>
+    public IReadOnlyList<CharacterListEntry> Characters { get; private set; } = Array.Empty<CharacterListEntry>();
+
+    /// <summary>
+    ///     The answer to the last <see cref="CreateCharacter" />, or <see cref="CreateCharacterOutcome.None" />.
+    /// </summary>
+    public CreateCharacterOutcome LastCreateOutcome { get; private set; }
 
     public uint ServerTickRate { get; private set; }
 
@@ -105,6 +118,12 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
                 break;
             case MessageOpcode.WorldEntered:
                 OnWorldEntered(payload);
+                break;
+            case MessageOpcode.CharacterList:
+                OnCharacterList(payload);
+                break;
+            case MessageOpcode.CreateCharacterResult:
+                OnCreateCharacterResult(payload);
                 break;
             case MessageOpcode.EntitySpawn:
                 OnEntitySpawn(payload);
@@ -264,6 +283,46 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
         SendRouted(MessageOpcode.Respawn, Respawn.EncodedLength);
     }
 
+    /// <summary>
+    ///     Asks for a new character on the account. False, sending nothing, unless characters are being selected and
+    ///     the name fits the protocol; the server applies the naming policy and answers with
+    ///     <see cref="LastCreateOutcome" /> and a new list.
+    /// </summary>
+    public bool CreateCharacter(string name)
+    {
+        var message = new CreateCharacter(name);
+        if (State != ClientConnectionState.SelectingCharacter
+            || Encoding.UTF8.GetByteCount(name) > ProtocolLimits.MaxCharacterNameBytes)
+        {
+            return false;
+        }
+
+        LastCreateOutcome = CreateCharacterOutcome.None;
+        SendRouted(MessageOpcode.CreateCharacter, message.Write(m_sendBuffer));
+        return true;
+    }
+
+    /// <summary>
+    ///     Asks to enter the world as <paramref name="character" />. False, sending nothing, unless characters are
+    ///     being selected.
+    /// </summary>
+    public bool EnterWorld(CharacterId character)
+    {
+        if (State != ClientConnectionState.SelectingCharacter)
+        {
+            return false;
+        }
+
+        State = ClientConnectionState.EnteringWorld;
+        SendRouted(MessageOpcode.EnterWorldRequest, new EnterWorldRequest(character).Write(m_sendBuffer));
+        return true;
+    }
+
+    /// <summary>
+    ///     Raised after every character list, including the one that follows a creation.
+    /// </summary>
+    public event Action? CharactersChanged;
+
     public event Action<ClientWorld>? EnteredWorld;
 
     public event Action? Closed;
@@ -276,6 +335,8 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
         }
 
         World = null;
+        Characters = Array.Empty<CharacterListEntry>();
+        LastCreateOutcome = CreateCharacterOutcome.None;
         Notice = null;
         LocalError = string.Empty;
         DisconnectCause = TransportDisconnectCause.None;
@@ -329,9 +390,43 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
 
         ServerTickRate = hello.ServerTickRate;
         ServerBuildVersion = hello.ServerBuildVersion;
-        State = ClientConnectionState.EnteringWorld;
-        int length = new EnterWorldRequest(m_settings.Character).Write(m_sendBuffer);
-        SendRouted(MessageOpcode.EnterWorldRequest, length);
+        State = ClientConnectionState.SelectingCharacter;
+    }
+
+    private void OnCharacterList(ReadOnlySpan<byte> payload)
+    {
+        if (!CharacterList.TryRead(payload, out CharacterList? list) || list == null)
+        {
+            MalformedMessages++;
+            return;
+        }
+
+        // A list can still arrive after an enter request crossed it on the way.
+        if (State != ClientConnectionState.SelectingCharacter && State != ClientConnectionState.EnteringWorld)
+        {
+            UnexpectedMessages++;
+            return;
+        }
+
+        Characters = list.Characters;
+        CharactersChanged?.Invoke();
+    }
+
+    private void OnCreateCharacterResult(ReadOnlySpan<byte> payload)
+    {
+        if (!CreateCharacterResult.TryRead(payload, out CreateCharacterResult result))
+        {
+            MalformedMessages++;
+            return;
+        }
+
+        if (State != ClientConnectionState.SelectingCharacter && State != ClientConnectionState.EnteringWorld)
+        {
+            UnexpectedMessages++;
+            return;
+        }
+
+        LastCreateOutcome = result.Outcome;
     }
 
     private void OnWorldEntered(ReadOnlySpan<byte> payload)

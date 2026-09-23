@@ -128,13 +128,20 @@ public sealed class RealClientOverSocketTests
             new ClientConnectionSettings(
                 CompatibilityOptions.DefaultBuildVersion,
                 content.ClientContentVersion,
-                "dev:socket-test",
-                new CharacterId(21)),
+                "dev:socket-test"),
             new ContentMaps(content));
+        var selection = new AutoEnter(connection, "Socket21");
 
         connection.Connect("127.0.0.1", port);
         Assert.That(
-            PumpUntil(connection, null, () => connection.State == ClientConnectionState.InWorld),
+            PumpUntil(
+                connection,
+                null,
+                () =>
+                {
+                    selection.Poll();
+                    return connection.State == ClientConnectionState.InWorld;
+                }),
             Is.True,
             $"entered the world: {connection.LocalError} {connection.DisconnectCause}");
         ClientWorld world = connection.World!;

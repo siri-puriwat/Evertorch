@@ -118,6 +118,26 @@ public sealed class MessageFuzzTests
             Encode(new EntityRevived(new EntityId(9), new WorldPosition(1f, 2f, 3f), new WorldDirection(0f, 1f), 70)),
             payload => EntityRevived.TryRead(payload, out EntityRevived message) ? Encode(message) : null);
         yield return Case(
+            "CreateCharacter",
+            Encode(new CreateCharacter("Ann0")),
+            payload => CreateCharacter.TryRead(payload, out CreateCharacter? message) ? Encode(message!) : null);
+        yield return Case(
+            "CreateCharacterResult",
+            Encode(new CreateCharacterResult(CreateCharacterOutcome.Created, new CharacterId(9))),
+            payload => CreateCharacterResult.TryRead(payload, out CreateCharacterResult message)
+                ? Encode(message)
+                : null);
+        yield return Case(
+            "CharacterList",
+            Encode(
+                new CharacterList(
+                    new[]
+                    {
+                        new CharacterListEntry(new CharacterId(7), "Ann0", new JobDefinitionId("job.adventurer"), 1),
+                        new CharacterListEntry(new CharacterId(8), "Bob12", new JobDefinitionId("job.adventurer"), 12)
+                    })),
+            payload => CharacterList.TryRead(payload, out CharacterList? message) ? Encode(message!) : null);
+        yield return Case(
             "ItemDropped",
             Encode(new ItemDropped(new EntityId(11), "item.material.slime_gel", 2, new WorldPosition(1f, 2f, 3f))),
             payload => ItemDropped.TryRead(payload, out ItemDropped? message) ? Encode(message!) : null);
@@ -249,6 +269,27 @@ public sealed class MessageFuzzTests
     }
 
     private static byte[] Encode(EntitySpawn message)
+    {
+        byte[] buffer = new byte[message.GetEncodedLength()];
+        message.Write(buffer);
+        return buffer;
+    }
+
+    private static byte[] Encode(CreateCharacter message)
+    {
+        byte[] buffer = new byte[message.GetEncodedLength()];
+        message.Write(buffer);
+        return buffer;
+    }
+
+    private static byte[] Encode(CreateCharacterResult message)
+    {
+        byte[] buffer = new byte[CreateCharacterResult.EncodedLength];
+        message.Write(buffer);
+        return buffer;
+    }
+
+    private static byte[] Encode(CharacterList message)
     {
         byte[] buffer = new byte[message.GetEncodedLength()];
         message.Write(buffer);

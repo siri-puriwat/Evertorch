@@ -15,6 +15,7 @@ public enum MessageOpcode : ushort
     AttackEntity = 0x0006,
     CancelAction = 0x0007,
     Respawn = 0x000C,
+    CreateCharacter = 0x000D,
     ServerHello = 0x8001,
     WorldEntered = 0x8003,
     EntitySpawn = 0x8004,
@@ -27,6 +28,8 @@ public enum MessageOpcode : ushort
     ItemDropped = 0x800D,
     DisconnectNotice = 0x8013,
     CharacterHealth = 0x8014,
-    EntityRevived = 0x8015
+    EntityRevived = 0x8015,
+    CharacterList = 0x8016,
+    CreateCharacterResult = 0x8017
 }
 }

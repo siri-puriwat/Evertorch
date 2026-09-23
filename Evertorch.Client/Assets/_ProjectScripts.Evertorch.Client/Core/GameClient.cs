@@ -82,8 +82,6 @@ public sealed class GameClient : MonoBehaviour
 
     public string Identity { get; set; } = string.Empty;
 
-    public long Character { get; set; }
-
     public string Status { get; private set; } = "Loading content";
 
     public ClientContent? Content => m_contentLoader.Content;
@@ -109,12 +107,12 @@ public sealed class GameClient : MonoBehaviour
         DontDestroyOnLoad(gameObject);
         Application.runInBackground = true;
 
-        // Every client on the machine, including each Multiplayer Play Mode window, needs its own character, or the
-        // server replaces the older session. A GUID is random per process, unlike a seeded draw two editors started
-        // together could share.
+        // Each identity is its own account. Every client on the machine, including each Multiplayer Play Mode
+        // window, starts with its own, so windows started together never share characters. A GUID is random per
+        // process, unlike a seeded draw two editors started together could share. Type an identity in the overlay
+        // to come back to the same account.
         int suffix = 100000 + Math.Abs(Guid.NewGuid().GetHashCode() % 900000);
         Identity = $"player{suffix}";
-        Character = suffix;
 
         Touch = TouchControls.Create();
         Touch.transform.SetParent(transform, false);
@@ -232,6 +230,7 @@ public sealed class GameClient : MonoBehaviour
 
         if (Connection != null)
         {
+            Connection.CharactersChanged -= OnCharactersChanged;
             Connection.EnteredWorld -= OnEnteredWorld;
             Connection.Closed -= OnClosed;
         }
@@ -251,9 +250,9 @@ public sealed class GameClient : MonoBehaviour
         var settings = new ClientConnectionSettings(
             m_buildVersion,
             m_contentLoader.Content.Version,
-            DevelopmentTokenPrefix + Identity,
-            new CharacterId(Character));
+            DevelopmentTokenPrefix + Identity);
         Connection = new ClientConnection(Link, settings, m_contentLoader.Content);
+        Connection.CharactersChanged += OnCharactersChanged;
         Connection.EnteredWorld += OnEnteredWorld;
         Connection.Closed += OnClosed;
         Status = $"Connecting to {m_host}:{m_port}";
@@ -266,6 +265,25 @@ public sealed class GameClient : MonoBehaviour
     }
 
     /// <summary>
+    ///     Asks for a new character on this identity's account; the answer comes back with the next character list.
+    /// </summary>
+    public void CreateCharacter(string name)
+    {
+        if (Connection != null && Connection.CreateCharacter(name))
+        {
+            Status = $"Creating {name}";
+        }
+    }
+
+    public void EnterWorld(CharacterId character)
+    {
+        if (Connection != null && Connection.EnterWorld(character))
+        {
+            Status = "Entering the world";
+        }
+    }
+
+    /// <summary>
     ///     Asks the server to bring the dead local player back at the map's spawn point.
     /// </summary>
     public void RequestRespawn()
@@ -274,6 +292,25 @@ public sealed class GameClient : MonoBehaviour
         {
             Connection?.SendRespawn();
         }
+    }
+
+    private void OnCharactersChanged()
+    {
+        ClientConnection? connection = Connection;
+        if (connection == null || connection.State != ClientConnectionState.SelectingCharacter)
+        {
+            return;
+        }
+
+        Status = connection.LastCreateOutcome switch
+        {
+            CreateCharacterOutcome.None => "Choose or create a character",
+            CreateCharacterOutcome.Created => "Character created",
+            CreateCharacterOutcome.NameInvalid => "Name refused: 4 to 23 letters and digits",
+            CreateCharacterOutcome.NameTaken => "Name refused: already taken",
+            CreateCharacterOutcome.LimitReached => "Refused: an account holds at most 3 characters",
+            _ => "The server cannot create characters right now; try again"
+        };
     }
 
     private void OnEnteredWorld(ClientWorld world)
