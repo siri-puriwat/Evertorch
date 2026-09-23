@@ -16,6 +16,7 @@ public sealed class PlayerEntity : WorldEntity
         WorldPosition position,
         WorldDirection facing,
         float movementSpeed,
+        PrimaryStats primary,
         DerivedStats stats,
         float attackRange)
         : base(id, position, facing, movementSpeed, stats.MaxHp, attackRange)
@@ -23,6 +24,7 @@ public sealed class PlayerEntity : WorldEntity
         Character = character;
         Owner = owner;
         Job = job;
+        Primary = primary;
         Stats = stats;
     }
 
@@ -36,6 +38,8 @@ public sealed class PlayerEntity : WorldEntity
     ///     The character's derived statistics from the rules; recalculated only when their inputs change.
     /// </summary>
     public DerivedStats Stats { get; }
+
+    public PrimaryStats Primary { get; }
 
     public override EntityKind Kind => EntityKind.Player;
 

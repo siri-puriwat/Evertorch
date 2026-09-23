@@ -85,6 +85,7 @@ public sealed class WorldSimulation
             map.Definition.SpawnPosition,
             MovementModel.NormalizeOrZero(map.Definition.SpawnFacing.X, map.Definition.SpawnFacing.Z),
             m_startingMovementSpeed,
+            m_startingJob.StartingStats,
             m_startingStats,
             m_startingAttackRange);
         map.Add(player);

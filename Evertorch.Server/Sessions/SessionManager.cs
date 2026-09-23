@@ -272,8 +272,8 @@ public sealed class SessionManager : ITickPhase
         session.LastCommandSequence = command.CommandSequence;
         bool isAccepted = command.Kind switch
         {
-            InboundEventKind.Attack => command.Target != default && m_targeting.TrySelect(session, command.Target),
-            InboundEventKind.Cancel => true,
+            InboundEventKind.Attack => m_targeting.TryAttack(session, command.Target),
+            InboundEventKind.Cancel => Cancel(session.Player),
             _ => false
         };
 
@@ -281,6 +281,12 @@ public sealed class SessionManager : ITickPhase
         {
             session.RefusedCommands++;
         }
+    }
+
+    private static bool Cancel(PlayerEntity player)
+    {
+        player.Combat.IsAutoAttacking = false;
+        return true;
     }
 
     private void ExpireSilentConnections(uint tick)

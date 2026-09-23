@@ -68,6 +68,8 @@ public abstract class WorldEntity
 
     public bool IsDead => (StateFlags & EntityStateFlags.Dead) != 0;
 
+    public CombatState Combat { get; } = new();
+
     /// <summary>
     ///     The HP ratio clients may see: a monster's, for its health bar. Other kinds share none.
     /// </summary>

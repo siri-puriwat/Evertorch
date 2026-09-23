@@ -47,9 +47,14 @@ public sealed class MovementSystem : ITickPhase
 
     private void Move(PlayerEntity player, MapInstance map, PlayerInputState input, in TickContext context)
     {
+        // From a swing's start to its impact, and while dead, input is consumed and acknowledged but applied as a
+        // zero direction (Gameplay Systems §5). Storing the zero keeps the hold timeout from resuming the walk later.
+        bool isHeld = player.IsDead || player.Combat.IsSwinging;
         if (input.Queue.TryDequeue(out MoveIntent intent))
         {
-            input.Direction = MovementModel.NormalizeOrZero(intent.DirectionX, intent.DirectionZ);
+            input.Direction = isHeld
+                ? new WorldDirection(0f, 0f)
+                : MovementModel.NormalizeOrZero(intent.DirectionX, intent.DirectionZ);
             input.LastProcessedSequence = intent.Sequence;
             input.TicksSinceInput = 0;
             TrackClientTick(input, intent.ClientTick, context.Tick);
@@ -59,7 +64,7 @@ public sealed class MovementSystem : ITickPhase
             // Packets get lost, so the last input keeps applying for a short while. It must not apply forever:
             // a client that vanished mid-stride would otherwise walk on until its connection timed out.
             input.TicksSinceInput++;
-            if (input.TicksSinceInput > m_holdTicks)
+            if (input.TicksSinceInput > m_holdTicks || isHeld)
             {
                 input.Direction = new WorldDirection(0f, 0f);
             }
@@ -81,6 +86,7 @@ public sealed class MovementSystem : ITickPhase
         player.StateFlags = step.IsMoving
             ? player.StateFlags | EntityStateFlags.Moving
             : player.StateFlags & ~EntityStateFlags.Moving;
+        player.Combat.HasMovedThisTick = step.IsMoving;
     }
 
     private void TrackClientTick(PlayerInputState input, uint clientTick, uint serverTick)

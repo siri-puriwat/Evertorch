@@ -24,7 +24,8 @@ public sealed class Targeting
         return session.Map != null
             && session.KnownEntities.Contains(target)
             && session.Map.TryGetMonster(target, out MonsterEntity? monster)
-            && monster != null;
+            && monster != null
+            && !monster.IsDead;
     }
 
     /// <summary>
@@ -59,6 +60,21 @@ public sealed class Targeting
         }
     }
 
+    /// <summary>
+    ///     Selects <paramref name="target" /> and keeps attacking it. Returns false, changing nothing, when the
+    ///     target may not be selected.
+    /// </summary>
+    public bool TryAttack(ClientSession session, EntityId target)
+    {
+        if (session.Player == null || target == default || !TrySelect(session, target))
+        {
+            return false;
+        }
+
+        session.Player.Combat.IsAutoAttacking = true;
+        return true;
+    }
+
     private void SetTarget(ClientSession session, PlayerEntity player, EntityId target)
     {
         if (player.Target == target)
@@ -66,6 +82,8 @@ public sealed class Targeting
             return;
         }
 
+        // Selecting another target, or none, ends auto-attack; a swing already begun still resolves.
+        player.Combat.IsAutoAttacking = false;
         player.Target = target;
         m_sender.Send(session.Connection, new TargetChanged(player.Id, target));
     }

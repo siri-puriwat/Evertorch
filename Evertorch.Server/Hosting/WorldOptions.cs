@@ -49,6 +49,12 @@ public sealed class WorldOptions
     ///     Seed of the server's random source. Unset draws a seed at startup and logs it, so a run can be replayed.
     /// </summary>
     public ulong? RandomSeed { get; set; }
+
+    /// <summary>
+    ///     World units a player's basic attack reaches beyond its range when a swing begins. It absorbs the delay of
+    ///     the interpolated position the client measured its approach against.
+    /// </summary>
+    public float AttackRangeTolerance { get; set; } = 0.5f;
 }
 
 internal sealed class WorldOptionsValidator : IValidateOptions<WorldOptions>
@@ -69,6 +75,11 @@ internal sealed class WorldOptionsValidator : IValidateOptions<WorldOptions>
         if (options.InterestNeighborRadius < 0 || options.InterestNeighborRadius > 8)
         {
             failures.Add($"{WorldOptions.SectionName}:InterestNeighborRadius must be between 0 and 8.");
+        }
+
+        if (!(options.AttackRangeTolerance >= 0f && options.AttackRangeTolerance <= 5f))
+        {
+            failures.Add($"{WorldOptions.SectionName}:AttackRangeTolerance must be between 0 and 5.");
         }
 
         AddRangeFailure(failures, "InputHoldTimeoutMs", options.InputHoldTimeoutMs, 0, 5000);

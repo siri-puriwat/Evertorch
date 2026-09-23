@@ -40,7 +40,8 @@ internal sealed class TestServer
         int maxQueuedInputs = 3,
         int snapshotIntervalTicks = 1,
         bool withMonsters = false,
-        ulong randomSeed = 1)
+        ulong randomSeed = 1,
+        IRandomSource? combatRandom = null)
     {
         Content = withMonsters ? RepositoryContent.Value : RepositoryContentWithoutMonsters.Value;
         var network = new NetworkOptions
@@ -93,6 +94,15 @@ internal sealed class TestServer
             compatibility,
             Options.Create(world),
             Log);
+        Combat = new CombatSystem(
+            World,
+            Sessions,
+            sender,
+            targeting,
+            new RenewalCombatRules(),
+            combatRandom ?? Random,
+            Options.Create(world),
+            simulation);
         Metrics = new ServerMetrics(new TickLogObserver(new CapturingLogger<TickLogObserver>(), new FakeClock()));
         Status = new StatusPublisher(Metrics, Inbound, Sessions, SessionManager, World, Transport, simulation);
         m_pipeline = new TickPipeline(
@@ -102,6 +112,7 @@ internal sealed class TestServer
                 new SnapshotPhase(Sessions, sender, Options.Create(world)),
                 new VisibilityPhase(Sessions, World, sender, targeting),
                 new MovementSystem(Sessions, Options.Create(world), simulation),
+                Combat,
                 SessionManager,
                 new RecordingPhase(TickPhase.ApplyCommands, "test", new List<string>(), _ => RunAfterCommands())
             });
@@ -111,6 +122,8 @@ internal sealed class TestServer
     public ServerContent Content { get; }
 
     public ServerRandom Random { get; }
+
+    public CombatSystem Combat { get; }
 
     public InMemoryServerTransport Transport { get; }
 

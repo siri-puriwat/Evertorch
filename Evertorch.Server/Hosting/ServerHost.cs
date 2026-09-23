@@ -48,6 +48,7 @@ public static class ServerHost
         builder.Services.AddSingleton(TimeProvider.System);
         builder.Services.AddSingleton<ICharacterRules, RenewalCharacterRules>();
         builder.Services.AddSingleton<IMovementRules, RenewalMovementRules>();
+        builder.Services.AddSingleton<ICombatRules, RenewalCombatRules>();
         builder.Services.AddSingleton(services =>
             ServerRandom.FromOptions(services.GetRequiredService<IOptions<WorldOptions>>().Value));
         builder.Services.AddSingleton<IRandomSource>(services => services.GetRequiredService<ServerRandom>());
@@ -67,6 +68,8 @@ public static class ServerHost
         builder.Services.AddSingleton<SessionManager>();
         builder.Services.AddSingleton<ITickPhase>(services => services.GetRequiredService<SessionManager>());
         builder.Services.AddSingleton<ITickPhase, MovementSystem>();
+        builder.Services.AddSingleton<CombatSystem>();
+        builder.Services.AddSingleton<ITickPhase>(services => services.GetRequiredService<CombatSystem>());
         builder.Services.AddSingleton<ITickPhase, VisibilityPhase>();
         builder.Services.AddSingleton<ITickPhase, SnapshotPhase>();
         builder.Services.AddSingleton<StatusPublisher>();
