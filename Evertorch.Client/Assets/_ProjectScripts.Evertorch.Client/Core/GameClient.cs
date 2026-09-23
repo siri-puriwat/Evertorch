@@ -63,6 +63,8 @@ public sealed class GameClient : MonoBehaviour
     private MoveMarker? m_marker;
     private FollowCamera? m_camera;
     private DevelopmentOverlay? m_overlay;
+    private CombatHud? m_hud;
+    private CombatPresenter? m_combat;
     private Material? m_runtimeMaterial;
     private string m_leaveReason = string.Empty;
 
@@ -92,6 +94,8 @@ public sealed class GameClient : MonoBehaviour
 
     public ClientWorld? World => m_world;
 
+    public CombatPresenter? Combat => m_combat;
+
     public MovementController? Controller => m_controller;
 
     public FixedTickClock? Clock => m_clock;
@@ -115,6 +119,8 @@ public sealed class GameClient : MonoBehaviour
         Touch.SetVisible(Application.isMobilePlatform);
         m_overlay = DevelopmentOverlay.Create(this);
         m_overlay.transform.SetParent(transform, false);
+        m_hud = CombatHud.Create(this);
+        m_hud.transform.SetParent(transform, false);
 
         yield return m_contentLoader.Load();
         if (m_contentLoader.Content == null)
@@ -197,6 +203,8 @@ public sealed class GameClient : MonoBehaviour
                 m_targetMarker.Hide();
             }
         }
+
+        m_combat?.Present(m_localView, m_remoteViews, Camera.main);
     }
 
     private void OnDestroy()
@@ -309,6 +317,7 @@ public sealed class GameClient : MonoBehaviour
 
         world.RemoteSpawned += AddRemoteView;
         world.RemoteDespawned += RemoveRemoteView;
+        m_combat = new CombatPresenter(world, 1.0 / Connection.ServerTickRate, material);
 
         Camera? mainCamera = Camera.main;
         if (mainCamera != null)
@@ -464,6 +473,8 @@ public sealed class GameClient : MonoBehaviour
             m_world.RemoteDespawned -= RemoveRemoteView;
         }
 
+        m_combat?.Dispose();
+        m_combat = null;
         m_world = null;
         m_driver = null;
         m_autoAttack = null;

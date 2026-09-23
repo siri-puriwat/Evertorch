@@ -10,10 +10,19 @@ namespace Evertorch.Client
 /// </summary>
 public sealed class EntityView : MonoBehaviour
 {
+    // The procedural attack pose (Gameplay Systems §8): how far the lunge reaches and how much a hit squashes.
+    private const float LungeDistance = 0.35f;
+    private const float SquashWiden = 0.25f;
+    private const float SquashFlatten = 0.35f;
+
     private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
     private static readonly Vector3 PlaceholderScale = new(0.6f, 1.6f, 0.6f);
+    private static readonly Vector3 DeadScale = new(1.3f, 0.3f, 1.3f);
 
     private Color? m_tint;
+    private Transform? m_body;
+    private Vector3 m_bodyPosition;
+    private Vector3 m_bodyScale;
 
     public bool HasBody { get; private set; }
 
@@ -42,6 +51,29 @@ public sealed class EntityView : MonoBehaviour
         }
     }
 
+    /// <summary>
+    ///     Poses the body for this frame: <paramref name="lunge" /> and <paramref name="squash" /> run from 0 to 1, and
+    ///     a dead body lies flat. Only the drawing changes.
+    /// </summary>
+    public void SetCombatPose(float lunge, float squash, bool isDead)
+    {
+        if (m_body == null)
+        {
+            return;
+        }
+
+        if (isDead)
+        {
+            m_body.localPosition = Vector3.Scale(m_bodyPosition, new Vector3(1f, DeadScale.y, 1f));
+            m_body.localScale = Vector3.Scale(m_bodyScale, DeadScale);
+            return;
+        }
+
+        float widen = 1f + SquashWiden * squash;
+        m_body.localPosition = m_bodyPosition + Vector3.forward * (LungeDistance * lunge);
+        m_body.localScale = Vector3.Scale(m_bodyScale, new Vector3(widen, 1f - SquashFlatten * squash, widen));
+    }
+
     private void AttachBody(GameObject? prefab, EntityViewCatalog catalog)
     {
         // The load may finish after the entity has despawned.
@@ -67,6 +99,9 @@ public sealed class EntityView : MonoBehaviour
 
         body.name = "Body";
         body.transform.SetParent(transform, false);
+        m_body = body.transform;
+        m_bodyPosition = m_body.localPosition;
+        m_bodyScale = m_body.localScale;
 
         // Bodies must not catch the ground clicks meant for the map; entities are picked by their own test.
         foreach (Collider part in body.GetComponentsInChildren<Collider>(true))
