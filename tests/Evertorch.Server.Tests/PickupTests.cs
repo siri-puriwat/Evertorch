@@ -196,6 +196,38 @@ public sealed class PickupTests
     }
 
     [Test]
+    public void Logout_AfterAnEarlierLogoutsCheckpointFailed_IsNotFinishedByThatOldCheckpoint()
+    {
+        var server = new TestServer();
+        ConnectionId picker = server.EnterWorld(1);
+        ItemDropEntity drop = Drop(server, NextTo(server.PlayerOf(picker), 1f));
+        server.RunsPersistence = false;
+        server.SendLogout(picker, 1);
+        server.Tick();
+        server.Store.IsUnavailable = true;
+        server.RunsPersistence = true;
+        server.Tick();
+        Assert.That(Rejections(server, picker).Single().Reason, Is.EqualTo(CommandRejectionReason.ServiceUnavailable));
+
+        // The failed checkpoint waits in its slot for the database; a pickup and a second logout come before it runs.
+        server.Store.IsUnavailable = false;
+        server.RunsPersistence = false;
+        server.Persistence.Probe();
+        server.SendPickup(picker, drop.Id, 2);
+        server.SendLogout(picker, 3);
+        server.Tick();
+        server.RunsPersistence = true;
+        server.TickUntil(() => server.SessionOf(picker).State == SessionState.Authenticated);
+
+        MessageOpcode[] opcodes = server.Transport.ControlOpcodesSentTo(picker).ToArray();
+        Assert.That(opcodes, Does.Contain(MessageOpcode.InventoryChanged), "the pickup reached its player first");
+        Assert.That(
+            Array.IndexOf(opcodes, MessageOpcode.InventoryChanged),
+            Is.LessThan(Array.IndexOf(opcodes, MessageOpcode.LogoutComplete)));
+        Assert.That(server.Store.Checkpoints, Has.Count.EqualTo(2), "the old checkpoint, then the logout's own");
+    }
+
+    [Test]
     public void Logout_WithAPickupInFlight_WaitsForItThenCompletes()
     {
         var server = new TestServer();

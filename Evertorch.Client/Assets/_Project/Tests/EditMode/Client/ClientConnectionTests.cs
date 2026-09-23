@@ -332,6 +332,27 @@ public sealed class ClientConnectionTests
     }
 
     [Test]
+    public void EnterWorld_WhileAnEarlierEntryIsUnanswered_CanChooseAgainAndStillEnter()
+    {
+        var harness = new Harness();
+        harness.ConnectAndReceiveHello();
+        harness.ReceiveList(Entry(7, "Ann0"), Entry(9, "Bob12"));
+        harness.Connection.EnterWorld(new CharacterId(7));
+
+        bool isSentAgain = harness.Connection.EnterWorld(new CharacterId(9));
+        bool isCreateSent = harness.Connection.CreateCharacter("Cid3");
+        WorldEntered entered = ClientWorldFixture.Entered(Start);
+        harness.Deliver(ProtocolChannel.Control, Encode(entered.GetEncodedLength(), entered.Write));
+
+        Assert.That(isSentAgain, Is.True, "a refused entry is not answered, so the list stays usable");
+        Assert.That(isCreateSent, Is.True);
+        Assert.That(EnterWorldRequest.TryRead(harness.Transport.Sent[harness.Transport.Sent.Count - 2].Payload,
+            out EnterWorldRequest again), Is.True);
+        Assert.That(again.Character, Is.EqualTo(new CharacterId(9)));
+        Assert.That(harness.Connection.State, Is.EqualTo(ClientConnectionState.InWorld));
+    }
+
+    [Test]
     public void InventoryChanged_WithARevisionGap_SendsOneResyncRequest()
     {
         var harness = new Harness();

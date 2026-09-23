@@ -700,14 +700,23 @@ public sealed class SessionManager : ITickPhase
     private void QueueLogoutCheckpoint(ClientSession session, CharacterSession character)
     {
         ConnectionId connection = session.Connection;
-        character.LogoutCheckpoint = m_lifetime.QueueCheckpoint(
+        PersistenceJob? checkpoint = null;
+        checkpoint = m_lifetime.QueueCheckpoint(
             character,
-            outcome => CompleteLogout(connection, character, outcome));
+            outcome => CompleteLogout(connection, character, checkpoint!, outcome));
+        character.LogoutCheckpoint = checkpoint;
     }
 
-    private void CompleteLogout(ConnectionId connection, CharacterSession character, PersistenceOutcome outcome)
+    // A checkpoint that met an outage goes back into its slot and completes again later, possibly after a newer
+    // logout began; only this logout's own checkpoint may finish it.
+    private void CompleteLogout(
+        ConnectionId connection,
+        CharacterSession character,
+        PersistenceJob checkpoint,
+        PersistenceOutcome outcome)
     {
         if (!character.IsLoggingOut
+            || character.LogoutCheckpoint != checkpoint
             || !m_sessions.TryGet(connection, out ClientSession? session)
             || session == null
             || session.Character != character)

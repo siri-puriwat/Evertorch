@@ -408,7 +408,7 @@ public sealed class DevelopmentOverlay : MonoBehaviour
 
         private void RefreshCharacters(ClientConnection? connection)
         {
-            bool isSelecting = connection != null && connection.State == ClientConnectionState.SelectingCharacter;
+            bool isSelecting = connection != null && connection.IsOnCharacterList;
             m_characters.SetActive(isSelecting);
             if (!isSelecting)
             {

@@ -61,6 +61,12 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
 
     public int RoundTripMilliseconds => m_transport.RoundTripMilliseconds;
 
+    /// <summary>
+    ///     Characters can be created or entered: on the list, or waiting for an entry the server may never answer.
+    /// </summary>
+    public bool IsOnCharacterList =>
+        State == ClientConnectionState.SelectingCharacter || State == ClientConnectionState.EnteringWorld;
+
     void IClientTransportListener.OnConnected()
     {
         if (State != ClientConnectionState.Connecting)
@@ -372,7 +378,7 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
     public bool CreateCharacter(string name)
     {
         var message = new CreateCharacter(name);
-        if (State != ClientConnectionState.SelectingCharacter
+        if (!IsOnCharacterList
             || Encoding.UTF8.GetByteCount(name) > ProtocolLimits.MaxCharacterNameBytes)
         {
             return false;
@@ -385,11 +391,12 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
 
     /// <summary>
     ///     Asks to enter the world as <paramref name="character" />. False, sending nothing, unless characters are
-    ///     being selected.
+    ///     being selected. A refused entry gets no reply (Network Protocol §4), so while an earlier request is
+    ///     unanswered another may be sent: the client stays on the list.
     /// </summary>
     public bool EnterWorld(CharacterId character)
     {
-        if (State != ClientConnectionState.SelectingCharacter)
+        if (!IsOnCharacterList)
         {
             return false;
         }

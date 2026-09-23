@@ -1,5 +1,7 @@
 using System;
 using System.Threading;
+using System.Threading.Tasks;
+using Npgsql;
 using NUnit.Framework;
 
 namespace Evertorch.Persistence.Tests
@@ -53,6 +55,11 @@ public sealed class PickupStoreTests
     private PickupResult? Find(long character, Guid drop)
     {
         return m_store.FindPickupAsync(drop, character, CancellationToken.None).GetAwaiter().GetResult();
+    }
+
+    private Task<PickupResult?> FindInBackground(long character, Guid drop)
+    {
+        return Task.Run(() => Find(character, drop));
     }
 
     private long Revision(long character)
@@ -225,6 +232,31 @@ public sealed class PickupStoreTests
         Assert.That(found!.Status, Is.EqualTo(PickupStatus.Committed));
         Assert.That(found.InventoryRevision, Is.EqualTo(2u));
         Assert.That(found.Row!.Quantity, Is.EqualTo(5));
+    }
+
+    [Test]
+    public void Find_WhileTheCommitIsStillOpen_WaitsForItInsteadOfAnsweringNotCommitted()
+    {
+        long character = NewCharacter();
+        var drop = Guid.NewGuid();
+        using var commit = new NpgsqlConnection(m_database.ConnectionString);
+        commit.Open();
+        using NpgsqlTransaction transaction = commit.BeginTransaction();
+        using (var locking = new NpgsqlCommand(
+                   $"SELECT id FROM characters WHERE id = {character} FOR UPDATE; "
+                   + Sql.LedgerInsert(drop, character, "pickup"),
+                   commit,
+                   transaction))
+        {
+            locking.ExecuteNonQuery();
+        }
+
+        Task<PickupResult?> lookup = FindInBackground(character, drop);
+        bool isAnsweredEarly = lookup.Wait(500);
+        transaction.Commit();
+
+        Assert.That(isAnsweredEarly, Is.False, "the lookup waited for the character lock");
+        Assert.That(lookup.GetAwaiter().GetResult()!.Status, Is.EqualTo(PickupStatus.Committed));
     }
 }
 }

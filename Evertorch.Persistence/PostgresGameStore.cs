@@ -285,7 +285,22 @@ RETURNING id AS ""Id"", status AS ""Status""")
 
     public Task<PickupResult?> FindPickupAsync(Guid dropId, long characterId, CancellationToken cancellationToken)
     {
-        return RunAsync(context => FindAsync(context, dropId, characterId, cancellationToken), cancellationToken);
+        return RunAsync(
+            async context =>
+            {
+                // A commit whose answer was lost may still hold the character's lock; waiting for it means the
+                // ledger read after it sees that commit or its rollback, never a commit still in flight.
+                await using (IDbContextTransaction transaction =
+                             await context.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false))
+                {
+                    await LockCharacterAsync(context, characterId, cancellationToken).ConfigureAwait(false);
+                    PickupResult? found = await FindAsync(context, dropId, characterId, cancellationToken)
+                        .ConfigureAwait(false);
+                    await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+                    return found;
+                }
+            },
+            cancellationToken);
     }
 
     public Task<IReadOnlyList<string>> ListStoredDefinitionIdsAsync(CancellationToken cancellationToken)
