@@ -38,6 +38,7 @@ public sealed class LiveServerCombatTests : InputTestFixture
     private readonly List<ItemDropped> m_dropped = new();
     private int m_kills;
     private int m_respawns;
+    private bool m_hasCheckedTargetFrame;
     private LiveDatabase? m_database;
     private LiveServer? m_server;
     private GameObject? m_client;
@@ -65,6 +66,7 @@ public sealed class LiveServerCombatTests : InputTestFixture
         m_dropped.Clear();
         m_kills = 0;
         m_respawns = 0;
+        m_hasCheckedTargetFrame = false;
 
         // Leave the next test an empty scene rather than the map, whose camera and ground would still be there. Only a
         // scene the client loads is unloaded: a test that fails before its map loads leaves the test runner's own scene
@@ -137,6 +139,11 @@ public sealed class LiveServerCombatTests : InputTestFixture
         Assert.That(held, Is.GreaterThan(0u), $"last refusal {world.LastRejection}, status {client.Status}");
         Assert.That(pickedUp.Any(picked => picked.Recipient == world.LocalEntity), Is.True);
         uint revision = world.Inventory.Revision;
+        FeedbackLines feedback = client.GetComponentsInChildren<FeedbackLines>(true).Single();
+        InventoryWindow inventory = client.GetComponentsInChildren<InventoryWindow>(true).Single();
+        yield return WaitUntil(() => inventory.Text == $"Slime Gel x {held}", 5f);
+        Assert.That(feedback.Text, Does.Contain("Picked up Slime Gel x "), "the pickup is announced by name");
+        Assert.That(inventory.Text, Is.EqualTo($"Slime Gel x {held}"), "the window lists the gel by name");
 
         client.Disconnect();
         yield return WaitUntil(() => client.World == null, StartTimeoutSeconds);
@@ -321,6 +328,11 @@ public sealed class LiveServerCombatTests : InputTestFixture
             {
                 yield return Tap(keyboard.tabKey);
                 yield return WaitUntil(() => world.Target != default, 2f);
+                if (world.Target != default && !m_hasCheckedTargetFrame)
+                {
+                    m_hasCheckedTargetFrame = true;
+                    yield return ExpectTargetFrame(client);
+                }
             }
             else if (world.Target != attacking)
             {
@@ -332,6 +344,18 @@ public sealed class LiveServerCombatTests : InputTestFixture
                 yield return null;
             }
         }
+    }
+
+    // The frame follows the confirmed target: the slime by its display name, and how far away it is.
+    private static IEnumerator ExpectTargetFrame(GameClient client)
+    {
+        TargetFrame frame = client.GetComponentsInChildren<TargetFrame>(true).Single();
+        TMP_Text name = frame.GetComponentsInChildren<TMP_Text>(true).Single(label => label.name == "Name");
+        TMP_Text detail = frame.GetComponentsInChildren<TMP_Text>(true).Single(label => label.name == "Detail");
+        yield return WaitUntil(() => frame.IsVisible && detail.text.EndsWith(" m", StringComparison.Ordinal), 2f);
+        Assert.That(frame.IsVisible, Is.True, "the frame shows the confirmed target");
+        Assert.That(name.text, Is.EqualTo("Training Slime"));
+        Assert.That(detail.text, Does.EndWith(" m"), "the frame gives the distance to the target");
     }
 
     private GameClient CreateClient(int port, string actionsPath)

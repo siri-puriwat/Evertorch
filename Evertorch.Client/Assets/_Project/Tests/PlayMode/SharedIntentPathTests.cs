@@ -1,10 +1,12 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using Evertorch.Game;
 using Evertorch.Protocol;
 using NUnit.Framework;
 using UnityEngine;
+using UnityEngine.Events;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
 using UnityEngine.InputSystem.LowLevel;
@@ -270,7 +272,7 @@ public sealed class SharedIntentPathTests : InputTestFixture
         overlay.Panel!.gameObject.SetActive(true);
         yield return null;
 
-        ClickAt(mouse, CenterOf(overlay.Panel!));
+        ClickAt(mouse, CenterOf(Child(overlay, "Connection")));
         PointerMoveResult result = rig.Tick();
 
         Assert.That(result, Is.EqualTo(PointerMoveResult.OnControl));
@@ -294,7 +296,9 @@ public sealed class SharedIntentPathTests : InputTestFixture
         SetKeys(keyboard);
         yield return null;
         bool isShown = overlay.IsVisible;
-        Vector2 onPanel = CenterOf(overlay.Panel!);
+
+        // On the panel, away from its buttons.
+        Vector2 onPanel = CenterOf(Child(overlay, "Connection"));
         ClickAt(mouse, onPanel);
         PointerMoveResult whileShown = rig.Tick();
 
@@ -309,6 +313,62 @@ public sealed class SharedIntentPathTests : InputTestFixture
         Assert.That(whileShown, Is.EqualTo(PointerMoveResult.OnControl));
         Assert.That(overlay.IsVisible, Is.False);
         Assert.That(afterHiding, Is.Not.EqualTo(PointerMoveResult.OnControl));
+    }
+
+    [UnityTest]
+    public IEnumerator TouchTargetButtons_AskForWhatTheirGamepadButtonsAskFor()
+    {
+        // The buttons are pressed through the UI event system, which ignores an unfocused application unless told
+        // otherwise.
+        InputSystem.settings.backgroundBehavior = InputSettings.BackgroundBehavior.IgnoreFocus;
+#if UNITY_EDITOR
+        InputSystem.settings.editorInputBehaviorInPlayMode =
+            InputSettings.EditorInputBehaviorInPlayMode.AllDeviceInputAlwaysGoesToGameView;
+#endif
+        Touchscreen touchscreen = InputSystem.AddDevice<Touchscreen>();
+        Rig rig = CreateRig();
+        TouchControls controls = rig.CreateTouchControls();
+        CombatInputSource source = rig.CreateCombatSource();
+        yield return null;
+
+        var requests = new List<CombatRequest>();
+        foreach (string button in new[] { "Next", "Previous", "Clear" })
+        {
+            Vector2 onButton = CenterOf(Child(controls, button));
+            BeginTouch(1, onButton, screen: touchscreen);
+
+            // One frame for the event system to press the button, and one for the button's own event.
+            yield return null;
+            yield return null;
+            requests.Add(source.TakeRequest());
+            EndTouch(1, onButton, screen: touchscreen);
+            yield return null;
+            yield return null;
+        }
+
+        Assert.That(requests, Is.EqualTo(new[] { CombatRequest.Next, CombatRequest.Previous, CombatRequest.Clear }));
+    }
+
+    [UnityTest]
+    public IEnumerator DevButton_ShowsTheDevelopmentOverlay_AndTheOverlaysHideButtonHidesIt()
+    {
+        InputSystem.settings.backgroundBehavior = InputSettings.BackgroundBehavior.IgnoreFocus;
+#if UNITY_EDITOR
+        InputSystem.settings.editorInputBehaviorInPlayMode =
+            InputSettings.EditorInputBehaviorInPlayMode.AllDeviceInputAlwaysGoesToGameView;
+#endif
+        Touchscreen touchscreen = InputSystem.AddDevice<Touchscreen>();
+        Rig rig = CreateRig();
+        DevelopmentOverlay overlay = rig.CreateOverlay();
+        TouchControls controls = rig.CreateTouchControls(overlay.Toggle);
+        yield return null;
+
+        yield return Tap(touchscreen, CenterOf(Child(controls, "Dev")));
+        Assert.That(overlay.IsVisible, Is.True, "the Dev button shows the overlay");
+        yield return Tap(touchscreen, CenterOf(Child(overlay, "Hide")));
+
+        Assert.That(overlay.IsVisible, Is.False);
+        Assert.That(EventSystem.current.currentSelectedGameObject, Is.Null);
     }
 
     [UnityTest]
@@ -475,6 +535,20 @@ public sealed class SharedIntentPathTests : InputTestFixture
         return m_rig;
     }
 
+    private static RectTransform Child(Component root, string objectName)
+    {
+        return root.GetComponentsInChildren<RectTransform>().Single(rect => rect.name == objectName);
+    }
+
+    private IEnumerator Tap(Touchscreen touchscreen, Vector2 position)
+    {
+        BeginTouch(1, position, screen: touchscreen);
+        yield return null;
+        EndTouch(1, position, screen: touchscreen);
+        yield return null;
+        yield return null;
+    }
+
     private static Vector2 CenterOf(RectTransform rect)
     {
         return RectTransformUtility.WorldToScreenPoint(null, rect.TransformPoint(rect.rect.center));
@@ -562,9 +636,9 @@ public sealed class SharedIntentPathTests : InputTestFixture
             Sent.Add(intent);
         }
 
-        public TouchControls CreateTouchControls()
+        public TouchControls CreateTouchControls(UnityAction? toggleOverlay = null)
         {
-            var controls = TouchControls.Create();
+            var controls = TouchControls.Create(toggleOverlay);
             m_created.Add(controls.gameObject);
             m_handler = new PointerMoveHandler(m_pointer, new UiHitTest());
             return controls;

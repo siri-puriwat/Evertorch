@@ -1,9 +1,8 @@
 using System;
-using System.Text;
 using Evertorch.Game;
-using Evertorch.Protocol;
 using TMPro;
 using UnityEngine;
+using UnityEngine.Events;
 using UnityEngine.InputSystem;
 using UnityEngine.UI;
 
@@ -11,7 +10,8 @@ namespace Evertorch.Client
 {
 /// <summary>
 ///     Development-only readout and controls: connection and prediction telemetry, the simulated link quality, and the
-///     on-screen stick. F1 shows and hides it; the panels a player sees do the rest (Prototype Content §2).
+///     on-screen stick. F1 or the touch toggle shows and hides it; the panels a player sees do the rest (Prototype
+///     Content §2).
 /// </summary>
 public sealed class DevelopmentOverlay : MonoBehaviour
 {
@@ -32,9 +32,9 @@ public sealed class DevelopmentOverlay : MonoBehaviour
     private void Update()
     {
         Keyboard? keyboard = Keyboard.current;
-        if (Panel != null && keyboard != null && keyboard.f1Key.wasPressedThisFrame)
+        if (keyboard != null && keyboard.f1Key.wasPressedThisFrame)
         {
-            Panel.gameObject.SetActive(!Panel.gameObject.activeSelf);
+            Toggle();
         }
 
         if (IsVisible)
@@ -44,7 +44,7 @@ public sealed class DevelopmentOverlay : MonoBehaviour
     }
 
     /// <summary>
-    ///     Builds the overlay hidden; F1 shows it.
+    ///     Builds the overlay hidden; F1 or the touch toggle shows it.
     /// </summary>
     public static DevelopmentOverlay Create(GameClient client)
     {
@@ -57,13 +57,21 @@ public sealed class DevelopmentOverlay : MonoBehaviour
         return overlay;
     }
 
+    public void Toggle()
+    {
+        if (Panel != null)
+        {
+            Panel.gameObject.SetActive(!Panel.gameObject.activeSelf);
+        }
+    }
+
     private void Build(GameClient client)
     {
         ClientUI.EnsureEventSystem(transform);
         ClientUI.AddScreenCanvas(gameObject, SortingOrder);
 
         Panel = Ui.CreatePanel(transform, new Vector2(0f, 1f), new Vector2(Margin, -Margin), Width, Padding);
-        m_view = new View(client, Panel);
+        m_view = new View(client, Panel, Toggle);
         m_view.Refresh();
         Panel.gameObject.SetActive(false);
     }
@@ -81,9 +89,12 @@ public sealed class DevelopmentOverlay : MonoBehaviour
         private readonly LinkSlider[] m_linkSliders;
         private readonly Toggle m_stick;
 
-        public View(GameClient client, Transform panel)
+        public View(GameClient client, Transform panel, UnityAction hide)
         {
             m_client = client;
+
+            // The touch toggle may be under the open panel, so the panel closes itself too.
+            Ui.CreateButton("Hide", panel, hide);
             m_connection = Ui.CreateLabel("Connection", panel);
             m_disconnect = Ui.CreateButton("Disconnect", panel, client.Disconnect);
             m_respawn = Ui.CreateButton("Respawn", panel, client.RequestRespawn);
@@ -165,9 +176,7 @@ public sealed class DevelopmentOverlay : MonoBehaviour
             MovementPredictor predictor = world.Predictor;
             WorldPosition position = predictor.Position;
             RenderSmoother smoother = world.Smoother;
-            string life = world.IsLocalDead ? "   dead" : string.Empty;
-            string text = $"HP {world.LocalHealth}/{world.LocalMaximumHealth}{life}"
-                + $"\nTick {world.LatestServerTick}   Pos {position.X:F2}, {position.Y:F2}, {position.Z:F2}"
+            string text = $"Tick {world.LatestServerTick}   Pos {position.X:F2}, {position.Y:F2}, {position.Z:F2}"
                 + $"\nPending {predictor.PendingCount}   Ack {predictor.LastAcknowledgedSequence}"
                 + $"   Dropped {predictor.DroppedPendingInputs}"
                 + $"\nCorrection last {smoother.LastCorrection:F3} m   max {smoother.LargestCorrection:F3} m"
@@ -181,46 +190,12 @@ public sealed class DevelopmentOverlay : MonoBehaviour
                     + $"   refused clicks {controller.RejectedMoveRequests}   cancelled {controller.CancelledPaths}";
             }
 
-            if (world.LastRejection != CommandRejectionReason.None)
-            {
-                text += $"\nLast refused command: {world.LastRejection}";
-            }
-
-            text += InventoryText(world.Inventory);
-
             if (m_client.Clock != null && m_client.Clock.SkippedTicks > 0)
             {
                 text += $"\nSkipped client ticks {m_client.Clock.SkippedTicks}";
             }
 
             UiBuilder.SetText(m_world, text);
-        }
-
-        // A placeholder list until the game has an inventory window.
-        private string InventoryText(ClientInventory inventory)
-        {
-            if (!inventory.IsCurrent)
-            {
-                return "\nInventory: waiting for the server";
-            }
-
-            var text = new StringBuilder($"\nInventory (revision {inventory.Revision})");
-            if (inventory.Rows.Count == 0)
-            {
-                text.Append(": empty");
-            }
-
-            foreach (InventoryEntry row in inventory.Rows)
-            {
-                string name = m_client.Content != null
-                    && m_client.Content.TryGetItem(row.Item, out ClientItem? item)
-                    && item != null
-                        ? item.DisplayName
-                        : row.Item.Value;
-                text.Append($"\n  {name} x {row.Quantity}");
-            }
-
-            return text.ToString();
         }
 
         private void RefreshLink()

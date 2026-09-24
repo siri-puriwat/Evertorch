@@ -66,6 +66,9 @@ public sealed class GameClient : MonoBehaviour
     private CombatHud? m_hud;
     private LoginPanel? m_login;
     private StatusBar? m_statusBar;
+    private TargetFrame? m_targetFrame;
+    private InventoryWindow? m_inventoryWindow;
+    private FeedbackLines? m_feedback;
     private CombatPresenter? m_combat;
     private Material? m_runtimeMaterial;
     private string m_leaveReason = string.Empty;
@@ -151,15 +154,21 @@ public sealed class GameClient : MonoBehaviour
         int suffix = 100000 + Math.Abs(Guid.NewGuid().GetHashCode() % 900000);
         Identity = $"player{suffix}";
 
-        Touch = TouchControls.Create();
-        Touch.transform.SetParent(transform, false);
-        Touch.SetVisible(Application.isMobilePlatform);
         m_overlay = DevelopmentOverlay.Create(this);
         m_overlay.transform.SetParent(transform, false);
+        Touch = TouchControls.Create(m_overlay.Toggle);
+        Touch.transform.SetParent(transform, false);
+        Touch.SetVisible(Application.isMobilePlatform);
         m_hud = CombatHud.Create(this);
         m_hud.transform.SetParent(transform, false);
         m_statusBar = StatusBar.Create(this);
         m_statusBar.transform.SetParent(transform, false);
+        m_targetFrame = TargetFrame.Create(this);
+        m_targetFrame.transform.SetParent(transform, false);
+        m_inventoryWindow = InventoryWindow.Create(this);
+        m_inventoryWindow.transform.SetParent(transform, false);
+        m_feedback = FeedbackLines.Create(this);
+        m_feedback.transform.SetParent(transform, false);
         m_login = LoginPanel.Create(this);
         m_login.transform.SetParent(transform, false);
 
