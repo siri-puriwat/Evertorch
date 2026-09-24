@@ -3,6 +3,14 @@
 This directory contains local development infrastructure only. It is not a
 deployment configuration.
 
+## Runtime prerequisites
+
+- The .NET 10 SDK (see `global.json`) builds and runs everything here.
+- A machine that only runs a built server needs both the .NET Runtime 10 and
+  the ASP.NET Core Runtime 10: the server's health endpoints use the ASP.NET
+  Core shared framework.
+- Docker Desktop, running, for the database below and for the database tests.
+
 ## PostgreSQL 18
 
 1. Copy `.env.example` to `.env` and set `EVERTORCH_POSTGRES_PASSWORD`. The
@@ -45,6 +53,24 @@ values chosen in `.env`:
 ```text
 ConnectionStrings__Evertorch=Host=127.0.0.1;Port=5432;Database=evertorch_dev;Username=evertorch;Password=<local password>
 ```
+
+## Server ports, health checks, and stopping
+
+- Game traffic: UDP 7777, on `127.0.0.1` unless the server is started with
+  `--Network:BindAddress=0.0.0.0` (the `Development (LAN)` launch profile does
+  this). Another device on the network also needs an inbound firewall rule for
+  UDP 7777.
+- Health checks: HTTP on TCP 7778, on `127.0.0.1` only.
+  `http://127.0.0.1:7778/health/live` answers 200 while the simulation runs;
+  `http://127.0.0.1:7778/health/ready` answers 200 while the server also
+  admits players and its database answers. Otherwise they answer 503; both
+  return a JSON body. In Windows PowerShell use `curl.exe` or
+  `Invoke-RestMethod`, since `curl` is an alias there.
+- A second server on the same machine needs other ports, for example
+  `--Network:Port=7779 --Health:Port=7780`; otherwise it exits with code 1.
+- Ctrl+C in the server's window, or `shutdown` typed into it, stops it cleanly:
+  connected players are saved and told, and the process exits with code 0.
+  Closing the window instead kills the process before that.
 
 ## Running the server from Visual Studio
 
