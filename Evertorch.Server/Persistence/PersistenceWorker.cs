@@ -84,6 +84,8 @@ public sealed class PersistenceWorker : IDisposable
     private bool m_isStopping;
     private bool m_isExecuting;
     private bool m_isDisposed;
+    private bool m_hasStopped;
+    private bool m_hasDrained;
     private bool m_isProbeFailureLogged;
     private Thread? m_thread;
 
@@ -299,6 +301,12 @@ public sealed class PersistenceWorker : IDisposable
     /// </summary>
     public bool Stop(int drainTimeoutMs)
     {
+        // Disposing after a stop must not report the same unfinished work a second time.
+        if (m_hasStopped)
+        {
+            return m_hasDrained;
+        }
+
         var waited = Stopwatch.StartNew();
         lock (m_gate)
         {
@@ -331,7 +339,9 @@ public sealed class PersistenceWorker : IDisposable
             LogDrainIncomplete(m_logger, left, null);
         }
 
-        return left == 0;
+        m_hasStopped = true;
+        m_hasDrained = left == 0;
+        return m_hasDrained;
     }
 
     /// <summary>

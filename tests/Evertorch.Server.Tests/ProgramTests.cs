@@ -1,8 +1,12 @@
 using System;
 using System.IO;
+using System.Net;
+using System.Net.Sockets;
 using System.Threading;
+using System.Threading.Tasks;
 using Evertorch.Persistence;
 using Evertorch.Persistence.Tests;
+using Npgsql;
 using NUnit.Framework;
 
 namespace Evertorch.Server.Tests
@@ -11,6 +15,53 @@ namespace Evertorch.Server.Tests
 [NonParallelizable]
 public sealed class ProgramTests
 {
+    private static Task<int> StartMain(string[] args)
+    {
+        return Task.Run(() => Program.Main(args));
+    }
+
+    // A server that started after all would run until stopped; the test fails instead of waiting for it.
+    private static int RunMain(params string[] args)
+    {
+        Task<int> run = StartMain(args);
+        Assert.That(run.Wait(TimeSpan.FromSeconds(60)), Is.True, "Main returned");
+        return run.Result;
+    }
+
+    [Test]
+    public void Main_WhenItsPortIsTaken_ReturnsOne()
+    {
+        using var package = new TemporaryDirectory();
+        PackageFixture.WriteTo(package.Path, PackageFixture.BuildRepositoryPackage());
+        using var taken = new UdpClient(AddressFamily.InterNetwork) { ExclusiveAddressUse = true };
+        taken.Client.Bind(new IPEndPoint(IPAddress.Any, 0));
+        int port = ((IPEndPoint)taken.Client.LocalEndPoint!).Port;
+
+        int exitCode = RunMain(
+            $"--Content:ServerPackagePath={package.Path}",
+            $"--ConnectionStrings:Evertorch={TestHosts.UnreachableDatabase}",
+            $"--Network:Port={port}");
+
+        Assert.That(exitCode, Is.EqualTo(1));
+    }
+
+    [Test]
+    public void Main_WhenTheDatabaseRefusesItsCredentials_ReturnsOne()
+    {
+        using var database = PostgresFixture.Start();
+        using var package = new TemporaryDirectory();
+        PackageFixture.WriteTo(package.Path, PackageFixture.BuildRepositoryPackage());
+        string refused = new NpgsqlConnectionStringBuilder(database.ConnectionString) { Password = "wrong" }
+            .ConnectionString;
+
+        int exitCode = RunMain(
+            $"--Content:ServerPackagePath={package.Path}",
+            $"--ConnectionStrings:Evertorch={refused}",
+            "--Network:Port=0");
+
+        Assert.That(exitCode, Is.EqualTo(1));
+    }
+
     [Test]
     public void Main_WithPendingMigrations_ReturnsOneWithoutApplyingThem()
     {

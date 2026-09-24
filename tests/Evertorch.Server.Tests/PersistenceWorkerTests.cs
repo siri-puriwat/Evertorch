@@ -395,6 +395,36 @@ public sealed class PersistenceWorkerTests
     }
 
     [Test]
+    public void Stop_ThenDispose_ReportsTheUnfinishedWorkOnce()
+    {
+        var log = new CapturingLogger<PersistenceWorker>();
+        PersistenceWorker worker = CreateWorker(new InMemoryGameStore(), timeoutMs: 60000, logger: log);
+        var job = new PersistenceJob<int>(
+            "stuck",
+            default,
+            0,
+            async (_, token) =>
+            {
+                await Task.Delay(Timeout.Infinite, token);
+                return 0;
+            },
+            (_, _) =>
+            {
+            });
+        worker.Start();
+        worker.TryEnqueue(job);
+        worker.TryEnqueue(Job("behind", new List<string>()));
+
+        bool isDrained = worker.Stop(300);
+        worker.Dispose();
+
+        Assert.That(isDrained, Is.False);
+        Assert.That(
+            log.Entries.Count(entry => entry.EventId.Name == "PersistenceDrainIncomplete"),
+            Is.EqualTo(1));
+    }
+
+    [Test]
     public void Stop_WhileTheWriterMovesOnToTheLastCheckpoint_WaitsForItToBeWritten()
     {
         // Many rounds, because the moment Stop must not mistake for the end of the drain is short: the writer has

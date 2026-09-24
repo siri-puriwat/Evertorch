@@ -2,7 +2,6 @@ using System;
 using System.Runtime.InteropServices;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Options;
 
 namespace Evertorch.Server
 {
@@ -15,10 +14,11 @@ public static class Program
         {
             exitCode = Run(args);
         }
-        catch
+        // Only a failure before the host exists gets here, and nothing has reported it yet.
+        catch (Exception exception)
         {
-            KeepWindowOpenIfOwned();
-            throw;
+            Console.Error.WriteLine($"The server could not start: {exception}");
+            exitCode = 1;
         }
 
         if (exitCode != 0)
@@ -40,20 +40,17 @@ public static class Program
             try
             {
                 host.Run();
-                exitCode = host.Services.GetRequiredService<ServerLifetimeService>().HasFaulted ? 1 : 0;
+                exitCode = host.Services.GetRequiredService<ServerLifetimeService>().HasFailed ? 1 : 0;
             }
-            // In both cases the host has already logged the problem. Bad content or configuration is an operator
-            // error, so exit with a failure code instead of crashing with a second, unhandled copy of the report.
+            // The host has already logged every failure to start or stop. Bad content or configuration, a port
+            // already bound, or a database that refuses the server is an operator's to fix, so the process exits with
+            // a failure code instead of crashing with a second, unhandled copy of the report.
             catch (ContentLoadException)
             {
                 isContentUnusable = true;
                 exitCode = 1;
             }
-            catch (OptionsValidationException)
-            {
-                exitCode = 1;
-            }
-            catch (PendingMigrationsException)
+            catch (Exception)
             {
                 exitCode = 1;
             }

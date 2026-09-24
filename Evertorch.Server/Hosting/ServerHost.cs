@@ -127,6 +127,10 @@ public static class ServerHost
         builder.Services.AddSingleton<TickPipeline>();
         builder.Services.AddSingleton<FixedStepLoop>();
         builder.Services.AddSingleton<ServerLifetimeService>();
+        builder.Services
+            .AddOptions<HostOptions>()
+            .Configure<IOptions<PersistenceOptions>>((host, persistence) =>
+                host.ShutdownTimeout = ServerLifetimeService.ShutdownTimeout(persistence.Value));
         builder.Services.AddHostedService(services => services.GetRequiredService<ServerLifetimeService>());
 
         return builder;

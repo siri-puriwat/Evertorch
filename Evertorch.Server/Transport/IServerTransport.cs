@@ -1,3 +1,5 @@
+using Evertorch.Protocol;
+
 namespace Evertorch.Server
 {
 /// <summary>
@@ -22,14 +24,15 @@ public interface IServerTransport : IOutboundMessages, ITransportStatistics
     void Start();
 
     /// <summary>
-    ///     From now on new connections are refused with <see cref="Evertorch.Protocol.DisconnectReason.Maintenance" />.
+    ///     From now on new connections are refused with <see cref="DisconnectReason.Maintenance" />.
     ///     Existing connections are unaffected.
     /// </summary>
     void CloseAdmission();
 
     /// <summary>
-    ///     Tells every peer the server is going away, closes them, and releases the socket.
+    ///     Tells every peer the server is going away, with <paramref name="reason" />, closes them, and releases the
+    ///     socket.
     /// </summary>
-    void Stop();
+    void Stop(DisconnectReason reason);
 }
 }

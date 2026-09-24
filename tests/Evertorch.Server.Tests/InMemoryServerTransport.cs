@@ -24,6 +24,11 @@ internal sealed class InMemoryServerTransport : IServerTransport
     /// </summary>
     public HashSet<ConnectionId> FailSendsTo { get; } = new();
 
+    /// <summary>
+    ///     The reason every peer was told when the transport stopped; null while it runs.
+    /// </summary>
+    public DisconnectReason? StoppedWith { get; private set; }
+
     public int LocalPort => 0;
 
     public bool IsAdmissionOpen { get; private set; } = true;
@@ -69,9 +74,10 @@ internal sealed class InMemoryServerTransport : IServerTransport
         IsAdmissionOpen = false;
     }
 
-    public void Stop()
+    public void Stop(DisconnectReason reason)
     {
         CloseAdmission();
+        StoppedWith = reason;
     }
 
     public TransportStatistics GetStatistics()
