@@ -31,7 +31,7 @@ public sealed class ClientConnectionTests
             Transport = new FakeClientTransport();
             Connection = new ClientConnection(
                 Transport,
-                new ClientConnectionSettings("0.2.0-dev", contentVersion, Token),
+                new ClientConnectionSettings(ProtocolConstants.BuildVersion, contentVersion, Token),
                 this);
             Connection.Closed += () => ClosedCount++;
         }
@@ -55,7 +55,12 @@ public sealed class ClientConnectionTests
             Connection.Connect("127.0.0.1", 7777);
             Transport.CompleteConnect();
             Connection.Poll();
-            var hello = new ServerHello(ProtocolConstants.ProtocolVersion, "0.2.0-dev", 0x11326bd1u, 20, 0);
+            var hello = new ServerHello(
+                ProtocolConstants.ProtocolVersion,
+                ProtocolConstants.BuildVersion,
+                0x11326bd1u,
+                20,
+                0);
             Deliver(ProtocolChannel.Control, Encode(hello.GetEncodedLength(), hello.Write));
         }
 
@@ -240,7 +245,7 @@ public sealed class ClientConnectionTests
         Assert.That(sent.Delivery, Is.EqualTo(MessageDelivery.ReliableOrdered));
         Assert.That(ClientHello.TryRead(sent.Payload, out ClientHello? hello), Is.True);
         Assert.That(hello!.ProtocolVersion, Is.EqualTo(ProtocolConstants.ProtocolVersion));
-        Assert.That(hello.ClientBuildVersion, Is.EqualTo("0.2.0-dev"));
+        Assert.That(hello.ClientBuildVersion, Is.EqualTo(ProtocolConstants.BuildVersion));
         Assert.That(hello.ClientContentVersion, Is.EqualTo(0x11326bd1u));
         Assert.That(hello.SessionToken, Is.EqualTo(Token));
         Assert.That(harness.Connection.State, Is.EqualTo(ClientConnectionState.AwaitingHello));
@@ -694,7 +699,12 @@ public sealed class ClientConnectionTests
         harness.Transport.CompleteConnect();
         harness.Connection.Poll();
         sentBefore = harness.Transport.Sent.Count;
-        var hello = new ServerHello(ProtocolConstants.ProtocolVersion, "0.2.0-dev", 0x11326bd1u, 20, 0);
+        var hello = new ServerHello(
+            ProtocolConstants.ProtocolVersion,
+            ProtocolConstants.BuildVersion,
+            0x11326bd1u,
+            20,
+            0);
         harness.Deliver(ProtocolChannel.Control, Encode(hello.GetEncodedLength(), hello.Write));
 
         Assert.That(harness.Transport.Sent.Count, Is.EqualTo(sentBefore));
@@ -709,7 +719,7 @@ public sealed class ClientConnectionTests
         harness.Connection.Connect("127.0.0.1", 7777);
         harness.Transport.CompleteConnect();
         harness.Connection.Poll();
-        var hello = new ServerHello(ProtocolConstants.ProtocolVersion, "0.2.0-dev", 1, 0, 0);
+        var hello = new ServerHello(ProtocolConstants.ProtocolVersion, ProtocolConstants.BuildVersion, 1, 0, 0);
 
         harness.Deliver(ProtocolChannel.Control, Encode(hello.GetEncodedLength(), hello.Write));
 

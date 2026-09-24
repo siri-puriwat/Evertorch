@@ -87,6 +87,14 @@ public sealed class ClientHelloTests
         return buffer;
     }
 
+    [TestCase(0)]
+    [TestCase(1)]
+    [TestCase(3)]
+    public void TryReadProtocolVersion_WhenShorterThanOpcodeAndVersion_ReturnsFalse(int length)
+    {
+        Assert.That(ClientHello.TryReadProtocolVersion(GoldenBytes.AsSpan(0, length), out _), Is.False);
+    }
+
     [Test]
     public void Constructor_WithNullString_Throws()
     {
@@ -95,6 +103,36 @@ public sealed class ClientHelloTests
 
         Assert.That(nullBuild, Throws.ArgumentNullException);
         Assert.That(nullToken, Throws.ArgumentNullException);
+    }
+
+    [Test]
+    public void TryReadProtocolVersion_ForGoldenBytes_ReadsTheVersionAlone()
+    {
+        bool isRead = ClientHello.TryReadProtocolVersion(GoldenBytes, out ushort version);
+
+        Assert.That(isRead, Is.True);
+        Assert.That(version, Is.EqualTo(1));
+    }
+
+    [Test]
+    public void TryReadProtocolVersion_OfALongerHelloInAnotherLayout_StillReadsTheVersion()
+    {
+        byte[] foreign = new byte[ProtocolLimits.MaxClientPayloadBytes + 100];
+        foreign[0] = 0x01;
+        foreign[2] = 0x0E;
+        foreign[4] = 0xFF;
+
+        bool isRead = ClientHello.TryReadProtocolVersion(foreign, out ushort version);
+
+        Assert.That(isRead, Is.True);
+        Assert.That(version, Is.EqualTo(14));
+        Assert.That(ClientHello.TryRead(foreign, out _), Is.False, "the full decode still refuses it");
+    }
+
+    [Test]
+    public void TryReadProtocolVersion_WhenOpcodeDiffers_ReturnsFalse()
+    {
+        WireMatrix.AssertRejectsOtherOpcodes(GoldenBytes, bytes => ClientHello.TryReadProtocolVersion(bytes, out _));
     }
 
     [Test]

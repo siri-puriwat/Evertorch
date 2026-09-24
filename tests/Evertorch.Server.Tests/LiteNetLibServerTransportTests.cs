@@ -31,7 +31,7 @@ public sealed class LiteNetLibServerTransportTests
 
     private static byte[] Hello()
     {
-        var hello = new ClientHello(1, "0.2.0-dev", 1, "dev:tester");
+        var hello = new ClientHello(ProtocolConstants.ProtocolVersion, ProtocolConstants.BuildVersion, 1, "dev:tester");
         byte[] payload = new byte[hello.GetEncodedLength()];
         hello.Write(payload);
         return payload;
@@ -126,6 +126,35 @@ public sealed class LiteNetLibServerTransportTests
         Assert.That(client.WaitFor(() => client.IsConnected), Is.True);
         Assert.That(harness.WaitForEvent(out InboundEvent connected), Is.True);
         Assert.That(connected.Kind, Is.EqualTo(InboundEventKind.Connected));
+    }
+
+    [Test]
+    public void Connect_WithWrongKeyAfterAdmissionClosed_IsRejectedWithoutANotice()
+    {
+        using var harness = new Harness();
+        using var client = new TestNetClient();
+        harness.Transport.CloseAdmission();
+
+        client.Connect(harness.Port, "not-the-key");
+
+        Assert.That(client.WaitFor(() => client.IsDisconnected), Is.True);
+        Assert.That(client.TransportReason, Is.EqualTo(LiteNetLib.DisconnectReason.ConnectionRejected));
+        Assert.That(client.Notice, Is.Null, "a requester without the key learns nothing about the server's state");
+    }
+
+    [Test]
+    public void Connect_WithWrongKeyWhenFull_IsRejectedWithoutANotice()
+    {
+        using var harness = new Harness(1);
+        using var first = new TestNetClient();
+        using var second = new TestNetClient();
+        first.Connect(harness.Port, Key);
+        Assert.That(first.WaitFor(() => first.IsConnected), Is.True);
+
+        second.Connect(harness.Port, "not-the-key");
+
+        Assert.That(second.WaitFor(() => second.IsDisconnected), Is.True);
+        Assert.That(second.Notice, Is.Null);
     }
 
     [Test]

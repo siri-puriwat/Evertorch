@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Threading;
 using Evertorch.Client;
 using Evertorch.Game;
+using Evertorch.Protocol;
 using NUnit.Framework;
 
 namespace Evertorch.Server.Tests
@@ -40,7 +41,7 @@ internal sealed class SocketClient : IDisposable
         Connection = new ClientConnection(
             Link,
             new ClientConnectionSettings(
-                CompatibilityOptions.DefaultBuildVersion,
+                ProtocolConstants.BuildVersion,
                 content.ClientContentVersion,
                 $"dev:{identity}"),
             new ContentMaps(content));

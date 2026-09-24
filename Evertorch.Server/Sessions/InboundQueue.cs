@@ -77,6 +77,19 @@ public sealed class InboundQueue
         out InboundEvent decoded)
     {
         decoded = default;
+
+        // Checked before the size and the decode: a hello of another version may be longer or laid out differently,
+        // and must still be told ProtocolMismatch rather than dropped as malformed.
+        if (channel == ProtocolChannel.Control
+            && ClientHello.TryReadProtocolVersion(payload, out ushort protocolVersion)
+            && protocolVersion != ProtocolConstants.ProtocolVersion)
+        {
+            decoded = InboundEvent.ForHello(
+                connection,
+                new ClientHello(protocolVersion, string.Empty, 0, string.Empty));
+            return true;
+        }
+
         if (payload.Length > ProtocolLimits.MaxClientPayloadBytes
             || !MessageRouting.TryReadOpcode(payload, out MessageOpcode opcode)
             || !MessageRouting.IsClientToServer(opcode)

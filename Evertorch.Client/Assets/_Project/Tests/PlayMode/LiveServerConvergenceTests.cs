@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Evertorch.Game;
+using Evertorch.Protocol;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.TestTools;
@@ -67,7 +68,7 @@ public sealed class LiveServerConvergenceTests
         };
         var connection = new ClientConnection(
             link,
-            new ClientConnectionSettings("0.2.0-dev", content!.Version, "dev:playmode"),
+            new ClientConnectionSettings(ProtocolConstants.BuildVersion, content!.Version, "dev:playmode"),
             content);
         var picker = new CharacterPicker("Live31");
         connection.Connect("127.0.0.1", port);

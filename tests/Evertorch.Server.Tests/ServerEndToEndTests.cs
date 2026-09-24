@@ -55,7 +55,7 @@ public sealed class ServerEndToEndTests
     {
         var hello = new ClientHello(
             ProtocolConstants.ProtocolVersion,
-            CompatibilityOptions.DefaultBuildVersion,
+            ProtocolConstants.BuildVersion,
             contentVersion,
             "dev:tester");
         byte[] payload = new byte[hello.GetEncodedLength()];
@@ -173,6 +173,27 @@ public sealed class ServerEndToEndTests
 
         Assert.That(client.WaitFor(() => client.IsDisconnected), Is.True);
         Assert.That(client.Notice!.Reason, Is.EqualTo(DisconnectReason.AuthenticationFailed));
+        Assert.That(client.Received, Is.Empty);
+        host.StopAsync().GetAwaiter().GetResult();
+    }
+
+    [Test]
+    public void Client_WithALongerHelloOfAnotherVersion_IsToldProtocolMismatch()
+    {
+        using var root = new TemporaryDirectory();
+        using IHost host = StartHost(root, true);
+        int port = host.Services.GetRequiredService<IServerTransport>().LocalPort;
+        using var client = new TestNetClient();
+        client.Connect(port, "evertorch");
+        Assert.That(client.WaitFor(() => client.IsConnected), Is.True);
+
+        client.Send(
+            ForeignHello.Encode(ProtocolConstants.ProtocolVersion + 1, ProtocolLimits.MaxClientPayloadBytes + 100),
+            ProtocolChannel.Control,
+            DeliveryMethod.ReliableOrdered);
+
+        Assert.That(client.WaitFor(() => client.IsDisconnected), Is.True);
+        Assert.That(client.Notice!.Reason, Is.EqualTo(DisconnectReason.ProtocolMismatch));
         Assert.That(client.Received, Is.Empty);
         host.StopAsync().GetAwaiter().GetResult();
     }

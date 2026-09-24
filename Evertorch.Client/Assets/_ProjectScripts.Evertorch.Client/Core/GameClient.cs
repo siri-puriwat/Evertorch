@@ -37,9 +37,6 @@ public sealed class GameClient : MonoBehaviour
     private int m_port = 7777;
 
     [SerializeField]
-    private string m_buildVersion = "0.2.0-dev";
-
-    [SerializeField]
     private bool m_connectOnStart = true;
 
     private readonly Dictionary<EntityId, EntityView> m_remoteViews = new();
@@ -254,7 +251,7 @@ public sealed class GameClient : MonoBehaviour
         }
 
         var settings = new ClientConnectionSettings(
-            m_buildVersion,
+            ProtocolConstants.BuildVersion,
             m_contentLoader.Content.Version,
             DevelopmentTokenPrefix + Identity);
         Connection = new ClientConnection(Link, settings, m_contentLoader.Content);

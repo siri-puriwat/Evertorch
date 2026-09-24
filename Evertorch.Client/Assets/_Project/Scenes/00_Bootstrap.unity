@@ -152,7 +152,6 @@ MonoBehaviour:
   m_inputActions: {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b, type: 3}
   m_host: 127.0.0.1
   m_port: 7777
-  m_buildVersion: 0.2.0-dev
   m_connectOnStart: 1
 --- !u!4 &514232
 Transform:

@@ -15,7 +15,7 @@ namespace Evertorch.Server.Tests
 /// </summary>
 internal sealed class TestServer
 {
-    public const string BuildVersion = CompatibilityOptions.DefaultBuildVersion;
+    public const string BuildVersion = ProtocolConstants.BuildVersion;
     public const string DevelopmentToken = "dev:tester";
     public const int TickRate = 20;
 

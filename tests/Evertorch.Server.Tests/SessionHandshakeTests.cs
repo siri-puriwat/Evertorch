@@ -30,6 +30,22 @@ public sealed class SessionHandshakeTests
         AssertRefused(server, connection, DisconnectReason.AuthenticationFailed);
     }
 
+    [TestCase(1)]
+    [TestCase(ProtocolConstants.ProtocolVersion + 1)]
+    public void Hello_OfAnotherVersionInAnotherLayout_IsRefusedAsProtocolMismatch(int version)
+    {
+        var server = new TestServer();
+        ConnectionId connection = server.Connect();
+
+        server.Inbound.OnPayload(
+            connection,
+            ProtocolChannel.Control,
+            ForeignHello.Encode(version, ProtocolLimits.MaxClientPayloadBytes + 100));
+        server.Tick();
+
+        AssertRefused(server, connection, DisconnectReason.ProtocolMismatch);
+    }
+
     private static void AssertRefused(TestServer server, ConnectionId connection, DisconnectReason reason)
     {
         Assert.That(server.Transport.Disconnects, Does.ContainKey(connection));

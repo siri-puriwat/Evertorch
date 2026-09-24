@@ -9,12 +9,11 @@ namespace Evertorch.Server
 public sealed class CompatibilityOptions
 {
     public const string SectionName = "Compatibility";
-    public const string DefaultBuildVersion = "0.2.0-dev";
 
     /// <summary>
     ///     Reported in the handshake. A client with exactly this build version is always admitted.
     /// </summary>
-    public string ServerBuildVersion { get; set; } = DefaultBuildVersion;
+    public string ServerBuildVersion { get; set; } = ProtocolConstants.BuildVersion;
 
     /// <summary>
     ///     Other client build versions this server admits, compared exactly. Empty by default, because configuration

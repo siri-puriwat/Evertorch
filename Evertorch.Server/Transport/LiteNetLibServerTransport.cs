@@ -76,8 +76,16 @@ public sealed class LiteNetLibServerTransport : IServerTransport, INetEventListe
         }
     }
 
+    // The key is checked first, so a requester without it is rejected without data and learns nothing about the
+    // server's state (Network Protocol §7).
     void INetEventListener.OnConnectionRequest(ConnectionRequest request)
     {
+        if (!HasConnectionKey(request))
+        {
+            request.Reject();
+            return;
+        }
+
         if (m_isAdmissionClosed)
         {
             request.Reject(EncodeNotice(DisconnectReason.Maintenance, string.Empty));
@@ -90,7 +98,7 @@ public sealed class LiteNetLibServerTransport : IServerTransport, INetEventListe
             return;
         }
 
-        request.AcceptIfKey(m_options.ConnectionKey);
+        request.Accept();
     }
 
     void INetEventListener.OnPeerConnected(NetPeer peer)
@@ -247,6 +255,20 @@ public sealed class LiteNetLibServerTransport : IServerTransport, INetEventListe
         if (peer.Tag is PeerState state)
         {
             state.IsClosedByServer = true;
+        }
+    }
+
+    private bool HasConnectionKey(ConnectionRequest request)
+    {
+        try
+        {
+            return request.Data.TryGetString(out string key)
+                && string.Equals(key, m_options.ConnectionKey, StringComparison.Ordinal);
+        }
+        catch (ArgumentException)
+        {
+            // Not valid UTF-8, so not the key.
+            return false;
         }
     }
 

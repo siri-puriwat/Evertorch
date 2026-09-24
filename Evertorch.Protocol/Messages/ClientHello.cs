@@ -29,6 +29,18 @@ public sealed class ClientHello
 
     public string SessionToken { get; }
 
+    /// <summary>
+    ///     Reads only the opcode and the protocol version, which lead the hello in every protocol version (Network
+    ///     Protocol §5), so a server can tell a client of another version <c>ProtocolMismatch</c> however the rest of
+    ///     that hello is laid out.
+    /// </summary>
+    public static bool TryReadProtocolVersion(ReadOnlySpan<byte> source, out ushort protocolVersion)
+    {
+        protocolVersion = 0;
+        var reader = new WireReader(source);
+        return reader.TryReadOpcode(MessageOpcode.ClientHello) && reader.TryReadUInt16(out protocolVersion);
+    }
+
     public static bool TryRead(ReadOnlySpan<byte> source, out ClientHello? message)
     {
         message = null;

@@ -34,7 +34,7 @@ public sealed class InboundQueueTests
 
     private static byte[] Hello()
     {
-        var hello = new ClientHello(1, "0.2.0-dev", 1, "dev:tester");
+        var hello = new ClientHello(ProtocolConstants.ProtocolVersion, ProtocolConstants.BuildVersion, 1, "dev:tester");
         byte[] payload = new byte[hello.GetEncodedLength()];
         hello.Write(payload);
         return payload;
@@ -74,6 +74,43 @@ public sealed class InboundQueueTests
         Assert.That(server.Log.Entries.Count(entry => entry.Level == LogLevel.Error), Is.EqualTo(1));
         Assert.That(server.Log.Entries.Single(entry => entry.Level == LogLevel.Error).EventId.Name,
             Is.EqualTo("SessionFaulted"));
+    }
+
+    [Test]
+    public void Hello_OfAnotherVersionOnAnotherChannel_IsMalformed()
+    {
+        InboundQueue queue = CreateQueue(16);
+
+        queue.OnPayload(Peer, ProtocolChannel.Input, ForeignHello.Encode(ProtocolConstants.ProtocolVersion + 1, 40));
+
+        AssertOnlyMalformed(queue, 1);
+    }
+
+    [Test]
+    public void Hello_OfAnotherVersion_LongerAndInAnotherLayout_IsAHelloOfThatVersion()
+    {
+        InboundQueue queue = CreateQueue(16);
+        int nextVersion = ProtocolConstants.ProtocolVersion + 1;
+
+        queue.OnPayload(
+            Peer,
+            ProtocolChannel.Control,
+            ForeignHello.Encode(nextVersion, ProtocolLimits.MaxClientPayloadBytes + 100));
+
+        Assert.That(queue.TryDequeue(out InboundEvent decoded), Is.True);
+        Assert.That(decoded.Kind, Is.EqualTo(InboundEventKind.Hello));
+        Assert.That(decoded.Hello!.ProtocolVersion, Is.EqualTo(nextVersion));
+        Assert.That(queue.Malformed, Is.Zero);
+    }
+
+    [Test]
+    public void Hello_OfThisVersionInAnotherLayout_IsMalformed()
+    {
+        InboundQueue queue = CreateQueue(16);
+
+        queue.OnPayload(Peer, ProtocolChannel.Control, ForeignHello.Encode(ProtocolConstants.ProtocolVersion, 40));
+
+        AssertOnlyMalformed(queue, 1);
     }
 
     [Test]
@@ -138,8 +175,10 @@ public sealed class InboundQueueTests
     public void Message_LargerThanAnyClientPayload_IsRejectedBeforeDecoding()
     {
         InboundQueue queue = CreateQueue(16);
+        // A hello of this version: one of another version is read before the size check, to be told its mismatch.
         byte[] oversized = new byte[ProtocolLimits.MaxClientPayloadBytes + 1];
         oversized[0] = 0x01;
+        oversized[2] = (byte)ProtocolConstants.ProtocolVersion;
 
         queue.OnPayload(Peer, ProtocolChannel.Control, oversized);
 
@@ -179,7 +218,7 @@ public sealed class InboundQueueTests
         Assert.That(queue.TryDequeue(out InboundEvent inboundEvent), Is.True);
         Assert.That(inboundEvent.Kind, Is.EqualTo(InboundEventKind.Hello));
         Assert.That(inboundEvent.Connection, Is.EqualTo(Peer));
-        Assert.That(inboundEvent.Hello!.ClientBuildVersion, Is.EqualTo("0.2.0-dev"));
+        Assert.That(inboundEvent.Hello!.ClientBuildVersion, Is.EqualTo(ProtocolConstants.BuildVersion));
         Assert.That(queue.Malformed, Is.EqualTo(0));
     }
 
