@@ -19,6 +19,16 @@ public sealed class ClientSession
 
     public uint ConnectedAtTick { get; }
 
+    /// <summary>
+    ///     This connection's command buckets; null with the abuse limits off.
+    /// </summary>
+    public SessionCommandLimits? CommandLimits { get; set; }
+
+    /// <summary>
+    ///     Commands refused or dropped because their class had no token left.
+    /// </summary>
+    public long ThrottledCommands { get; set; }
+
     public SessionState State { get; set; }
 
     /// <summary>

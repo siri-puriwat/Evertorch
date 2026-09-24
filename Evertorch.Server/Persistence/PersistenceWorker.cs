@@ -65,6 +65,7 @@ public sealed class PersistenceWorker : IDisposable
     private readonly ServerInstruments m_instruments;
     private readonly ILogger<PersistenceWorker> m_logger;
     private readonly int m_capacity;
+    private readonly int m_maxAdmissionJobs;
     private readonly int m_timeoutMs;
     private readonly int m_maxRetries;
     private readonly int m_retryBaseDelayMs;
@@ -77,6 +78,7 @@ public sealed class PersistenceWorker : IDisposable
     // Jitter only spreads retries; it never decides a gameplay outcome, so it does not use the seeded server random.
     private readonly Random m_jitter = new();
     private int m_pendingJobs;
+    private int m_pendingAdmissionJobs;
     private long m_nextJobId;
     private int m_state;
     private bool m_isStopping;
@@ -95,6 +97,7 @@ public sealed class PersistenceWorker : IDisposable
         m_instruments = instruments;
         m_logger = logger;
         m_capacity = options.Value.QueueCapacity;
+        m_maxAdmissionJobs = options.Value.EffectiveMaxAdmissionJobs;
         m_timeoutMs = options.Value.CommandTimeoutMs;
         m_maxRetries = options.Value.MaxRetries;
         m_retryBaseDelayMs = options.Value.RetryBaseDelayMs;
@@ -130,6 +133,11 @@ public sealed class PersistenceWorker : IDisposable
     }
 
     public long Retries { get; private set; }
+
+    /// <summary>
+    ///     Admission jobs refused because <c>Persistence:MaxAdmissionJobs</c> were already waiting.
+    /// </summary>
+    public long AdmissionRefusals { get; private set; }
 
     public void Dispose()
     {
@@ -175,6 +183,34 @@ public sealed class PersistenceWorker : IDisposable
             m_queue.Enqueue(new Entry(job));
             m_pendingJobs++;
             Monitor.PulseAll(m_gate);
+            return true;
+        }
+    }
+
+    /// <summary>
+    ///     Hands over sign-in, character-list, or character-load work, which may hold only
+    ///     <c>Persistence:MaxAdmissionJobs</c> places of the queue. Returns false, without queueing it, like
+    ///     <see cref="TryEnqueue" />, and also when that share is taken.
+    /// </summary>
+    public bool TryEnqueueAdmission(PersistenceJob job)
+    {
+        lock (m_gate)
+        {
+            if (m_pendingAdmissionJobs >= m_maxAdmissionJobs)
+            {
+                AdmissionRefusals++;
+                m_instruments.RecordRateLimited(ServerInstruments.AdmissionLimit);
+                return false;
+            }
+
+            job.IsAdmission = true;
+            if (!TryEnqueue(job))
+            {
+                job.IsAdmission = false;
+                return false;
+            }
+
+            m_pendingAdmissionJobs++;
             return true;
         }
     }
@@ -432,6 +468,7 @@ public sealed class PersistenceWorker : IDisposable
 
         m_queue.Dequeue();
         m_pendingJobs--;
+        ForgetAdmission(next.Job);
         return next.Job;
     }
 
@@ -498,6 +535,7 @@ public sealed class PersistenceWorker : IDisposable
                 }
 
                 m_pendingJobs--;
+                ForgetAdmission(entry.Job);
                 entry.Job.Outcome = PersistenceOutcome.Unavailable;
                 m_completions.Enqueue(entry.Job);
             }
@@ -554,6 +592,15 @@ public sealed class PersistenceWorker : IDisposable
 
             m_checkpoints[checkpoint.Character] = checkpoint;
             m_queue.Enqueue(Entry.CheckpointOf(checkpoint.Character));
+        }
+    }
+
+    // Called under the gate when a job leaves the queue.
+    private void ForgetAdmission(PersistenceJob job)
+    {
+        if (job.IsAdmission)
+        {
+            m_pendingAdmissionJobs--;
         }
     }
 

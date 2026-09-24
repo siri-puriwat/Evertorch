@@ -50,6 +50,29 @@ public sealed class PersistenceOptionsValidatorTests
         Assert.That(Validate(options).Succeeded, Is.True);
     }
 
+    [TestCase(0)]
+    [TestCase(257)]
+    public void Validate_WithAdmissionJobsOutsideTheQueue_FailsNamingTheKey(int value)
+    {
+        var options = new PersistenceOptions { MaxAdmissionJobs = value };
+
+        ValidateOptionsResult result = Validate(options);
+
+        Assert.That(result.Failed, Is.True);
+        Assert.That(result.FailureMessage, Does.Contain("Persistence:MaxAdmissionJobs"));
+    }
+
+    [TestCase(256, 64)]
+    [TestCase(8, 2)]
+    [TestCase(1, 1)]
+    public void EffectiveMaxAdmissionJobs_WhenUnset_IsAQuarterOfTheQueue(int queueCapacity, int expected)
+    {
+        var options = new PersistenceOptions { QueueCapacity = queueCapacity };
+
+        Assert.That(options.EffectiveMaxAdmissionJobs, Is.EqualTo(expected));
+        Assert.That(Validate(options).Succeeded, Is.True);
+    }
+
     [Test]
     public void Validate_WithDefaults_MatchesTheSpecification()
     {

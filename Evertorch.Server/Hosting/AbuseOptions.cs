@@ -35,6 +35,28 @@ public sealed class AbuseOptions
     ///     Bound of the table of remote addresses the connection limits remember.
     /// </summary>
     public int MaxTrackedAddresses { get; set; } = 10000;
+
+    /// <summary>
+    ///     <c>AttackEntity</c>, <c>TargetEntity</c>, and <c>Respawn</c> per second, per connection.
+    /// </summary>
+    public int CombatCommandsPerSecond { get; set; } = 20;
+
+    public int CombatCommandBurst { get; set; } = 40;
+
+    public int PickupCommandsPerSecond { get; set; } = 10;
+
+    public int PickupCommandBurst { get; set; } = 20;
+
+    /// <summary>
+    ///     <c>CreateCharacter</c>, <c>EnterWorldRequest</c>, and <c>Logout</c> per second, per connection.
+    /// </summary>
+    public int SessionCommandsPerSecond { get; set; } = 2;
+
+    public int SessionCommandBurst { get; set; } = 5;
+
+    public int ResyncRequestsPerSecond { get; set; } = 1;
+
+    public int ResyncRequestBurst { get; set; } = 3;
 }
 
 internal sealed class AbuseOptionsValidator : IValidateOptions<AbuseOptions>
@@ -47,6 +69,14 @@ internal sealed class AbuseOptionsValidator : IValidateOptions<AbuseOptions>
         AddRangeFailure(failures, "ConnectionRequestsPerSecond", options.ConnectionRequestsPerSecond, 1, 10000);
         AddRangeFailure(failures, "MaxConnectionsPerAddress", options.MaxConnectionsPerAddress, 1, 10000);
         AddRangeFailure(failures, "MaxTrackedAddresses", options.MaxTrackedAddresses, 16, 1000000);
+        AddRangeFailure(failures, "CombatCommandsPerSecond", options.CombatCommandsPerSecond, 1, 1000);
+        AddRangeFailure(failures, "CombatCommandBurst", options.CombatCommandBurst, 1, 10000);
+        AddRangeFailure(failures, "PickupCommandsPerSecond", options.PickupCommandsPerSecond, 1, 1000);
+        AddRangeFailure(failures, "PickupCommandBurst", options.PickupCommandBurst, 1, 10000);
+        AddRangeFailure(failures, "SessionCommandsPerSecond", options.SessionCommandsPerSecond, 1, 1000);
+        AddRangeFailure(failures, "SessionCommandBurst", options.SessionCommandBurst, 1, 10000);
+        AddRangeFailure(failures, "ResyncRequestsPerSecond", options.ResyncRequestsPerSecond, 1, 1000);
+        AddRangeFailure(failures, "ResyncRequestBurst", options.ResyncRequestBurst, 1, 10000);
         return failures.Count == 0 ? ValidateOptionsResult.Success : ValidateOptionsResult.Fail(failures);
     }
 

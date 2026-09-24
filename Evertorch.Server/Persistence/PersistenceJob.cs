@@ -51,6 +51,11 @@ public abstract class PersistenceJob
     internal PersistenceOutcome Outcome { get; set; }
 
     /// <summary>
+    ///     Set when the job was queued as admission work (sign-in, character list, character load), which has its own cap.
+    /// </summary>
+    internal bool IsAdmission { get; set; }
+
+    /// <summary>
     ///     Set when the job was queued as a checkpoint: it waits in its character's slot and is retried after an
     ///     outage, so its completion can run more than once.
     /// </summary>

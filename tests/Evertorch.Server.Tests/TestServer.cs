@@ -76,12 +76,8 @@ internal sealed class TestServer
 
         Random = ServerRandom.FromOptions(world);
         Transport = new InMemoryServerTransport();
-        Inbound = new InboundQueue(
-            Options.Create(network),
-            Options.Create(new AbuseOptions { Enabled = isAbuseControlEnabled }),
-            simulation,
-            Clock,
-            Instruments);
+        IOptions<AbuseOptions> abuse = Options.Create(new AbuseOptions { Enabled = isAbuseControlEnabled });
+        Inbound = new InboundQueue(Options.Create(network), abuse, simulation, Clock, Instruments);
         Sessions = new SessionRegistry();
         World = new WorldSimulation(
             Content,
@@ -139,6 +135,7 @@ internal sealed class TestServer
             Options.Create(network),
             compatibility,
             Options.Create(world),
+            abuse,
             Instruments,
             Log);
         Drops = new ItemDropSystem(World, dropRandom ?? Random, Options.Create(world), simulation);

@@ -18,6 +18,11 @@ public sealed class ServerInstruments
     public const string QueueFullLimit = "queue_full";
     public const string AddressRateLimit = "address_rate";
     public const string AddressConnectionsLimit = "address_connections";
+    public const string CombatCommandLimit = "session_combat";
+    public const string PickupCommandLimit = "session_pickup";
+    public const string SessionCommandLimit = "session_session";
+    public const string ResyncRequestLimit = "session_resync";
+    public const string AdmissionLimit = "admission";
 
     private const string OperationTag = "operation";
     private const string OutcomeTag = "outcome";

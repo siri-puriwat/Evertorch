@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using Microsoft.Extensions.Options;
 
@@ -35,6 +36,15 @@ public sealed class PersistenceOptions
     ///     How often a character in the world is checkpointed.
     /// </summary>
     public int CheckpointIntervalMs { get; set; } = 60000;
+
+    /// <summary>
+    ///     Sign-in, character-list, and character-load jobs that may wait, a share of <see cref="QueueCapacity" />, so a
+    ///     flood of hellos cannot fill the queue that pickups and checkpoints share (Persistence §9). Unset, it is a
+    ///     quarter of the queue.
+    /// </summary>
+    public int? MaxAdmissionJobs { get; set; }
+
+    public int EffectiveMaxAdmissionJobs => MaxAdmissionJobs ?? Math.Max(1, QueueCapacity / 4);
 }
 
 public sealed class PersistenceOptionsValidator : IValidateOptions<PersistenceOptions>
@@ -47,6 +57,11 @@ public sealed class PersistenceOptionsValidator : IValidateOptions<PersistenceOp
         AddRangeFailure(failures, "MaxRetries", options.MaxRetries, 0, 10);
         AddRangeFailure(failures, "RetryBaseDelayMs", options.RetryBaseDelayMs, 1, 10000);
         AddRangeFailure(failures, "CheckpointIntervalMs", options.CheckpointIntervalMs, 1000, 3600000);
+        if (options.MaxAdmissionJobs.HasValue)
+        {
+            AddRangeFailure(failures, "MaxAdmissionJobs", options.MaxAdmissionJobs.Value, 1, options.QueueCapacity);
+        }
+
         return failures.Count == 0 ? ValidateOptionsResult.Success : ValidateOptionsResult.Fail(failures);
     }
 

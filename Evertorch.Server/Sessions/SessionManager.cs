@@ -67,6 +67,7 @@ public sealed class SessionManager : ITickPhase
     private readonly PickupSystem m_pickups;
     private readonly TimeProvider m_time;
     private readonly ServerInstruments m_instruments;
+    private readonly AbuseOptions m_abuse;
     private readonly ILogger<SessionManager> m_logger;
     private readonly string m_serverBuildVersion;
     private readonly uint m_tickRate;
@@ -93,9 +94,11 @@ public sealed class SessionManager : ITickPhase
         IOptions<NetworkOptions> network,
         IOptions<CompatibilityOptions> compatibility,
         IOptions<WorldOptions> worldOptions,
+        IOptions<AbuseOptions> abuse,
         ServerInstruments instruments,
         ILogger<SessionManager> logger)
     {
+        m_abuse = abuse.Value;
         m_maxQueuedInputs = worldOptions.Value.MaxQueuedInputs;
         m_inbound = inbound;
         m_persistence = persistence;
@@ -130,6 +133,11 @@ public sealed class SessionManager : ITickPhase
     ///     or entry asked for before the hello.
     /// </summary>
     public long AuthenticationFailures { get; private set; }
+
+    /// <summary>
+    ///     Commands refused or dropped by the per-connection command buckets, over every connection.
+    /// </summary>
+    public long ThrottledCommands { get; private set; }
 
     public TickPhase Phase => TickPhase.DrainCommands;
 
@@ -171,7 +179,13 @@ public sealed class SessionManager : ITickPhase
     {
         if (inboundEvent.Kind == InboundEventKind.Connected)
         {
-            m_sessions.Add(new ClientSession(inboundEvent.Connection, tick));
+            var connected = new ClientSession(inboundEvent.Connection, tick);
+            if (m_abuse.Enabled)
+            {
+                connected.CommandLimits = new SessionCommandLimits(m_abuse, (int)m_tickRate, tick);
+            }
+
+            m_sessions.Add(connected);
             return;
         }
 
@@ -244,7 +258,7 @@ public sealed class SessionManager : ITickPhase
             0,
             (store, cancellation) => m_tokens.ValidateAsync(token, store, cancellation),
             (outcome, account) => CompleteAuthentication(connection, outcome, account));
-        if (!m_persistence.TryEnqueue(authentication))
+        if (!m_persistence.TryEnqueueAdmission(authentication))
         {
             Refuse(session, DisconnectReason.ServerNotReady);
             return;
@@ -297,7 +311,7 @@ public sealed class SessionManager : ITickPhase
             0,
             (store, cancellation) => store.ListCharactersAsync(account, cancellation),
             (outcome, characters) => CompleteCharacterList(connection, outcome, characters));
-        if (!m_persistence.TryEnqueue(list))
+        if (!m_persistence.TryEnqueueAdmission(list))
         {
             Refuse(session, DisconnectReason.ServerNotReady);
         }
@@ -345,6 +359,11 @@ public sealed class SessionManager : ITickPhase
         if (session.State != SessionState.Authenticated || session.Characters == null || session.IsCreatingCharacter)
         {
             IgnoredEvents++;
+            return;
+        }
+
+        if (IsThrottled(session, InboundEventKind.CreateCharacter))
+        {
             return;
         }
 
@@ -420,6 +439,11 @@ public sealed class SessionManager : ITickPhase
             return;
         }
 
+        if (IsThrottled(session, InboundEventKind.EnterWorld))
+        {
+            return;
+        }
+
         // A character still in the world, retained or controlled by an older connection, is attached to: the same
         // entity, no second copy loaded (Network Protocol §3, Persistence §7).
         if (m_sessions.TryGetCharacter(request.Character, out CharacterSession? existing) && existing != null)
@@ -450,7 +474,7 @@ public sealed class SessionManager : ITickPhase
             character,
             (store, cancellation) => store.LoadCharacterAsync(account, character, cancellation),
             (outcome, stored) => CompleteLoad(connection, outcome, stored));
-        if (!m_persistence.TryEnqueue(load))
+        if (!m_persistence.TryEnqueueAdmission(load))
         {
             Refuse(session, DisconnectReason.ServerNotReady);
             return;
@@ -593,7 +617,10 @@ public sealed class SessionManager : ITickPhase
             return;
         }
 
-        session.NeedsInventorySnapshot = true;
+        if (!IsThrottled(session, InboundEventKind.InventoryResync))
+        {
+            session.NeedsInventorySnapshot = true;
+        }
     }
 
     private void HandleTarget(ClientSession session, EntityId target)
@@ -601,6 +628,11 @@ public sealed class SessionManager : ITickPhase
         if (session.State != SessionState.InWorld)
         {
             IgnoredEvents++;
+            return;
+        }
+
+        if (IsThrottled(session, InboundEventKind.Target))
+        {
             return;
         }
 
@@ -629,7 +661,11 @@ public sealed class SessionManager : ITickPhase
         }
 
         session.LastCommandSequence = command.CommandSequence;
-        CommandRejectionReason refusal = Apply(session, command, tick);
+
+        // Reason 3 already ends the client's chase or pickup cleanly (Network Protocol §11).
+        CommandRejectionReason refusal = IsThrottled(session, command.Kind)
+            ? CommandRejectionReason.NotAllowedNow
+            : Apply(session, command, tick);
         if (refusal != CommandRejectionReason.None)
         {
             Reject(session, command.CommandSequence, refusal);
@@ -819,6 +855,21 @@ public sealed class SessionManager : ITickPhase
         {
             Refuse(session, DisconnectReason.AuthenticationFailed);
         }
+    }
+
+    // Layer 2 of the abuse controls (Network Protocol §11). A command without a sequence that is throttled is
+    // simply dropped: it is counted here and nothing answers it.
+    private bool IsThrottled(ClientSession session, InboundEventKind kind)
+    {
+        if (session.CommandLimits == null || session.CommandLimits.TryTake(kind, m_currentTick, out string limit))
+        {
+            return false;
+        }
+
+        session.ThrottledCommands++;
+        ThrottledCommands++;
+        m_instruments.RecordRateLimited(limit);
+        return true;
     }
 
     private void Refuse(ClientSession session, DisconnectReason reason)
