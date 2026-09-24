@@ -6,6 +6,7 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Threading.Tasks;
+using Evertorch.Game;
 using Evertorch.Protocol;
 using NUnit.Framework;
 using TMPro;
@@ -65,11 +66,14 @@ public sealed class LiveServerCombatTests : InputTestFixture
         m_kills = 0;
         m_respawns = 0;
 
-        // Leave the next test an empty scene rather than the map, whose camera and ground would still be there.
+        // Leave the next test an empty scene rather than the map, whose camera and ground would still be there. Only a
+        // scene the client loads is unloaded: a test that fails before its map loads leaves the test runner's own scene
+        // active, which play mode numbers among the build scenes, and unloading it would silently end the whole run.
         Scene loaded = SceneManager.GetActiveScene();
         Scene empty = SceneManager.CreateScene($"Empty {Guid.NewGuid():N}");
         SceneManager.SetActiveScene(empty);
-        if (loaded.IsValid() && loaded.isLoaded && loaded != empty)
+        if (loaded.isLoaded
+            && (MapSceneResolver.IsMapScene(loaded.name) || loaded.name == BootstrapRedirect.MainMenuScene))
         {
             yield return SceneManager.UnloadSceneAsync(loaded);
         }
@@ -85,7 +89,7 @@ public sealed class LiveServerCombatTests : InputTestFixture
         Keyboard keyboard = InputSystem.AddDevice<Keyboard>();
         Gamepad gamepad = InputSystem.AddDevice<Gamepad>();
         GameClient client = CreateClient(port, actionsPath);
-        yield return CreateAndEnterThroughTheOverlay(client, "LiveFighter");
+        yield return CreateAndEnterThroughTheLoginPanel(client, "LiveFighter");
         yield return WaitUntil(() => client.World != null && client.Combat != null, StartTimeoutSeconds);
         Assert.That(client.World, Is.Not.Null, $"{client.Status} server output: {m_server.JoinOutput()}");
         ClientWorld world = client.World!;
@@ -117,7 +121,7 @@ public sealed class LiveServerCombatTests : InputTestFixture
         Keyboard keyboard = InputSystem.AddDevice<Keyboard>();
         Gamepad gamepad = InputSystem.AddDevice<Gamepad>();
         GameClient client = CreateClient(port, actionsPath);
-        yield return CreateAndEnterThroughTheOverlay(client, "LivePicker");
+        yield return CreateAndEnterThroughTheLoginPanel(client, "LivePicker");
         yield return WaitUntil(() => client.World?.Inventory.IsCurrent == true, StartTimeoutSeconds);
         Assert.That(client.World, Is.Not.Null, $"{client.Status} server output: {m_server.JoinOutput()}");
         ClientWorld world = client.World!;
@@ -136,7 +140,7 @@ public sealed class LiveServerCombatTests : InputTestFixture
 
         client.Disconnect();
         yield return WaitUntil(() => client.World == null, StartTimeoutSeconds);
-        yield return ReconnectThroughTheOverlay(client, port);
+        yield return ReconnectThroughTheLoginPanel(client, port);
         Assert.That(HeldGel(client.World!), Is.EqualTo(held), "the retained character still holds the gel");
         Assert.That(client.World!.Inventory.Revision, Is.EqualTo(revision));
 
@@ -149,7 +153,7 @@ public sealed class LiveServerCombatTests : InputTestFixture
         LiveServer restarted = m_server;
         yield return WaitUntil(() => restarted.TryReadListeningPort(out int _), StartTimeoutSeconds);
         Assert.That(restarted.TryReadListeningPort(out int restartedPort), Is.True, restarted.JoinOutput());
-        yield return ReconnectThroughTheOverlay(client, restartedPort);
+        yield return ReconnectThroughTheLoginPanel(client, restartedPort);
         Assert.That(HeldGel(client.World!), Is.EqualTo(held), "the gel was loaded from the database");
         Assert.That(client.World!.Inventory.Revision, Is.EqualTo(revision));
         Debug.Log($"Live pickup: {held} gel kept across a reconnect and a server restart, revision {revision}");
@@ -208,8 +212,10 @@ public sealed class LiveServerCombatTests : InputTestFixture
         return null;
     }
 
-    // The development overlay's own name field and buttons, as a player uses them to pick a character.
-    private static IEnumerator CreateAndEnterThroughTheOverlay(GameClient client, string name)
+    // The login panel's name field and buttons, as a player uses them to pick a character; the status bar then names
+    // the character. A refused entry is never answered (Network Protocol §4), so the list has to stay on screen for
+    // another choice.
+    private static IEnumerator CreateAndEnterThroughTheLoginPanel(GameClient client, string name)
     {
         yield return WaitUntil(() => client.Connection != null, StartTimeoutSeconds);
         ClientConnection connection = client.Connection!;
@@ -223,21 +229,32 @@ public sealed class LiveServerCombatTests : InputTestFixture
         field.text = name;
         Button create = client.GetComponentsInChildren<Button>(true)
             .Single(button => button.name == "Create character");
-        Assert.That(create.gameObject.activeInHierarchy, Is.True, "the overlay shows character creation");
+        Assert.That(create.gameObject.activeInHierarchy, Is.True, "the login panel shows character creation");
         create.onClick.Invoke();
         yield return WaitUntil(() => connection.Characters.Any(entry => entry.Name == name), StartTimeoutSeconds);
         Assert.That(connection.LastCreateOutcome, Is.EqualTo(CreateCharacterOutcome.Created), client.Status);
 
-        // The overlay refreshes its buttons in its own Update.
+        // The login panel refreshes its buttons in its own Update.
         yield return null;
         Button enter = client.GetComponentsInChildren<Button>(true).Single(button => button.name == "Enter 1");
         Assert.That(enter.gameObject.activeInHierarchy, Is.True, "the new character can be entered");
+        client.EnterWorld(new CharacterId(long.MaxValue));
+        yield return null;
+        Assert.That(connection.State, Is.EqualTo(ClientConnectionState.EnteringWorld));
+        Assert.That(enter.gameObject.activeInHierarchy, Is.True, "an unanswered entry keeps the list on screen");
         enter.onClick.Invoke();
+
+        TMP_Text shownName = client.GetComponentsInChildren<StatusBar>(true).Single()
+            .GetComponentsInChildren<TMP_Text>(true)
+            .Single(label => label.name == "Name");
+        yield return WaitUntil(() => shownName.text.StartsWith(name, StringComparison.Ordinal), StartTimeoutSeconds);
+        Assert.That(shownName.text, Does.StartWith(name), "the status bar names the character in the world");
     }
 
     // After a close the client leaves the map for the main menu and says why in its own words. Nothing reconnects by
-    // itself: the overlay's Reconnect, pressed on the port the player typed, connects and enters the last character.
-    private static IEnumerator ReconnectThroughTheOverlay(GameClient client, int port)
+    // itself: the login panel's Reconnect, pressed on the port the player typed, connects and enters the last
+    // character.
+    private static IEnumerator ReconnectThroughTheLoginPanel(GameClient client, int port)
     {
         yield return WaitUntil(
             () => SceneManager.GetActiveScene().name == BootstrapRedirect.MainMenuScene,
@@ -252,7 +269,7 @@ public sealed class LiveServerCombatTests : InputTestFixture
         portField.text = port.ToString(CultureInfo.InvariantCulture);
         Button reconnect = client.GetComponentsInChildren<Button>(true)
             .Single(button => button.name == "Reconnect");
-        Assert.That(reconnect.gameObject.activeInHierarchy, Is.True, "the overlay offers Reconnect");
+        Assert.That(reconnect.gameObject.activeInHierarchy, Is.True, "the login panel offers Reconnect");
         reconnect.onClick.Invoke();
         yield return WaitUntil(() => client.World?.Inventory.IsCurrent == true, StartTimeoutSeconds);
         Assert.That(client.World?.Inventory.IsCurrent, Is.True, client.Status);

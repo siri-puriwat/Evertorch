@@ -5,16 +5,14 @@ using UnityEngine.UI;
 namespace Evertorch.Client
 {
 /// <summary>
-///     The player's own HP, as the server last reported it, and the way back after dying: a Respawn button (the touch
-///     path of Prototype Content §4) beside the R and Start bindings.
+///     The way back after dying: a Respawn button in the middle of the screen (the touch path of Prototype Content
+///     §4) beside the R and Start bindings. The HP readout is part of the <see cref="StatusBar" />.
 /// </summary>
 public sealed class CombatHud : MonoBehaviour
 {
-    // Under the development overlay, over the on-screen stick.
+    // Under the status bar and the other panels, over the on-screen stick.
     private const int SortingOrder = 5;
     private const float FontSize = 40f;
-    private const float Margin = 24f;
-    private static readonly Vector2 LabelSize = new(600f, 60f);
     private static readonly Vector2 ButtonSize = new(360f, 110f);
     private static readonly Color TextColor = new(0.95f, 0.95f, 0.97f);
     private static readonly Color ButtonColor = new(0.25f, 0.65f, 0.95f, 0.95f);
@@ -23,28 +21,16 @@ public sealed class CombatHud : MonoBehaviour
     private static readonly Navigation NoNavigation = new() { mode = Navigation.Mode.None };
 
     private GameClient? m_client;
-    private TMP_Text? m_health;
     private GameObject? m_respawn;
-
-    public string HealthText => m_health != null ? m_health.text : string.Empty;
 
     public bool IsRespawnShown => m_respawn != null && m_respawn.activeSelf;
 
     private void Update()
     {
         ClientWorld? world = m_client != null ? m_client.World : null;
-        if (m_health == null || m_respawn == null)
+        if (m_respawn != null)
         {
-            return;
-        }
-
-        m_health.gameObject.SetActive(world != null);
-        m_respawn.SetActive(world != null && world.IsLocalDead);
-        if (world != null)
-        {
-            m_health.text = world.IsLocalDead
-                ? $"HP 0 / {world.LocalMaximumHealth}   You died"
-                : $"HP {world.LocalHealth} / {world.LocalMaximumHealth}";
+            UiBuilder.SetActive(m_respawn, world != null && world.IsLocalDead);
         }
     }
 
@@ -57,30 +43,10 @@ public sealed class CombatHud : MonoBehaviour
         hud.m_client = client;
         ClientUI.EnsureEventSystem(root.transform);
         ClientUI.AddScreenCanvas(root, SortingOrder);
-        hud.m_health = CreateLabel(root.transform);
         hud.m_respawn = CreateRespawnButton(root.transform, client);
-        hud.m_health.gameObject.SetActive(false);
         hud.m_respawn.SetActive(false);
         root.SetActive(true);
         return hud;
-    }
-
-    private static TMP_Text CreateLabel(Transform parent)
-    {
-        var labelObject = new GameObject("Health", typeof(RectTransform));
-        labelObject.transform.SetParent(parent, false);
-        var rect = (RectTransform)labelObject.transform;
-        rect.anchorMin = new Vector2(0.5f, 1f);
-        rect.anchorMax = new Vector2(0.5f, 1f);
-        rect.pivot = new Vector2(0.5f, 1f);
-        rect.anchoredPosition = new Vector2(0f, -Margin);
-        rect.sizeDelta = LabelSize;
-        TextMeshProUGUI label = labelObject.AddComponent<TextMeshProUGUI>();
-        label.fontSize = FontSize;
-        label.color = TextColor;
-        label.alignment = TextAlignmentOptions.Center;
-        label.raycastTarget = false;
-        return label;
     }
 
     private static GameObject CreateRespawnButton(Transform parent, GameClient client)

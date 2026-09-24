@@ -64,6 +64,8 @@ public sealed class GameClient : MonoBehaviour
     private FollowCamera? m_camera;
     private DevelopmentOverlay? m_overlay;
     private CombatHud? m_hud;
+    private LoginPanel? m_login;
+    private StatusBar? m_statusBar;
     private CombatPresenter? m_combat;
     private Material? m_runtimeMaterial;
     private string m_leaveReason = string.Empty;
@@ -111,6 +113,32 @@ public sealed class GameClient : MonoBehaviour
     /// </summary>
     public bool CanReconnect { get; private set; }
 
+    /// <summary>
+    ///     The list entry of the character in the world, for its name and level, which the world messages do not carry;
+    ///     null outside the world.
+    /// </summary>
+    public CharacterListEntry? PlayedCharacter
+    {
+        get
+        {
+            IReadOnlyList<CharacterListEntry>? characters = m_world != null ? Connection?.Characters : null;
+            if (characters == null)
+            {
+                return null;
+            }
+
+            for (int index = 0; index < characters.Count; index++)
+            {
+                if (characters[index].Character == m_lastCharacter)
+                {
+                    return characters[index];
+                }
+            }
+
+            return null;
+        }
+    }
+
     private IEnumerator Start()
     {
         DontDestroyOnLoad(gameObject);
@@ -118,8 +146,8 @@ public sealed class GameClient : MonoBehaviour
 
         // Each identity is its own account. Every client on the machine, including each Multiplayer Play Mode
         // window, starts with its own, so windows started together never share characters. A GUID is random per
-        // process, unlike a seeded draw two editors started together could share. Type an identity in the overlay
-        // to come back to the same account.
+        // process, unlike a seeded draw two editors started together could share. Type an identity in the login
+        // panel to come back to the same account.
         int suffix = 100000 + Math.Abs(Guid.NewGuid().GetHashCode() % 900000);
         Identity = $"player{suffix}";
 
@@ -130,6 +158,10 @@ public sealed class GameClient : MonoBehaviour
         m_overlay.transform.SetParent(transform, false);
         m_hud = CombatHud.Create(this);
         m_hud.transform.SetParent(transform, false);
+        m_statusBar = StatusBar.Create(this);
+        m_statusBar.transform.SetParent(transform, false);
+        m_login = LoginPanel.Create(this);
+        m_login.transform.SetParent(transform, false);
 
         yield return m_contentLoader.Load();
         if (m_contentLoader.Content == null)

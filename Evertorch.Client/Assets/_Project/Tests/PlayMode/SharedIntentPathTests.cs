@@ -265,6 +265,9 @@ public sealed class SharedIntentPathTests : InputTestFixture
         Mouse mouse = InputSystem.AddDevice<Mouse>();
         Rig rig = CreateRig();
         DevelopmentOverlay overlay = rig.CreateOverlay();
+
+        // Shown as F1 would.
+        overlay.Panel!.gameObject.SetActive(true);
         yield return null;
 
         ClickAt(mouse, CenterOf(overlay.Panel!));
@@ -275,29 +278,41 @@ public sealed class SharedIntentPathTests : InputTestFixture
     }
 
     [UnityTest]
-    public IEnumerator F1_HidesTheDevelopmentOverlay_SoItNoLongerTakesClicks()
+    public IEnumerator F1_ShowsTheHiddenDevelopmentOverlay_AndHidesItAgain()
     {
         Keyboard keyboard = InputSystem.AddDevice<Keyboard>();
         Mouse mouse = InputSystem.AddDevice<Mouse>();
         Rig rig = CreateRig();
         DevelopmentOverlay overlay = rig.CreateOverlay();
         yield return null;
-        Vector2 onPanel = CenterOf(overlay.Panel!);
+        bool isHiddenAtFirst = !overlay.IsVisible;
 
         // Queued without a manual update: the overlay polls "pressed this frame", so the press has to arrive in the
         // input update of the frame whose Update reads it.
         InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.F1));
         yield return null;
         SetKeys(keyboard);
+        yield return null;
+        bool isShown = overlay.IsVisible;
+        Vector2 onPanel = CenterOf(overlay.Panel!);
         ClickAt(mouse, onPanel);
-        PointerMoveResult result = rig.Tick();
+        PointerMoveResult whileShown = rig.Tick();
 
+        InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.F1));
+        yield return null;
+        SetKeys(keyboard);
+        ClickAt(mouse, onPanel);
+        PointerMoveResult afterHiding = rig.Tick();
+
+        Assert.That(isHiddenAtFirst, Is.True, "the panels a player sees come first");
+        Assert.That(isShown, Is.True);
+        Assert.That(whileShown, Is.EqualTo(PointerMoveResult.OnControl));
         Assert.That(overlay.IsVisible, Is.False);
-        Assert.That(result, Is.Not.EqualTo(PointerMoveResult.OnControl));
+        Assert.That(afterHiding, Is.Not.EqualTo(PointerMoveResult.OnControl));
     }
 
     [UnityTest]
-    public IEnumerator OverlayButton_WhenTapped_IsNotLeftSelected()
+    public IEnumerator LoginButton_WhenTapped_IsNotLeftSelected()
     {
         // A selected control receives the UI navigate action, which shares WASD and the gamepad stick with movement.
         // The tap goes through the UI event system, which ignores an unfocused application unless told otherwise.
@@ -308,11 +323,14 @@ public sealed class SharedIntentPathTests : InputTestFixture
 #endif
         Touchscreen touchscreen = InputSystem.AddDevice<Touchscreen>();
         Rig rig = CreateRig();
-        DevelopmentOverlay overlay = rig.CreateOverlay();
+        LoginPanel login = rig.CreateLoginPanel();
         yield return null;
-        Button[] buttons = overlay.GetComponentsInChildren<Button>();
+        Button[] buttons = login.GetComponentsInChildren<Button>();
         Assert.That(buttons.Length, Is.EqualTo(1), "only Connect shows while disconnected");
+
+        // Only the tap is under test; a real connect would open a socket nothing closes.
         bool isClicked = false;
+        buttons[0].onClick.RemoveAllListeners();
         buttons[0].onClick.AddListener(() => isClicked = true);
         Vector2 onButton = CenterOf((RectTransform)buttons[0].transform);
 
@@ -566,14 +584,27 @@ public sealed class SharedIntentPathTests : InputTestFixture
 
         public DevelopmentOverlay CreateOverlay()
         {
-            // Never activated, so the client neither loads content nor connects; the overlay only reads its state.
-            var clientObject = new GameObject("TestClient");
-            clientObject.SetActive(false);
-            m_created.Add(clientObject);
-            var overlay = DevelopmentOverlay.Create(clientObject.AddComponent<GameClient>());
+            var overlay = DevelopmentOverlay.Create(CreateIdleClient());
             m_created.Add(overlay.gameObject);
             m_handler = new PointerMoveHandler(m_pointer, new UiHitTest());
             return overlay;
+        }
+
+        public LoginPanel CreateLoginPanel()
+        {
+            var login = LoginPanel.Create(CreateIdleClient());
+            m_created.Add(login.gameObject);
+            m_handler = new PointerMoveHandler(m_pointer, new UiHitTest());
+            return login;
+        }
+
+        // Never activated, so the client neither loads content nor connects; a panel only reads its state.
+        private GameClient CreateIdleClient()
+        {
+            var clientObject = new GameObject("TestClient");
+            clientObject.SetActive(false);
+            m_created.Add(clientObject);
+            return clientObject.AddComponent<GameClient>();
         }
 
         public Vector2 ScreenPointOf(WorldPosition position)
