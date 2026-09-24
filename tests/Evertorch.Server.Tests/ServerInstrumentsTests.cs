@@ -18,7 +18,15 @@ namespace Evertorch.Server.Tests
 [TestFixture]
 public sealed class ServerInstrumentsTests
 {
-    private static readonly string[] AllowedTagKeys = { "map", "direction", "operation", "outcome", "state" };
+    private static readonly string[] AllowedTagKeys =
+    {
+        "map",
+        "direction",
+        "operation",
+        "outcome",
+        "state",
+        "limit"
+    };
 
     private static IReadOnlyList<Recorded> Named(MeterRecorder recorder, string instrument)
     {

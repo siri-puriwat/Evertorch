@@ -10,7 +10,8 @@ namespace Evertorch.Server.Tests
 {
 /// <summary>
 ///     A client that lies, floods, or sends garbage. Whatever arrives, the authoritative entity may only ever stand
-///     where the grid lets a body stand, and may never cover more ground in a tick than its speed allows.
+///     where the grid lets a body stand, and may never cover more ground in a tick than its speed allows. These
+///     guarantees hold without the abuse limits, so the servers here run with them switched off.
 /// </summary>
 [TestFixture]
 public sealed class MovementAbuseTests
@@ -26,7 +27,7 @@ public sealed class MovementAbuseTests
     [TestCase(1000f, 0.001f)]
     public void EnormousDirection_MovesExactlyOneNormalStep(float directionX, float directionZ)
     {
-        var server = new TestServer();
+        var server = new TestServer(isAbuseControlEnabled: false);
         ConnectionId connection = server.EnterWorld(7);
         PlayerEntity player = server.PlayerOf(connection);
         WorldPosition before = player.Position;
@@ -45,7 +46,7 @@ public sealed class MovementAbuseTests
     [TestCase(-0f, 0f)]
     public void NegligibleDirection_MovesNothing(float directionX, float directionZ)
     {
-        var server = new TestServer();
+        var server = new TestServer(isAbuseControlEnabled: false);
         ConnectionId connection = server.EnterWorld(7);
         PlayerEntity player = server.PlayerOf(connection);
         WorldPosition before = player.Position;
@@ -62,7 +63,7 @@ public sealed class MovementAbuseTests
     [TestCase(1f, float.NegativeInfinity)]
     public void NonFiniteDirectionBytes_AreMalformedAndMoveNothing(float directionX, float directionZ)
     {
-        var server = new TestServer();
+        var server = new TestServer(isAbuseControlEnabled: false);
         ConnectionId connection = server.EnterWorld(7);
         PlayerEntity player = server.PlayerOf(connection);
         WorldPosition before = player.Position;
@@ -192,7 +193,7 @@ public sealed class MovementAbuseTests
     [Test]
     public void HostileRun_NeverLeavesWalkableGroundOrOutrunsItsSpeed()
     {
-        var server = new TestServer();
+        var server = new TestServer(isAbuseControlEnabled: false);
         ConnectionId connection = server.EnterWorld(7);
         PlayerEntity player = server.PlayerOf(connection);
         var random = new Random(7);
@@ -222,7 +223,7 @@ public sealed class MovementAbuseTests
     [Test]
     public void InputFlood_BuysNoExtraDistance()
     {
-        var server = new TestServer();
+        var server = new TestServer(isAbuseControlEnabled: false);
         ConnectionId connection = server.EnterWorld(7);
         PlayerEntity player = server.PlayerOf(connection);
         WorldPosition start = player.Position;
@@ -249,7 +250,7 @@ public sealed class MovementAbuseTests
     [Test]
     public void InputsFromASessionThatNeverEnteredTheWorld_MoveNobody()
     {
-        var server = new TestServer();
+        var server = new TestServer(isAbuseControlEnabled: false);
         ConnectionId player = server.EnterWorld(7);
         ConnectionId lurker = server.Connect();
         server.SendHello(lurker);
@@ -272,7 +273,7 @@ public sealed class MovementAbuseTests
     [Test]
     public void MalformedBurst_DoesNotFaultTheTickOrMoveAnyone()
     {
-        var server = new TestServer();
+        var server = new TestServer(isAbuseControlEnabled: false);
         ConnectionId connection = server.EnterWorld(7);
         PlayerEntity player = server.PlayerOf(connection);
         WorldPosition before = player.Position;
@@ -298,9 +299,14 @@ public sealed class MovementAbuseTests
         Assert.That(server.Inbound.Malformed, Is.EqualTo(malformedBefore + 3000));
         Assert.That(player.Position, Is.EqualTo(before));
 
+        ConnectionId other = server.EnterWorld(8);
+        PlayerEntity otherPlayer = server.PlayerOf(other);
+        WorldPosition otherBefore = otherPlayer.Position;
         server.SendMove(connection, 1, 1f, 0f);
+        server.SendMove(other, 1, 1f, 0f);
         server.Tick();
         Assert.That(player.Position.X, Is.GreaterThan(before.X), "an honest input still works afterwards");
+        Assert.That(otherPlayer.Position.X, Is.GreaterThan(otherBefore.X), "so does another peer's");
     }
 
     [Test]
@@ -319,7 +325,7 @@ public sealed class MovementAbuseTests
     [Test]
     public void SteeringIntoAWall_ForSeconds_NeverEntersIt()
     {
-        var server = new TestServer();
+        var server = new TestServer(isAbuseControlEnabled: false);
         ConnectionId connection = server.EnterWorld(7);
         PlayerEntity player = server.PlayerOf(connection);
         NavigationGrid grid = Grid(server);
@@ -340,7 +346,7 @@ public sealed class MovementAbuseTests
     [Test]
     public void SteeringOffThePlateauEdge_IsHeldAtTheEdge()
     {
-        var server = new TestServer();
+        var server = new TestServer(isAbuseControlEnabled: false);
         ConnectionId connection = server.EnterWorld(7);
         PlayerEntity player = server.PlayerOf(connection);
         NavigationGrid grid = Grid(server);

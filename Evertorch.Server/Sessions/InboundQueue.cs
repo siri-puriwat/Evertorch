@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Threading;
 using Evertorch.Game;
 using Evertorch.Protocol;
@@ -11,17 +12,41 @@ namespace Evertorch.Server
 ///     The only structure network threads and the tick thread share. Network threads decode and enqueue here and touch
 ///     nothing else; the tick thread drains it at the start of a tick and is the sole writer of sessions and the world.
 /// </summary>
+/// <remarks>
+///     Layer 1 of the abuse controls lives here, on the network thread (Network Protocol §11): each peer has a budget
+///     of messages per tick. Over it, input is dropped; a reliable message closes the connection instead, because the
+///     transport has already acknowledged it and a sequenced command must not go unanswered. A full queue closes its
+///     heaviest peer rather than dropping everyone's reliable messages.
+/// </remarks>
 public sealed class InboundQueue
 {
     private readonly ConcurrentQueue<InboundEvent> m_events = new();
+    private readonly ConcurrentDictionary<ConnectionId, PeerBudget> m_peers = new();
     private readonly int m_capacity;
+    private readonly bool m_isLimited;
+    private readonly double m_messagesPerSecond;
+    private readonly double m_burst;
+    private readonly IMonotonicClock m_clock;
+    private readonly ServerInstruments m_instruments;
     private int m_count;
     private long m_dropped;
     private long m_malformed;
+    private long m_overBudget;
+    private long m_peersLimited;
 
-    public InboundQueue(IOptions<NetworkOptions> options)
+    public InboundQueue(
+        IOptions<NetworkOptions> network,
+        IOptions<AbuseOptions> abuse,
+        IOptions<SimulationOptions> simulation,
+        IMonotonicClock clock,
+        ServerInstruments instruments)
     {
-        m_capacity = options.Value.MaxInboundEvents;
+        m_capacity = network.Value.MaxInboundEvents;
+        m_isLimited = abuse.Value.Enabled;
+        m_messagesPerSecond = (double)abuse.Value.PeerMessagesPerTick * simulation.Value.TickRate;
+        m_burst = abuse.Value.PeerMessageBurst;
+        m_clock = clock;
+        m_instruments = instruments;
     }
 
     public int Count => Volatile.Read(ref m_count);
@@ -33,30 +58,57 @@ public sealed class InboundQueue
 
     public long Malformed => Interlocked.Read(ref m_malformed);
 
+    /// <summary>
+    ///     Messages dropped, or that closed their connection, because their peer was over its budget.
+    /// </summary>
+    public long OverBudget => Interlocked.Read(ref m_overBudget);
+
+    /// <summary>
+    ///     Connections this queue asked the tick thread to close with <c>RateLimited</c>.
+    /// </summary>
+    public long PeersLimited => Interlocked.Read(ref m_peersLimited);
+
     public void OnConnected(ConnectionId connection)
     {
-        Enqueue(InboundEvent.Connected(connection), true);
+        m_peers[connection] = new PeerBudget(m_clock.Elapsed, m_burst);
+        EnqueueLifecycle(InboundEvent.Connected(connection));
     }
 
     public void OnDisconnected(ConnectionId connection)
     {
-        Enqueue(InboundEvent.Disconnected(connection), true);
+        m_peers.TryRemove(connection, out PeerBudget? _);
+        EnqueueLifecycle(InboundEvent.Disconnected(connection));
     }
 
     /// <summary>
-    ///     Decodes one payload. Anything that is oversized, unknown, server-bound, on the wrong channel, or not exactly
-    ///     a well-formed message becomes a <see cref="InboundEventKind.Malformed" /> event.
+    ///     Decodes one payload. Anything that is oversized, unknown, server-bound, on the wrong channel or delivery, or
+    ///     not exactly a well-formed message becomes a <see cref="InboundEventKind.Malformed" /> event.
     /// </summary>
-    public void OnPayload(ConnectionId connection, ProtocolChannel channel, ReadOnlySpan<byte> payload)
+    /// <param name="delivery">How the transport delivered it; null for a method the protocol never uses.</param>
+    public void OnPayload(
+        ConnectionId connection,
+        ProtocolChannel channel,
+        MessageDelivery? delivery,
+        ReadOnlySpan<byte> payload)
     {
-        if (TryDecode(connection, channel, payload, out InboundEvent decoded))
+        PeerBudget? peer = null;
+        if (m_isLimited)
         {
-            Enqueue(decoded, false);
+            peer = m_peers.GetOrAdd(connection, _ => new PeerBudget(m_clock.Elapsed, m_burst));
+            if (!Admit(connection, channel, peer))
+            {
+                return;
+            }
+        }
+
+        if (TryDecode(connection, channel, delivery, payload, out InboundEvent decoded))
+        {
+            EnqueueMessage(decoded, peer);
             return;
         }
 
         Interlocked.Increment(ref m_malformed);
-        Enqueue(InboundEvent.Malformed(connection), false);
+        EnqueueMessage(InboundEvent.Malformed(connection), peer);
     }
 
     public bool TryDequeue(out InboundEvent inboundEvent)
@@ -67,12 +119,25 @@ public sealed class InboundQueue
         }
 
         Interlocked.Decrement(ref m_count);
+        if (!IsLifecycle(inboundEvent.Kind) && m_peers.TryGetValue(inboundEvent.Connection, out PeerBudget? peer))
+        {
+            peer.OnDequeued();
+        }
+
         return true;
+    }
+
+    private static bool IsLifecycle(InboundEventKind kind)
+    {
+        return kind == InboundEventKind.Connected
+            || kind == InboundEventKind.Disconnected
+            || kind == InboundEventKind.RateLimited;
     }
 
     private static bool TryDecode(
         ConnectionId connection,
         ProtocolChannel channel,
+        MessageDelivery? delivery,
         ReadOnlySpan<byte> payload,
         out InboundEvent decoded)
     {
@@ -81,6 +146,7 @@ public sealed class InboundQueue
         // Checked before the size and the decode: a hello of another version may be longer or laid out differently,
         // and must still be told ProtocolMismatch rather than dropped as malformed.
         if (channel == ProtocolChannel.Control
+            && delivery == MessageDelivery.ReliableOrdered
             && ClientHello.TryReadProtocolVersion(payload, out ushort protocolVersion)
             && protocolVersion != ProtocolConstants.ProtocolVersion)
         {
@@ -93,8 +159,9 @@ public sealed class InboundQueue
         if (payload.Length > ProtocolLimits.MaxClientPayloadBytes
             || !MessageRouting.TryReadOpcode(payload, out MessageOpcode opcode)
             || !MessageRouting.IsClientToServer(opcode)
-            || !MessageRouting.TryGetRoute(opcode, out ProtocolChannel expectedChannel, out MessageDelivery _)
-            || expectedChannel != channel)
+            || !MessageRouting.TryGetRoute(opcode, out ProtocolChannel expectedChannel, out MessageDelivery expected)
+            || expectedChannel != channel
+            || delivery != expected)
         {
             return false;
         }
@@ -203,17 +270,144 @@ public sealed class InboundQueue
         }
     }
 
-    // Connection lifecycle events are never dropped: losing a disconnect would leak a session and its entity.
-    private void Enqueue(InboundEvent inboundEvent, bool isLifecycle)
+    // Whether the payload may go on to decoding. A peer already being closed sends nothing more to the tick thread.
+    private bool Admit(ConnectionId connection, ProtocolChannel channel, PeerBudget peer)
     {
-        if (!isLifecycle && Volatile.Read(ref m_count) >= m_capacity)
+        if (peer.IsLimited)
+        {
+            Interlocked.Increment(ref m_overBudget);
+            return false;
+        }
+
+        if (peer.TryTake(m_clock.Elapsed, m_messagesPerSecond, m_burst))
+        {
+            return true;
+        }
+
+        Interlocked.Increment(ref m_overBudget);
+        if (channel == ProtocolChannel.Input)
+        {
+            m_instruments.RecordRateLimited(ServerInstruments.PeerInputLimit);
+            return false;
+        }
+
+        m_instruments.RecordRateLimited(ServerInstruments.PeerControlLimit);
+        Limit(connection, peer);
+        return false;
+    }
+
+    private void Limit(ConnectionId connection, PeerBudget peer)
+    {
+        if (peer.MarkLimited())
+        {
+            Interlocked.Increment(ref m_peersLimited);
+            EnqueueLifecycle(InboundEvent.RateLimited(connection));
+        }
+    }
+
+    // Lifecycle events are never dropped: losing a disconnect would leak a session and its entity.
+    private void EnqueueLifecycle(InboundEvent inboundEvent)
+    {
+        Interlocked.Increment(ref m_count);
+        m_events.Enqueue(inboundEvent);
+    }
+
+    // With the limits off a full queue drops the message and counts it. With them on, the queue closes whichever peer
+    // has the most waiting and keeps this message, unless it is that peer's own.
+    private void EnqueueMessage(InboundEvent inboundEvent, PeerBudget? peer)
+    {
+        if (Volatile.Read(ref m_count) >= m_capacity &&
+            (peer == null || IsHeaviestAfterLimiting(inboundEvent.Connection)))
         {
             Interlocked.Increment(ref m_dropped);
             return;
         }
 
+        peer?.OnEnqueued();
         Interlocked.Increment(ref m_count);
         m_events.Enqueue(inboundEvent);
+    }
+
+    // Closes the peer with the most messages waiting. True when that is the sender itself.
+    private bool IsHeaviestAfterLimiting(ConnectionId sender)
+    {
+        ConnectionId heaviest = default;
+        PeerBudget? heaviestPeer = null;
+        foreach (KeyValuePair<ConnectionId, PeerBudget> entry in m_peers)
+        {
+            if (!entry.Value.IsLimited && (heaviestPeer == null || entry.Value.Pending > heaviestPeer.Pending))
+            {
+                heaviest = entry.Key;
+                heaviestPeer = entry.Value;
+            }
+        }
+
+        if (heaviestPeer == null)
+        {
+            return true;
+        }
+
+        m_instruments.RecordRateLimited(ServerInstruments.QueueFullLimit);
+        Limit(heaviest, heaviestPeer);
+        return heaviest == sender;
+    }
+
+    /// <summary>
+    ///     One peer's token bucket, refilled from the injected clock, and how many of its messages wait in the queue.
+    /// </summary>
+    private sealed class PeerBudget
+    {
+        private readonly object m_gate = new();
+        private double m_tokens;
+        private TimeSpan m_refilledAt;
+        private int m_pending;
+        private int m_isLimited;
+
+        public PeerBudget(TimeSpan now, double burst)
+        {
+            m_tokens = burst;
+            m_refilledAt = now;
+        }
+
+        public bool IsLimited => Volatile.Read(ref m_isLimited) != 0;
+
+        public int Pending => Volatile.Read(ref m_pending);
+
+        public bool TryTake(TimeSpan now, double perSecond, double burst)
+        {
+            lock (m_gate)
+            {
+                if (now > m_refilledAt)
+                {
+                    m_tokens = Math.Min(burst, m_tokens + (now - m_refilledAt).TotalSeconds * perSecond);
+                    m_refilledAt = now;
+                }
+
+                if (m_tokens < 1d)
+                {
+                    return false;
+                }
+
+                m_tokens -= 1d;
+                return true;
+            }
+        }
+
+        // True only for the first caller, so the tick thread is told once.
+        public bool MarkLimited()
+        {
+            return Interlocked.Exchange(ref m_isLimited, 1) == 0;
+        }
+
+        public void OnEnqueued()
+        {
+            Interlocked.Increment(ref m_pending);
+        }
+
+        public void OnDequeued()
+        {
+            Interlocked.Decrement(ref m_pending);
+        }
     }
 }
 }

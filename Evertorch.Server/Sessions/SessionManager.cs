@@ -186,6 +186,9 @@ public sealed class SessionManager : ITickPhase
             case InboundEventKind.Disconnected:
                 Remove(session);
                 break;
+            case InboundEventKind.RateLimited:
+                Close(session, DisconnectReason.RateLimited);
+                break;
             case InboundEventKind.Hello:
                 HandleHello(session, inboundEvent.Hello!);
                 break;

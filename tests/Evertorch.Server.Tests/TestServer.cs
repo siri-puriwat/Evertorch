@@ -48,7 +48,8 @@ internal sealed class TestServer
         int itemDropLifetimeMs = 60000,
         PersistenceOptions? persistence = null,
         IGameStore? store = null,
-        int reconnectGraceMs = 0)
+        int reconnectGraceMs = 0,
+        bool isAbuseControlEnabled = true)
     {
         Content = withMonsters ? RepositoryContent.Value : RepositoryContentWithoutMonsters.Value;
         var network = new NetworkOptions
@@ -75,7 +76,12 @@ internal sealed class TestServer
 
         Random = ServerRandom.FromOptions(world);
         Transport = new InMemoryServerTransport();
-        Inbound = new InboundQueue(Options.Create(network));
+        Inbound = new InboundQueue(
+            Options.Create(network),
+            Options.Create(new AbuseOptions { Enabled = isAbuseControlEnabled }),
+            simulation,
+            Clock,
+            Instruments);
         Sessions = new SessionRegistry();
         World = new WorldSimulation(
             Content,
@@ -232,7 +238,8 @@ internal sealed class TestServer
     public ServerInstruments Instruments { get; } = TestInstruments.Create();
 
     /// <summary>
-    ///     The status publisher's monotonic clock; advance it to age the published status.
+    ///     The server's monotonic clock: every tick advances it by one tick's length, so the per-peer budgets refill
+    ///     in simulated time. Advance it further to age the published status.
     /// </summary>
     public FakeClock Clock { get; } = new();
 
@@ -254,6 +261,7 @@ internal sealed class TestServer
         for (int index = 0; index < count; index++)
         {
             m_tick++;
+            Clock.Advance(TimeSpan.FromSeconds(1.0 / TickRate));
             if (RunsPersistence)
             {
                 Persistence.RunUntilIdle();

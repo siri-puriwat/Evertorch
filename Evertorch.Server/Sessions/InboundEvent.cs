@@ -59,6 +59,11 @@ public readonly struct InboundEvent
         return new InboundEvent(InboundEventKind.Malformed, connection, null, default, default);
     }
 
+    public static InboundEvent RateLimited(ConnectionId connection)
+    {
+        return new InboundEvent(InboundEventKind.RateLimited, connection, null, default, default);
+    }
+
     public static InboundEvent ForHello(ConnectionId connection, ClientHello hello)
     {
         return new InboundEvent(InboundEventKind.Hello, connection, hello, default, default);

@@ -29,7 +29,12 @@ public sealed class InboundQueueTests
 
     private static InboundQueue CreateQueue(int capacity)
     {
-        return new InboundQueue(Options.Create(new NetworkOptions { MaxInboundEvents = capacity }));
+        return new InboundQueue(
+            Options.Create(new NetworkOptions { MaxInboundEvents = capacity }),
+            Options.Create(new AbuseOptions { Enabled = false }),
+            Options.Create(new SimulationOptions()),
+            new FakeClock(),
+            TestInstruments.Create());
     }
 
     private static byte[] Hello()

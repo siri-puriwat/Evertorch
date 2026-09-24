@@ -82,8 +82,13 @@ internal sealed class TestNetClient : IDisposable
     /// </summary>
     public bool WaitFor(Func<bool> condition)
     {
+        return WaitFor(condition, Timeout);
+    }
+
+    public bool WaitFor(Func<bool> condition, TimeSpan limit)
+    {
         var elapsed = Stopwatch.StartNew();
-        while (elapsed.Elapsed < Timeout)
+        while (elapsed.Elapsed < limit)
         {
             m_manager.PollEvents();
             if (condition())

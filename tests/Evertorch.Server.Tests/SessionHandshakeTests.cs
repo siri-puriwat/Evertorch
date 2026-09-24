@@ -55,6 +55,25 @@ public sealed class SessionHandshakeTests
     }
 
     [Test]
+    public void ControlFlood_OverThePeerBudget_ClosesTheConnectionWithRateLimited()
+    {
+        var server = new TestServer();
+        ConnectionId flooder = server.EnterWorld(7);
+        ConnectionId honest = server.EnterWorld(8);
+
+        for (int message = 0; message < new AbuseOptions().PeerMessageBurst + 1; message++)
+        {
+            server.SendTarget(flooder, default);
+        }
+
+        server.Tick();
+
+        Assert.That(server.Transport.Disconnects[flooder], Is.EqualTo(DisconnectReason.RateLimited));
+        Assert.That(server.Transport.Disconnects.ContainsKey(honest), Is.False);
+        Assert.That(server.Sessions.TryGet(flooder, out _), Is.False);
+    }
+
+    [Test]
     public void Disconnect_BeforeHello_RemovesTheSessionQuietly()
     {
         var server = new TestServer();

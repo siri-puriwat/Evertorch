@@ -57,13 +57,27 @@ public sealed class LiteNetLibServerTransportTests
             Transport.Dispose();
         }
 
-        public static LiteNetLibServerTransport CreateTransport(int port, int maxConnections, out InboundQueue inbound)
+        public static LiteNetLibServerTransport CreateTransport(
+            int port,
+            int maxConnections,
+            out InboundQueue inbound,
+            AbuseOptions? abuse = null)
         {
             var options = new NetworkOptions { Port = port, MaxConnections = maxConnections };
-            inbound = new InboundQueue(Options.Create(options));
+            IOptions<AbuseOptions> limits = Options.Create(abuse ?? new AbuseOptions { Enabled = false });
+            var clock = new StopwatchClock();
+            ServerInstruments instruments = TestInstruments.Create();
+            inbound = new InboundQueue(
+                Options.Create(options),
+                limits,
+                Options.Create(new SimulationOptions()),
+                clock,
+                instruments);
             return new LiteNetLibServerTransport(
                 inbound,
                 Options.Create(options),
+                new AddressThrottle(limits, clock),
+                instruments,
                 new CapturingLogger<LiteNetLibServerTransport>());
         }
 
@@ -96,6 +110,25 @@ public sealed class LiteNetLibServerTransportTests
 
         Assert.That(client.WaitFor(() => client.IsDisconnected), Is.True);
         Assert.That(client.Notice!.Reason, Is.EqualTo(DisconnectReason.Maintenance));
+    }
+
+    [Test]
+    public void Connect_OverTheCapOfItsAddress_IsRefusedWithoutAWordUntilAConnectionEnds()
+    {
+        var abuse = new AbuseOptions { MaxConnectionsPerAddress = 1 };
+        using LiteNetLibServerTransport transport = Harness.CreateTransport(0, 8, out InboundQueue _, abuse);
+        transport.Start();
+        using var first = new TestNetClient();
+        using var second = new TestNetClient();
+        first.Connect(transport.LocalPort, Key);
+        Assert.That(first.WaitFor(() => first.IsConnected), Is.True);
+
+        second.Connect(transport.LocalPort, Key);
+        bool isAdmitted = second.WaitFor(() => second.IsConnected || second.IsDisconnected, TimeSpan.FromSeconds(1));
+        first.Disconnect();
+
+        Assert.That(isAdmitted, Is.False, "refused without a word: no connection and no rejection");
+        Assert.That(second.WaitFor(() => second.IsConnected), Is.True, "a retry succeeds once the address has room");
     }
 
     [Test]
@@ -257,6 +290,22 @@ public sealed class LiteNetLibServerTransportTests
             harness.Inbound.Malformed,
             Is.EqualTo(malformedBefore + 1),
             "only the small marker reached the queue; the 5000-byte message was never put back together");
+    }
+
+    [Test]
+    public void Payload_WithAnotherDeliveryThanItsRoute_IsEnqueuedAsMalformed()
+    {
+        using var harness = new Harness();
+        using TestNetClient client = ConnectedClient(harness, out ConnectionId connection);
+        var move = new MoveInput(new MoveIntent(1, 1, 1f, 0f));
+        byte[] payload = new byte[MoveInput.EncodedLength];
+        move.Write(payload);
+
+        client.Send(payload, ProtocolChannel.Input, DeliveryMethod.ReliableOrdered);
+
+        Assert.That(harness.WaitForEvent(out InboundEvent received), Is.True);
+        Assert.That(received.Kind, Is.EqualTo(InboundEventKind.Malformed));
+        Assert.That(received.Connection, Is.EqualTo(connection));
     }
 
     [Test]

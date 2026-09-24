@@ -55,6 +55,13 @@ public enum InboundEventKind
     /// <summary>
     ///     The peer sent something that is not a well-formed client message on its proper channel.
     /// </summary>
-    Malformed = 4
+    Malformed = 4,
+
+    /// <summary>
+    ///     The network thread found the peer over its message budget on a reliable channel, or the heaviest peer of a
+    ///     full queue; the connection is to be closed with <c>RateLimited</c>. Never dropped, like connect and
+    ///     disconnect.
+    /// </summary>
+    RateLimited = 14
 }
 }

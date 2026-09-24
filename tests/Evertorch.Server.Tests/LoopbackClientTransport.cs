@@ -48,7 +48,7 @@ internal sealed class LoopbackClientTransport : IClientTransport
     {
         if (IsConnected)
         {
-            m_server.Inbound.OnPayload(m_connection, channel, payload);
+            m_server.Inbound.OnPayload(m_connection, channel, delivery, payload);
         }
     }
 

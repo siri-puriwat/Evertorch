@@ -64,6 +64,7 @@ public static class ServerHost
         builder.Services.AddHostedService<DatabaseStartupCheck>();
 
         AddOptions<NetworkOptions, NetworkOptionsValidator>(builder, NetworkOptions.SectionName);
+        AddOptions<AbuseOptions, AbuseOptionsValidator>(builder, AbuseOptions.SectionName);
         AddOptions<CompatibilityOptions, CompatibilityOptionsValidator>(builder, CompatibilityOptions.SectionName);
         AddOptions<WorldOptions, WorldOptionsValidator>(builder, WorldOptions.SectionName);
         builder.Services
@@ -89,6 +90,7 @@ public static class ServerHost
         builder.Services.AddSingleton<CharacterLifetime>();
         builder.Services.AddSingleton<PickupSystem>();
         builder.Services.AddSingleton<ITickPhase>(services => services.GetRequiredService<PickupSystem>());
+        builder.Services.AddSingleton<AddressThrottle>();
         builder.Services.AddSingleton<LiteNetLibServerTransport>();
         builder.Services.AddSingleton<IServerTransport>(services =>
             services.GetRequiredService<LiteNetLibServerTransport>());

@@ -32,6 +32,8 @@ public sealed class LiteNetLibServerTransport : IServerTransport, INetEventListe
 
     private readonly InboundQueue m_inbound;
     private readonly NetworkOptions m_options;
+    private readonly AddressThrottle m_throttle;
+    private readonly ServerInstruments m_instruments;
     private readonly ILogger<LiteNetLibServerTransport> m_logger;
     private readonly NetManager m_manager;
 
@@ -43,10 +45,14 @@ public sealed class LiteNetLibServerTransport : IServerTransport, INetEventListe
     public LiteNetLibServerTransport(
         InboundQueue inbound,
         IOptions<NetworkOptions> options,
+        AddressThrottle throttle,
+        ServerInstruments instruments,
         ILogger<LiteNetLibServerTransport> logger)
     {
         m_inbound = inbound;
         m_options = options.Value;
+        m_throttle = throttle;
+        m_instruments = instruments;
         m_logger = logger;
         m_manager = new NetManager(this)
         {
@@ -76,10 +82,18 @@ public sealed class LiteNetLibServerTransport : IServerTransport, INetEventListe
         }
     }
 
-    // The key is checked first, so a requester without it is rejected without data and learns nothing about the
-    // server's state (Network Protocol §7).
+    // Throttling comes first and answers nothing at all: a forced reject creates no peer and sends no packet. Then the
+    // key, so a requester without it is rejected without data and learns nothing about the server's state (Network
+    // Protocol §7).
     void INetEventListener.OnConnectionRequest(ConnectionRequest request)
     {
+        if (!m_throttle.TryAdmit(request.RemoteEndPoint.Address, out string limit))
+        {
+            m_instruments.RecordRateLimited(limit);
+            request.RejectForce();
+            return;
+        }
+
         if (!HasConnectionKey(request))
         {
             request.Reject();
@@ -106,6 +120,7 @@ public sealed class LiteNetLibServerTransport : IServerTransport, INetEventListe
         var connection = new ConnectionId(Interlocked.Increment(ref m_lastConnection));
         peer.Tag = new PeerState(connection);
         m_peers[connection] = peer;
+        m_throttle.OnConnected(peer.Address);
         m_inbound.OnConnected(connection);
     }
 
@@ -117,6 +132,7 @@ public sealed class LiteNetLibServerTransport : IServerTransport, INetEventListe
         }
 
         m_peers.TryRemove(state.Connection, out NetPeer? _);
+        m_throttle.OnDisconnected(peer.Address);
 
         // The session layer already removed a connection it closed itself; telling it again would only be noise.
         if (!state.IsClosedByServer)
@@ -133,7 +149,18 @@ public sealed class LiteNetLibServerTransport : IServerTransport, INetEventListe
     {
         if (peer.Tag is PeerState state)
         {
-            m_inbound.OnPayload(state.Connection, (ProtocolChannel)channelNumber, reader.GetRemainingBytesSpan());
+            // Only the two methods the protocol uses are named; any other makes the message malformed.
+            MessageDelivery? delivery = deliveryMethod switch
+            {
+                DeliveryMethod.ReliableOrdered => MessageDelivery.ReliableOrdered,
+                DeliveryMethod.Sequenced => MessageDelivery.UnreliableSequenced,
+                _ => null
+            };
+            m_inbound.OnPayload(
+                state.Connection,
+                (ProtocolChannel)channelNumber,
+                delivery,
+                reader.GetRemainingBytesSpan());
         }
     }
 

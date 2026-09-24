@@ -13,6 +13,12 @@ public sealed class ServerInstruments
 {
     public const string MeterName = "Evertorch.Server";
 
+    public const string PeerInputLimit = "peer_input";
+    public const string PeerControlLimit = "peer_control";
+    public const string QueueFullLimit = "queue_full";
+    public const string AddressRateLimit = "address_rate";
+    public const string AddressConnectionsLimit = "address_connections";
+
     private const string OperationTag = "operation";
     private const string OutcomeTag = "outcome";
 
@@ -42,6 +48,7 @@ public sealed class ServerInstruments
     private readonly Counter<long> m_jobFailures;
     private readonly Counter<long> m_retries;
     private readonly Histogram<int> m_roundTripTime;
+    private readonly Counter<long> m_rateLimited;
 
     public ServerInstruments(IMeterFactory meters)
     {
@@ -78,6 +85,10 @@ public sealed class ServerInstruments
             "evertorch.sessions.round_trip_time",
             "ms",
             "Round-trip time of each player in the world, sampled once a second.");
+        m_rateLimited = Meter.CreateCounter<long>(
+            "evertorch.abuse.rate_limited",
+            "{message}",
+            "Messages and connection requests a rate limit refused, by limit.");
     }
 
     public Meter Meter { get; }
@@ -118,6 +129,12 @@ public sealed class ServerInstruments
     public void RecordRoundTripTime(int milliseconds)
     {
         m_roundTripTime.Record(milliseconds);
+    }
+
+    /// <param name="limit">One of the limit names above.</param>
+    public void RecordRateLimited(string limit)
+    {
+        m_rateLimited.Add(1, new KeyValuePair<string, object?>("limit", limit));
     }
 
     /// <summary>
