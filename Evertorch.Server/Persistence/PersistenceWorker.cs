@@ -65,6 +65,7 @@ public sealed class PersistenceWorker : IDisposable
     private readonly ServerInstruments m_instruments;
     private readonly ILogger<PersistenceWorker> m_logger;
     private readonly int m_capacity;
+    private readonly int m_idleProbeIntervalMs;
     private readonly int m_maxAdmissionJobs;
     private readonly int m_timeoutMs;
     private readonly int m_maxRetries;
@@ -99,6 +100,7 @@ public sealed class PersistenceWorker : IDisposable
         m_instruments = instruments;
         m_logger = logger;
         m_capacity = options.Value.QueueCapacity;
+        m_idleProbeIntervalMs = options.Value.IdleProbeIntervalMs;
         m_maxAdmissionJobs = options.Value.EffectiveMaxAdmissionJobs;
         m_timeoutMs = options.Value.CommandTimeoutMs;
         m_maxRetries = options.Value.MaxRetries;
@@ -426,6 +428,7 @@ public sealed class PersistenceWorker : IDisposable
                 continue;
             }
 
+            bool isIdle = false;
             lock (m_gate)
             {
                 Monitor.PulseAll(m_gate);
@@ -436,8 +439,15 @@ public sealed class PersistenceWorker : IDisposable
                         return;
                     }
 
-                    Monitor.Wait(m_gate);
+                    // With no work the writer still asks the database now and then, so readiness drops with an
+                    // outage before a job meets it (Persistence §9).
+                    isIdle = !Monitor.Wait(m_gate, m_idleProbeIntervalMs) && m_queue.Count == 0 && !m_isStopping;
                 }
+            }
+
+            if (isIdle)
+            {
+                Probe();
             }
         }
     }

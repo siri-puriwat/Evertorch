@@ -11,9 +11,15 @@ own license.
 | Microsoft.EntityFrameworkCore | 10.0.12 | `Evertorch.Persistence` | MIT | <https://github.com/dotnet/efcore> |
 | Microsoft.EntityFrameworkCore.Relational | 10.0.12 | `Evertorch.Persistence` | MIT | <https://github.com/dotnet/efcore> |
 | Microsoft.EntityFrameworkCore.Design | 10.0.12 | `Evertorch.Persistence` (migrations tooling only, not shipped) | MIT | <https://github.com/dotnet/efcore> |
-| Microsoft.Extensions.Hosting | 10.0.12 | `Evertorch.Server` | MIT | <https://github.com/dotnet/runtime> |
 | Npgsql.EntityFrameworkCore.PostgreSQL | 10.0.3 | `Evertorch.Persistence` | PostgreSQL License | <https://github.com/npgsql/efcore.pg> |
 | YamlDotNet | 18.1.0 | `Evertorch.Tools` | MIT | <https://github.com/aaubry/YamlDotNet> |
+
+The server also uses the ASP.NET Core shared framework, which the .NET
+installation provides; it is not copied into this repository or the build output.
+
+| Framework | Version | Used by | License | Project |
+| --- | --- | --- | --- | --- |
+| Microsoft.AspNetCore.App (Kestrel for the health endpoints, and the generic host) | 10.0 | `Evertorch.Server` | MIT | <https://github.com/dotnet/aspnetcore> |
 
 Test and development tools, not shipped with the server or the client:
 
@@ -43,8 +49,7 @@ TextMesh Pro Essential Resources are imported from `com.unity.ugui` 2.0.0 into
 
 LiteNetLib is Copyright (c) Ruslan Pyrch.
 
-Microsoft.Extensions.Hosting, Entity Framework Core, and dotnet-ef are Copyright (c) .NET Foundation and
-Contributors.
+ASP.NET Core, Entity Framework Core, and dotnet-ef are Copyright (c) .NET Foundation and Contributors.
 
 Npgsql.EntityFrameworkCore.PostgreSQL is Copyright 2025 (c) The Npgsql Development Team.
 

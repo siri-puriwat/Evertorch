@@ -29,6 +29,32 @@ public sealed class ProgramTests
     }
 
     [Test]
+    public void Main_WhenItsHealthPortIsTaken_ReturnsOne()
+    {
+        using var package = new TemporaryDirectory();
+        PackageFixture.WriteTo(package.Path, PackageFixture.BuildRepositoryPackage());
+        var taken = new TcpListener(IPAddress.Loopback, 0) { ExclusiveAddressUse = true };
+        taken.Start();
+        try
+        {
+            int port = ((IPEndPoint)taken.LocalEndpoint).Port;
+
+            int exitCode = RunMain(
+                $"--Content:ServerPackagePath={package.Path}",
+                $"--ConnectionStrings:Evertorch={TestHosts.UnreachableDatabase}",
+                "--Network:Port=0",
+                "--Health:Enabled=true",
+                $"--Health:Port={port}");
+
+            Assert.That(exitCode, Is.EqualTo(1));
+        }
+        finally
+        {
+            taken.Stop();
+        }
+    }
+
+    [Test]
     public void Main_WhenItsPortIsTaken_ReturnsOne()
     {
         using var package = new TemporaryDirectory();
@@ -40,7 +66,8 @@ public sealed class ProgramTests
         int exitCode = RunMain(
             $"--Content:ServerPackagePath={package.Path}",
             $"--ConnectionStrings:Evertorch={TestHosts.UnreachableDatabase}",
-            $"--Network:Port={port}");
+            $"--Network:Port={port}",
+            "--Health:Port=0");
 
         Assert.That(exitCode, Is.EqualTo(1));
     }
@@ -57,7 +84,8 @@ public sealed class ProgramTests
         int exitCode = RunMain(
             $"--Content:ServerPackagePath={package.Path}",
             $"--ConnectionStrings:Evertorch={refused}",
-            "--Network:Port=0");
+            "--Network:Port=0",
+            "--Health:Port=0");
 
         Assert.That(exitCode, Is.EqualTo(1));
     }
@@ -74,7 +102,8 @@ public sealed class ProgramTests
             {
                 $"--Content:ServerPackagePath={package.Path}",
                 $"--ConnectionStrings:Evertorch={database.ConnectionString}",
-                "--Network:Port=0"
+                "--Network:Port=0",
+                "--Health:Port=0"
             });
 
         Assert.That(exitCode, Is.EqualTo(1));
@@ -103,7 +132,8 @@ public sealed class ProgramTests
                 new[]
                 {
                     $"--Content:ServerPackagePath={missing}",
-                    $"--ConnectionStrings:Evertorch={TestHosts.UnreachableDatabase}"
+                    $"--ConnectionStrings:Evertorch={TestHosts.UnreachableDatabase}",
+                    "--Health:Port=0"
                 });
         }
         finally

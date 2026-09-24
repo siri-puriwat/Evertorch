@@ -21,6 +21,8 @@ public sealed class PersistenceOptionsValidatorTests
     [TestCase("RetryBaseDelayMs", 10001)]
     [TestCase("CheckpointIntervalMs", 999)]
     [TestCase("CheckpointIntervalMs", 3600001)]
+    [TestCase("IdleProbeIntervalMs", 99)]
+    [TestCase("IdleProbeIntervalMs", 3600001)]
     public void Validate_WithAValueOutOfRange_FailsNamingTheKey(string key, int value)
     {
         var options = new PersistenceOptions();
@@ -42,6 +44,8 @@ public sealed class PersistenceOptionsValidatorTests
     [TestCase("RetryBaseDelayMs", 10000)]
     [TestCase("CheckpointIntervalMs", 1000)]
     [TestCase("CheckpointIntervalMs", 3600000)]
+    [TestCase("IdleProbeIntervalMs", 100)]
+    [TestCase("IdleProbeIntervalMs", 3600000)]
     public void Validate_WithAValueAtItsBound_Succeeds(string key, int value)
     {
         var options = new PersistenceOptions();

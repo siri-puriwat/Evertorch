@@ -50,9 +50,13 @@ internal static class TestHosts
         builder.Services.AddSingleton(services => ActivatorUtilities.CreateInstance<CombatSystem>(services, combat));
     }
 
+    // The test output carries the server's appsettings.json, which names a fixed health port.
     private static string[] WithDatabase(string[] args, string connectionString)
     {
-        return args.Append($"--ConnectionStrings:{DatabaseOptions.ConnectionName}={connectionString}").ToArray();
+        return args
+            .Append($"--ConnectionStrings:{DatabaseOptions.ConnectionName}={connectionString}")
+            .Append("--Health:Port=0")
+            .ToArray();
     }
 }
 }

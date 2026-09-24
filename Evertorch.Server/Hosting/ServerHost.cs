@@ -64,6 +64,7 @@ public static class ServerHost
         builder.Services.AddHostedService<DatabaseStartupCheck>();
 
         AddOptions<NetworkOptions, NetworkOptionsValidator>(builder, NetworkOptions.SectionName);
+        AddOptions<HealthOptions, HealthOptionsValidator>(builder, HealthOptions.SectionName);
         AddOptions<AbuseOptions, AbuseOptionsValidator>(builder, AbuseOptions.SectionName);
         AddOptions<CompatibilityOptions, CompatibilityOptionsValidator>(builder, CompatibilityOptions.SectionName);
         AddOptions<WorldOptions, WorldOptionsValidator>(builder, WorldOptions.SectionName);
@@ -129,6 +130,9 @@ public static class ServerHost
         builder.Services.AddSingleton<ITickObserver>(services => services.GetRequiredService<ServerMetrics>());
         builder.Services.AddSingleton<TickPipeline>();
         builder.Services.AddSingleton<FixedStepLoop>();
+        // Before the lifetime service, so the endpoints start before the transport and stop after everything else.
+        builder.Services.AddSingleton<HealthEndpoint>();
+        builder.Services.AddHostedService(services => services.GetRequiredService<HealthEndpoint>());
         builder.Services.AddSingleton<ServerLifetimeService>();
         builder.Services
             .AddOptions<HostOptions>()

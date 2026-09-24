@@ -80,7 +80,7 @@ internal sealed class LiveServer : IDisposable
         var start = new ProcessStartInfo
         {
             FileName = "dotnet",
-            Arguments = $"\"{DllPath}\" --Network:Port=0 --DevelopmentAuthentication:Enabled=true"
+            Arguments = $"\"{DllPath}\" --Network:Port=0 --Health:Port=0 --DevelopmentAuthentication:Enabled=true"
                 + $" --Content:ServerPackagePath=\"{ContentPath}\" {extraArguments}",
             WorkingDirectory = Path.GetDirectoryName(DllPath),
             UseShellExecute = false,

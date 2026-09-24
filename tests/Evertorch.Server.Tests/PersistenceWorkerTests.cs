@@ -22,14 +22,16 @@ public sealed class PersistenceWorkerTests
         int capacity = 256,
         int timeoutMs = 5000,
         int maxRetries = 3,
-        CapturingLogger<PersistenceWorker>? logger = null)
+        CapturingLogger<PersistenceWorker>? logger = null,
+        int idleProbeIntervalMs = 5000)
     {
         var options = new PersistenceOptions
         {
             QueueCapacity = capacity,
             CommandTimeoutMs = timeoutMs,
             MaxRetries = maxRetries,
-            RetryBaseDelayMs = 1
+            RetryBaseDelayMs = 1,
+            IdleProbeIntervalMs = idleProbeIntervalMs
         };
         return new PersistenceWorker(
             store,
@@ -171,6 +173,23 @@ public sealed class PersistenceWorkerTests
         Assert.That(server.Transport.Disconnects[faulty], Is.EqualTo(DisconnectReason.InternalError));
         Assert.That(server.Transport.Disconnects.ContainsKey(other), Is.False);
         Assert.That(server.SessionOf(other).State, Is.EqualTo(SessionState.InWorld));
+    }
+
+    [Test]
+    public void IdleWriter_NoticesAnOutageWithoutAnyWork_AndTheDatabaseComingBack()
+    {
+        var store = new InMemoryGameStore();
+        using PersistenceWorker worker = CreateWorker(store, idleProbeIntervalMs: 100);
+        worker.Probe();
+        worker.Start();
+
+        store.IsUnavailable = true;
+        bool isNoticed = SpinWait.SpinUntil(() => worker.State == DatabaseState.Unavailable, 5000);
+        store.IsUnavailable = false;
+        bool isBack = SpinWait.SpinUntil(() => worker.State == DatabaseState.Available, 5000);
+
+        Assert.That(isNoticed, Is.True);
+        Assert.That(isBack, Is.True);
     }
 
     [Test]

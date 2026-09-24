@@ -20,7 +20,9 @@ public sealed class PackageReferenceTests
                 "Microsoft.EntityFrameworkCore.Design",
                 "Npgsql.EntityFrameworkCore.PostgreSQL"
             },
-            ["Evertorch.Server"] = new[] { "LiteNetLib", "Microsoft.Extensions.Hosting" },
+            // The generic host comes with the ASP.NET Core shared framework (FrameworkReferenceTests); a package
+            // reference to it as well would be pruned and fail the build with NU1510.
+            ["Evertorch.Server"] = new[] { "LiteNetLib" },
             ["Evertorch.Tools"] = new[] { "YamlDotNet" }
         };
 

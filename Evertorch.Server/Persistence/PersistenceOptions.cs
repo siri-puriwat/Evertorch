@@ -38,6 +38,12 @@ public sealed class PersistenceOptions
     public int CheckpointIntervalMs { get; set; } = 60000;
 
     /// <summary>
+    ///     How often the writer asks the database whether it answers while it has no work, so an outage shows in
+    ///     readiness without waiting for the next job (Persistence §9).
+    /// </summary>
+    public int IdleProbeIntervalMs { get; set; } = 5000;
+
+    /// <summary>
     ///     Sign-in, character-list, and character-load jobs that may wait, a share of <see cref="QueueCapacity" />, so a
     ///     flood of hellos cannot fill the queue that pickups and checkpoints share (Persistence §9). Unset, it is a
     ///     quarter of the queue.
@@ -57,6 +63,7 @@ public sealed class PersistenceOptionsValidator : IValidateOptions<PersistenceOp
         AddRangeFailure(failures, "MaxRetries", options.MaxRetries, 0, 10);
         AddRangeFailure(failures, "RetryBaseDelayMs", options.RetryBaseDelayMs, 1, 10000);
         AddRangeFailure(failures, "CheckpointIntervalMs", options.CheckpointIntervalMs, 1000, 3600000);
+        AddRangeFailure(failures, "IdleProbeIntervalMs", options.IdleProbeIntervalMs, 100, 3600000);
         if (options.MaxAdmissionJobs.HasValue)
         {
             AddRangeFailure(failures, "MaxAdmissionJobs", options.MaxAdmissionJobs.Value, 1, options.QueueCapacity);

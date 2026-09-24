@@ -47,6 +47,11 @@ internal static class RepositoryLayout
         return ItemIncludes(projectName, "PackageReference").ToArray();
     }
 
+    public static IReadOnlyCollection<string> FrameworkReferences(string projectName)
+    {
+        return ItemIncludes(projectName, "FrameworkReference").ToArray();
+    }
+
     public static string PackageVersion(string projectName, string packageName)
     {
         return XDocument.Load(ProjectFilePath(projectName))
