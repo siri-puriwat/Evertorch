@@ -24,6 +24,9 @@ function Test-DockerEngine {
         return $false
     }
 
+    # Windows PowerShell turns a native command's redirected stderr into an error record, which the callers' 'Stop'
+    # preference makes fatal; a stopped engine must answer false so the caller can say what to do.
+    $ErrorActionPreference = 'Continue'
     & $docker info --format '{{.ServerVersion}}' *> $null
     return $LASTEXITCODE -eq 0
 }

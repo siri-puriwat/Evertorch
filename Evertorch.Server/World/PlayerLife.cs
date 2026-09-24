@@ -40,18 +40,8 @@ public sealed class PlayerLife
         player.Target = default;
         player.Combat.IsAutoAttacking = false;
         player.Combat.EndSwing();
-        if (session.Input != null)
-        {
-            // Inputs sent while dead are consumed and acknowledged as zero directions, so none carries over into
-            // the new life.
-            while (session.Input.Queue.TryDequeue(out MoveIntent intent))
-            {
-                session.Input.LastProcessedSequence = intent.Sequence;
-            }
-
-            session.Input.Direction = default;
-            session.Input.TicksSinceInput = 0;
-        }
+        // Inputs sent while dead must not carry over into the new life.
+        session.Input?.Halt();
 
         var revived = new EntityRevived(player.Id, player.Position, player.Facing, tick);
         foreach (ClientSession other in m_sessions.Sessions)

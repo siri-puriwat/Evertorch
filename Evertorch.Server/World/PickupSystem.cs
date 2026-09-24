@@ -31,7 +31,7 @@ public sealed class PickupSystem : ITickPhase
     private static readonly Action<ILogger, Guid, long, Exception?> LogUnsettled =
         LoggerMessage.Define<Guid, long>(
             LogLevel.Warning,
-            new EventId(4007, "PickupUnsettled"),
+            new EventId(4008, "PickupUnsettled"),
             "The commit of drop {Drop} for character {Character} gave no answer; the drop stays reserved until the "
             + "ledger says what happened.");
 

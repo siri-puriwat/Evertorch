@@ -70,6 +70,7 @@ public sealed class SessionManager : ITickPhase
     private readonly uint m_handshakeTimeoutTicks;
     private readonly int m_maxQueuedInputs;
     private readonly List<ClientSession> m_expired = new();
+    private readonly List<CharacterSession> m_cancelledLogouts = new();
     private uint m_currentTick;
 
     public SessionManager(
@@ -134,14 +135,11 @@ public sealed class SessionManager : ITickPhase
             }
             catch (Exception exception)
             {
-                LogSessionFaulted(m_logger, job.Connection.Value, exception);
-                if (m_sessions.TryGet(job.Connection, out ClientSession? faulted) && faulted != null)
-                {
-                    Close(faulted, DisconnectReason.InternalError);
-                }
+                CloseFaulted(job.Connection, exception);
             }
         }
 
+        CancelLogoutsWhileUnavailable();
         while (m_inbound.TryDequeue(out InboundEvent inboundEvent))
         {
             try
@@ -150,12 +148,7 @@ public sealed class SessionManager : ITickPhase
             }
             catch (Exception exception)
             {
-                // One peer's input must never take the tick down with it.
-                LogSessionFaulted(m_logger, inboundEvent.Connection.Value, exception);
-                if (m_sessions.TryGet(inboundEvent.Connection, out ClientSession? faulted) && faulted != null)
-                {
-                    Close(faulted, DisconnectReason.InternalError);
-                }
+                CloseFaulted(inboundEvent.Connection, exception);
             }
         }
 
@@ -680,7 +673,8 @@ public sealed class SessionManager : ITickPhase
         character.IsLoggingOut = true;
         character.LogoutSequence = commandSequence;
         character.Player.Combat.IsAutoAttacking = false;
-        session.Input!.Direction = default;
+        // Moves queued before the logout must not walk the character away from the checkpoint it is about to write.
+        session.Input!.Halt();
         if (character.Pickup == null)
         {
             QueueLogoutCheckpoint(session, character);
@@ -726,9 +720,7 @@ public sealed class SessionManager : ITickPhase
 
         if (outcome != PersistenceOutcome.Succeeded)
         {
-            character.IsLoggingOut = false;
-            character.LogoutCheckpoint = null;
-            Reject(session, character.LogoutSequence, CommandRejectionReason.ServiceUnavailable);
+            CancelLogout(session, character);
             return;
         }
 
@@ -738,6 +730,56 @@ public sealed class SessionManager : ITickPhase
         session.State = SessionState.Authenticated;
         m_sender.Send(connection, new LogoutComplete());
         QueueCharacterList(session);
+    }
+
+    private void CancelLogout(ClientSession session, CharacterSession character)
+    {
+        character.IsLoggingOut = false;
+        character.LogoutCheckpoint = null;
+        Reject(session, character.LogoutSequence, CommandRejectionReason.ServiceUnavailable);
+    }
+
+    // A logout still waiting when the database stops answering, for its checkpoint or for a pickup before it, would
+    // hold the player still for the whole outage; it is cancelled instead and the player plays on (Persistence §7).
+    // A checkpoint it queued stays queued and is written later like any other.
+    private void CancelLogoutsWhileUnavailable()
+    {
+        if (m_persistence.IsAvailable)
+        {
+            return;
+        }
+
+        m_cancelledLogouts.Clear();
+        foreach (CharacterSession character in m_sessions.Characters)
+        {
+            if (character.IsLoggingOut && character.Connection != null)
+            {
+                m_cancelledLogouts.Add(character);
+            }
+        }
+
+        foreach (CharacterSession character in m_cancelledLogouts)
+        {
+            ClientSession session = character.Connection!;
+            try
+            {
+                CancelLogout(session, character);
+            }
+            catch (Exception exception)
+            {
+                CloseFaulted(session.Connection, exception);
+            }
+        }
+    }
+
+    // One peer's input or result must never take the tick down with it.
+    private void CloseFaulted(ConnectionId connection, Exception exception)
+    {
+        LogSessionFaulted(m_logger, connection.Value, exception);
+        if (m_sessions.TryGet(connection, out ClientSession? faulted) && faulted != null)
+        {
+            Close(faulted, DisconnectReason.InternalError);
+        }
     }
 
     private void ExpireSilentConnections(uint tick)

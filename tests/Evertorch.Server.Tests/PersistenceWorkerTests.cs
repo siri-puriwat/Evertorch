@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Evertorch.Persistence;
@@ -20,7 +21,8 @@ public sealed class PersistenceWorkerTests
         InMemoryGameStore store,
         int capacity = 256,
         int timeoutMs = 5000,
-        int maxRetries = 3)
+        int maxRetries = 3,
+        CapturingLogger<PersistenceWorker>? logger = null)
     {
         var options = new PersistenceOptions
         {
@@ -29,7 +31,10 @@ public sealed class PersistenceWorkerTests
             MaxRetries = maxRetries,
             RetryBaseDelayMs = 1
         };
-        return new PersistenceWorker(store, Options.Create(options), new CapturingLogger<PersistenceWorker>());
+        return new PersistenceWorker(
+            store,
+            Options.Create(options),
+            logger ?? new CapturingLogger<PersistenceWorker>());
     }
 
     private static PersistenceJob<int> Job(
@@ -48,6 +53,11 @@ public sealed class PersistenceWorkerTests
                 return Task.FromResult(work?.Invoke() ?? 0);
             },
             (outcome, _) => log.Add($"done {name} {outcome}"));
+    }
+
+    private static Task<bool> StopInBackground(PersistenceWorker worker)
+    {
+        return Task.Run(() => worker.Stop(5000));
     }
 
     private static void CompleteAll(PersistenceWorker worker)
@@ -266,6 +276,28 @@ public sealed class PersistenceWorkerTests
     }
 
     [Test]
+    public void Jobs_QueuedBehindOneThatMeetsAnOutage_EndUnavailableWithoutRunning()
+    {
+        var store = new InMemoryGameStore();
+        using PersistenceWorker worker = CreateWorker(store, maxRetries: 0);
+        var log = new List<string>();
+        worker.TryEnqueue(Job("first", log, work: () =>
+        {
+            store.IsUnavailable = true;
+            throw new StoreUnavailableException(new TimeoutException());
+        }));
+        worker.TryEnqueue(Job("second", log));
+        worker.QueueCheckpoint(Job("checkpoint", log, 7));
+
+        worker.RunUntilIdle();
+        CompleteAll(worker);
+
+        Assert.That(log, Is.EqualTo(new[] { "run first", "done first Unavailable", "done second Unavailable" }));
+        Assert.That(worker.PendingJobs, Is.Zero);
+        Assert.That(worker.WaitingCheckpoints, Is.EqualTo(1), "a checkpoint waits for the database");
+    }
+
+    [Test]
     public void Jobs_RunInTheOrderQueued_AndCompleteOnlyWhenTheTickThreadAsks()
     {
         using PersistenceWorker worker = CreateWorker(new InMemoryGameStore());
@@ -279,6 +311,40 @@ public sealed class PersistenceWorkerTests
 
         Assert.That(afterRun, Is.EqualTo(new[] { "run a", "run b" }));
         Assert.That(log, Is.EqualTo(new[] { "run a", "run b", "done a Succeeded", "done b Succeeded" }));
+    }
+
+    [Test]
+    public void Outage_WhoseProbeMeetsAnErrorOfTheDatabasesOwn_KeepsTheWriterAliveAndUnavailable()
+    {
+        var store = new InMemoryGameStore { IsUnavailable = true };
+        var logger = new CapturingLogger<PersistenceWorker>();
+        using PersistenceWorker worker = CreateWorker(store, logger: logger);
+        var log = new List<string>();
+        worker.Probe();
+        worker.QueueCheckpoint(Job("checkpoint", log, 7));
+        store.IsUnavailable = false;
+        store.MigrationQueryFailure = new InvalidOperationException("password authentication failed");
+
+        Action writerProbesTwice = () =>
+        {
+            worker.RunUntilIdle();
+            worker.RunUntilIdle();
+        };
+        Action startupProbe = () => worker.Probe();
+
+        Assert.That(writerProbesTwice, Throws.Nothing, "on the writer thread an escaped exception ends the process");
+        Assert.That(worker.State, Is.EqualTo(DatabaseState.Unavailable));
+        Assert.That(log, Is.Empty, "nothing is written while the probe fails");
+        Assert.That(
+            logger.Entries.Count(entry => entry.EventId.Name == "DatabaseProbeFailed"),
+            Is.EqualTo(1),
+            "once per outage, not once a second");
+        Assert.That(startupProbe, Throws.InstanceOf<InvalidOperationException>(), "startup still stops on it");
+
+        store.MigrationQueryFailure = null;
+        worker.RunUntilIdle();
+
+        Assert.That(log, Is.EqualTo(new[] { "run checkpoint" }), "the writer goes on once a probe passes");
     }
 
     [Test]
@@ -324,6 +390,50 @@ public sealed class PersistenceWorkerTests
             {
                 Assert.That(PersistenceWorker.RetryDelayMs(attempt, 100, random), Is.InRange(0, bound));
             }
+        }
+    }
+
+    [Test]
+    public void Stop_WhileTheWriterMovesOnToTheLastCheckpoint_WaitsForItToBeWritten()
+    {
+        // Many rounds, because the moment Stop must not mistake for the end of the drain is short: the writer has
+        // just taken the last checkpoint from the queue and not yet started it.
+        for (int round = 0; round < 200; round++)
+        {
+            using PersistenceWorker worker = CreateWorker(new InMemoryGameStore());
+            using var release = new ManualResetEventSlim();
+            PersistenceOutcome? last = null;
+            worker.Start();
+            worker.QueueCheckpoint(new PersistenceJob<int>(
+                "first",
+                default,
+                1,
+                (_, _) =>
+                {
+                    release.Wait();
+                    return Task.FromResult(0);
+                },
+                (_, _) =>
+                {
+                }));
+            worker.QueueCheckpoint(new PersistenceJob<int>(
+                "last",
+                default,
+                2,
+                (_, token) =>
+                {
+                    token.ThrowIfCancellationRequested();
+                    return Task.FromResult(0);
+                },
+                (outcome, _) => last = outcome));
+            Task<bool> stopping = StopInBackground(worker);
+            Thread.Sleep(2);
+
+            release.Set();
+
+            Assert.That(stopping.Result, Is.True, $"round {round}");
+            CompleteAll(worker);
+            Assert.That(last, Is.EqualTo(PersistenceOutcome.Succeeded), $"round {round}");
         }
     }
 

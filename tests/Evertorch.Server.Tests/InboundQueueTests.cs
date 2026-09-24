@@ -54,18 +54,23 @@ public sealed class InboundQueueTests
     public void Fault_WhileHandlingOnePeer_ClosesThatPeerAndTheTickGoesOn()
     {
         var server = new TestServer();
-        ConnectionId faulty = server.Connect();
-        ConnectionId healthy = server.Connect();
+        ConnectionId faulty = server.EnterWorld(1);
+        ConnectionId healthy = server.EnterWorld(2);
+        server.Transport.ClearSent();
         server.Transport.FailSendsTo.Add(faulty);
-        server.SendHello(faulty);
-        server.SendHello(healthy);
 
-        // The hello's tick starts the account lookup; the next applies it and answers, which fails for the faulty peer.
-        server.Tick(2);
+        // A living player's respawn is refused at once, from inside the handling of that peer's input; the answer to
+        // the faulty peer is what fails. Database results have a fault boundary of their own and are not used here.
+        server.SendRespawn(faulty, 1);
+        server.SendRespawn(healthy, 1);
+        server.Tick();
 
         Assert.That(server.Transport.Disconnects[faulty], Is.EqualTo(DisconnectReason.InternalError));
         Assert.That(server.Sessions.TryGet(faulty, out _), Is.False);
-        Assert.That(server.Transport.ControlOpcodesSentTo(healthy), Is.EqualTo(new[] { MessageOpcode.ServerHello }));
+        Assert.That(
+            server.Transport.ControlOpcodesSentTo(healthy),
+            Does.Contain(MessageOpcode.CommandRejected),
+            "the next peer's input was still handled in the same tick");
         Assert.That(server.Log.Entries.Count(entry => entry.Level == LogLevel.Error), Is.EqualTo(1));
         Assert.That(server.Log.Entries.Single(entry => entry.Level == LogLevel.Error).EventId.Name,
             Is.EqualTo("SessionFaulted"));

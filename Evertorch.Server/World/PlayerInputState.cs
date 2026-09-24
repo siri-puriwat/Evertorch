@@ -37,5 +37,20 @@ public sealed class PlayerInputState
     ///     Times the client's tick wandered beyond the allowed drift and the offset was set anew.
     /// </summary>
     public long TickDriftRebases { get; set; }
+
+    /// <summary>
+    ///     Ends the held direction and consumes every queued input as a zero direction, acknowledged but not applied,
+    ///     so none of them moves the player afterwards.
+    /// </summary>
+    public void Halt()
+    {
+        while (Queue.TryDequeue(out MoveIntent intent))
+        {
+            LastProcessedSequence = intent.Sequence;
+        }
+
+        Direction = default;
+        TicksSinceInput = 0;
+    }
 }
 }

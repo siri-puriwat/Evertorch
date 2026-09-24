@@ -55,6 +55,12 @@ public sealed class PersistenceWorker : IDisposable
             new EventId(4005, "PersistenceDrainIncomplete"),
             "{Count} persistence job(s) were still waiting when the shutdown drain ended.");
 
+    private static readonly Action<ILogger, Exception?> LogProbeFailed =
+        LoggerMessage.Define(
+            LogLevel.Error,
+            new EventId(4009, "DatabaseProbeFailed"),
+            "The database answered the availability probe with an error; it stays unavailable until a probe passes.");
+
     private readonly IGameStore m_store;
     private readonly ILogger<PersistenceWorker> m_logger;
     private readonly int m_capacity;
@@ -74,6 +80,7 @@ public sealed class PersistenceWorker : IDisposable
     private bool m_isStopping;
     private bool m_isExecuting;
     private bool m_isDisposed;
+    private bool m_isProbeFailureLogged;
     private Thread? m_thread;
 
     public PersistenceWorker(
@@ -216,6 +223,7 @@ public sealed class PersistenceWorker : IDisposable
                 return pending;
             }
 
+            m_isProbeFailureLogged = false;
             if (SetState(DatabaseState.Available))
             {
                 LogDatabaseAvailable(m_logger, null);
@@ -294,7 +302,7 @@ public sealed class PersistenceWorker : IDisposable
         {
             if (State == DatabaseState.Unavailable)
             {
-                Probe();
+                ProbeDuringOutage();
                 if (State == DatabaseState.Unavailable)
                 {
                     return;
@@ -319,6 +327,25 @@ public sealed class PersistenceWorker : IDisposable
         }
     }
 
+    // A database that answers with an error of its own, such as a refused password, stays unavailable. The writer
+    // thread must survive it: an exception escaping there would end the process without the shutdown's checkpoints.
+    // At startup the same error still stops the server, because the startup check calls Probe itself.
+    private void ProbeDuringOutage()
+    {
+        try
+        {
+            Probe();
+        }
+        catch (Exception exception)
+        {
+            if (!m_isProbeFailureLogged)
+            {
+                m_isProbeFailureLogged = true;
+                LogProbeFailed(m_logger, exception);
+            }
+        }
+    }
+
     private void Run()
     {
         while (!m_stop.IsCancellationRequested)
@@ -332,7 +359,7 @@ public sealed class PersistenceWorker : IDisposable
 
             if (State == DatabaseState.Unavailable)
             {
-                Probe();
+                ProbeDuringOutage();
                 if (State == DatabaseState.Unavailable)
                 {
                     m_stop.Token.WaitHandle.WaitOne(ProbeIntervalMs);
@@ -363,43 +390,47 @@ public sealed class PersistenceWorker : IDisposable
         }
     }
 
+    // A job leaves the queue and becomes the running one under the same lock, so Stop never sees the moment between
+    // the two as a finished drain.
     private PersistenceJob? TakeNext()
     {
         lock (m_gate)
         {
-            if (m_queue.Count == 0)
-            {
-                return null;
-            }
-
-            Entry next = m_queue.Peek();
-            if (next.Job == null)
-            {
-                m_queue.Dequeue();
-                return m_checkpoints.Remove(next.CheckpointCharacter, out PersistenceJob? checkpoint)
-                    ? checkpoint
-                    : null;
-            }
-
-            // A job for a character first takes that character's waiting checkpoint; its own turn comes next.
-            if (next.Job.Character != 0 && m_checkpoints.Remove(next.Job.Character, out PersistenceJob? earlier))
-            {
-                return earlier;
-            }
-
-            m_queue.Dequeue();
-            m_pendingJobs--;
-            return next.Job;
+            PersistenceJob? next = Dequeue();
+            m_isExecuting = next != null;
+            return next;
         }
+    }
+
+    private PersistenceJob? Dequeue()
+    {
+        if (m_queue.Count == 0)
+        {
+            return null;
+        }
+
+        Entry next = m_queue.Peek();
+        if (next.Job == null)
+        {
+            m_queue.Dequeue();
+            return m_checkpoints.Remove(next.CheckpointCharacter, out PersistenceJob? checkpoint)
+                ? checkpoint
+                : null;
+        }
+
+        // A job for a character first takes that character's waiting checkpoint; its own turn comes next.
+        if (next.Job.Character != 0 && m_checkpoints.Remove(next.Job.Character, out PersistenceJob? earlier))
+        {
+            return earlier;
+        }
+
+        m_queue.Dequeue();
+        m_pendingJobs--;
+        return next.Job;
     }
 
     private void Execute(PersistenceJob job)
     {
-        lock (m_gate)
-        {
-            m_isExecuting = true;
-        }
-
         try
         {
             Finish(job);
@@ -435,6 +466,34 @@ public sealed class PersistenceWorker : IDisposable
         }
 
         m_completions.Enqueue(job);
+        if (job.Outcome == PersistenceOutcome.Unavailable && !m_stop.IsCancellationRequested)
+        {
+            FailQueuedJobs();
+        }
+    }
+
+    // Work queued before the outage was found would otherwise wait all through it, with nothing said to the player
+    // who asked; it ends unavailable now, like work refused at the door (Persistence §9). Checkpoints stay queued for
+    // their retry. Not while stopping: that cancellation says nothing about the database.
+    private void FailQueuedJobs()
+    {
+        lock (m_gate)
+        {
+            int count = m_queue.Count;
+            for (int index = 0; index < count; index++)
+            {
+                Entry entry = m_queue.Dequeue();
+                if (entry.Job == null)
+                {
+                    m_queue.Enqueue(entry);
+                    continue;
+                }
+
+                m_pendingJobs--;
+                entry.Job.Outcome = PersistenceOutcome.Unavailable;
+                m_completions.Enqueue(entry.Job);
+            }
+        }
     }
 
     private PersistenceOutcome Attempt(PersistenceJob job)

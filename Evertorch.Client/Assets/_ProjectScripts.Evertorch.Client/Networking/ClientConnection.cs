@@ -38,7 +38,8 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
     public IReadOnlyList<CharacterListEntry> Characters { get; private set; } = Array.Empty<CharacterListEntry>();
 
     /// <summary>
-    ///     The answer to the last <see cref="CreateCharacter" />, or <see cref="CreateCharacterOutcome.None" />.
+    ///     The answer to the last <see cref="CreateCharacter" />, or <see cref="CreateCharacterOutcome.None" />. Entering
+    ///     the world clears it, so the list after a logout is not taken for its answer.
     /// </summary>
     public CreateCharacterOutcome LastCreateOutcome { get; private set; }
 
@@ -563,6 +564,7 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
         }
 
         World = new ClientWorld(grid, entered, ServerTickRate);
+        LastCreateOutcome = CreateCharacterOutcome.None;
 
         // The command sequence belongs to the character, not the connection: after a reconnect it goes on from the
         // newest the server processed, or every command would look like a replay (Network Protocol §8).

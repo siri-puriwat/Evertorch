@@ -90,6 +90,24 @@ public sealed class AuthenticationTests
     }
 
     [Test]
+    public void Hello_QueuedBehindWorkThatMeetsAnOutage_IsRefusedAsNotReady()
+    {
+        var server = new TestServer();
+        ConnectionId player = server.EnterWorld(7);
+        ConnectionId connection = server.Connect();
+        server.SendLogout(player, 1);
+        server.SendHello(connection);
+        server.Tick();
+        server.Store.IsUnavailable = true;
+
+        // The logout's checkpoint meets the outage first; the account lookup queued behind it is never tried.
+        server.Tick();
+
+        AssertRefused(server, connection, DisconnectReason.ServerNotReady);
+        Assert.That(server.Store.Logins, Has.Count.EqualTo(1), "only the player already in the world signed in");
+    }
+
+    [Test]
     public void Hello_WhenTheDatabaseHasPendingMigrations_IsRefusedAsNotReady()
     {
         var server = new TestServer();

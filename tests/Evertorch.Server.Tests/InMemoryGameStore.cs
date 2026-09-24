@@ -28,6 +28,12 @@ internal sealed class InMemoryGameStore : IGameStore
     public bool IsUnavailable { get; set; }
 
     /// <summary>
+    ///     When set, asking for pending migrations throws this, the way a database that answers with an error of its
+    ///     own (a refused password, say) fails rather than being unreachable.
+    /// </summary>
+    public Exception? MigrationQueryFailure { get; set; }
+
+    /// <summary>
     ///     When set, the next character created gets this ID instead of the next free one, so a test can name it.
     /// </summary>
     public long? NextCharacterId { get; set; }
@@ -83,6 +89,11 @@ internal sealed class InMemoryGameStore : IGameStore
     public Task<IReadOnlyList<string>> GetPendingMigrationsAsync(CancellationToken cancellationToken)
     {
         ThrowIfUnavailable();
+        if (MigrationQueryFailure != null)
+        {
+            throw MigrationQueryFailure;
+        }
+
         return Task.FromResult(PendingMigrations);
     }
 

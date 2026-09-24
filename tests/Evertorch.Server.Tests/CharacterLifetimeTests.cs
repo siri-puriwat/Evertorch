@@ -225,6 +225,52 @@ public sealed class CharacterLifetimeTests
     }
 
     [Test]
+    public void Logout_AfterAMoveQueuedInTheSameTick_LeavesTheCharacterWhereItsCheckpointWasTaken()
+    {
+        var server = new TestServer();
+        ConnectionId connection = server.EnterWorld(7);
+        server.RunsPersistence = false;
+        WorldPosition before = server.PlayerOf(connection).Position;
+
+        server.SendMove(connection, 1, 1f, 0f);
+        server.SendLogout(connection, 1);
+        server.Tick(3);
+
+        Assert.That(server.PlayerOf(connection).Position, Is.EqualTo(before));
+        Assert.That(
+            server.SessionOf(connection).Input!.LastProcessedSequence,
+            Is.EqualTo(1u),
+            "the move is acknowledged, not applied");
+    }
+
+    [Test]
+    public void Logout_QueuedBehindACheckpointThatMeetsAnOutage_IsCancelledAndTheCharacterPlaysOn()
+    {
+        var server = new TestServer();
+        ConnectionId first = server.EnterWorld(7);
+        ConnectionId second = server.EnterWorld(8);
+        server.SendLogout(first, 1);
+        server.SendLogout(second, 1);
+        server.Tick();
+        server.Store.IsUnavailable = true;
+
+        // The first logout's checkpoint meets the outage; the second one's is never tried while it lasts.
+        server.Tick(2);
+        WorldPosition before = server.PlayerOf(second).Position;
+        server.SendMove(second, 1, 1f, 0f);
+        server.Tick(2);
+
+        Assert.That(server.SessionOf(second).Character!.IsLoggingOut, Is.False);
+        Assert.That(server.PlayerOf(second).Position, Is.Not.EqualTo(before), "the player plays on");
+        InMemoryServerTransport.SentMessage rejected = server.Transport.ControlSentTo(second)
+            .Single(message => message.Opcode == MessageOpcode.CommandRejected);
+        CommandRejected.TryRead(rejected.Payload, out CommandRejected refusal);
+        Assert.That(refusal.CommandSequence, Is.EqualTo(1u));
+        Assert.That(refusal.Reason, Is.EqualTo(CommandRejectionReason.ServiceUnavailable));
+        Assert.That(server.Transport.ControlOpcodesSentTo(second), Has.None.EqualTo(MessageOpcode.LogoutComplete));
+    }
+
+    [Test]
     public void Logout_ThenEnterAgain_ContinuesFromTheCheckpoint()
     {
         var server = new TestServer();

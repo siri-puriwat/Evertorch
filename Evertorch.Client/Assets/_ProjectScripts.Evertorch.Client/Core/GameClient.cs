@@ -313,15 +313,21 @@ public sealed class GameClient : MonoBehaviour
         }
     }
 
-    private void OnCharactersChanged()
+    /// <summary>
+    ///     The status line after a character list, or null to keep the current one. While an entry is unanswered the
+    ///     player can still create a character, and the list that follows says why a creation was refused; a list that
+    ///     only crossed the entry request says nothing new.
+    /// </summary>
+    public static string? CharacterListStatus(ClientConnectionState state, CreateCharacterOutcome outcome)
     {
-        ClientConnection? connection = Connection;
-        if (connection == null || connection.State != ClientConnectionState.SelectingCharacter)
+        bool isAnswer = state == ClientConnectionState.SelectingCharacter
+            || (state == ClientConnectionState.EnteringWorld && outcome != CreateCharacterOutcome.None);
+        if (!isAnswer)
         {
-            return;
+            return null;
         }
 
-        Status = connection.LastCreateOutcome switch
+        return outcome switch
         {
             CreateCharacterOutcome.None => "Choose or create a character",
             CreateCharacterOutcome.Created => "Character created",
@@ -330,6 +336,18 @@ public sealed class GameClient : MonoBehaviour
             CreateCharacterOutcome.LimitReached => "Refused: an account holds at most 3 characters",
             _ => "The server cannot create characters right now; try again"
         };
+    }
+
+    private void OnCharactersChanged()
+    {
+        ClientConnection? connection = Connection;
+        string? status = connection == null
+            ? null
+            : CharacterListStatus(connection.State, connection.LastCreateOutcome);
+        if (status != null)
+        {
+            Status = status;
+        }
     }
 
     private void OnLeftWorld()

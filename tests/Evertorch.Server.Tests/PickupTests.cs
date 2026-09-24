@@ -228,6 +228,34 @@ public sealed class PickupTests
     }
 
     [Test]
+    public void Logout_WaitingForAPickupWhoseCommitMeetsAnOutage_IsCancelledAndTheCharacterPlaysOn()
+    {
+        var server = new TestServer();
+        ConnectionId picker = server.EnterWorld(1);
+        ItemDropEntity drop = Drop(server, NextTo(server.PlayerOf(picker), 1f));
+        server.SendPickup(picker, drop.Id, 1);
+        server.SendLogout(picker, 2);
+        server.Tick();
+        server.Store.IsUnavailable = true;
+
+        server.Tick(2);
+
+        Assert.That(server.SessionOf(picker).Character!.IsLoggingOut, Is.False);
+        Assert.That(
+            Rejections(server, picker).Select(rejected => (rejected.CommandSequence, rejected.Reason)),
+            Is.EqualTo(new[] { (2u, CommandRejectionReason.ServiceUnavailable) }),
+            "the logout is answered; the pickup stays unsettled until the ledger answers");
+
+        server.Store.IsUnavailable = false;
+        server.TickUntil(() => server.SessionOf(picker).Character!.Pickup == null);
+        server.Tick(2);
+
+        Assert.That(server.SessionOf(picker).State, Is.EqualTo(SessionState.InWorld));
+        Assert.That(Rejections(server, picker).Last().CommandSequence, Is.EqualTo(1u));
+        Assert.That(server.Transport.ControlOpcodesSentTo(picker), Has.None.EqualTo(MessageOpcode.LogoutComplete));
+    }
+
+    [Test]
     public void Logout_WithAPickupInFlight_WaitsForItThenCompletes()
     {
         var server = new TestServer();

@@ -114,8 +114,11 @@ internal sealed class LiveDatabase : IDisposable
                 return false;
             }
 
-            output = standardOutput.Result + standardError.Result;
-            return process.ExitCode == 0;
+            // Docker reports progress, such as pulling a missing image, on stderr; a successful command's output is
+            // stdout alone, or a container ID would carry the pull log with it.
+            bool isSuccess = process.ExitCode == 0;
+            output = isSuccess ? standardOutput.Result : standardOutput.Result + standardError.Result;
+            return isSuccess;
         }
         catch (Exception exception) when (exception is InvalidOperationException
                                           || exception is Win32Exception)

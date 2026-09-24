@@ -88,6 +88,29 @@ public sealed class ClientConnectionTests
     }
 
     [Test]
+    public void CharacterList_AfterALogout_IsNotTakenForTheAnswerToAnEarlierCreation()
+    {
+        var harness = new Harness();
+        harness.ConnectAndReceiveHello();
+        harness.ReceiveList();
+        harness.Connection.CreateCharacter("Ann0");
+        var result = new CreateCharacterResult(CreateCharacterOutcome.Created, new CharacterId(7));
+        harness.Deliver(ProtocolChannel.Control, Encode(CreateCharacterResult.EncodedLength, result.Write));
+        harness.ReceiveList(Entry(7, "Ann0"));
+        harness.Connection.EnterWorld(new CharacterId(7));
+        WorldEntered entered = ClientWorldFixture.Entered(Start);
+        harness.Deliver(ProtocolChannel.Control, Encode(entered.GetEncodedLength(), entered.Write));
+
+        harness.Deliver(ProtocolChannel.Control, Encode(LogoutComplete.EncodedLength, new LogoutComplete().Write));
+        harness.ReceiveList(Entry(7, "Ann0"));
+
+        Assert.That(harness.Connection.LastCreateOutcome, Is.EqualTo(CreateCharacterOutcome.None));
+        Assert.That(
+            GameClient.CharacterListStatus(harness.Connection.State, harness.Connection.LastCreateOutcome),
+            Is.EqualTo("Choose or create a character"));
+    }
+
+    [Test]
     public void CharacterList_BeforeTheHello_IsUnexpected()
     {
         var harness = new Harness();
@@ -99,6 +122,21 @@ public sealed class ClientConnectionTests
 
         Assert.That(harness.Connection.UnexpectedMessages, Is.EqualTo(1));
         Assert.That(harness.Connection.Characters, Is.Empty);
+    }
+
+    [Test]
+    public void CharacterList_ThatOnlyCrossedAnEntryRequest_KeepsTheStatusLine()
+    {
+        var harness = new Harness();
+        harness.ConnectAndReceiveHello();
+        harness.ReceiveList(Entry(7, "Ann0"));
+        harness.Connection.EnterWorld(new CharacterId(7));
+
+        harness.ReceiveList(Entry(7, "Ann0"));
+
+        Assert.That(
+            GameClient.CharacterListStatus(harness.Connection.State, harness.Connection.LastCreateOutcome),
+            Is.Null);
     }
 
     [Test]
@@ -238,6 +276,25 @@ public sealed class ClientConnectionTests
         Assert.That(harness.Connection.State, Is.EqualTo(ClientConnectionState.Disconnected));
         Assert.That(harness.Connection.LocalError, Is.Not.Empty);
         Assert.That(harness.ClosedCount, Is.EqualTo(1));
+    }
+
+    [Test]
+    public void CreateCharacter_RefusedWhileAnEntryIsUnanswered_SaysWhyOnTheStatusLine()
+    {
+        var harness = new Harness();
+        harness.ConnectAndReceiveHello();
+        harness.ReceiveList(Entry(7, "Ann0"));
+        harness.Connection.EnterWorld(new CharacterId(7));
+
+        harness.Connection.CreateCharacter("ab");
+        var result = new CreateCharacterResult(CreateCharacterOutcome.NameInvalid, default);
+        harness.Deliver(ProtocolChannel.Control, Encode(CreateCharacterResult.EncodedLength, result.Write));
+        harness.ReceiveList(Entry(7, "Ann0"));
+
+        Assert.That(harness.Connection.State, Is.EqualTo(ClientConnectionState.EnteringWorld));
+        Assert.That(
+            GameClient.CharacterListStatus(harness.Connection.State, harness.Connection.LastCreateOutcome),
+            Does.StartWith("Name refused"));
     }
 
     [Test]
