@@ -1,8 +1,6 @@
 using System;
-using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Threading;
 using Evertorch.Client;
 using Evertorch.Game;
 using Evertorch.Persistence;
@@ -21,113 +19,6 @@ namespace Evertorch.Server.Tests
 [NonParallelizable]
 public sealed class RealClientOverSocketTests
 {
-    private static readonly TimeSpan Limit = TimeSpan.FromSeconds(15);
-
-    private static bool PumpUntil(ClientConnection connection, Ticker? ticker, Func<bool> condition)
-    {
-        var elapsed = Stopwatch.StartNew();
-        while (elapsed.Elapsed < Limit)
-        {
-            connection.Poll();
-            ticker?.Run();
-            if (condition())
-            {
-                return true;
-            }
-
-            Thread.Sleep(1);
-        }
-
-        return false;
-    }
-
-    private static float Distance(WorldPosition left, WorldPosition right)
-    {
-        float deltaX = left.X - right.X;
-        float deltaZ = left.Z - right.Z;
-        return (float)Math.Sqrt(deltaX * deltaX + deltaZ * deltaZ);
-    }
-
-    /// <summary>
-    ///     What the Unity frame loop does for the client: whole ticks at the server's rate, from a real clock.
-    /// </summary>
-    private sealed class Ticker
-    {
-        private readonly LocalPlayerDriver m_driver;
-        private readonly ClientWorld m_world;
-        private readonly Stopwatch m_clock;
-        private readonly FixedTickClock m_ticks;
-        private double m_last;
-
-        public Ticker(LocalPlayerDriver driver, ClientWorld world, Stopwatch clock, double tickSeconds)
-        {
-            m_driver = driver;
-            m_world = world;
-            m_clock = clock;
-            m_ticks = new FixedTickClock((float)tickSeconds);
-            m_last = clock.Elapsed.TotalSeconds;
-        }
-
-        public void Run()
-        {
-            double now = m_clock.Elapsed.TotalSeconds;
-            float delta = (float)(now - m_last);
-            m_last = now;
-            int due = m_ticks.Advance(delta);
-            for (int index = 0; index < due; index++)
-            {
-                m_driver.Tick(m_ticks.NextTick());
-            }
-
-            m_world.Advance(delta);
-        }
-    }
-
-    private sealed class ContentMaps : IMapProvider
-    {
-        private readonly ServerContent m_content;
-
-        public ContentMaps(ServerContent content)
-        {
-            m_content = content;
-        }
-
-        public bool TryGetNavigation(MapDefinitionId map, out NavigationGrid? grid)
-        {
-            bool found = m_content.Maps.TryGetValue(map, out MapDefinition? definition);
-            grid = definition?.Navigation;
-            return found;
-        }
-    }
-
-    private static ClientConnection EnterOverSocket(
-        LiteNetLibClientTransport socket,
-        ServerContent content,
-        int port,
-        string identity,
-        string name)
-    {
-        var connection = new ClientConnection(
-            socket,
-            new ClientConnectionSettings(
-                CompatibilityOptions.DefaultBuildVersion,
-                content.ClientContentVersion,
-                $"dev:{identity}"),
-            new ContentMaps(content));
-        var selection = new AutoEnter(connection, name);
-        connection.Connect("127.0.0.1", port);
-        bool isEntered = PumpUntil(
-            connection,
-            null,
-            () =>
-            {
-                selection.Poll();
-                return connection.World?.Inventory.IsCurrent == true;
-            });
-        Assert.That(isEntered, Is.True, $"entered the world: {connection.LocalError} {connection.DisconnectCause}");
-        return connection;
-    }
-
     [Test]
     public void Client_ReconnectingOverTheSocket_GetsTheSameEntityAndAFreshBaselineWithoutASecondLoad()
     {
@@ -143,20 +34,19 @@ public sealed class RealClientOverSocketTests
         int port = host.Services.GetRequiredService<IServerTransport>().LocalPort;
         ServerContent content = host.Services.GetRequiredService<ServerContent>();
 
-        using var firstSocket = new LiteNetLibClientTransport("evertorch", 5000);
-        ClientConnection first = EnterOverSocket(firstSocket, content, port, "socket-reconnect", "Socket23");
-        EntityId entity = first.World!.LocalEntity;
-        long character = first.Characters.Single().Character.Value;
+        using var first = new SocketClient(content, "socket-reconnect", "Socket23");
+        first.EnterWorld(port);
+        EntityId entity = first.World.LocalEntity;
+        long character = first.Connection.Characters.Single().Character.Value;
         first.Disconnect();
-        Assert.That(PumpUntil(first, null, () => first.State == ClientConnectionState.Disconnected), Is.True);
 
-        using var secondSocket = new LiteNetLibClientTransport("evertorch", 5000);
-        ClientConnection second = EnterOverSocket(secondSocket, content, port, "socket-reconnect", "Socket23");
+        using var second = new SocketClient(content, "socket-reconnect", "Socket23");
+        second.EnterWorld(port);
 
-        Assert.That(second.World!.LocalEntity, Is.EqualTo(entity), "attached to the retained entity");
+        Assert.That(second.World.LocalEntity, Is.EqualTo(entity), "attached to the retained entity");
         Assert.That(second.World.Inventory.IsCurrent, Is.True, "the baseline ended with the inventory");
         Assert.That(store.Loads[character], Is.EqualTo(1), "no second copy was loaded");
-        Assert.That(second.MalformedMessages + second.UnexpectedMessages, Is.Zero);
+        Assert.That(second.Connection.MalformedMessages + second.Connection.UnexpectedMessages, Is.Zero);
         Assert.That(
             host.Services.GetRequiredService<SessionRegistry>().Characters,
             Has.Count.EqualTo(1));
@@ -179,52 +69,27 @@ public sealed class RealClientOverSocketTests
         ServerContent content = host.Services.GetRequiredService<ServerContent>();
         IAdminCommandService admin = host.Services.GetRequiredService<IAdminCommandService>();
 
-        var clock = Stopwatch.StartNew();
-        using var socket = new LiteNetLibClientTransport("evertorch", 5000);
-        var link = new LossyTransport(socket, 4, () => clock.Elapsed.TotalSeconds)
-        {
-            LatencyMilliseconds = 50,
-            JitterMilliseconds = 10,
-            LossPercent = 10,
-            ReorderPercent = 5
-        };
-        var connection = new ClientConnection(
-            link,
-            new ClientConnectionSettings(
-                CompatibilityOptions.DefaultBuildVersion,
-                content.ClientContentVersion,
-                "dev:socket-test"),
-            new ContentMaps(content));
-        var selection = new AutoEnter(connection, "Socket21");
-
-        connection.Connect("127.0.0.1", port);
+        using var client = new SocketClient(content, "socket-test", "Socket21");
+        LossyTransport link = client.Link;
+        link.LatencyMilliseconds = 50;
+        link.JitterMilliseconds = 10;
+        link.LossPercent = 10;
+        link.ReorderPercent = 5;
+        client.Connect(port);
         Assert.That(
-            PumpUntil(
-                connection,
-                null,
-                () =>
-                {
-                    selection.Poll();
-                    return connection.State == ClientConnectionState.InWorld;
-                }),
+            client.PumpUntil(() => client.Connection.State == ClientConnectionState.InWorld),
             Is.True,
-            $"entered the world: {connection.LocalError} {connection.DisconnectCause}");
-        ClientWorld world = connection.World!;
-        var controller = new MovementController(world.Grid);
-        var driver = new LocalPlayerDriver(controller, new MoveIntentProducer(), world, connection);
-        var ticker = new Ticker(driver, world, clock, 1.0 / connection.ServerTickRate);
+            $"entered the world: {client.Connection.LocalError} {client.Connection.DisconnectCause}");
+        ClientWorld world = client.World;
 
-        controller.SetManualDirection(1f, 0.5f);
-        TimeSpan walkUntil = clock.Elapsed + TimeSpan.FromSeconds(1.5);
-        PumpUntil(connection, ticker, () => clock.Elapsed >= walkUntil);
-        controller.SetManualDirection(0f, 0f);
+        client.Controller.SetManualDirection(1f, 0.5f);
+        client.PumpFor(TimeSpan.FromSeconds(1.5));
+        client.Controller.SetManualDirection(0f, 0f);
 
         // The admin view is republished once a second, so agreement shows up within two of those.
-        bool agreed = PumpUntil(
-            connection,
-            ticker,
-            () => world.Predictor.PendingCount == 0
-                && admin.GetPlayers().Any(player => Distance(player.Position, world.Predictor.Position) <= 1e-3f));
+        bool agreed = client.PumpUntil(() =>
+            world.Predictor.PendingCount == 0
+            && admin.GetPlayers().Any(player => client.DistanceTo(player.Position) <= 1e-3f));
 
         WorldPosition predicted = world.Predictor.Position;
         string serverView = string.Join(", ", admin.GetPlayers().Select(player => player.Position.ToString()));
@@ -232,18 +97,18 @@ public sealed class RealClientOverSocketTests
         Assert.That(predicted.X, Is.GreaterThan(3f), "the player really walked");
         Assert.That(link.Dropped, Is.GreaterThan(0), "the link really lost messages");
         Assert.That(world.Smoother.Snaps, Is.EqualTo(0));
-        Assert.That(connection.MalformedMessages, Is.EqualTo(0));
+        Assert.That(client.Connection.MalformedMessages, Is.EqualTo(0));
 
         host.StopAsync().GetAwaiter().GetResult();
         Assert.That(
-            PumpUntil(connection, null, () => connection.State == ClientConnectionState.Disconnected),
+            client.PumpUntil(() => client.Connection.State == ClientConnectionState.Disconnected),
             Is.True);
-        Assert.That(connection.Notice, Is.Not.Null, "the shutdown notice reached the client's own transport");
+        Assert.That(client.Connection.Notice, Is.Not.Null, "the shutdown notice reached the client's own transport");
         Assert.That(
             store.Checkpoints,
             Has.Some.Matches<CharacterCheckpoint>(checkpoint => checkpoint.Position.X > 3f),
             "the controlled shutdown checkpointed the character where it walked to");
-        Assert.That(connection.Notice!.Reason, Is.EqualTo(DisconnectReason.Maintenance));
+        Assert.That(client.Connection.Notice!.Reason, Is.EqualTo(DisconnectReason.Maintenance));
     }
 }
 }

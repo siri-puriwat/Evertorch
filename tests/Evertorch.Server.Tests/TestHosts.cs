@@ -1,5 +1,6 @@
 using System.Linq;
 using Evertorch.Persistence;
+using Evertorch.Rules;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
@@ -36,6 +37,17 @@ internal static class TestHosts
         string connectionString)
     {
         return ServerHost.CreateBuilder(WithDatabase(args, connectionString), contentRootPath);
+    }
+
+    /// <summary>
+    ///     Gives combat and drops their own random sources. The host draws every outcome from one source, and over
+    ///     real sockets the network's timing decides which draw each roll gets, so a seed alone cannot script a fight.
+    ///     Monster placement and AI keep the server's own source.
+    /// </summary>
+    public static void ScriptOutcomes(HostApplicationBuilder builder, IRandomSource combat, IRandomSource drops)
+    {
+        builder.Services.AddSingleton(services => ActivatorUtilities.CreateInstance<ItemDropSystem>(services, drops));
+        builder.Services.AddSingleton(services => ActivatorUtilities.CreateInstance<CombatSystem>(services, combat));
     }
 
     private static string[] WithDatabase(string[] args, string connectionString)
