@@ -224,10 +224,10 @@ public sealed class LiteNetLibServerTransport : IServerTransport, INetEventListe
         m_isAdmissionClosed = true;
     }
 
-    public void Stop(DisconnectReason reason)
+    public void Stop(DisconnectReason reason, string message)
     {
         CloseAdmission();
-        byte[] notice = EncodeNotice(reason, string.Empty);
+        byte[] notice = EncodeNotice(reason, message);
         foreach (KeyValuePair<ConnectionId, NetPeer> entry in m_peers)
         {
             MarkClosedByServer(entry.Value);

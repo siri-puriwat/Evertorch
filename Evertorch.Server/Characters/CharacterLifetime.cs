@@ -246,5 +246,25 @@ public sealed class CharacterLifetime
             QueueCheckpoint(character);
         }
     }
+
+    /// <summary>
+    ///     The console's <c>save</c> (Persistence §6): a checkpoint for every character in the world or in its grace
+    ///     period. A character logging out is left alone: its final checkpoint is already on its way, and replacing it in
+    ///     its slot would drop the completion that finishes the logout. Returns the number queued.
+    /// </summary>
+    public int SaveAll()
+    {
+        int queued = 0;
+        foreach (CharacterSession character in m_sessions.Characters)
+        {
+            if (!character.IsLoggingOut)
+            {
+                QueueCheckpoint(character);
+                queued++;
+            }
+        }
+
+        return queued;
+    }
 }
 }

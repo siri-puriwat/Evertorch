@@ -30,9 +30,9 @@ public interface IServerTransport : IOutboundMessages, ITransportStatistics
     void CloseAdmission();
 
     /// <summary>
-    ///     Tells every peer the server is going away, with <paramref name="reason" />, closes them, and releases the
-    ///     socket.
+    ///     Tells every peer the server is going away, with <paramref name="reason" /> and <paramref name="message" />,
+    ///     closes them, and releases the socket.
     /// </summary>
-    void Stop(DisconnectReason reason);
+    void Stop(DisconnectReason reason, string message);
 }
 }

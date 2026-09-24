@@ -11,9 +11,11 @@ namespace Evertorch.Server
 /// </summary>
 public sealed class AdminConsole
 {
-    private const string Help = "Commands: status, players, help";
+    private const string Help = "Commands: status, players, save, shutdown [reason], help";
+    private const string ShutdownCommand = "shutdown";
 
     private readonly IAdminCommandService m_commands;
+    private readonly AdminActor m_actor = AdminActor.LocalConsole;
 
     public AdminConsole(IAdminCommandService commands)
     {
@@ -48,11 +50,22 @@ public sealed class AdminConsole
 
         if (string.Equals(command, "status", StringComparison.OrdinalIgnoreCase))
         {
-            WriteStatus(m_commands.GetStatus(), output);
+            WriteStatus(m_commands.GetStatus(m_actor), output);
         }
         else if (string.Equals(command, "players", StringComparison.OrdinalIgnoreCase))
         {
-            WritePlayers(m_commands.GetPlayers(), output);
+            WritePlayers(m_commands.GetPlayers(m_actor), output);
+        }
+        else if (string.Equals(command, "save", StringComparison.OrdinalIgnoreCase))
+        {
+            // The count arrives with the audit event, once a tick has run the save.
+            _ = m_commands.SaveAsync(m_actor);
+            output.WriteLine("Save queued for the next tick.");
+        }
+        else if (IsShutdown(command, out string reason))
+        {
+            m_commands.Shutdown(m_actor, reason);
+            output.WriteLine("Shutting down.");
         }
         else if (string.Equals(command, "help", StringComparison.OrdinalIgnoreCase))
         {
@@ -62,6 +75,29 @@ public sealed class AdminConsole
         {
             output.WriteLine($"Unknown command. {Help}");
         }
+    }
+
+    // "shutdown" alone, or followed by white space and the reason.
+    private static bool IsShutdown(string command, out string reason)
+    {
+        reason = string.Empty;
+        if (!command.StartsWith(ShutdownCommand, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        if (command.Length == ShutdownCommand.Length)
+        {
+            return true;
+        }
+
+        if (!char.IsWhiteSpace(command[ShutdownCommand.Length]))
+        {
+            return false;
+        }
+
+        reason = command.Substring(ShutdownCommand.Length).Trim();
+        return true;
     }
 
     private static void WriteStatus(ServerStatus status, TextWriter output)

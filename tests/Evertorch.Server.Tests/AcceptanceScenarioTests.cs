@@ -168,7 +168,9 @@ public sealed class AcceptanceScenarioTests
             // disconnect discards it. The pickup itself already went to the socket.
             client.Link.LatencyMilliseconds = 10000;
             bool isCommitted = client.PumpUntil(Every(StoreCheckInterval, () => StoredGel() == 2));
-            string refused = string.Join(", ", admin.GetPlayers().Select(player => player.RefusedCommands));
+            string refused = string.Join(
+                ", ",
+                admin.GetPlayers(AdminActor.LocalConsole).Select(player => player.RefusedCommands));
             Assert.That(isCommitted, Is.True, $"in flight: the pickup was committed (refused commands: {refused})");
             Assert.That(GelIn(client.World), Is.EqualTo(1), "in flight: the client has not heard the answer");
             AssertCleanTraffic(client, "in flight");
@@ -275,9 +277,11 @@ public sealed class AcceptanceScenarioTests
         // The admin view is republished once a second, so agreement shows up within two of those.
         bool isConverged = client.PumpUntil(() =>
             world.Predictor.PendingCount == 0
-            && admin.GetPlayers().Any(player =>
+            && admin.GetPlayers(AdminActor.LocalConsole).Any(player =>
                 player.Entity == world.LocalEntity && client.DistanceTo(player.Position) <= ConvergedDistance));
-        string serverView = string.Join(", ", admin.GetPlayers().Select(player => player.Position.ToString()));
+        string serverView = string.Join(
+            ", ",
+            admin.GetPlayers(AdminActor.LocalConsole).Select(player => player.Position.ToString()));
         Assert.That(
             isConverged,
             Is.True,

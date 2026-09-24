@@ -29,6 +29,8 @@ internal sealed class InMemoryServerTransport : IServerTransport
     /// </summary>
     public DisconnectReason? StoppedWith { get; private set; }
 
+    public string StoppedWithMessage { get; private set; } = string.Empty;
+
     public int LocalPort => 0;
 
     public bool IsAdmissionOpen { get; private set; } = true;
@@ -74,10 +76,11 @@ internal sealed class InMemoryServerTransport : IServerTransport
         IsAdmissionOpen = false;
     }
 
-    public void Stop(DisconnectReason reason)
+    public void Stop(DisconnectReason reason, string message)
     {
         CloseAdmission();
         StoppedWith = reason;
+        StoppedWithMessage = message;
     }
 
     public TransportStatistics GetStatistics()

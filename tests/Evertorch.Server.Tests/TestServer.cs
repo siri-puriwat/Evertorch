@@ -5,6 +5,8 @@ using Evertorch.Game;
 using Evertorch.Persistence;
 using Evertorch.Protocol;
 using Evertorch.Rules;
+using Microsoft.Extensions.Hosting.Internal;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
 namespace Evertorch.Server.Tests
@@ -143,6 +145,7 @@ internal sealed class TestServer
             Instruments,
             Audit,
             Log);
+        AdminQueue = new AdminQueue(Lifetime, Audit);
         Drops = new ItemDropSystem(World, dropRandom ?? Random, Options.Create(world), simulation);
         Combat = new CombatSystem(
             World,
@@ -168,6 +171,7 @@ internal sealed class TestServer
             Clock,
             Instruments,
             simulation);
+        Admin = new AdminCommandService(Status, AdminQueue, Shutdown, ApplicationLifetime, Audit);
         var phases = new List<ITickPhase>
         {
             Status,
@@ -180,6 +184,7 @@ internal sealed class TestServer
             SessionManager,
             new RecordingPhase(TickPhase.ApplyCommands, "test", new List<string>(), _ => RunAfterCommands()),
             new CheckpointScheduler(Sessions, Lifetime),
+            AdminQueue,
             Pickups
         };
         if (withMonsterAi)
@@ -248,6 +253,17 @@ internal sealed class TestServer
     public CapturingLogger<PickupSystem> PickupLog { get; } = new();
 
     public AuditLog Audit { get; }
+
+    public AdminQueue AdminQueue { get; }
+
+    public AdminCommandService Admin { get; }
+
+    public ShutdownRequest Shutdown { get; } = new();
+
+    /// <summary>
+    ///     The host's lifetime as the admin service sees it: a <c>shutdown</c> stops it.
+    /// </summary>
+    public ApplicationLifetime ApplicationLifetime { get; } = new(NullLogger<ApplicationLifetime>.Instance);
 
     /// <summary>
     ///     What the server wrote to the audit category (<see cref="LogCategories.Audit" />).

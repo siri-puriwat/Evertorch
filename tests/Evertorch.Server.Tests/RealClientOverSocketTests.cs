@@ -89,10 +89,12 @@ public sealed class RealClientOverSocketTests
         // The admin view is republished once a second, so agreement shows up within two of those.
         bool agreed = client.PumpUntil(() =>
             world.Predictor.PendingCount == 0
-            && admin.GetPlayers().Any(player => client.DistanceTo(player.Position) <= 1e-3f));
+            && admin.GetPlayers(AdminActor.LocalConsole).Any(player => client.DistanceTo(player.Position) <= 1e-3f));
 
         WorldPosition predicted = world.Predictor.Position;
-        string serverView = string.Join(", ", admin.GetPlayers().Select(player => player.Position.ToString()));
+        string serverView = string.Join(
+            ", ",
+            admin.GetPlayers(AdminActor.LocalConsole).Select(player => player.Position.ToString()));
         Assert.That(agreed, Is.True, $"client at {predicted}, server reports {serverView}");
         Assert.That(predicted.X, Is.GreaterThan(3f), "the player really walked");
         Assert.That(link.Dropped, Is.GreaterThan(0), "the link really lost messages");

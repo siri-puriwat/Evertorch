@@ -5,6 +5,7 @@ using System.Reflection;
 using System.Threading;
 using Evertorch.Game;
 using Evertorch.Protocol;
+using Microsoft.Extensions.Hosting;
 using NUnit.Framework;
 
 namespace Evertorch.Server.Tests
@@ -12,7 +13,8 @@ namespace Evertorch.Server.Tests
 [TestFixture]
 public sealed class TelemetryTests
 {
-    [TestCase("shutdown")]
+    [TestCase("shutdownnow")]
+    [TestCase("save now")]
     [TestCase("teleport 1 2 3")]
     [TestCase("status now")]
     public void Execute_UnknownCommand_PrintsHelpAndDoesNothingElse(string line)
@@ -21,7 +23,9 @@ public sealed class TelemetryTests
 
         CreateConsole(new TestServer()).Execute(line, output);
 
-        Assert.That(output.ToString().Trim(), Is.EqualTo("Unknown command. Commands: status, players, help"));
+        Assert.That(
+            output.ToString().Trim(),
+            Is.EqualTo("Unknown command. Commands: status, players, save, shutdown [reason], help"));
     }
 
     [TestCase("")]
@@ -37,7 +41,7 @@ public sealed class TelemetryTests
 
     private static AdminConsole CreateConsole(TestServer server)
     {
-        return new AdminConsole(new AdminCommandService(server.Status));
+        return new AdminConsole(server.Admin);
     }
 
     private static ServerMetrics CreateMetrics(out CapturingLogger<TickLogObserver> log)
@@ -46,8 +50,10 @@ public sealed class TelemetryTests
         return new ServerMetrics(new TickLogObserver(log, new FakeClock()), TestInstruments.Create());
     }
 
+    // The console thread reads only the published status; what acts on the world waits in the queue for the tick
+    // thread, and a shutdown goes to the host.
     [Test]
-    public void AdminCommandService_DependsOnlyOnThePublishedStatus()
+    public void AdminCommandService_DependsOnNothingThatTouchesTheWorldFromItsCaller()
     {
         Type[] dependencies = typeof(AdminCommandService)
             .GetConstructors()
@@ -56,7 +62,17 @@ public sealed class TelemetryTests
             .Select(parameter => parameter.ParameterType)
             .ToArray();
 
-        Assert.That(dependencies, Is.EqualTo(new[] { typeof(StatusPublisher) }));
+        Assert.That(
+            dependencies,
+            Is.EquivalentTo(
+                new[]
+                {
+                    typeof(StatusPublisher),
+                    typeof(AdminQueue),
+                    typeof(ShutdownRequest),
+                    typeof(IHostApplicationLifetime),
+                    typeof(AuditLog)
+                }));
     }
 
     [Test]
@@ -184,7 +200,7 @@ public sealed class TelemetryTests
 
         CreateConsole(new TestServer()).Run(input, output, CancellationToken.None);
 
-        Assert.That(output.ToString().Trim(), Is.EqualTo("Commands: status, players, help"));
+        Assert.That(output.ToString().Trim(), Is.EqualTo("Commands: status, players, save, shutdown [reason], help"));
     }
 
     [Test]

@@ -45,6 +45,7 @@ public sealed class ServerLifetimeService : IHostedService, IDisposable
     private readonly IServerTransport m_transport;
     private readonly PersistenceWorker m_persistence;
     private readonly CharacterLifetime m_characters;
+    private readonly ShutdownRequest m_shutdown;
     private readonly int m_drainTimeoutMs;
     private readonly int m_joinTimeoutMs;
     private readonly FixedStepLoop m_loop;
@@ -64,6 +65,7 @@ public sealed class ServerLifetimeService : IHostedService, IDisposable
         IServerTransport transport,
         PersistenceWorker persistence,
         CharacterLifetime characters,
+        ShutdownRequest shutdown,
         IOptions<PersistenceOptions> persistenceOptions,
         FixedStepLoop loop,
         IHostApplicationLifetime lifetime,
@@ -75,6 +77,7 @@ public sealed class ServerLifetimeService : IHostedService, IDisposable
         m_transport = transport;
         m_persistence = persistence;
         m_characters = characters;
+        m_shutdown = shutdown;
         m_drainTimeoutMs = persistenceOptions.Value.CommandTimeoutMs;
         m_joinTimeoutMs = persistenceOptions.Value.CommandTimeoutMs;
         m_loop = loop;
@@ -158,7 +161,14 @@ public sealed class ServerLifetimeService : IHostedService, IDisposable
         finally
         {
             m_persistence.Stop(m_drainTimeoutMs);
-            m_transport.Stop(HasFailed ? DisconnectReason.InternalError : DisconnectReason.Maintenance);
+            if (HasFailed)
+            {
+                m_transport.Stop(DisconnectReason.InternalError, string.Empty);
+            }
+            else
+            {
+                m_transport.Stop(DisconnectReason.Maintenance, m_shutdown.Message);
+            }
         }
 
         return Task.CompletedTask;

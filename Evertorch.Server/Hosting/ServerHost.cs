@@ -109,9 +109,12 @@ public static class ServerHost
         builder.Services.AddSingleton<ITickPhase, InventorySyncPhase>();
         builder.Services.AddSingleton<ITickPhase, SnapshotPhase>();
         builder.Services.AddSingleton<ITickPhase, CheckpointScheduler>();
+        builder.Services.AddSingleton<AdminQueue>();
+        builder.Services.AddSingleton<ITickPhase>(services => services.GetRequiredService<AdminQueue>());
         builder.Services.AddSingleton<StatusPublisher>();
         builder.Services.AddSingleton<ITickPhase>(services => services.GetRequiredService<StatusPublisher>());
 
+        builder.Services.AddSingleton<ShutdownRequest>();
         builder.Services.AddSingleton<IAdminCommandService, AdminCommandService>();
         builder.Services.AddSingleton<AdminConsole>();
         builder.Services.AddHostedService<ConsoleCommandService>();

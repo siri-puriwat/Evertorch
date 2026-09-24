@@ -443,7 +443,7 @@ public sealed class LiteNetLibServerTransportTests
         using var harness = new Harness();
         using TestNetClient client = ConnectedClient(harness, out ConnectionId _);
 
-        harness.Transport.Stop(DisconnectReason.Maintenance);
+        harness.Transport.Stop(DisconnectReason.Maintenance, string.Empty);
 
         Assert.That(client.WaitFor(() => client.IsDisconnected), Is.True);
         Assert.That(client.Notice!.Reason, Is.EqualTo(DisconnectReason.Maintenance));

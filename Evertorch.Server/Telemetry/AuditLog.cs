@@ -6,11 +6,12 @@ using Microsoft.Extensions.Logging;
 namespace Evertorch.Server
 {
 /// <summary>
-///     The audit events of the abuse controls (Network Protocol §11), in their own category (System Architecture §10):
-///     refusals at Debug, and violations and the disconnects they cause at Information. A connection writes at most
-///     <see cref="EventsPerConnection" /> a second, and each event at most <see cref="EventsPerKind" /> a second over
-///     all connections; the meter keeps the exact counts. Connections, accounts, and characters appear only as
-///     numbers: no event carries payload bytes, a token, an identity, or a connection string.
+///     The audit events, in their own category (System Architecture §10). Those of the abuse controls (Network Protocol
+///     §11) are refusals at Debug, and violations and the disconnects they cause at Information; a connection writes at
+///     most <see cref="EventsPerConnection" /> a second, and each event at most <see cref="EventsPerKind" /> a second
+///     over all connections, while the meter keeps the exact counts. Connections, accounts, and characters appear only
+///     as numbers: no event carries payload bytes, a token, an identity, or a connection string. Operator commands
+///     are recorded at Information with their actor, and never held back.
 /// </summary>
 public sealed class AuditLog
 {
@@ -52,6 +53,18 @@ public sealed class AuditLog
             LogLevel.Debug,
             new EventId(5005, "ConnectionRefused"),
             "Connection {Connection} (account {Account}) was refused by the {Limit} limit ({Suppressed} held back).");
+
+    private static readonly Action<ILogger, string, string, int, Exception?> LogOperatorSaved =
+        LoggerMessage.Define<string, string, int>(
+            LogLevel.Information,
+            new EventId(6001, "OperatorSaved"),
+            "Operator {Actor} ({User}) saved: {Queued} checkpoint(s) queued.");
+
+    private static readonly Action<ILogger, string, string, string, Exception?> LogOperatorShutdown =
+        LoggerMessage.Define<string, string, string>(
+            LogLevel.Information,
+            new EventId(6002, "OperatorShutdown"),
+            "Operator {Actor} ({User}) shut the server down: \"{Reason}\".");
 
     private readonly ILogger m_logger;
     private readonly IMonotonicClock m_clock;
@@ -155,6 +168,16 @@ public sealed class AuditLog
         {
             LogConnectionRefused(m_logger, connection.Value, account?.Value ?? 0, limit, suppressed, null);
         }
+    }
+
+    public void OperatorSaved(AdminActor actor, int queued)
+    {
+        LogOperatorSaved(m_logger, actor.Name, actor.User, queued, null);
+    }
+
+    public void OperatorShutdown(AdminActor actor, string reason)
+    {
+        LogOperatorShutdown(m_logger, actor.Name, actor.User, reason, null);
     }
 
     private static long AccountOf(ClientSession session)
