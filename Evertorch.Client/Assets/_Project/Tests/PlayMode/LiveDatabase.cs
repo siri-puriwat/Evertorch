@@ -15,6 +15,12 @@ namespace Evertorch.Client.Tests.PlayMode
 /// </summary>
 internal sealed class LiveDatabase : IDisposable
 {
+    /// <summary>
+    ///     Every container this class starts carries this label, so the ones an editor left behind when it died
+    ///     mid-test are removed, with their volumes, at the next start.
+    /// </summary>
+    public const string Label = "evertorch.live-test";
+
     private const string Image = "postgres:18";
     private const string Database = "evertorch_live";
     private const int CommandTimeoutMs = 180_000;
@@ -53,8 +59,32 @@ internal sealed class LiveDatabase : IDisposable
         return Task.Run(Start);
     }
 
+    /// <summary>
+    ///     Removes every labelled container and its volumes; the IDs of those removed.
+    /// </summary>
+    public static string[] RemoveLeftovers()
+    {
+        string[] leftovers = Docker($"ps -aq --filter label={Label}")
+            .Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
+        foreach (string container in leftovers)
+        {
+            Docker($"rm -f -v {container}");
+        }
+
+        return leftovers;
+    }
+
+    /// <summary>
+    ///     A Docker command's output; it throws with Docker's own message when the command fails.
+    /// </summary>
+    public static string Docker(string arguments)
+    {
+        return Run(DockerCommand(), arguments);
+    }
+
     private static LiveDatabase Start()
     {
+        RemoveLeftovers();
         var database = new LiveDatabase(DockerCommand());
         try
         {
@@ -136,7 +166,8 @@ internal sealed class LiveDatabase : IDisposable
         string password = Guid.NewGuid().ToString("N");
         m_container = Run(
                 m_docker,
-                $"run -d --rm -e POSTGRES_PASSWORD={password} -e POSTGRES_DB={Database} -p 127.0.0.1::5432 {Image}")
+                $"run -d --rm --label {Label} -e POSTGRES_PASSWORD={password} -e POSTGRES_DB={Database}"
+                + $" -p 127.0.0.1::5432 {Image}")
             .Trim();
         string mapping = Run(m_docker, $"port {m_container} 5432/tcp")
             .Split('\n')

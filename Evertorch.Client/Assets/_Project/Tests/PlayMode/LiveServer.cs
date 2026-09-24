@@ -11,7 +11,8 @@ namespace Evertorch.Client.Tests.PlayMode
 {
 /// <summary>
 ///     The real .NET server as a child process, for tests that run Unity's runtime against it. Needs
-///     <c>scripts/verify.ps1</c> (or a Release build plus a content build) to have produced the server first.
+///     <c>scripts/verify.ps1</c> (or a Release build plus a content build) to have produced the server first. On
+///     Windows the process is in a <see cref="KillOnCloseJob" />, so it ends with the editor.
 /// </summary>
 internal sealed class LiveServer : IDisposable
 {
@@ -19,6 +20,7 @@ internal sealed class LiveServer : IDisposable
 
     private readonly List<string> m_output = new();
     private Process? m_process;
+    private KillOnCloseJob? m_job;
 
     public static string MissingPrerequisites =>
         "Needs the built server, its content package, and the client package. "
@@ -30,21 +32,30 @@ internal sealed class LiveServer : IDisposable
 
     private static string ContentPath => Path.Combine(Repository, "artifacts", "content", "server");
 
+    private static string ClientContentFolder =>
+        Path.Combine(Application.streamingAssetsPath, StreamingContentLoader.FolderName);
+
+    /// <summary>
+    ///     Whether the process is in the job that ends it with the editor.
+    /// </summary>
+    public bool IsTiedToEditor => m_process != null && m_job != null && m_job.Contains(m_process);
+
     public void Dispose()
     {
-        if (m_process == null)
+        if (m_process != null)
         {
-            return;
+            if (!m_process.HasExited)
+            {
+                m_process.Kill();
+                m_process.WaitForExit(5000);
+            }
+
+            m_process.Dispose();
+            m_process = null;
         }
 
-        if (!m_process.HasExited)
-        {
-            m_process.Kill();
-            m_process.WaitForExit(5000);
-        }
-
-        m_process.Dispose();
-        m_process = null;
+        m_job?.Dispose();
+        m_job = null;
     }
 
     public static bool IsBuilt()
@@ -52,9 +63,24 @@ internal sealed class LiveServer : IDisposable
         return File.Exists(DllPath) && Directory.Exists(ContentPath) && HasClientPackage();
     }
 
+    /// <summary>
+    ///     Null when the client package in StreamingAssets is the one the server package was built with; otherwise
+    ///     what differs and how to fix it. The handshake would refuse a stale package as a content update, which says
+    ///     nothing about the cause.
+    /// </summary>
+    public static string? ContentMismatch()
+    {
+        string expected = ClientVersionIn(Path.Combine(ContentPath, ClientContentParser.ManifestFile));
+        string actual = ClientVersionIn(Path.Combine(ClientContentFolder, ClientContentParser.ManifestFile));
+        return string.Equals(expected, actual, StringComparison.Ordinal)
+            ? null
+            : $"The client content in StreamingAssets is version {actual}, but the server package expects {expected}. "
+            + StreamingContentLoader.MissingPackageHint;
+    }
+
     public static ClientContent? LoadClientContent(out string error)
     {
-        string folder = Path.Combine(Application.streamingAssetsPath, StreamingContentLoader.FolderName);
+        string folder = ClientContentFolder;
         byte[] manifest = File.ReadAllBytes(Path.Combine(folder, ClientContentParser.ManifestFile));
         var files = ClientContentParser
             .ReadFileList(manifest, out error)
@@ -64,11 +90,12 @@ internal sealed class LiveServer : IDisposable
 
     private static bool HasClientPackage()
     {
-        return File.Exists(
-            Path.Combine(
-                Application.streamingAssetsPath,
-                StreamingContentLoader.FolderName,
-                ClientContentParser.ManifestFile));
+        return File.Exists(Path.Combine(ClientContentFolder, ClientContentParser.ManifestFile));
+    }
+
+    private static string ClientVersionIn(string manifestPath)
+    {
+        return JsonUtility.FromJson<ManifestVersion>(File.ReadAllText(manifestPath)).clientContentVersion;
     }
 
     /// <summary>
@@ -96,6 +123,12 @@ internal sealed class LiveServer : IDisposable
         m_process.OutputDataReceived += (_, line) => Record(line.Data);
         m_process.ErrorDataReceived += (_, line) => Record(line.Data);
         m_process.Start();
+        if (KillOnCloseJob.IsSupported)
+        {
+            m_job = KillOnCloseJob.Create();
+            m_job.Add(m_process);
+        }
+
         m_process.BeginOutputReadLine();
         m_process.BeginErrorReadLine();
     }
@@ -131,6 +164,28 @@ internal sealed class LiveServer : IDisposable
         return string.Join(" / ", Output());
     }
 
+    /// <summary>
+    ///     The position the console's <c>players</c> command printed last, for a server with one player in it.
+    /// </summary>
+    public bool TryReadPlayerPosition(out float x, out float z)
+    {
+        x = 0f;
+        z = 0f;
+        var position = new Regex(@" at \(([^,]+), ([^,]+), ([^)]+)\)");
+        foreach (string line in Output())
+        {
+            Match match = position.Match(line);
+            if (match.Success)
+            {
+                x = float.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture);
+                z = float.Parse(match.Groups[3].Value, CultureInfo.InvariantCulture);
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     public bool TryReadListeningPort(out int port)
     {
         port = 0;
@@ -158,5 +213,15 @@ internal sealed class LiveServer : IDisposable
             }
         }
     }
+
+    // Both packages' manifests carry the client version. JsonUtility binds by field name, so the field keeps the
+    // manifest's JSON spelling, and it ignores the rest.
+    // ReSharper disable InconsistentNaming
+    [Serializable]
+    private sealed class ManifestVersion
+    {
+        public string clientContentVersion = string.Empty;
+    }
+    // ReSharper restore InconsistentNaming
 }
 }

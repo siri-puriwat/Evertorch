@@ -13,6 +13,7 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.InputSystem.Controls;
+using UnityEngine.InputSystem.LowLevel;
 using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
 using UnityEngine.UI;
@@ -24,8 +25,10 @@ namespace Evertorch.Client.Tests.PlayMode
 /// <summary>
 ///     The whole client against the real server process and a real database (Milestone 3 verification "the player can
 ///     kill the training slime and see a slime-gel drop"; Milestone 4 verification "a pickup is committed before
-///     success and survives a server restart"): <see cref="GameClient" /> with the project's input actions, driven only
-///     by simulated keys and buttons: Tab to target, the gamepad's West button to attack, R to respawn, F to pick up.
+///     success and survives a server restart"; the Milestone 5 acceptance path, Coding Standards §10):
+///     <see cref="GameClient" /> with the project's input actions, driven only by simulated devices: WASD and a ground
+///     click to walk, Tab to target, the gamepad's West button to attack, R to respawn, F to pick up, and the login
+///     panel to reconnect.
 /// </summary>
 public sealed class LiveServerCombatTests : InputTestFixture
 {
@@ -34,6 +37,13 @@ public sealed class LiveServerCombatTests : InputTestFixture
     private const string GelModel = "pickup_slime_gel";
     private const float StartTimeoutSeconds = 30f;
     private const float FightTimeoutSeconds = 180f;
+    private const float WalkTimeoutSeconds = 15f;
+    private const float ConvergeTimeoutSeconds = 15f;
+    private const float ConvergedDistance = 1e-3f;
+
+    // Past every budget inside the test, the runner's 180 s default among them, which the fight alone can reach.
+    private const int FightTestTimeoutMs = 300_000;
+    private const int WholePathTimeoutMs = 600_000;
 
     private readonly List<ItemDropped> m_dropped = new();
     private int m_kills;
@@ -82,6 +92,7 @@ public sealed class LiveServerCombatTests : InputTestFixture
     }
 
     [UnityTest]
+    [Timeout(FightTestTimeoutMs)]
     public IEnumerator Player_FightsSlimesWithKeysAndButtons_UntilOneDropsGelThatIsDrawnFromItsModel()
     {
         string actionsPath = RequirePrerequisites();
@@ -114,7 +125,8 @@ public sealed class LiveServerCombatTests : InputTestFixture
     }
 
     [UnityTest]
-    public IEnumerator Player_PicksUpTheGelWithTheKey_AndStillOwnsItAfterAReconnectAndAServerRestart()
+    [Timeout(WholePathTimeoutMs)]
+    public IEnumerator Player_WalksFightsAndPicksUp_ThenKeepsTheGelAcrossAReconnectAndAServerRestart()
     {
         string actionsPath = RequirePrerequisites();
         yield return StartDatabaseAndServer();
@@ -122,11 +134,13 @@ public sealed class LiveServerCombatTests : InputTestFixture
 
         Keyboard keyboard = InputSystem.AddDevice<Keyboard>();
         Gamepad gamepad = InputSystem.AddDevice<Gamepad>();
+        Mouse mouse = InputSystem.AddDevice<Mouse>();
         GameClient client = CreateClient(port, actionsPath);
         yield return CreateAndEnterThroughTheLoginPanel(client, "LivePicker");
         yield return WaitUntil(() => client.World?.Inventory.IsCurrent == true, StartTimeoutSeconds);
         Assert.That(client.World, Is.Not.Null, $"{client.Status} server output: {m_server.JoinOutput()}");
         ClientWorld world = client.World!;
+        yield return WalkOnABadLink(client, world, keyboard, mouse);
         yield return FightUntilGelDrops(client, world, keyboard, gamepad);
         Assert.That(FindGelView(client), Is.Not.Null, $"kills {m_kills}, respawns {m_respawns}");
 
@@ -172,6 +186,13 @@ public sealed class LiveServerCombatTests : InputTestFixture
         if (!LiveServer.IsBuilt() || !File.Exists(actionsPath))
         {
             Assert.Inconclusive(LiveServer.MissingPrerequisites);
+        }
+
+        // A stale client package is a setup to fix, not a missing prerequisite.
+        string? mismatch = LiveServer.ContentMismatch();
+        if (mismatch != null)
+        {
+            Assert.Fail(mismatch);
         }
 
         return actionsPath;
@@ -300,7 +321,143 @@ public sealed class LiveServerCombatTests : InputTestFixture
 
         LiveServer server = m_server = new LiveServer();
         server.Start(m_database, "--World:RandomSeed=11");
+        Assert.That(server.IsTiedToEditor || !KillOnCloseJob.IsSupported, Is.True, "the server ends with the editor");
         yield return WaitUntil(() => server.TryReadListeningPort(out int _), StartTimeoutSeconds);
+    }
+
+    // WASD and a ground click as a player makes them, on a simulated bad link. A stop the server never hears leaves
+    // it walking on the last input for as long as it holds one, so the client must take the server's word: a
+    // correction, smoothed rather than snapped. After each walk the client ends where the server process says it is.
+    private IEnumerator WalkOnABadLink(GameClient client, ClientWorld world, Keyboard keyboard, Mouse mouse)
+    {
+        LossyTransport link = client.Link!;
+        MovementController controller = client.Controller!;
+        WorldPosition start = world.Predictor.Position;
+
+        link.LatencyMilliseconds = 50;
+        HoldKeys(keyboard, Key.W);
+        yield return new WaitForSecondsRealtime(1f);
+        float before = world.Smoother.LargestCorrection;
+        link.LossPercent = 100;
+        HoldKeys(keyboard);
+        yield return new WaitForSecondsRealtime(0.5f);
+        link.LossPercent = 0;
+        yield return AwaitConvergence(world, "a lost stop");
+        Assert.That(
+            world.Smoother.LargestCorrection,
+            Is.GreaterThan(Math.Max(before, 0.5f)),
+            "the server corrected the prediction");
+        Assert.That(world.Smoother.Snaps, Is.Zero, "the correction was smoothed, not snapped");
+
+        int dropped = link.Dropped;
+        link.JitterMilliseconds = 10;
+        link.LossPercent = 10;
+        link.ReorderPercent = 5;
+        HoldKeys(keyboard, Key.S);
+        yield return new WaitForSecondsRealtime(1.5f);
+        HoldKeys(keyboard);
+        yield return AwaitConvergence(world, "a lossy WASD walk");
+
+        // Back towards the spawn, where the slimes are.
+        WorldPosition target = ClearGroundNear(client, world, start);
+        Vector3 onScreen = Camera.main!.WorldToScreenPoint(new Vector3(target.X, target.Y, target.Z));
+        ClickAt(mouse, onScreen);
+        yield return WaitUntil(() => controller.HasPath, 2f);
+        Assert.That(controller.HasPath, Is.True, $"a click at {onScreen} on {target} started a walk");
+        yield return WaitUntil(() => !controller.HasPath, WalkTimeoutSeconds);
+        yield return AwaitConvergence(world, "a lossy click walk");
+        Assert.That(link.Dropped, Is.GreaterThan(dropped), "the link really lost messages");
+        Assert.That(world.Smoother.Snaps, Is.Zero, "no correction was large enough to snap");
+        Debug.Log(
+            $"Live walk: largest correction {world.Smoother.LargestCorrection} m, dropped {link.Dropped}, "
+            + $"reordered {link.Reordered}");
+
+        link.LatencyMilliseconds = 0;
+        link.JitterMilliseconds = 0;
+        link.LossPercent = 0;
+        link.ReorderPercent = 0;
+    }
+
+    // The console republishes what it reads once a second, so agreement shows up within a few of those.
+    private IEnumerator AwaitConvergence(ClientWorld world, string step)
+    {
+        LiveServer server = m_server!;
+        float deadline = Time.realtimeSinceStartup + ConvergeTimeoutSeconds;
+        bool isConverged = false;
+        string serverView = string.Empty;
+        while (!isConverged && Time.realtimeSinceStartup < deadline)
+        {
+            yield return new WaitForSecondsRealtime(0.5f);
+            if (world.Predictor.PendingCount != 0)
+            {
+                continue;
+            }
+
+            server.ClearOutput();
+            server.SendCommand("players");
+            yield return WaitUntil(() => server.HasOutput(" at ("), 5f);
+            serverView = server.JoinOutput();
+            WorldPosition predicted = world.Predictor.Position;
+            isConverged = server.TryReadPlayerPosition(out float x, out float z)
+                && Mathf.Abs(predicted.X - x) <= ConvergedDistance
+                && Mathf.Abs(predicted.Z - z) <= ConvergedDistance;
+        }
+
+        Assert.That(
+            isConverged,
+            Is.True,
+            $"{step}: the client at {world.Predictor.Position} converges on the server: {serverView}");
+    }
+
+    // A reachable point two to six metres away with nothing drawn near it, so the click walks rather than attacks or
+    // picks up. The preferred point first, then the compass around the player.
+    private static WorldPosition ClearGroundNear(GameClient client, ClientWorld world, WorldPosition preferred)
+    {
+        WorldPosition from = world.Predictor.Position;
+        var candidates = new List<WorldPosition> { preferred };
+        for (int step = 0; step < 8; step++)
+        {
+            float angle = step * Mathf.PI / 4f;
+            candidates.Add(new WorldPosition(from.X + 3f * Mathf.Cos(angle), from.Y, from.Z + 3f * Mathf.Sin(angle)));
+        }
+
+        var paths = new MovementController(world.Grid);
+        foreach (WorldPosition point in candidates)
+        {
+            float distance = HorizontalDistance(from, point);
+            bool isClear = client.RemoteViews.Values.All(view =>
+                HorizontalDistance(new WorldPosition(view.transform.position.x, 0f, view.transform.position.z), point)
+                >= 2f);
+            if (distance >= 2f && distance <= 6f && isClear && paths.TryMoveTo(from, point))
+            {
+                return point;
+            }
+        }
+
+        Assert.Fail($"no clear, reachable ground near {from} to click on");
+        return from;
+    }
+
+    private static float HorizontalDistance(WorldPosition a, WorldPosition b)
+    {
+        float x = a.X - b.X;
+        float z = a.Z - b.Z;
+        return Mathf.Sqrt(x * x + z * z);
+    }
+
+    // A full keyboard state lasts across frames, which the fixture's Press does not promise once a frame has run.
+    private static void HoldKeys(Keyboard keyboard, params Key[] held)
+    {
+        InputSystem.QueueStateEvent(keyboard, new KeyboardState(held));
+        InputSystem.Update();
+    }
+
+    private static void ClickAt(Mouse mouse, Vector2 screenPosition)
+    {
+        InputSystem.QueueStateEvent(mouse, new MouseState { position = screenPosition }.WithButton(MouseButton.Left));
+        InputSystem.Update();
+        InputSystem.QueueStateEvent(mouse, new MouseState { position = screenPosition });
+        InputSystem.Update();
     }
 
     private IEnumerator FightUntilGelDrops(GameClient client, ClientWorld world, Keyboard keyboard, Gamepad gamepad)

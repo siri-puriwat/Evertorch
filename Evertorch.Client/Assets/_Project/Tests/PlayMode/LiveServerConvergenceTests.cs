@@ -1,7 +1,5 @@
 using System;
 using System.Collections;
-using System.Globalization;
-using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Evertorch.Game;
 using Evertorch.Protocol;
@@ -20,6 +18,7 @@ public sealed class LiveServerConvergenceTests
     private const float StartTimeoutSeconds = 30f;
     private const float StepTimeoutSeconds = 15f;
     private const float ConvergedDistance = 1e-3f;
+    private const int TestTimeoutMs = 120_000;
 
     private LiveDatabase? m_database;
     private LiveServer? m_server;
@@ -37,11 +36,18 @@ public sealed class LiveServerConvergenceTests
     }
 
     [UnityTest]
+    [Timeout(TestTimeoutMs)]
     public IEnumerator Client_OnABadLink_EndsWhereTheServerProcessSaysItIs()
     {
         if (!LiveServer.IsBuilt())
         {
             Assert.Inconclusive(LiveServer.MissingPrerequisites);
+        }
+
+        string? mismatch = LiveServer.ContentMismatch();
+        if (mismatch != null)
+        {
+            Assert.Fail(mismatch);
         }
 
         // A package that is present but refused is a defect, not a missing prerequisite.
@@ -105,7 +111,7 @@ public sealed class LiveServerConvergenceTests
         yield return WaitUntil(() => server.HasOutput(" at ("), StepTimeoutSeconds);
 
         WorldPosition predicted = world.Predictor.Position;
-        Assert.That(TryReadServerPosition(server, out float serverX, out float serverZ), Is.True, server.JoinOutput());
+        Assert.That(server.TryReadPlayerPosition(out float serverX, out float serverZ), Is.True, server.JoinOutput());
         Assert.That(predicted.X, Is.GreaterThan(3f), "the player really walked");
         Assert.That(link.Dropped, Is.GreaterThan(0), "the link really lost messages");
         Assert.That(world.Smoother.Snaps, Is.EqualTo(0));
@@ -149,25 +155,6 @@ public sealed class LiveServerConvergenceTests
             world.Advance(Time.unscaledDeltaTime);
             yield return null;
         }
-    }
-
-    private static bool TryReadServerPosition(LiveServer server, out float x, out float z)
-    {
-        x = 0f;
-        z = 0f;
-        var position = new Regex(@" at \(([^,]+), ([^,]+), ([^)]+)\)");
-        foreach (string line in server.Output())
-        {
-            Match match = position.Match(line);
-            if (match.Success)
-            {
-                x = float.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture);
-                z = float.Parse(match.Groups[3].Value, CultureInfo.InvariantCulture);
-                return true;
-            }
-        }
-
-        return false;
     }
 }
 }
