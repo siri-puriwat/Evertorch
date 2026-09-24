@@ -496,7 +496,7 @@ public sealed class SharedIntentPathTests : InputTestFixture
             m_actions = actions;
             m_manual = new ManualMoveSource(actions.FindAction("Player/Move", true));
             m_pointer = new PointerMoveSource(actions.FindAction("Player/MoveTo", true));
-            m_handler = new PointerMoveHandler(m_pointer, null, null);
+            m_handler = new PointerMoveHandler(m_pointer, null);
 
             NavigationGrid grid = CreateGrid();
             var entered = new WorldEntered(
@@ -548,7 +548,7 @@ public sealed class SharedIntentPathTests : InputTestFixture
         {
             var controls = TouchControls.Create();
             m_created.Add(controls.gameObject);
-            m_handler = new PointerMoveHandler(m_pointer, controls, null);
+            m_handler = new PointerMoveHandler(m_pointer, new UiHitTest());
             return controls;
         }
 
@@ -572,7 +572,7 @@ public sealed class SharedIntentPathTests : InputTestFixture
             m_created.Add(clientObject);
             var overlay = DevelopmentOverlay.Create(clientObject.AddComponent<GameClient>());
             m_created.Add(overlay.gameObject);
-            m_handler = new PointerMoveHandler(m_pointer, null, overlay);
+            m_handler = new PointerMoveHandler(m_pointer, new UiHitTest());
             return overlay;
         }
 

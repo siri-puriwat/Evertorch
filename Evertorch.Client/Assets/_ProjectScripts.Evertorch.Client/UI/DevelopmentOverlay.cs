@@ -72,17 +72,6 @@ public sealed class DevelopmentOverlay : MonoBehaviour
         return overlay;
     }
 
-    /// <summary>
-    ///     Whether a screen position (origin bottom-left, as the input system reports it) is on the overlay, so that
-    ///     using its controls is never also a click on the ground.
-    /// </summary>
-    public bool Covers(Vector2 screenPosition)
-    {
-        return Panel != null
-            && Panel.gameObject.activeSelf
-            && RectTransformUtility.RectangleContainsScreenPoint(Panel, screenPosition, null);
-    }
-
     private void Build(GameClient client)
     {
         ClientUI.EnsureEventSystem(transform);

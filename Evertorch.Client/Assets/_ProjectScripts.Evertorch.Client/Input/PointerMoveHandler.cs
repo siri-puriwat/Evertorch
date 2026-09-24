@@ -8,20 +8,18 @@ namespace Evertorch.Client
 {
 /// <summary>
 ///     Turns a pending click or tap into a request: the entity under it when there is one, otherwise a walk. A
-///     position on a control is never also a position in the world, and the movement controller alone decides
-///     whether a point can be walked to.
+///     position on the UI is never also a position in the world, and the movement controller alone decides whether a
+///     point can be walked to.
 /// </summary>
 public sealed class PointerMoveHandler
 {
     private readonly PointerMoveSource m_source;
-    private readonly TouchControls? m_touch;
-    private readonly DevelopmentOverlay? m_overlay;
+    private readonly UiHitTest? m_ui;
 
-    public PointerMoveHandler(PointerMoveSource source, TouchControls? touch, DevelopmentOverlay? overlay)
+    public PointerMoveHandler(PointerMoveSource source, UiHitTest? ui)
     {
         m_source = source ?? throw new ArgumentNullException(nameof(source));
-        m_touch = touch;
-        m_overlay = overlay;
+        m_ui = ui;
     }
 
     /// <param name="entities">What a click may pick; tested before the ground, so the entity under it wins.</param>
@@ -43,9 +41,7 @@ public sealed class PointerMoveHandler
             return PointerMoveResult.None;
         }
 
-        bool isOnControl = (m_touch != null && m_touch.IsOverControl(screenPosition))
-            || (m_overlay != null && m_overlay.Covers(screenPosition));
-        if (isOnControl)
+        if (m_ui != null && m_ui.IsOverUi(screenPosition))
         {
             return PointerMoveResult.OnControl;
         }

@@ -45,6 +45,7 @@ public sealed class GameClient : MonoBehaviour
     private readonly List<PickCandidate> m_targetCandidates = new();
     private readonly List<PickCandidate> m_pointerCandidates = new();
     private readonly TargetCycler m_targetCycler = new();
+    private readonly UiHitTest m_uiHitTest = new();
     private LiteNetLibClientTransport? m_socket;
     private ManualMoveSource? m_manualSource;
     private PointerMoveSource? m_pointerSource;
@@ -497,7 +498,7 @@ public sealed class GameClient : MonoBehaviour
 
         m_manualSource = new ManualMoveSource(move);
         m_pointerSource = new PointerMoveSource(moveTo);
-        m_pointerHandler = new PointerMoveHandler(m_pointerSource, Touch, m_overlay);
+        m_pointerHandler = new PointerMoveHandler(m_pointerSource, m_uiHitTest);
 
         InputAction? next = actions?.FindAction("Player/Next");
         InputAction? previous = actions?.FindAction("Player/Previous");

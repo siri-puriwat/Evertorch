@@ -1,6 +1,4 @@
-using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.EventSystems;
 using UnityEngine.InputSystem.OnScreen;
 using UnityEngine.UI;
 
@@ -19,9 +17,7 @@ public sealed class TouchControls : MonoBehaviour
     private const float KnobSize = 62f;
     private const float StickInset = 129f;
 
-    private readonly List<RaycastResult> m_raycastResults = new();
     private GameObject? m_stickRoot;
-    private EventSystem? m_eventSystem;
 
     public bool IsVisible => m_stickRoot != null && m_stickRoot.activeSelf;
 
@@ -45,25 +41,9 @@ public sealed class TouchControls : MonoBehaviour
         }
     }
 
-    /// <summary>
-    ///     Whether a screen position is on a control, so that touching the stick is never also a tap on the ground.
-    /// </summary>
-    public bool IsOverControl(Vector2 screenPosition)
-    {
-        if (m_eventSystem == null)
-        {
-            return false;
-        }
-
-        var pointer = new PointerEventData(m_eventSystem) { position = screenPosition };
-        m_raycastResults.Clear();
-        m_eventSystem.RaycastAll(pointer, m_raycastResults);
-        return m_raycastResults.Count > 0;
-    }
-
     private void Build()
     {
-        m_eventSystem = ClientUI.EnsureEventSystem(transform);
+        ClientUI.EnsureEventSystem(transform);
 
         var canvasObject = new GameObject("Canvas");
         canvasObject.transform.SetParent(transform, false);

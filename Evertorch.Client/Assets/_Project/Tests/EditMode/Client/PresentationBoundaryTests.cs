@@ -21,6 +21,19 @@ public sealed class PresentationBoundaryTests
         + @"|CharacterHealth)\("
         + @"|\.(HealthPermille|StateFlags|CurrentHealth)\s*=[^=]");
 
+    // UI may ask GameClient for anything a player can do, and read what it likes; it may not send, build a message,
+    // drive movement, or change what the client believes (Coding Standards §3).
+    private static readonly Regex UiForbidden = new(
+        @"ICombatCommandSink|IMoveIntentSink|\.Send\w*\(|AutoAttackState|LocalPlayerDriver|PickupState"
+        + @"|MoveIntentProducer|\bnew\s+(MoveIntent|ClientHello|EnterWorldRequest|MoveInput|StopMovement|TargetEntity"
+        + @"|AttackEntity|CancelAction|Respawn|Logout|PickupItem|CreateCharacter|InventoryResyncRequest)\s*\("
+        + @"|\.Connection\??\.(Connect|Disconnect|EnterWorld|CreateCharacter|Poll)\("
+        + @"|\.Controller\??\.(SetManualDirection|TryMoveTo|Chase\w*|Cancel\w*|Tick)\("
+        + @"|\.On(Spawn|Despawn|Snapshot|TargetChanged|AttackStarted|Damage|EntityDied|EntityRevived|CommandRejected"
+        + @"|ItemDropped|ItemPickedUp|CharacterHealth)\("
+        + @"|\.(Advance|CollectTargetCandidates|CollectDropCandidates)\("
+        + @"|\.(Target|LastRejection|LocalHealth|LocalMaximumHealth|HealthPermille|StateFlags|CurrentHealth)\s*=[^=]");
+
     private static readonly Regex UsesPresentation = new(
         @"\b(CombatAnimation|CombatTimeline|CombatPresenter|HitMark|FloatingNumber|HealthBar|EntityView)\b"
         + @"|\bAnimator\b|AnimationEvent");
@@ -65,6 +78,31 @@ public sealed class PresentationBoundaryTests
         Assert.That(probes.Where(probe => !Forbidden.IsMatch(probe)), Is.Empty);
         Assert.That(Forbidden.IsMatch("if (remote.HealthPermille == 0)"), Is.False, "reading is allowed");
         Assert.That(UsesPresentation.IsMatch("m_presenter = new CombatPresenter(world);"), Is.True);
+    }
+
+    [Test]
+    public void TheUiScan_FindsWhatItLooksFor()
+    {
+        string[] probes =
+        {
+            "connection.SendTarget(target);", "client.Connection.EnterWorld(entry.Character);",
+            "var hello = new ClientHello(1, build, 0, token);", "world.OnCommandRejected(rejected);",
+            "world.Target = entity;", "client.Controller.TryMoveTo(from, point);"
+        };
+        string[] allowed =
+        {
+            "client.EnterWorld(entry.Character);", "client.RequestRespawn();", "if (world.Target == entity)",
+            "int rtt = client.Connection.RoundTripMilliseconds;"
+        };
+
+        Assert.That(probes.Where(probe => !UiForbidden.IsMatch(probe)), Is.Empty);
+        Assert.That(allowed.Where(line => UiForbidden.IsMatch(line)), Is.Empty);
+    }
+
+    [Test]
+    public void Ui_RequestsThroughTheClientButNeverSendsOrChangesTheClientWorld()
+    {
+        Assert.That(Offenders("UI", UiForbidden), Is.Empty);
     }
 }
 }
