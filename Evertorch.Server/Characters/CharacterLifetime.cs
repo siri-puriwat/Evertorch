@@ -16,11 +16,12 @@ public sealed class CharacterLifetime
 {
     private const int MillisecondsPerSecond = 1000;
 
-    private static readonly Action<ILogger, long, Exception?> LogCheckpointFailed =
-        LoggerMessage.Define<long>(
+    private static readonly Action<ILogger, string, long, long, Exception?> LogCheckpointFailed =
+        LoggerMessage.Define<string, long, long>(
             LogLevel.Warning,
             new EventId(4006, "CheckpointFailed"),
-            "The checkpoint of character {Character} could not be written; it is retried once the database answers.");
+            "Checkpoint {OperationId} of character {Character} on connection {Connection} could not be written; it "
+            + "is retried once the database answers.");
 
     private readonly WorldSimulation m_world;
     private readonly SessionRegistry m_sessions;
@@ -95,9 +96,11 @@ public sealed class CharacterLifetime
             player.Position,
             player.IsDead ? 0 : player.CurrentHealth,
             m_time.GetUtcNow().UtcDateTime);
-        var job = new PersistenceJob<bool>(
+        ConnectionId connection = character.Connection?.Connection ?? default;
+        PersistenceJob<bool>? job = null;
+        job = new PersistenceJob<bool>(
             "checkpoint",
-            character.Connection?.Connection ?? default,
+            connection,
             id,
             async (store, cancellation) =>
             {
@@ -108,7 +111,7 @@ public sealed class CharacterLifetime
             {
                 if (outcome != PersistenceOutcome.Succeeded)
                 {
-                    LogCheckpointFailed(m_logger, id, null);
+                    LogCheckpointFailed(m_logger, job!.OperationId, id, connection.Value, null);
                 }
 
                 onComplete?.Invoke(outcome);

@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Threading;
 using System.Threading.Tasks;
 using Evertorch.Persistence;
@@ -12,11 +13,14 @@ namespace Evertorch.Server
 /// </summary>
 public abstract class PersistenceJob
 {
-    protected PersistenceJob(string operation, ConnectionId connection, long character)
+    private readonly string? m_operationId;
+
+    protected PersistenceJob(string operation, ConnectionId connection, long character, string? operationId)
     {
         Operation = operation;
         Connection = connection;
         Character = character;
+        m_operationId = operationId;
     }
 
     /// <summary>
@@ -33,6 +37,16 @@ public abstract class PersistenceJob
     ///     The character whose state the job reads or writes, or 0. A waiting checkpoint of that character runs first.
     /// </summary>
     public long Character { get; }
+
+    /// <summary>
+    ///     Set by the writer when the job is queued; unique within a server run.
+    /// </summary>
+    public long Id { get; internal set; }
+
+    /// <summary>
+    ///     What logs correlate the job by: a pickup's <c>DropId</c>, otherwise <see cref="Id" /> (Persistence §9).
+    /// </summary>
+    public string OperationId => m_operationId ?? Id.ToString(CultureInfo.InvariantCulture);
 
     internal PersistenceOutcome Outcome { get; set; }
 
@@ -61,8 +75,9 @@ public sealed class PersistenceJob<T> : PersistenceJob
         ConnectionId connection,
         long character,
         Func<IGameStore, CancellationToken, Task<T>> work,
-        Action<PersistenceOutcome, T> complete)
-        : base(operation, connection, character)
+        Action<PersistenceOutcome, T> complete,
+        string? operationId = null)
+        : base(operation, connection, character, operationId)
     {
         m_work = work;
         m_complete = complete;

@@ -102,7 +102,7 @@ internal sealed class TestServer
             Options.Create(persistence ?? new PersistenceOptions()),
             Options.Create(new SessionOptions { ReconnectGraceMs = reconnectGraceMs }),
             simulation,
-            new CapturingLogger<CharacterLifetime>());
+            LifetimeLog);
         Pickups = new PickupSystem(
             Sessions,
             Persistence,
@@ -112,7 +112,7 @@ internal sealed class TestServer
             Time,
             Options.Create(world),
             simulation,
-            new CapturingLogger<PickupSystem>());
+            PickupLog);
         var tokens = new DevelopmentTokenValidator(Options.Create(authentication), Time);
         var handshake = new HandshakeValidator(compatibility, tokens, Content);
         SessionManager = new SessionManager(
@@ -212,6 +212,10 @@ internal sealed class TestServer
     public PersistenceWorker Persistence { get; }
 
     public CapturingLogger<PersistenceWorker> PersistenceLog { get; }
+
+    public CapturingLogger<CharacterLifetime> LifetimeLog { get; } = new();
+
+    public CapturingLogger<PickupSystem> PickupLog { get; } = new();
 
     /// <summary>
     ///     When false, <see cref="Tick" /> leaves queued database work alone, as a slow database would.

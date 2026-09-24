@@ -5,12 +5,16 @@ using Evertorch.Rules;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Console;
 using Microsoft.Extensions.Options;
 
 namespace Evertorch.Server
 {
 public static class ServerHost
 {
+    public const string UtcTimestampFormat = "yyyy-MM-ddTHH:mm:ss.fffZ";
+
     /// <summary>
     ///     Builds the server composition. Configuration comes from <c>appsettings.json</c> and
     ///     <c>appsettings.{Environment}.json</c> under <paramref name="contentRootPath" />, then environment variables,
@@ -24,6 +28,7 @@ public static class ServerHost
             ContentRootPath = contentRootPath
         };
         HostApplicationBuilder builder = Host.CreateApplicationBuilder(settings);
+        AddLogging(builder);
 
         builder.Services
             .AddOptions<SimulationOptions>()
@@ -119,6 +124,28 @@ public static class ServerHost
         builder.Services.AddHostedService(services => services.GetRequiredService<ServerLifetimeService>());
 
         return builder;
+    }
+
+    // The console is the only sink: the default host also adds Debug, EventSource, and on Windows EventLog. The
+    // formatter comes from Logging:Console:FormatterName, so only the formatters' options are set here;
+    // AddSimpleConsole and AddJsonConsole would each fix the formatter name as well. Without a name the provider
+    // formats with its deprecated options instead and writes no timestamp, so simple is named explicitly.
+    private static void AddLogging(HostApplicationBuilder builder)
+    {
+        builder.Logging.ClearProviders();
+        builder.Logging.AddConsole();
+        builder.Services.Configure<ConsoleLoggerOptions>(options =>
+            options.FormatterName ??= ConsoleFormatterNames.Simple);
+        builder.Services.Configure<SimpleConsoleFormatterOptions>(options =>
+        {
+            options.UseUtcTimestamp = true;
+            options.TimestampFormat = $"{UtcTimestampFormat} ";
+        });
+        builder.Services.Configure<JsonConsoleFormatterOptions>(options =>
+        {
+            options.UseUtcTimestamp = true;
+            options.TimestampFormat = UtcTimestampFormat;
+        });
     }
 
     private static void AddOptions<TOptions, TValidator>(HostApplicationBuilder builder, string sectionName)

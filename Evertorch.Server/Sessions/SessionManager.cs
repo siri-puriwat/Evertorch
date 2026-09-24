@@ -16,23 +16,23 @@ public sealed class SessionManager : ITickPhase
 {
     private const int MillisecondsPerSecond = 1000;
 
-    private static readonly Action<ILogger, long, DisconnectReason, Exception?> LogHandshakeRejected =
-        LoggerMessage.Define<long, DisconnectReason>(
+    private static readonly Action<ILogger, long, long, DisconnectReason, Exception?> LogHandshakeRejected =
+        LoggerMessage.Define<long, long, DisconnectReason>(
             LogLevel.Information,
             new EventId(2001, "HandshakeRejected"),
-            "Connection {Connection} was refused: {Reason}.");
+            "Connection {Connection} (account {Account}) was refused: {Reason}.");
 
-    private static readonly Action<ILogger, long, long, long, Exception?> LogWorldEntered =
-        LoggerMessage.Define<long, long, long>(
+    private static readonly Action<ILogger, long, long, long, long, Exception?> LogWorldEntered =
+        LoggerMessage.Define<long, long, long, long>(
             LogLevel.Information,
             new EventId(2002, "WorldEntered"),
-            "Connection {Connection} entered the world as character {Character}, entity {Entity}.");
+            "Connection {Connection} (account {Account}) entered the world as character {Character}, entity {Entity}.");
 
-    private static readonly Action<ILogger, long, Exception?> LogSessionClosed =
-        LoggerMessage.Define<long>(
+    private static readonly Action<ILogger, long, long, long, Exception?> LogSessionClosed =
+        LoggerMessage.Define<long, long, long>(
             LogLevel.Information,
             new EventId(2003, "SessionClosed"),
-            "Connection {Connection} closed.");
+            "Connection {Connection} (account {Account}, character {Character}) closed.");
 
     private static readonly Action<ILogger, long, long, Exception?> LogAuthenticated =
         LoggerMessage.Define<long, long>(
@@ -40,17 +40,19 @@ public sealed class SessionManager : ITickPhase
             new EventId(2005, "SessionAuthenticated"),
             "Connection {Connection} signed in to account {Account}.");
 
-    private static readonly Action<ILogger, long, string, Exception?> LogCharacterContentMismatch =
-        LoggerMessage.Define<long, string>(
+    private static readonly Action<ILogger, long, long, long, string, Exception?> LogCharacterContentMismatch =
+        LoggerMessage.Define<long, long, long, string>(
             LogLevel.Warning,
             new EventId(2006, "CharacterContentMismatch"),
-            "Character {Character} was not entered: the loaded content has no {Definition}. Its stored data is kept.");
+            "Connection {Connection} (account {Account}) could not enter character {Character}: the loaded content has "
+            + "no {Definition}. Its stored data is kept.");
 
-    private static readonly Action<ILogger, long, Exception?> LogSessionFaulted =
-        LoggerMessage.Define<long>(
+    private static readonly Action<ILogger, long, long, long, Exception?> LogSessionFaulted =
+        LoggerMessage.Define<long, long, long>(
             LogLevel.Error,
             new EventId(2004, "SessionFaulted"),
-            "Handling input from connection {Connection} failed; the connection was closed.");
+            "Handling input from connection {Connection} (account {Account}, character {Character}) failed; the "
+            + "connection was closed.");
 
     private readonly InboundQueue m_inbound;
     private readonly PersistenceWorker m_persistence;
@@ -217,8 +219,7 @@ public sealed class SessionManager : ITickPhase
         DisconnectReason refusal = m_handshake.Validate(hello);
         if (refusal != DisconnectReason.None)
         {
-            LogHandshakeRejected(m_logger, session.Connection.Value, refusal, null);
-            Close(session, refusal);
+            Refuse(session, refusal);
             return;
         }
 
@@ -233,8 +234,7 @@ public sealed class SessionManager : ITickPhase
             (outcome, account) => CompleteAuthentication(connection, outcome, account));
         if (!m_persistence.TryEnqueue(authentication))
         {
-            LogHandshakeRejected(m_logger, connection.Value, DisconnectReason.ServerNotReady, null);
-            Close(session, DisconnectReason.ServerNotReady);
+            Refuse(session, DisconnectReason.ServerNotReady);
             return;
         }
 
@@ -256,8 +256,7 @@ public sealed class SessionManager : ITickPhase
             : DisconnectReason.None;
         if (refusal != DisconnectReason.None)
         {
-            LogHandshakeRejected(m_logger, connection.Value, refusal, null);
-            Close(session, refusal);
+            Refuse(session, refusal);
             return;
         }
 
@@ -288,8 +287,7 @@ public sealed class SessionManager : ITickPhase
             (outcome, characters) => CompleteCharacterList(connection, outcome, characters));
         if (!m_persistence.TryEnqueue(list))
         {
-            LogHandshakeRejected(m_logger, connection.Value, DisconnectReason.ServerNotReady, null);
-            Close(session, DisconnectReason.ServerNotReady);
+            Refuse(session, DisconnectReason.ServerNotReady);
         }
     }
 
@@ -305,8 +303,7 @@ public sealed class SessionManager : ITickPhase
 
         if (outcome != PersistenceOutcome.Succeeded)
         {
-            LogHandshakeRejected(m_logger, connection.Value, DisconnectReason.ServerNotReady, null);
-            Close(session, DisconnectReason.ServerNotReady);
+            Refuse(session, DisconnectReason.ServerNotReady);
             return;
         }
 
@@ -397,8 +394,7 @@ public sealed class SessionManager : ITickPhase
     {
         if (session.State == SessionState.AwaitingHello)
         {
-            LogHandshakeRejected(m_logger, session.Connection.Value, DisconnectReason.AuthenticationFailed, null);
-            Close(session, DisconnectReason.AuthenticationFailed);
+            Refuse(session, DisconnectReason.AuthenticationFailed);
             return;
         }
 
@@ -444,8 +440,7 @@ public sealed class SessionManager : ITickPhase
             (outcome, stored) => CompleteLoad(connection, outcome, stored));
         if (!m_persistence.TryEnqueue(load))
         {
-            LogHandshakeRejected(m_logger, connection.Value, DisconnectReason.ServerNotReady, null);
-            Close(session, DisconnectReason.ServerNotReady);
+            Refuse(session, DisconnectReason.ServerNotReady);
             return;
         }
 
@@ -480,8 +475,7 @@ public sealed class SessionManager : ITickPhase
         if (outcome != PersistenceOutcome.Succeeded)
         {
             // Entering needs the database (Persistence §9): without it the connection is not ready.
-            LogHandshakeRejected(m_logger, connection.Value, DisconnectReason.ServerNotReady, null);
-            Close(session, DisconnectReason.ServerNotReady);
+            Refuse(session, DisconnectReason.ServerNotReady);
             return;
         }
 
@@ -496,7 +490,13 @@ public sealed class SessionManager : ITickPhase
         CharacterSession? character = m_lifetime.Spawn(stored, session, tick, out string problem);
         if (character == null)
         {
-            LogCharacterContentMismatch(m_logger, requested.Value, problem, null);
+            LogCharacterContentMismatch(
+                m_logger,
+                session.Connection.Value,
+                AccountOf(session),
+                requested.Value,
+                problem,
+                null);
             IgnoredEvents++;
             return;
         }
@@ -532,7 +532,13 @@ public sealed class SessionManager : ITickPhase
                 (uint)player.MaxHealth,
                 player.AttackRange,
                 character.LastCommandSequence));
-        LogWorldEntered(m_logger, session.Connection.Value, character.Character.Value, player.Id.Value, null);
+        LogWorldEntered(
+            m_logger,
+            session.Connection.Value,
+            AccountOf(session),
+            character.Character.Value,
+            player.Id.Value,
+            null);
     }
 
     private static bool Owns(ClientSession session, CharacterId character)
@@ -775,11 +781,14 @@ public sealed class SessionManager : ITickPhase
     // One peer's input or result must never take the tick down with it.
     private void CloseFaulted(ConnectionId connection, Exception exception)
     {
-        LogSessionFaulted(m_logger, connection.Value, exception);
         if (m_sessions.TryGet(connection, out ClientSession? faulted) && faulted != null)
         {
+            LogSessionFaulted(m_logger, connection.Value, AccountOf(faulted), CharacterOf(faulted), exception);
             Close(faulted, DisconnectReason.InternalError);
+            return;
         }
+
+        LogSessionFaulted(m_logger, connection.Value, 0, 0, exception);
     }
 
     private void ExpireSilentConnections(uint tick)
@@ -796,9 +805,14 @@ public sealed class SessionManager : ITickPhase
 
         foreach (ClientSession session in m_expired)
         {
-            LogHandshakeRejected(m_logger, session.Connection.Value, DisconnectReason.AuthenticationFailed, null);
-            Close(session, DisconnectReason.AuthenticationFailed);
+            Refuse(session, DisconnectReason.AuthenticationFailed);
         }
+    }
+
+    private void Refuse(ClientSession session, DisconnectReason reason)
+    {
+        LogHandshakeRejected(m_logger, session.Connection.Value, AccountOf(session), reason, null);
+        Close(session, reason);
     }
 
     private void Close(ClientSession session, DisconnectReason reason)
@@ -809,6 +823,8 @@ public sealed class SessionManager : ITickPhase
 
     private void Remove(ClientSession session)
     {
+        // Read before detaching, which unlinks the character from the session.
+        long characterId = CharacterOf(session);
         CharacterSession? character = session.Character;
         if (character != null)
         {
@@ -824,7 +840,18 @@ public sealed class SessionManager : ITickPhase
         }
 
         m_sessions.Remove(session);
-        LogSessionClosed(m_logger, session.Connection.Value, null);
+        LogSessionClosed(m_logger, session.Connection.Value, AccountOf(session), characterId, null);
+    }
+
+    // Correlation fields for the logs (System Architecture §10); 0 when the connection has not got that far.
+    private static long AccountOf(ClientSession session)
+    {
+        return session.Account?.Value ?? 0;
+    }
+
+    private static long CharacterOf(ClientSession session)
+    {
+        return session.Character?.Character.Value ?? 0;
     }
 }
 }

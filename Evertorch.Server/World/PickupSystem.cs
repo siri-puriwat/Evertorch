@@ -28,12 +28,12 @@ public sealed class PickupSystem : ITickPhase
 
     private const int MillisecondsPerSecond = 1000;
 
-    private static readonly Action<ILogger, Guid, long, Exception?> LogUnsettled =
-        LoggerMessage.Define<Guid, long>(
+    private static readonly Action<ILogger, Guid, long, long, Exception?> LogUnsettled =
+        LoggerMessage.Define<Guid, long, long>(
             LogLevel.Warning,
             new EventId(4008, "PickupUnsettled"),
-            "The commit of drop {Drop} for character {Character} gave no answer; the drop stays reserved until the "
-            + "ledger says what happened.");
+            "The commit of drop {OperationId} for character {Character} on connection {Connection} gave no answer; the "
+            + "drop stays reserved until the ledger says what happened.");
 
     private readonly SessionRegistry m_sessions;
     private readonly PersistenceWorker m_persistence;
@@ -141,7 +141,8 @@ public sealed class PickupSystem : ITickPhase
             session.Connection,
             character.Character.Value,
             (store, cancellation) => store.CommitPickupAsync(commit, cancellation),
-            (outcome, result) => CompleteCommit(character, outcome, result));
+            (outcome, result) => CompleteCommit(character, outcome, result),
+            drop.DropId.ToString());
         if (!m_persistence.TryEnqueue(job))
         {
             return CommandRejectionReason.ServiceUnavailable;
@@ -168,7 +169,12 @@ public sealed class PickupSystem : ITickPhase
         }
 
         // The commit may have happened; only the ledger can say.
-        LogUnsettled(m_logger, character.Pickup!.Drop.DropId, character.Character.Value, null);
+        LogUnsettled(
+            m_logger,
+            character.Pickup!.Drop.DropId,
+            character.Character.Value,
+            character.Connection?.Connection.Value ?? 0,
+            null);
         if (!TryQueueLookup(character))
         {
             m_unsettled.Add(character);
@@ -184,7 +190,8 @@ public sealed class PickupSystem : ITickPhase
             character.Connection?.Connection ?? default,
             id,
             (store, cancellation) => store.FindPickupAsync(dropId, id, cancellation),
-            (outcome, found) => CompleteLookup(character, outcome, found));
+            (outcome, found) => CompleteLookup(character, outcome, found),
+            dropId.ToString());
         return m_persistence.TryEnqueue(lookup);
     }
 

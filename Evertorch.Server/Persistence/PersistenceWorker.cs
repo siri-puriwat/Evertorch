@@ -25,11 +25,11 @@ public sealed class PersistenceWorker : IDisposable
 {
     public const int ProbeIntervalMs = 1000;
 
-    private static readonly Action<ILogger, string, long, Exception?> LogJobFailed =
-        LoggerMessage.Define<string, long>(
+    private static readonly Action<ILogger, string, string, long, long, Exception?> LogJobFailed =
+        LoggerMessage.Define<string, string, long, long>(
             LogLevel.Error,
             new EventId(4004, "PersistenceJobFailed"),
-            "The {Operation} job for character {Character} failed.");
+            "The {Operation} job {OperationId} for character {Character} on connection {Connection} failed.");
 
     private static readonly Action<ILogger, Exception?> LogDatabaseUnavailable =
         LoggerMessage.Define(
@@ -76,6 +76,7 @@ public sealed class PersistenceWorker : IDisposable
     // Jitter only spreads retries; it never decides a gameplay outcome, so it does not use the seeded server random.
     private readonly Random m_jitter = new();
     private int m_pendingJobs;
+    private long m_nextJobId;
     private int m_state;
     private bool m_isStopping;
     private bool m_isExecuting;
@@ -167,6 +168,7 @@ public sealed class PersistenceWorker : IDisposable
                 return false;
             }
 
+            job.Id = ++m_nextJobId;
             m_queue.Enqueue(new Entry(job));
             m_pendingJobs++;
             Monitor.PulseAll(m_gate);
@@ -183,6 +185,7 @@ public sealed class PersistenceWorker : IDisposable
         checkpoint.IsCheckpoint = true;
         lock (m_gate)
         {
+            checkpoint.Id = ++m_nextJobId;
             bool isWaiting = m_checkpoints.ContainsKey(checkpoint.Character);
             m_checkpoints[checkpoint.Character] = checkpoint;
             if (!isWaiting)
@@ -527,7 +530,7 @@ public sealed class PersistenceWorker : IDisposable
             }
             catch (Exception exception)
             {
-                LogJobFailed(m_logger, job.Operation, job.Character, exception);
+                LogJobFailed(m_logger, job.Operation, job.OperationId, job.Character, job.Connection.Value, exception);
                 return PersistenceOutcome.Failed;
             }
         }
