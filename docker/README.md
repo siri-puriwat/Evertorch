@@ -38,9 +38,57 @@ environment variables or .NET user secrets and are never committed.
 | Database connection | `ConnectionStrings:Evertorch` | `ConnectionStrings__Evertorch` |
 
 The server refuses to start without it. The IDE launch profiles do not set it:
-set the environment variable first, or use `scripts/run-server.cmd`. Example
-for a local shell, using the values chosen in `.env`:
+set the environment variable first (see "Running the server from Visual Studio"
+below), or use `scripts/run-server.cmd`. Example for a local shell, using the
+values chosen in `.env`:
 
 ```text
 ConnectionStrings__Evertorch=Host=127.0.0.1;Port=5432;Database=evertorch_dev;Username=evertorch;Password=<local password>
 ```
+
+## Running the server from Visual Studio
+
+The launch profiles in `Evertorch.Server/Properties/launchSettings.json` are
+committed, so they cannot carry the database password. Visual Studio takes the
+connection string from a user environment variable instead.
+
+One-time setup, from the repository root, with Docker Desktop running:
+
+1. Run `scripts/run-server.cmd` once, then stop it with Ctrl+C. It builds the
+   content packages, starts the database, and applies the migrations. The
+   database keeps running.
+2. Store the connection string. It is built from `.env`, so the password is
+   neither typed nor printed:
+
+   ```powershell
+   powershell -NoProfile -ExecutionPolicy Bypass -Command ". .\scripts\DevDatabase.ps1; [Environment]::SetEnvironmentVariable('ConnectionStrings__Evertorch', (Get-DevConnectionString (Get-Location).Path), 'User')"
+   ```
+
+   It prints nothing when it works.
+3. Check it, with the password masked:
+
+   ```powershell
+   [Environment]::GetEnvironmentVariable('ConnectionStrings__Evertorch', 'User') -replace 'Password=[^;]*', 'Password=***'
+   ```
+
+4. Close every Visual Studio window and open it again. It reads environment
+   variables only when it starts.
+5. Choose the `Development` or `Development (LAN)` profile and start debugging.
+
+Afterwards:
+
+- Docker Desktop must be running. The database container restarts with it.
+- After pulling a new migration, run `scripts/db-migrate.ps1` first: the server
+  exits while a migration is pending.
+- After changing files under `content/`, rebuild the packages with
+  `dotnet run --project Evertorch.Tools -- content build --client-out Evertorch.Client/Assets/StreamingAssets/GameData`,
+  or run `scripts/run-server.cmd` again.
+- After changing the password in `.env`, repeat step 2.
+- To remove the variable:
+  `[Environment]::SetEnvironmentVariable('ConnectionStrings__Evertorch', $null, 'User')`.
+
+The variable holds only the local development password, for a database that
+listens on `127.0.0.1`.
+
+To debug without the variable, start `scripts/run-server.cmd` and use
+Debug > Attach to Process on the `Evertorch.Server` process.
