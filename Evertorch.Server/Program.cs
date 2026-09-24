@@ -39,7 +39,9 @@ public static class Program
             environmentName = host.Services.GetRequiredService<IHostEnvironment>().EnvironmentName;
             try
             {
-                host.Run();
+                // Not Run, which disposes the host on its way out, before the outcome can be read.
+                host.Start();
+                host.WaitForShutdown();
                 exitCode = host.Services.GetRequiredService<ServerLifetimeService>().HasFailed ? 1 : 0;
             }
             // The host has already logged every failure to start or stop. Bad content or configuration, a port

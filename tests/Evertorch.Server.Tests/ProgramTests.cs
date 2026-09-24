@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Net;
 using System.Net.Sockets;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Evertorch.Persistence;
@@ -26,6 +27,66 @@ public sealed class ProgramTests
         Task<int> run = StartMain(args);
         Assert.That(run.Wait(TimeSpan.FromSeconds(60)), Is.True, "Main returned");
         return run.Result;
+    }
+
+    // The console output, watched for the host's own word that every service has started.
+    private sealed class StartedWatcher : TextWriter
+    {
+        private readonly StringBuilder m_text = new();
+
+        public ManualResetEventSlim Started { get; } = new();
+
+        public override Encoding Encoding => Encoding.UTF8;
+
+        public override void Write(char value)
+        {
+            Write(value.ToString());
+        }
+
+        public override void Write(string? value)
+        {
+            lock (m_text)
+            {
+                m_text.Append(value);
+                if (m_text.ToString().Contains("Application started", StringComparison.Ordinal))
+                {
+                    Started.Set();
+                }
+            }
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                Started.Dispose();
+            }
+
+            base.Dispose(disposing);
+        }
+    }
+
+    private sealed class ShutdownOnceStarted : TextReader
+    {
+        private readonly ManualResetEventSlim m_started;
+        private bool m_hasAnswered;
+
+        public ShutdownOnceStarted(ManualResetEventSlim started)
+        {
+            m_started = started;
+        }
+
+        public override string? ReadLine()
+        {
+            if (m_hasAnswered)
+            {
+                return null;
+            }
+
+            m_hasAnswered = true;
+            m_started.Wait(TimeSpan.FromSeconds(30));
+            return "shutdown";
+        }
     }
 
     [Test]
@@ -70,6 +131,38 @@ public sealed class ProgramTests
             "--Health:Port=0");
 
         Assert.That(exitCode, Is.EqualTo(1));
+    }
+
+    [Test]
+    public void Main_WhenTheConsoleSaysShutdown_StopsAndReturnsZero()
+    {
+        using var package = new TemporaryDirectory();
+        PackageFixture.WriteTo(package.Path, PackageFixture.BuildRepositoryPackage());
+        TextReader originalIn = Console.In;
+        TextWriter originalOut = Console.Out;
+        using var output = new StartedWatcher();
+        int exitCode;
+
+        // The stop Ctrl+C makes, once the host has started; a stop during the start is a failed start.
+        Console.SetOut(output);
+        Console.SetIn(new ShutdownOnceStarted(output.Started));
+        try
+        {
+            exitCode = RunMain(
+                $"--Content:ServerPackagePath={package.Path}",
+                $"--ConnectionStrings:Evertorch={TestHosts.UnreachableDatabase}",
+                "--Network:Port=0",
+                "--Health:Enabled=true",
+                "--Health:Port=0");
+        }
+        finally
+        {
+            Console.SetIn(originalIn);
+            Console.SetOut(originalOut);
+        }
+
+        Assert.That(output.Started.IsSet, Is.True, "the host started");
+        Assert.That(exitCode, Is.Zero, "a clean stop is not a failure");
     }
 
     [Test]
