@@ -62,6 +62,7 @@ public sealed class PersistenceWorker : IDisposable
             "The database answered the availability probe with an error; it stays unavailable until a probe passes.");
 
     private readonly IGameStore m_store;
+    private readonly ServerInstruments m_instruments;
     private readonly ILogger<PersistenceWorker> m_logger;
     private readonly int m_capacity;
     private readonly int m_timeoutMs;
@@ -87,9 +88,11 @@ public sealed class PersistenceWorker : IDisposable
     public PersistenceWorker(
         IGameStore store,
         IOptions<PersistenceOptions> options,
+        ServerInstruments instruments,
         ILogger<PersistenceWorker> logger)
     {
         m_store = store;
+        m_instruments = instruments;
         m_logger = logger;
         m_capacity = options.Value.QueueCapacity;
         m_timeoutMs = options.Value.CommandTimeoutMs;
@@ -450,7 +453,9 @@ public sealed class PersistenceWorker : IDisposable
 
     private void Finish(PersistenceJob job)
     {
+        var took = Stopwatch.StartNew();
         job.Outcome = Attempt(job);
+        m_instruments.RecordJob(job.Operation, job.Outcome, took.Elapsed);
         if (job.Outcome == PersistenceOutcome.Unavailable)
         {
             if (SetState(DatabaseState.Unavailable))
@@ -513,6 +518,7 @@ public sealed class PersistenceWorker : IDisposable
             catch (StoreUnavailableException) when (attempt < m_maxRetries && !timeout.IsCancellationRequested)
             {
                 Retries++;
+                m_instruments.RecordRetry(job.Operation);
                 bool isCancelled =
                     timeout.Token.WaitHandle.WaitOne(RetryDelayMs(attempt, m_retryBaseDelayMs, m_jitter));
                 if (isCancelled)

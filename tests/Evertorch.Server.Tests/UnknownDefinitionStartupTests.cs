@@ -21,6 +21,7 @@ public sealed class UnknownDefinitionStartupTests
         var worker = new PersistenceWorker(
             store,
             Options.Create(new PersistenceOptions()),
+            TestInstruments.Create(),
             new CapturingLogger<PersistenceWorker>());
         var log = new CapturingLogger<DatabaseStartupCheck>();
         return (new DatabaseStartupCheck(worker, store, content, log), log);

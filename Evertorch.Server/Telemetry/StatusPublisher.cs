@@ -15,7 +15,10 @@ public sealed class StatusPublisher : ITickPhase
     private readonly SessionRegistry m_sessions;
     private readonly SessionManager m_sessionManager;
     private readonly WorldSimulation m_world;
-    private readonly ITransportStatistics m_transport;
+    private readonly IServerTransport m_transport;
+    private readonly PersistenceWorker m_persistence;
+    private readonly IMonotonicClock m_clock;
+    private readonly ServerInstruments m_instruments;
     private readonly int m_tickRate;
     private ServerStatus m_current = ServerStatus.Empty;
 
@@ -25,7 +28,10 @@ public sealed class StatusPublisher : ITickPhase
         SessionRegistry sessions,
         SessionManager sessionManager,
         WorldSimulation world,
-        ITransportStatistics transport,
+        IServerTransport transport,
+        PersistenceWorker persistence,
+        IMonotonicClock clock,
+        ServerInstruments instruments,
         IOptions<SimulationOptions> simulation)
     {
         m_metrics = metrics;
@@ -34,7 +40,11 @@ public sealed class StatusPublisher : ITickPhase
         m_sessionManager = sessionManager;
         m_world = world;
         m_transport = transport;
+        m_persistence = persistence;
+        m_clock = clock;
+        m_instruments = instruments;
         m_tickRate = simulation.Value.TickRate;
+        instruments.ObserveStatus(() => Current);
     }
 
     /// <summary>
@@ -57,16 +67,24 @@ public sealed class StatusPublisher : ITickPhase
     {
         var playersPerMap = new Dictionary<string, int>();
         var monstersPerMap = new Dictionary<string, int>();
+        var entitiesPerMap = new Dictionary<string, int>();
         foreach (MapInstance map in m_world.Maps)
         {
             playersPerMap[map.Definition.Id.Value] = map.Players.Count;
             monstersPerMap[map.Definition.Id.Value] = map.Monsters.Count;
+            entitiesPerMap[map.Definition.Id.Value] = map.Entities.Count;
         }
 
         var players = new List<PlayerSummary>();
+        int authenticated = 0;
         int inWorld = 0;
         foreach (ClientSession session in m_sessions.Sessions)
         {
+            if (session.Account != null)
+            {
+                authenticated++;
+            }
+
             if (session.State != SessionState.InWorld
                 || session.Player == null
                 || session.Map == null
@@ -76,9 +94,13 @@ public sealed class StatusPublisher : ITickPhase
             }
 
             inWorld++;
-            int roundTrip = m_transport.TryGetRoundTripTime(session.Connection, out int milliseconds)
-                ? milliseconds
-                : -1;
+            int roundTrip = -1;
+            if (m_transport.TryGetRoundTripTime(session.Connection, out int milliseconds))
+            {
+                roundTrip = milliseconds;
+                m_instruments.RecordRoundTripTime(milliseconds);
+            }
+
             players.Add(
                 new PlayerSummary(
                     session.Connection,
@@ -96,6 +118,7 @@ public sealed class StatusPublisher : ITickPhase
         return new ServerStatus(
             tick,
             m_tickRate,
+            m_clock.Elapsed,
             m_metrics.LastTickDuration,
             m_metrics.MaxTickDuration,
             m_metrics.Overruns,
@@ -105,10 +128,19 @@ public sealed class StatusPublisher : ITickPhase
             m_inbound.Malformed,
             m_sessionManager.IgnoredEvents,
             m_sessions.Sessions.Count,
+            authenticated,
             inWorld,
+            m_sessionManager.AuthenticationFailures,
+            m_transport.IsAdmissionOpen,
+            new PersistenceStatus(
+                m_persistence.State,
+                m_persistence.PendingJobs,
+                m_persistence.WaitingCheckpoints,
+                m_persistence.Retries),
             m_transport.GetStatistics(),
             playersPerMap,
             monstersPerMap,
+            entitiesPerMap,
             players);
     }
 }

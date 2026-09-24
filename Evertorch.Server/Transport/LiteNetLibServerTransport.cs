@@ -167,6 +167,8 @@ public sealed class LiteNetLibServerTransport : IServerTransport, INetEventListe
         LogListening(m_logger, m_options.BindAddress, m_manager.LocalPort, null);
     }
 
+    public bool IsAdmissionOpen => !m_isAdmissionClosed;
+
     public void CloseAdmission()
     {
         m_isAdmissionClosed = true;

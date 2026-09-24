@@ -66,7 +66,12 @@ public sealed class AdminConsole
 
     private static void WriteStatus(ServerStatus status, TextWriter output)
     {
-        output.WriteLine(Format("tick {0} at {1} Hz", status.Tick, status.TickRate));
+        output.WriteLine(
+            Format(
+                "uptime {0}, tick {1} at {2} Hz",
+                status.PublishedAt.ToString(@"d\.hh\:mm\:ss", CultureInfo.InvariantCulture),
+                status.Tick,
+                status.TickRate));
         output.WriteLine(
             Format(
                 "tick time last {0:0.00} ms, max {1:0.00} ms, overruns {2}, skipped steps {3}",
@@ -75,7 +80,20 @@ public sealed class AdminConsole
                 status.Overruns,
                 status.SkippedSteps));
         output.WriteLine(
-            Format("sessions connected {0}, in world {1}", status.ConnectedSessions, status.InWorldSessions));
+            Format(
+                "sessions connected {0}, signed in {1}, in world {2}; authentication failures {3}",
+                status.ConnectedSessions,
+                status.AuthenticatedSessions,
+                status.InWorldSessions,
+                status.AuthenticationFailures));
+        output.WriteLine(status.IsAdmissionOpen ? "admission open" : "admission closed");
+        output.WriteLine(
+            Format(
+                "database {0}, persistence jobs waiting {1}, checkpoints waiting {2}, retries {3}",
+                DatabaseStateText(status.Persistence.State),
+                status.Persistence.PendingJobs,
+                status.Persistence.WaitingCheckpoints,
+                status.Persistence.Retries));
         output.WriteLine(
             Format(
                 "inbound queue {0}, dropped {1}, malformed {2}, ignored {3}",
@@ -122,6 +140,21 @@ public sealed class AdminConsole
                     player.StaleInputs,
                     player.DroppedInputs,
                     player.RefusedCommands));
+        }
+    }
+
+    private static string DatabaseStateText(DatabaseState state)
+    {
+        switch (state)
+        {
+            case DatabaseState.Available:
+                return "available";
+            case DatabaseState.Unavailable:
+                return "unavailable";
+            case DatabaseState.PendingMigrations:
+                return "waiting for migrations";
+            default:
+                return "not yet asked";
         }
     }
 

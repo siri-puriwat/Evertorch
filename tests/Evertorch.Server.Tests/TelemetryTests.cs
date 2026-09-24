@@ -43,7 +43,7 @@ public sealed class TelemetryTests
     private static ServerMetrics CreateMetrics(out CapturingLogger<TickLogObserver> log)
     {
         log = new CapturingLogger<TickLogObserver>();
-        return new ServerMetrics(new TickLogObserver(log, new FakeClock()));
+        return new ServerMetrics(new TickLogObserver(log, new FakeClock()), TestInstruments.Create());
     }
 
     [Test]
@@ -99,9 +99,26 @@ public sealed class TelemetryTests
 
         string text = output.ToString();
         Assert.That(text, Does.Contain($"tick {server.Status.Current.Tick} at 20 Hz"));
-        Assert.That(text, Does.Contain("sessions connected 1, in world 1"));
+        Assert.That(text, Does.Contain("sessions connected 1, signed in 1, in world 1; authentication failures 0"));
+        Assert.That(text, Does.Contain("admission open"));
+        Assert.That(text, Does.Contain("database available, persistence jobs waiting 0, checkpoints waiting 0"));
         Assert.That(text, Does.Contain("network bytes in 1000, out 2000"));
         Assert.That(text, Does.Contain("map map.training_ground: 1 players"));
+    }
+
+    [Test]
+    public void Execute_Status_ShowsUptimeAndAClosedAdmission()
+    {
+        var server = new TestServer();
+        server.Clock.Advance(TimeSpan.FromHours(26) + TimeSpan.FromSeconds(7));
+        server.Transport.CloseAdmission();
+        server.TickUntilPublished();
+        var output = new StringWriter();
+
+        CreateConsole(server).Execute("status", output);
+
+        Assert.That(output.ToString(), Does.StartWith("uptime 1.02:00:07, tick"));
+        Assert.That(output.ToString(), Does.Contain("admission closed"));
     }
 
     [Test]

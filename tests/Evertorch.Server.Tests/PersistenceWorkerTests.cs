@@ -34,6 +34,7 @@ public sealed class PersistenceWorkerTests
         return new PersistenceWorker(
             store,
             Options.Create(options),
+            TestInstruments.Create(),
             logger ?? new CapturingLogger<PersistenceWorker>());
     }
 

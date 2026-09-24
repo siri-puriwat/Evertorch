@@ -12,6 +12,11 @@ public interface IServerTransport : IOutboundMessages, ITransportStatistics
     int LocalPort { get; }
 
     /// <summary>
+    ///     False once <see cref="CloseAdmission" /> has run. Safe to read from any thread.
+    /// </summary>
+    bool IsAdmissionOpen { get; }
+
+    /// <summary>
     ///     Binds the socket and begins accepting connections. Throws when the endpoint cannot be bound.
     /// </summary>
     void Start();

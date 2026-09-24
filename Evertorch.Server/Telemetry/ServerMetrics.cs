@@ -9,10 +9,12 @@ namespace Evertorch.Server
 public sealed class ServerMetrics : ITickObserver
 {
     private readonly TickLogObserver m_log;
+    private readonly ServerInstruments m_instruments;
 
-    public ServerMetrics(TickLogObserver log)
+    public ServerMetrics(TickLogObserver log, ServerInstruments instruments)
     {
         m_log = log;
+        m_instruments = instruments;
     }
 
     public uint LastTick { get; private set; }
@@ -34,6 +36,7 @@ public sealed class ServerMetrics : ITickObserver
             MaxTickDuration = duration;
         }
 
+        m_instruments.RecordTick(duration);
         m_log.OnTickCompleted(tick, duration);
     }
 
@@ -41,6 +44,7 @@ public sealed class ServerMetrics : ITickObserver
     {
         Overruns++;
         SkippedSteps += skippedSteps;
+        m_instruments.RecordOverrun(skippedSteps);
         m_log.OnOverrun(tick, duration, skippedSteps);
     }
 }

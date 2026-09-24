@@ -21,7 +21,11 @@ public sealed class LogCorrelationTests
 
     private static PersistenceWorker CreateWorker(CapturingLogger<PersistenceWorker> log)
     {
-        return new PersistenceWorker(new InMemoryGameStore(), Options.Create(new PersistenceOptions()), log);
+        return new PersistenceWorker(
+            new InMemoryGameStore(),
+            Options.Create(new PersistenceOptions()),
+            TestInstruments.Create(),
+            log);
     }
 
     // A job that fails for good: any exception but the store's own unavailability is not retried.

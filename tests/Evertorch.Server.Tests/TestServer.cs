@@ -90,6 +90,7 @@ internal sealed class TestServer
         Persistence = new PersistenceWorker(
             GameStore,
             Options.Create(persistence ?? new PersistenceOptions { RetryBaseDelayMs = 1 }),
+            Instruments,
             PersistenceLog);
 
         var sender = new MessageSender(Transport);
@@ -132,6 +133,7 @@ internal sealed class TestServer
             Options.Create(network),
             compatibility,
             Options.Create(world),
+            Instruments,
             Log);
         Drops = new ItemDropSystem(World, dropRandom ?? Random, Options.Create(world), simulation);
         Combat = new CombatSystem(
@@ -144,8 +146,20 @@ internal sealed class TestServer
             combatRandom ?? Random,
             Options.Create(world),
             simulation);
-        Metrics = new ServerMetrics(new TickLogObserver(new CapturingLogger<TickLogObserver>(), new FakeClock()));
-        Status = new StatusPublisher(Metrics, Inbound, Sessions, SessionManager, World, Transport, simulation);
+        Metrics = new ServerMetrics(
+            new TickLogObserver(new CapturingLogger<TickLogObserver>(), new FakeClock()),
+            Instruments);
+        Status = new StatusPublisher(
+            Metrics,
+            Inbound,
+            Sessions,
+            SessionManager,
+            World,
+            Transport,
+            Persistence,
+            Clock,
+            Instruments,
+            simulation);
         var phases = new List<ITickPhase>
         {
             Status,
@@ -214,6 +228,13 @@ internal sealed class TestServer
     public CapturingLogger<PersistenceWorker> PersistenceLog { get; }
 
     public CapturingLogger<CharacterLifetime> LifetimeLog { get; } = new();
+
+    public ServerInstruments Instruments { get; } = TestInstruments.Create();
+
+    /// <summary>
+    ///     The status publisher's monotonic clock; advance it to age the published status.
+    /// </summary>
+    public FakeClock Clock { get; } = new();
 
     public CapturingLogger<PickupSystem> PickupLog { get; } = new();
 

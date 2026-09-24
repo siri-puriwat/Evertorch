@@ -12,6 +12,7 @@ public sealed class ServerStatus
     public ServerStatus(
         uint tick,
         int tickRate,
+        TimeSpan publishedAt,
         TimeSpan lastTickDuration,
         TimeSpan maxTickDuration,
         long overruns,
@@ -21,14 +22,20 @@ public sealed class ServerStatus
         long malformedMessages,
         long ignoredEvents,
         int connectedSessions,
+        int authenticatedSessions,
         int inWorldSessions,
+        long authenticationFailures,
+        bool isAdmissionOpen,
+        PersistenceStatus persistence,
         TransportStatistics transport,
         IReadOnlyDictionary<string, int> playersPerMap,
         IReadOnlyDictionary<string, int> monstersPerMap,
+        IReadOnlyDictionary<string, int> entitiesPerMap,
         IReadOnlyList<PlayerSummary> players)
     {
         Tick = tick;
         TickRate = tickRate;
+        PublishedAt = publishedAt;
         LastTickDuration = lastTickDuration;
         MaxTickDuration = maxTickDuration;
         Overruns = overruns;
@@ -38,10 +45,15 @@ public sealed class ServerStatus
         MalformedMessages = malformedMessages;
         IgnoredEvents = ignoredEvents;
         ConnectedSessions = connectedSessions;
+        AuthenticatedSessions = authenticatedSessions;
         InWorldSessions = inWorldSessions;
+        AuthenticationFailures = authenticationFailures;
+        IsAdmissionOpen = isAdmissionOpen;
+        Persistence = persistence;
         Transport = transport;
         PlayersPerMap = playersPerMap;
         MonstersPerMap = monstersPerMap;
+        EntitiesPerMap = entitiesPerMap;
         Players = players;
     }
 
@@ -50,6 +62,7 @@ public sealed class ServerStatus
         0,
         TimeSpan.Zero,
         TimeSpan.Zero,
+        TimeSpan.Zero,
         0,
         0,
         0,
@@ -58,7 +71,12 @@ public sealed class ServerStatus
         0,
         0,
         0,
+        0,
+        0,
+        false,
         default,
+        default,
+        new Dictionary<string, int>(),
         new Dictionary<string, int>(),
         new Dictionary<string, int>(),
         new PlayerSummary[0]);
@@ -66,6 +84,11 @@ public sealed class ServerStatus
     public uint Tick { get; }
 
     public int TickRate { get; }
+
+    /// <summary>
+    ///     When this was published, on the server's monotonic clock, which starts with the host: the uptime then.
+    /// </summary>
+    public TimeSpan PublishedAt { get; }
 
     public TimeSpan LastTickDuration { get; }
 
@@ -85,13 +108,26 @@ public sealed class ServerStatus
 
     public int ConnectedSessions { get; }
 
+    /// <summary>
+    ///     Sessions signed in to an account, whether choosing a character, entering, or in the world.
+    /// </summary>
+    public int AuthenticatedSessions { get; }
+
     public int InWorldSessions { get; }
+
+    public long AuthenticationFailures { get; }
+
+    public bool IsAdmissionOpen { get; }
+
+    public PersistenceStatus Persistence { get; }
 
     public TransportStatistics Transport { get; }
 
     public IReadOnlyDictionary<string, int> PlayersPerMap { get; }
 
     public IReadOnlyDictionary<string, int> MonstersPerMap { get; }
+
+    public IReadOnlyDictionary<string, int> EntitiesPerMap { get; }
 
     public IReadOnlyList<PlayerSummary> Players { get; }
 }

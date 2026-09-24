@@ -66,6 +66,7 @@ public sealed class SessionManager : ITickPhase
     private readonly CharacterLifetime m_lifetime;
     private readonly PickupSystem m_pickups;
     private readonly TimeProvider m_time;
+    private readonly ServerInstruments m_instruments;
     private readonly ILogger<SessionManager> m_logger;
     private readonly string m_serverBuildVersion;
     private readonly uint m_tickRate;
@@ -92,6 +93,7 @@ public sealed class SessionManager : ITickPhase
         IOptions<NetworkOptions> network,
         IOptions<CompatibilityOptions> compatibility,
         IOptions<WorldOptions> worldOptions,
+        ServerInstruments instruments,
         ILogger<SessionManager> logger)
     {
         m_maxQueuedInputs = worldOptions.Value.MaxQueuedInputs;
@@ -108,6 +110,7 @@ public sealed class SessionManager : ITickPhase
         m_pickups = pickups;
         m_pickups.Settled += OnPickupSettled;
         m_time = time;
+        m_instruments = instruments;
         m_logger = logger;
         m_serverBuildVersion = compatibility.Value.ServerBuildVersion;
         m_tickRate = (uint)simulation.Value.TickRate;
@@ -121,6 +124,12 @@ public sealed class SessionManager : ITickPhase
     ///     Inputs that arrived malformed, out of order for the session's state, or for a connection already closed.
     /// </summary>
     public long IgnoredEvents { get; private set; }
+
+    /// <summary>
+    ///     Connections refused because they did not sign in: a rejected token, silence until the handshake timed out,
+    ///     or entry asked for before the hello.
+    /// </summary>
+    public long AuthenticationFailures { get; private set; }
 
     public TickPhase Phase => TickPhase.DrainCommands;
 
@@ -811,6 +820,12 @@ public sealed class SessionManager : ITickPhase
 
     private void Refuse(ClientSession session, DisconnectReason reason)
     {
+        if (reason == DisconnectReason.AuthenticationFailed)
+        {
+            AuthenticationFailures++;
+            m_instruments.RecordAuthenticationFailure();
+        }
+
         LogHandshakeRejected(m_logger, session.Connection.Value, AccountOf(session), reason, null);
         Close(session, reason);
     }

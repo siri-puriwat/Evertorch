@@ -8,7 +8,7 @@ namespace Evertorch.Server.Tests
 /// <summary>
 ///     Records what the server sends, per connection and in order, instead of putting it on a socket.
 /// </summary>
-internal sealed class InMemoryServerTransport : IOutboundMessages, ITransportStatistics
+internal sealed class InMemoryServerTransport : IServerTransport
 {
     private readonly Dictionary<ConnectionId, List<SentMessage>> m_sent = new();
 
@@ -18,6 +18,10 @@ internal sealed class InMemoryServerTransport : IOutboundMessages, ITransportSta
     ///     Sends to these connections throw, standing in for any defect while one peer's input is handled.
     /// </summary>
     public HashSet<ConnectionId> FailSendsTo { get; } = new();
+
+    public int LocalPort => 0;
+
+    public bool IsAdmissionOpen { get; private set; } = true;
 
     public void Send(ConnectionId connection, ReadOnlySpan<byte> payload)
     {
@@ -44,6 +48,20 @@ internal sealed class InMemoryServerTransport : IOutboundMessages, ITransportSta
     public void Disconnect(ConnectionId connection, DisconnectReason reason, string message)
     {
         Disconnects[connection] = reason;
+    }
+
+    public void Start()
+    {
+    }
+
+    public void CloseAdmission()
+    {
+        IsAdmissionOpen = false;
+    }
+
+    public void Stop()
+    {
+        CloseAdmission();
     }
 
     public TransportStatistics GetStatistics()
