@@ -11,7 +11,7 @@ namespace Evertorch.Client.Tests.PlayMode
 {
 /// <summary>
 ///     A throwaway PostgreSQL 18 container for the live server, migrated with <c>scripts/db-migrate.ps1</c> and
-///     removed on dispose. It never touches the Compose development database. Needs Docker running.
+///     removed with its volume on dispose. It never touches the Compose development database. Needs Docker running.
 /// </summary>
 internal sealed class LiveDatabase : IDisposable
 {
@@ -39,7 +39,9 @@ internal sealed class LiveDatabase : IDisposable
             return;
         }
 
-        TryRun(m_docker, $"rm -f {m_container}", out _);
+        // The image keeps its data in an anonymous volume. A forced removal leaves that volume behind, even for a
+        // container started with --rm, unless it is given -v.
+        TryRun(m_docker, $"rm -f -v {m_container}", out _);
         m_container = null;
     }
 
