@@ -66,6 +66,9 @@ public sealed class GameClient : MonoBehaviour
     private CombatPresenter? m_combat;
     private Material? m_runtimeMaterial;
     private string m_leaveReason = string.Empty;
+    private CharacterId m_enteringCharacter;
+    private CharacterId m_lastCharacter;
+    private CharacterId m_reconnectCharacter;
 
     public string Host
     {
@@ -100,6 +103,12 @@ public sealed class GameClient : MonoBehaviour
     public FixedTickClock? Clock => m_clock;
 
     public TouchControls? Touch { get; private set; }
+
+    /// <summary>
+    ///     Whether the last close allows <see cref="Reconnect" />: not after a refusal only an update or another sign-in
+    ///     can cure (<see cref="DisconnectMessages.CanReconnect" />).
+    /// </summary>
+    public bool CanReconnect { get; private set; }
 
     private IEnumerator Start()
     {
@@ -269,6 +278,21 @@ public sealed class GameClient : MonoBehaviour
     }
 
     /// <summary>
+    ///     Connects again and, once the character list arrives, enters the character last played. Only ever on the
+    ///     player's request, never by itself.
+    /// </summary>
+    public void Reconnect()
+    {
+        if (!CanReconnect)
+        {
+            return;
+        }
+
+        m_reconnectCharacter = m_lastCharacter;
+        Connect();
+    }
+
+    /// <summary>
     ///     Asks for a new character on this identity's account; the answer comes back with the next character list.
     /// </summary>
     public void CreateCharacter(string name)
@@ -295,6 +319,7 @@ public sealed class GameClient : MonoBehaviour
     {
         if (Connection != null && Connection.EnterWorld(character))
         {
+            m_enteringCharacter = character;
             Status = "Entering the world";
         }
     }
@@ -345,16 +370,39 @@ public sealed class GameClient : MonoBehaviour
         {
             Status = status;
         }
+
+        EnterAgainAfterReconnect();
+    }
+
+    private void EnterAgainAfterReconnect()
+    {
+        CharacterId character = m_reconnectCharacter;
+        m_reconnectCharacter = default;
+        if (character == default || Connection?.State != ClientConnectionState.SelectingCharacter)
+        {
+            return;
+        }
+
+        foreach (CharacterListEntry entry in Connection.Characters)
+        {
+            if (entry.Character == character)
+            {
+                EnterWorld(character);
+                return;
+            }
+        }
     }
 
     private void OnLeftWorld()
     {
         TearDownWorld();
+        LeaveMapScene();
         Status = "Logged out: choose or create a character";
     }
 
     private void OnEnteredWorld(ClientWorld world)
     {
+        m_lastCharacter = m_enteringCharacter;
         StartCoroutine(EnterMap(world));
     }
 
@@ -376,6 +424,11 @@ public sealed class GameClient : MonoBehaviour
         // The connection may have closed, or been replaced, while the scene was loading.
         if (Connection == null || Connection.State != ClientConnectionState.InWorld || Connection.World != world)
         {
+            if (m_world == null)
+            {
+                LeaveMapScene();
+            }
+
             yield break;
         }
 
@@ -557,6 +610,8 @@ public sealed class GameClient : MonoBehaviour
     private void OnClosed()
     {
         TearDownWorld();
+        LeaveMapScene();
+        m_reconnectCharacter = default;
         ClientConnection? connection = Connection;
         if (connection == null)
         {
@@ -567,18 +622,26 @@ public sealed class GameClient : MonoBehaviour
         {
             Status = m_leaveReason;
             m_leaveReason = string.Empty;
+            CanReconnect = false;
         }
         else if (connection.LocalError.Length > 0)
         {
             Status = connection.LocalError;
-        }
-        else if (connection.Notice != null)
-        {
-            Status = $"Disconnected: {connection.Notice.Reason} {connection.Notice.Message}";
+            CanReconnect = false;
         }
         else
         {
-            Status = $"Disconnected: {connection.DisconnectCause}";
+            Status = DisconnectMessages.Describe(connection.Notice, connection.DisconnectCause);
+            CanReconnect = DisconnectMessages.CanReconnect(connection.Notice);
+        }
+    }
+
+    // Out of the world the map scene would be an empty stage, so the client shows the main menu scene instead.
+    private static void LeaveMapScene()
+    {
+        if (MapSceneResolver.IsMapScene(SceneManager.GetActiveScene().name))
+        {
+            SceneManager.LoadScene(BootstrapRedirect.MainMenuScene);
         }
     }
 

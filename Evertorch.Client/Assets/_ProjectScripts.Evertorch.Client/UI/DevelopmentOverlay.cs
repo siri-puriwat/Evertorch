@@ -281,6 +281,7 @@ public sealed class DevelopmentOverlay : MonoBehaviour
         private readonly GameObject m_logout;
         private readonly GameObject m_connectForm;
         private readonly TMP_InputField m_port;
+        private readonly GameObject m_reconnect;
         private readonly GameObject m_characters;
         private readonly TMP_Text m_charactersLabel;
         private readonly GameObject[] m_enterButtons = new GameObject[CharacterList.MaxEntries];
@@ -308,6 +309,7 @@ public sealed class DevelopmentOverlay : MonoBehaviour
             CreateField(form, "Identity", client.Identity, TMP_InputField.ContentType.Standard)
                 .onValueChanged.AddListener(value => client.Identity = value);
             CreateButton("Connect", form, Connect);
+            m_reconnect = CreateButton("Reconnect", form, Reconnect);
 
             m_characters = CreateColumn("Characters", panel);
             Transform characters = m_characters.transform;
@@ -376,6 +378,7 @@ public sealed class DevelopmentOverlay : MonoBehaviour
             m_respawn.SetActive(m_client.World?.IsLocalDead == true);
             m_logout.SetActive(connection != null && connection.State == ClientConnectionState.InWorld);
             m_connectForm.SetActive(!isOpen);
+            m_reconnect.SetActive(m_client.CanReconnect);
             RefreshCharacters(connection);
             RefreshWorld();
             RefreshLink();
@@ -394,6 +397,15 @@ public sealed class DevelopmentOverlay : MonoBehaviour
             {
                 m_client.Port = port;
                 m_client.Connect();
+            }
+        }
+
+        private void Reconnect()
+        {
+            if (int.TryParse(m_port.text, out int port))
+            {
+                m_client.Port = port;
+                m_client.Reconnect();
             }
         }
 

@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -135,7 +136,7 @@ public sealed class LiveServerCombatTests : InputTestFixture
 
         client.Disconnect();
         yield return WaitUntil(() => client.World == null, StartTimeoutSeconds);
-        yield return ReconnectAndEnter(client);
+        yield return ReconnectThroughTheOverlay(client, port);
         Assert.That(HeldGel(client.World!), Is.EqualTo(held), "the retained character still holds the gel");
         Assert.That(client.World!.Inventory.Revision, Is.EqualTo(revision));
 
@@ -148,8 +149,7 @@ public sealed class LiveServerCombatTests : InputTestFixture
         LiveServer restarted = m_server;
         yield return WaitUntil(() => restarted.TryReadListeningPort(out int _), StartTimeoutSeconds);
         Assert.That(restarted.TryReadListeningPort(out int restartedPort), Is.True, restarted.JoinOutput());
-        client.Port = restartedPort;
-        yield return ReconnectAndEnter(client);
+        yield return ReconnectThroughTheOverlay(client, restartedPort);
         Assert.That(HeldGel(client.World!), Is.EqualTo(held), "the gel was loaded from the database");
         Assert.That(client.World!.Inventory.Revision, Is.EqualTo(revision));
         Debug.Log($"Live pickup: {held} gel kept across a reconnect and a server restart, revision {revision}");
@@ -235,15 +235,25 @@ public sealed class LiveServerCombatTests : InputTestFixture
         enter.onClick.Invoke();
     }
 
-    private static IEnumerator ReconnectAndEnter(GameClient client)
+    // After a close the client leaves the map for the main menu and says why in its own words. Nothing reconnects by
+    // itself: the overlay's Reconnect, pressed on the port the player typed, connects and enters the last character.
+    private static IEnumerator ReconnectThroughTheOverlay(GameClient client, int port)
     {
-        client.Connect();
         yield return WaitUntil(
-            () => client.Connection?.State == ClientConnectionState.SelectingCharacter
-                && client.Connection.Characters.Count > 0,
+            () => SceneManager.GetActiveScene().name == BootstrapRedirect.MainMenuScene,
             StartTimeoutSeconds);
-        Assert.That(client.Connection!.Characters.Count, Is.EqualTo(1), client.Status);
-        client.EnterWorld(client.Connection.Characters[0].Character);
+        Assert.That(SceneManager.GetActiveScene().name, Is.EqualTo(BootstrapRedirect.MainMenuScene), "no empty map");
+        Assert.That(client.Status, Is.EqualTo(DisconnectMessages.ForCause(TransportDisconnectCause.ClosedLocally)));
+        yield return new WaitForSecondsRealtime(1f);
+        Assert.That(client.Connection!.State, Is.EqualTo(ClientConnectionState.Disconnected), "no reconnect by itself");
+
+        TMP_InputField portField = client.GetComponentsInChildren<TMP_InputField>(true)
+            .Single(candidate => candidate.transform.parent.name == "Port");
+        portField.text = port.ToString(CultureInfo.InvariantCulture);
+        Button reconnect = client.GetComponentsInChildren<Button>(true)
+            .Single(button => button.name == "Reconnect");
+        Assert.That(reconnect.gameObject.activeInHierarchy, Is.True, "the overlay offers Reconnect");
+        reconnect.onClick.Invoke();
         yield return WaitUntil(() => client.World?.Inventory.IsCurrent == true, StartTimeoutSeconds);
         Assert.That(client.World?.Inventory.IsCurrent, Is.True, client.Status);
     }

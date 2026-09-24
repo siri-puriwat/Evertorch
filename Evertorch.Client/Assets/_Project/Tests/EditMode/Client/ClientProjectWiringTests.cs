@@ -18,9 +18,11 @@ public sealed class ClientProjectWiringTests
 
     [TestCase("10_TrainingGround", false, true)]
     [TestCase("10_TrainingGround", true, false)]
+    [TestCase("01_MainMenu", false, true)]
+    [TestCase("01_MainMenu", true, false)]
     [TestCase("00_Bootstrap", false, false)]
     [TestCase("InitTestScene637000000000000000", false, false)]
-    public void BootstrapRedirect_OnlyAMapSceneWithoutAClientGoesBackToTheBootstrap(
+    public void BootstrapRedirect_OnlyAMapOrMainMenuSceneWithoutAClientGoesBackToTheBootstrap(
         string activeScene,
         bool hasGameClient,
         bool expected)
@@ -118,6 +120,19 @@ public sealed class ClientProjectWiringTests
             .ToArray();
 
         Assert.That(files, Is.EqualTo(new[] { "LiteNetLibClientTransport.cs" }));
+    }
+
+    [Test]
+    public void MainMenuScene_ComesRightAfterTheBootstrapInTheBuild()
+    {
+        string[] buildScenes = EditorBuildSettings.scenes
+            .Where(scene => scene.enabled)
+            .Select(scene => Path.GetFileNameWithoutExtension(scene.path))
+            .ToArray();
+
+        Assert.That(buildScenes, Has.Length.GreaterThan(1));
+        Assert.That(buildScenes[1], Is.EqualTo(BootstrapRedirect.MainMenuScene));
+        Assert.That(MapSceneResolver.IsMapScene(BootstrapRedirect.MainMenuScene), Is.False);
     }
 
     [Test]
