@@ -102,6 +102,10 @@ public sealed class TelemetryTests
         Assert.That(text, Does.Contain("sessions connected 1, signed in 1, in world 1; authentication failures 0"));
         Assert.That(text, Does.Contain("admission open"));
         Assert.That(text, Does.Contain("database available, persistence jobs waiting 0, checkpoints waiting 0"));
+        Assert.That(
+            text,
+            Does.Contain(
+                "rate limits: messages over budget 0, commands throttled 0; violations 0, disconnects for violations 0"));
         Assert.That(text, Does.Contain("network bytes in 1000, out 2000"));
         Assert.That(text, Does.Contain("map map.training_ground: 1 players"));
     }

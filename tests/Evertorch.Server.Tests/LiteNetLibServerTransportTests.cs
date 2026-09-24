@@ -39,9 +39,9 @@ public sealed class LiteNetLibServerTransportTests
 
     private sealed class Harness : IDisposable
     {
-        public Harness(int maxConnections = 8)
+        public Harness(int maxConnections = 8, AbuseOptions? abuse = null)
         {
-            Transport = CreateTransport(0, maxConnections, out InboundQueue inbound);
+            Transport = CreateTransport(0, maxConnections, out InboundQueue inbound, abuse);
             Inbound = inbound;
             Transport.Start();
         }
@@ -78,6 +78,7 @@ public sealed class LiteNetLibServerTransportTests
                 Options.Create(options),
                 new AddressThrottle(limits, clock),
                 instruments,
+                new AuditLog(new CapturingLogger<AuditLog>(), clock),
                 new CapturingLogger<LiteNetLibServerTransport>());
         }
 
@@ -110,6 +111,33 @@ public sealed class LiteNetLibServerTransportTests
 
         Assert.That(client.WaitFor(() => client.IsDisconnected), Is.True);
         Assert.That(client.Notice!.Reason, Is.EqualTo(DisconnectReason.Maintenance));
+    }
+
+    [Test]
+    public void Connect_FromACoolingAddress_IsRejectedWithRateLimitedAfterTheKeyCheckUntilTheCooldownEnds()
+    {
+        using var harness = new Harness(abuse: new AbuseOptions { KickCooldownMs = 1000 });
+        using TestNetClient kicked = ConnectedClient(harness, out ConnectionId connection);
+        var cooling = Stopwatch.StartNew();
+        harness.Transport.CoolDownAddress(connection);
+        harness.Transport.Disconnect(connection, DisconnectReason.Kicked, string.Empty);
+        Assert.That(kicked.WaitFor(() => kicked.IsDisconnected), Is.True);
+
+        using var again = new TestNetClient();
+        using var keyless = new TestNetClient();
+        again.Connect(harness.Port, Key);
+        keyless.Connect(harness.Port, "not-the-key");
+        Assert.That(again.WaitFor(() => again.IsDisconnected), Is.True);
+        Assert.That(keyless.WaitFor(() => keyless.IsDisconnected), Is.True);
+        Assert.That(cooling.Elapsed, Is.LessThan(TimeSpan.FromSeconds(1)), "the rejections came within the cooldown");
+
+        Thread.Sleep(TimeSpan.FromMilliseconds(1100) - cooling.Elapsed);
+        using var later = new TestNetClient();
+        later.Connect(harness.Port, Key);
+
+        Assert.That(again.Notice!.Reason, Is.EqualTo(DisconnectReason.RateLimited));
+        Assert.That(keyless.Notice, Is.Null, "the key is checked before the cooldown");
+        Assert.That(later.WaitFor(() => later.IsConnected), Is.True, "admitted once the cooldown is over");
     }
 
     [Test]
@@ -229,6 +257,18 @@ public sealed class LiteNetLibServerTransportTests
         Assert.That(client.Notice.Message, Is.EqualTo("Signed in elsewhere"));
         Thread.Sleep(100);
         Assert.That(harness.Inbound.Count, Is.EqualTo(0));
+    }
+
+    [Test]
+    public void Disconnect_ByServer_LetsTheQueueForgetThePeer()
+    {
+        using var harness = new Harness();
+        using TestNetClient client = ConnectedClient(harness, out ConnectionId connection);
+
+        harness.Transport.Disconnect(connection, DisconnectReason.Kicked, string.Empty);
+
+        Assert.That(client.WaitFor(() => client.IsDisconnected), Is.True);
+        Assert.That(client.WaitFor(() => harness.Inbound.TrackedPeers == 0), Is.True, "no budget is left behind");
     }
 
     [Test]

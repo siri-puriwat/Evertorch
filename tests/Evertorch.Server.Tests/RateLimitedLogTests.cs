@@ -65,6 +65,26 @@ public sealed class RateLimitedLogTests
     }
 
     [Test]
+    public void TryEnter_WithSeveralPerInterval_LetsThatManyThroughEachInterval()
+    {
+        var clock = new FakeClock();
+        var log = new RateLimitedLog(clock, TimeSpan.FromSeconds(1), 3);
+
+        int entered = 0;
+        for (int attempt = 0; attempt < 10; attempt++)
+        {
+            entered += log.TryEnter(out int _) ? 1 : 0;
+        }
+
+        clock.Advance(TimeSpan.FromSeconds(1));
+        bool next = log.TryEnter(out int suppressed);
+
+        Assert.That(entered, Is.EqualTo(3));
+        Assert.That(next, Is.True);
+        Assert.That(suppressed, Is.EqualTo(7));
+    }
+
+    [Test]
     public void TryEnter_WithinTheInterval_HoldsBack()
     {
         var clock = new FakeClock();

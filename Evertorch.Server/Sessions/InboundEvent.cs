@@ -16,7 +16,8 @@ public readonly struct InboundEvent
         MoveIntent intent,
         EntityId target = default,
         uint commandSequence = 0,
-        string? name = null)
+        string? name = null,
+        int count = 0)
     {
         Kind = kind;
         Connection = connection;
@@ -26,6 +27,7 @@ public readonly struct InboundEvent
         Target = target;
         CommandSequence = commandSequence;
         Name = name;
+        Count = count;
     }
 
     public InboundEventKind Kind { get; }
@@ -43,6 +45,11 @@ public readonly struct InboundEvent
     public uint CommandSequence { get; }
 
     public string? Name { get; }
+
+    /// <summary>
+    ///     For <see cref="InboundEventKind.InputDropped" />, how many inputs were dropped.
+    /// </summary>
+    public int Count { get; }
 
     public static InboundEvent Connected(ConnectionId connection)
     {
@@ -62,6 +69,11 @@ public readonly struct InboundEvent
     public static InboundEvent RateLimited(ConnectionId connection)
     {
         return new InboundEvent(InboundEventKind.RateLimited, connection, null, default, default);
+    }
+
+    public static InboundEvent InputDropped(ConnectionId connection, int count)
+    {
+        return new InboundEvent(InboundEventKind.InputDropped, connection, null, default, default, count: count);
     }
 
     public static InboundEvent ForHello(ConnectionId connection, ClientHello hello)

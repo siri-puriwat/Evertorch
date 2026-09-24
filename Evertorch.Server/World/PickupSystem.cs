@@ -41,6 +41,7 @@ public sealed class PickupSystem : ITickPhase
     private readonly CharacterLifetime m_lifetime;
     private readonly IReadOnlyDictionary<ItemDefinitionId, ItemDefinition> m_items;
     private readonly TimeProvider m_time;
+    private readonly AuditLog m_audit;
     private readonly ILogger<PickupSystem> m_logger;
     private readonly float m_reach;
     private readonly uint m_priorityTicks;
@@ -55,6 +56,7 @@ public sealed class PickupSystem : ITickPhase
         TimeProvider time,
         IOptions<WorldOptions> worldOptions,
         IOptions<SimulationOptions> simulation,
+        AuditLog audit,
         ILogger<PickupSystem> logger)
     {
         m_sessions = sessions;
@@ -63,6 +65,7 @@ public sealed class PickupSystem : ITickPhase
         m_lifetime = lifetime;
         m_items = content.Items;
         m_time = time;
+        m_audit = audit;
         m_logger = logger;
         m_reach = worldOptions.Value.PickupRange + worldOptions.Value.AttackRangeTolerance;
         m_priorityTicks = (uint)((long)LootPriorityMs * simulation.Value.TickRate / MillisecondsPerSecond);
@@ -280,6 +283,7 @@ public sealed class PickupSystem : ITickPhase
         if (owner != null && owner.State == SessionState.InWorld)
         {
             owner.RefusedCommands++;
+            m_audit.CommandRefused(owner, InboundEventKind.Pickup, reason);
             m_sender.Send(owner.Connection, new CommandRejected(pickup.CommandSequence, reason));
         }
 

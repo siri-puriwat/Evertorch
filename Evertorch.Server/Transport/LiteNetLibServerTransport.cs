@@ -34,6 +34,7 @@ public sealed class LiteNetLibServerTransport : IServerTransport, INetEventListe
     private readonly NetworkOptions m_options;
     private readonly AddressThrottle m_throttle;
     private readonly ServerInstruments m_instruments;
+    private readonly AuditLog m_audit;
     private readonly ILogger<LiteNetLibServerTransport> m_logger;
     private readonly NetManager m_manager;
 
@@ -47,12 +48,14 @@ public sealed class LiteNetLibServerTransport : IServerTransport, INetEventListe
         IOptions<NetworkOptions> options,
         AddressThrottle throttle,
         ServerInstruments instruments,
+        AuditLog audit,
         ILogger<LiteNetLibServerTransport> logger)
     {
         m_inbound = inbound;
         m_options = options.Value;
         m_throttle = throttle;
         m_instruments = instruments;
+        m_audit = audit;
         m_logger = logger;
         m_manager = new NetManager(this)
         {
@@ -83,13 +86,14 @@ public sealed class LiteNetLibServerTransport : IServerTransport, INetEventListe
     }
 
     // Throttling comes first and answers nothing at all: a forced reject creates no peer and sends no packet. Then the
-    // key, so a requester without it is rejected without data and learns nothing about the server's state (Network
-    // Protocol §7).
+    // key, so a requester without it is rejected without data and learns nothing about the server's state. Only then
+    // the cooldown, admission, and capacity, each told with a notice (Network Protocol §7).
     void INetEventListener.OnConnectionRequest(ConnectionRequest request)
     {
-        if (!m_throttle.TryAdmit(request.RemoteEndPoint.Address, out string limit))
+        IPAddress address = request.RemoteEndPoint.Address;
+        if (!m_throttle.TryAdmit(address, out string limit))
         {
-            m_instruments.RecordRateLimited(limit);
+            Refused(limit);
             request.RejectForce();
             return;
         }
@@ -97,6 +101,13 @@ public sealed class LiteNetLibServerTransport : IServerTransport, INetEventListe
         if (!HasConnectionKey(request))
         {
             request.Reject();
+            return;
+        }
+
+        if (m_throttle.IsCoolingDown(address))
+        {
+            Refused(ServerInstruments.AddressCooldownLimit);
+            request.Reject(EncodeNotice(DisconnectReason.RateLimited, string.Empty));
             return;
         }
 
@@ -134,8 +145,12 @@ public sealed class LiteNetLibServerTransport : IServerTransport, INetEventListe
         m_peers.TryRemove(state.Connection, out NetPeer? _);
         m_throttle.OnDisconnected(peer.Address);
 
-        // The session layer already removed a connection it closed itself; telling it again would only be noise.
-        if (!state.IsClosedByServer)
+        // The session layer already removed a connection it closed itself; only the queue's budget is left to forget.
+        if (state.IsClosedByServer)
+        {
+            m_inbound.OnClosed(state.Connection);
+        }
+        else
         {
             m_inbound.OnDisconnected(state.Connection);
         }
@@ -254,6 +269,14 @@ public sealed class LiteNetLibServerTransport : IServerTransport, INetEventListe
         m_manager.DisconnectPeer(peer, EncodeNotice(reason, message));
     }
 
+    public void CoolDownAddress(ConnectionId connection)
+    {
+        if (m_peers.TryGetValue(connection, out NetPeer? peer))
+        {
+            m_throttle.StartCooldown(peer.Address);
+        }
+    }
+
     public TransportStatistics GetStatistics()
     {
         NetStatistics statistics = m_manager.Statistics;
@@ -275,6 +298,12 @@ public sealed class LiteNetLibServerTransport : IServerTransport, INetEventListe
 
         milliseconds = 0;
         return false;
+    }
+
+    private void Refused(string limit)
+    {
+        m_instruments.RecordRateLimited(limit);
+        m_audit.ConnectionRefused(default, null, limit);
     }
 
     private static void MarkClosedByServer(NetPeer peer)

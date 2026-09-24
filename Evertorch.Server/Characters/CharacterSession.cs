@@ -60,6 +60,12 @@ public sealed class CharacterSession
     public bool IsLoggingOut { get; set; }
 
     /// <summary>
+    ///     Its connection was closed for violations: the character is checkpointed and removed, once a pickup in flight
+    ///     settles, and no connection may attach to it (Network Protocol §3).
+    /// </summary>
+    public bool IsExpelled { get; set; }
+
+    /// <summary>
     ///     The checkpoint whose completion finishes the logout; a completion of any other checkpoint does not.
     /// </summary>
     public PersistenceJob? LogoutCheckpoint { get; set; }

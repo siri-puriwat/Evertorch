@@ -137,6 +137,11 @@ public sealed class StatusPublisher : ITickPhase
                 m_persistence.PendingJobs,
                 m_persistence.WaitingCheckpoints,
                 m_persistence.Retries),
+            new AbuseStatus(
+                m_inbound.OverBudget,
+                m_sessionManager.ThrottledCommands,
+                m_sessionManager.Violations,
+                m_sessionManager.ViolationDisconnects),
             m_transport.GetStatistics(),
             playersPerMap,
             monstersPerMap,

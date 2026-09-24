@@ -27,6 +27,7 @@ public sealed class ServerStatus
         long authenticationFailures,
         bool isAdmissionOpen,
         PersistenceStatus persistence,
+        AbuseStatus abuse,
         TransportStatistics transport,
         IReadOnlyDictionary<string, int> playersPerMap,
         IReadOnlyDictionary<string, int> monstersPerMap,
@@ -50,6 +51,7 @@ public sealed class ServerStatus
         AuthenticationFailures = authenticationFailures;
         IsAdmissionOpen = isAdmissionOpen;
         Persistence = persistence;
+        Abuse = abuse;
         Transport = transport;
         PlayersPerMap = playersPerMap;
         MonstersPerMap = monstersPerMap;
@@ -74,6 +76,7 @@ public sealed class ServerStatus
         0,
         0,
         false,
+        default,
         default,
         default,
         new Dictionary<string, int>(),
@@ -120,6 +123,8 @@ public sealed class ServerStatus
     public bool IsAdmissionOpen { get; }
 
     public PersistenceStatus Persistence { get; }
+
+    public AbuseStatus Abuse { get; }
 
     public TransportStatistics Transport { get; }
 

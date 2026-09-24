@@ -14,9 +14,10 @@ namespace Evertorch.Server
 /// </summary>
 /// <remarks>
 ///     Layer 1 of the abuse controls lives here, on the network thread (Network Protocol §11): each peer has a budget
-///     of messages per tick. Over it, input is dropped; a reliable message closes the connection instead, because the
-///     transport has already acknowledged it and a sequenced command must not go unanswered. A full queue closes its
-///     heaviest peer rather than dropping everyone's reliable messages.
+///     of messages per tick. Over it, input is dropped, and the tick thread is told how much so it can score it; a
+///     reliable message closes the connection instead, because the transport has already acknowledged it and a
+///     sequenced command must not go unanswered. A full queue closes its heaviest peer rather than dropping everyone's
+///     reliable messages.
 /// </remarks>
 public sealed class InboundQueue
 {
@@ -68,6 +69,11 @@ public sealed class InboundQueue
     /// </summary>
     public long PeersLimited => Interlocked.Read(ref m_peersLimited);
 
+    /// <summary>
+    ///     Peers with a message budget: one for each connection the transport has not yet reported closed.
+    /// </summary>
+    public int TrackedPeers => m_peers.Count;
+
     public void OnConnected(ConnectionId connection)
     {
         m_peers[connection] = new PeerBudget(m_clock.Elapsed, m_burst);
@@ -81,6 +87,15 @@ public sealed class InboundQueue
     }
 
     /// <summary>
+    ///     The transport finished closing a connection the session layer closed itself. Its session is already gone, so
+    ///     nothing is enqueued; only the peer's budget is forgotten.
+    /// </summary>
+    public void OnClosed(ConnectionId connection)
+    {
+        m_peers.TryRemove(connection, out PeerBudget? _);
+    }
+
+    /// <summary>
     ///     Decodes one payload. Anything that is oversized, unknown, server-bound, on the wrong channel or delivery, or
     ///     not exactly a well-formed message becomes a <see cref="InboundEventKind.Malformed" /> event.
     /// </summary>
@@ -91,14 +106,11 @@ public sealed class InboundQueue
         MessageDelivery? delivery,
         ReadOnlySpan<byte> payload)
     {
+        // A peer the transport has already reported closed has no budget left, and no session to act on it.
         PeerBudget? peer = null;
-        if (m_isLimited)
+        if (m_isLimited && m_peers.TryGetValue(connection, out peer) && !Admit(connection, channel, peer))
         {
-            peer = m_peers.GetOrAdd(connection, _ => new PeerBudget(m_clock.Elapsed, m_burst));
-            if (!Admit(connection, channel, peer))
-            {
-                return;
-            }
+            return;
         }
 
         if (TryDecode(connection, channel, delivery, payload, out InboundEvent decoded))
@@ -119,7 +131,16 @@ public sealed class InboundQueue
         }
 
         Interlocked.Decrement(ref m_count);
-        if (!IsLifecycle(inboundEvent.Kind) && m_peers.TryGetValue(inboundEvent.Connection, out PeerBudget? peer))
+        if (!m_peers.TryGetValue(inboundEvent.Connection, out PeerBudget? peer))
+        {
+            return true;
+        }
+
+        if (inboundEvent.Kind == InboundEventKind.InputDropped)
+        {
+            inboundEvent = InboundEvent.InputDropped(inboundEvent.Connection, peer.TakeDroppedInputs());
+        }
+        else if (!IsLifecycle(inboundEvent.Kind))
         {
             peer.OnDequeued();
         }
@@ -131,7 +152,8 @@ public sealed class InboundQueue
     {
         return kind == InboundEventKind.Connected
             || kind == InboundEventKind.Disconnected
-            || kind == InboundEventKind.RateLimited;
+            || kind == InboundEventKind.RateLimited
+            || kind == InboundEventKind.InputDropped;
     }
 
     private static bool TryDecode(
@@ -288,6 +310,11 @@ public sealed class InboundQueue
         if (channel == ProtocolChannel.Input)
         {
             m_instruments.RecordRateLimited(ServerInstruments.PeerInputLimit);
+            if (peer.OnInputDropped())
+            {
+                EnqueueLifecycle(InboundEvent.InputDropped(connection, 0));
+            }
+
             return false;
         }
 
@@ -305,7 +332,8 @@ public sealed class InboundQueue
         }
     }
 
-    // Lifecycle events are never dropped: losing a disconnect would leak a session and its entity.
+    // Lifecycle events are never dropped: losing a disconnect would leak a session and its entity. They stay bounded,
+    // because a peer has at most one close and one report of dropped input waiting.
     private void EnqueueLifecycle(InboundEvent inboundEvent)
     {
         Interlocked.Increment(ref m_count);
@@ -353,7 +381,8 @@ public sealed class InboundQueue
     }
 
     /// <summary>
-    ///     One peer's token bucket, refilled from the injected clock, and how many of its messages wait in the queue.
+    ///     One peer's token bucket, refilled from the injected clock, how many of its messages wait in the queue, and how
+    ///     much of its input was dropped since the tick thread last asked.
     /// </summary>
     private sealed class PeerBudget
     {
@@ -362,6 +391,8 @@ public sealed class InboundQueue
         private TimeSpan m_refilledAt;
         private int m_pending;
         private int m_isLimited;
+        private int m_droppedInputs;
+        private int m_isReporting;
 
         public PeerBudget(TimeSpan now, double burst)
         {
@@ -407,6 +438,21 @@ public sealed class InboundQueue
         public void OnDequeued()
         {
             Interlocked.Decrement(ref m_pending);
+        }
+
+        // True when no report is waiting, so the caller enqueues one.
+        public bool OnInputDropped()
+        {
+            Interlocked.Increment(ref m_droppedInputs);
+            return Interlocked.Exchange(ref m_isReporting, 1) == 0;
+        }
+
+        // The flag is cleared before the count is taken, so a drop in between is either in this count or reported
+        // again; none is lost.
+        public int TakeDroppedInputs()
+        {
+            Volatile.Write(ref m_isReporting, 0);
+            return Interlocked.Exchange(ref m_droppedInputs, 0);
         }
     }
 }

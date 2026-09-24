@@ -49,7 +49,8 @@ internal sealed class TestServer
         PersistenceOptions? persistence = null,
         IGameStore? store = null,
         int reconnectGraceMs = 0,
-        bool isAbuseControlEnabled = true)
+        bool isAbuseControlEnabled = true,
+        AbuseOptions? abuseOptions = null)
     {
         Content = withMonsters ? RepositoryContent.Value : RepositoryContentWithoutMonsters.Value;
         var network = new NetworkOptions
@@ -76,7 +77,9 @@ internal sealed class TestServer
 
         Random = ServerRandom.FromOptions(world);
         Transport = new InMemoryServerTransport();
-        IOptions<AbuseOptions> abuse = Options.Create(new AbuseOptions { Enabled = isAbuseControlEnabled });
+        IOptions<AbuseOptions> abuse =
+            Options.Create(abuseOptions ?? new AbuseOptions { Enabled = isAbuseControlEnabled });
+        Audit = new AuditLog(AuditLogger, Clock);
         Inbound = new InboundQueue(Options.Create(network), abuse, simulation, Clock, Instruments);
         Sessions = new SessionRegistry();
         World = new WorldSimulation(
@@ -115,6 +118,7 @@ internal sealed class TestServer
             Time,
             Options.Create(world),
             simulation,
+            Audit,
             PickupLog);
         var tokens = new DevelopmentTokenValidator(Options.Create(authentication), Time);
         var handshake = new HandshakeValidator(compatibility, tokens, Content);
@@ -137,6 +141,7 @@ internal sealed class TestServer
             Options.Create(world),
             abuse,
             Instruments,
+            Audit,
             Log);
         Drops = new ItemDropSystem(World, dropRandom ?? Random, Options.Create(world), simulation);
         Combat = new CombatSystem(
@@ -241,6 +246,13 @@ internal sealed class TestServer
     public FakeClock Clock { get; } = new();
 
     public CapturingLogger<PickupSystem> PickupLog { get; } = new();
+
+    public AuditLog Audit { get; }
+
+    /// <summary>
+    ///     What the server wrote to the audit category (<see cref="LogCategories.Audit" />).
+    /// </summary>
+    public CapturingLogger<AuditLog> AuditLogger { get; } = new();
 
     /// <summary>
     ///     When false, <see cref="Tick" /> leaves queued database work alone, as a slow database would.

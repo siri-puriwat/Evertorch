@@ -57,9 +57,24 @@ public sealed class AbuseOptions
     public int ResyncRequestsPerSecond { get; set; } = 1;
 
     public int ResyncRequestBurst { get; set; } = 3;
+
+    /// <summary>
+    ///     Violation score at which a connection is closed; each violation adds <see cref="ViolationScore.Points" />.
+    /// </summary>
+    public int ViolationThreshold { get; set; } = 100;
+
+    /// <summary>
+    ///     Score forgiven per second, spread over the ticks.
+    /// </summary>
+    public int ViolationDecayPerSecond { get; set; } = 5;
+
+    /// <summary>
+    ///     How long an account, or an address that had not signed in, is refused after a disconnect for violations.
+    /// </summary>
+    public int KickCooldownMs { get; set; } = 60000;
 }
 
-internal sealed class AbuseOptionsValidator : IValidateOptions<AbuseOptions>
+public sealed class AbuseOptionsValidator : IValidateOptions<AbuseOptions>
 {
     public ValidateOptionsResult Validate(string? name, AbuseOptions options)
     {
@@ -77,6 +92,9 @@ internal sealed class AbuseOptionsValidator : IValidateOptions<AbuseOptions>
         AddRangeFailure(failures, "SessionCommandBurst", options.SessionCommandBurst, 1, 10000);
         AddRangeFailure(failures, "ResyncRequestsPerSecond", options.ResyncRequestsPerSecond, 1, 1000);
         AddRangeFailure(failures, "ResyncRequestBurst", options.ResyncRequestBurst, 1, 10000);
+        AddRangeFailure(failures, "ViolationThreshold", options.ViolationThreshold, 1, 1000000);
+        AddRangeFailure(failures, "ViolationDecayPerSecond", options.ViolationDecayPerSecond, 0, 1000000);
+        AddRangeFailure(failures, "KickCooldownMs", options.KickCooldownMs, 0, 86400000);
         return failures.Count == 0 ? ValidateOptionsResult.Success : ValidateOptionsResult.Fail(failures);
     }
 

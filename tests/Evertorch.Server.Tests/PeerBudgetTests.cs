@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Evertorch.Game;
 using Evertorch.Protocol;
 using Microsoft.Extensions.Options;
@@ -136,6 +137,18 @@ public sealed class PeerBudgetTests
     }
 
     [Test]
+    public void ClosedPeer_IsForgotten()
+    {
+        InboundQueue queue = CreateQueue(new FakeClock());
+        queue.OnConnected(Peer);
+        queue.OnConnected(Other);
+
+        queue.OnClosed(Peer);
+
+        Assert.That(queue.TrackedPeers, Is.EqualTo(1));
+    }
+
+    [Test]
     public void Control_OverTheBudget_ClosesTheConnectionOnceAndDropsTheRest()
     {
         var clock = new FakeClock();
@@ -201,6 +214,22 @@ public sealed class PeerBudgetTests
     }
 
     [Test]
+    public void InputReport_OnceRead_IsSentAgainForLaterDrops()
+    {
+        var clock = new FakeClock();
+        InboundQueue queue = CreateQueue(clock);
+        queue.OnConnected(Peer);
+        SendMoves(queue, Peer, 12);
+        Drain(queue);
+
+        SendMoves(queue, Peer, 1);
+        List<InboundEvent> events = Drain(queue);
+
+        InboundEvent report = events.Single(inboundEvent => inboundEvent.Kind == InboundEventKind.InputDropped);
+        Assert.That(report.Count, Is.EqualTo(1));
+    }
+
+    [Test]
     public void Input_AfterTheBurst_GetsTheBudgetOfEachTick()
     {
         var clock = new FakeClock();
@@ -229,6 +258,21 @@ public sealed class PeerBudgetTests
         Assert.That(Count(events, InboundEventKind.RateLimited, Peer), Is.Zero);
         Assert.That(queue.OverBudget, Is.EqualTo(2));
         Assert.That(queue.PeersLimited, Is.Zero);
+    }
+
+    [Test]
+    public void Input_OverTheBudget_IsReportedOnceWithHowMuchWasDropped()
+    {
+        InboundQueue queue = CreateQueue(new FakeClock());
+        queue.OnConnected(Peer);
+        queue.TryDequeue(out InboundEvent _);
+
+        SendMoves(queue, Peer, 14);
+        List<InboundEvent> events = Drain(queue);
+
+        InboundEvent report = events.Single(inboundEvent => inboundEvent.Kind == InboundEventKind.InputDropped);
+        Assert.That(report.Connection, Is.EqualTo(Peer));
+        Assert.That(report.Count, Is.EqualTo(4));
     }
 
     [Test]

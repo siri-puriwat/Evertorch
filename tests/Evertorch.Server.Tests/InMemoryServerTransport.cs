@@ -15,6 +15,11 @@ internal sealed class InMemoryServerTransport : IServerTransport
     public Dictionary<ConnectionId, DisconnectReason> Disconnects { get; } = new();
 
     /// <summary>
+    ///     Connections whose remote address the server asked to cool down.
+    /// </summary>
+    public HashSet<ConnectionId> CooledDownAddresses { get; } = new();
+
+    /// <summary>
     ///     Sends to these connections throw, standing in for any defect while one peer's input is handled.
     /// </summary>
     public HashSet<ConnectionId> FailSendsTo { get; } = new();
@@ -48,6 +53,11 @@ internal sealed class InMemoryServerTransport : IServerTransport
     public void Disconnect(ConnectionId connection, DisconnectReason reason, string message)
     {
         Disconnects[connection] = reason;
+    }
+
+    public void CoolDownAddress(ConnectionId connection)
+    {
+        CooledDownAddresses.Add(connection);
     }
 
     public void Start()

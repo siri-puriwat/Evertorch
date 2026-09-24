@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics.Metrics;
+using Evertorch.Protocol;
 
 namespace Evertorch.Server
 {
@@ -18,6 +19,8 @@ public sealed class ServerInstruments
     public const string QueueFullLimit = "queue_full";
     public const string AddressRateLimit = "address_rate";
     public const string AddressConnectionsLimit = "address_connections";
+    public const string AddressCooldownLimit = "address_cooldown";
+    public const string AccountCooldownLimit = "account_cooldown";
     public const string CombatCommandLimit = "session_combat";
     public const string PickupCommandLimit = "session_pickup";
     public const string SessionCommandLimit = "session_session";
@@ -45,6 +48,19 @@ public sealed class ServerInstruments
         new("state", "pending_migrations")
     };
 
+    // Indexed by Violation.
+    private static readonly KeyValuePair<string, object?>[] ViolationTags =
+    {
+        new("violation", "malformed"),
+        new("violation", "repeated_hello"),
+        new("violation", "stale_command"),
+        new("violation", "input_rate"),
+        new("violation", "command_rate")
+    };
+
+    private static readonly KeyValuePair<string, object?> RateLimitedReason = new("reason", "rate_limited");
+    private static readonly KeyValuePair<string, object?> KickedReason = new("reason", "kicked");
+
     private readonly Histogram<double> m_tickDuration;
     private readonly Counter<long> m_tickOverruns;
     private readonly Counter<long> m_skippedSteps;
@@ -54,6 +70,8 @@ public sealed class ServerInstruments
     private readonly Counter<long> m_retries;
     private readonly Histogram<int> m_roundTripTime;
     private readonly Counter<long> m_rateLimited;
+    private readonly Counter<long> m_violations;
+    private readonly Counter<long> m_violationDisconnects;
 
     public ServerInstruments(IMeterFactory meters)
     {
@@ -94,6 +112,14 @@ public sealed class ServerInstruments
             "evertorch.abuse.rate_limited",
             "{message}",
             "Messages and connection requests a rate limit refused, by limit.");
+        m_violations = Meter.CreateCounter<long>(
+            "evertorch.abuse.violations",
+            "{violation}",
+            "Violations added to connections' scores, by kind.");
+        m_violationDisconnects = Meter.CreateCounter<long>(
+            "evertorch.abuse.disconnects",
+            "{connection}",
+            "Connections closed for violations or for rate excess, by reason.");
     }
 
     public Meter Meter { get; }
@@ -140,6 +166,17 @@ public sealed class ServerInstruments
     public void RecordRateLimited(string limit)
     {
         m_rateLimited.Add(1, new KeyValuePair<string, object?>("limit", limit));
+    }
+
+    public void RecordViolations(Violation violation, int count)
+    {
+        m_violations.Add(count, ViolationTags[(int)violation]);
+    }
+
+    /// <param name="reason"><c>RateLimited</c> or <c>Kicked</c>.</param>
+    public void RecordViolationDisconnect(DisconnectReason reason)
+    {
+        m_violationDisconnects.Add(1, reason == DisconnectReason.Kicked ? KickedReason : RateLimitedReason);
     }
 
     /// <summary>

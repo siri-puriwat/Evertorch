@@ -19,7 +19,8 @@ public sealed class AddressThrottleTests
         int perSecond = 2,
         int maxConnections = 64,
         int maxAddresses = 10000,
-        bool isEnabled = true)
+        bool isEnabled = true,
+        int cooldownMs = 60000)
     {
         return new AddressThrottle(
             Options.Create(
@@ -28,7 +29,8 @@ public sealed class AddressThrottleTests
                     Enabled = isEnabled,
                     ConnectionRequestsPerSecond = perSecond,
                     MaxConnectionsPerAddress = maxConnections,
-                    MaxTrackedAddresses = maxAddresses
+                    MaxTrackedAddresses = maxAddresses,
+                    KickCooldownMs = cooldownMs
                 }),
             clock);
     }
@@ -53,6 +55,57 @@ public sealed class AddressThrottleTests
         Assert.That(limit, Is.EqualTo(ServerInstruments.AddressConnectionsLimit));
         Assert.That(throttle.TryAdmit(Home, out string _), Is.True);
         Assert.That(throttle.TryAdmit(Away, out string _), Is.True, "other addresses are not affected");
+    }
+
+    [Test]
+    public void Cooldown_CoversItsAddressUntilItEnds()
+    {
+        var clock = new FakeClock();
+        AddressThrottle throttle = Create(clock, cooldownMs: 1000);
+        throttle.OnConnected(Home);
+
+        throttle.StartCooldown(Home);
+        bool whileCooling = throttle.IsCoolingDown(Home);
+        clock.Advance(TimeSpan.FromMilliseconds(999));
+        bool justBefore = throttle.IsCoolingDown(Home);
+        clock.Advance(TimeSpan.FromMilliseconds(1));
+
+        Assert.That(whileCooling, Is.True);
+        Assert.That(justBefore, Is.True);
+        Assert.That(throttle.IsCoolingDown(Home), Is.False);
+        Assert.That(throttle.IsCoolingDown(Away), Is.False, "other addresses are not affected");
+    }
+
+    [Test]
+    public void Cooldown_OfZeroOrWithTheLimitsOff_CoversNothing()
+    {
+        var clock = new FakeClock();
+        AddressThrottle none = Create(clock, cooldownMs: 0);
+        AddressThrottle off = Create(clock, isEnabled: false);
+
+        none.StartCooldown(Home);
+        off.StartCooldown(Home);
+
+        Assert.That(none.IsCoolingDown(Home), Is.False);
+        Assert.That(off.IsCoolingDown(Home), Is.False);
+    }
+
+    [Test]
+    public void Cooldown_SurvivesTheTableMakingRoom()
+    {
+        var clock = new FakeClock();
+        AddressThrottle throttle = Create(clock, 100, maxAddresses: 16);
+        throttle.StartCooldown(Home);
+        for (int index = 0; index < 15; index++)
+        {
+            throttle.TryAdmit(Numbered(index), out string _);
+        }
+
+        clock.Advance(TimeSpan.FromSeconds(1));
+        bool isAdmitted = throttle.TryAdmit(Away, out string _);
+
+        Assert.That(isAdmitted, Is.True, "idle addresses made room");
+        Assert.That(throttle.IsCoolingDown(Home), Is.True, "the cooling address was kept");
     }
 
     [Test]

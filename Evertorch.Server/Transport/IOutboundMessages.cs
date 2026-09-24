@@ -19,5 +19,12 @@ public interface IOutboundMessages
     ///     Delivers a <see cref="DisconnectNotice" /> when possible and then closes the connection.
     /// </summary>
     void Disconnect(ConnectionId connection, DisconnectReason reason, string message);
+
+    /// <summary>
+    ///     Refuses connection requests from the connection's remote address for <c>Abuse:KickCooldownMs</c> (Network
+    ///     Protocol §11). Called before <see cref="Disconnect" />, while the connection is still known; unknown
+    ///     connections are ignored.
+    /// </summary>
+    void CoolDownAddress(ConnectionId connection);
 }
 }

@@ -103,6 +103,14 @@ public sealed class AdminConsole
                 status.IgnoredEvents));
         output.WriteLine(
             Format(
+                "rate limits: messages over budget {0}, commands throttled {1}; violations {2}, disconnects for "
+                + "violations {3}",
+                status.Abuse.OverBudgetMessages,
+                status.Abuse.ThrottledCommands,
+                status.Abuse.Violations,
+                status.Abuse.ViolationDisconnects));
+        output.WriteLine(
+            Format(
                 "network bytes in {0}, out {1}, packets in {2}, out {3}, lost {4}",
                 status.Transport.BytesReceived,
                 status.Transport.BytesSent,

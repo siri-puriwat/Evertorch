@@ -7,9 +7,10 @@ namespace Evertorch.Server
 {
 /// <summary>
 ///     Per remote address, a rate of connection requests and a cap on connections held at once (Network Protocol §11).
-///     Both are generous by default, because many phones share one address behind carrier NAT. The table of addresses
-///     is bounded: when it is full, addresses with no connection and a full budget make room, and if none can, the
-///     request is refused.
+///     Both are generous by default, because many phones share one address behind carrier NAT. An address whose
+///     connection was closed for violations before it signed in also waits out a re-admission cooldown. The table of
+///     addresses is bounded: when it is full, addresses with no connection, a full budget, and no cooldown make room,
+///     and if none can, the request is refused.
 /// </summary>
 public sealed class AddressThrottle
 {
@@ -21,6 +22,7 @@ public sealed class AddressThrottle
     private readonly double m_requestsPerSecond;
     private readonly int m_maxConnections;
     private readonly int m_maxAddresses;
+    private readonly TimeSpan m_cooldown;
 
     public AddressThrottle(IOptions<AbuseOptions> options, IMonotonicClock clock)
     {
@@ -29,6 +31,7 @@ public sealed class AddressThrottle
         m_requestsPerSecond = options.Value.ConnectionRequestsPerSecond;
         m_maxConnections = options.Value.MaxConnectionsPerAddress;
         m_maxAddresses = options.Value.MaxTrackedAddresses;
+        m_cooldown = TimeSpan.FromMilliseconds(options.Value.KickCooldownMs);
     }
 
     /// <summary>
@@ -80,14 +83,41 @@ public sealed class AddressThrottle
     {
         lock (m_gate)
         {
-            if (!m_addresses.TryGetValue(address, out Entry? entry))
-            {
-                // A connection admitted before the limits applied, or while its entry made room; it still counts.
-                entry = new Entry(m_clock.Elapsed, m_requestsPerSecond);
-                m_addresses.Add(address, entry);
-            }
+            // A connection admitted before the limits applied, or while its entry made room, still counts.
+            GetOrAdd(address).Connections++;
+        }
+    }
 
-            entry.Connections++;
+    /// <summary>
+    ///     True while <paramref name="address" /> waits out a re-admission cooldown.
+    /// </summary>
+    public bool IsCoolingDown(IPAddress address)
+    {
+        if (!m_isEnabled)
+        {
+            return false;
+        }
+
+        TimeSpan now = m_clock.Elapsed;
+        lock (m_gate)
+        {
+            return m_addresses.TryGetValue(address, out Entry? entry) && entry.CooldownEndsAt > now;
+        }
+    }
+
+    /// <summary>
+    ///     Refuses connection requests from <paramref name="address" /> for <c>Abuse:KickCooldownMs</c>.
+    /// </summary>
+    public void StartCooldown(IPAddress address)
+    {
+        if (!m_isEnabled || m_cooldown <= TimeSpan.Zero)
+        {
+            return;
+        }
+
+        lock (m_gate)
+        {
+            GetOrAdd(address).CooldownEndsAt = m_clock.Elapsed + m_cooldown;
         }
     }
 
@@ -102,14 +132,28 @@ public sealed class AddressThrottle
         }
     }
 
-    // Forgets every address that holds no connection and has not asked lately (its budget has refilled).
+    private Entry GetOrAdd(IPAddress address)
+    {
+        if (!m_addresses.TryGetValue(address, out Entry? entry))
+        {
+            entry = new Entry(m_clock.Elapsed, m_requestsPerSecond);
+            m_addresses.Add(address, entry);
+        }
+
+        return entry;
+    }
+
+    // Forgets every address that holds no connection, has not asked lately (its budget has refilled), and is not
+    // cooling down.
     private bool MakeRoom(TimeSpan now)
     {
         m_idle.Clear();
         foreach (KeyValuePair<IPAddress, Entry> pair in m_addresses)
         {
             pair.Value.Refill(now, m_requestsPerSecond);
-            if (pair.Value.Connections == 0 && pair.Value.Tokens >= m_requestsPerSecond)
+            if (pair.Value.Connections == 0
+                && pair.Value.Tokens >= m_requestsPerSecond
+                && pair.Value.CooldownEndsAt <= now)
             {
                 m_idle.Add(pair.Key);
             }
@@ -136,6 +180,8 @@ public sealed class AddressThrottle
         public double Tokens { get; set; }
 
         public int Connections { get; set; }
+
+        public TimeSpan CooldownEndsAt { get; set; }
 
         // At most one second's worth of requests is saved up.
         public void Refill(TimeSpan now, double perSecond)

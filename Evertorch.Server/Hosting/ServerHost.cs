@@ -118,6 +118,9 @@ public static class ServerHost
 
         builder.Services.AddSingleton<IMonotonicClock, StopwatchClock>();
         builder.Services.AddSingleton<ServerInstruments>();
+        builder.Services.AddSingleton(services => new AuditLog(
+            services.GetRequiredService<ILoggerFactory>().CreateLogger(LogCategories.Audit),
+            services.GetRequiredService<IMonotonicClock>()));
         builder.Services.AddSingleton<TickLogObserver>();
         builder.Services.AddSingleton<ServerMetrics>();
         builder.Services.AddSingleton<ITickObserver>(services => services.GetRequiredService<ServerMetrics>());

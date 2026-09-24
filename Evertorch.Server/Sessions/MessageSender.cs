@@ -118,5 +118,10 @@ public sealed class MessageSender
     {
         m_outbound.Disconnect(connection, reason, string.Empty);
     }
+
+    public void CoolDownAddress(ConnectionId connection)
+    {
+        m_outbound.CoolDownAddress(connection);
+    }
 }
 }

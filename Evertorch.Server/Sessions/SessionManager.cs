@@ -67,7 +67,9 @@ public sealed class SessionManager : ITickPhase
     private readonly PickupSystem m_pickups;
     private readonly TimeProvider m_time;
     private readonly ServerInstruments m_instruments;
+    private readonly AuditLog m_audit;
     private readonly AbuseOptions m_abuse;
+    private readonly AccountCooldowns m_cooldowns;
     private readonly ILogger<SessionManager> m_logger;
     private readonly string m_serverBuildVersion;
     private readonly uint m_tickRate;
@@ -96,9 +98,11 @@ public sealed class SessionManager : ITickPhase
         IOptions<WorldOptions> worldOptions,
         IOptions<AbuseOptions> abuse,
         ServerInstruments instruments,
+        AuditLog audit,
         ILogger<SessionManager> logger)
     {
         m_abuse = abuse.Value;
+        m_audit = audit;
         m_maxQueuedInputs = worldOptions.Value.MaxQueuedInputs;
         m_inbound = inbound;
         m_persistence = persistence;
@@ -121,6 +125,8 @@ public sealed class SessionManager : ITickPhase
         long timeoutTicks = (long)network.Value.HandshakeTimeoutMs * simulation.Value.TickRate /
             MillisecondsPerSecond;
         m_handshakeTimeoutTicks = (uint)Math.Max(1L, timeoutTicks);
+        m_cooldowns = new AccountCooldowns(
+            (uint)((long)m_abuse.KickCooldownMs * simulation.Value.TickRate / MillisecondsPerSecond));
     }
 
     /// <summary>
@@ -138,6 +144,16 @@ public sealed class SessionManager : ITickPhase
     ///     Commands refused or dropped by the per-connection command buckets, over every connection.
     /// </summary>
     public long ThrottledCommands { get; private set; }
+
+    /// <summary>
+    ///     Violations added to connections' scores, each dropped input counted.
+    /// </summary>
+    public long Violations { get; private set; }
+
+    /// <summary>
+    ///     Connections closed for violations or for rate excess, with <c>RateLimited</c> or <c>Kicked</c>.
+    /// </summary>
+    public long ViolationDisconnects { get; private set; }
 
     public TickPhase Phase => TickPhase.DrainCommands;
 
@@ -183,6 +199,7 @@ public sealed class SessionManager : ITickPhase
             if (m_abuse.Enabled)
             {
                 connected.CommandLimits = new SessionCommandLimits(m_abuse, (int)m_tickRate, tick);
+                connected.Violations = new ViolationScore(m_abuse, (int)m_tickRate, tick);
             }
 
             m_sessions.Add(connected);
@@ -201,7 +218,14 @@ public sealed class SessionManager : ITickPhase
                 Remove(session);
                 break;
             case InboundEventKind.RateLimited:
-                Close(session, DisconnectReason.RateLimited);
+                Expel(session, DisconnectReason.RateLimited);
+                break;
+            case InboundEventKind.InputDropped:
+                Score(session, Violation.InputRate, inboundEvent.Count);
+                break;
+            case InboundEventKind.Malformed:
+                IgnoredEvents++;
+                Score(session, Violation.Malformed, 1);
                 break;
             case InboundEventKind.Hello:
                 HandleHello(session, inboundEvent.Hello!);
@@ -232,6 +256,13 @@ public sealed class SessionManager : ITickPhase
                 IgnoredEvents++;
                 break;
         }
+
+        // Closed once the event is handled, so an answer it earned still goes out ahead of the notice.
+        DisconnectReason verdict = session.Violations?.Verdict ?? DisconnectReason.None;
+        if (verdict != DisconnectReason.None && IsOpen(session))
+        {
+            Expel(session, verdict);
+        }
     }
 
     private void HandleHello(ClientSession session, ClientHello hello)
@@ -239,6 +270,7 @@ public sealed class SessionManager : ITickPhase
         if (session.State != SessionState.AwaitingHello)
         {
             IgnoredEvents++;
+            Score(session, Violation.RepeatedHello, 1);
             return;
         }
 
@@ -283,6 +315,15 @@ public sealed class SessionManager : ITickPhase
         if (refusal != DisconnectReason.None)
         {
             Refuse(session, refusal);
+            return;
+        }
+
+        // An account disconnected for violations waits out its cooldown (Network Protocol §11).
+        if (m_cooldowns.IsCoolingDown(account!.Value, m_currentTick))
+        {
+            m_instruments.RecordRateLimited(ServerInstruments.AccountCooldownLimit);
+            m_audit.ConnectionRefused(connection, account, ServerInstruments.AccountCooldownLimit);
+            Refuse(session, DisconnectReason.RateLimited);
             return;
         }
 
@@ -448,7 +489,7 @@ public sealed class SessionManager : ITickPhase
         // entity, no second copy loaded (Network Protocol §3, Persistence §7).
         if (m_sessions.TryGetCharacter(request.Character, out CharacterSession? existing) && existing != null)
         {
-            if (existing.IsLoggingOut)
+            if (existing.IsLoggingOut || existing.IsExpelled)
             {
                 IgnoredEvents++;
                 return;
@@ -636,11 +677,16 @@ public sealed class SessionManager : ITickPhase
             return;
         }
 
-        if (session.Player?.IsDead == true
-            || session.Character?.IsLoggingOut == true
-            || !m_targeting.TrySelect(session, target))
+        CommandRejectionReason refusal =
+            session.Player?.IsDead == true || session.Character?.IsLoggingOut == true
+                ? CommandRejectionReason.NotAllowedNow
+                : m_targeting.TrySelect(session, target)
+                    ? CommandRejectionReason.None
+                    : CommandRejectionReason.InvalidTarget;
+        if (refusal != CommandRejectionReason.None)
         {
             session.RefusedCommands++;
+            m_audit.CommandRefused(session, InboundEventKind.Target, refusal);
         }
     }
 
@@ -657,17 +703,23 @@ public sealed class SessionManager : ITickPhase
         if (unchecked((int)(command.CommandSequence - session.LastCommandSequence)) <= 0)
         {
             session.RefusedCommands++;
+            Score(session, Violation.StaleCommand, 1);
             return;
         }
 
         session.LastCommandSequence = command.CommandSequence;
 
         // Reason 3 already ends the client's chase or pickup cleanly (Network Protocol §11).
-        CommandRejectionReason refusal = IsThrottled(session, command.Kind)
-            ? CommandRejectionReason.NotAllowedNow
-            : Apply(session, command, tick);
+        if (IsThrottled(session, command.Kind))
+        {
+            Reject(session, command.CommandSequence, CommandRejectionReason.NotAllowedNow);
+            return;
+        }
+
+        CommandRejectionReason refusal = Apply(session, command, tick);
         if (refusal != CommandRejectionReason.None)
         {
+            m_audit.CommandRefused(session, command.Kind, refusal);
             Reject(session, command.CommandSequence, refusal);
         }
     }
@@ -790,6 +842,7 @@ public sealed class SessionManager : ITickPhase
     {
         character.IsLoggingOut = false;
         character.LogoutCheckpoint = null;
+        m_audit.CommandRefused(session, InboundEventKind.Logout, CommandRejectionReason.ServiceUnavailable);
         Reject(session, character.LogoutSequence, CommandRejectionReason.ServiceUnavailable);
     }
 
@@ -858,7 +911,7 @@ public sealed class SessionManager : ITickPhase
     }
 
     // Layer 2 of the abuse controls (Network Protocol §11). A command without a sequence that is throttled is
-    // simply dropped: it is counted here and nothing answers it.
+    // simply dropped: it is counted and scored here and nothing answers it.
     private bool IsThrottled(ClientSession session, InboundEventKind kind)
     {
         if (session.CommandLimits == null || session.CommandLimits.TryTake(kind, m_currentTick, out string limit))
@@ -869,7 +922,53 @@ public sealed class SessionManager : ITickPhase
         session.ThrottledCommands++;
         ThrottledCommands++;
         m_instruments.RecordRateLimited(limit);
+        m_audit.CommandThrottled(session, kind, limit);
+        Score(session, Violation.CommandRate, 1);
         return true;
+    }
+
+    // With the limits off a connection has no score, and nothing is scored.
+    private void Score(ClientSession session, Violation violation, int count)
+    {
+        if (session.Violations == null || count <= 0)
+        {
+            return;
+        }
+
+        session.Violations.Add(violation, count, m_currentTick);
+        Violations += count;
+        m_instruments.RecordViolations(violation, count);
+        m_audit.ViolationScored(session, violation, session.Violations.Value);
+    }
+
+    // A disconnect for violations or rate excess (Network Protocol §3, §11). The character is checkpointed and removed
+    // at once, as after a logout, and the account, or the address when the connection never signed in, is refused
+    // until the cooldown is over: a kick after sign-in then shuts out no one else behind the same carrier NAT.
+    private void Expel(ClientSession session, DisconnectReason reason)
+    {
+        ViolationDisconnects++;
+        m_instruments.RecordViolationDisconnect(reason);
+        m_audit.ViolationDisconnect(session, reason, session.Violations?.Value ?? 0d);
+        if (session.Character != null)
+        {
+            session.Character.IsExpelled = true;
+        }
+
+        if (session.Account is AccountId account)
+        {
+            m_cooldowns.Start(account, m_currentTick);
+        }
+        else
+        {
+            m_sender.CoolDownAddress(session.Connection);
+        }
+
+        Close(session, reason);
+    }
+
+    private bool IsOpen(ClientSession session)
+    {
+        return m_sessions.TryGet(session.Connection, out ClientSession? open) && ReferenceEquals(open, session);
     }
 
     private void Refuse(ClientSession session, DisconnectReason reason)
@@ -897,8 +996,8 @@ public sealed class SessionManager : ITickPhase
         CharacterSession? character = session.Character;
         if (character != null)
         {
-            // A player who asked to leave is not kept for a reconnect.
-            if (character.IsLoggingOut)
+            // A player who asked to leave, or was disconnected for violations, is not kept for a reconnect.
+            if (character.IsLoggingOut || character.IsExpelled)
             {
                 m_lifetime.CheckpointAndRemove(character);
             }

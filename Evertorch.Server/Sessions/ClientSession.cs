@@ -29,6 +29,16 @@ public sealed class ClientSession
     /// </summary>
     public long ThrottledCommands { get; set; }
 
+    /// <summary>
+    ///     This connection's violation score; null with the abuse limits off.
+    /// </summary>
+    public ViolationScore? Violations { get; set; }
+
+    /// <summary>
+    ///     This connection's share of the audit log, created with its first audit event.
+    /// </summary>
+    public RateLimitedLog? AuditLimit { get; set; }
+
     public SessionState State { get; set; }
 
     /// <summary>

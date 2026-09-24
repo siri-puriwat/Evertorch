@@ -4,6 +4,7 @@ using System.Diagnostics.Metrics;
 using System.IO;
 using System.Linq;
 using System.Threading;
+using Evertorch.Game;
 using Evertorch.Protocol;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -25,7 +26,9 @@ public sealed class ServerInstrumentsTests
         "operation",
         "outcome",
         "state",
-        "limit"
+        "limit",
+        "violation",
+        "reason"
     };
 
     private static IReadOnlyList<Recorded> Named(MeterRecorder recorder, string instrument)
@@ -43,6 +46,21 @@ public sealed class ServerInstrumentsTests
         return Named(recorder, instrument)
             .Single(measurement => measurement.Tags.Any(tag => tag.Key == key && Equals(tag.Value, value)))
             .Value;
+    }
+
+    private static double SumTagged(MeterRecorder recorder, string instrument, string key, string value)
+    {
+        return Named(recorder, instrument)
+            .Where(measurement => measurement.Tags.Any(tag => tag.Key == key && Equals(tag.Value, value)))
+            .Sum(measurement => measurement.Value);
+    }
+
+    private static void SendGarbage(TestServer server, ConnectionId connection, int count)
+    {
+        for (int index = 0; index < count; index++)
+        {
+            server.Inbound.OnPayload(connection, ProtocolChannel.Control, new byte[] { 0xFF, 0x7F });
+        }
     }
 
     private sealed class Recorded
@@ -224,6 +242,7 @@ public sealed class ServerInstrumentsTests
         using var recorder = new MeterRecorder(server.Instruments.Meter);
         server.EnterWorld(7);
         server.EnterWorld(8);
+        SendGarbage(server, server.EnterWorld(9), 10);
         server.TickUntilPublished();
 
         recorder.Observe();
@@ -254,6 +273,29 @@ public sealed class ServerInstrumentsTests
             Is.EqualTo(new[] { 4.0, 9.0 }));
         Assert.That(Single(recorder, "evertorch.tick.overruns"), Is.EqualTo(1));
         Assert.That(Single(recorder, "evertorch.tick.skipped_steps"), Is.EqualTo(3));
+    }
+
+    [Test]
+    public void Violations_AreCountedByKind_AndTheirDisconnectsByReason()
+    {
+        var server = new TestServer();
+        using var recorder = new MeterRecorder(server.Instruments.Meter);
+        ConnectionId garbage = server.EnterWorld(7);
+        ConnectionId attacker = server.EnterWorld(8);
+        var defaults = new AbuseOptions();
+
+        SendGarbage(server, garbage, 10);
+        for (uint sequence = 1; sequence <= defaults.CombatCommandBurst + 10; sequence++)
+        {
+            server.SendAttack(attacker, new EntityId(999999), sequence);
+        }
+
+        server.Tick();
+
+        Assert.That(SumTagged(recorder, "evertorch.abuse.violations", "violation", "malformed"), Is.EqualTo(10));
+        Assert.That(SumTagged(recorder, "evertorch.abuse.violations", "violation", "command_rate"), Is.EqualTo(10));
+        Assert.That(SumTagged(recorder, "evertorch.abuse.disconnects", "reason", "kicked"), Is.EqualTo(1));
+        Assert.That(SumTagged(recorder, "evertorch.abuse.disconnects", "reason", "rate_limited"), Is.EqualTo(1));
     }
 }
 }
