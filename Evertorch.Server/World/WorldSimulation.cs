@@ -88,12 +88,11 @@ public sealed class WorldSimulation
     }
 
     /// <summary>
-    ///     Places a stored character in the world (Persistence §6, §8): its stored job, level, and statistics, on its
-    ///     stored map. It stands where it was checkpointed, at the map's spawn point with full HP when it was
-    ///     checkpointed dead, and at the spawn point with its HP when its spot is no longer standable. Returns false, placing
-    ///     nothing, when the content
-    ///     does not define its job, its map, or one of its items; <paramref name="problem" /> then names what is
-    ///     missing.
+    ///     Places a stored character in the world (Persistence §6, §8): its stored job, level, experience, and
+    ///     statistics, on its stored map, with its HP and SP within their maximums. It stands where it was
+    ///     checkpointed, at the map's spawn point with full HP and SP when it was checkpointed dead, and at the spawn
+    ///     point with its HP when its spot is no longer standable. Returns false, placing nothing, when the content does
+    ///     not define its job, its map, or one of its items; <paramref name="problem" /> then names what is missing.
     /// </summary>
     public bool TrySpawnPlayer(
         StoredCharacter stored,
@@ -137,6 +136,7 @@ public sealed class WorldSimulation
         bool wasDead = stored.Health <= 0;
         WorldPosition position = wasDead || !isStandable ? definition.SpawnPosition : stored.Position;
         int health = wasDead ? stats.MaxHp : Math.Min(stored.Health, stats.MaxHp);
+        int spirit = wasDead ? stats.MaxSp : Math.Min(stored.Spirit, stats.MaxSp);
         float speed = m_movementRules.CalculateMovement(new MovementContext(stats.MovementSpeed)).Speed;
         player = new PlayerEntity(
             NextEntityId(),
@@ -152,6 +152,8 @@ public sealed class WorldSimulation
             m_stats.CalculateRegeneration(stored.Stats, stats),
             (float)m_content.Skills[job.BasicAttack].Range);
         player.CurrentHealth = health;
+        player.CurrentSpirit = spirit;
+        player.Experience = stored.Experience;
         instance.Add(player);
         map = instance;
         problem = string.Empty;

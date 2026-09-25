@@ -159,8 +159,10 @@ RETURNING id AS ""Id"", status AS ""Status""")
                     row.Name,
                     row.JobDefinitionId,
                     row.BaseLevel,
+                    row.BaseExp,
                     new PrimaryStats(row.Str, row.Agi, row.Vit, row.Int, row.Dex, row.Luk),
                     row.Hp,
+                    row.Sp,
                     row.MapDefinitionId,
                     new WorldPosition(row.PositionX, row.PositionY, row.PositionZ),
                     (uint)row.InventoryRevision,
@@ -179,7 +181,13 @@ RETURNING id AS ""Id"", status AS ""Status""")
                 float y = checkpoint.Position.Y;
                 float z = checkpoint.Position.Z;
                 int health = checkpoint.Health;
+                int spirit = checkpoint.Spirit;
+                int level = checkpoint.Level;
+                long experience = checkpoint.Experience;
                 DateTime at = checkpoint.At;
+
+                // One statement: level and experience move only forward, compared as a pair, so a checkpoint queued
+                // before a quest reward commits its experience can never take it back (Persistence §6).
                 return await context.Characters
                     .Where(row => row.Id == checkpoint.CharacterId)
                     .ExecuteUpdateAsync(
@@ -189,6 +197,17 @@ RETURNING id AS ""Id"", status AS ""Status""")
                             .SetProperty(row => row.PositionY, y)
                             .SetProperty(row => row.PositionZ, z)
                             .SetProperty(row => row.Hp, health)
+                            .SetProperty(row => row.Sp, spirit)
+                            .SetProperty(
+                                row => row.BaseLevel,
+                                row => level > row.BaseLevel || (level == row.BaseLevel && experience >= row.BaseExp)
+                                    ? level
+                                    : row.BaseLevel)
+                            .SetProperty(
+                                row => row.BaseExp,
+                                row => level > row.BaseLevel || (level == row.BaseLevel && experience >= row.BaseExp)
+                                    ? experience
+                                    : row.BaseExp)
                             .SetProperty(row => row.LastPlayedAt, at)
                             .SetProperty(row => row.Version, row => row.Version + 1),
                         cancellationToken)

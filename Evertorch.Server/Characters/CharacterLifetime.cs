@@ -83,8 +83,9 @@ public sealed class CharacterLifetime
     }
 
     /// <summary>
-    ///     Hands the character's current map, position, and HP to the writer, replacing any checkpoint of it still
-    ///     waiting. <paramref name="onComplete" /> runs on the tick thread when it is written or found unwritable.
+    ///     Hands the character's current map, position, HP, SP, level, and experience to the writer, replacing any
+    ///     checkpoint of it still waiting. <paramref name="onComplete" /> runs on the tick thread when it is written or
+    ///     found unwritable.
     /// </summary>
     public PersistenceJob QueueCheckpoint(CharacterSession character, Action<PersistenceOutcome>? onComplete = null)
     {
@@ -95,6 +96,9 @@ public sealed class CharacterLifetime
             character.Map.Definition.Id,
             player.Position,
             player.IsDead ? 0 : player.CurrentHealth,
+            player.CurrentSpirit,
+            player.Level,
+            player.Experience,
             m_time.GetUtcNow().UtcDateTime);
         ConnectionId connection = character.Connection?.Connection ?? default;
         PersistenceJob<bool>? job = null;

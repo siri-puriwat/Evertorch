@@ -2,6 +2,7 @@ using System.Linq;
 using Evertorch.Game;
 using Evertorch.Persistence;
 using Evertorch.Protocol;
+using Evertorch.Rules;
 using NUnit.Framework;
 
 namespace Evertorch.Server.Tests
@@ -71,6 +72,25 @@ public sealed class CharacterLifetimeTests
 
         Assert.That(server.Store.Checkpoints.Select(checkpoint => checkpoint.CharacterId),
             Is.EquivalentTo(new[] { 7, 8 }));
+    }
+
+    [Test]
+    public void Checkpoint_HoldsTheLevelExperienceAndSp()
+    {
+        var server = new TestServer();
+        ConnectionId connection = server.EnterWorld(7);
+        PlayerEntity player = server.PlayerOf(connection);
+        player.Level = 4;
+        player.Experience = 33;
+        player.CurrentSpirit = 5;
+
+        server.Disconnect(connection);
+        server.Tick(2);
+
+        CharacterCheckpoint checkpoint = server.Store.Checkpoints.Last();
+        Assert.That(checkpoint.Level, Is.EqualTo(4));
+        Assert.That(checkpoint.Experience, Is.EqualTo(33));
+        Assert.That(checkpoint.Spirit, Is.EqualTo(5));
     }
 
     [Test]
@@ -157,6 +177,39 @@ public sealed class CharacterLifetimeTests
     }
 
     [Test]
+    public void Enter_CheckpointedDead_LoadsWithFullSp()
+    {
+        var server = new TestServer();
+        server.Disconnect(server.EnterWorld(7));
+        server.Tick(2);
+        server.Store.Edit(7, health: 0, spirit: 3);
+
+        PlayerEntity player = server.PlayerOf(EnterAgain(server, 7));
+
+        Assert.That(player.CurrentSpirit, Is.EqualTo(player.MaxSpirit));
+    }
+
+    [Test]
+    public void Enter_LoadsTheStoredLevelExperienceAndSp_WithTheStatisticsOfThatLevel()
+    {
+        var server = new TestServer();
+        server.Disconnect(server.EnterWorld(7));
+        server.Tick(2);
+        server.Store.Edit(7, level: 3, experience: 42, spirit: 9);
+
+        ConnectionId connection = EnterAgain(server, 7);
+
+        PlayerEntity player = server.PlayerOf(connection);
+        DerivedStats levelThree = new RenewalCharacterRules().CalculateDerivedStats(
+            new CharacterBuild(3, new PrimaryStats(5, 5, 5, 5, 5, 5), 60, 8, 20, 3, 44, 5f));
+        Assert.That(player.Level, Is.EqualTo(3));
+        Assert.That(player.Experience, Is.EqualTo(42));
+        Assert.That(player.CurrentSpirit, Is.EqualTo(9));
+        Assert.That(player.MaxHealth, Is.EqualTo(levelThree.MaxHp));
+        Assert.That(player.MaxSpirit, Is.EqualTo(levelThree.MaxSp));
+    }
+
+    [Test]
     public void Enter_LoadsTheStoredPositionAndHealth()
     {
         var server = new TestServer();
@@ -202,6 +255,19 @@ public sealed class CharacterLifetimeTests
 
         Assert.That(server.Transport.Disconnects[connection], Is.EqualTo(DisconnectReason.ServerNotReady));
         Assert.That(server.World.Maps.Single().Players, Is.Empty);
+    }
+
+    [Test]
+    public void Enter_WithSpAboveTheMaximum_CapsIt()
+    {
+        var server = new TestServer();
+        server.Disconnect(server.EnterWorld(7));
+        server.Tick(2);
+        server.Store.Edit(7, spirit: 10_000);
+
+        PlayerEntity player = server.PlayerOf(EnterAgain(server, 7));
+
+        Assert.That(player.CurrentSpirit, Is.EqualTo(player.MaxSpirit));
     }
 
     [Test]

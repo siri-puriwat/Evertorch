@@ -15,8 +15,10 @@ public sealed class StoredCharacter
         string name,
         string jobDefinitionId,
         int baseLevel,
+        long experience,
         PrimaryStats stats,
         int health,
+        int spirit,
         string mapDefinitionId,
         WorldPosition position,
         uint inventoryRevision,
@@ -27,8 +29,10 @@ public sealed class StoredCharacter
         Name = name;
         JobDefinitionId = jobDefinitionId;
         BaseLevel = baseLevel;
+        Experience = experience;
         Stats = stats;
         Health = health;
+        Spirit = spirit;
         MapDefinitionId = mapDefinitionId;
         Position = position;
         InventoryRevision = inventoryRevision;
@@ -45,12 +49,19 @@ public sealed class StoredCharacter
 
     public int BaseLevel { get; }
 
+    /// <summary>
+    ///     Base experience toward the next level.
+    /// </summary>
+    public long Experience { get; }
+
     public PrimaryStats Stats { get; }
 
     /// <summary>
     ///     HP at the last checkpoint; 0 means the character was checkpointed dead.
     /// </summary>
     public int Health { get; }
+
+    public int Spirit { get; }
 
     public string MapDefinitionId { get; }
 

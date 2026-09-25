@@ -150,6 +150,7 @@ internal sealed class TestServer
         Drops = new ItemDropSystem(World, dropRandom ?? Random, Options.Create(world), simulation);
         Progression = new CharacterProgression(
             Sessions,
+            Lifetime,
             stats,
             new RenewalProgressionRules(),
             Content,

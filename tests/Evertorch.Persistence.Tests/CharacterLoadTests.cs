@@ -59,11 +59,48 @@ public sealed class CharacterLoadTests
 
     private void Checkpoint(long character, WorldPosition position, int health)
     {
-        m_store.SaveCheckpointAsync(
-                new CharacterCheckpoint(character, new MapDefinitionId("map.training_ground"), position, health, Now),
-                CancellationToken.None)
-            .GetAwaiter()
-            .GetResult();
+        Checkpoint(character, position, health, 23, 1, 0);
+    }
+
+    private void Checkpoint(long character, WorldPosition position, int health, int spirit, int level, long experience)
+    {
+        var checkpoint = new CharacterCheckpoint(
+            character,
+            new MapDefinitionId("map.training_ground"),
+            position,
+            health,
+            spirit,
+            level,
+            experience,
+            Now);
+        m_store.SaveCheckpointAsync(checkpoint, CancellationToken.None).GetAwaiter().GetResult();
+    }
+
+    // Stored level and experience, then a checkpoint's => what is stored afterwards.
+    [TestCase(3, 40, 2, 99, 3, 40)]
+    [TestCase(3, 40, 3, 39, 3, 40)]
+    [TestCase(3, 40, 3, 40, 3, 40)]
+    [TestCase(3, 40, 3, 41, 3, 41)]
+    [TestCase(3, 40, 4, 0, 4, 0)]
+    public void SaveCheckpoint_NeverLowersTheLevelAndExperience_AndWritesTheRest(
+        int storedLevel,
+        long storedExperience,
+        int level,
+        long experience,
+        int expectedLevel,
+        long expectedExperience)
+    {
+        (AccountId account, long character) = NewCharacter();
+        Checkpoint(character, new WorldPosition(1f, 0f, 1f), 50, 23, storedLevel, storedExperience);
+
+        Checkpoint(character, new WorldPosition(2f, 0f, 2f), 40, 11, level, experience);
+        StoredCharacter stored = Load(account, character)!;
+
+        Assert.That(stored.BaseLevel, Is.EqualTo(expectedLevel), "level");
+        Assert.That(stored.Experience, Is.EqualTo(expectedExperience), "experience");
+        Assert.That(stored.Position, Is.EqualTo(new WorldPosition(2f, 0f, 2f)), "position");
+        Assert.That(stored.Health, Is.EqualTo(40), "HP");
+        Assert.That(stored.Spirit, Is.EqualTo(11), "SP");
     }
 
     [Test]
@@ -80,6 +117,18 @@ public sealed class CharacterLoadTests
         Assert.That(ids, Does.Contain("job.adventurer"));
         Assert.That(ids, Does.Contain("map.training_ground"));
         Assert.That(ids, Does.Contain("item.material.retired"));
+    }
+
+    [Test]
+    public void LoadCharacter_ForANewCharacter_ReturnsLevelOneWithNoExperienceAndItsSp()
+    {
+        (AccountId account, long character) = NewCharacter();
+
+        StoredCharacter stored = Load(account, character)!;
+
+        Assert.That(stored.BaseLevel, Is.EqualTo(1));
+        Assert.That(stored.Experience, Is.Zero);
+        Assert.That(stored.Spirit, Is.EqualTo(23));
     }
 
     [Test]
@@ -136,6 +185,19 @@ public sealed class CharacterLoadTests
         Checkpoint(character, new WorldPosition(1f, 0f, 1f), 0);
 
         Assert.That(Load(account, character)!.Health, Is.Zero);
+    }
+
+    [Test]
+    public void SaveCheckpoint_ThenLoad_ReturnsTheCheckpointedLevelExperienceAndSp()
+    {
+        (AccountId account, long character) = NewCharacter();
+
+        Checkpoint(character, new WorldPosition(1f, 0f, 1f), 50, 17, 3, 42);
+        StoredCharacter stored = Load(account, character)!;
+
+        Assert.That(stored.BaseLevel, Is.EqualTo(3));
+        Assert.That(stored.Experience, Is.EqualTo(42));
+        Assert.That(stored.Spirit, Is.EqualTo(17));
     }
 
     [Test]

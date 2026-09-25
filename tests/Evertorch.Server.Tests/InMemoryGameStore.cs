@@ -192,6 +192,14 @@ internal sealed class InMemoryGameStore : IGameStore
                 row.Map = checkpoint.Map.Value;
                 row.Position = checkpoint.Position;
                 row.Health = checkpoint.Health;
+                row.Spirit = checkpoint.Spirit;
+                bool isNotLower = checkpoint.Level > row.Level
+                    || (checkpoint.Level == row.Level && checkpoint.Experience >= row.Experience);
+                if (isNotLower)
+                {
+                    row.Level = checkpoint.Level;
+                    row.Experience = checkpoint.Experience;
+                }
             }
         }
 
@@ -269,7 +277,10 @@ internal sealed class InMemoryGameStore : IGameStore
         string? map = null,
         WorldPosition? position = null,
         int? health = null,
-        string? item = null)
+        string? item = null,
+        int? spirit = null,
+        int? level = null,
+        long? experience = null)
     {
         lock (m_gate)
         {
@@ -278,6 +289,9 @@ internal sealed class InMemoryGameStore : IGameStore
             row.Map = map ?? row.Map;
             row.Position = position ?? row.Position;
             row.Health = health ?? row.Health;
+            row.Spirit = spirit ?? row.Spirit;
+            row.Level = level ?? row.Level;
+            row.Experience = experience ?? row.Experience;
             if (item != null)
             {
                 row.Items.Add(new StoredItem(++m_lastItem, item, 1));
@@ -398,6 +412,7 @@ internal sealed class InMemoryGameStore : IGameStore
             Map = created.Map.Value;
             Position = created.Position;
             Health = created.Health;
+            Spirit = created.Spirit;
         }
 
         public AccountId Account { get; }
@@ -414,6 +429,12 @@ internal sealed class InMemoryGameStore : IGameStore
 
         public int Health { get; set; }
 
+        public int Spirit { get; set; }
+
+        public int Level { get; set; } = 1;
+
+        public long Experience { get; set; }
+
         public uint InventoryRevision { get; set; }
 
         public List<StoredItem> Items { get; } = new();
@@ -425,9 +446,11 @@ internal sealed class InMemoryGameStore : IGameStore
                 Account,
                 Name,
                 Job,
-                1,
+                Level,
+                Experience,
                 Created.Stats,
                 Health,
+                Spirit,
                 Map,
                 Position,
                 InventoryRevision,

@@ -36,6 +36,28 @@ public sealed class ProcessLossTests
     }
 
     [Test]
+    public void Enter_AfterTheServerProcessWasLost_RestoresTheLastCheckpointedLevelExperienceAndSp()
+    {
+        TestServer lost = NewServer();
+        ConnectionId first = lost.EnterWorldAs("loss-level", "LossLevel");
+        PlayerEntity player = lost.PlayerOf(first);
+        player.Level = 3;
+        player.Experience = 12;
+        player.CurrentSpirit = 7;
+        lost.Tick(TestServer.TickRate + 1);
+        lost.Persistence.RunUntilIdle();
+        player.Level = 5;
+        player.Experience = 1;
+
+        TestServer restarted = NewServer();
+        PlayerEntity loaded = restarted.PlayerOf(restarted.EnterWorldAs("loss-level", "LossLevel"));
+
+        Assert.That(loaded.Level, Is.EqualTo(3));
+        Assert.That(loaded.Experience, Is.EqualTo(12));
+        Assert.That(loaded.CurrentSpirit, Is.EqualTo(7));
+    }
+
+    [Test]
     public void Enter_AfterTheServerProcessWasLost_RestoresTheLastCheckpointedPosition()
     {
         TestServer lost = NewServer();

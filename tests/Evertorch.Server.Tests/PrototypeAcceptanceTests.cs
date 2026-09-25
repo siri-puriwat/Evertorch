@@ -63,14 +63,14 @@ public sealed class PrototypeAcceptanceTests
 
     /// <summary>
     ///     Both players enter the training ground, see each other, walk, fight, and one reconnects; the server then
-    ///     stops. Returns where each character stood, by character name.
+    ///     stops. Returns each character as the server last showed it, by character name.
     /// </summary>
-    private static Dictionary<string, WorldPosition> PlayTogether(IHost host)
+    private static Dictionary<string, PlayerSummary> PlayTogether(IHost host)
     {
         ServerContent content = host.Services.GetRequiredService<ServerContent>();
         IAdminCommandService admin = host.Services.GetRequiredService<IAdminCommandService>();
         int port = host.Services.GetRequiredService<IServerTransport>().LocalPort;
-        var stopped = new Dictionary<string, WorldPosition>();
+        var stopped = new Dictionary<string, PlayerSummary>();
 
         using var first = new SocketClient(content, Players.FirstIdentity, Players.FirstName);
         using var second = new SocketClient(content, Players.SecondIdentity, Players.SecondName);
@@ -111,8 +111,8 @@ public sealed class PrototypeAcceptanceTests
             SeeEachOther("reconnect", again, second);
             Assert.That(despawned, Does.Not.Contain(firstEntity), "reconnect: the other player never lost sight");
             AwaitConvergence(admin, "reconnect", again, second);
-            stopped[Players.FirstName] = PositionOf(admin, firstEntity);
-            stopped[Players.SecondName] = PositionOf(admin, secondEntity);
+            stopped[Players.FirstName] = SummaryOf(admin, firstEntity);
+            stopped[Players.SecondName] = SummaryOf(admin, secondEntity);
 
             host.StopAsync().GetAwaiter().GetResult();
             foreach (SocketClient client in new[] { again, second })
@@ -134,11 +134,12 @@ public sealed class PrototypeAcceptanceTests
 
     /// <summary>
     ///     After a clean stop and a second server on the same database, both sign in again to the same characters where
-    ///     they stood, and see each other.
+    ///     they stood, at the level and experience they had, and see each other.
     /// </summary>
-    private static void PlayAfterTheRestart(IHost host, IReadOnlyDictionary<string, WorldPosition> stopped)
+    private static void PlayAfterTheRestart(IHost host, IReadOnlyDictionary<string, PlayerSummary> stopped)
     {
         ServerContent content = host.Services.GetRequiredService<ServerContent>();
+        IAdminCommandService admin = host.Services.GetRequiredService<IAdminCommandService>();
         int port = host.Services.GetRequiredService<IServerTransport>().LocalPort;
         using var first = new SocketClient(content, Players.FirstIdentity, Players.FirstName);
         using var second = new SocketClient(content, Players.SecondIdentity, Players.SecondName);
@@ -151,10 +152,22 @@ public sealed class PrototypeAcceptanceTests
         {
             Assert.That(client.Connection.Characters.Single().Name, Is.EqualTo(name), "restart: the same character");
             Assert.That(
-                client.DistanceTo(stopped[name]),
+                client.DistanceTo(stopped[name].Position),
                 Is.LessThanOrEqualTo(ConvergedDistance),
                 $"restart: {name} stands where the shutdown checkpoint left it");
         }
+
+        bool isKept = SocketClients.PumpUntil(
+            () => characters.All(character =>
+            {
+                PlayerSummary? now = admin.GetPlayers(AdminActor.LocalConsole)
+                    .SingleOrDefault(player => player.Entity == character.Client.World.LocalEntity);
+                PlayerSummary before = stopped[character.Name];
+                return now != null && now.Level == before.Level && now.Experience == before.Experience;
+            }),
+            first,
+            second);
+        Assert.That(isKept, Is.True, "restart: both characters kept their level and experience");
 
         SeeEachOther("restart", first, second);
         AssertCleanTraffic(first, "restart");
@@ -401,9 +414,9 @@ public sealed class PrototypeAcceptanceTests
                 : null;
     }
 
-    private static WorldPosition PositionOf(IAdminCommandService admin, EntityId entity)
+    private static PlayerSummary SummaryOf(IAdminCommandService admin, EntityId entity)
     {
-        return admin.GetPlayers(AdminActor.LocalConsole).Single(player => player.Entity == entity).Position;
+        return admin.GetPlayers(AdminActor.LocalConsole).Single(player => player.Entity == entity);
     }
 
     private static float Horizontal(WorldPosition a, WorldPosition b)
@@ -435,7 +448,7 @@ public sealed class PrototypeAcceptanceTests
             Path.Combine(root.Path, "content", "server"),
             PackageFixture.BuildRepositoryPackage());
 
-        Dictionary<string, WorldPosition> stopped;
+        Dictionary<string, PlayerSummary> stopped;
         using (IHost first = StartHost(root.Path))
         {
             stopped = PlayTogether(first);

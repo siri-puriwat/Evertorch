@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using Evertorch.Game;
+using Evertorch.Persistence;
 using Evertorch.Protocol;
 using Evertorch.Rules;
 using Microsoft.Extensions.Logging;
@@ -112,6 +113,24 @@ public sealed class LevelUpTests
     }
 
     [Test]
+    public void Kill_WhenTheCharacterLevelsUp_QueuesACheckpointOfTheNewLevel()
+    {
+        (TestServer server, ConnectionId connection, MonsterEntity slime) = Arrange();
+        PlayerEntity player = server.PlayerOf(connection);
+        player.Experience = 25;
+        int checkpoints = server.Store.Checkpoints.Count;
+
+        Kill(server, slime);
+        server.Tick();
+
+        CharacterCheckpoint checkpoint = server.Store.Checkpoints.Skip(checkpoints).Single();
+        Assert.That(checkpoint.Level, Is.EqualTo(2));
+        Assert.That(checkpoint.Experience, Is.EqualTo(5));
+        Assert.That(checkpoint.Health, Is.EqualTo(player.MaxHealth));
+        Assert.That(checkpoint.Spirit, Is.EqualTo(player.MaxSpirit));
+    }
+
+    [Test]
     public void Kill_WhenTheShareCoversTheNextLevel_RecalculatesAndRestoresHpAndSp()
     {
         (TestServer server, ConnectionId connection, MonsterEntity slime) = Arrange();
@@ -140,6 +159,18 @@ public sealed class LevelUpTests
             .Single();
         Assert.That(health.Current, Is.EqualTo((uint)levelTwo.MaxHp));
         Assert.That(health.Maximum, Is.EqualTo((uint)levelTwo.MaxHp));
+    }
+
+    [Test]
+    public void Kill_WhenTheShareStaysBelowTheNextLevel_QueuesNoCheckpoint()
+    {
+        (TestServer server, ConnectionId _, MonsterEntity slime) = Arrange();
+        int checkpoints = server.Store.Checkpoints.Count;
+
+        Kill(server, slime);
+        server.Tick();
+
+        Assert.That(server.Store.Checkpoints, Has.Count.EqualTo(checkpoints));
     }
 }
 }

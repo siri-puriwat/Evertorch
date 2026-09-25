@@ -20,6 +20,7 @@ public sealed class CharacterProgression
             "Character {Character} on connection {Connection} reached level {Level} from level {PreviousLevel}.");
 
     private readonly SessionRegistry m_sessions;
+    private readonly CharacterLifetime m_lifetime;
     private readonly CharacterStats m_stats;
     private readonly IProgressionRules m_rules;
     private readonly ServerContent m_content;
@@ -29,6 +30,7 @@ public sealed class CharacterProgression
 
     public CharacterProgression(
         SessionRegistry sessions,
+        CharacterLifetime lifetime,
         CharacterStats stats,
         IProgressionRules rules,
         ServerContent content,
@@ -37,6 +39,7 @@ public sealed class CharacterProgression
         ILogger<CharacterProgression> logger)
     {
         m_sessions = sessions;
+        m_lifetime = lifetime;
         m_stats = stats;
         m_rules = rules;
         m_content = content;
@@ -112,6 +115,13 @@ public sealed class CharacterProgression
         if (player.Owner != default)
         {
             m_sender.Send(player.Owner, new CharacterHealth((uint)player.CurrentHealth, (uint)player.MaxHealth));
+        }
+
+        // An important transition (Persistence §6). A character logging out or expelled shares nothing, so this never
+        // takes the place of the checkpoint that ends its time in the world.
+        if (!character.IsLoggingOut && !character.IsExpelled)
+        {
+            m_lifetime.QueueCheckpoint(character);
         }
     }
 }
