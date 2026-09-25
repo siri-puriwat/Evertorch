@@ -79,6 +79,30 @@ public sealed class ServerContentLoaderTests
     [TestCase(Monsters, "\"baseSpeed\": 4", "\"baseSpeed\": -4", "definitions[0].baseSpeed: must not be negative")]
     [TestCase(Monsters, "\"behavior\": \"passive\"", "\"behavior\": \"sleepy\"", "behavior: unknown value 'sleepy'")]
     [TestCase(Skills, "\"range\": 1.5", "\"range\": true", "skills.json: definitions[0].range: must be a number")]
+    [TestCase(Skills, "\"spCost\": 0", "\"spCost\": -1", "skills.json: definitions[0].spCost: must be at least 0")]
+    [TestCase(Skills, "\"resolution\"", "\"later\"", "definitions[0].spPaidAt: unknown value 'later'")]
+    [TestCase(
+        Skills,
+        "\"cooldownMs\": 0",
+        "\"cooldownMs\": 0,\n      \"effect\": {\n        \"damageRatio\": 0\n      }",
+        "definitions[0].effect.damageRatio: must be at least 1")]
+    [TestCase(
+        Skills,
+        "\"cooldownMs\": 0",
+        "\"cooldownMs\": 0,\n      \"effect\": {}",
+        "definitions[0].effect.damageRatio: an effect must have exactly one of damageRatio or healHp")]
+    [TestCase(
+        Skills,
+        "      \"damageType\": \"physical\",\n",
+        "",
+        "jobs.json: job.adventurer: its basic attack 'skill.basic_attack' has no damage type")]
+    [TestCase(Jobs, "\"skills\": []", "\"skills\": [\"skill.none\"]", "knows unknown skill 'skill.none'")]
+    [TestCase(
+        Jobs,
+        "\"skills\": []",
+        "\"skills\": [\"skill.basic_attack\"]",
+        "knows skill 'skill.basic_attack', which has no effect")]
+    [TestCase(Jobs, "\"skills\": []", "\"skills\": [\"Skill\"]", "'Skill' is not a valid skill ID")]
     [TestCase(
         Experience,
         "[\n        30,",

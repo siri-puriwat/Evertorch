@@ -11,9 +11,10 @@ public readonly struct DamageContext
         int hardDefense,
         int softDefense,
         bool isCritical,
-        IRandomSource random)
+        IRandomSource random,
+        int ratioPercent = 100)
     {
-        if (statusAttack < 0 || weaponAttack < 0 || hardDefense < 0 || softDefense < 0)
+        if (statusAttack < 0 || weaponAttack < 0 || hardDefense < 0 || softDefense < 0 || ratioPercent < 0)
         {
             throw new ArgumentOutOfRangeException(nameof(statusAttack), "Damage inputs cannot be negative.");
         }
@@ -25,6 +26,7 @@ public readonly struct DamageContext
         SoftDefense = softDefense;
         IsCritical = isCritical;
         Random = random ?? throw new ArgumentNullException(nameof(random));
+        RatioPercent = ratioPercent;
     }
 
     public AttackerKind AttackerKind { get; }
@@ -44,5 +46,10 @@ public readonly struct DamageContext
     public bool IsCritical { get; }
 
     public IRandomSource Random { get; }
+
+    /// <summary>
+    ///     A skill's share of the raw damage, applied before defense; 100 for a basic attack.
+    /// </summary>
+    public int RatioPercent { get; }
 }
 }

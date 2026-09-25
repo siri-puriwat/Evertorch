@@ -66,6 +66,7 @@ public sealed class RenewalCombatRules : ICombatRules
         long raw = context.AttackerKind == AttackerKind.Character
             ? 2L * context.StatusAttack + context.WeaponAttack
             : RollMonsterAttack(context) + context.StatusAttack;
+        raw = raw * context.RatioPercent / 100;
 
         long reduced = raw * (DefenseScale + context.HardDefense) / (DefenseScale + 10L * context.HardDefense)
             - context.SoftDefense;

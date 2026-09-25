@@ -6,6 +6,12 @@
       "displayName": "Basic Attack",
       "targetType": "enemy",
       "icon": "skill_basic_attack"
+    },
+    {
+      "id": "skill.strike",
+      "displayName": "Strike",
+      "targetType": "enemy",
+      "icon": "skill_strike"
     }
   ]
 }

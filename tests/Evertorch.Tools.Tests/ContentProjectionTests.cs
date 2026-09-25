@@ -19,7 +19,8 @@ public sealed class ContentProjectionTests
     {
         "3917", "3918", "73219", "73220", "54321", "7613", "2917", "1553", "1027", "4.0625", "1.5625", "12347",
         "6.125", "12.375", "0.7321", "1.8125", "60413", "8123", "20417", "3119", "5.1875", "3.4375", "7.5625",
-        "12.6875", "14.3125", "6.875", "86421", "6.4375", "4111", "5227", "139", "30211", "50423", "80637", "77173"
+        "12.6875", "14.3125", "6.875", "86421", "6.4375", "4111", "5227", "139", "30211", "50423", "80637", "77173",
+        "1.6875", "4127", "3171", "7193", "5231", "21133", "1319"
     };
 
     private static readonly string[] ServerOnlyFieldNames =
@@ -30,13 +31,16 @@ public sealed class ContentProjectionTests
         "startingStats", "health", "spirit", "healthBase", "healthPerLevel", "spiritBase", "spiritPerLevel",
         "unarmedAttackSpeedPenalty", "startingMap", "basicAttack", "spawnPoint", "monsterSpawns", "respawnMs",
         "serverContentVersion", "roamRadius", "idlePauseMs", "idlePauseMinMs", "idlePauseMaxMs", "scanIntervalMs",
-        "experienceTable", "rewards", "baseExperience", "levels"
+        "experienceTable", "rewards", "baseExperience", "levels", "skills", "spCost", "spPaidAt", "castTimeMs",
+        "fixedCastMs", "variableCastMs", "afterCastDelayMs", "cooldownMs", "effect", "damage", "ratio", "heal",
+        "damageRatio", "healHp"
     };
 
     // Authoring sections that the projection flattens into their fields, so no package carries these names.
     private static readonly string[] FlattenedAuthoringSections =
     {
-        "server", "stats", "movement", "combat", "ai", "amount", "health", "spirit", "idlePauseMs", "rewards"
+        "server", "stats", "movement", "combat", "ai", "amount", "health", "spirit", "idlePauseMs", "rewards",
+        "castTimeMs", "damage", "ratio", "heal"
     };
 
     private static ContentPackages BuildValid(ContentWorkspace workspace)
@@ -70,6 +74,18 @@ public sealed class ContentProjectionTests
         for (int index = 0; index < left.DataFiles.Count; index++)
         {
             Assert.That(left.DataFiles[index].Content, Is.EqualTo(right.DataFiles[index].Content));
+        }
+    }
+
+    private static JsonElement Definition(ContentPackage package, string path, string id)
+    {
+        PackageFile file = package.DataFiles.Single(candidate => candidate.Path == path);
+        using (var document = JsonDocument.Parse(file.Content))
+        {
+            return document.RootElement.GetProperty("definitions")
+                .EnumerateArray()
+                .Single(definition => definition.GetProperty("id").GetString() == id)
+                .Clone();
         }
     }
 
@@ -289,6 +305,33 @@ public sealed class ContentProjectionTests
                 AssertManifestHashes(server.RootElement, packages.Server);
                 AssertManifestHashes(client.RootElement, packages.Client);
             }
+        }
+    }
+
+    [Test]
+    public void Build_ForValidFixture_WritesTheSkillNumbersAndTheJobsSkillsForTheServer()
+    {
+        using (var workspace = new ContentWorkspace())
+        {
+            ContentPackages packages = BuildValid(workspace);
+
+            JsonElement strike = Definition(packages.Server, "skills.json", "skill.strike");
+            Assert.That(strike.GetProperty("damageType").GetString(), Is.EqualTo("physical"));
+            Assert.That(strike.GetProperty("spCost").GetInt32(), Is.EqualTo(4127));
+            Assert.That(strike.GetProperty("spPaidAt").GetString(), Is.EqualTo("castStart"));
+            Assert.That(strike.GetProperty("fixedCastMs").GetInt32(), Is.EqualTo(3171));
+            Assert.That(strike.GetProperty("variableCastMs").GetInt32(), Is.EqualTo(7193));
+            Assert.That(strike.GetProperty("afterCastDelayMs").GetInt32(), Is.EqualTo(5231));
+            Assert.That(strike.GetProperty("cooldownMs").GetInt32(), Is.EqualTo(21133));
+            Assert.That(strike.GetProperty("effect").GetProperty("damageRatio").GetInt32(), Is.EqualTo(1319));
+            Assert.That(
+                Definition(packages.Server, "skills.json", "skill.basic_attack").TryGetProperty("effect", out _),
+                Is.False,
+                "a skill without an effect writes none");
+            Assert.That(
+                FirstDefinition(packages.Server, "jobs.json").GetProperty("skills").EnumerateArray()
+                    .Select(skill => skill.GetString()),
+                Is.EqualTo(new[] { "skill.strike" }));
         }
     }
 

@@ -157,6 +157,32 @@ public sealed class ServerInstrumentsTests
     }
 
     [Test]
+    public void Casts_AreCountedByOutcome()
+    {
+        var rig = new CombatRig(combatRandom: new SureHitRandom());
+        using var recorder = new MeterRecorder(rig.Server.Instruments.Meter);
+        rig.Server.AfterCommandsOnce(() => rig.Server.Combat.TryBeginCast(
+            rig.Map,
+            rig.Entity,
+            new SkillDefinitionId("skill.first_aid"),
+            default,
+            rig.Server.CurrentTick));
+        rig.Server.Tick();
+        rig.Cancel();
+        rig.Server.Tick();
+        rig.Server.AfterCommandsOnce(() => rig.Server.Combat.TryBeginCast(
+            rig.Map,
+            rig.Entity,
+            new SkillDefinitionId("skill.strike"),
+            rig.Slime.Id,
+            rig.Server.CurrentTick));
+        rig.Server.Tick();
+
+        Assert.That(SumTagged(recorder, "evertorch.combat.casts", "outcome", "interrupted"), Is.EqualTo(1));
+        Assert.That(SumTagged(recorder, "evertorch.combat.casts", "outcome", "resolved"), Is.EqualTo(1));
+    }
+
+    [Test]
     public void Gauges_ReadThePublishedStatus()
     {
         var server = new TestServer();

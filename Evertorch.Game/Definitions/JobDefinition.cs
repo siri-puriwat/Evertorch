@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+
 namespace Evertorch.Game
 {
 public sealed class JobDefinition
@@ -14,7 +16,8 @@ public sealed class JobDefinition
         double baseSpeed,
         MapDefinitionId startingMap,
         SkillDefinitionId basicAttack,
-        ExperienceDefinitionId experienceTable)
+        ExperienceDefinitionId experienceTable,
+        IReadOnlyList<SkillDefinitionId> skills)
     {
         Id = id;
         DisplayName = displayName;
@@ -28,6 +31,7 @@ public sealed class JobDefinition
         StartingMap = startingMap;
         BasicAttack = basicAttack;
         ExperienceTable = experienceTable;
+        Skills = skills;
     }
 
     public JobDefinitionId Id { get; }
@@ -54,5 +58,10 @@ public sealed class JobDefinition
     public SkillDefinitionId BasicAttack { get; }
 
     public ExperienceDefinitionId ExperienceTable { get; }
+
+    /// <summary>
+    ///     The skills the job knows from level 1 (Gameplay Systems §9).
+    /// </summary>
+    public IReadOnlyList<SkillDefinitionId> Skills { get; }
 }
 }

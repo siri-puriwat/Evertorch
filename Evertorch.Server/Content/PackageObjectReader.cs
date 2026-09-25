@@ -230,6 +230,15 @@ internal sealed class PackageObjectReader
     }
 
     /// <summary>
+    ///     Whether the optional property <paramref name="name" /> is present; asking counts as expecting it.
+    /// </summary>
+    public bool Has(string name)
+    {
+        m_requested.Add(name);
+        return m_element.TryGetProperty(name, out JsonElement _);
+    }
+
+    /// <summary>
     ///     Call after every expected property has been read.
     /// </summary>
     public void ReportUnexpectedProperties()

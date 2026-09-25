@@ -1,0 +1,15 @@
+id: skill.strike
+displayName: Strike
+targetType: enemy
+damageType: physical
+server:
+  range: 1.6875
+  spCost: 4127
+  spPaidAt: castStart
+  castTimeMs: { fixed: 3171, variable: 7193 }
+  afterCastDelayMs: 5231
+  cooldownMs: 21133
+  effect:
+    damage: { ratio: 1319 }
+client:
+  icon: skill_strike

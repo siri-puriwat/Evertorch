@@ -25,7 +25,6 @@ public sealed class AutoAttackState
     private readonly ICombatCommandSink m_commands;
     private readonly double m_tickSeconds;
     private readonly int m_stalledTicks;
-    private int m_lockTicksRemaining;
     private int m_ticksInRangeWithoutSwing;
     private bool m_isClosingIn;
     private bool m_isAwaitingConfirmation;
@@ -96,16 +95,10 @@ public sealed class AutoAttackState
     }
 
     /// <summary>
-    ///     Runs before the movement controller on every client tick.
+    ///     Runs before the movement controller on every client tick, after the tick's lock was applied.
     /// </summary>
     public void Tick(WorldPosition position)
     {
-        m_controller.IsLocked = m_lockTicksRemaining > 0;
-        if (m_lockTicksRemaining > 0)
-        {
-            m_lockTicksRemaining--;
-        }
-
         if (!IsActive)
         {
             return;
@@ -142,7 +135,7 @@ public sealed class AutoAttackState
         }
 
         m_controller.StopChase();
-        if (m_lockTicksRemaining == 0 && ++m_ticksInRangeWithoutSwing > m_stalledTicks)
+        if (!m_world.ActionLock.IsSwingLocked && ++m_ticksInRangeWithoutSwing > m_stalledTicks)
         {
             // The server measures range against the target's own position, which the drawn one trails; come closer.
             m_isClosingIn = true;
@@ -164,7 +157,7 @@ public sealed class AutoAttackState
         }
 
         // The lock is counted from hearing of the swing: the server locked the same span a little earlier.
-        m_lockTicksRemaining = (int)Math.Ceiling(started.Timing.Impact.TotalSeconds / m_tickSeconds);
+        m_world.ActionLock.LockForSwing((int)Math.Ceiling(started.Timing.Impact.TotalSeconds / m_tickSeconds));
         m_ticksInRangeWithoutSwing = 0;
         m_isClosingIn = false;
     }

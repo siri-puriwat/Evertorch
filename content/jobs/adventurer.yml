@@ -10,5 +10,6 @@ server:
   startingMap: map.training_ground
   basicAttack: skill.basic_attack
   experienceTable: experience.adventurer
+  skills: [skill.strike, skill.first_aid]
 client:
   prefab: character_adventurer

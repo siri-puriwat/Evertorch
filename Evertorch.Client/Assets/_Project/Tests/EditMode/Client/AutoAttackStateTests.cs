@@ -62,8 +62,10 @@ public sealed class AutoAttackStateTests
             Sent.Add("cancel");
         }
 
+        // The lock is applied as the driver applies it, before the auto-attack's own tick.
         public WorldDirection Tick()
         {
+            Controller.IsLocked = World.ActionLock.Advance();
             AutoAttack.Tick(World.Predictor.Position);
             return Controller.Tick(World.Predictor.Position, World.Predictor.StepDistance);
         }

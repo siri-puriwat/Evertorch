@@ -16,7 +16,7 @@ public sealed class PresentationBoundaryTests
 {
     private static readonly Regex Forbidden = new(
         @"ClientConnection|ICombatCommandSink|IMoveIntentSink|\bSend\w*\(|AutoAttackState|MovementController"
-        + @"|LocalPlayerDriver|MovementPredictor|\.Predictor\b|\.IsLocked\b|RequestRespawn"
+        + @"|LocalPlayerDriver|MovementPredictor|\.Predictor\b|\.IsLocked\b|RequestRespawn|\.ActionLock\b"
         + @"|\.On(Spawn|Despawn|Snapshot|TargetChanged|AttackStarted|Damage|EntityDied|EntityRevived|ItemDropped"
         + @"|CharacterHealth)\("
         + @"|\.(HealthPermille|StateFlags|CurrentHealth)\s*=[^=]");
@@ -26,7 +26,7 @@ public sealed class PresentationBoundaryTests
     // name only one client type has is matched on any receiver, so a local copy of the controller or the predictor
     // cannot hide the call.
     private static readonly Regex UiForbidden = new(
-        @"ICombatCommandSink|IMoveIntentSink|\.Send\w*\(|AutoAttackState|LocalPlayerDriver|PickupState"
+        @"ICombatCommandSink|IMoveIntentSink|\.Send\w*\(|AutoAttackState|LocalPlayerDriver|PickupState|\.ActionLock\b"
         + @"|MoveIntentProducer|\bnew\s+(MoveIntent|ClientHello|EnterWorldRequest|MoveInput|StopMovement|TargetEntity"
         + @"|AttackEntity|CancelAction|Respawn|Logout|PickupItem|CreateCharacter|InventoryResyncRequest)\s*\("
         + @"|\.Connection\??\.(Connect|Disconnect|EnterWorld|CreateCharacter|Poll)\("
@@ -108,9 +108,11 @@ public sealed class PresentationBoundaryTests
             "if (target.IsDead == wasDead)", "world.Inventory.Changed += Refresh;", "m_lines.Clear();",
             "world.LeveledUp += OnLeveledUp;", "ShowCharacter(played.Value.Name, world.Level);"
         };
+        string[] lockProbes = { "world.ActionLock.LockForSwing(4);", "bool held = m_world.ActionLock.IsCastLocked;" };
 
         Assert.That(probes.Where(probe => !UiForbidden.IsMatch(probe)), Is.Empty);
         Assert.That(allowed.Where(line => UiForbidden.IsMatch(line)), Is.Empty);
+        Assert.That(lockProbes.Where(probe => !UiForbidden.IsMatch(probe) || !Forbidden.IsMatch(probe)), Is.Empty);
     }
 
     [Test]

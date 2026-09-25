@@ -51,7 +51,8 @@ public sealed class DefinitionShapeTests
             5.0,
             new MapDefinitionId("map.training_ground"),
             new SkillDefinitionId("skill.basic_attack"),
-            new ExperienceDefinitionId("experience.adventurer"));
+            new ExperienceDefinitionId("experience.adventurer"),
+            new[] { new SkillDefinitionId("skill.strike") });
 
         Assert.That(job.Id.Value, Is.EqualTo("job.adventurer"));
         Assert.That(job.DisplayName, Is.EqualTo("Adventurer"));
@@ -65,6 +66,7 @@ public sealed class DefinitionShapeTests
         Assert.That(job.StartingMap.Value, Is.EqualTo("map.training_ground"));
         Assert.That(job.BasicAttack.Value, Is.EqualTo("skill.basic_attack"));
         Assert.That(job.ExperienceTable.Value, Is.EqualTo("experience.adventurer"));
+        Assert.That(job.Skills, Is.EqualTo(new[] { new SkillDefinitionId("skill.strike") }));
     }
 
     [Test]
@@ -168,17 +170,44 @@ public sealed class DefinitionShapeTests
     public void SkillDefinition_WithValues_ExposesThem()
     {
         var skill = new SkillDefinition(
-            new SkillDefinitionId("skill.basic_attack"),
-            "Basic Attack",
+            new SkillDefinitionId("skill.strike"),
+            "Strike",
             SkillTargetType.Enemy,
             SkillDamageType.Physical,
-            1.5);
+            1.5,
+            8,
+            SkillPaymentPoint.CastStart,
+            100,
+            200,
+            500,
+            2000,
+            SkillEffect.Damage(130));
 
-        Assert.That(skill.Id.Value, Is.EqualTo("skill.basic_attack"));
-        Assert.That(skill.DisplayName, Is.EqualTo("Basic Attack"));
+        Assert.That(skill.Id.Value, Is.EqualTo("skill.strike"));
+        Assert.That(skill.DisplayName, Is.EqualTo("Strike"));
         Assert.That(skill.TargetType, Is.EqualTo(SkillTargetType.Enemy));
         Assert.That(skill.DamageType, Is.EqualTo(SkillDamageType.Physical));
         Assert.That(skill.Range, Is.EqualTo(1.5));
+        Assert.That(skill.SpCost, Is.EqualTo(8));
+        Assert.That(skill.SpPaidAt, Is.EqualTo(SkillPaymentPoint.CastStart));
+        Assert.That(skill.FixedCastMs, Is.EqualTo(100));
+        Assert.That(skill.VariableCastMs, Is.EqualTo(200));
+        Assert.That(skill.AfterCastDelayMs, Is.EqualTo(500));
+        Assert.That(skill.CooldownMs, Is.EqualTo(2000));
+        Assert.That(skill.Effect!.Kind, Is.EqualTo(SkillEffectKind.Damage));
+        Assert.That(skill.Effect.DamageRatioPercent, Is.EqualTo(130));
+    }
+
+    [Test]
+    public void SkillEffect_OfEachKind_KeepsOnlyItsOwnValue()
+    {
+        var heal = SkillEffect.Heal(15);
+        Action noRatio = () => SkillEffect.Damage(0);
+        Action noHeal = () => SkillEffect.Heal(0);
+
+        Assert.That((heal.Kind, heal.HealHp, heal.DamageRatioPercent), Is.EqualTo((SkillEffectKind.Heal, 15, 0)));
+        Assert.That(noRatio, Throws.InstanceOf<ArgumentOutOfRangeException>());
+        Assert.That(noHeal, Throws.InstanceOf<ArgumentOutOfRangeException>());
     }
 }
 }

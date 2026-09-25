@@ -58,6 +58,9 @@ public sealed class ServerInstruments
         new("violation", "command_rate")
     };
 
+    private static readonly KeyValuePair<string, object?> CastResolved = new(OutcomeTag, "resolved");
+    private static readonly KeyValuePair<string, object?> CastInterrupted = new(OutcomeTag, "interrupted");
+
     private static readonly KeyValuePair<string, object?> RateLimitedReason = new("reason", "rate_limited");
     private static readonly KeyValuePair<string, object?> KickedReason = new("reason", "kicked");
 
@@ -74,6 +77,7 @@ public sealed class ServerInstruments
     private readonly Counter<long> m_violationDisconnects;
     private readonly Counter<long> m_experience;
     private readonly Counter<long> m_levelUps;
+    private readonly Counter<long> m_casts;
 
     public ServerInstruments(IMeterFactory meters)
     {
@@ -130,6 +134,10 @@ public sealed class ServerInstruments
             "evertorch.progression.level_ups",
             "{level}",
             "Levels characters gained.");
+        m_casts = Meter.CreateCounter<long>(
+            "evertorch.combat.casts",
+            "{cast}",
+            "Skill casts that resolved or were interrupted, by outcome.");
     }
 
     public Meter Meter { get; }
@@ -197,6 +205,11 @@ public sealed class ServerInstruments
     public void RecordLevelUps(int levels)
     {
         m_levelUps.Add(levels);
+    }
+
+    public void RecordCast(bool isResolved)
+    {
+        m_casts.Add(1, isResolved ? CastResolved : CastInterrupted);
     }
 
     /// <summary>

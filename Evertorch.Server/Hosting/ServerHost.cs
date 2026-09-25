@@ -77,6 +77,7 @@ public static class ServerHost
         builder.Services.AddSingleton<IMovementRules, RenewalMovementRules>();
         builder.Services.AddSingleton<ICombatRules, RenewalCombatRules>();
         builder.Services.AddSingleton<IProgressionRules, RenewalProgressionRules>();
+        builder.Services.AddSingleton<ISkillRules, RenewalSkillRules>();
         builder.Services.AddSingleton(services =>
             ServerRandom.FromOptions(services.GetRequiredService<IOptions<WorldOptions>>().Value));
         builder.Services.AddSingleton<IRandomSource>(services => services.GetRequiredService<ServerRandom>());

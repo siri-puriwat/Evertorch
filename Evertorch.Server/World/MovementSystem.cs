@@ -59,7 +59,7 @@ public sealed class MovementSystem : ITickPhase
     // A monster walks the direction its AI chose last tick, at its own speed, with the same movement model.
     private static void MoveMonster(MonsterEntity monster, MapInstance map, in TickContext context)
     {
-        WorldDirection direction = monster.IsDead || monster.Combat.IsSwinging
+        WorldDirection direction = monster.IsDead || monster.Combat.IsSwinging || monster.Combat.IsCasting
             ? default
             : monster.Brain.DesiredDirection;
         MovementStep step = MovementModel.Step(
@@ -83,9 +83,10 @@ public sealed class MovementSystem : ITickPhase
 
     private void Move(PlayerEntity player, MapInstance map, PlayerInputState input, in TickContext context)
     {
-        // From a swing's start to its impact, and while dead, input is consumed and acknowledged but applied as a
-        // zero direction (Gameplay Systems §5). Storing the zero keeps the hold timeout from resuming the walk later.
-        bool isHeld = player.IsDead || player.Combat.IsSwinging;
+        // From a swing's start to its impact, through a cast, and while dead, input is consumed and acknowledged but
+        // applied as a zero direction (Gameplay Systems §5). Storing the zero keeps the hold timeout from resuming the
+        // walk later.
+        bool isHeld = player.IsDead || player.Combat.IsSwinging || player.Combat.IsCasting;
         if (input.Queue.TryDequeue(out MoveIntent intent))
         {
             input.Direction = isHeld

@@ -41,6 +41,7 @@ public sealed class LocalPlayerDriver
         MovementPredictor predictor = m_world.Predictor;
         WorldPosition previous = predictor.Position;
         m_controller.IsDead = m_world.IsLocalDead;
+        m_controller.IsLocked = m_world.ActionLock.Advance();
         m_autoAttack?.Tick(previous);
         m_pickup?.Tick(previous);
         WorldDirection direction = m_controller.Tick(previous, predictor.StepDistance);

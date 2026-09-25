@@ -114,6 +114,11 @@ public sealed class ClientWorld
 
     public ClientInventory Inventory { get; } = new();
 
+    /// <summary>
+    ///     The local player's movement lock; a new world starts unlocked.
+    /// </summary>
+    public ActionLock ActionLock { get; } = new();
+
     public IReadOnlyDictionary<EntityId, RemoteEntity> Remotes => m_remotes;
 
     public uint LatestServerTick { get; private set; }

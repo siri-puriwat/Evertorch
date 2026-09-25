@@ -88,6 +88,13 @@ internal static class ServerProjection
             writer.WriteString("startingMap", job.StartingMap.Value);
             writer.WriteString("basicAttack", job.BasicAttack.Value);
             writer.WriteString("experienceTable", job.ExperienceTable.Value);
+            writer.WriteStartArray("skills");
+            foreach (SkillDefinitionId skill in job.Skills)
+            {
+                writer.WriteStringValue(skill.Value);
+            }
+
+            writer.WriteEndArray();
             writer.WriteEndObject();
         }
 
@@ -184,8 +191,33 @@ internal static class ServerProjection
             writer.WriteString("id", skill.Id.Value);
             writer.WriteString("displayName", skill.DisplayName);
             writer.WriteString("targetType", EnumText.Of(skill.TargetType));
-            writer.WriteString("damageType", EnumText.Of(skill.DamageType));
+            if (skill.DamageType.HasValue)
+            {
+                writer.WriteString("damageType", EnumText.Of(skill.DamageType.Value));
+            }
+
             writer.WriteNumber("range", skill.Range);
+            writer.WriteNumber("spCost", skill.SpCost);
+            writer.WriteString("spPaidAt", EnumText.Of(skill.SpPaidAt));
+            writer.WriteNumber("fixedCastMs", skill.FixedCastMs);
+            writer.WriteNumber("variableCastMs", skill.VariableCastMs);
+            writer.WriteNumber("afterCastDelayMs", skill.AfterCastDelayMs);
+            writer.WriteNumber("cooldownMs", skill.CooldownMs);
+            if (skill.Effect != null)
+            {
+                writer.WriteStartObject("effect");
+                if (skill.Effect.Kind == SkillEffectKind.Damage)
+                {
+                    writer.WriteNumber("damageRatio", skill.Effect.DamageRatioPercent);
+                }
+                else
+                {
+                    writer.WriteNumber("healHp", skill.Effect.HealHp);
+                }
+
+                writer.WriteEndObject();
+            }
+
             writer.WriteEndObject();
         }
 

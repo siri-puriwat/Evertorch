@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Evertorch.Game;
 using Evertorch.Protocol;
 using Evertorch.Rules;
@@ -8,10 +9,10 @@ using Microsoft.Extensions.Options;
 namespace Evertorch.Server
 {
 /// <summary>
-///     Resolves basic attacks (Gameplay Systems §6, §7). Each tick it first resolves the impacts that are due, then
-///     begins the swings that may begin. Timing is kept in exact milliseconds: an event runs on the first tick at or
-///     after its time, and a continuing schedule adds the interval to the previous nominal start, so tick alignment
-///     never accumulates. Crash-fast by design (System Architecture §7).
+///     Resolves basic attacks and skill casts (Gameplay Systems §6, §7, §9). Each tick it first resolves the impacts
+///     and casts that are due, then begins the swings that may begin. Timing is kept in exact milliseconds: an event
+///     runs on the first tick at or after its time, and a continuing schedule adds the interval to the previous nominal
+///     start, so tick alignment never accumulates. Crash-fast by design (System Architecture §7).
 /// </summary>
 public sealed class CombatSystem : ITickPhase
 {
@@ -23,7 +24,10 @@ public sealed class CombatSystem : ITickPhase
     private readonly Targeting m_targeting;
     private readonly ItemDropSystem m_drops;
     private readonly CharacterProgression m_progression;
+    private readonly ServerContent m_content;
     private readonly ICombatRules m_rules;
+    private readonly ISkillRules m_skillRules;
+    private readonly ServerInstruments m_instruments;
     private readonly IRandomSource m_random;
     private readonly int m_tickRate;
     private readonly float m_rangeTolerance;
@@ -37,8 +41,11 @@ public sealed class CombatSystem : ITickPhase
         Targeting targeting,
         ItemDropSystem drops,
         CharacterProgression progression,
+        ServerContent content,
         ICombatRules rules,
+        ISkillRules skillRules,
         IRandomSource random,
+        ServerInstruments instruments,
         IOptions<WorldOptions> worldOptions,
         IOptions<SimulationOptions> simulation)
     {
@@ -48,8 +55,11 @@ public sealed class CombatSystem : ITickPhase
         m_targeting = targeting;
         m_drops = drops;
         m_progression = progression;
+        m_content = content;
         m_rules = rules;
+        m_skillRules = skillRules;
         m_random = random;
+        m_instruments = instruments;
         m_tickRate = simulation.Value.TickRate;
         m_rangeTolerance = worldOptions.Value.AttackRangeTolerance;
     }
@@ -61,6 +71,7 @@ public sealed class CombatSystem : ITickPhase
         long now = TickMilliseconds(context.Tick);
         foreach (MapInstance map in m_world.Maps)
         {
+            InterruptCastsOnDepartedTargets(map);
             ResolveImpacts(map, now, context.Tick);
             BeginSwings(map, now, context.Tick);
             foreach (WorldEntity entity in map.Entities)
@@ -71,8 +82,95 @@ public sealed class CombatSystem : ITickPhase
     }
 
     /// <summary>
-    ///     Ends <paramref name="entity" />'s life: its own and its attackers' auto-attacks end, swings at it are
-    ///     interrupted, and every client that knows it hears of the death.
+    ///     Begins <paramref name="player" />'s cast of <paramref name="skillId" /> at <paramref name="target" />, the
+    ///     default value for itself, after the checks of Gameplay Systems §9 in their order. It resolves on the first
+    ///     tick at or after its cast time, a cast of 0 ms in this tick's combat phase. The selected target and the
+    ///     auto-attack stay as they were.
+    /// </summary>
+    public CastRefusal TryBeginCast(
+        MapInstance map,
+        PlayerEntity player,
+        SkillDefinitionId skillId,
+        EntityId target,
+        uint tick)
+    {
+        long now = TickMilliseconds(tick);
+        CombatState combat = player.Combat;
+        if (player.IsDead
+            || !m_content.Jobs[player.Job].Skills.Contains(skillId)
+            || !m_content.Skills.TryGetValue(skillId, out SkillDefinition? skill)
+            || skill.Effect == null
+            || combat.IsCasting
+            || combat.IsSwinging
+            || now < combat.DelayEndsMs
+            || now < combat.CooldownEndMs(skillId))
+        {
+            return CastRefusal.NotAllowedNow;
+        }
+
+        if (player.CurrentSpirit < skill.SpCost)
+        {
+            return CastRefusal.NotEnoughSp;
+        }
+
+        WorldEntity? resolvedOn = player;
+        if (skill.TargetType == SkillTargetType.Self)
+        {
+            if (target != default && target != player.Id)
+            {
+                return CastRefusal.InvalidTarget;
+            }
+        }
+        else
+        {
+            ClientSession? session = FindSession(player);
+            if (target == default
+                || session == null
+                || !Targeting.IsTargetable(session, target)
+                || !map.TryGetEntity(target, out resolvedOn)
+                || resolvedOn == null)
+            {
+                return CastRefusal.InvalidTarget;
+            }
+
+            if (HorizontalDistance(player.Position, resolvedOn.Position) > skill.Range + m_rangeTolerance
+                || !map.Definition.Navigation.HasLineOfSight(player.Position, resolvedOn.Position))
+            {
+                return CastRefusal.OutOfRange;
+            }
+
+            Face(player, resolvedOn);
+        }
+
+        CastTiming timing = m_skillRules.CalculateCastTiming(
+            new SkillContext(skill, AttackerKind.Character, player.Stats.VariableCastPermille));
+        bool isPaidNow = skill.SpPaidAt == SkillPaymentPoint.CastStart;
+        if (isPaidNow && skill.SpCost > 0)
+        {
+            player.CurrentSpirit -= skill.SpCost;
+            m_sender.SendHealth(player);
+        }
+
+        combat.BeginCast(skillId, resolvedOn.Id, now + timing.CastMs, isPaidNow);
+        return CastRefusal.None;
+    }
+
+    /// <summary>
+    ///     Ends <paramref name="caster" />'s cast, if any, without effect (Gameplay Systems §9): SP not yet paid is
+    ///     not paid, and neither the after-cast delay nor the cooldown starts.
+    /// </summary>
+    public void InterruptCast(WorldEntity caster)
+    {
+        if (caster.Combat.IsCasting)
+        {
+            caster.Combat.EndCast();
+            m_instruments.RecordCast(false);
+        }
+    }
+
+    /// <summary>
+    ///     Ends <paramref name="entity" />'s life: its own and its attackers' auto-attacks end, swings and casts at it
+    ///     and its own cast are interrupted, and every client that knows it hears of the death.
     /// </summary>
     public void Kill(MapInstance map, WorldEntity entity, WorldEntity? source, uint tick)
     {
@@ -88,6 +186,7 @@ public sealed class CombatSystem : ITickPhase
         entity.VelocityZ = 0f;
         entity.Combat.IsAutoAttacking = false;
         entity.Combat.EndSwing();
+        InterruptCast(entity);
         ClearTarget(entity);
 
         foreach (WorldEntity other in map.Entities)
@@ -100,6 +199,11 @@ public sealed class CombatSystem : ITickPhase
             if (other.Combat.IsSwinging && other.Combat.SwingTarget == entity.Id)
             {
                 other.Combat.EndSwing();
+            }
+
+            if (other.Combat.IsCasting && other.Combat.CastTarget == entity.Id)
+            {
+                InterruptCast(other);
             }
         }
 
@@ -140,27 +244,64 @@ public sealed class CombatSystem : ITickPhase
         }
     }
 
+    private static long DueMs(WorldEntity entity)
+    {
+        return entity.Combat.IsCasting ? entity.Combat.CastResolveMs : entity.Combat.ImpactMs;
+    }
+
+    private static void Face(WorldEntity entity, WorldEntity target)
+    {
+        WorldDirection facing = MovementModel.NormalizeOrZero(
+            target.Position.X - entity.Position.X,
+            target.Position.Z - entity.Position.Z);
+        if (facing != default)
+        {
+            entity.Facing = facing;
+        }
+    }
+
+    // A target that left the map (a player logging out, say) ends every cast at it at once, as its death would.
+    private void InterruptCastsOnDepartedTargets(MapInstance map)
+    {
+        foreach (WorldEntity entity in map.Entities)
+        {
+            if (entity.Combat.IsCasting
+                && entity.Combat.CastTarget != entity.Id
+                && !map.TryGetEntity(entity.Combat.CastTarget, out WorldEntity? _))
+            {
+                InterruptCast(entity);
+            }
+        }
+    }
+
     private void ResolveImpacts(MapInstance map, long now, uint tick)
     {
         m_due.Clear();
         foreach (WorldEntity entity in map.Entities)
         {
-            if (entity.Combat.IsSwinging && entity.Combat.ImpactMs <= now)
+            if ((entity.Combat.IsSwinging && entity.Combat.ImpactMs <= now)
+                || (entity.Combat.IsCasting && entity.Combat.CastResolveMs <= now))
             {
                 m_due.Add(entity);
             }
         }
 
-        // Several impacts in one tick resolve in a fixed order, so an attacker killed by an earlier one is
+        // Several impacts and casts in one tick resolve in a fixed order, so an entity killed by an earlier one is
         // interrupted the same way on every run.
         m_due.Sort((left, right) =>
         {
-            int byTime = left.Combat.ImpactMs.CompareTo(right.Combat.ImpactMs);
+            int byTime = DueMs(left).CompareTo(DueMs(right));
             return byTime != 0 ? byTime : left.Id.Value.CompareTo(right.Id.Value);
         });
 
         foreach (WorldEntity attacker in m_due)
         {
+            if (attacker.Combat.IsCasting)
+            {
+                ResolveCast(map, attacker, now, tick);
+                continue;
+            }
+
             if (!attacker.Combat.IsSwinging)
             {
                 continue;
@@ -193,12 +334,6 @@ public sealed class CombatSystem : ITickPhase
             target.CurrentHealth = Math.Max(0, target.CurrentHealth - amount);
         }
 
-        if (target is MonsterEntity damaged && attacker is PlayerEntity damager && amount > 0)
-        {
-            // The whole roll counts toward the experience share, a killing blow's overkill included.
-            damaged.LogDamage(damager.Character, amount);
-        }
-
         foreach (ClientSession session in SessionsOn(map))
         {
             if (session.Knows(target.Id))
@@ -208,6 +343,19 @@ public sealed class CombatSystem : ITickPhase
                     session.Connection,
                     new Damage(source, target.Id, result, (uint)amount, tick, target.SharedHealthPermille));
             }
+        }
+
+        AfterDamage(map, attacker, target, amount, tick);
+    }
+
+    // What follows damage however it was dealt: the experience log, the monster's grudge, the victim's own HP, and
+    // its death.
+    private void AfterDamage(MapInstance map, WorldEntity attacker, WorldEntity target, int amount, uint tick)
+    {
+        if (target is MonsterEntity damaged && attacker is PlayerEntity damager && amount > 0)
+        {
+            // The whole roll counts toward the experience share, a killing blow's overkill included.
+            damaged.LogDamage(damager.Character, amount);
         }
 
         if (target is MonsterEntity monster && amount > 0 && monster.Brain.State != MonsterAiState.ReturnHome)
@@ -225,6 +373,62 @@ public sealed class CombatSystem : ITickPhase
         {
             Kill(map, target, attacker, tick);
         }
+    }
+
+    // Pays what the cast still owes, applies its effect, and starts its after-cast delay and cooldown. A target that
+    // is gone or dead by now leaves the cast interrupted.
+    private void ResolveCast(MapInstance map, WorldEntity caster, long now, uint tick)
+    {
+        CombatState combat = caster.Combat;
+        SkillDefinition skill = m_content.Skills[combat.CastSkill];
+        WorldEntity? target = caster;
+        if (combat.CastTarget != caster.Id
+            && (!map.TryGetEntity(combat.CastTarget, out target) || target == null || target.IsDead))
+        {
+            InterruptCast(caster);
+            return;
+        }
+
+        if (caster is PlayerEntity paying && !combat.IsCastPaid && skill.SpCost > 0)
+        {
+            paying.CurrentSpirit = Math.Max(0, paying.CurrentSpirit - skill.SpCost);
+            m_sender.SendHealth(paying);
+        }
+
+        CastTiming timing = m_skillRules.CalculateCastTiming(CreateSkillContext(caster, target, skill, false));
+        combat.CompleteCast(now, timing.AfterCastDelayMs, timing.CooldownMs);
+        m_instruments.RecordCast(true);
+
+        SkillResolution resolution = m_skillRules.Resolve(
+            CreateSkillContext(caster, target, skill, skill.Effect!.Kind == SkillEffectKind.Damage));
+        if (resolution.Result == SkillResult.Healed)
+        {
+            target.CurrentHealth = Math.Min(target.MaxHealth, target.CurrentHealth + resolution.Amount);
+            if (target is PlayerEntity healed)
+            {
+                m_sender.SendHealth(healed);
+            }
+
+            return;
+        }
+
+        target.CurrentHealth = Math.Max(0, target.CurrentHealth - resolution.Amount);
+        AfterDamage(map, caster, target, resolution.Amount, tick);
+    }
+
+    private SkillContext CreateSkillContext(WorldEntity caster, WorldEntity target, SkillDefinition skill,
+        bool isDamage)
+    {
+        AttackerKind kind = caster is PlayerEntity ? AttackerKind.Character : AttackerKind.Monster;
+        int permille = caster is PlayerEntity player ? player.Stats.VariableCastPermille : 0;
+        return isDamage
+            ? new SkillContext(
+                skill,
+                kind,
+                permille,
+                CreateHitContext(caster, target),
+                CreateDamageContext(caster, target, false))
+            : new SkillContext(skill, kind, permille);
     }
 
     private HitContext CreateHitContext(WorldEntity attacker, WorldEntity target)
@@ -288,7 +492,12 @@ public sealed class CombatSystem : ITickPhase
         m_attackers.Clear();
         foreach (WorldEntity entity in map.Entities)
         {
-            if (entity.Combat.IsAutoAttacking && !entity.Combat.IsSwinging && !entity.IsDead)
+            // A cast and its after-cast delay hold the next swing back; the auto-attack goes on after them.
+            if (entity.Combat.IsAutoAttacking
+                && !entity.Combat.IsSwinging
+                && !entity.Combat.IsCasting
+                && now >= entity.Combat.DelayEndsMs
+                && !entity.IsDead)
             {
                 m_attackers.Add(entity);
             }
@@ -345,13 +554,7 @@ public sealed class CombatSystem : ITickPhase
         long nominal = isCarried ? next : now;
 
         attacker.Combat.BeginSwing(target.Id, tick, nominal, timing);
-        WorldDirection facing = MovementModel.NormalizeOrZero(
-            target.Position.X - attacker.Position.X,
-            target.Position.Z - attacker.Position.Z);
-        if (facing != default)
-        {
-            attacker.Facing = facing;
-        }
+        Face(attacker, target);
 
         foreach (ClientSession session in SessionsOn(map))
         {

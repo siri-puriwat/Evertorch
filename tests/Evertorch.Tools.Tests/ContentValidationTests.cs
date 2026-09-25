@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Linq;
+using Evertorch.Game;
 using NUnit.Framework;
 
 namespace Evertorch.Tools.Tests
@@ -15,6 +16,8 @@ public sealed class ContentValidationTests
     private const string Job = "jobs/adventurer.yml";
     private const string Map = "maps/training_ground.yml";
     private const string Experience = "experience/adventurer.yml";
+    private const string Strike = "skills/strike.yml";
+    private const string JobSkills = "skills: [skill.strike]";
     private const string Levels = "levels: [30211, 50423, 80637]";
 
     [TestCase(Potion, "id: item.consumable.minor_health", "id: Item.Consumable.MinorHealth", "id", "not a valid ID")]
@@ -111,6 +114,26 @@ public sealed class ContentValidationTests
     [TestCase(Job, "str: 5", "str: -1", "server.startingStats.str", "between 0 and")]
     [TestCase(Job, "baseSpeed: 5.1875", "baseSpeed: 0", "server.movement.baseSpeed", "greater than 0")]
     [TestCase(Skill, "targetType: enemy", "targetType: everyone", "targetType", "one of: enemy, self")]
+    [TestCase(
+        Strike,
+        "    damage: { ratio: 1319 }",
+        "    damage: { ratio: 1319 }\n    heal: { hp: 5 }",
+        "server.effect.damage",
+        "exactly one of damage or heal")]
+    [TestCase(Strike, "ratio: 1319", "ratio: 0", "server.effect.damage.ratio", "between 1 and")]
+    [TestCase(Strike, "damageType: physical\n", "", "damageType", "required for a damage effect")]
+    [TestCase(Strike, "spPaidAt: castStart", "spPaidAt: later", "server.spPaidAt", "one of: resolution, castStart")]
+    [TestCase(Strike, "cooldownMs: 21133", "cooldownMs: -1", "server.cooldownMs", "between 0 and")]
+    [TestCase(Strike, "fixed: 3171", "fixed: 1.5", "server.castTimeMs.fixed", "whole number")]
+    [TestCase(
+        Job,
+        JobSkills,
+        "skills: [skill.missing]",
+        "server.skills[0]",
+        "references unknown skill 'skill.missing'")]
+    [TestCase(Job, JobSkills, "skills: [skill.basic_attack]", "server.skills[0]", "which has no effect")]
+    [TestCase(Job, JobSkills, "skills: [skill.strike, skill.strike]", "server.skills[1]", "more than once")]
+    [TestCase(Job, JobSkills, "skills: [Skill.Strike]", "server.skills[0]", "not a valid ID")]
     [TestCase(Experience, Levels, "levels: [30211, 0, 80637]", "levels[1]", "between 1 and")]
     [TestCase(Experience, Levels, "levels: [30211, 1.5, 80637]", "levels[1]", "whole number")]
     [TestCase(Experience, Levels, "levels: [30211, \"50423\", 80637]", "levels[1]", "whole number")]
@@ -195,6 +218,29 @@ public sealed class ContentValidationTests
     }
 
     [Test]
+    public void Run_ForASkillWithoutOptionalNumbers_TakesThemAsZeroAndPaysAtResolution()
+    {
+        using (var workspace = new ContentWorkspace())
+        {
+            workspace.Replace(
+                Strike,
+                "  spCost: 4127\n  spPaidAt: castStart\n  castTimeMs: { fixed: 3171, variable: 7193 }\n"
+                + "  afterCastDelayMs: 5231\n  cooldownMs: 21133\n",
+                "");
+
+            ContentPipelineResult result = ContentPipeline.Run(workspace.ContentRoot);
+
+            Assert.That(result.Diagnostics, Is.Empty, Describe(result));
+            SkillDefinition strike = result.Content.Skills.Single(skill => skill.Definition.Id.Value == "skill.strike")
+                .Definition;
+            Assert.That(
+                (strike.SpCost, strike.SpPaidAt, strike.FixedCastMs, strike.VariableCastMs, strike.AfterCastDelayMs,
+                    strike.CooldownMs),
+                Is.EqualTo((0, SkillPaymentPoint.Resolution, 0, 0, 0, 0)));
+        }
+    }
+
+    [Test]
     public void Run_ForRepositoryContent_HasNoDiagnostics()
     {
         string contentRoot = Path.Combine(RepositoryRoot(), "content");
@@ -225,7 +271,7 @@ public sealed class ContentValidationTests
             Assert.That(result.Packages, Is.Not.Null);
             Assert.That(result.Content.Items, Has.Count.EqualTo(2));
             Assert.That(result.Content.Monsters, Has.Count.EqualTo(1));
-            Assert.That(result.Content.Skills, Has.Count.EqualTo(1));
+            Assert.That(result.Content.Skills, Has.Count.EqualTo(2));
             Assert.That(result.Content.Jobs, Has.Count.EqualTo(1));
             Assert.That(result.Content.Maps, Has.Count.EqualTo(1));
             Assert.That(result.Content.ExperienceTables, Has.Count.EqualTo(1));
@@ -380,6 +426,22 @@ public sealed class ContentValidationTests
                 result.Diagnostics.Where(diagnostic => diagnostic.File == Item)
                     .Select(diagnostic => diagnostic.FieldPath),
                 Is.EquivalentTo(new[] { "stackLimit", "server.sellPrice" }));
+        }
+    }
+
+    [Test]
+    public void Run_WhenTheBasicAttackHasNoDamageType_ReportsTheJob()
+    {
+        using (var workspace = new ContentWorkspace())
+        {
+            workspace.Replace(Skill, "damageType: physical\n", "");
+
+            ContentPipelineResult result = ContentPipeline.Run(workspace.ContentRoot);
+
+            Assert.That(result.Diagnostics, Has.Count.EqualTo(1), Describe(result));
+            Assert.That(result.Diagnostics[0].File, Is.EqualTo(Job));
+            Assert.That(result.Diagnostics[0].FieldPath, Is.EqualTo("server.basicAttack"));
+            Assert.That(result.Diagnostics[0].Message, Does.Contain("without a damageType"));
         }
     }
 

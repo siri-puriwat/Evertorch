@@ -40,6 +40,12 @@ public static class ContentValidator
             known.UnionWith(content.DeclaredIds);
         }
 
+        var skillsById = new Dictionary<string, SkillDefinition>(StringComparer.Ordinal);
+        foreach (AuthoredSkill skill in content.Skills)
+        {
+            skillsById[skill.Definition.Id.Value] = skill.Definition;
+        }
+
         var stackLimits = new Dictionary<string, int>(StringComparer.Ordinal);
         foreach (AuthoredItem item in content.Items)
         {
@@ -93,7 +99,43 @@ public static class ContentValidator
                 job.Source,
                 "server.experienceTable",
                 diagnostics);
+            RequireJobSkills(job, skills, skillsById, diagnostics);
         }
+    }
+
+    // A basic attack needs its damage type; every other skill a job lists needs an effect to resolve (Content
+    // Pipeline §7).
+    private static void RequireJobSkills(
+        AuthoredJob job,
+        HashSet<string> knownSkills,
+        Dictionary<string, SkillDefinition> skillsById,
+        List<ContentDiagnostic> diagnostics)
+    {
+        if (skillsById.TryGetValue(job.Definition.BasicAttack.Value, out SkillDefinition? basicAttack)
+            && basicAttack.DamageType == null)
+        {
+            Report(job.Source, "server.basicAttack", "names a skill without a damageType", diagnostics);
+        }
+
+        for (int index = 0; index < job.Definition.Skills.Count; index++)
+        {
+            string fieldPath = string.Format(CultureInfo.InvariantCulture, "server.skills[{0}]", index);
+            string skill = job.Definition.Skills[index].Value;
+            RequireReference(knownSkills, skill, "skill", job.Source, fieldPath, diagnostics);
+            if (skillsById.TryGetValue(skill, out SkillDefinition? definition) && definition.Effect == null)
+            {
+                Report(job.Source, fieldPath, $"names skill '{skill}', which has no effect", diagnostics);
+            }
+        }
+    }
+
+    private static void Report(
+        DefinitionSource source,
+        string fieldPath,
+        string message,
+        List<ContentDiagnostic> diagnostics)
+    {
+        diagnostics.Add(new ContentDiagnostic(source.File, fieldPath, source.LineOf(fieldPath), message));
     }
 
     private static HashSet<string> CollectIds<T>(

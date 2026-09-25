@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Globalization;
 using Evertorch.Game;
 
 namespace Evertorch.Tools
@@ -58,6 +59,7 @@ internal static class JobDefinitionReader
             "experienceTable",
             ExperienceDefinitionId.TryCreate,
             ExperienceDefinitionId.KindPrefix);
+        List<SkillDefinitionId> skills = ReadSkills(server);
 
         YamlFieldReader client = root.RequiredMapping("client");
         string prefab = client.RequiredAssetKey("prefab");
@@ -80,8 +82,45 @@ internal static class JobDefinitionReader
             baseSpeed,
             startingMap,
             basicAttack,
-            experienceTable);
+            experienceTable,
+            skills.AsReadOnly());
         return new AuthoredJob(root.ToSource(), definition, prefab);
+    }
+
+    // Optional: a job without skills has only its basic attack.
+    private static List<SkillDefinitionId> ReadSkills(YamlFieldReader server)
+    {
+        var skills = new List<SkillDefinitionId>();
+        if (!server.Has("skills"))
+        {
+            return skills;
+        }
+
+        IReadOnlyList<string> values = server.RequiredStringSequence("skills");
+        for (int index = 0; index < values.Count; index++)
+        {
+            string element = string.Format(CultureInfo.InvariantCulture, "skills[{0}]", index);
+            if (!SkillDefinitionId.TryCreate(values[index], out SkillDefinitionId skill))
+            {
+                server.ReportField(
+                    element,
+                    string.Format(
+                        CultureInfo.InvariantCulture,
+                        "'{0}' is not a valid ID; expected '{1}.' followed by lowercase dot-separated segments",
+                        values[index],
+                        SkillDefinitionId.KindPrefix));
+            }
+            else if (skills.Contains(skill))
+            {
+                server.ReportField(element, $"lists '{skill}' more than once");
+            }
+            else
+            {
+                skills.Add(skill);
+            }
+        }
+
+        return skills;
     }
 }
 }

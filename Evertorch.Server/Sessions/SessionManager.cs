@@ -65,6 +65,7 @@ public sealed class SessionManager : ITickPhase
     private readonly PlayerLife m_life;
     private readonly CharacterLifetime m_lifetime;
     private readonly CharacterProgression m_progression;
+    private readonly CombatSystem m_combat;
     private readonly PickupSystem m_pickups;
     private readonly TimeProvider m_time;
     private readonly ServerInstruments m_instruments;
@@ -92,6 +93,7 @@ public sealed class SessionManager : ITickPhase
         PlayerLife life,
         CharacterLifetime lifetime,
         CharacterProgression progression,
+        CombatSystem combat,
         PickupSystem pickups,
         TimeProvider time,
         IOptions<SimulationOptions> simulation,
@@ -117,6 +119,7 @@ public sealed class SessionManager : ITickPhase
         m_life = life;
         m_lifetime = lifetime;
         m_progression = progression;
+        m_combat = combat;
         m_pickups = pickups;
         m_pickups.Settled += OnPickupSettled;
         m_time = time;
@@ -768,9 +771,11 @@ public sealed class SessionManager : ITickPhase
         m_sender.Send(session.Connection, new CommandRejected(commandSequence, reason));
     }
 
-    private static CommandRejectionReason Cancel(PlayerEntity player)
+    // Stops the auto-attack and interrupts a cast; a swing already begun still resolves (Gameplay Systems §7, §9).
+    private CommandRejectionReason Cancel(PlayerEntity player)
     {
         player.Combat.IsAutoAttacking = false;
+        m_combat.InterruptCast(player);
         return CommandRejectionReason.None;
     }
 

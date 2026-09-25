@@ -1,0 +1,11 @@
+id: skill.first_aid
+displayName: First Aid
+targetType: self
+server:
+  range: 0
+  spCost: 3
+  castTimeMs: { fixed: 500, variable: 1000 }
+  effect:
+    heal: { hp: 15 }
+client:
+  icon: skill_first_aid

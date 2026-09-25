@@ -118,6 +118,7 @@ public static class ServerContentLoader
             monsters.Values,
             jobs.Values,
             maps.Values,
+            skills,
             declaredItems,
             declaredMonsters,
             declaredSkills,
@@ -395,13 +396,67 @@ public static class ServerContentLoader
         int problemsBefore = problems.Count;
         string displayName = entry.RequiredString("displayName");
         SkillTargetType targetType = entry.RequiredEnum<SkillTargetType>("targetType");
-        SkillDamageType damageType = entry.RequiredEnum<SkillDamageType>("damageType");
-        double range = RequiredNonNegative(entry, "range");
-        entry.ReportUnexpectedProperties();
-
-        return problems.Count == problemsBefore
-            ? new SkillDefinition(id, displayName, targetType, damageType, range)
+        SkillDamageType? damageType = entry.Has("damageType")
+            ? entry.RequiredEnum<SkillDamageType>("damageType")
             : null;
+        double range = RequiredNonNegative(entry, "range");
+        int spCost = entry.RequiredInt("spCost", 0);
+        SkillPaymentPoint spPaidAt = entry.RequiredEnum<SkillPaymentPoint>("spPaidAt");
+        int fixedCastMs = entry.RequiredInt("fixedCastMs", 0);
+        int variableCastMs = entry.RequiredInt("variableCastMs", 0);
+        int afterCastDelayMs = entry.RequiredInt("afterCastDelayMs", 0);
+        int cooldownMs = entry.RequiredInt("cooldownMs", 0);
+        SkillEffect? effect = entry.Has("effect") ? ReadEffect(entry.RequiredObject("effect")) : null;
+        if (effect?.Kind == SkillEffectKind.Damage && damageType == null)
+        {
+            entry.Report("damageType", "is required for a damage effect");
+        }
+
+        entry.ReportUnexpectedProperties();
+        return problems.Count == problemsBefore
+            ? new SkillDefinition(
+                id,
+                displayName,
+                targetType,
+                damageType,
+                range,
+                spCost,
+                spPaidAt,
+                fixedCastMs,
+                variableCastMs,
+                afterCastDelayMs,
+                cooldownMs,
+                effect)
+            : null;
+    }
+
+    private static SkillEffect? ReadEffect(PackageObjectReader? effect)
+    {
+        if (effect == null)
+        {
+            return null;
+        }
+
+        bool isDamage = effect.Has("damageRatio");
+        bool isHeal = effect.Has("healHp");
+        SkillEffect? read = null;
+        if (isDamage == isHeal)
+        {
+            effect.Report("damageRatio", "an effect must have exactly one of damageRatio or healHp");
+        }
+        else if (isDamage)
+        {
+            int ratio = effect.RequiredInt("damageRatio", 1);
+            read = ratio > 0 ? SkillEffect.Damage(ratio) : null;
+        }
+        else
+        {
+            int hp = effect.RequiredInt("healHp", 1);
+            read = hp > 0 ? SkillEffect.Heal(hp) : null;
+        }
+
+        effect.ReportUnexpectedProperties();
+        return read;
     }
 
     private static JobDefinition? ReadJob(PackageObjectReader entry, JobDefinitionId id, List<string> problems)
@@ -438,6 +493,19 @@ public static class ServerContentLoader
         ExperienceDefinitionId experienceTable = entry.RequiredId<ExperienceDefinitionId>(
             "experienceTable",
             ExperienceDefinitionId.TryCreate);
+        var skills = new List<SkillDefinitionId>();
+        foreach (string text in entry.RequiredStringArray("skills"))
+        {
+            if (!SkillDefinitionId.TryCreate(text, out SkillDefinitionId skill) || skills.Contains(skill))
+            {
+                entry.Report("skills", $"'{text}' is not a valid skill ID or appears more than once");
+            }
+            else
+            {
+                skills.Add(skill);
+            }
+        }
+
         entry.ReportUnexpectedProperties();
 
         if (problems.Count != problemsBefore)
@@ -457,7 +525,8 @@ public static class ServerContentLoader
             baseSpeed,
             startingMap,
             basicAttack,
-            experienceTable);
+            experienceTable,
+            skills.AsReadOnly());
     }
 
     private static ExperienceTableDefinition? ReadExperienceTable(
@@ -570,6 +639,7 @@ public static class ServerContentLoader
         IEnumerable<MonsterDefinition> monsters,
         IEnumerable<JobDefinition> jobs,
         IEnumerable<MapDefinition> maps,
+        IReadOnlyDictionary<SkillDefinitionId, SkillDefinition> skills,
         HashSet<ItemDefinitionId> declaredItems,
         HashSet<MonsterDefinitionId> declaredMonsters,
         HashSet<SkillDefinitionId> declaredSkills,
@@ -614,6 +684,23 @@ public static class ServerContentLoader
             if (!declaredExperienceTables.Contains(job.ExperienceTable))
             {
                 problems.Add($"{JobsFile}: {job.Id}: uses unknown experience table '{job.ExperienceTable}'");
+            }
+
+            if (skills.TryGetValue(job.BasicAttack, out SkillDefinition? basicAttack) && basicAttack.DamageType == null)
+            {
+                problems.Add($"{JobsFile}: {job.Id}: its basic attack '{job.BasicAttack}' has no damage type");
+            }
+
+            foreach (SkillDefinitionId skill in job.Skills)
+            {
+                if (!declaredSkills.Contains(skill))
+                {
+                    problems.Add($"{JobsFile}: {job.Id}: knows unknown skill '{skill}'");
+                }
+                else if (skills.TryGetValue(skill, out SkillDefinition? known) && known.Effect == null)
+                {
+                    problems.Add($"{JobsFile}: {job.Id}: knows skill '{skill}', which has no effect");
+                }
             }
         }
     }
