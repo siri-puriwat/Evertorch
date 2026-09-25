@@ -114,7 +114,8 @@ public sealed class StatusPublisher : ITickPhase
                     session.Input.Queue.Dropped,
                     session.RefusedCommands,
                     session.Player.Level,
-                    session.Player.Experience));
+                    session.Player.Experience,
+                    session.OtherEpochInputs));
         }
 
         return new ServerStatus(

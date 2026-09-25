@@ -14,14 +14,16 @@ public sealed class SharedMovementMessageTests
         0x04, 0x03, 0x02, 0x01,
         0x0D, 0x0C, 0x0B, 0x0A,
         0x00, 0x00, 0x80, 0x3F,
-        0x00, 0x00, 0x00, 0xBF
+        0x00, 0x00, 0x00, 0xBF,
+        0x2A
     };
 
     private static readonly byte[] StopMovementBytes =
     {
         0x04, 0x00,
         0x04, 0x03, 0x02, 0x01,
-        0x0D, 0x0C, 0x0B, 0x0A
+        0x0D, 0x0C, 0x0B, 0x0A,
+        0x2A
     };
 
     private static readonly byte[] EntitySnapshotBytes =
@@ -118,20 +120,21 @@ public sealed class SharedMovementMessageTests
     {
         var intent = new MoveIntent(0x01020304, 0x0A0B0C0D, 1f, -0.5f);
         byte[] buffer = new byte[MoveInput.EncodedLength];
-        new MoveInput(intent).Write(buffer);
+        new MoveInput(intent, 0x2A).Write(buffer);
 
         bool isRead = MoveInput.TryRead(MoveInputBytes, out MoveInput read);
 
         Assert.That(buffer, Is.EqualTo(MoveInputBytes));
         Assert.That(isRead, Is.True);
         Assert.That(read.Intent, Is.EqualTo(intent));
+        Assert.That(read.MapEpoch, Is.EqualTo(0x2A));
     }
 
     [Test]
     public void StopMovement_WriteAndRead_MatchGoldenBytes()
     {
         byte[] buffer = new byte[StopMovement.EncodedLength];
-        new StopMovement(0x01020304, 0x0A0B0C0D).Write(buffer);
+        new StopMovement(0x01020304, 0x0A0B0C0D, 0x2A).Write(buffer);
 
         bool isRead = StopMovement.TryRead(StopMovementBytes, out StopMovement read);
 
@@ -139,6 +142,7 @@ public sealed class SharedMovementMessageTests
         Assert.That(isRead, Is.True);
         Assert.That(read.Sequence, Is.EqualTo(0x01020304u));
         Assert.That(read.ClientTick, Is.EqualTo(0x0A0B0C0Du));
+        Assert.That(read.MapEpoch, Is.EqualTo(0x2A));
     }
 }
 }

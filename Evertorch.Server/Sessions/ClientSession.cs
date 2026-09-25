@@ -97,6 +97,17 @@ public sealed class ClientSession
     public bool NeedsStatusEffects { get; set; }
 
     /// <summary>
+    ///     This connection's map changes, counted from 0 and wrapping; <c>WorldEntered</c> carries it, and movement input
+    ///     made for another epoch is dropped (Network Protocol §10).
+    /// </summary>
+    public byte MapEpoch { get; set; }
+
+    /// <summary>
+    ///     Movement inputs dropped because they were made for another map epoch. Ordinary around a map change.
+    /// </summary>
+    public long OtherEpochInputs { get; set; }
+
+    /// <summary>
     ///     Commands that were well formed but refused: a target that is missing, hidden, or not targetable.
     /// </summary>
     public long RefusedCommands { get; set; }

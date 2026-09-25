@@ -104,6 +104,7 @@ public static class ServerHost
             services.GetRequiredService<IServerTransport>());
         builder.Services.AddSingleton<SessionManager>();
         builder.Services.AddSingleton<ITickPhase>(services => services.GetRequiredService<SessionManager>());
+        builder.Services.AddSingleton<ITickPhase, MapTransferPhase>();
         builder.Services.AddSingleton<ITickPhase, MovementSystem>();
         builder.Services.AddSingleton<StatusEffectSystem>();
         builder.Services.AddSingleton<ITickPhase>(services => services.GetRequiredService<StatusEffectSystem>());

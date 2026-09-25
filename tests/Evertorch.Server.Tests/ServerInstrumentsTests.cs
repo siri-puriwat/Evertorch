@@ -271,6 +271,23 @@ public sealed class ServerInstrumentsTests
     }
 
     [Test]
+    public void MapTransfers_AreCountedByDestination_AndInputOfAnotherEpochToo()
+    {
+        var server = new TestServer(withEveryMap: true);
+        using var recorder = new MeterRecorder(server.Instruments.Meter);
+        ConnectionId player = server.EnterWorld(1);
+        server.World.TryGetMap(new MapDefinitionId("map.training_ground"), out MapInstance? ground);
+        server.PlayerOf(player).Position = ground!.Definition.Portals.Single().Center;
+
+        server.Tick(2);
+        server.SendMove(player, 1, 1f, 0f, 0);
+        server.Tick();
+
+        Assert.That(SumTagged(recorder, "evertorch.world.map_transfers", "map", "map.training_field"), Is.EqualTo(1));
+        Assert.That(Single(recorder, "evertorch.world.stale_epoch_inputs"), Is.EqualTo(1));
+    }
+
+    [Test]
     public void PersistenceJobs_RecordDurationByOperationAndOutcome_AndCountFailuresAndRetries()
     {
         var server = new TestServer();

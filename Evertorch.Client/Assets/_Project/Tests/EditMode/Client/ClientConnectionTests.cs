@@ -708,6 +708,27 @@ public sealed class ClientConnectionTests
     }
 
     [Test]
+    public void Send_Movement_EchoesTheMapEpochOfTheWorldEntered()
+    {
+        var harness = new Harness();
+        harness.ConnectAndReceiveHello();
+        harness.ReceiveList(Entry(7, "Ann0"));
+        harness.Connection.EnterWorld(new CharacterId(7));
+        WorldEntered entered = ClientWorldFixture.Entered(Start, mapEpoch: 3);
+        harness.Deliver(ProtocolChannel.Control, Encode(entered.GetEncodedLength(), entered.Write));
+
+        harness.Connection.Send(new MoveIntent(1, 1, 1f, 0f));
+        FakeClientTransport.SentMessage move = harness.Transport.Sent.Last();
+        harness.Connection.Send(new MoveIntent(2, 2, 0f, 0f));
+        FakeClientTransport.SentMessage stop = harness.Transport.Sent.Last();
+
+        Assert.That(MoveInput.TryRead(move.Payload, out MoveInput moveRead), Is.True);
+        Assert.That(StopMovement.TryRead(stop.Payload, out StopMovement stopRead), Is.True);
+        Assert.That((moveRead.MapEpoch, stopRead.MapEpoch), Is.EqualTo(((byte)3, (byte)3)));
+        Assert.That(harness.Connection.MapEpoch, Is.EqualTo(3));
+    }
+
+    [Test]
     public void Send_MovingIntent_GoesOutAsMoveInputOnTheInputChannel()
     {
         var harness = new Harness();

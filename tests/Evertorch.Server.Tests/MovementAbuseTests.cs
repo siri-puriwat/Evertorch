@@ -319,7 +319,10 @@ public sealed class MovementAbuseTests
             .ToArray();
 
         Assert.That(properties, Is.EqualTo(new[] { "ClientTick", "DirectionX", "DirectionZ", "Sequence" }));
-        Assert.That(MoveInput.EncodedLength, Is.EqualTo(18), "opcode, sequence, client tick, and two floats");
+        Assert.That(
+            MoveInput.EncodedLength,
+            Is.EqualTo(19),
+            "opcode, sequence, client tick, two floats, and the map epoch");
     }
 
     [Test]

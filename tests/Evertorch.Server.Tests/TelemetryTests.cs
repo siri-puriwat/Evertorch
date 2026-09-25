@@ -99,6 +99,7 @@ public sealed class TelemetryTests
         string[] lines = output.ToString().Split(new[] { Environment.NewLine }, StringSplitOptions.RemoveEmptyEntries);
         Assert.That(lines, Has.Length.EqualTo(2));
         Assert.That(lines[0], Does.Contain("character 7").And.Contain("map.training_ground").And.Contain("rtt 42 ms"));
+        Assert.That(lines[0], Does.EndWith(" other epoch 0"), "movement input made for another map");
         Assert.That(lines[1], Does.Contain("character 8"));
         Assert.That(output.ToString(), Does.Not.Contain("dev:").And.Not.Contain("tester"));
     }

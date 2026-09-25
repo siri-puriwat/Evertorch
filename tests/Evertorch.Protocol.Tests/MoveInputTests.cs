@@ -16,10 +16,11 @@ public sealed class MoveInputTests
         0x04, 0x03, 0x02, 0x01,
         0x0D, 0x0C, 0x0B, 0x0A,
         0x00, 0x00, 0x80, 0x3F,
-        0x00, 0x00, 0x00, 0xBF
+        0x00, 0x00, 0x00, 0xBF,
+        0x2A
     };
 
-    private static readonly MoveInput Golden = new(new MoveIntent(0x01020304, 0x0A0B0C0D, 1f, -0.5f));
+    private static readonly MoveInput Golden = new(new MoveIntent(0x01020304, 0x0A0B0C0D, 1f, -0.5f), 0x2A);
 
     [TestCase(0u, 0u, 0f, 0f)]
     [TestCase(uint.MaxValue, uint.MaxValue, -1f, 1f)]
@@ -54,6 +55,8 @@ public sealed class MoveInputTests
 
         Assert.That(isRead, Is.True);
         Assert.That(message.Intent, Is.EqualTo(new MoveIntent(0x01020304, 0x0A0B0C0D, 1f, -0.5f)));
+        Assert.That(message.MapEpoch, Is.EqualTo(0x2A));
+        Assert.That(MoveInput.EncodedLength, Is.EqualTo(19));
     }
 
     [Test]

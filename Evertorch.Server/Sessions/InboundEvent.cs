@@ -18,7 +18,8 @@ public readonly struct InboundEvent
         uint commandSequence = 0,
         string? name = null,
         int count = 0,
-        SkillDefinitionId skill = default)
+        SkillDefinitionId skill = default,
+        byte mapEpoch = 0)
     {
         Kind = kind;
         Connection = connection;
@@ -30,6 +31,7 @@ public readonly struct InboundEvent
         Name = name;
         Count = count;
         Skill = skill;
+        MapEpoch = mapEpoch;
     }
 
     public InboundEventKind Kind { get; }
@@ -57,6 +59,11 @@ public readonly struct InboundEvent
     ///     For <see cref="InboundEventKind.UseSkill" />, the skill asked for.
     /// </summary>
     public SkillDefinitionId Skill { get; }
+
+    /// <summary>
+    ///     For <see cref="InboundEventKind.Move" />, the map epoch the input was made for.
+    /// </summary>
+    public byte MapEpoch { get; }
 
     public static InboundEvent Connected(ConnectionId connection)
     {
@@ -93,9 +100,9 @@ public readonly struct InboundEvent
         return new InboundEvent(InboundEventKind.EnterWorld, connection, null, request, default);
     }
 
-    public static InboundEvent ForMove(ConnectionId connection, MoveIntent intent)
+    public static InboundEvent ForMove(ConnectionId connection, MoveIntent intent, byte mapEpoch)
     {
-        return new InboundEvent(InboundEventKind.Move, connection, null, default, intent);
+        return new InboundEvent(InboundEventKind.Move, connection, null, default, intent, mapEpoch: mapEpoch);
     }
 
     public static InboundEvent ForTarget(ConnectionId connection, EntityId target)

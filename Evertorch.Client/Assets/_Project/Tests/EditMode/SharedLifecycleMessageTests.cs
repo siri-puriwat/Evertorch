@@ -53,7 +53,8 @@ public sealed class SharedLifecycleMessageTests
         0x08, 0x07, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01,
         0x18, 0x17, 0x16, 0x15, 0x14, 0x13, 0x12, 0x11,
         0x14, 0x00, 0x00, 0x00,
-        0x18, 0x00, 0x00, 0x00
+        0x18, 0x00, 0x00, 0x00,
+        0x2A
     };
 
     private static readonly byte[] EntitySpawnBytes =
@@ -282,7 +283,8 @@ public sealed class SharedLifecycleMessageTests
             0x0102030405060708UL,
             0x1112131415161718UL,
             20,
-            24);
+            24,
+            0x2A);
         byte[] buffer = new byte[message.GetEncodedLength()];
         message.Write(buffer);
 

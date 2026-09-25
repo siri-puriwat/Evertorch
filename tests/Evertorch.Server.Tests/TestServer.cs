@@ -219,6 +219,7 @@ internal sealed class TestServer
             new RegenerationSystem(World, sender, simulation),
             Drops,
             SessionManager,
+            new MapTransferPhase(SessionManager),
             new RecordingPhase(TickPhase.ApplyCommands, "test", new List<string>(), _ => RunAfterCommands()),
             new CheckpointScheduler(Sessions, Lifetime),
             AdminQueue,
@@ -229,6 +230,7 @@ internal sealed class TestServer
             phases.Add(new MonsterAiSystem(World, Random, Options.Create(world), simulation));
         }
 
+        Phases = phases;
         m_pipeline = new TickPipeline(phases);
         RequiredClientContentVersion = handshake.RequiredClientContentVersion;
     }
@@ -238,6 +240,11 @@ internal sealed class TestServer
     public ServerRandom Random { get; }
 
     public CombatSystem Combat { get; }
+
+    /// <summary>
+    ///     The phases in the order this composition registered them.
+    /// </summary>
+    public IReadOnlyList<ITickPhase> Phases { get; }
 
     public StatusEffectSystem StatusEffects { get; }
 
@@ -394,6 +401,16 @@ internal sealed class TestServer
     {
         byte[] payload = new byte[MoveInput.EncodedLength];
         new MoveInput(new MoveIntent(sequence, clientTick, directionX, directionZ)).Write(payload);
+        Inbound.OnPayload(connection, ProtocolChannel.Input, payload);
+    }
+
+    /// <summary>
+    ///     A move made for map epoch <paramref name="mapEpoch" />, as a client does after a map change.
+    /// </summary>
+    public void SendMove(ConnectionId connection, uint sequence, float directionX, float directionZ, byte mapEpoch)
+    {
+        byte[] payload = new byte[MoveInput.EncodedLength];
+        new MoveInput(new MoveIntent(sequence, sequence, directionX, directionZ), mapEpoch).Write(payload);
         Inbound.OnPayload(connection, ProtocolChannel.Input, payload);
     }
 

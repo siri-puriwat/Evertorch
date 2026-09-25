@@ -5,18 +5,22 @@ namespace Evertorch.Protocol
 {
 /// <summary>
 ///     One movement intent on the wire. It asks for a direction and nothing more; the server decides where the entity
-///     ends up.
+///     ends up. It names the map epoch of the world it was made for, and input for another is dropped.
 /// </summary>
 public readonly struct MoveInput
 {
-    public const int EncodedLength = sizeof(ushort) + sizeof(uint) + sizeof(uint) + sizeof(float) + sizeof(float);
+    public const int EncodedLength =
+        sizeof(ushort) + sizeof(uint) + sizeof(uint) + sizeof(float) + sizeof(float) + sizeof(byte);
 
-    public MoveInput(MoveIntent intent)
+    public MoveInput(MoveIntent intent, byte mapEpoch = 0)
     {
         Intent = intent;
+        MapEpoch = mapEpoch;
     }
 
     public MoveIntent Intent { get; }
+
+    public byte MapEpoch { get; }
 
     public static bool TryRead(ReadOnlySpan<byte> source, out MoveInput message)
     {
@@ -27,12 +31,13 @@ public readonly struct MoveInput
             || !reader.TryReadUInt32(out uint clientTick)
             || !reader.TryReadSingle(out float directionX)
             || !reader.TryReadSingle(out float directionZ)
+            || !reader.TryReadByte(out byte mapEpoch)
             || !reader.IsAtEnd)
         {
             return false;
         }
 
-        message = new MoveInput(new MoveIntent(sequence, clientTick, directionX, directionZ));
+        message = new MoveInput(new MoveIntent(sequence, clientTick, directionX, directionZ), mapEpoch);
         return true;
     }
 
@@ -44,6 +49,7 @@ public readonly struct MoveInput
         writer.WriteUInt32(Intent.ClientTick);
         writer.WriteSingle(Intent.DirectionX);
         writer.WriteSingle(Intent.DirectionZ);
+        writer.WriteByte(MapEpoch);
         return writer.Position;
     }
 }

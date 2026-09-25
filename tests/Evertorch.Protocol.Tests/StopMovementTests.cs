@@ -10,10 +10,11 @@ public sealed class StopMovementTests
     {
         0x04, 0x00,
         0x04, 0x03, 0x02, 0x01,
-        0x0D, 0x0C, 0x0B, 0x0A
+        0x0D, 0x0C, 0x0B, 0x0A,
+        0x2A
     };
 
-    private static readonly StopMovement Golden = new(0x01020304, 0x0A0B0C0D);
+    private static readonly StopMovement Golden = new(0x01020304, 0x0A0B0C0D, 0x2A);
 
     [TestCase(0u, 0u)]
     [TestCase(uint.MaxValue, uint.MaxValue)]
@@ -37,6 +38,8 @@ public sealed class StopMovementTests
         Assert.That(isRead, Is.True);
         Assert.That(message.Sequence, Is.EqualTo(0x01020304u));
         Assert.That(message.ClientTick, Is.EqualTo(0x0A0B0C0Du));
+        Assert.That(message.MapEpoch, Is.EqualTo(0x2A));
+        Assert.That(StopMovement.EncodedLength, Is.EqualTo(11));
     }
 
     [Test]

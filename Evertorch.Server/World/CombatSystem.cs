@@ -186,6 +186,35 @@ public sealed class CombatSystem : ITickPhase
     ///     Ends <paramref name="entity" />'s life: its own and its attackers' auto-attacks end, swings and casts at it
     ///     and its own cast are interrupted, and every client that knows it hears of the death.
     /// </summary>
+    /// <summary>
+    ///     Ends what <paramref name="player" /> was doing on <paramref name="map" /> before it leaves for another map:
+    ///     its target, auto-attack, swing, and cast, and every swing, cast, and target aimed at it there.
+    /// </summary>
+    public void PrepareForTransfer(MapInstance map, PlayerEntity player)
+    {
+        player.Combat.IsAutoAttacking = false;
+        player.Combat.EndSwing();
+        InterruptCast(player);
+        ClearTarget(player);
+        foreach (WorldEntity other in map.Entities)
+        {
+            if (other.Target == player.Id)
+            {
+                ClearTarget(other);
+            }
+
+            if (other.Combat.IsSwinging && other.Combat.SwingTarget == player.Id)
+            {
+                other.Combat.EndSwing();
+            }
+
+            if (other.Combat.IsCasting && other.Combat.CastTarget == player.Id)
+            {
+                InterruptCast(other);
+            }
+        }
+    }
+
     public void Kill(MapInstance map, WorldEntity entity, WorldEntity? source, uint tick)
     {
         if (entity.IsDead)

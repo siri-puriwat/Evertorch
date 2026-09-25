@@ -28,7 +28,8 @@ public sealed class WorldEntered
         ulong experience,
         ulong experienceToNextLevel,
         uint currentSpirit,
-        uint maximumSpirit)
+        uint maximumSpirit,
+        byte mapEpoch = 0)
     {
         Map = map;
         MapInstance = mapInstance;
@@ -48,6 +49,7 @@ public sealed class WorldEntered
         ExperienceToNextLevel = experienceToNextLevel;
         CurrentSpirit = currentSpirit;
         MaximumSpirit = maximumSpirit;
+        MapEpoch = mapEpoch;
     }
 
     public MapDefinitionId Map { get; }
@@ -124,6 +126,11 @@ public sealed class WorldEntered
 
     public uint MaximumSpirit { get; }
 
+    /// <summary>
+    ///     Counts this connection's map changes from 0, wrapping; movement input echoes it (Network Protocol §10).
+    /// </summary>
+    public byte MapEpoch { get; }
+
     public static bool TryRead(ReadOnlySpan<byte> source, out WorldEntered? message)
     {
         message = null;
@@ -147,6 +154,7 @@ public sealed class WorldEntered
             || !reader.TryReadUInt64(out ulong experienceToNextLevel)
             || !reader.TryReadUInt32(out uint currentSpirit)
             || !reader.TryReadUInt32(out uint maximumSpirit)
+            || !reader.TryReadByte(out byte mapEpoch)
             || !reader.IsAtEnd
             || movementSpeed < 0f
             || maximumHealth == 0
@@ -179,7 +187,8 @@ public sealed class WorldEntered
             experience,
             experienceToNextLevel,
             currentSpirit,
-            maximumSpirit);
+            maximumSpirit,
+            mapEpoch);
         return true;
     }
 
@@ -201,7 +210,8 @@ public sealed class WorldEntered
             + sizeof(long)
             + sizeof(ushort)
             + 2 * sizeof(ulong)
-            + 2 * sizeof(uint);
+            + 2 * sizeof(uint)
+            + sizeof(byte);
     }
 
     public int Write(Span<byte> destination)
@@ -226,6 +236,7 @@ public sealed class WorldEntered
         writer.WriteUInt64(ExperienceToNextLevel);
         writer.WriteUInt32(CurrentSpirit);
         writer.WriteUInt32(MaximumSpirit);
+        writer.WriteByte(MapEpoch);
         return writer.Position;
     }
 }

@@ -25,7 +25,8 @@ internal static class ClientWorldFixture
         ulong experience = 0,
         ulong experienceToNextLevel = 30,
         uint spirit = 24,
-        long character = 1)
+        long character = 1,
+        byte mapEpoch = 0)
     {
         return new WorldEntered(
             new MapDefinitionId("map.training_ground"),
@@ -45,7 +46,8 @@ internal static class ClientWorldFixture
             experience,
             experienceToNextLevel,
             spirit,
-            24);
+            24,
+            mapEpoch);
     }
 
     public static EntitySnapshot Snapshot(uint tick, uint acknowledged, params EntityState[] states)

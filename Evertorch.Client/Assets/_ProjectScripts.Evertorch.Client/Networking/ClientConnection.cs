@@ -45,6 +45,11 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
 
     public uint ServerTickRate { get; private set; }
 
+    /// <summary>
+    ///     The map epoch of the world last entered, which movement input echoes (Network Protocol §10).
+    /// </summary>
+    public byte MapEpoch { get; private set; }
+
     public string ServerBuildVersion { get; private set; } = string.Empty;
 
     public TransportDisconnectCause DisconnectCause { get; private set; }
@@ -360,12 +365,12 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
 
         if (intent.DirectionX == 0f && intent.DirectionZ == 0f)
         {
-            int length = new StopMovement(intent.Sequence, intent.ClientTick).Write(m_sendBuffer);
+            int length = new StopMovement(intent.Sequence, intent.ClientTick, MapEpoch).Write(m_sendBuffer);
             SendRouted(MessageOpcode.StopMovement, length);
         }
         else
         {
-            int length = new MoveInput(intent).Write(m_sendBuffer);
+            int length = new MoveInput(intent, MapEpoch).Write(m_sendBuffer);
             SendRouted(MessageOpcode.MoveInput, length);
         }
     }
@@ -642,6 +647,7 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
         // The command sequence belongs to the character, not the connection: after a reconnect it goes on from the
         // newest the server processed, or every command would look like a replay (Network Protocol §8).
         m_commandSequence = entered.LastCommandSequence;
+        MapEpoch = entered.MapEpoch;
         State = ClientConnectionState.InWorld;
         EnteredWorld?.Invoke(World);
     }

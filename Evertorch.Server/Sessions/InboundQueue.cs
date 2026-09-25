@@ -212,7 +212,7 @@ public sealed class InboundQueue
                     return false;
                 }
 
-                decoded = InboundEvent.ForMove(connection, move.Intent);
+                decoded = InboundEvent.ForMove(connection, move.Intent, move.MapEpoch);
                 return true;
             case MessageOpcode.StopMovement:
                 if (!StopMovement.TryRead(payload, out StopMovement stop))
@@ -220,7 +220,10 @@ public sealed class InboundQueue
                     return false;
                 }
 
-                decoded = InboundEvent.ForMove(connection, new MoveIntent(stop.Sequence, stop.ClientTick, 0f, 0f));
+                decoded = InboundEvent.ForMove(
+                    connection,
+                    new MoveIntent(stop.Sequence, stop.ClientTick, 0f, 0f),
+                    stop.MapEpoch);
                 return true;
             case MessageOpcode.TargetEntity:
                 if (!TargetEntity.TryRead(payload, out TargetEntity target))

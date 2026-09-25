@@ -41,7 +41,8 @@ public sealed class WorldEnteredTests
         0x08, 0x07, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01,
         0x18, 0x17, 0x16, 0x15, 0x14, 0x13, 0x12, 0x11,
         0x14, 0x00, 0x00, 0x00,
-        0x18, 0x00, 0x00, 0x00
+        0x18, 0x00, 0x00, 0x00,
+        0x2A
     };
 
     private static WorldEntered Golden => new(
@@ -62,7 +63,8 @@ public sealed class WorldEnteredTests
         0x0102030405060708UL,
         0x1112131415161718UL,
         20,
-        24);
+        24,
+        0x2A);
 
     [Test]
     public void TryRead_ForAJobWithoutSp_AcceptsZeroOfZero()
@@ -102,6 +104,7 @@ public sealed class WorldEnteredTests
         Assert.That(message.ExperienceToNextLevel, Is.EqualTo(0x1112131415161718UL));
         Assert.That(message.CurrentSpirit, Is.EqualTo(20u));
         Assert.That(message.MaximumSpirit, Is.EqualTo(24u));
+        Assert.That(message.MapEpoch, Is.EqualTo(0x2A));
     }
 
     [Test]
@@ -246,7 +249,7 @@ public sealed class WorldEnteredTests
         bool isRead = WorldEntered.TryRead(buffer, out WorldEntered? message);
 
         Assert.That(isRead, Is.True);
-        Assert.That(buffer.Length, Is.EqualTo(224), "the largest WorldEntered");
+        Assert.That(buffer.Length, Is.EqualTo(225), "the largest WorldEntered");
         Assert.That(message!.Map, Is.EqualTo(longestMap));
         Assert.That(message.Job, Is.EqualTo(longestJob));
     }

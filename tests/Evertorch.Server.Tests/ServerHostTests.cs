@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -120,6 +121,25 @@ public sealed class ServerHostTests
 
         Assert.That(didTick, Is.True);
         Assert.That(lifetime.IsSimulationRunning, Is.False);
+    }
+
+    // The transfer runs alone in ApplyCommands, at the start of the tick after the movement that entered a portal,
+    // and the order within a phase is the registration order (System Architecture §7).
+    [Test]
+    public void Phases_InTheHost_TransferAloneInApplyCommands_AndEndEffectsBeforeCombat()
+    {
+        using var root = new TemporaryDirectory();
+        WriteValidContent(root);
+        using IHost host = TestHosts.CreateBuilder(EphemeralPort, root.Path).Build();
+
+        var phases = host.Services.GetServices<ITickPhase>().ToList();
+        var order = phases.Select(phase => phase.GetType()).ToList();
+
+        Assert.That(
+            phases.Where(phase => phase.Phase == TickPhase.ApplyCommands).Select(phase => phase.GetType()),
+            Is.EqualTo(new[] { typeof(MapTransferPhase) }));
+        Assert.That(order.IndexOf(typeof(StatusEffectSystem)), Is.LessThan(order.IndexOf(typeof(CombatSystem))));
+        Assert.That(order.IndexOf(typeof(InventorySyncPhase)), Is.LessThan(order.IndexOf(typeof(CharacterSyncPhase))));
     }
 
     [Test]

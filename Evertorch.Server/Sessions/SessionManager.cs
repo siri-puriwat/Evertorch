@@ -47,6 +47,18 @@ public sealed class SessionManager : ITickPhase
             "Connection {Connection} (account {Account}) could not enter character {Character}: the loaded content has "
             + "no {Definition}. Its stored data is kept.");
 
+    private static readonly Action<ILogger, long, long, string, string, Exception?> LogMapTransferred =
+        LoggerMessage.Define<long, long, string, string>(
+            LogLevel.Information,
+            new EventId(2007, "MapTransferred"),
+            "Connection {Connection} took character {Character} from {From} to {To}.");
+
+    private static readonly Action<ILogger, long, string, string, Exception?> LogDeadEndPortal =
+        LoggerMessage.Define<long, string, string>(
+            LogLevel.Warning,
+            new EventId(2008, "MapTransferSkipped"),
+            "Character {Character} stands in a portal on {From} to {To}, which this server has not loaded; it stays.");
+
     private static readonly Action<ILogger, long, long, long, Exception?> LogSessionFaulted =
         LoggerMessage.Define<long, long, long>(
             LogLevel.Error,
@@ -79,6 +91,7 @@ public sealed class SessionManager : ITickPhase
     private readonly int m_maxQueuedInputs;
     private readonly List<ClientSession> m_expired = new();
     private readonly List<CharacterSession> m_cancelledLogouts = new();
+    private readonly List<ClientSession> m_transfers = new();
     private uint m_currentTick;
 
     public SessionManager(
@@ -243,7 +256,7 @@ public sealed class SessionManager : ITickPhase
                 HandleCreateCharacter(session, inboundEvent.Name!);
                 break;
             case InboundEventKind.Move:
-                HandleMove(session, inboundEvent.Intent);
+                HandleMove(session, inboundEvent.Intent, inboundEvent.MapEpoch);
                 break;
             case InboundEventKind.Target:
                 HandleTarget(session, inboundEvent.Target);
@@ -589,18 +602,31 @@ public sealed class SessionManager : ITickPhase
         EnterAs(session, character, tick);
     }
 
-    // The full baseline starts here: WorldEntered now, then a spawn for everything in view from this tick's visibility
-    // pass, because a new connection knows no entity yet, then the whole inventory. The movement sequence starts
-    // afresh with the connection; the command sequence belongs to the character and continues (Network Protocol §3,
-    // §8, §9).
+    // The movement sequence starts afresh with the connection; the command sequence belongs to the character and
+    // continues (Network Protocol §3, §8).
     private void EnterAs(ClientSession session, CharacterSession character, uint tick)
     {
         session.Input = new PlayerInputState(m_maxQueuedInputs);
+        session.State = SessionState.InWorld;
+        SendBaseline(session, character, tick);
+        LogWorldEntered(
+            m_logger,
+            session.Connection.Value,
+            AccountOf(session),
+            character.Character.Value,
+            character.Player.Id.Value,
+            null);
+    }
+
+    // The full baseline starts here: WorldEntered now, then a spawn for everything in view from this tick's visibility
+    // pass, since the client knows no entity of this map yet, then the whole inventory, the skill list, and the status
+    // effects (Network Protocol §9). Entering, an attach, and a map change all send it.
+    private void SendBaseline(ClientSession session, CharacterSession character, uint tick)
+    {
         session.KnownEntities.Clear();
         session.NeedsInventorySnapshot = true;
         session.NeedsSkillList = true;
         session.NeedsStatusEffects = true;
-        session.State = SessionState.InWorld;
         PlayerEntity player = character.Player;
         MapInstance map = character.Map;
         m_sender.Send(
@@ -623,13 +649,105 @@ public sealed class SessionManager : ITickPhase
                 (ulong)player.Experience,
                 (ulong)m_progression.ExperienceToNextLevel(player),
                 (uint)player.CurrentSpirit,
-                (uint)player.MaxSpirit));
-        LogWorldEntered(
+                (uint)player.MaxSpirit,
+                session.MapEpoch));
+    }
+
+    /// <summary>
+    ///     Moves every character that stands in a portal to its destination (Gameplay Systems §4.2). A dead,
+    ///     logging-out, or expelled character stays, and one with a pickup in flight waits for it to settle.
+    /// </summary>
+    public void TransferThroughPortals(uint tick)
+    {
+        m_transfers.Clear();
+        foreach (ClientSession session in m_sessions.Sessions)
+        {
+            if (session.State == SessionState.InWorld && session.Character != null)
+            {
+                m_transfers.Add(session);
+            }
+        }
+
+        foreach (ClientSession session in m_transfers)
+        {
+            try
+            {
+                TryTransfer(session, session.Character!, tick);
+            }
+            catch (Exception exception)
+            {
+                CloseFaulted(session.Connection, exception);
+            }
+        }
+    }
+
+    private void TryTransfer(ClientSession session, CharacterSession character, uint tick)
+    {
+        PlayerEntity player = character.Player;
+        MapInstance origin = character.Map;
+        MapPortal? portal = null;
+        foreach (MapPortal candidate in origin.Definition.Portals)
+        {
+            if (candidate.Contains(player.Position))
+            {
+                portal = candidate;
+                break;
+            }
+        }
+
+        if (portal == null)
+        {
+            character.IsInDeadEndPortal = false;
+            return;
+        }
+
+        if (player.IsDead || character.IsLoggingOut || character.IsExpelled || character.Pickup != null)
+        {
+            return;
+        }
+
+        WorldPosition arrival = portal.DestinationPosition;
+        if (!m_world.TryGetMap(portal.DestinationMap, out MapInstance? destination)
+            || destination == null
+            || !destination.Definition.Navigation.CanOccupy(arrival.X, arrival.Z))
+        {
+            if (!character.IsInDeadEndPortal)
+            {
+                character.IsInDeadEndPortal = true;
+                LogDeadEndPortal(
+                    m_logger,
+                    character.Character.Value,
+                    origin.Definition.Id.Value,
+                    portal.DestinationMap.Value,
+                    null);
+            }
+
+            return;
+        }
+
+        // Everything aimed at the old map ends, and input queued for it is consumed and acknowledged; the epoch drops
+        // what is still on its way (Network Protocol §10).
+        m_combat.PrepareForTransfer(origin, player);
+        session.Input!.Halt();
+        m_world.RemovePlayer(origin, player);
+        player.Position = arrival;
+        player.Facing = MovementModel.NormalizeOrZero(portal.DestinationFacing.X, portal.DestinationFacing.Z);
+        player.VelocityX = 0f;
+        player.VelocityY = 0f;
+        player.VelocityZ = 0f;
+        player.StateFlags &= ~EntityStateFlags.Moving;
+        destination.Add(player);
+        character.Map = destination;
+        session.MapEpoch = unchecked((byte)(session.MapEpoch + 1));
+        SendBaseline(session, character, tick);
+        m_lifetime.QueueCheckpoint(character);
+        m_instruments.RecordMapTransfer(destination.Definition.Id);
+        LogMapTransferred(
             m_logger,
             session.Connection.Value,
-            AccountOf(session),
             character.Character.Value,
-            player.Id.Value,
+            origin.Definition.Id.Value,
+            destination.Definition.Id.Value,
             null);
     }
 
@@ -652,11 +770,19 @@ public sealed class SessionManager : ITickPhase
     }
 
     // Only queued here. The movement phase applies at most one input per tick, whatever arrives.
-    private void HandleMove(ClientSession session, MoveIntent intent)
+    private void HandleMove(ClientSession session, MoveIntent intent, byte mapEpoch)
     {
         if (session.State != SessionState.InWorld || session.Input == null || session.Character!.IsLoggingOut)
         {
             IgnoredEvents++;
+            return;
+        }
+
+        // Input made for the map before a transfer, still on its way; an honest client sends it, so it is not scored.
+        if (mapEpoch != session.MapEpoch)
+        {
+            session.OtherEpochInputs++;
+            m_instruments.RecordOtherEpochInput();
             return;
         }
 

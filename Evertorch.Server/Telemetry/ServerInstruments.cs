@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics.Metrics;
+using Evertorch.Game;
 using Evertorch.Protocol;
 
 namespace Evertorch.Server
@@ -82,6 +83,8 @@ public sealed class ServerInstruments
     private readonly Counter<long> m_levelUps;
     private readonly Counter<long> m_casts;
     private readonly Counter<long> m_statusEffects;
+    private readonly Counter<long> m_mapTransfers;
+    private readonly Counter<long> m_otherEpochInputs;
 
     public ServerInstruments(IMeterFactory meters)
     {
@@ -146,6 +149,14 @@ public sealed class ServerInstruments
             "evertorch.combat.status_effects",
             "{effect}",
             "Status effects started, renewed, or ended, by change.");
+        m_mapTransfers = Meter.CreateCounter<long>(
+            "evertorch.world.map_transfers",
+            "{transfer}",
+            "Characters moved through a portal, by destination map.");
+        m_otherEpochInputs = Meter.CreateCounter<long>(
+            "evertorch.world.stale_epoch_inputs",
+            "{input}",
+            "Movement inputs dropped because they were made for the map before a transfer.");
     }
 
     public Meter Meter { get; }
@@ -218,6 +229,16 @@ public sealed class ServerInstruments
     public void RecordCast(bool isResolved)
     {
         m_casts.Add(1, isResolved ? CastResolved : CastInterrupted);
+    }
+
+    public void RecordMapTransfer(MapDefinitionId destination)
+    {
+        m_mapTransfers.Add(1, new KeyValuePair<string, object?>("map", destination.Value));
+    }
+
+    public void RecordOtherEpochInput()
+    {
+        m_otherEpochInputs.Add(1);
     }
 
     public void RecordStatusEffects(StatusEffectChange change, int count)

@@ -30,7 +30,15 @@ public sealed class CharacterSession
 
     public PlayerEntity Player { get; }
 
-    public MapInstance Map { get; }
+    /// <summary>
+    ///     The map instance the character is on; a map transfer moves it (Gameplay Systems §4.2).
+    /// </summary>
+    public MapInstance Map { get; set; }
+
+    /// <summary>
+    ///     The character stands in a portal to a map this server has not loaded, which was logged once.
+    /// </summary>
+    public bool IsInDeadEndPortal { get; set; }
 
     public CharacterInventory Inventory { get; }
 
