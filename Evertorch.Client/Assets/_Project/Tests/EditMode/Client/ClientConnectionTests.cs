@@ -679,6 +679,23 @@ public sealed class ClientConnectionTests
     }
 
     [Test]
+    public void SendUseSkill_InTheWorld_SharesTheCommandSequenceOnTheReliableChannel()
+    {
+        var harness = new Harness();
+        harness.EnterWorld();
+        uint attack = harness.Connection.SendAttack(new EntityId(300));
+
+        uint skill = harness.Connection.SendUseSkill(new SkillDefinitionId("skill.strike"), new EntityId(300));
+
+        FakeClientTransport.SentMessage sent = harness.Transport.Sent.Last();
+        Assert.That(UseSkill.TryRead(sent.Payload, out UseSkill? read), Is.True);
+        Assert.That((attack, skill), Is.EqualTo((1u, 2u)));
+        Assert.That(read!.CommandSequence, Is.EqualTo(2u));
+        Assert.That(read.Skill, Is.EqualTo(new SkillDefinitionId("skill.strike")));
+        Assert.That(sent.Channel, Is.EqualTo(ProtocolChannel.Control));
+    }
+
+    [Test]
     public void Send_BeforeTheWorldIsEntered_SendsNothing()
     {
         var harness = new Harness();
@@ -756,6 +773,43 @@ public sealed class ClientConnectionTests
 
         Assert.That(harness.Connection.MalformedMessages, Is.EqualTo(1));
         Assert.That(harness.Connection.State, Is.EqualTo(ClientConnectionState.AwaitingHello));
+    }
+
+    [Test]
+    public void SkillMessages_InTheWorld_ReachTheWorld_AndACancelEndsTheCastLock()
+    {
+        var harness = new Harness();
+        harness.EnterWorld();
+        var started = new SkillCastStarted(
+            ClientWorldFixture.LocalEntity,
+            new SkillDefinitionId("skill.first_aid"),
+            default,
+            10,
+            1331);
+        var list = new SkillList(
+            new[] { new SkillListEntry(new SkillDefinitionId("skill.first_aid"), 0f, 3, 0, 0, 0) });
+        var resolved = new SkillResolved(
+            ClientWorldFixture.LocalEntity,
+            ClientWorldFixture.LocalEntity,
+            new SkillDefinitionId("skill.first_aid"),
+            SkillOutcome.Healed,
+            15,
+            37,
+            0);
+        var heard = new List<SkillResolved>();
+        harness.Connection.World!.SkillResolvedReceived += heard.Add;
+
+        harness.Deliver(ProtocolChannel.Control, Encode(started.GetEncodedLength(), started.Write));
+        harness.Deliver(ProtocolChannel.Control, Encode(list.GetEncodedLength(), list.Write));
+        bool isLocked = harness.Connection.World.ActionLock.IsCastLocked;
+        harness.Connection.SendCancel();
+        harness.Deliver(ProtocolChannel.Control, Encode(resolved.GetEncodedLength(), resolved.Write));
+
+        Assert.That(isLocked, Is.True);
+        Assert.That(harness.Connection.World.ActionLock.IsCastLocked, Is.False, "the player's own cancel");
+        Assert.That(harness.Connection.World.Skills.Count, Is.EqualTo(1));
+        Assert.That(heard, Has.Count.EqualTo(1));
+        Assert.That(harness.Connection.MalformedMessages, Is.Zero);
     }
 
     [Test]

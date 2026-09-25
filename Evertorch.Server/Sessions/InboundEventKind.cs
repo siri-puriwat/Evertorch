@@ -68,6 +68,12 @@ public enum InboundEventKind
     ///     The network thread dropped <see cref="InboundEvent.Count" /> of the peer's inputs over its message budget, for
     ///     the violation score. A peer has at most one waiting, and it is never dropped.
     /// </summary>
-    InputDropped = 15
+    InputDropped = 15,
+
+    /// <summary>
+    ///     A request to cast <see cref="InboundEvent.Skill" /> at <see cref="InboundEvent.Target" />, 0 for the caster,
+    ///     carrying a command sequence.
+    /// </summary>
+    UseSkill = 16
 }
 }

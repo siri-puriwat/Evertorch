@@ -314,6 +314,21 @@ public sealed class ServerContentLoaderTests
     }
 
     [Test]
+    public void Load_WhenAJobKnowsMoreSkillsThanASkillListCarries_Fails()
+    {
+        Dictionary<string, byte[]> files = PackageFixture.BuildFixturePackage();
+        string twelve = string.Join(", ", Enumerable.Range(1, 12).Select(index => $"\"skill.s{index}\""));
+        PackageFixture.Replace(files, Jobs, "\"skills\": []", $"\"skills\": [{twelve}]");
+
+        IReadOnlyList<string> problems = ProblemsOf(files);
+
+        Assert.That(
+            problems,
+            Is.EqualTo(new[]
+                { "jobs.json: definitions[0].skills: lists more than the 11 skills a skill list carries" }));
+    }
+
+    [Test]
     public void Load_WhenDataFileSchemaVersionUnsupported_Fails()
     {
         Dictionary<string, byte[]> files = PackageFixture.BuildFixturePackage();

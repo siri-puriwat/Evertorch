@@ -5,6 +5,7 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using Evertorch.Game;
+using Evertorch.Protocol;
 
 namespace Evertorch.Server
 {
@@ -494,7 +495,13 @@ public static class ServerContentLoader
             "experienceTable",
             ExperienceDefinitionId.TryCreate);
         var skills = new List<SkillDefinitionId>();
-        foreach (string text in entry.RequiredStringArray("skills"))
+        IReadOnlyList<string> skillTexts = entry.RequiredStringArray("skills");
+        if (skillTexts.Count > SkillList.MaxEntries)
+        {
+            entry.Report("skills", $"lists more than the {SkillList.MaxEntries} skills a skill list carries");
+        }
+
+        foreach (string text in skillTexts)
         {
             if (!SkillDefinitionId.TryCreate(text, out SkillDefinitionId skill) || skills.Contains(skill))
             {

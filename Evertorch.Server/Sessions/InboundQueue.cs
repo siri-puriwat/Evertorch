@@ -238,6 +238,18 @@ public sealed class InboundQueue
 
                 decoded = InboundEvent.ForAttack(connection, attack.Target, attack.CommandSequence);
                 return true;
+            case MessageOpcode.UseSkill:
+                if (!UseSkill.TryRead(payload, out UseSkill? useSkill) || useSkill == null)
+                {
+                    return false;
+                }
+
+                decoded = InboundEvent.ForUseSkill(
+                    connection,
+                    useSkill.Skill,
+                    useSkill.Target,
+                    useSkill.CommandSequence);
+                return true;
             case MessageOpcode.PickupItem:
                 if (!PickupItem.TryRead(payload, out PickupItem pickup))
                 {

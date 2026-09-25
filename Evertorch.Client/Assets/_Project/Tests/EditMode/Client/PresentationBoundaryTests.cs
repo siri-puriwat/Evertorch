@@ -18,7 +18,7 @@ public sealed class PresentationBoundaryTests
         @"ClientConnection|ICombatCommandSink|IMoveIntentSink|\bSend\w*\(|AutoAttackState|MovementController"
         + @"|LocalPlayerDriver|MovementPredictor|\.Predictor\b|\.IsLocked\b|RequestRespawn|\.ActionLock\b"
         + @"|\.On(Spawn|Despawn|Snapshot|TargetChanged|AttackStarted|Damage|EntityDied|EntityRevived|ItemDropped"
-        + @"|CharacterHealth)\("
+        + @"|CharacterHealth|SkillCastStarted|SkillResolved|SkillList|LocalCancel)\("
         + @"|\.(HealthPermille|StateFlags|CurrentHealth)\s*=[^=]");
 
     // UI may ask GameClient for anything a player can do, and read what it likes; it may not send, build a message,
@@ -35,7 +35,8 @@ public sealed class PresentationBoundaryTests
         + @"|ForgetPendingStops|OnTick|OnCorrected|Observe)\("
         + @"|[Pp]redictor\??\.Apply\(|\.Buffer\.(Add|Clear)\("
         + @"|\.On(Spawn|Despawn|Snapshot|TargetChanged|AttackStarted|Damage|EntityDied|EntityRevived|CommandRejected"
-        + @"|ItemDropped|ItemPickedUp|CharacterHealth|CharacterProgress|Changed)\("
+        + @"|ItemDropped|ItemPickedUp|CharacterHealth|CharacterProgress|SkillCastStarted|SkillResolved|SkillList"
+        + @"|LocalCancel|Changed)\("
         + @"|\.(Advance|CollectTargetCandidates|CollectDropCandidates)\("
         + @"|\.(Target|LastRejection|LocalHealth|LocalMaximumHealth|HealthPermille|StateFlags|CurrentHealth|IsLocked"
         + @"|IsDead|LocalSpirit|LocalMaximumSpirit|Level|Experience|ExperienceToNextLevel)\s*=(?![=>])");
@@ -98,7 +99,8 @@ public sealed class PresentationBoundaryTests
             "predictor.Teleport(position, facing);", "smoother.OnCorrected(before, after);",
             "world.ServerTime.Observe(now);", "remote.Buffer.Clear();", "m_predictor.Apply(intent);",
             "controller.IsDead = true;", "world.Target =", "world.OnCharacterProgress(progress);",
-            "world.Level = 3;", "world.LocalSpirit = 0;"
+            "world.Level = 3;", "world.LocalSpirit = 0;", "world.OnSkillResolved(resolved);",
+            "m_world.OnLocalCancel();"
         };
         string[] allowed =
         {

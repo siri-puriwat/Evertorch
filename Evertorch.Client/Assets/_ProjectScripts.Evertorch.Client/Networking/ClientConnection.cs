@@ -170,6 +170,39 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
                 }
 
                 break;
+            case MessageOpcode.SkillCastStarted:
+                if (SkillCastStarted.TryRead(payload, out SkillCastStarted? castStarted) && castStarted != null)
+                {
+                    WithWorld(world => world.OnSkillCastStarted(castStarted));
+                }
+                else
+                {
+                    MalformedMessages++;
+                }
+
+                break;
+            case MessageOpcode.SkillResolved:
+                if (SkillResolved.TryRead(payload, out SkillResolved? resolved) && resolved != null)
+                {
+                    WithWorld(world => world.OnSkillResolved(resolved));
+                }
+                else
+                {
+                    MalformedMessages++;
+                }
+
+                break;
+            case MessageOpcode.SkillList:
+                if (SkillList.TryRead(payload, out SkillList? skills) && skills != null)
+                {
+                    WithWorld(world => world.OnSkillList(skills));
+                }
+                else
+                {
+                    MalformedMessages++;
+                }
+
+                break;
             case MessageOpcode.EntityDied:
                 if (EntityDied.TryRead(payload, out EntityDied died))
                 {
@@ -304,6 +337,7 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
 
         new CancelAction(NextCommandSequence()).Write(m_sendBuffer);
         SendRouted(MessageOpcode.CancelAction, CancelAction.EncodedLength);
+        World?.OnLocalCancel();
     }
 
     public void Send(MoveIntent intent)
@@ -338,6 +372,23 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
         uint sequence = NextCommandSequence();
         new PickupItem(drop, sequence).Write(m_sendBuffer);
         SendRouted(MessageOpcode.PickupItem, PickupItem.EncodedLength);
+        return sequence;
+    }
+
+    /// <summary>
+    ///     Asks the server to cast <paramref name="skill" /> at <paramref name="target" />, the default value for the
+    ///     local character itself. Returns the command's sequence, or 0 outside the world.
+    /// </summary>
+    public uint SendUseSkill(SkillDefinitionId skill, EntityId target)
+    {
+        if (State != ClientConnectionState.InWorld)
+        {
+            return 0;
+        }
+
+        uint sequence = NextCommandSequence();
+        var message = new UseSkill(skill, target, sequence);
+        SendRouted(MessageOpcode.UseSkill, message.Write(m_sendBuffer));
         return sequence;
     }
 

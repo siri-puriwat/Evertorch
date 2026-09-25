@@ -17,7 +17,8 @@ public readonly struct InboundEvent
         EntityId target = default,
         uint commandSequence = 0,
         string? name = null,
-        int count = 0)
+        int count = 0,
+        SkillDefinitionId skill = default)
     {
         Kind = kind;
         Connection = connection;
@@ -28,6 +29,7 @@ public readonly struct InboundEvent
         CommandSequence = commandSequence;
         Name = name;
         Count = count;
+        Skill = skill;
     }
 
     public InboundEventKind Kind { get; }
@@ -50,6 +52,11 @@ public readonly struct InboundEvent
     ///     For <see cref="InboundEventKind.InputDropped" />, how many inputs were dropped.
     /// </summary>
     public int Count { get; }
+
+    /// <summary>
+    ///     For <see cref="InboundEventKind.UseSkill" />, the skill asked for.
+    /// </summary>
+    public SkillDefinitionId Skill { get; }
 
     public static InboundEvent Connected(ConnectionId connection)
     {
@@ -99,6 +106,23 @@ public readonly struct InboundEvent
     public static InboundEvent ForAttack(ConnectionId connection, EntityId target, uint commandSequence)
     {
         return new InboundEvent(InboundEventKind.Attack, connection, null, default, default, target, commandSequence);
+    }
+
+    public static InboundEvent ForUseSkill(
+        ConnectionId connection,
+        SkillDefinitionId skill,
+        EntityId target,
+        uint commandSequence)
+    {
+        return new InboundEvent(
+            InboundEventKind.UseSkill,
+            connection,
+            null,
+            default,
+            default,
+            target,
+            commandSequence,
+            skill: skill);
     }
 
     public static InboundEvent ForPickup(ConnectionId connection, EntityId drop, uint commandSequence)

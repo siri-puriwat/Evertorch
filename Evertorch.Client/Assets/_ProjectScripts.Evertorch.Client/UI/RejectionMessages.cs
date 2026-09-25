@@ -26,6 +26,8 @@ public static class RejectionMessages
                 return "The server cannot save right now. Try again in a moment.";
             case CommandRejectionReason.Busy:
                 return "That drop is already being picked up. Try again in a moment.";
+            case CommandRejectionReason.NotEnoughSp:
+                return "Not enough SP.";
             default:
                 return "The server refused that.";
         }

@@ -87,6 +87,11 @@ public sealed class ClientSession
     public bool NeedsInventorySnapshot { get; set; }
 
     /// <summary>
+    ///     The client is owed its character's <c>SkillList</c>: it entered or attached, or one of its casts resolved.
+    /// </summary>
+    public bool NeedsSkillList { get; set; }
+
+    /// <summary>
     ///     Commands that were well formed but refused: a target that is missing, hidden, or not targetable.
     /// </summary>
     public long RefusedCommands { get; set; }

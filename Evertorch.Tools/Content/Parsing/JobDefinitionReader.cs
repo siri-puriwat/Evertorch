@@ -6,6 +6,9 @@ namespace Evertorch.Tools
 {
 internal static class JobDefinitionReader
 {
+    // One SkillList message carries at most this many (Network Protocol §9).
+    private const int MaxSkills = 11;
+
     public static AuthoredJob? Read(
         YamlFieldReader root,
         List<ContentDiagnostic> diagnostics,
@@ -118,6 +121,16 @@ internal static class JobDefinitionReader
             {
                 skills.Add(skill);
             }
+        }
+
+        if (values.Count > MaxSkills)
+        {
+            server.ReportField(
+                "skills",
+                string.Format(
+                    CultureInfo.InvariantCulture,
+                    "lists more than the {0} skills a skill list carries",
+                    MaxSkills));
         }
 
         return skills;

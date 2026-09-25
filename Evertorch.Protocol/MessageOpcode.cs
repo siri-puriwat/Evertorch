@@ -14,6 +14,7 @@ public enum MessageOpcode : ushort
     TargetEntity = 0x0005,
     AttackEntity = 0x0006,
     CancelAction = 0x0007,
+    UseSkill = 0x0008,
     PickupItem = 0x0009,
     Respawn = 0x000C,
     CreateCharacter = 0x000D,
@@ -28,6 +29,8 @@ public enum MessageOpcode : ushort
     AttackStarted = 0x8008,
     Damage = 0x8009,
     EntityDied = 0x800A,
+    SkillCastStarted = 0x800B,
+    SkillResolved = 0x800C,
     ItemDropped = 0x800D,
     ItemPickedUp = 0x800E,
     InventorySnapshot = 0x800F,
@@ -39,6 +42,7 @@ public enum MessageOpcode : ushort
     CreateCharacterResult = 0x8017,
     CommandRejected = 0x8018,
     LogoutComplete = 0x8019,
-    CharacterProgress = 0x801A
+    CharacterProgress = 0x801A,
+    SkillList = 0x801B
 }
 }

@@ -88,6 +88,7 @@ public sealed class PrototypeAcceptanceTests
         WalkOnALossyLink(admin, first, second);
         FightSlimes("fight", first, second);
         ShareAKill(content, admin, first, second);
+        UseSkills(first, second);
 
         EntityId firstEntity = first.World.LocalEntity;
         EntityId secondEntity = second.World.LocalEntity;
@@ -378,6 +379,79 @@ public sealed class PrototypeAcceptanceTests
             Assert.That(client.World.LocalMaximumSpirit, Is.GreaterThan(0u), $"{step}: SP reached the client");
             Assert.That(client.World.ExperienceToNextLevel, Is.GreaterThan(client.World.Experience), step);
         }
+    }
+
+    // The first player walks up to a slime, stops attacking, and strikes it, then heals itself with First Aid; both
+    // clients see each cast begin and resolve (Network Protocol §9).
+    private static void UseSkills(SocketClient first, SocketClient second)
+    {
+        const string step = "skills";
+        SocketClient[] clients = { first, second };
+        var started = new Dictionary<SocketClient, List<SkillCastStarted>>();
+        var resolved = new Dictionary<SocketClient, List<SkillResolved>>();
+        foreach (SocketClient client in clients)
+        {
+            var casts = new List<SkillCastStarted>();
+            var results = new List<SkillResolved>();
+            started[client] = casts;
+            resolved[client] = results;
+            client.World.SkillCastStartedReceived += casts.Add;
+            client.World.SkillResolvedReceived += results.Add;
+        }
+
+        EntityId slime = first.CycleTarget(true);
+        Assert.That(slime, Is.Not.EqualTo(default(EntityId)), $"{step}: Tab found a slime");
+        Assert.That(
+            SocketClients.PumpUntil(() => first.World.Target == slime, clients),
+            Is.True,
+            $"{step}: the server confirmed the target");
+        first.AttackTarget();
+        Assert.That(
+            SocketClients.PumpUntil(
+                () => first.World.Remotes.TryGetValue(slime, out RemoteEntity? remote)
+                    && remote.Buffer.TrySample(first.World.RemoteRenderTime, out WorldPosition at, out _)
+                    && first.DistanceTo(at) <= 1.4f,
+                clients),
+            Is.True,
+            $"{step}: walked within Strike's range");
+        first.Connection.SendCancel();
+        SocketClients.PumpFor(TimeSpan.FromSeconds(1), clients);
+
+        var strike = new SkillDefinitionId("skill.strike");
+        var firstAid = new SkillDefinitionId("skill.first_aid");
+        EntityId caster = first.World.LocalEntity;
+        first.Connection.SendUseSkill(strike, slime);
+        Assert.That(
+            SocketClients.PumpUntil(
+                () => clients.All(client => resolved[client].Any(result => result.Skill == strike)),
+                clients),
+            Is.True,
+            $"{step}: both clients saw Strike resolve");
+        SocketClients.PumpFor(TimeSpan.FromSeconds(1), clients);
+        first.Connection.SendUseSkill(firstAid, default);
+        Assert.That(
+            SocketClients.PumpUntil(
+                () => clients.All(client => resolved[client].Any(result => result.Skill == firstAid)),
+                clients),
+            Is.True,
+            $"{step}: both clients saw First Aid resolve");
+
+        foreach (SocketClient client in clients)
+        {
+            SkillCastStarted strikeStart = started[client].Single(cast => cast.Skill == strike);
+            SkillResolved strikeResult = resolved[client].Single(result => result.Skill == strike);
+            Assert.That((strikeStart.Caster, strikeStart.Target), Is.EqualTo((caster, slime)), step);
+            Assert.That((strikeResult.Caster, strikeResult.Target, strikeResult.Outcome),
+                Is.EqualTo((caster, slime, SkillOutcome.Hit)), $"{step}: every attack hits in this scenario");
+            SkillCastStarted aidStart = started[client].Single(cast => cast.Skill == firstAid);
+            SkillResolved aidResult = resolved[client].Single(result => result.Skill == firstAid);
+            Assert.That((aidStart.Caster, aidStart.Target, aidStart.CastMs),
+                Is.EqualTo((caster, default(EntityId), 1331u)), step);
+            Assert.That((aidResult.Target, aidResult.Outcome, aidResult.Amount),
+                Is.EqualTo((caster, SkillOutcome.Healed, 15u)), $"{step}: the nominal heal");
+        }
+
+        Assert.That(first.World.Skills.Select(entry => entry.Skill), Is.EqualTo(new[] { strike, firstAid }), step);
     }
 
     private static void AwaitConvergence(IAdminCommandService admin, string step, params SocketClient[] clients)

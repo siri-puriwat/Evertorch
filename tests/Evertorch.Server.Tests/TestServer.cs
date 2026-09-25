@@ -194,6 +194,7 @@ internal sealed class TestServer
             new SnapshotPhase(Sessions, sender, Options.Create(world)),
             new VisibilityPhase(Sessions, World, sender, targeting),
             new InventorySyncPhase(Sessions, sender),
+            new CharacterSyncPhase(Sessions, Content, sender, simulation),
             new MovementSystem(Sessions, World, Options.Create(world), simulation),
             Combat,
             new RegenerationSystem(World, sender, simulation),
@@ -386,6 +387,14 @@ internal sealed class TestServer
     {
         byte[] payload = new byte[AttackEntity.EncodedLength];
         new AttackEntity(target, commandSequence).Write(payload);
+        Inbound.OnPayload(connection, ProtocolChannel.Control, payload);
+    }
+
+    public void SendUseSkill(ConnectionId connection, string skill, EntityId target, uint commandSequence)
+    {
+        var message = new UseSkill(new SkillDefinitionId(skill), target, commandSequence);
+        byte[] payload = new byte[message.GetEncodedLength()];
+        message.Write(payload);
         Inbound.OnPayload(connection, ProtocolChannel.Control, payload);
     }
 

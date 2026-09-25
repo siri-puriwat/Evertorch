@@ -253,6 +253,7 @@ public sealed class SessionManager : ITickPhase
                 break;
             case InboundEventKind.Attack:
             case InboundEventKind.Cancel:
+            case InboundEventKind.UseSkill:
             case InboundEventKind.Respawn:
             case InboundEventKind.Logout:
             case InboundEventKind.Pickup:
@@ -597,6 +598,7 @@ public sealed class SessionManager : ITickPhase
         session.Input = new PlayerInputState(m_maxQueuedInputs);
         session.KnownEntities.Clear();
         session.NeedsInventorySnapshot = true;
+        session.NeedsSkillList = true;
         session.State = SessionState.InWorld;
         PlayerEntity player = character.Player;
         MapInstance map = character.Map;
@@ -759,6 +761,8 @@ public sealed class SessionManager : ITickPhase
                 ? CommandRejectionReason.None
                 : CommandRejectionReason.InvalidTarget,
             InboundEventKind.Cancel => Cancel(player),
+            InboundEventKind.UseSkill => ReasonFor(
+                m_combat.TryBeginCast(session.Map!, player, command.Skill, command.Target, tick)),
             InboundEventKind.Logout => TryLogout(session, command.CommandSequence),
             InboundEventKind.Pickup => m_pickups.TryStart(session, command.Target, command.CommandSequence, tick),
             _ => CommandRejectionReason.NotAllowedNow
@@ -769,6 +773,18 @@ public sealed class SessionManager : ITickPhase
     {
         session.RefusedCommands++;
         m_sender.Send(session.Connection, new CommandRejected(commandSequence, reason));
+    }
+
+    private static CommandRejectionReason ReasonFor(CastRefusal refusal)
+    {
+        return refusal switch
+        {
+            CastRefusal.None => CommandRejectionReason.None,
+            CastRefusal.NotEnoughSp => CommandRejectionReason.NotEnoughSp,
+            CastRefusal.InvalidTarget => CommandRejectionReason.InvalidTarget,
+            CastRefusal.OutOfRange => CommandRejectionReason.OutOfRange,
+            _ => CommandRejectionReason.NotAllowedNow
+        };
     }
 
     // Stops the auto-attack and interrupts a cast; a swing already begun still resolves (Gameplay Systems §7, §9).

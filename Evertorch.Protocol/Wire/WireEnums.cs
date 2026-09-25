@@ -34,7 +34,12 @@ internal static class WireEnums
 
     public static bool IsDefined(CommandRejectionReason value)
     {
-        return value >= CommandRejectionReason.InvalidTarget && value <= CommandRejectionReason.Busy;
+        return value >= CommandRejectionReason.InvalidTarget && value <= CommandRejectionReason.NotEnoughSp;
+    }
+
+    public static bool IsDefined(SkillOutcome value)
+    {
+        return value >= SkillOutcome.Hit && value <= SkillOutcome.Healed;
     }
 
     public static bool IsDefined(EntityStateFlags value)

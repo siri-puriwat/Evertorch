@@ -28,6 +28,7 @@ public sealed class SessionCommandLimits
         switch (kind)
         {
             case InboundEventKind.Attack:
+            case InboundEventKind.UseSkill:
             case InboundEventKind.Target:
             case InboundEventKind.Respawn:
                 limit = ServerInstruments.CombatCommandLimit;

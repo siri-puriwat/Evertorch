@@ -38,6 +38,11 @@ public enum CommandRejectionReason : byte
     /// <summary>
     ///     The drop is reserved by a pickup still being committed. Trying again later may work.
     /// </summary>
-    Busy = 7
+    Busy = 7,
+
+    /// <summary>
+    ///     The character has less SP than the skill costs.
+    /// </summary>
+    NotEnoughSp = 8
 }
 }

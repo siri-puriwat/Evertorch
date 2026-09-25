@@ -82,6 +82,21 @@ public sealed class MessageSender
         }
     }
 
+    public void Send(ConnectionId connection, SkillCastStarted message)
+    {
+        m_outbound.Send(connection, m_buffer.AsSpan(0, message.Write(m_buffer)));
+    }
+
+    public void Send(ConnectionId connection, SkillResolved message)
+    {
+        m_outbound.Send(connection, m_buffer.AsSpan(0, message.Write(m_buffer)));
+    }
+
+    public void Send(ConnectionId connection, SkillList message)
+    {
+        m_outbound.Send(connection, m_buffer.AsSpan(0, message.Write(m_buffer)));
+    }
+
     public void Send(ConnectionId connection, CharacterProgress message)
     {
         m_outbound.Send(connection, m_buffer.AsSpan(0, message.Write(m_buffer)));

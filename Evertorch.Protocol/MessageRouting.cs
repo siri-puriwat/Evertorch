@@ -22,6 +22,7 @@ public static class MessageRouting
             case MessageOpcode.TargetEntity:
             case MessageOpcode.AttackEntity:
             case MessageOpcode.CancelAction:
+            case MessageOpcode.UseSkill:
             case MessageOpcode.PickupItem:
             case MessageOpcode.Respawn:
             case MessageOpcode.CreateCharacter:
@@ -35,10 +36,13 @@ public static class MessageRouting
             case MessageOpcode.AttackStarted:
             case MessageOpcode.Damage:
             case MessageOpcode.EntityDied:
+            case MessageOpcode.SkillCastStarted:
+            case MessageOpcode.SkillResolved:
             case MessageOpcode.ItemDropped:
             case MessageOpcode.ItemPickedUp:
             case MessageOpcode.CharacterHealth:
             case MessageOpcode.CharacterProgress:
+            case MessageOpcode.SkillList:
             case MessageOpcode.EntityRevived:
             case MessageOpcode.DisconnectNotice:
             case MessageOpcode.CharacterList:

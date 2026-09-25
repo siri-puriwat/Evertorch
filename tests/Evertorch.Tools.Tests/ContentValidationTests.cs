@@ -282,6 +282,24 @@ public sealed class ContentValidationTests
     }
 
     [Test]
+    public void Run_WhenAJobListsMoreSkillsThanASkillListCarries_ReportsTheSkills()
+    {
+        using (var workspace = new ContentWorkspace())
+        {
+            workspace.Replace(Job, JobSkills,
+                "skills: [" + string.Join(", ", Enumerable.Repeat("skill.strike", 12)) + "]");
+
+            ContentPipelineResult result = ContentPipeline.Run(workspace.ContentRoot);
+
+            Assert.That(
+                result.Diagnostics.Where(diagnostic => diagnostic.FieldPath == "server.skills")
+                    .Select(diagnostic => diagnostic.Message),
+                Is.EqualTo(new[] { "lists more than the 11 skills a skill list carries" }),
+                Describe(result));
+        }
+    }
+
+    [Test]
     public void Run_WhenAMonsterHasNoRewards_GivesItNoExperience()
     {
         using (var workspace = new ContentWorkspace())

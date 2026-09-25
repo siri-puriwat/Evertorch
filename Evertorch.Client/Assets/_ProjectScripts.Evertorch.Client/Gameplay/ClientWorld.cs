@@ -18,6 +18,7 @@ public sealed class ClientWorld
     // back where it died.
     private readonly Dictionary<EntityId, uint> m_lifeChangeTicks = new();
     private readonly double m_tickSeconds;
+    private EntityId m_localCastTarget;
 
     public ClientWorld(NavigationGrid grid, WorldEntered entered, uint serverTickRate)
     {
@@ -115,6 +116,11 @@ public sealed class ClientWorld
     public ClientInventory Inventory { get; } = new();
 
     /// <summary>
+    ///     The skills the server says the local character knows, with the cooldown left when the list was sent.
+    /// </summary>
+    public IReadOnlyList<SkillListEntry> Skills { get; private set; } = Array.Empty<SkillListEntry>();
+
+    /// <summary>
     ///     The local player's movement lock; a new world starts unlocked.
     /// </summary>
     public ActionLock ActionLock { get; } = new();
@@ -167,6 +173,12 @@ public sealed class ClientWorld
 
     public event Action<ItemDropped>? ItemDroppedReceived;
 
+    public event Action<SkillCastStarted>? SkillCastStartedReceived;
+
+    public event Action<SkillResolved>? SkillResolvedReceived;
+
+    public event Action? SkillsChanged;
+
     /// <summary>
     ///     The local character reached a higher level.
     /// </summary>
@@ -216,7 +228,68 @@ public sealed class ClientWorld
         if (m_remotes.TryGetValue(despawn.Entity, out RemoteEntity? remote))
         {
             m_remotes.Remove(despawn.Entity);
+            EndLocalCastAt(despawn.Entity);
             RemoteDespawned?.Invoke(remote);
+        }
+    }
+
+    /// <summary>
+    ///     A cast began. The local player's own cast holds it still for the cast time from now: the server held it a
+    ///     little earlier, from the tick it began (Gameplay Systems §5.1).
+    /// </summary>
+    public void OnSkillCastStarted(SkillCastStarted started)
+    {
+        if (!Knows(started.Caster))
+        {
+            UnknownEntityEvents++;
+            return;
+        }
+
+        if (started.Caster == LocalEntity)
+        {
+            m_localCastTarget = started.Target;
+            ActionLock.LockForCast((int)Math.Ceiling(started.CastMs / 1000.0 / m_tickSeconds));
+        }
+
+        SkillCastStartedReceived?.Invoke(started);
+    }
+
+    public void OnSkillResolved(SkillResolved resolved)
+    {
+        if (!Knows(resolved.Target))
+        {
+            UnknownEntityEvents++;
+            return;
+        }
+
+        if (m_remotes.TryGetValue(resolved.Target, out RemoteEntity? remote) && remote.Kind == EntityKind.Monster)
+        {
+            remote.HealthPermille = resolved.TargetHealthPermille;
+        }
+
+        SkillResolvedReceived?.Invoke(resolved);
+    }
+
+    public void OnSkillList(SkillList list)
+    {
+        Skills = list.Skills;
+        SkillsChanged?.Invoke();
+    }
+
+    /// <summary>
+    ///     The local player asked to stop: its own cast ends at once, as the server ends it.
+    /// </summary>
+    public void OnLocalCancel()
+    {
+        ActionLock.EndCast();
+    }
+
+    // No message says a cast was interrupted: the local cast lock ends when its target dies or leaves view.
+    private void EndLocalCastAt(EntityId entity)
+    {
+        if (ActionLock.IsCastLocked && m_localCastTarget == entity && entity != default)
+        {
+            ActionLock.EndCast();
         }
     }
 
@@ -264,6 +337,7 @@ public sealed class ClientWorld
         if (died.Entity == LocalEntity)
         {
             IsLocalDead = true;
+            ActionLock.EndCast();
         }
         else if (m_remotes.TryGetValue(died.Entity, out RemoteEntity? remote))
         {
@@ -277,6 +351,7 @@ public sealed class ClientWorld
         }
 
         m_lifeChangeTicks[died.Entity] = died.ServerTick;
+        EndLocalCastAt(died.Entity);
 
         EntityDiedReceived?.Invoke(died);
     }

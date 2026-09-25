@@ -152,6 +152,17 @@ public sealed class CombatSystem : ITickPhase
         }
 
         combat.BeginCast(skillId, resolvedOn.Id, now + timing.CastMs, isPaidNow);
+        foreach (ClientSession other in SessionsOn(map))
+        {
+            if (other.Knows(player.Id))
+            {
+                EntityId shownTarget = resolvedOn != player && other.Knows(resolvedOn.Id) ? resolvedOn.Id : default;
+                m_sender.Send(
+                    other.Connection,
+                    new SkillCastStarted(player.Id, skillId, shownTarget, tick, (uint)timing.CastMs));
+            }
+        }
+
         return CastRefusal.None;
     }
 
@@ -399,11 +410,22 @@ public sealed class CombatSystem : ITickPhase
         combat.CompleteCast(now, timing.AfterCastDelayMs, timing.CooldownMs);
         m_instruments.RecordCast(true);
 
+        if (caster is PlayerEntity owner)
+        {
+            // Its cooldown changed, so its owner gets the list again.
+            ClientSession? ownerSession = FindSession(owner);
+            if (ownerSession != null)
+            {
+                ownerSession.NeedsSkillList = true;
+            }
+        }
+
         SkillResolution resolution = m_skillRules.Resolve(
             CreateSkillContext(caster, target, skill, skill.Effect!.Kind == SkillEffectKind.Damage));
         if (resolution.Result == SkillResult.Healed)
         {
             target.CurrentHealth = Math.Min(target.MaxHealth, target.CurrentHealth + resolution.Amount);
+            AnnounceResolved(map, caster, target, skill.Id, SkillOutcome.Healed, resolution.Amount, tick);
             if (target is PlayerEntity healed)
             {
                 m_sender.SendHealth(healed);
@@ -413,7 +435,38 @@ public sealed class CombatSystem : ITickPhase
         }
 
         target.CurrentHealth = Math.Max(0, target.CurrentHealth - resolution.Amount);
+        SkillOutcome outcome = resolution.Result == SkillResult.Hit ? SkillOutcome.Hit : SkillOutcome.Miss;
+        AnnounceResolved(map, caster, target, skill.Id, outcome, resolution.Amount, tick);
         AfterDamage(map, caster, target, resolution.Amount, tick);
+    }
+
+    // To every client that knows the target; one that knows no caster is told 0 (Network Protocol §9).
+    private void AnnounceResolved(
+        MapInstance map,
+        WorldEntity caster,
+        WorldEntity target,
+        SkillDefinitionId skill,
+        SkillOutcome outcome,
+        int amount,
+        uint tick)
+    {
+        foreach (ClientSession session in SessionsOn(map))
+        {
+            if (session.Knows(target.Id))
+            {
+                EntityId shownCaster = session.Knows(caster.Id) ? caster.Id : default;
+                m_sender.Send(
+                    session.Connection,
+                    new SkillResolved(
+                        shownCaster,
+                        target.Id,
+                        skill,
+                        outcome,
+                        (uint)amount,
+                        tick,
+                        target.SharedHealthPermille));
+            }
+        }
     }
 
     private SkillContext CreateSkillContext(WorldEntity caster, WorldEntity target, SkillDefinition skill,

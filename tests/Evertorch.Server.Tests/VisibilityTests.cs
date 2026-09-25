@@ -149,7 +149,7 @@ public sealed class VisibilityTests
         {
             MessageOpcode.ServerHello, MessageOpcode.CharacterList, MessageOpcode.CreateCharacterResult,
             MessageOpcode.CharacterList, MessageOpcode.WorldEntered, MessageOpcode.EntitySpawn,
-            MessageOpcode.InventorySnapshot
+            MessageOpcode.InventorySnapshot, MessageOpcode.SkillList
         };
         Assert.That(server.Transport.ControlOpcodesSentTo(second), Is.EqualTo(expected));
         Assert.That(server.Transport.ControlSentTo(second).Select(message => message.Channel),

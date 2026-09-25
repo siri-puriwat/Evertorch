@@ -113,6 +113,7 @@ public static class ServerHost
         builder.Services.AddSingleton<ITickPhase>(services => services.GetRequiredService<ItemDropSystem>());
         builder.Services.AddSingleton<ITickPhase, VisibilityPhase>();
         builder.Services.AddSingleton<ITickPhase, InventorySyncPhase>();
+        builder.Services.AddSingleton<ITickPhase, CharacterSyncPhase>();
         builder.Services.AddSingleton<ITickPhase, SnapshotPhase>();
         builder.Services.AddSingleton<ITickPhase, CheckpointScheduler>();
         builder.Services.AddSingleton<AdminQueue>();

@@ -121,6 +121,36 @@ public sealed class MessageFuzzTests
             Encode(new CharacterHealth(60, 68, 20, 24)),
             payload => CharacterHealth.TryRead(payload, out CharacterHealth message) ? Encode(message) : null);
         yield return Case(
+            "UseSkill",
+            Encode(new UseSkill(new SkillDefinitionId("skill.strike"), new EntityId(42), 7)),
+            payload => UseSkill.TryRead(payload, out UseSkill? message) ? Encode(message!) : null);
+        yield return Case(
+            "SkillCastStarted",
+            Encode(new SkillCastStarted(new EntityId(9), new SkillDefinitionId("skill.first_aid"), default, 70, 1331)),
+            payload => SkillCastStarted.TryRead(payload, out SkillCastStarted? message) ? Encode(message!) : null);
+        yield return Case(
+            "SkillResolved",
+            Encode(
+                new SkillResolved(
+                    new EntityId(9),
+                    new EntityId(42),
+                    new SkillDefinitionId("skill.strike"),
+                    SkillOutcome.Hit,
+                    17,
+                    70,
+                    660)),
+            payload => SkillResolved.TryRead(payload, out SkillResolved? message) ? Encode(message!) : null);
+        yield return Case(
+            "SkillList",
+            Encode(
+                new SkillList(
+                    new[]
+                    {
+                        new SkillListEntry(new SkillDefinitionId("skill.strike"), 1.5f, 8, 2000, 500, 1250),
+                        new SkillListEntry(new SkillDefinitionId("skill.first_aid"), 0f, 3, 0, 0, 0)
+                    })),
+            payload => SkillList.TryRead(payload, out SkillList? message) ? Encode(message!) : null);
+        yield return Case(
             "CharacterProgress",
             Encode(new CharacterProgress(2, 45, 50)),
             payload => CharacterProgress.TryRead(payload, out CharacterProgress message) ? Encode(message) : null);
@@ -482,6 +512,34 @@ public sealed class MessageFuzzTests
     private static byte[] Encode(CharacterHealth message)
     {
         byte[] buffer = new byte[CharacterHealth.EncodedLength];
+        message.Write(buffer);
+        return buffer;
+    }
+
+    private static byte[] Encode(UseSkill message)
+    {
+        byte[] buffer = new byte[message.GetEncodedLength()];
+        message.Write(buffer);
+        return buffer;
+    }
+
+    private static byte[] Encode(SkillCastStarted message)
+    {
+        byte[] buffer = new byte[message.GetEncodedLength()];
+        message.Write(buffer);
+        return buffer;
+    }
+
+    private static byte[] Encode(SkillResolved message)
+    {
+        byte[] buffer = new byte[message.GetEncodedLength()];
+        message.Write(buffer);
+        return buffer;
+    }
+
+    private static byte[] Encode(SkillList message)
+    {
+        byte[] buffer = new byte[message.GetEncodedLength()];
         message.Write(buffer);
         return buffer;
     }

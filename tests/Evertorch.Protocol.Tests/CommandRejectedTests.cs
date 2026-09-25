@@ -14,7 +14,7 @@ public sealed class CommandRejectedTests
     }
 
     [TestCase((byte)0)]
-    [TestCase((byte)8)]
+    [TestCase((byte)9)]
     [TestCase((byte)255)]
     public void CommandRejected_WithAnUnknownReason_IsRefused(byte reason)
     {
@@ -51,7 +51,7 @@ public sealed class CommandRejectedTests
             Array.ConvertAll(
                 (CommandRejectionReason[])Enum.GetValues(typeof(CommandRejectionReason)),
                 reason => (byte)reason),
-            Is.EqualTo(new byte[] { 0, 1, 2, 3, 4, 5, 6, 7 }));
+            Is.EqualTo(new byte[] { 0, 1, 2, 3, 4, 5, 6, 7, 8 }));
         Assert.That(CommandRejectionReason.InvalidTarget, Is.EqualTo((CommandRejectionReason)1));
         Assert.That(CommandRejectionReason.OutOfRange, Is.EqualTo((CommandRejectionReason)2));
         Assert.That(CommandRejectionReason.NotAllowedNow, Is.EqualTo((CommandRejectionReason)3));
@@ -59,6 +59,7 @@ public sealed class CommandRejectedTests
         Assert.That(CommandRejectionReason.InventoryFull, Is.EqualTo((CommandRejectionReason)5));
         Assert.That(CommandRejectionReason.ServiceUnavailable, Is.EqualTo((CommandRejectionReason)6));
         Assert.That(CommandRejectionReason.Busy, Is.EqualTo((CommandRejectionReason)7));
+        Assert.That(CommandRejectionReason.NotEnoughSp, Is.EqualTo((CommandRejectionReason)8));
     }
 }
 }
