@@ -22,17 +22,23 @@ public sealed class PresentationBoundaryTests
         + @"|\.(HealthPermille|StateFlags|CurrentHealth)\s*=[^=]");
 
     // UI may ask GameClient for anything a player can do, and read what it likes; it may not send, build a message,
-    // drive movement, or change what the client believes (Coding Standards §3).
+    // drive movement or the client's ticks, or change what the client believes (Coding Standards §3). A method whose
+    // name only one client type has is matched on any receiver, so a local copy of the controller or the predictor
+    // cannot hide the call.
     private static readonly Regex UiForbidden = new(
         @"ICombatCommandSink|IMoveIntentSink|\.Send\w*\(|AutoAttackState|LocalPlayerDriver|PickupState"
         + @"|MoveIntentProducer|\bnew\s+(MoveIntent|ClientHello|EnterWorldRequest|MoveInput|StopMovement|TargetEntity"
         + @"|AttackEntity|CancelAction|Respawn|Logout|PickupItem|CreateCharacter|InventoryResyncRequest)\s*\("
         + @"|\.Connection\??\.(Connect|Disconnect|EnterWorld|CreateCharacter|Poll)\("
-        + @"|\.Controller\??\.(SetManualDirection|TryMoveTo|Chase\w*|Cancel\w*|Tick)\("
+        + @"|\.Controller\??\.(Cancel\w*|Tick)\("
+        + @"|\.(SetManualDirection|TryMoveTo|Chase\w*|StopChase|CancelPath|NextTick|Reconcile|Teleport"
+        + @"|ForgetPendingStops|OnTick|OnCorrected|Observe)\("
+        + @"|[Pp]redictor\??\.Apply\(|\.Buffer\.(Add|Clear)\("
         + @"|\.On(Spawn|Despawn|Snapshot|TargetChanged|AttackStarted|Damage|EntityDied|EntityRevived|CommandRejected"
-        + @"|ItemDropped|ItemPickedUp|CharacterHealth)\("
+        + @"|ItemDropped|ItemPickedUp|CharacterHealth|Changed)\("
         + @"|\.(Advance|CollectTargetCandidates|CollectDropCandidates)\("
-        + @"|\.(Target|LastRejection|LocalHealth|LocalMaximumHealth|HealthPermille|StateFlags|CurrentHealth)\s*=[^=]");
+        + @"|\.(Target|LastRejection|LocalHealth|LocalMaximumHealth|HealthPermille|StateFlags|CurrentHealth|IsLocked"
+        + @"|IsDead)\s*=(?![=>])");
 
     private static readonly Regex UsesPresentation = new(
         @"\b(CombatAnimation|CombatTimeline|CombatPresenter|HitMark|FloatingNumber|HealthBar|EntityView)\b"
@@ -87,12 +93,18 @@ public sealed class PresentationBoundaryTests
         {
             "connection.SendTarget(target);", "client.Connection.EnterWorld(entry.Character);",
             "var hello = new ClientHello(1, build, 0, token);", "world.OnCommandRejected(rejected);",
-            "world.Target = entity;", "client.Controller.TryMoveTo(from, point);"
+            "world.Target = entity;", "client.Controller.TryMoveTo(from, point);", "controller.StopChase();",
+            "controller.CancelPath();", "m_client.Clock?.NextTick();", "world.Inventory.OnChanged(change);",
+            "predictor.Teleport(position, facing);", "smoother.OnCorrected(before, after);",
+            "world.ServerTime.Observe(now);", "remote.Buffer.Clear();", "m_predictor.Apply(intent);",
+            "controller.IsDead = true;", "world.Target ="
         };
         string[] allowed =
         {
             "client.EnterWorld(entry.Character);", "client.RequestRespawn();", "if (world.Target == entity)",
-            "int rtt = client.Connection.RoundTripMilliseconds;"
+            "int rtt = client.Connection.RoundTripMilliseconds;", "WorldPosition self = world.Predictor.Position;",
+            "if (m_client.Clock != null && m_client.Clock.SkippedTicks > 0)", "bool isLocked = controller.IsLocked;",
+            "if (target.IsDead == wasDead)", "world.Inventory.Changed += Refresh;", "m_lines.Clear();"
         };
 
         Assert.That(probes.Where(probe => !UiForbidden.IsMatch(probe)), Is.Empty);
