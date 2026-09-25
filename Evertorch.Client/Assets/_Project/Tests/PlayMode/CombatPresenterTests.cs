@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using Evertorch.Game;
 using Evertorch.Protocol;
 using NUnit.Framework;
+using TMPro;
 using UnityEngine;
 using EntityId = Evertorch.Game.EntityId;
 using Object = UnityEngine.Object;
@@ -16,6 +17,8 @@ public sealed class CombatPresenterTests
 {
     private static readonly EntityId Local = new(100);
     private static readonly EntityId Slime = new(300);
+    private static readonly SkillDefinitionId FirstAid = new("skill.first_aid");
+    private static readonly SkillDefinitionId Strike = new("skill.strike");
 
     private readonly List<Object> m_created = new();
     private CombatPresenter? m_presenter;
@@ -31,6 +34,12 @@ public sealed class CombatPresenterTests
         }
 
         foreach (HealthBar bar in Object.FindObjectsByType<HealthBar>(FindObjectsSortMode.None))
+        {
+            Object.DestroyImmediate(bar.gameObject);
+        }
+
+        foreach (CastBar bar in
+                 Object.FindObjectsByType<CastBar>(FindObjectsInactive.Include, FindObjectsSortMode.None))
         {
             Object.DestroyImmediate(bar.gameObject);
         }
@@ -132,6 +141,78 @@ public sealed class CombatPresenterTests
         FloatingNumber number = Object.FindAnyObjectByType<FloatingNumber>();
         Assert.That(number, Is.Not.Null);
         Assert.That(number.Text, Is.EqualTo("12"));
+    }
+
+    [Test]
+    public void OwnCast_DrawsABarOverThePlayerForItsTime_AndItsHealIsAGreenPlusNumber()
+    {
+        ClientWorld world = CreateWorld();
+        Dictionary<EntityId, EntityView> remotes = CreateViews(out EntityView local);
+        CombatPresenter presenter = CreatePresenter(world);
+
+        world.OnSkillCastStarted(new SkillCastStarted(Local, FirstAid, default, 0, 1000));
+        presenter.Present(local, remotes, null);
+        presenter.TryGetCastBar(Local, out CastBar? bar);
+        bool isShownAtTheStart = bar != null && bar.IsShown;
+        float height = bar != null ? bar.transform.position.y : 0f;
+        world.Advance(0.5f);
+        presenter.Present(local, remotes, null);
+        float halfway = bar!.ShownProgress;
+        world.Advance(0.55f);
+        world.OnSkillResolved(new SkillResolved(Local, Local, FirstAid, SkillOutcome.Healed, 15, 22, 0));
+        presenter.Present(local, remotes, null);
+
+        Assert.That(isShownAtTheStart, Is.True);
+        Assert.That(height, Is.EqualTo(1.45f).Within(1e-4f), "1.45 m over the caster");
+        Assert.That(halfway, Is.EqualTo(0.5f).Within(1e-3f));
+        Assert.That(bar.IsShown, Is.False, "the cast time is over");
+        FloatingNumber number = Object.FindAnyObjectByType<FloatingNumber>();
+        Assert.That(number, Is.Not.Null);
+        Assert.That(number.Text, Is.EqualTo("+15"));
+        Color color = number.GetComponent<TextMeshPro>().color;
+        Assert.That(color.g, Is.GreaterThan(color.r + 0.3f), "green");
+    }
+
+    [Test]
+    public void OwnCast_Cancelled_HidesItsBar_AndARemoteCastIsDrawnOnItsTimeline()
+    {
+        ClientWorld world = CreateWorld();
+        Dictionary<EntityId, EntityView> remotes = CreateViews(out EntityView local);
+        CombatPresenter presenter = CreatePresenter(world);
+
+        world.OnSkillCastStarted(new SkillCastStarted(Local, FirstAid, default, 0, 1500));
+        world.OnSkillCastStarted(new SkillCastStarted(Slime, Strike, Local, 2, 1000));
+        presenter.Present(local, remotes, null);
+        presenter.TryGetCastBar(Local, out CastBar? own);
+        bool isRemoteBarShownEarly = presenter.TryGetCastBar(Slime, out CastBar? _);
+        world.OnLocalCancel();
+        world.Advance(0.3f);
+        presenter.Present(local, remotes, null);
+        presenter.TryGetCastBar(Slime, out CastBar? remote);
+
+        Assert.That(isRemoteBarShownEarly, Is.False, "tick 2 is not drawn yet");
+        Assert.That(own!.IsShown, Is.False, "cancelled");
+        Assert.That(remote, Is.Not.Null);
+        Assert.That(remote!.IsShown, Is.True);
+        Assert.That(remote.ShownProgress, Is.EqualTo(0.1f).Within(1e-3f), "0.1 s into the slime's cast");
+    }
+
+    [Test]
+    public void SkillHit_OnAMonster_ShowsItsNumberAndMovesItsBarWhenItsMomentIsDrawn()
+    {
+        ClientWorld world = CreateWorld();
+        Dictionary<EntityId, EntityView> remotes = CreateViews(out EntityView local);
+        CombatPresenter presenter = CreatePresenter(world);
+        presenter.Present(local, remotes, null);
+        presenter.TryGetHealthBar(Slime, out HealthBar? bar);
+
+        world.OnSkillResolved(new SkillResolved(Local, Slime, Strike, SkillOutcome.Hit, 17, 2, 660));
+        world.Advance(0.3f);
+        presenter.Present(local, remotes, null);
+
+        Assert.That(presenter.NumbersShown, Is.EqualTo(1));
+        Assert.That(bar!.ShownRatio, Is.EqualTo(0.66f).Within(1e-4f));
+        Assert.That(Object.FindAnyObjectByType<FloatingNumber>().Text, Is.EqualTo("17"));
     }
 
     [Test]

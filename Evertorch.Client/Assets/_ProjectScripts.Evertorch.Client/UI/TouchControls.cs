@@ -24,6 +24,7 @@ public sealed class TouchControls : MonoBehaviour
     private const float StickInset = 129f;
     private const float ButtonGap = 16f;
     private const float ButtonInset = 32f;
+    private const int TargetButtonCount = 3;
 
     private static readonly Vector2 ButtonSize = new(190f, 96f);
     private static readonly Vector2 ToggleSize = new(110f, 64f);
@@ -39,6 +40,28 @@ public sealed class TouchControls : MonoBehaviour
     public RectTransform? StickArea { get; private set; }
 
     public RectTransform? Knob { get; private set; }
+
+    /// <summary>
+    ///     What the stick and its knob can cover, in canvas units from the bottom-left corner.
+    /// </summary>
+    public static Rect StickBounds
+    {
+        get
+        {
+            float reach = Mathf.Max(StickSize / 2f, StickRange + KnobSize / 2f);
+            return new Rect(StickInset - reach, StickInset - reach, 2f * reach, 2f * reach);
+        }
+    }
+
+    /// <summary>
+    ///     The column of target buttons in the bottom right corner of a canvas <paramref name="canvasWidth" /> units
+    ///     wide, from its bottom-left corner.
+    /// </summary>
+    public static Rect ButtonColumnBounds(float canvasWidth)
+    {
+        float height = TargetButtonCount * ButtonSize.y + (TargetButtonCount - 1) * ButtonGap;
+        return new Rect(canvasWidth - ButtonInset - ButtonSize.x, ButtonInset, ButtonSize.x, height);
+    }
 
     /// <param name="toggleOverlay">What the Dev button does; without it there is no Dev button.</param>
     public static TouchControls Create(UnityAction? toggleOverlay = null)

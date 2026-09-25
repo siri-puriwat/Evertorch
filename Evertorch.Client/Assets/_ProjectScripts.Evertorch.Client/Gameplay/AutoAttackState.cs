@@ -157,7 +157,9 @@ public sealed class AutoAttackState
         }
 
         // The lock is counted from hearing of the swing: the server locked the same span a little earlier.
-        m_world.ActionLock.LockForSwing((int)Math.Ceiling(started.Timing.Impact.TotalSeconds / m_tickSeconds));
+        m_world.ActionLock.LockForSwing(
+            (int)Math.Ceiling(started.Timing.Impact.TotalSeconds / m_tickSeconds),
+            (int)Math.Ceiling(started.Timing.Interval.TotalSeconds / m_tickSeconds));
         m_ticksInRangeWithoutSwing = 0;
         m_isClosingIn = false;
     }

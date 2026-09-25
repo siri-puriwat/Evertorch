@@ -121,6 +121,11 @@ public sealed class ClientWorld
     public IReadOnlyList<SkillListEntry> Skills { get; private set; } = Array.Empty<SkillListEntry>();
 
     /// <summary>
+    ///     The estimated server time, in seconds, when the skill list arrived; its cooldowns count down from then.
+    /// </summary>
+    public double SkillsReceivedAt { get; private set; }
+
+    /// <summary>
     ///     The local player's movement lock; a new world starts unlocked.
     /// </summary>
     public ActionLock ActionLock { get; } = new();
@@ -178,6 +183,11 @@ public sealed class ClientWorld
     public event Action<SkillResolved>? SkillResolvedReceived;
 
     public event Action? SkillsChanged;
+
+    /// <summary>
+    ///     The local player's own cast ended before its time: it died, its target died or left, or it cancelled.
+    /// </summary>
+    public event Action? LocalCastEnded;
 
     /// <summary>
     ///     The local character reached a higher level.
@@ -273,7 +283,24 @@ public sealed class ClientWorld
     public void OnSkillList(SkillList list)
     {
         Skills = list.Skills;
+        SkillsReceivedAt = ServerTime.Now;
         SkillsChanged?.Invoke();
+    }
+
+    /// <summary>
+    ///     What is left of a listed skill's cooldown now, in seconds; 0 once it is ready, and for a skill not listed.
+    /// </summary>
+    public double CooldownRemaining(SkillDefinitionId skill)
+    {
+        foreach (SkillListEntry entry in Skills)
+        {
+            if (entry.Skill == skill)
+            {
+                return Math.Max(0.0, entry.RemainingCooldownMs / 1000.0 - (ServerTime.Now - SkillsReceivedAt));
+            }
+        }
+
+        return 0.0;
     }
 
     /// <summary>
@@ -281,15 +308,24 @@ public sealed class ClientWorld
     /// </summary>
     public void OnLocalCancel()
     {
-        ActionLock.EndCast();
+        EndLocalCast();
     }
 
     // No message says a cast was interrupted: the local cast lock ends when its target dies or leaves view.
     private void EndLocalCastAt(EntityId entity)
     {
-        if (ActionLock.IsCastLocked && m_localCastTarget == entity && entity != default)
+        if (m_localCastTarget == entity && entity != default)
+        {
+            EndLocalCast();
+        }
+    }
+
+    private void EndLocalCast()
+    {
+        if (ActionLock.IsCastLocked)
         {
             ActionLock.EndCast();
+            LocalCastEnded?.Invoke();
         }
     }
 
@@ -337,7 +373,7 @@ public sealed class ClientWorld
         if (died.Entity == LocalEntity)
         {
             IsLocalDead = true;
-            ActionLock.EndCast();
+            EndLocalCast();
         }
         else if (m_remotes.TryGetValue(died.Entity, out RemoteEntity? remote))
         {

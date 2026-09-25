@@ -27,8 +27,8 @@ namespace Evertorch.Client.Tests.PlayMode
 ///     kill the training slime and see a slime-gel drop"; Milestone 4 verification "a pickup is committed before
 ///     success and survives a server restart"; the Milestone 5 acceptance path, Coding Standards §10):
 ///     <see cref="GameClient" /> with the project's input actions, driven only by simulated devices: WASD and a ground
-///     click to walk, Tab to target, the gamepad's West button to attack, R to respawn, F to pick up, and the login
-///     panel to reconnect.
+///     click to walk, Tab to target, the gamepad's West button to attack, R to respawn, F to pick up, 2 and the skill
+///     bar for First Aid, and the login panel to reconnect.
 /// </summary>
 public sealed class LiveServerCombatTests : InputTestFixture
 {
@@ -46,6 +46,7 @@ public sealed class LiveServerCombatTests : InputTestFixture
     private const int WholePathTimeoutMs = 600_000;
 
     private readonly List<ItemDropped> m_dropped = new();
+    private readonly List<string> m_skillLog = new();
     private int m_kills;
     private int m_respawns;
     private bool m_hasCheckedTargetFrame;
@@ -74,6 +75,7 @@ public sealed class LiveServerCombatTests : InputTestFixture
         }
 
         m_dropped.Clear();
+        m_skillLog.Clear();
         m_kills = 0;
         m_respawns = 0;
         m_hasCheckedTargetFrame = false;
@@ -122,6 +124,7 @@ public sealed class LiveServerCombatTests : InputTestFixture
         Assert.That(m_dropped.Any(dropped => dropped.ItemId == SlimeGel), Is.True);
         Assert.That(m_kills, Is.GreaterThanOrEqualTo(1));
         yield return ExpectProgressOnTheStatusBar(client, world);
+        yield return UseFirstAidByKeyThenByButton(client, world, keyboard);
         Debug.Log($"Live combat: {m_kills} kills, {m_respawns} respawns, {m_dropped.Count} drops announced");
     }
 
@@ -318,6 +321,92 @@ public sealed class LiveServerCombatTests : InputTestFixture
         Assert.That(name.text, Does.EndWith($"Lv {world.Level}"), "the level comes from the world");
         Assert.That(spirit.text, Is.EqualTo($"SP {world.LocalSpirit} / {world.LocalMaximumSpirit}"));
         Assert.That(bar.ShownExperienceRatio, Is.EqualTo(ExperienceRatio(world)).Within(0.001f));
+    }
+
+    // First Aid from its key and then from its button on the skill bar (Prototype Content §4): each draws a cast bar
+    // over the player and ends in a green heal number.
+    private IEnumerator UseFirstAidByKeyThenByButton(GameClient client, ClientWorld world, Keyboard keyboard)
+    {
+        if (world.IsLocalDead)
+        {
+            yield return Tap(keyboard.rKey);
+            yield return WaitUntil(() => !world.IsLocalDead, 5f);
+        }
+
+        Button firstAid = client.GetComponentsInChildren<SkillBar>(true)
+            .Single()
+            .GetComponentsInChildren<Button>(true)
+            .Single(button => button.name == "Slot 2");
+        yield return WaitUntil(() => firstAid.gameObject.activeInHierarchy, 5f);
+        Assert.That(firstAid.gameObject.activeInHierarchy, Is.True, "the bar shows First Aid once it is listed");
+        var heals = new List<SkillResolved>();
+        world.SkillResolvedReceived += resolved =>
+        {
+            if (resolved.Target == world.LocalEntity && resolved.Outcome == SkillOutcome.Healed)
+            {
+                heals.Add(resolved);
+            }
+        };
+
+        world.SkillCastStartedReceived += started => m_skillLog.Add($"cast@{Time.frameCount}:{started.Skill.Value}");
+        world.CommandRejectedReceived += rejected => m_skillLog.Add($"refused@{Time.frameCount}:{rejected.Reason}");
+        world.AttackStartedReceived += started =>
+        {
+            if (started.Attacker == world.LocalEntity)
+            {
+                m_skillLog.Add($"swing@{Time.frameCount}");
+            }
+        };
+        world.SkillResolvedReceived += resolved => m_skillLog.Add($"resolved@{Time.frameCount}:{resolved.Skill.Value}");
+        m_skillLog.Add($"key@{Time.frameCount}");
+        yield return Tap(keyboard.digit2Key);
+        yield return ExpectCastBarAndHeal(client, world, heals, 1, "the 2 key");
+        yield return WaitUntil(() => !IsHealNumberShown(), 3f);
+        m_skillLog.Add($"button@{Time.frameCount}");
+        firstAid.onClick.Invoke();
+        yield return ExpectCastBarAndHeal(client, world, heals, 2, "the bar's button");
+    }
+
+    private IEnumerator ExpectCastBarAndHeal(
+        GameClient client,
+        ClientWorld world,
+        List<SkillResolved> heals,
+        int count,
+        string how)
+    {
+        bool isBarSeen = false;
+        bool isNumberSeen = false;
+        float deadline = Time.realtimeSinceStartup + 5f;
+        while (Time.realtimeSinceStartup < deadline && !(isBarSeen && isNumberSeen && heals.Count >= count))
+        {
+            isBarSeen |= client.Combat != null
+                && client.Combat.TryGetCastBar(world.LocalEntity, out CastBar? bar)
+                && bar != null
+                && bar.IsShown;
+            isNumberSeen |= IsHealNumberShown();
+            yield return null;
+        }
+
+        FeedbackLines lines = client.GetComponentsInChildren<FeedbackLines>(true).Single();
+        var skill = (SkillState?)typeof(GameClient)
+            .GetField("m_skill", BindingFlags.NonPublic | BindingFlags.Instance)!
+            .GetValue(client);
+        Assert.That(
+            heals.Count,
+            Is.GreaterThanOrEqualTo(count),
+            $"First Aid by {how} resolved; refusal {world.LastRejection}, lines '{lines.Text}', SP {world.LocalSpirit}, "
+            + $"dead {world.IsLocalDead}, target {world.Target.Value}, skill active {skill?.IsActive} sent "
+            + $"{skill?.SkillsSent}, locks {world.ActionLock.IsSwingLocked}/{world.ActionLock.IsCastLocked}/"
+            + $"{world.ActionLock.IsSwingDueWithin(4)}, manual {client.Controller?.HasManualDirection}, "
+            + $"log {string.Join(" ", m_skillLog)}");
+        Assert.That(isBarSeen, Is.True, $"First Aid by {how} drew a cast bar over the player");
+        Assert.That(isNumberSeen, Is.True, $"First Aid by {how} showed its heal");
+    }
+
+    private static bool IsHealNumberShown()
+    {
+        return Object.FindObjectsByType<FloatingNumber>(FindObjectsSortMode.None)
+            .Any(number => number.Text == "+15");
     }
 
     private static bool IsShowing(StatusBar bar, TMP_Text name, TMP_Text spirit, ClientWorld world)

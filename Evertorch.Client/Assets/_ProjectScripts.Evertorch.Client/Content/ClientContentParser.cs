@@ -20,6 +20,7 @@ public static class ClientContentParser
     public const string JobsFile = "jobs.json";
     public const string MonstersFile = "monsters.json";
     public const string ItemsFile = "items.json";
+    public const string SkillsFile = "skills.json";
 
     private const int SupportedSchemaVersion = 1;
 
@@ -74,7 +75,8 @@ public static class ClientContentParser
         if (!TryGetListedFile(manifest, files, MapsFile, out byte[] mapsBytes, out error)
             || !TryGetListedFile(manifest, files, JobsFile, out byte[] jobsBytes, out error)
             || !TryGetListedFile(manifest, files, MonstersFile, out byte[] monstersBytes, out error)
-            || !TryGetListedFile(manifest, files, ItemsFile, out byte[] itemsBytes, out error))
+            || !TryGetListedFile(manifest, files, ItemsFile, out byte[] itemsBytes, out error)
+            || !TryGetListedFile(manifest, files, SkillsFile, out byte[] skillsBytes, out error))
         {
             return null;
         }
@@ -98,7 +100,13 @@ public static class ClientContentParser
         }
 
         Dictionary<ItemDefinitionId, ClientItem>? items = ParseItems(itemsBytes, out error);
-        return items == null ? null : new ClientContent(version, maps, jobs, monsters, items);
+        if (items == null)
+        {
+            return null;
+        }
+
+        Dictionary<SkillDefinitionId, ClientSkill>? skills = ParseSkills(skillsBytes, out error);
+        return skills == null ? null : new ClientContent(version, maps, jobs, monsters, items, skills);
     }
 
     private static bool TryGetListedFile(
@@ -290,6 +298,59 @@ public static class ClientContentParser
         }
 
         return items;
+    }
+
+    private static Dictionary<SkillDefinitionId, ClientSkill>? ParseSkills(byte[] skillsBytes, out string error)
+    {
+        error = string.Empty;
+        SkillsDto? dto = FromJson<SkillsDto>(skillsBytes);
+        if (dto == null || dto.definitions == null || dto.schemaVersion != SupportedSchemaVersion)
+        {
+            error = $"'{SkillsFile}' is not readable or has an unsupported schema version.";
+            return null;
+        }
+
+        var skills = new Dictionary<SkillDefinitionId, ClientSkill>();
+        foreach (SkillDto skill in dto.definitions)
+        {
+            if (!SkillDefinitionId.TryCreate(skill.id, out SkillDefinitionId id) || skills.ContainsKey(id))
+            {
+                error = $"'{SkillsFile}' has an invalid or repeated skill ID.";
+                return null;
+            }
+
+            if (!TryParseTargetType(skill.targetType, out SkillTargetType targetType))
+            {
+                error = $"Skill '{skill.id}': targetType is not enemy or self.";
+                return null;
+            }
+
+            if (!IsLogicalKey(skill.icon))
+            {
+                error = $"Skill '{skill.id}': icon is not a logical key.";
+                return null;
+            }
+
+            skills.Add(id, new ClientSkill(id, skill.displayName ?? string.Empty, targetType, skill.icon));
+        }
+
+        return skills;
+    }
+
+    private static bool TryParseTargetType(string? text, out SkillTargetType targetType)
+    {
+        switch (text)
+        {
+            case "enemy":
+                targetType = SkillTargetType.Enemy;
+                return true;
+            case "self":
+                targetType = SkillTargetType.Self;
+                return true;
+            default:
+                targetType = SkillTargetType.Enemy;
+                return false;
+        }
     }
 
     // The content tools enforce the same grammar. It is checked again here because a key that is a path would still
@@ -572,6 +633,22 @@ public static class ClientContentParser
         public string? id = string.Empty;
         public string? displayName = string.Empty;
         public string? model = string.Empty;
+        public string? icon = string.Empty;
+    }
+
+    [Serializable]
+    private sealed class SkillsDto
+    {
+        public int schemaVersion = 0;
+        public SkillDto[] definitions = Array.Empty<SkillDto>();
+    }
+
+    [Serializable]
+    private sealed class SkillDto
+    {
+        public string? id = string.Empty;
+        public string? displayName = string.Empty;
+        public string? targetType = string.Empty;
         public string? icon = string.Empty;
     }
     // ReSharper restore InconsistentNaming, RedundantDefaultMemberInitializer

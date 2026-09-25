@@ -9,13 +9,14 @@ using Object = UnityEngine.Object;
 namespace Evertorch.Client
 {
 /// <summary>
-///     Shows the fight the server reports: lunges, squashes, floating numbers, monster health bars, and dead bodies.
-///     It listens to <see cref="ClientWorld" /> and only draws; nothing here sends a command or changes what the
-///     client believes about the fight.
+///     Shows the fight the server reports: lunges, squashes, floating numbers, heals, monster health bars, cast bars,
+///     and dead bodies. It listens to <see cref="ClientWorld" /> and only draws; nothing here sends a command or
+///     changes what the client believes about the fight.
 /// </summary>
 public sealed class CombatPresenter : IDisposable
 {
     private const float BarHeight = 1.2f;
+    private const float CastBarHeight = 1.45f;
     private const float NumberHeight = 1.6f;
     private const float CriticalScale = 1.4f;
 
@@ -23,16 +24,22 @@ public sealed class CombatPresenter : IDisposable
     private static readonly Color CriticalColor = new(1f, 0.85f, 0.2f);
     private static readonly Color MissColor = new(0.7f, 0.7f, 0.75f);
     private static readonly Color LocalHitColor = new(1f, 0.35f, 0.3f);
+    private static readonly Color HealColor = new(0.35f, 0.9f, 0.4f);
     private static readonly Color BarBackColor = new(0.15f, 0.05f, 0.05f);
     private static readonly Color BarFillColor = new(0.85f, 0.2f, 0.2f);
+    private static readonly Color CastBackColor = new(0.05f, 0.08f, 0.2f);
+    private static readonly Color CastFillColor = new(0.3f, 0.55f, 1f);
 
     private readonly ClientWorld m_world;
     private readonly double m_tickSeconds;
     private readonly Dictionary<EntityId, HealthBar> m_bars = new();
+    private readonly Dictionary<EntityId, CastBar> m_castBars = new();
     private readonly Dictionary<EntityId, ushort> m_shownHealth = new();
     private readonly List<HitMark> m_due = new();
     private readonly Material m_barBack;
     private readonly Material m_barFill;
+    private readonly Material m_castBack;
+    private readonly Material m_castFill;
 
     public CombatPresenter(ClientWorld world, double tickSeconds, Material baseMaterial)
     {
@@ -45,8 +52,13 @@ public sealed class CombatPresenter : IDisposable
         m_tickSeconds = tickSeconds;
         m_barBack = new Material(baseMaterial) { color = BarBackColor };
         m_barFill = new Material(baseMaterial) { color = BarFillColor };
+        m_castBack = new Material(baseMaterial) { color = CastBackColor };
+        m_castFill = new Material(baseMaterial) { color = CastFillColor };
         m_world.AttackStartedReceived += OnAttackStarted;
         m_world.DamageReceived += OnDamage;
+        m_world.SkillCastStartedReceived += OnSkillCastStarted;
+        m_world.SkillResolvedReceived += OnSkillResolved;
+        m_world.LocalCastEnded += OnLocalCastEnded;
         m_world.EntityDiedReceived += OnEntityDied;
         m_world.EntityRevivedReceived += OnEntityRevived;
         m_world.RemoteSpawned += OnRemoteSpawned;
@@ -65,6 +77,9 @@ public sealed class CombatPresenter : IDisposable
     {
         m_world.AttackStartedReceived -= OnAttackStarted;
         m_world.DamageReceived -= OnDamage;
+        m_world.SkillCastStartedReceived -= OnSkillCastStarted;
+        m_world.SkillResolvedReceived -= OnSkillResolved;
+        m_world.LocalCastEnded -= OnLocalCastEnded;
         m_world.EntityDiedReceived -= OnEntityDied;
         m_world.EntityRevivedReceived -= OnEntityRevived;
         m_world.RemoteSpawned -= OnRemoteSpawned;
@@ -78,13 +93,29 @@ public sealed class CombatPresenter : IDisposable
         }
 
         m_bars.Clear();
+        foreach (CastBar bar in m_castBars.Values)
+        {
+            if (bar != null)
+            {
+                Object.Destroy(bar.gameObject);
+            }
+        }
+
+        m_castBars.Clear();
         Object.Destroy(m_barBack);
         Object.Destroy(m_barFill);
+        Object.Destroy(m_castBack);
+        Object.Destroy(m_castFill);
     }
 
     public bool TryGetHealthBar(EntityId entity, out HealthBar? bar)
     {
         return m_bars.TryGetValue(entity, out bar);
+    }
+
+    public bool TryGetCastBar(EntityId caster, out CastBar? bar)
+    {
+        return m_castBars.TryGetValue(caster, out bar);
     }
 
     /// <summary>
@@ -108,6 +139,7 @@ public sealed class CombatPresenter : IDisposable
                 Timeline.Lunge(self, localNow, remoteNow),
                 Timeline.Squash(self, localNow, remoteNow),
                 Timeline.IsShownDead(self, m_world.IsLocalDead, localNow, remoteNow));
+            PresentCastBar(self, local, localNow, remoteNow, camera);
         }
 
         foreach (KeyValuePair<EntityId, EntityView> pair in remotes)
@@ -126,11 +158,18 @@ public sealed class CombatPresenter : IDisposable
             {
                 PresentHealthBar(remote, pair.Value, isShownDead, camera);
             }
+
+            PresentCastBar(pair.Key, pair.Value, localNow, remoteNow, camera);
         }
     }
 
     private static string Describe(HitMark hit)
     {
+        if (hit.IsHeal)
+        {
+            return "+" + hit.Amount.ToString(CultureInfo.InvariantCulture);
+        }
+
         return hit.Result switch
         {
             CombatResult.Miss => "Miss",
@@ -158,6 +197,30 @@ public sealed class CombatPresenter : IDisposable
         bar.Show(view.transform.position + Vector3.up * BarHeight, camera, shown);
     }
 
+    private void PresentCastBar(EntityId caster, EntityView view, double localNow, double remoteNow, Camera? camera)
+    {
+        bool isCasting = Timeline.TryGetCastProgress(caster, localNow, remoteNow, out float progress);
+        if (!m_castBars.TryGetValue(caster, out CastBar? bar))
+        {
+            if (!isCasting)
+            {
+                return;
+            }
+
+            bar = CastBar.Create(m_castBack, m_castFill);
+            m_castBars.Add(caster, bar);
+        }
+
+        if (isCasting)
+        {
+            bar.Show(view.transform.position + Vector3.up * CastBarHeight, camera, progress);
+        }
+        else
+        {
+            bar.Hide();
+        }
+    }
+
     private void ShowHit(HitMark hit, EntityView? local, IReadOnlyDictionary<EntityId, EntityView> remotes)
     {
         bool isLocal = hit.Target == m_world.LocalEntity;
@@ -172,12 +235,14 @@ public sealed class CombatPresenter : IDisposable
             return;
         }
 
-        Color color = hit.Result switch
-        {
-            CombatResult.Miss => MissColor,
-            CombatResult.Critical => CriticalColor,
-            _ => isLocal ? LocalHitColor : HitColor
-        };
+        Color color = hit.IsHeal
+            ? HealColor
+            : hit.Result switch
+            {
+                CombatResult.Miss => MissColor,
+                CombatResult.Critical => CriticalColor,
+                _ => isLocal ? LocalHitColor : HitColor
+            };
         float scale = hit.Result == CombatResult.Critical ? CriticalScale : 1f;
         FloatingNumber.Create(Describe(hit), color, scale, view.transform.position + Vector3.up * NumberHeight);
         NumbersShown++;
@@ -210,11 +275,58 @@ public sealed class CombatPresenter : IDisposable
                 damage.TargetHealthPermille));
     }
 
+    // The local cast is drawn from when its message arrived, like the local swing, and a remote one on its caster's
+    // interpolated timeline.
+    private void OnSkillCastStarted(SkillCastStarted started)
+    {
+        bool isLocal = started.Caster == m_world.LocalEntity;
+        double at = isLocal ? m_world.ServerTime.Now : started.StartTick * m_tickSeconds;
+        Timeline.BeginCast(started.Caster, started.Target, at, started.CastMs / 1000.0, isLocal);
+    }
+
+    private void OnSkillResolved(SkillResolved resolved)
+    {
+        CombatResult result;
+        switch (resolved.Outcome)
+        {
+            case SkillOutcome.Hit:
+            case SkillOutcome.Healed:
+                result = CombatResult.Hit;
+                break;
+            case SkillOutcome.Miss:
+                result = CombatResult.Miss;
+                break;
+            case SkillOutcome.Critical:
+                result = CombatResult.Critical;
+                break;
+            default:
+                return;
+        }
+
+        bool isLocal = resolved.Target == m_world.LocalEntity;
+        double at = isLocal ? m_world.ServerTime.Now : resolved.ServerTick * m_tickSeconds;
+        Timeline.AddHit(
+            new HitMark(
+                resolved.Target,
+                at,
+                isLocal,
+                result,
+                resolved.Amount,
+                resolved.TargetHealthPermille,
+                resolved.Outcome == SkillOutcome.Healed));
+    }
+
+    private void OnLocalCastEnded()
+    {
+        Timeline.EndCast(m_world.LocalEntity);
+    }
+
     private void OnEntityDied(EntityDied died)
     {
         bool isLocal = died.Entity == m_world.LocalEntity;
         double at = isLocal ? m_world.ServerTime.Now : died.ServerTick * m_tickSeconds;
         Timeline.MarkDeath(died.Entity, at, isLocal);
+        Timeline.EndCastsOf(died.Entity);
     }
 
     private void OnEntityRevived(EntityRevived revived)
@@ -240,6 +352,15 @@ public sealed class CombatPresenter : IDisposable
             if (bar != null)
             {
                 Object.Destroy(bar.gameObject);
+            }
+        }
+
+        if (m_castBars.TryGetValue(remote.Entity, out CastBar? castBar))
+        {
+            m_castBars.Remove(remote.Entity);
+            if (castBar != null)
+            {
+                Object.Destroy(castBar.gameObject);
             }
         }
     }

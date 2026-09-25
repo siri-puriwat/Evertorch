@@ -15,7 +15,7 @@ namespace Evertorch.Client.Tests.EditMode
 public sealed class PresentationBoundaryTests
 {
     private static readonly Regex Forbidden = new(
-        @"ClientConnection|ICombatCommandSink|IMoveIntentSink|\bSend\w*\(|AutoAttackState|MovementController"
+        @"ClientConnection|ICombatCommandSink|IMoveIntentSink|\bSend\w*\(|AutoAttackState|SkillState|MovementController"
         + @"|LocalPlayerDriver|MovementPredictor|\.Predictor\b|\.IsLocked\b|RequestRespawn|\.ActionLock\b"
         + @"|\.On(Spawn|Despawn|Snapshot|TargetChanged|AttackStarted|Damage|EntityDied|EntityRevived|ItemDropped"
         + @"|CharacterHealth|SkillCastStarted|SkillResolved|SkillList|LocalCancel)\("
@@ -26,9 +26,10 @@ public sealed class PresentationBoundaryTests
     // name only one client type has is matched on any receiver, so a local copy of the controller or the predictor
     // cannot hide the call.
     private static readonly Regex UiForbidden = new(
-        @"ICombatCommandSink|IMoveIntentSink|\.Send\w*\(|AutoAttackState|LocalPlayerDriver|PickupState|\.ActionLock\b"
-        + @"|MoveIntentProducer|\bnew\s+(MoveIntent|ClientHello|EnterWorldRequest|MoveInput|StopMovement|TargetEntity"
-        + @"|AttackEntity|CancelAction|Respawn|Logout|PickupItem|CreateCharacter|InventoryResyncRequest)\s*\("
+        @"ICombatCommandSink|IMoveIntentSink|\.Send\w*\(|AutoAttackState|LocalPlayerDriver|PickupState|SkillState"
+        + @"|\.ActionLock\b|MoveIntentProducer|\bnew\s+(MoveIntent|ClientHello|EnterWorldRequest|MoveInput|StopMovement"
+        + @"|TargetEntity|AttackEntity|CancelAction|UseSkill|Respawn|Logout|PickupItem|CreateCharacter"
+        + @"|InventoryResyncRequest)\s*\("
         + @"|\.Connection\??\.(Connect|Disconnect|EnterWorld|CreateCharacter|Poll)\("
         + @"|\.Controller\??\.(Cancel\w*|Tick)\("
         + @"|\.(SetManualDirection|TryMoveTo|Chase\w*|StopChase|CancelPath|NextTick|Reconcile|Teleport"
@@ -42,7 +43,7 @@ public sealed class PresentationBoundaryTests
         + @"|IsDead|LocalSpirit|LocalMaximumSpirit|Level|Experience|ExperienceToNextLevel)\s*=(?![=>])");
 
     private static readonly Regex UsesPresentation = new(
-        @"\b(CombatAnimation|CombatTimeline|CombatPresenter|HitMark|FloatingNumber|HealthBar|EntityView)\b"
+        @"\b(CombatAnimation|CombatTimeline|CombatPresenter|HitMark|FloatingNumber|HealthBar|CastBar|EntityView)\b"
         + @"|\bAnimator\b|AnimationEvent");
 
     private static string ScriptsFolder(string folder)
@@ -79,12 +80,14 @@ public sealed class PresentationBoundaryTests
         string[] probes =
         {
             "connection.SendAttack(target);", "m_world.OnDamage(damage);", "remote.HealthPermille = 0;",
-            "controller.IsLocked = true;", "new AutoAttackState(world, controller, sink, 0.05);"
+            "controller.IsLocked = true;", "new AutoAttackState(world, controller, sink, 0.05);",
+            "var skill = new SkillState(world, controller, sink);"
         };
 
         Assert.That(probes.Where(probe => !Forbidden.IsMatch(probe)), Is.Empty);
         Assert.That(Forbidden.IsMatch("if (remote.HealthPermille == 0)"), Is.False, "reading is allowed");
         Assert.That(UsesPresentation.IsMatch("m_presenter = new CombatPresenter(world);"), Is.True);
+        Assert.That(UsesPresentation.IsMatch("CastBar bar = CastBar.Create(back, fill);"), Is.True);
     }
 
     [Test]
@@ -100,7 +103,8 @@ public sealed class PresentationBoundaryTests
             "world.ServerTime.Observe(now);", "remote.Buffer.Clear();", "m_predictor.Apply(intent);",
             "controller.IsDead = true;", "world.Target =", "world.OnCharacterProgress(progress);",
             "world.Level = 3;", "world.LocalSpirit = 0;", "world.OnSkillResolved(resolved);",
-            "m_world.OnLocalCancel();"
+            "m_world.OnLocalCancel();", "var use = new UseSkill(skill, target, 3);",
+            "SkillState? skill = m_client.Skill;"
         };
         string[] allowed =
         {
@@ -108,7 +112,8 @@ public sealed class PresentationBoundaryTests
             "int rtt = client.Connection.RoundTripMilliseconds;", "WorldPosition self = world.Predictor.Position;",
             "if (m_client.Clock != null && m_client.Clock.SkippedTicks > 0)", "bool isLocked = controller.IsLocked;",
             "if (target.IsDead == wasDead)", "world.Inventory.Changed += Refresh;", "m_lines.Clear();",
-            "world.LeveledUp += OnLeveledUp;", "ShowCharacter(played.Value.Name, world.Level);"
+            "world.LeveledUp += OnLeveledUp;", "ShowCharacter(played.Value.Name, world.Level);",
+            "m_client.UseSkillSlot(number);", "Show(slot, world.CooldownRemaining(slot.Skill));"
         };
         string[] lockProbes = { "world.ActionLock.LockForSwing(4);", "bool held = m_world.ActionLock.IsCastLocked;" };
 

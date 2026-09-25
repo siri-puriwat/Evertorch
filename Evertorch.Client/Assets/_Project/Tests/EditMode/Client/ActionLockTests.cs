@@ -47,6 +47,44 @@ public sealed class ActionLockTests
     }
 
     [Test]
+    public void HasBeenFreeFor_CountsTheTicksSinceTheLastHeldOne()
+    {
+        var actionLock = new ActionLock();
+        bool freshWorld = actionLock.HasBeenFreeFor(2);
+        actionLock.LockForSwing(1);
+        bool whileHeld = actionLock.HasBeenFreeFor(0);
+
+        bool[] free = new bool[3];
+        for (int tick = 0; tick < free.Length; tick++)
+        {
+            actionLock.Advance();
+            free[tick] = actionLock.HasBeenFreeFor(2);
+        }
+
+        Assert.That(freshWorld, Is.True, "nothing has held a new world's player");
+        Assert.That(whileHeld, Is.False);
+        Assert.That(free, Is.EqualTo(new[] { false, false, true }), "the held tick, then two free ones");
+    }
+
+    [Test]
+    public void IsSwingDueWithin_CountsDownToTheNextSwing_WithoutHoldingThePlayer()
+    {
+        var actionLock = new ActionLock();
+        actionLock.LockForSwing(1, 4);
+
+        bool[] due = new bool[5];
+        bool[] held = new bool[5];
+        for (int tick = 0; tick < due.Length; tick++)
+        {
+            due[tick] = actionLock.IsSwingDueWithin(2);
+            held[tick] = actionLock.Advance();
+        }
+
+        Assert.That(due, Is.EqualTo(new[] { false, false, true, true, false }));
+        Assert.That(held, Is.EqualTo(new[] { true, false, false, false, false }));
+    }
+
+    [Test]
     public void LockForSwing_WithNoTicks_HoldsNothing()
     {
         var actionLock = new ActionLock();

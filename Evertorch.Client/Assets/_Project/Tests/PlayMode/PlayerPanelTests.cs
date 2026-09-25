@@ -8,6 +8,7 @@ using NUnit.Framework;
 using TMPro;
 using UnityEngine;
 using UnityEngine.TestTools;
+using UnityEngine.UI;
 using EntityId = Evertorch.Game.EntityId;
 
 namespace Evertorch.Client.Tests.PlayMode
@@ -94,6 +95,34 @@ public sealed class PlayerPanelTests
     private static TMP_Text Label(Component panel, string objectName)
     {
         return panel.GetComponentsInChildren<TMP_Text>(true).Single(label => label.name == objectName);
+    }
+
+    private static GameObject Slot(SkillBar bar, int slot)
+    {
+        return bar.GetComponentsInChildren<Button>(true).Single(button => button.name == $"Slot {slot}").gameObject;
+    }
+
+    private static string SlotText(SkillBar bar, int slot)
+    {
+        return Slot(bar, slot).GetComponentInChildren<TMP_Text>(true).text;
+    }
+
+    private static SkillList StrikeAndFirstAid(uint strikeCooldownLeftMs)
+    {
+        return new SkillList(
+            new[]
+            {
+                new SkillListEntry(new SkillDefinitionId("skill.strike"), 1.5f, 8, 2000, 500, strikeCooldownLeftMs),
+                new SkillListEntry(new SkillDefinitionId("skill.first_aid"), 0f, 3, 0, 0, 0)
+            });
+    }
+
+    // A screen-space overlay canvas places its corners in screen pixels.
+    private static Rect ScreenRect(Transform target)
+    {
+        var corners = new Vector3[4];
+        ((RectTransform)target).GetWorldCorners(corners);
+        return Rect.MinMaxRect(corners[0].x, corners[0].y, corners[2].x, corners[2].y);
     }
 
     [UnityTest]
@@ -275,6 +304,76 @@ public sealed class PlayerPanelTests
         Assert.That(full.Split('\n'), Is.EqualTo(Enumerable.Repeat("That is too far away.", FeedbackLines.MaxLines)));
         Assert.That(lines.Text, Is.Empty);
         Assert.That(lines.IsVisible, Is.False);
+    }
+
+    [UnityTest]
+    public IEnumerator SkillBar_ShowsTheListedSlots_WithTheirKeyOrWhatIsLeftOfTheCooldown()
+    {
+        GameClient client = CreateIdleClient();
+        ClientWorld world = GiveWorld(client);
+        var bar = SkillBar.Create(client);
+        m_created.Add(bar.gameObject);
+        yield return null;
+        bool isShownWithoutAList = bar.IsVisible;
+
+        world.OnSkillList(StrikeAndFirstAid(1500));
+        yield return null;
+        string strike = SlotText(bar, 1);
+        string firstAid = SlotText(bar, 2);
+        bool isFocusShown = Slot(bar, 3).activeSelf;
+        int changes = bar.TextChanges;
+        yield return null;
+        int changesLater = bar.TextChanges;
+        world.Advance(1.5f);
+        yield return null;
+
+        Assert.That(isShownWithoutAList, Is.False);
+        Assert.That(strike, Is.EqualTo("skill.strike\n1.5 s"), "without content the bar names the definition");
+        Assert.That(firstAid, Is.EqualTo("skill.first_aid\n2"), "a skill ready to use shows its key");
+        Assert.That(isFocusShown, Is.False, "Focus waits until the server lists it");
+        Assert.That(changesLater, Is.EqualTo(changes), "an unchanged tenth of a second rewrites nothing");
+        Assert.That(SlotText(bar, 1), Is.EqualTo("skill.strike\n1"));
+        Assert.That(bar.IsVisible, Is.True);
+        Assert.That(Slot(bar, 1).GetComponent<Button>().navigation.mode, Is.EqualTo(Navigation.Mode.None));
+    }
+
+    [UnityTest]
+    public IEnumerator SkillBarAndFeedbackLines_AtThisScreenSize_ClearEachOtherTheStickAndTheTouchButtons()
+    {
+        GameClient client = CreateIdleClient();
+        ClientWorld world = GiveWorld(client);
+        var touch = TouchControls.Create();
+        m_created.Add(touch.gameObject);
+        touch.SetVisible(true);
+        var bar = SkillBar.Create(client);
+        m_created.Add(bar.gameObject);
+        var lines = FeedbackLines.Create(client);
+        m_created.Add(lines.gameObject);
+        yield return null;
+
+        world.OnSkillList(StrikeAndFirstAid(0));
+        for (int index = 0; index < FeedbackLines.MaxLines; index++)
+        {
+            world.OnCommandRejected(new CommandRejected(3, CommandRejectionReason.OutOfRange));
+        }
+
+        yield return null;
+        yield return null;
+        yield return null;
+        Rect shownBar = ScreenRect(bar.transform.Find("Bar"));
+        Rect shownLines = ScreenRect(lines.transform.Find("Panel"));
+        var covered = new List<Rect> { ScreenRect(touch.StickArea!) };
+        covered.AddRange(
+            new[] { "Next", "Previous", "Clear" }.Select(name => ScreenRect(
+                touch.GetComponentsInChildren<RectTransform>(true).Single(rect => rect.name == name))));
+        float unitsToPixels = Screen.width / ClientUI.CanvasWidth;
+        Debug.Log($"Panels at {Screen.width} x {Screen.height}: bar {shownBar}, lines {shownLines}");
+
+        Assert.That(lines.IsVisible, Is.True);
+        Assert.That(shownLines.yMin - shownBar.yMax, Is.GreaterThanOrEqualTo(16f * unitsToPixels - 0.5f));
+        Assert.That(shownLines.yMin, Is.GreaterThanOrEqualTo(0.2f * Screen.height - 0.5f));
+        Assert.That(covered.Where(rect => rect.Overlaps(shownBar)), Is.Empty, "the bar is clear of the touch controls");
+        Assert.That(covered.Where(rect => rect.Overlaps(shownLines)), Is.Empty, "the lines are too");
     }
 
     [UnityTest]

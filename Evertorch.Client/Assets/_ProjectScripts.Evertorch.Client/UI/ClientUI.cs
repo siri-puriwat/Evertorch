@@ -10,7 +10,12 @@ namespace Evertorch.Client
 /// </summary>
 public static class ClientUI
 {
-    private static readonly Vector2 ReferenceResolution = new(1080f, 1920f);
+    /// <summary>
+    ///     Every canvas is this many units wide, whatever the screen; its height follows the screen's shape.
+    /// </summary>
+    public const float CanvasWidth = 1080f;
+
+    private static readonly Vector2 ReferenceResolution = new(CanvasWidth, 1920f);
 
     /// <summary>
     ///     The event system every client canvas shares, created under <paramref name="owner" /> when there is none yet.

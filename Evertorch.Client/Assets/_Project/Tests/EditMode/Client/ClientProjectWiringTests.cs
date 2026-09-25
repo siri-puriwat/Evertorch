@@ -36,6 +36,9 @@ public sealed class ClientProjectWiringTests
     [TestCase("Player/Orbit")]
     [TestCase("Player/Zoom")]
     [TestCase("Player/ZoomStep")]
+    [TestCase("Player/Slot1")]
+    [TestCase("Player/Slot2")]
+    [TestCase("Player/Slot3")]
     public void InputActions_HaveTheActionsTheClientBinds(string actionPath)
     {
         Assert.That(LoadActions().FindAction(actionPath), Is.Not.Null);
@@ -102,6 +105,23 @@ public sealed class ClientProjectWiringTests
 
         string[] paths = moveTo.bindings.Select(binding => binding.path).ToArray();
         Assert.That(paths, Is.EquivalentTo(new[] { "<Mouse>/leftButton", "<Touchscreen>/touch*/tap" }));
+    }
+
+    [Test]
+    public void InputActions_SkillSlotsFollowThePrototypeControls()
+    {
+        InputActionAsset actions = LoadActions();
+
+        Assert.That(
+            Paths(actions, "Player/Slot1"),
+            Is.EquivalentTo(new[] { "<Keyboard>/1", "<Gamepad>/buttonSouth" }));
+        Assert.That(
+            Paths(actions, "Player/Slot2"),
+            Is.EquivalentTo(new[] { "<Keyboard>/2", "<Gamepad>/leftTrigger" }));
+        Assert.That(
+            Paths(actions, "Player/Slot3"),
+            Is.EquivalentTo(new[] { "<Keyboard>/3", "<Gamepad>/rightTrigger" }));
+        Assert.That(SkillSlots.Count, Is.EqualTo(3), "one action per slot of the bar");
     }
 
     [Test]

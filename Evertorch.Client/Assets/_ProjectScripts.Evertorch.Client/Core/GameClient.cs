@@ -68,10 +68,12 @@ public sealed class GameClient : MonoBehaviour
     private PointerMoveSource? m_pointerSource;
     private PointerMoveHandler? m_pointerHandler;
     private CombatInputSource? m_combatSource;
+    private SkillInputSource? m_skillSource;
     private CameraInputSource? m_cameraSource;
     private TargetMarker? m_targetMarker;
     private AutoAttackState? m_autoAttack;
     private PickupState? m_pickup;
+    private SkillState? m_skill;
     private MovementController? m_controller;
     private LocalPlayerDriver? m_driver;
     private FixedTickClock? m_clock;
@@ -86,6 +88,7 @@ public sealed class GameClient : MonoBehaviour
     private StatusBar? m_statusBar;
     private TargetFrame? m_targetFrame;
     private InventoryWindow? m_inventoryWindow;
+    private SkillBar? m_skillBar;
     private FeedbackLines? m_feedback;
     private CombatPresenter? m_combat;
     private Material? m_runtimeMaterial;
@@ -198,6 +201,8 @@ public sealed class GameClient : MonoBehaviour
         m_targetFrame.transform.SetParent(transform, false);
         m_inventoryWindow = InventoryWindow.Create(this);
         m_inventoryWindow.transform.SetParent(transform, false);
+        m_skillBar = SkillBar.Create(this);
+        m_skillBar.transform.SetParent(transform, false);
         m_feedback = FeedbackLines.Create(this);
         m_feedback.transform.SetParent(transform, false);
         m_login = LoginPanel.Create(this);
@@ -226,6 +231,7 @@ public sealed class GameClient : MonoBehaviour
             // A click made while there is no world to walk in is dropped, not saved up for the next one.
             m_pointerSource?.TryTakeRequest(out Vector2 _);
             m_combatSource?.TakeRequest();
+            m_skillSource?.TakeSlot();
             return;
         }
 
@@ -243,6 +249,11 @@ public sealed class GameClient : MonoBehaviour
         m_world.CollectDropCandidates(m_pointerCandidates);
         HandlePointerRequest();
         HandleCombatRequest();
+        int slot = m_skillSource?.TakeSlot() ?? 0;
+        if (slot != 0)
+        {
+            UseSkillSlot(slot);
+        }
 
         int ticks = m_clock.Advance(Time.unscaledDeltaTime);
         for (int index = 0; index < ticks; index++)
@@ -301,6 +312,7 @@ public sealed class GameClient : MonoBehaviour
         TearDownWorld();
         m_pointerSource?.Dispose();
         m_combatSource?.Dispose();
+        m_skillSource?.Dispose();
         m_cameraSource?.Dispose();
         m_socket?.Dispose();
         m_viewCatalog.Dispose();
@@ -411,6 +423,33 @@ public sealed class GameClient : MonoBehaviour
         {
             Connection?.SendRespawn();
         }
+    }
+
+    /// <summary>
+    ///     Uses the skill in a slot of the skill bar, numbered from 1 (Prototype Content §4): what the slot's key,
+    ///     gamepad button, and button on the bar ask for. An enemy skill is for the confirmed target.
+    /// </summary>
+    public void UseSkillSlot(int slot)
+    {
+        ClientContent? content = m_contentLoader.Content;
+        if (m_world == null
+            || m_skill == null
+            || content == null
+            || !SkillSlots.TryGetSkill(slot, out SkillDefinitionId skill)
+            || !content.TryGetSkill(skill, out ClientSkill? definition)
+            || definition == null)
+        {
+            return;
+        }
+
+        if (definition.TargetType == SkillTargetType.Enemy && m_world.Target == default)
+        {
+            m_feedback?.Add("Choose a target first.");
+            return;
+        }
+
+        m_pickup?.Cancel();
+        m_skill.Use(skill, definition.TargetType);
     }
 
     /// <summary>
@@ -547,13 +586,15 @@ public sealed class GameClient : MonoBehaviour
         m_clock = new FixedTickClock(1f / Connection.ServerTickRate);
         m_autoAttack = new AutoAttackState(world, m_controller, Connection, 1.0 / Connection.ServerTickRate);
         m_pickup = new PickupState(world, m_controller, Connection);
+        m_skill = new SkillState(world, m_controller, Connection, 1.0 / Connection.ServerTickRate);
         m_driver = new LocalPlayerDriver(
             m_controller,
             new MoveIntentProducer(),
             world,
             Connection,
             m_autoAttack,
-            m_pickup);
+            m_pickup,
+            m_skill);
         Status = $"In {map.DisplayName}";
     }
 
@@ -599,6 +640,21 @@ public sealed class GameClient : MonoBehaviour
         {
             m_combatSource = new CombatInputSource(next, previous, clear, attack, respawn, pickup);
         }
+
+        var slots = new List<InputAction>();
+        for (int slot = 1; slot <= SkillSlots.Count; slot++)
+        {
+            InputAction? action = actions?.FindAction($"Player/Slot{slot}");
+            if (action != null)
+            {
+                slots.Add(action);
+            }
+        }
+
+        if (slots.Count == SkillSlots.Count)
+        {
+            m_skillSource = new SkillInputSource(slots);
+        }
     }
 
     private void HandlePointerRequest()
@@ -621,6 +677,7 @@ public sealed class GameClient : MonoBehaviour
         {
             m_autoAttack?.OnWalkRequested();
             m_pickup?.Cancel();
+            m_skill?.Cancel();
             m_marker?.ShowAccepted(m_controller.Path[m_controller.Path.Count - 1]);
         }
         else if (result == PointerMoveResult.Refused)
@@ -687,6 +744,7 @@ public sealed class GameClient : MonoBehaviour
     private void Attack(EntityId target)
     {
         m_pickup?.Cancel();
+        m_skill?.Cancel();
         m_autoAttack?.Attack(target);
     }
 
@@ -694,6 +752,7 @@ public sealed class GameClient : MonoBehaviour
     private void StartPickup(EntityId drop)
     {
         m_autoAttack?.OnWalkRequested();
+        m_skill?.Cancel();
         m_pickup?.Pickup(drop);
     }
 
@@ -749,6 +808,7 @@ public sealed class GameClient : MonoBehaviour
         m_driver = null;
         m_autoAttack = null;
         m_pickup = null;
+        m_skill = null;
         m_controller = null;
         m_clock = null;
         foreach (EntityView view in m_remoteViews.Values)

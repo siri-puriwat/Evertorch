@@ -11,9 +11,9 @@ namespace Evertorch.Server.Tests
 {
 /// <summary>
 ///     A client over a real UDP socket, composed the way <c>GameClient</c> composes it: the LiteNetLib transport behind
-///     the simulated link, the connection, and once in the world the controller, auto-attack, pickup, and driver. The
-///     test's own thread plays the Unity frame loop: it polls, runs whole ticks at the server's rate from a real clock,
-///     and makes the requests the player's keys would make.
+///     the simulated link, the connection, and once in the world the controller, auto-attack, pickup, skill, and
+///     driver. The test's own thread plays the Unity frame loop: it polls, runs whole ticks at the server's rate from a
+///     real clock, and makes the requests the player's keys would make.
 /// </summary>
 internal sealed class SocketClient : IDisposable
 {
@@ -22,6 +22,7 @@ internal sealed class SocketClient : IDisposable
     public static readonly TimeSpan Limit = TimeSpan.FromSeconds(15);
 
     private readonly LiteNetLibClientTransport m_socket;
+    private readonly ServerContent m_content;
     private readonly AutoEnter m_selection;
     private readonly Stopwatch m_clock = Stopwatch.StartNew();
     private readonly TargetCycler m_targetCycler = new();
@@ -30,12 +31,14 @@ internal sealed class SocketClient : IDisposable
     private MovementController? m_controller;
     private AutoAttackState? m_autoAttack;
     private PickupState? m_pickup;
+    private SkillState? m_skill;
     private LocalPlayerDriver? m_driver;
     private FixedTickClock? m_ticks;
     private double m_lastSeconds;
 
     public SocketClient(ServerContent content, string identity, string characterName)
     {
+        m_content = content;
         m_socket = new LiteNetLibClientTransport(ConnectionKey, DisconnectTimeoutMilliseconds);
         Link = new LossyTransport(m_socket, 4, () => m_clock.Elapsed.TotalSeconds);
         Connection = new ClientConnection(
@@ -60,6 +63,8 @@ internal sealed class SocketClient : IDisposable
     public AutoAttackState AutoAttack => m_autoAttack ?? throw new InvalidOperationException("Not in the world.");
 
     public PickupState Pickup => m_pickup ?? throw new InvalidOperationException("Not in the world.");
+
+    public SkillState Skill => m_skill ?? throw new InvalidOperationException("Not in the world.");
 
     public void Dispose()
     {
@@ -190,6 +195,16 @@ internal sealed class SocketClient : IDisposable
     }
 
     /// <summary>
+    ///     A skill-bar key: the skill on the caster, or at the confirmed target once the approach is in range. False
+    ///     when the skill state starts nothing.
+    /// </summary>
+    public bool UseSkill(SkillDefinitionId skill)
+    {
+        Pickup.Cancel();
+        return Skill.Use(skill, m_content.Skills[skill].TargetType);
+    }
+
+    /// <summary>
     ///     Horizontal distance from the predicted position.
     /// </summary>
     public float DistanceTo(WorldPosition position)
@@ -206,13 +221,15 @@ internal sealed class SocketClient : IDisposable
         m_controller = new MovementController(world.Grid);
         m_autoAttack = new AutoAttackState(world, m_controller, Connection, 1.0 / Connection.ServerTickRate);
         m_pickup = new PickupState(world, m_controller, Connection);
+        m_skill = new SkillState(world, m_controller, Connection, 1.0 / Connection.ServerTickRate);
         m_driver = new LocalPlayerDriver(
             m_controller,
             new MoveIntentProducer(),
             world,
             Connection,
             m_autoAttack,
-            m_pickup);
+            m_pickup,
+            m_skill);
         m_ticks = new FixedTickClock(1f / Connection.ServerTickRate);
         m_lastSeconds = m_clock.Elapsed.TotalSeconds;
     }

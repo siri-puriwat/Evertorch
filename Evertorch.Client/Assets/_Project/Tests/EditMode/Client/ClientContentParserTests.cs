@@ -34,10 +34,16 @@ public sealed class ClientContentParserTests
         "{\"schemaVersion\":1,\"definitions\":[{\"id\":\"item.material.slime_gel\",\"displayName\":\"Slime Gel\","
         + "\"type\":\"material\",\"stackLimit\":999,\"icon\":\"item_slime_gel\",\"model\":\"pickup_slime_gel\"}]}";
 
+    private const string Skills =
+        "{\"schemaVersion\":1,\"definitions\":[{\"id\":\"skill.first_aid\",\"displayName\":\"First Aid\","
+        + "\"targetType\":\"self\",\"icon\":\"skill_first_aid\"},{\"id\":\"skill.strike\","
+        + "\"displayName\":\"Strike\",\"targetType\":\"enemy\",\"icon\":\"skill_strike\"}]}";
+
     [TestCase(ClientContentParser.MapsFile)]
     [TestCase(ClientContentParser.JobsFile)]
     [TestCase(ClientContentParser.MonstersFile)]
     [TestCase(ClientContentParser.ItemsFile)]
+    [TestCase(ClientContentParser.SkillsFile)]
     public void Parse_WhenARequiredFileIsNotInThePackage_IsRefused(string fileName)
     {
         var package = Package.Without(fileName);
@@ -164,6 +170,31 @@ public sealed class ClientContentParserTests
         "\"schemaVersion\":1",
         "\"schemaVersion\":2",
         "'items.json' is not readable or has an unsupported schema version")]
+    [TestCase(
+        ClientContentParser.SkillsFile,
+        "\"targetType\":\"self\"",
+        "\"targetType\":\"ally\"",
+        "Skill 'skill.first_aid': targetType is not enemy or self")]
+    [TestCase(
+        ClientContentParser.SkillsFile,
+        "\"id\":\"skill.strike\"",
+        "\"id\":\"skill.first_aid\"",
+        "'skills.json' has an invalid or repeated skill ID")]
+    [TestCase(
+        ClientContentParser.SkillsFile,
+        "\"id\":\"skill.strike\"",
+        "\"id\":\"item.strike\"",
+        "'skills.json' has an invalid or repeated skill ID")]
+    [TestCase(
+        ClientContentParser.SkillsFile,
+        "\"icon\":\"skill_strike\"",
+        "\"icon\":\"Skills/Strike.png\"",
+        "Skill 'skill.strike': icon is not a logical key")]
+    [TestCase(
+        ClientContentParser.SkillsFile,
+        "\"schemaVersion\":1",
+        "\"schemaVersion\":2",
+        "'skills.json' is not readable or has an unsupported schema version")]
     public void Parse_ForMalformedDefinitions_IsRefusedWithAReason(
         string fileName,
         string oldText,
@@ -219,7 +250,8 @@ public sealed class ClientContentParserTests
                 [ClientContentParser.MapsFile] = maps,
                 [ClientContentParser.JobsFile] = Jobs,
                 [ClientContentParser.MonstersFile] = Monsters,
-                [ClientContentParser.ItemsFile] = Items
+                [ClientContentParser.ItemsFile] = Items,
+                [ClientContentParser.SkillsFile] = Skills
             };
         }
 
@@ -342,6 +374,13 @@ public sealed class ClientContentParserTests
         Assert.That(item!.DisplayName, Is.EqualTo("Slime Gel"));
         Assert.That(item.ModelKey, Is.EqualTo("pickup_slime_gel"));
         Assert.That(item.IconKey, Is.EqualTo("item_slime_gel"));
+        Assert.That(content.TryGetSkill(new SkillDefinitionId("skill.strike"), out ClientSkill? strike), Is.True);
+        Assert.That(strike!.DisplayName, Is.EqualTo("Strike"));
+        Assert.That(strike.TargetType, Is.EqualTo(SkillTargetType.Enemy));
+        Assert.That(strike.IconKey, Is.EqualTo("skill_strike"));
+        Assert.That(content.TryGetSkill(new SkillDefinitionId("skill.first_aid"), out ClientSkill? aid), Is.True);
+        Assert.That(aid!.TargetType, Is.EqualTo(SkillTargetType.Self));
+        Assert.That(content.Skills.Count(), Is.EqualTo(2));
     }
 
     [Test]
@@ -402,7 +441,9 @@ public sealed class ClientContentParserTests
         IReadOnlyList<string> names = ClientContentParser.ReadFileList(package.Manifest, out string error);
 
         Assert.That(error, Is.Empty);
-        Assert.That(names, Is.EquivalentTo(new[] { "items.json", "jobs.json", "maps.json", "monsters.json" }));
+        Assert.That(
+            names,
+            Is.EquivalentTo(new[] { "items.json", "jobs.json", "maps.json", "monsters.json", "skills.json" }));
     }
 }
 }

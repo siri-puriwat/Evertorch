@@ -76,6 +76,24 @@ public sealed class CombatPresentationTests
     }
 
     [Test]
+    public void Timeline_DrawsACastFromItsStartToItsEnd_OnItsCastersClock()
+    {
+        var timeline = new CombatTimeline();
+
+        timeline.BeginCast(Local, default, 10.0, 1.5, true);
+        timeline.BeginCast(Slime, Local, 2.0, 1.0, false);
+
+        Assert.That(timeline.TryGetCastProgress(Local, 10.0, 0.0, out float start), Is.True);
+        Assert.That(start, Is.Zero);
+        Assert.That(timeline.TryGetCastProgress(Local, 10.75, 0.0, out float half), Is.True);
+        Assert.That(half, Is.EqualTo(0.5f).Within(1e-4f));
+        Assert.That(timeline.TryGetCastProgress(Local, 11.5, 0.0, out float _), Is.False, "the cast time is over");
+        Assert.That(timeline.TryGetCastProgress(Slime, 99.0, 1.9, out float _), Is.False, "not begun on its timeline");
+        Assert.That(timeline.TryGetCastProgress(Slime, 0.0, 2.25, out float remote), Is.True);
+        Assert.That(remote, Is.EqualTo(0.25f).Within(1e-4f));
+    }
+
+    [Test]
     public void Timeline_DrawsADeadRemoteDeadFromItsDeathOnItsTimeline()
     {
         var timeline = new CombatTimeline();
@@ -87,6 +105,27 @@ public sealed class CombatPresentationTests
         Assert.That(timeline.IsShownDead(new EntityId(301), true, 0.0, 0.0), Is.True, "a body seen already dead");
         timeline.ClearDeath(Slime);
         Assert.That(timeline.IsShownDead(Slime, false, 9.0, 9.0), Is.False);
+    }
+
+    [Test]
+    public void Timeline_EndsACast_WhenItsCasterOrTargetDiesOrLeaves_OrItIsCancelled()
+    {
+        var timeline = new CombatTimeline();
+        var other = new EntityId(301);
+        timeline.BeginCast(Local, Slime, 1.0, 2.0, true);
+        timeline.BeginCast(Slime, Local, 1.0, 2.0, false);
+        timeline.BeginCast(other, default, 1.0, 2.0, false);
+        timeline.BeginCast(new EntityId(302), default, 1.0, 0.0, false);
+
+        timeline.EndCastsOf(Slime);
+        bool isOtherKept = timeline.TryGetCastProgress(other, 1.5, 1.5, out float _);
+        timeline.EndCast(other);
+
+        Assert.That(timeline.TryGetCastProgress(Local, 1.5, 1.5, out float _), Is.False, "its target died");
+        Assert.That(timeline.TryGetCastProgress(Slime, 1.5, 1.5, out float _), Is.False, "its caster died");
+        Assert.That(isOtherKept, Is.True);
+        Assert.That(timeline.TryGetCastProgress(other, 1.5, 1.5, out float _), Is.False, "cancelled");
+        Assert.That(timeline.TryGetCastProgress(new EntityId(302), 1.0, 1.0, out float _), Is.False, "no cast time");
     }
 
     [Test]
@@ -115,6 +154,20 @@ public sealed class CombatPresentationTests
         Assert.That(timeline.Lunge(Local, 10.47, 0.0), Is.EqualTo(1f).Within(1e-4f));
         Assert.That(timeline.Lunge(Local, 10.0, 99.0), Is.Zero);
         Assert.That(timeline.Lunge(Slime, 10.47, 10.47), Is.Zero, "no swing, no lunge");
+    }
+
+    [Test]
+    public void Timeline_ShowsAHealWithoutASquash()
+    {
+        var timeline = new CombatTimeline();
+        var due = new List<HitMark>();
+
+        timeline.AddHit(new HitMark(Local, 1.0, true, CombatResult.Hit, 15, 0, true));
+        timeline.CollectDueHits(1.0, 0.0, due);
+
+        Assert.That(due.Count, Is.EqualTo(1));
+        Assert.That(due[0].IsHeal, Is.True);
+        Assert.That(timeline.Squash(Local, 1.0, 0.0), Is.Zero);
     }
 
     [Test]

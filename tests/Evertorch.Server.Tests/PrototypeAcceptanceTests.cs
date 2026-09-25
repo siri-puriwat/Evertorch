@@ -381,8 +381,8 @@ public sealed class PrototypeAcceptanceTests
         }
     }
 
-    // The first player walks up to a slime, stops attacking, and strikes it, then heals itself with First Aid; both
-    // clients see each cast begin and resolve (Network Protocol §9).
+    // The first player's skill state walks it within Strike's range of a slime and strikes it, then heals it with
+    // First Aid; both clients see each cast begin and resolve (Gameplay Systems §5.1; Network Protocol §9).
     private static void UseSkills(SocketClient first, SocketClient second)
     {
         const string step = "skills";
@@ -405,22 +405,11 @@ public sealed class PrototypeAcceptanceTests
             SocketClients.PumpUntil(() => first.World.Target == slime, clients),
             Is.True,
             $"{step}: the server confirmed the target");
-        first.AttackTarget();
-        Assert.That(
-            SocketClients.PumpUntil(
-                () => first.World.Remotes.TryGetValue(slime, out RemoteEntity? remote)
-                    && remote.Buffer.TrySample(first.World.RemoteRenderTime, out WorldPosition at, out _)
-                    && first.DistanceTo(at) <= 1.4f,
-                clients),
-            Is.True,
-            $"{step}: walked within Strike's range");
-        first.Connection.SendCancel();
-        SocketClients.PumpFor(TimeSpan.FromSeconds(1), clients);
 
         var strike = new SkillDefinitionId("skill.strike");
         var firstAid = new SkillDefinitionId("skill.first_aid");
         EntityId caster = first.World.LocalEntity;
-        first.Connection.SendUseSkill(strike, slime);
+        Assert.That(first.UseSkill(strike), Is.True, $"{step}: Strike on the confirmed target");
         Assert.That(
             SocketClients.PumpUntil(
                 () => clients.All(client => resolved[client].Any(result => result.Skill == strike)),
@@ -428,7 +417,7 @@ public sealed class PrototypeAcceptanceTests
             Is.True,
             $"{step}: both clients saw Strike resolve");
         SocketClients.PumpFor(TimeSpan.FromSeconds(1), clients);
-        first.Connection.SendUseSkill(firstAid, default);
+        Assert.That(first.UseSkill(firstAid), Is.True, $"{step}: First Aid");
         Assert.That(
             SocketClients.PumpUntil(
                 () => clients.All(client => resolved[client].Any(result => result.Skill == firstAid)),
@@ -452,6 +441,7 @@ public sealed class PrototypeAcceptanceTests
         }
 
         Assert.That(first.World.Skills.Select(entry => entry.Skill), Is.EqualTo(new[] { strike, firstAid }), step);
+        Assert.That(first.Skill.SkillsSent, Is.EqualTo(2), $"{step}: both through the skill state, once each");
     }
 
     private static void AwaitConvergence(IAdminCommandService admin, string step, params SocketClient[] clients)

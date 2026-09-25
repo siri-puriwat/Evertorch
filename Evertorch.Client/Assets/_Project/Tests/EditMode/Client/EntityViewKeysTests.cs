@@ -18,7 +18,8 @@ public sealed class EntityViewKeysTests
             new Dictionary<MapDefinitionId, ClientMap>(),
             new Dictionary<JobDefinitionId, ClientJob> { { job.Id, job } },
             new Dictionary<MonsterDefinitionId, ClientMonster> { { monster.Id, monster } },
-            new Dictionary<ItemDefinitionId, ClientItem> { { item.Id, item } });
+            new Dictionary<ItemDefinitionId, ClientItem> { { item.Id, item } },
+            new Dictionary<SkillDefinitionId, ClientSkill>());
     }
 
     [TestCase(EntityKind.Monster, "monster.unknown")]

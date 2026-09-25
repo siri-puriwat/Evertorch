@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Text;
 using Evertorch.Game;
@@ -8,19 +9,24 @@ using UnityEngine;
 namespace Evertorch.Client
 {
 /// <summary>
-///     Short-lived lines over the lower middle of the screen (Prototype Content §2): a refused command in plain words,
-///     what the player picked up, and a level-up.
+///     Short-lived lines over the lower middle of the screen, clear of the skill bar (Prototype Content §2): a refused
+///     command in plain words, what the player picked up, and a level-up.
 /// </summary>
 public sealed class FeedbackLines : MonoBehaviour
 {
     public const int MaxLines = 3;
     public const float LineSeconds = 4f;
 
+    /// <summary>
+    ///     The panel's width in canvas units: narrow enough to pass between the stick and the touch buttons.
+    /// </summary>
+    public const float Width = 600f;
+
     // Over the other in-world panels, under the login panel.
     private const int SortingOrder = 7;
-    private const float Width = 640f;
-    private const float BottomOffset = 400f;
     private const int Padding = 10;
+    private const float HeightShare = 0.2f;
+    private const float BarClearance = 16f;
 
     private static readonly UiBuilder Ui = new(24f, 32f, 0f, 4f);
 
@@ -29,7 +35,9 @@ public sealed class FeedbackLines : MonoBehaviour
     private GameClient? m_client;
     private ClientWorld? m_watched;
     private GameObject? m_panel;
+    private RectTransform? m_panelRect;
     private TMP_Text? m_label;
+    private float m_placedForHeight = -1f;
 
     public int TextChanges { get; private set; }
 
@@ -43,6 +51,14 @@ public sealed class FeedbackLines : MonoBehaviour
         if (world != m_watched)
         {
             Watch(world);
+        }
+
+        // The canvas height follows the screen's shape, so a rotated device or a resized window moves the lines.
+        float canvasHeight = ((RectTransform)transform).rect.height;
+        if (canvasHeight != m_placedForHeight)
+        {
+            m_placedForHeight = canvasHeight;
+            m_panelRect!.anchoredPosition = new Vector2(0f, BottomFor(canvasHeight));
         }
 
         int count = m_lines.Count;
@@ -66,6 +82,15 @@ public sealed class FeedbackLines : MonoBehaviour
         lines.Build(client);
         root.SetActive(true);
         return lines;
+    }
+
+    /// <summary>
+    ///     How high the lines' bottom edge sits, in canvas units (owner decision 10): about a fifth of the height,
+    ///     raised to clear the skill bar.
+    /// </summary>
+    public static float BottomFor(float canvasHeight)
+    {
+        return Math.Max(HeightShare * canvasHeight, SkillBar.Top + BarClearance);
     }
 
     public void Add(string line)
@@ -138,10 +163,11 @@ public sealed class FeedbackLines : MonoBehaviour
         RectTransform panel = Ui.CreatePanel(
             transform,
             new Vector2(0.5f, 0f),
-            new Vector2(0f, BottomOffset),
+            new Vector2(0f, BottomFor(0f)),
             Width,
             Padding);
         m_panel = panel.gameObject;
+        m_panelRect = panel;
         m_label = Ui.CreateLabel("Lines", panel);
         m_label.alignment = TextAlignmentOptions.Center;
         m_panel.SetActive(false);

@@ -13,7 +13,7 @@ namespace Evertorch.Client
 ///     cleanly.
 /// </summary>
 public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink, ICombatCommandSink,
-    IPickupCommandSink
+    IPickupCommandSink, ISkillCommandSink
 {
     private readonly IClientTransport m_transport;
     private readonly ClientConnectionSettings m_settings;

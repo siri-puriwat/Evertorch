@@ -92,6 +92,25 @@ public sealed class SkillWorldTests
     }
 
     [Test]
+    public void OwnCast_EndingEarly_IsAnnounced_ButItsNaturalEndIsNot()
+    {
+        ClientWorld world = CreateWorld();
+        int ended = 0;
+        world.LocalCastEnded += () => ended++;
+
+        world.OnSkillCastStarted(new SkillCastStarted(ClientWorldFixture.LocalEntity, Strike, Slime, 10, 100));
+        LockedTicks(world);
+        world.OnLocalCancel();
+        int afterItsTime = ended;
+        world.OnSkillCastStarted(new SkillCastStarted(ClientWorldFixture.LocalEntity, Strike, Slime, 20, 1500));
+        world.OnLocalCancel();
+        world.OnLocalCancel();
+
+        Assert.That(afterItsTime, Is.Zero, "a cast that ran its time ends without the event");
+        Assert.That(ended, Is.EqualTo(1), "one cancel ends one cast");
+    }
+
+    [Test]
     public void OwnCast_EndsEarly_WhenItsTargetDiesOrLeaves_ItsCasterDies_OrThePlayerCancels()
     {
         var endings = new CastEnding();
@@ -102,6 +121,24 @@ public sealed class SkillWorldTests
             "the caster died");
         endings.Check(world => world.OnLocalCancel(), "the player cancelled");
         endings.Check(world => world.OnEntityDied(new EntityDied(Other, default, 12)), "someone else died", false);
+    }
+
+    [Test]
+    public void SkillList_CooldownsCountDownFromWhenTheListArrived()
+    {
+        ClientWorld world = CreateWorld();
+        world.Advance(3f);
+
+        world.OnSkillList(new SkillList(new[] { new SkillListEntry(Strike, 1.5f, 8, 2000, 500, 1250) }));
+        double atArrival = world.CooldownRemaining(Strike);
+        world.Advance(0.5f);
+        double later = world.CooldownRemaining(Strike);
+        world.Advance(1f);
+
+        Assert.That(atArrival, Is.EqualTo(1.25).Within(1e-6));
+        Assert.That(later, Is.EqualTo(0.75).Within(1e-6));
+        Assert.That(world.CooldownRemaining(Strike), Is.Zero, "never below 0");
+        Assert.That(world.CooldownRemaining(FirstAid), Is.Zero, "not listed");
     }
 
     [Test]

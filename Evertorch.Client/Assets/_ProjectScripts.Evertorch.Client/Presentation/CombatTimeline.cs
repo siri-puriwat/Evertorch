@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using Evertorch.Game;
 using Evertorch.Protocol;
 
@@ -14,6 +15,7 @@ public sealed class CombatTimeline
     private readonly Dictionary<EntityId, Swing> m_swings = new();
     private readonly Dictionary<EntityId, Moment> m_impacts = new();
     private readonly Dictionary<EntityId, Moment> m_deaths = new();
+    private readonly Dictionary<EntityId, Cast> m_casts = new();
     private readonly List<HitMark> m_pending = new();
 
     public int PendingHits => m_pending.Count;
@@ -23,10 +25,69 @@ public sealed class CombatTimeline
         m_swings[attacker] = new Swing(new Moment(startSeconds, isOnLocalClock), timing);
     }
 
+    /// <summary>
+    ///     A cast of <paramref name="castSeconds" /> began; one of no length is shown as none.
+    /// </summary>
+    public void BeginCast(
+        EntityId caster,
+        EntityId target,
+        double startSeconds,
+        double castSeconds,
+        bool isOnLocalClock)
+    {
+        if (castSeconds > 0.0)
+        {
+            m_casts[caster] = new Cast(new Moment(startSeconds, isOnLocalClock), castSeconds, target);
+        }
+        else
+        {
+            m_casts.Remove(caster);
+        }
+    }
+
+    public void EndCast(EntityId caster)
+    {
+        m_casts.Remove(caster);
+    }
+
+    /// <summary>
+    ///     Ends every cast <paramref name="entity" /> was making or was the target of: it died or left.
+    /// </summary>
+    public void EndCastsOf(EntityId entity)
+    {
+        m_casts.Remove(entity);
+        var casters = m_casts.Where(pair => pair.Value.Target == entity).Select(pair => pair.Key).ToList();
+        foreach (EntityId caster in casters)
+        {
+            m_casts.Remove(caster);
+        }
+    }
+
+    /// <summary>
+    ///     How far along the caster's cast is drawn, from 0 to 1; false while it shows none.
+    /// </summary>
+    public bool TryGetCastProgress(EntityId caster, double localNow, double remoteNow, out float progress)
+    {
+        progress = 0f;
+        if (!m_casts.TryGetValue(caster, out Cast cast))
+        {
+            return false;
+        }
+
+        double since = cast.Start.Since(localNow, remoteNow);
+        if (since < 0.0 || since >= cast.Seconds)
+        {
+            return false;
+        }
+
+        progress = (float)(since / cast.Seconds);
+        return true;
+    }
+
     public void AddHit(HitMark hit)
     {
         m_pending.Add(hit);
-        if (hit.Result != CombatResult.Miss)
+        if (hit.Result != CombatResult.Miss && !hit.IsHeal)
         {
             m_impacts[hit.Target] = new Moment(hit.Seconds, hit.IsOnLocalClock);
         }
@@ -93,6 +154,7 @@ public sealed class CombatTimeline
         m_swings.Remove(entity);
         m_impacts.Remove(entity);
         m_deaths.Remove(entity);
+        EndCastsOf(entity);
         m_pending.RemoveAll(hit => hit.Target == entity);
     }
 
@@ -114,6 +176,22 @@ public sealed class CombatTimeline
         }
     }
 
+    private readonly struct Cast
+    {
+        public Cast(Moment start, double seconds, EntityId target)
+        {
+            Start = start;
+            Seconds = seconds;
+            Target = target;
+        }
+
+        public Moment Start { get; }
+
+        public double Seconds { get; }
+
+        public EntityId Target { get; }
+    }
+
     private readonly struct Swing
     {
         public Swing(Moment start, AttackTiming timing)
@@ -129,7 +207,7 @@ public sealed class CombatTimeline
 }
 
 /// <summary>
-///     One hit, miss, or critical to show over its target when its moment comes.
+///     One hit, miss, critical, or heal to show over its target when its moment comes.
 /// </summary>
 public readonly struct HitMark
 {
@@ -139,7 +217,8 @@ public readonly struct HitMark
         bool isOnLocalClock,
         CombatResult result,
         uint amount,
-        ushort targetHealthPermille)
+        ushort targetHealthPermille,
+        bool isHeal = false)
     {
         Target = target;
         Seconds = seconds;
@@ -147,6 +226,7 @@ public readonly struct HitMark
         Result = result;
         Amount = amount;
         TargetHealthPermille = targetHealthPermille;
+        IsHeal = isHeal;
     }
 
     public EntityId Target { get; }
@@ -160,5 +240,10 @@ public readonly struct HitMark
     public uint Amount { get; }
 
     public ushort TargetHealthPermille { get; }
+
+    /// <summary>
+    ///     HP restored rather than lost: no squash, and a green number.
+    /// </summary>
+    public bool IsHeal { get; }
 }
 }

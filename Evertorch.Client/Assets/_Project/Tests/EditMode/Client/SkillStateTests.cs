@@ -1,0 +1,249 @@
+using System;
+using System.Collections.Generic;
+using Evertorch.Game;
+using Evertorch.Protocol;
+using NUnit.Framework;
+
+namespace Evertorch.Client.Tests.EditMode
+{
+/// <summary>
+///     The local side of a skill (Gameplay Systems §5.1): a skill on the caster is asked for at once, an enemy skill
+///     walks within its range less the approach margin first, and either waits for the player's own swing or cast.
+/// </summary>
+[TestFixture]
+public sealed class SkillStateTests
+{
+    private static readonly EntityId Slime = new(300);
+    private static readonly EntityId Other = new(301);
+    private static readonly SkillDefinitionId Strike = new("skill.strike");
+    private static readonly SkillDefinitionId FirstAid = new("skill.first_aid");
+    private static readonly WorldPosition Start = ClientTestGrids.Center(1, 8);
+
+    private sealed class Rig : ISkillCommandSink
+    {
+        private uint m_moveSequence;
+
+        public Rig(float slimeDistance)
+        {
+            World = ClientWorldFixture.Create(ClientTestGrids.CreateYard(), Start);
+            Spawn(Slime, slimeDistance);
+            Spawn(Other, 2f);
+            World.OnSkillList(
+                new SkillList(
+                    new[]
+                    {
+                        new SkillListEntry(Strike, 1.5f, 8, 2000, 500, 0),
+                        new SkillListEntry(FirstAid, 0f, 3, 0, 0, 0)
+                    }));
+            World.OnTargetChanged(new TargetChanged(ClientWorldFixture.LocalEntity, Slime));
+            Controller = new MovementController(World.Grid);
+            Skill = new SkillState(World, Controller, this, 1.0 / ClientWorldFixture.TickRate);
+        }
+
+        public ClientWorld World { get; }
+
+        public MovementController Controller { get; }
+
+        public SkillState Skill { get; }
+
+        public List<(SkillDefinitionId Skill, EntityId Target)> Sent { get; } = new();
+
+        public uint SendUseSkill(SkillDefinitionId skill, EntityId target)
+        {
+            Sent.Add((skill, target));
+            return (uint)Sent.Count;
+        }
+
+        // As the driver runs a tick: the lock first, then the skill, then the movement.
+        public void Tick()
+        {
+            Controller.IsLocked = World.ActionLock.Advance();
+            Skill.Tick(World.Predictor.Position);
+            WorldDirection direction = Controller.Tick(World.Predictor.Position, World.Predictor.StepDistance);
+            m_moveSequence++;
+            World.Predictor.Apply(new MoveIntent(m_moveSequence, m_moveSequence, direction.X, direction.Z));
+        }
+
+        public int TickUntilSent(int limit)
+        {
+            int ticks = 0;
+            while (Sent.Count == 0 && ticks < limit)
+            {
+                Tick();
+                ticks++;
+            }
+
+            return ticks;
+        }
+
+        private void Spawn(EntityId entity, float dx)
+        {
+            World.OnSpawn(
+                new EntitySpawn(
+                    entity,
+                    EntityKind.Monster,
+                    "monster.a",
+                    new WorldPosition(Start.X + dx, Start.Y, Start.Z),
+                    new WorldDirection(0f, 1f),
+                    EntityStateFlags.None,
+                    1000));
+        }
+    }
+
+    private static float DistanceToSlime(Rig rig)
+    {
+        WorldPosition at = rig.World.Predictor.Position;
+        return (float)Math.Sqrt(Math.Pow(at.X - (Start.X + 4f), 2) + Math.Pow(at.Z - Start.Z, 2));
+    }
+
+    [Test]
+    public void EnemySkill_AfterTheTargetDied_OrAnotherWasConfirmed_EndsWithoutAsking()
+    {
+        var died = new Rig(4f);
+        died.Skill.Use(Strike, SkillTargetType.Enemy);
+        died.Tick();
+        died.World.OnEntityDied(new EntityDied(Slime, default, 3));
+        died.Tick();
+        var retargeted = new Rig(4f);
+        retargeted.Skill.Use(Strike, SkillTargetType.Enemy);
+        retargeted.Tick();
+        retargeted.World.OnTargetChanged(new TargetChanged(ClientWorldFixture.LocalEntity, Other));
+        retargeted.Tick();
+
+        Assert.That(died.Sent, Is.Empty);
+        Assert.That((died.Skill.IsActive, died.Controller.IsChasing), Is.EqualTo((false, false)));
+        Assert.That(retargeted.Sent, Is.Empty);
+        Assert.That((retargeted.Skill.IsActive, retargeted.Controller.IsChasing), Is.EqualTo((false, false)));
+    }
+
+    [Test]
+    public void EnemySkill_FromAfar_WalksWithinItsRangeLessTheMargin_ThenAsksOnce()
+    {
+        var rig = new Rig(4f);
+
+        bool isStarted = rig.Skill.Use(Strike, SkillTargetType.Enemy);
+        rig.TickUntilSent(100);
+        rig.Tick();
+
+        Assert.That(isStarted, Is.True);
+        Assert.That(rig.Sent, Is.EqualTo(new[] { (Strike, Slime) }));
+        Assert.That(DistanceToSlime(rig), Is.LessThanOrEqualTo(1.5f - AutoAttackState.StopMargin + 1e-3f));
+        Assert.That(DistanceToSlime(rig), Is.GreaterThan(1.5f - AutoAttackState.StopMargin - 0.3f), "no closer");
+        Assert.That(rig.Skill.IsActive, Is.False);
+        Assert.That(rig.Controller.IsChasing, Is.False);
+    }
+
+    [Test]
+    public void ManualMovement_BeforeReachingTheTarget_EndsTheApproachWithoutAsking()
+    {
+        var rig = new Rig(4f);
+        rig.Skill.Use(Strike, SkillTargetType.Enemy);
+        rig.Tick();
+
+        rig.Controller.SetManualDirection(0f, 1f);
+        rig.Tick();
+
+        Assert.That(rig.Skill.IsActive, Is.False);
+        Assert.That(rig.Sent, Is.Empty);
+    }
+
+    [Test]
+    public void Request_DuringTheSwingOrCastLock_WaitsForItsEnd()
+    {
+        var swinging = new Rig(1f);
+        swinging.World.ActionLock.LockForSwing(3);
+        var casting = new Rig(1f);
+        casting.World.ActionLock.LockForCast(5);
+
+        swinging.Skill.Use(Strike, SkillTargetType.Enemy);
+        casting.Skill.Use(FirstAid, SkillTargetType.Self);
+        int swingTicks = swinging.TickUntilSent(20);
+        int castTicks = casting.TickUntilSent(20);
+
+        Assert.That(swingTicks, Is.EqualTo(5), "two ticks after the swing's last held tick");
+        Assert.That(castTicks, Is.EqualTo(7), "two ticks after the cast's last held tick");
+        Assert.That(swinging.Sent, Is.EqualTo(new[] { (Strike, Slime) }));
+        Assert.That(casting.Sent, Is.EqualTo(new[] { (FirstAid, default(EntityId)) }));
+    }
+
+    [Test]
+    public void Request_JustBeforeTheAutoAttacksNextSwing_WaitsForThatSwingsImpact()
+    {
+        var rig = new Rig(1f);
+        rig.World.ActionLock.LockForSwing(0, 3);
+
+        rig.Skill.Use(FirstAid, SkillTargetType.Self);
+        rig.Tick();
+        rig.Tick();
+        int sentBeforeTheSwing = rig.Sent.Count;
+        rig.World.ActionLock.LockForSwing(2, 19);
+        int ticks = rig.TickUntilSent(20);
+
+        Assert.That(sentBeforeTheSwing, Is.Zero, "the next swing was due within the margin");
+        Assert.That(ticks, Is.EqualTo(4), "sent two ticks after the new swing's impact freed the player");
+        Assert.That(rig.Sent, Is.EqualTo(new[] { (FirstAid, default(EntityId)) }));
+    }
+
+    [Test]
+    public void Request_WhenTheExpectedSwingNeverCame_IsSentOnceItsTimePassed()
+    {
+        var rig = new Rig(1f);
+        rig.World.ActionLock.LockForSwing(0, 3);
+
+        rig.Skill.Use(FirstAid, SkillTargetType.Self);
+        int ticks = rig.TickUntilSent(20);
+
+        Assert.That(ticks, Is.EqualTo(3), "the auto-attack had ended; no swing came");
+    }
+
+    [Test]
+    public void SelfSkill_IsAskedForOnTheNextTick_ForTheCasterItself()
+    {
+        var rig = new Rig(4f);
+
+        bool isStarted = rig.Skill.Use(FirstAid, SkillTargetType.Self);
+        rig.Tick();
+
+        Assert.That(isStarted, Is.True);
+        Assert.That(rig.Sent, Is.EqualTo(new[] { (FirstAid, default(EntityId)) }), "no approach and no target");
+        Assert.That(rig.Controller.IsChasing, Is.False);
+        Assert.That(rig.Skill.SkillsSent, Is.EqualTo(1));
+    }
+
+    [Test]
+    public void SkillSlots_HoldStrikeFirstAidAndFocus_ByTheirKeys()
+    {
+        var skills = new List<string>();
+        for (int slot = 0; slot <= SkillSlots.Count + 1; slot++)
+        {
+            skills.Add(SkillSlots.TryGetSkill(slot, out SkillDefinitionId skill) ? skill.Value : "-");
+        }
+
+        Assert.That(skills, Is.EqualTo(new[] { "-", "skill.strike", "skill.first_aid", "skill.focus", "-" }));
+    }
+
+    [Test]
+    public void Use_WithoutATarget_ForAnUnlistedSkill_OrWhileDead_StartsNothing()
+    {
+        var untargeted = new Rig(4f);
+        untargeted.World.OnTargetChanged(new TargetChanged(ClientWorldFixture.LocalEntity, default));
+        var unlisted = new Rig(4f);
+        var dead = new Rig(4f);
+        dead.World.OnEntityDied(new EntityDied(ClientWorldFixture.LocalEntity, Slime, 2));
+
+        bool[] started =
+        {
+            untargeted.Skill.Use(Strike, SkillTargetType.Enemy),
+            unlisted.Skill.Use(new SkillDefinitionId("skill.focus"), SkillTargetType.Self),
+            dead.Skill.Use(FirstAid, SkillTargetType.Self)
+        };
+        foreach (Rig rig in new[] { untargeted, unlisted, dead })
+        {
+            rig.Tick();
+        }
+
+        Assert.That(started, Is.EqualTo(new[] { false, false, false }));
+        Assert.That(untargeted.Sent.Count + unlisted.Sent.Count + dead.Sent.Count, Is.Zero);
+    }
+}
+}
