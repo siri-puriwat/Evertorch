@@ -171,14 +171,11 @@ public sealed class PersistenceWorker : IDisposable
     /// </summary>
     public bool TryEnqueue(PersistenceJob job)
     {
-        if (!IsAvailable)
-        {
-            return false;
-        }
-
+        // Under the gate: the writer marks an outage before it fails the queued work under the gate, so a job either
+        // sees the outage or is queued in time to be failed with the rest.
         lock (m_gate)
         {
-            if (m_isStopping || m_pendingJobs >= m_capacity)
+            if (!IsAvailable || m_isStopping || m_pendingJobs >= m_capacity)
             {
                 return false;
             }
@@ -356,7 +353,7 @@ public sealed class PersistenceWorker : IDisposable
         {
             if (State == DatabaseState.Unavailable)
             {
-                ProbeDuringOutage();
+                ProbeOnWriter();
                 if (State == DatabaseState.Unavailable)
                 {
                     return;
@@ -381,10 +378,11 @@ public sealed class PersistenceWorker : IDisposable
         }
     }
 
-    // A database that answers with an error of its own, such as a refused password, stays unavailable. The writer
-    // thread must survive it: an exception escaping there would end the process without the shutdown's checkpoints.
-    // At startup the same error still stops the server, because the startup check calls Probe itself.
-    private void ProbeDuringOutage()
+    // A database that answers with an error of its own, such as a refused password, is unavailable until a probe
+    // passes. The writer thread must survive it, whether idle or in an outage: an exception escaping there would end
+    // the process without the shutdown's checkpoints. At startup the same error still stops the server, because the
+    // startup check calls Probe itself.
+    private void ProbeOnWriter()
     {
         try
         {
@@ -392,6 +390,7 @@ public sealed class PersistenceWorker : IDisposable
         }
         catch (Exception exception)
         {
+            SetState(DatabaseState.Unavailable);
             if (!m_isProbeFailureLogged)
             {
                 m_isProbeFailureLogged = true;
@@ -413,7 +412,7 @@ public sealed class PersistenceWorker : IDisposable
 
             if (State == DatabaseState.Unavailable)
             {
-                ProbeDuringOutage();
+                ProbeOnWriter();
                 if (State == DatabaseState.Unavailable)
                 {
                     m_stop.Token.WaitHandle.WaitOne(ProbeIntervalMs);
@@ -447,7 +446,14 @@ public sealed class PersistenceWorker : IDisposable
 
             if (isIdle)
             {
-                Probe();
+                ProbeOnWriter();
+
+                // Work queued while the probe ran would wait for a database it cannot use, like work queued behind a
+                // job that meets an outage.
+                if (!IsAvailable && !m_stop.IsCancellationRequested)
+                {
+                    FailQueuedJobs();
+                }
             }
         }
     }

@@ -176,6 +176,75 @@ public sealed class PersistenceWorkerTests
     }
 
     [Test]
+    public void IdleProbe_ThatFindsAnOutage_EndsTheJobsQueuedWhileItRan()
+    {
+        var store = new InMemoryGameStore();
+        using PersistenceWorker worker = CreateWorker(store, idleProbeIntervalMs: 50);
+        worker.Probe();
+        using var probing = new ManualResetEventSlim();
+        using var queued = new ManualResetEventSlim();
+        store.BeforeMigrationQuery = () =>
+        {
+            store.IsUnavailable = true;
+            probing.Set();
+            queued.Wait(5000);
+        };
+        worker.Start();
+        Assert.That(probing.Wait(5000), Is.True, "the idle writer probed");
+
+        var log = new List<string>();
+        bool isQueued = worker.TryEnqueue(Job("load", log));
+        store.BeforeMigrationQuery = null;
+        queued.Set();
+        bool isAnswered = SpinWait.SpinUntil(
+            () =>
+            {
+                CompleteAll(worker);
+                return log.Count > 0;
+            },
+            3000);
+
+        Assert.That(isQueued, Is.True, "the database still looked available while the probe ran");
+        Assert.That(isAnswered, Is.True, "the job was answered without waiting out the outage");
+        Assert.That(log, Is.EqualTo(new[] { "done load Unavailable" }));
+        Assert.That(worker.PendingJobs, Is.Zero);
+    }
+
+    [Test]
+    public void IdleProbe_ThatMeetsAnErrorOfTheDatabasesOwn_KeepsTheWriterAliveAndUnavailable()
+    {
+        var store = new InMemoryGameStore();
+        var logger = new CapturingLogger<PersistenceWorker>();
+        using PersistenceWorker worker = CreateWorker(store, logger: logger, idleProbeIntervalMs: 50);
+        worker.Probe();
+        worker.Start();
+
+        store.MigrationQueryFailure = new InvalidOperationException("permission denied for the migrations table");
+        bool isUnavailable = SpinWait.SpinUntil(() => worker.State == DatabaseState.Unavailable, 5000);
+        store.MigrationQueryFailure = null;
+        bool isBack = SpinWait.SpinUntil(() => worker.State == DatabaseState.Available, 5000);
+        var log = new List<string>();
+        worker.TryEnqueue(Job("after", log));
+        bool isRun = SpinWait.SpinUntil(
+            () =>
+            {
+                CompleteAll(worker);
+                return log.Contains("done after Succeeded");
+            },
+            5000);
+        int failures;
+        lock (logger.Entries)
+        {
+            failures = logger.Entries.Count(entry => entry.EventId.Name == "DatabaseProbeFailed");
+        }
+
+        Assert.That(isUnavailable, Is.True, "an error of the database's own makes it unavailable");
+        Assert.That(isBack, Is.True, "the writer lived on to see the database answer again");
+        Assert.That(isRun, Is.True, "and went on writing");
+        Assert.That(failures, Is.EqualTo(1));
+    }
+
+    [Test]
     public void IdleWriter_NoticesAnOutageWithoutAnyWork_AndTheDatabaseComingBack()
     {
         var store = new InMemoryGameStore();

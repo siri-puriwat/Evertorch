@@ -179,6 +179,28 @@ public sealed class PeerBudgetTests
     }
 
     [Test]
+    public void FullQueue_AfterClosingItsHeaviestPeer_ClosesNoOtherWhileTheOpenPeersLeaveRoom()
+    {
+        var third = new ConnectionId(3);
+        InboundQueue queue = CreateQueue(new FakeClock(), 1000, capacity: 16);
+        queue.OnConnected(Peer);
+        queue.OnConnected(Other);
+        queue.OnConnected(third);
+        Drain(queue);
+
+        SendTargets(queue, Peer, 16);
+        SendTargets(queue, Other, 3);
+        SendTargets(queue, third, 2);
+        List<InboundEvent> events = Drain(queue);
+
+        Assert.That(queue.PeersLimited, Is.EqualTo(1), "only the heaviest peer is closed");
+        Assert.That(Count(events, InboundEventKind.RateLimited, Peer), Is.EqualTo(1));
+        Assert.That(Count(events, InboundEventKind.Target, Other), Is.EqualTo(3));
+        Assert.That(Count(events, InboundEventKind.Target, third), Is.EqualTo(2));
+        Assert.That(queue.Dropped, Is.Zero);
+    }
+
+    [Test]
     public void FullQueue_ClosesItsHeaviestPeer_AndKeepsTheOtherPeersMessage()
     {
         InboundQueue queue = CreateQueue(new FakeClock(), 1000, capacity: 16);
@@ -196,6 +218,64 @@ public sealed class PeerBudgetTests
         Assert.That(Count(events, InboundEventKind.Target, Other), Is.EqualTo(1), "the other peer's message is kept");
         Assert.That(Count(events, InboundEventKind.Target, Peer), Is.EqualTo(16), "the heaviest peer sends no more");
         Assert.That(queue.Dropped, Is.Zero);
+    }
+
+    [Test]
+    public void FullQueue_ClosesNoPeerThatHasNothingWaiting()
+    {
+        var stranger = new ConnectionId(9);
+        InboundQueue queue = CreateQueue(new FakeClock(), 1000, capacity: 16);
+        queue.OnConnected(Other);
+        Drain(queue);
+
+        // A connection without a budget fills the queue; closing a peer with nothing waiting would free no room.
+        SendTargets(queue, stranger, 16);
+        SendTargets(queue, Other, 1);
+        List<InboundEvent> events = Drain(queue);
+
+        Assert.That(queue.PeersLimited, Is.Zero);
+        Assert.That(Count(events, InboundEventKind.RateLimited, Other), Is.Zero);
+        Assert.That(Count(events, InboundEventKind.Target, Other), Is.EqualTo(1), "its message is kept");
+    }
+
+    [Test]
+    public void FullQueue_ClosesTheNextHeaviestPeer_OnceTheOpenPeersFillItAgain()
+    {
+        var third = new ConnectionId(3);
+        InboundQueue queue = CreateQueue(new FakeClock(), 1000, capacity: 16);
+        queue.OnConnected(Peer);
+        queue.OnConnected(Other);
+        queue.OnConnected(third);
+        Drain(queue);
+
+        SendTargets(queue, Peer, 10);
+        SendTargets(queue, Other, 10);
+        long afterFirst = queue.PeersLimited;
+        SendTargets(queue, third, 10);
+        List<InboundEvent> events = Drain(queue);
+
+        Assert.That(afterFirst, Is.EqualTo(1));
+        Assert.That(Count(events, InboundEventKind.RateLimited, Peer), Is.EqualTo(1), "the heaviest went first");
+        Assert.That(Count(events, InboundEventKind.RateLimited, Other), Is.EqualTo(1), "then the next heaviest");
+        Assert.That(Count(events, InboundEventKind.RateLimited, third), Is.Zero);
+        Assert.That(Count(events, InboundEventKind.Target, third), Is.EqualTo(10));
+    }
+
+    [Test]
+    public void FullQueue_FilledByAPeerThatLeft_ClosesNoOneElse()
+    {
+        InboundQueue queue = CreateQueue(new FakeClock(), 1000, capacity: 16);
+        queue.OnConnected(Peer);
+        queue.OnConnected(Other);
+        Drain(queue);
+
+        SendTargets(queue, Peer, 16);
+        queue.OnDisconnected(Peer);
+        SendTargets(queue, Other, 3);
+        List<InboundEvent> events = Drain(queue);
+
+        Assert.That(queue.PeersLimited, Is.Zero, "closing an open peer frees nothing a departed one holds");
+        Assert.That(Count(events, InboundEventKind.Target, Other), Is.EqualTo(3));
     }
 
     [Test]

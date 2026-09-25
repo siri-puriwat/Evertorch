@@ -40,6 +40,11 @@ public sealed class LiteNetLibServerTransport : IServerTransport, INetEventListe
 
     private readonly ConcurrentDictionary<ConnectionId, NetPeer> m_peers = new();
 
+    // The session layer judges what a connection sent only when it drains the queue, so it may ask for a cooldown
+    // after the peer has left on its own. Their addresses are kept for that, the oldest forgotten first.
+    private readonly ConcurrentDictionary<ConnectionId, IPAddress> m_departed = new();
+    private readonly ConcurrentQueue<ConnectionId> m_departures = new();
+
     private long m_lastConnection;
     private volatile bool m_isAdmissionClosed;
 
@@ -142,6 +147,12 @@ public sealed class LiteNetLibServerTransport : IServerTransport, INetEventListe
             return;
         }
 
+        // Before the peer leaves the table, so a cooldown asked for meanwhile finds its address in one or the other.
+        if (!state.IsClosedByServer)
+        {
+            RememberDeparture(state.Connection, peer.Address);
+        }
+
         m_peers.TryRemove(state.Connection, out NetPeer? _);
         m_throttle.OnDisconnected(peer.Address);
 
@@ -162,7 +173,9 @@ public sealed class LiteNetLibServerTransport : IServerTransport, INetEventListe
         byte channelNumber,
         DeliveryMethod deliveryMethod)
     {
-        if (peer.Tag is PeerState state)
+        // A peer the server closed lingers in the library, and may go on sending, until it confirms the close. It has
+        // no session and no budget left, so nothing it sends may reach the queue.
+        if (peer.Tag is PeerState state && !state.IsClosedByServer)
         {
             // Only the two methods the protocol uses are named; any other makes the message malformed.
             MessageDelivery? delivery = deliveryMethod switch
@@ -275,6 +288,10 @@ public sealed class LiteNetLibServerTransport : IServerTransport, INetEventListe
         {
             m_throttle.StartCooldown(peer.Address);
         }
+        else if (m_departed.TryRemove(connection, out IPAddress? address))
+        {
+            m_throttle.StartCooldown(address);
+        }
     }
 
     public TransportStatistics GetStatistics()
@@ -304,6 +321,16 @@ public sealed class LiteNetLibServerTransport : IServerTransport, INetEventListe
     {
         m_instruments.RecordRateLimited(limit);
         m_audit.ConnectionRefused(default, null, limit);
+    }
+
+    private void RememberDeparture(ConnectionId connection, IPAddress address)
+    {
+        m_departed[connection] = address;
+        m_departures.Enqueue(connection);
+        while (m_departures.Count > m_options.MaxConnections && m_departures.TryDequeue(out ConnectionId oldest))
+        {
+            m_departed.TryRemove(oldest, out IPAddress? _);
+        }
     }
 
     private static void MarkClosedByServer(NetPeer peer)

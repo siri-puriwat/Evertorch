@@ -340,8 +340,9 @@ public sealed class InboundQueue
         m_events.Enqueue(inboundEvent);
     }
 
-    // With the limits off a full queue drops the message and counts it. With them on, the queue closes whichever peer
-    // has the most waiting and keeps this message, unless it is that peer's own.
+    // With the limits off a full queue drops the message and counts it, as it does a message without a budget. With
+    // them on, a budgeted message is kept past the capacity, bounded by the budgets, unless its sender is the peer the
+    // full queue closes.
     private void EnqueueMessage(InboundEvent inboundEvent, PeerBudget? peer)
     {
         if (Volatile.Read(ref m_count) >= m_capacity &&
@@ -356,23 +357,33 @@ public sealed class InboundQueue
         m_events.Enqueue(inboundEvent);
     }
 
-    // Closes the peer with the most messages waiting. True when that is the sender itself.
+    // Closes the open peer with the most messages waiting, and says whether that is the sender itself. Only open peers
+    // can add more, so only their own backlog filling the queue closes one. What peers being closed, peers that left,
+    // and lifecycle events hold leaves with the next drain, and closing someone else would free none of it.
     private bool IsHeaviestAfterLimiting(ConnectionId sender)
     {
+        int open = 0;
         ConnectionId heaviest = default;
         PeerBudget? heaviestPeer = null;
         foreach (KeyValuePair<ConnectionId, PeerBudget> entry in m_peers)
         {
-            if (!entry.Value.IsLimited && (heaviestPeer == null || entry.Value.Pending > heaviestPeer.Pending))
+            PeerBudget peer = entry.Value;
+            if (peer.IsLimited)
+            {
+                continue;
+            }
+
+            open += peer.Pending;
+            if (peer.Pending > (heaviestPeer?.Pending ?? 0))
             {
                 heaviest = entry.Key;
-                heaviestPeer = entry.Value;
+                heaviestPeer = peer;
             }
         }
 
-        if (heaviestPeer == null)
+        if (open < m_capacity || heaviestPeer == null)
         {
-            return true;
+            return false;
         }
 
         m_instruments.RecordRateLimited(ServerInstruments.QueueFullLimit);

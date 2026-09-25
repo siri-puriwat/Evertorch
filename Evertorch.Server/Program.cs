@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Runtime.InteropServices;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -9,6 +10,11 @@ public static class Program
 {
     public static int Main(string[] args)
     {
+        // The console formatters stamp each line in the logging thread's culture, which on some hosts writes a Thai
+        // Buddhist year or '.' between the hours. Every thread of the server formats alike, whatever the host.
+        CultureInfo.DefaultThreadCurrentCulture = CultureInfo.InvariantCulture;
+        CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
+
         int exitCode;
         try
         {

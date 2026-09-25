@@ -146,6 +146,20 @@ public sealed class AddressThrottleTests
     }
 
     [Test]
+    public void Table_WithTheLimitsOff_RemembersNoAddress()
+    {
+        AddressThrottle throttle = Create(new FakeClock(), maxAddresses: 16, isEnabled: false);
+
+        for (int index = 0; index < 100; index++)
+        {
+            throttle.OnConnected(Numbered(index));
+            throttle.OnDisconnected(Numbered(index));
+        }
+
+        Assert.That(throttle.TrackedAddresses, Is.Zero);
+    }
+
+    [Test]
     public void TryAdmit_WithTheLimitsOff_AlwaysAdmits()
     {
         AddressThrottle throttle = Create(new FakeClock(), 1, 1, isEnabled: false);

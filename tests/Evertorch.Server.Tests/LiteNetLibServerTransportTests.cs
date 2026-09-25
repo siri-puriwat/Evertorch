@@ -1,9 +1,12 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
+using System.Net;
 using System.Threading;
 using Evertorch.Game;
 using Evertorch.Protocol;
 using LiteNetLib;
+using LiteNetLib.Layers;
 using Microsoft.Extensions.Options;
 using NUnit.Framework;
 using DisconnectReason = Evertorch.Protocol.DisconnectReason;
@@ -35,6 +38,39 @@ public sealed class LiteNetLibServerTransportTests
         byte[] payload = new byte[hello.GetEncodedLength()];
         hello.Write(payload);
         return payload;
+    }
+
+    // Once deaf, the client's library drops every datagram it receives.
+    private sealed class DeafLayer : PacketLayerBase
+    {
+        private volatile bool m_isDeaf;
+
+        public DeafLayer()
+            : base(0)
+        {
+        }
+
+        public bool IsDeaf
+        {
+            get => m_isDeaf;
+            set => m_isDeaf = value;
+        }
+
+        public override void ProcessInboundPacket(ref IPEndPoint endPoint, ref byte[] data, ref int length)
+        {
+            if (m_isDeaf)
+            {
+                length = 0;
+            }
+        }
+
+        public override void ProcessOutBoundPacket(
+            ref IPEndPoint endPoint,
+            ref byte[] data,
+            ref int offset,
+            ref int length)
+        {
+        }
     }
 
     private sealed class Harness : IDisposable
@@ -232,6 +268,44 @@ public sealed class LiteNetLibServerTransportTests
     }
 
     [Test]
+    public void CoolDownAddress_AfterThePeerLeftOnItsOwn_StillRefusesItsAddress()
+    {
+        using var harness = new Harness(abuse: new AbuseOptions { KickCooldownMs = 5000 });
+        using TestNetClient leaver = ConnectedClient(harness, out ConnectionId connection);
+        leaver.Disconnect();
+        Assert.That(harness.WaitForEvent(out InboundEvent left), Is.True);
+        Assert.That(left.Kind, Is.EqualTo(InboundEventKind.Disconnected));
+
+        // The tick scores what a connection sent before it left only after the transport has seen it go.
+        harness.Transport.CoolDownAddress(connection);
+        using var again = new TestNetClient();
+        again.Connect(harness.Port, Key);
+
+        Assert.That(again.WaitFor(() => again.IsDisconnected), Is.True, "the address is cooling down");
+        Assert.That(again.Notice!.Reason, Is.EqualTo(DisconnectReason.RateLimited));
+    }
+
+    [Test]
+    public void CoolDownAddress_OfADepartureOlderThanMaxConnectionsOthers_IsForgotten()
+    {
+        using var harness = new Harness(2, new AbuseOptions { KickCooldownMs = 5000 });
+        var departed = new List<ConnectionId>();
+        for (int index = 0; index < 3; index++)
+        {
+            using TestNetClient leaver = ConnectedClient(harness, out ConnectionId connection);
+            leaver.Disconnect();
+            Assert.That(harness.WaitForEvent(out InboundEvent left), Is.True);
+            Assert.That(left.Kind, Is.EqualTo(InboundEventKind.Disconnected));
+            departed.Add(connection);
+        }
+
+        harness.Transport.CoolDownAddress(departed[0]);
+        using TestNetClient admitted = ConnectedClient(harness, out ConnectionId _);
+
+        Assert.That(admitted.IsConnected, Is.True, "the oldest departure was forgotten, so no cooldown started");
+    }
+
+    [Test]
     public void Disconnect_ByClient_EnqueuesDisconnected()
     {
         using var harness = new Harness();
@@ -269,6 +343,38 @@ public sealed class LiteNetLibServerTransportTests
 
         Assert.That(client.WaitFor(() => client.IsDisconnected), Is.True);
         Assert.That(client.WaitFor(() => harness.Inbound.TrackedPeers == 0), Is.True, "no budget is left behind");
+    }
+
+    [Test]
+    public void Payload_FromAPeerTheServerClosed_IsIgnored()
+    {
+        using var harness = new Harness(abuse: new AbuseOptions());
+        var deafness = new DeafLayer();
+        using var client = new TestNetClient(deafness);
+        client.Connect(harness.Port, Key);
+        Assert.That(client.WaitFor(() => client.IsConnected), Is.True, "the client did not connect");
+        Assert.That(harness.WaitForEvent(out InboundEvent connected), Is.True, "no Connected event arrived");
+
+        // Never hearing the close, the client never confirms it, so the library keeps its peer and its packets.
+        deafness.IsDeaf = true;
+        harness.Transport.Disconnect(connected.Connection, DisconnectReason.Kicked, string.Empty);
+        long bytesBefore = harness.Transport.GetStatistics().BytesReceived;
+        const int moves = 20;
+        byte[] payload = new byte[MoveInput.EncodedLength];
+        for (uint sequence = 1; sequence <= moves; sequence++)
+        {
+            new MoveInput(new MoveIntent(sequence, sequence, 1f, 0f)).Write(payload);
+            client.Send(payload, ProtocolChannel.Input, DeliveryMethod.Sequenced);
+        }
+
+        bool isReceived = SpinWait.SpinUntil(
+            () => harness.Transport.GetStatistics().BytesReceived >= bytesBefore + moves * MoveInput.EncodedLength,
+            5000);
+        Thread.Sleep(100);
+
+        Assert.That(isReceived, Is.True, "the closed peer's moves reached the server's socket");
+        Assert.That(harness.Inbound.TrackedPeers, Is.Zero);
+        Assert.That(harness.Inbound.Count, Is.Zero, "none of them reached the queue, where they would have no budget");
     }
 
     [Test]

@@ -22,8 +22,8 @@ public interface IOutboundMessages
 
     /// <summary>
     ///     Refuses connection requests from the connection's remote address for <c>Abuse:KickCooldownMs</c> (Network
-    ///     Protocol §11). Called before <see cref="Disconnect" />, while the connection is still known; unknown
-    ///     connections are ignored.
+    ///     Protocol §11). Called before <see cref="Disconnect" />. A connection that has just left on its own is still
+    ///     known, because what it sent is judged only when the queue is drained; unknown connections are ignored.
     /// </summary>
     void CoolDownAddress(ConnectionId connection);
 }

@@ -257,10 +257,15 @@ public sealed class AcceptanceScenarioTests
         controller.SetManualDirection(0f, 0f);
         AwaitConvergence(client, admin, "step 4, lossy manual walk");
 
-        bool isWalking = controller.TryMoveTo(world.Predictor.Position, new WorldPosition(12f, 0f, 8f));
+        // Where the walk ends is the server's word: stops lost on the link leave it walking on for up to its input
+        // hold time (World:InputHoldTimeoutMs), 1.25 m at the default speed, so the bound allows that and no more.
+        var clicked = new WorldPosition(12f, 0f, 8f);
+        Assert.That(client.DistanceTo(clicked), Is.GreaterThan(3f), "step 4: the click is away from the player");
+        bool isWalking = controller.TryMoveTo(world.Predictor.Position, clicked);
         Assert.That(isWalking, Is.True, "step 4: the clicked point is reachable");
         Assert.That(client.PumpUntil(() => !controller.HasPath, WalkLimit), Is.True, "step 4: the click walk ended");
         AwaitConvergence(client, admin, "step 4, lossy click walk");
+        Assert.That(client.DistanceTo(clicked), Is.LessThan(1.5f), "step 4: the click walk took the player there");
         Assert.That(link.Dropped, Is.GreaterThan(dropped), "step 4: the link really lost messages");
         Assert.That(world.Smoother.Snaps, Is.Zero, "step 4: no correction was large enough to snap");
 

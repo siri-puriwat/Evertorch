@@ -2,7 +2,7 @@
 #   1. refreshes both content packages, so the Unity client's copy always matches the server's;
 #   2. starts the Compose PostgreSQL database and applies pending migrations to it;
 #   3. runs the server in the Development environment with that database.
-# Extra arguments go to the server, e.g. --Network:Port=7778.
+# Extra arguments go to the server, e.g. --Network:Port=7779 --Health:Port=7780.
 param(
     [Parameter(ValueFromRemainingArguments = $true)]
     [string[]] $ServerArguments

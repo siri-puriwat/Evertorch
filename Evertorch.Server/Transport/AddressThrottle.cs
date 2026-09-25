@@ -34,6 +34,17 @@ public sealed class AddressThrottle
         m_cooldown = TimeSpan.FromMilliseconds(options.Value.KickCooldownMs);
     }
 
+    public int TrackedAddresses
+    {
+        get
+        {
+            lock (m_gate)
+            {
+                return m_addresses.Count;
+            }
+        }
+    }
+
     /// <summary>
     ///     False when a connection request from <paramref name="address" /> must be refused without a word;
     ///     <paramref name="limit" /> then names the limit it met (<see cref="ServerInstruments" />).
@@ -81,9 +92,15 @@ public sealed class AddressThrottle
 
     public void OnConnected(IPAddress address)
     {
+        // With the limits off nothing reads the table, and nothing would ever forget what went into it.
+        if (!m_isEnabled)
+        {
+            return;
+        }
+
         lock (m_gate)
         {
-            // A connection admitted before the limits applied, or while its entry made room, still counts.
+            // A connection admitted while its entry was forgotten to make room still counts.
             GetOrAdd(address).Connections++;
         }
     }
@@ -123,6 +140,11 @@ public sealed class AddressThrottle
 
     public void OnDisconnected(IPAddress address)
     {
+        if (!m_isEnabled)
+        {
+            return;
+        }
+
         lock (m_gate)
         {
             if (m_addresses.TryGetValue(address, out Entry? entry) && entry.Connections > 0)

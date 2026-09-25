@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using Evertorch.Game;
 using Evertorch.Protocol;
 using UnityEngine;
+using UnityEngine.Events;
 using UnityEngine.InputSystem;
 using UnityEngine.SceneManagement;
 using EntityId = Evertorch.Game.EntityId;
@@ -156,7 +157,9 @@ public sealed class GameClient : MonoBehaviour
 
         m_overlay = DevelopmentOverlay.Create(this);
         m_overlay.transform.SetParent(transform, false);
-        Touch = TouchControls.Create(m_overlay.Toggle);
+        // The Dev button is for a device without a keyboard; everywhere else F1 shows the overlay.
+        UnityAction? toggleOverlay = Application.isMobilePlatform ? m_overlay.Toggle : null;
+        Touch = TouchControls.Create(toggleOverlay);
         Touch.transform.SetParent(transform, false);
         Touch.SetVisible(Application.isMobilePlatform);
         m_hud = CombatHud.Create(this);

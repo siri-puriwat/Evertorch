@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Threading;
 using Evertorch.Protocol;
 using LiteNetLib;
+using LiteNetLib.Layers;
 using DisconnectReason = LiteNetLib.DisconnectReason;
 
 namespace Evertorch.Server.Tests
@@ -20,9 +21,10 @@ internal sealed class TestNetClient : IDisposable
     private readonly NetManager m_manager;
     private NetPeer? m_peer;
 
-    public TestNetClient()
+    /// <param name="layer">Sees every datagram the client sends or receives, as a hostile or broken peer would.</param>
+    public TestNetClient(PacketLayerBase? layer = null)
     {
-        m_manager = new NetManager(m_listener)
+        m_manager = new NetManager(m_listener, layer)
         {
             ChannelsCount = MessageRouting.ChannelCount,
             AutoRecycle = true,

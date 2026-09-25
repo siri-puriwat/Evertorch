@@ -372,6 +372,30 @@ public sealed class SharedIntentPathTests : InputTestFixture
     }
 
     [UnityTest]
+    public IEnumerator DevButton_StaysWhenTheOverlayHidesTheStick_SoATouchDeviceCanShowTheOverlayAgain()
+    {
+        InputSystem.settings.backgroundBehavior = InputSettings.BackgroundBehavior.IgnoreFocus;
+#if UNITY_EDITOR
+        InputSystem.settings.editorInputBehaviorInPlayMode =
+            InputSettings.EditorInputBehaviorInPlayMode.AllDeviceInputAlwaysGoesToGameView;
+#endif
+        Touchscreen touchscreen = InputSystem.AddDevice<Touchscreen>();
+        Rig rig = CreateRig();
+        DevelopmentOverlay overlay = rig.CreateOverlay();
+        TouchControls controls = rig.CreateTouchControls(overlay.Toggle);
+        yield return null;
+
+        controls.SetVisible(false);
+        yield return null;
+        RectTransform dev = controls.GetComponentsInChildren<RectTransform>(true).Single(rect => rect.name == "Dev");
+        Assert.That(controls.IsVisible, Is.False, "the stick is hidden");
+        Assert.That(dev.gameObject.activeInHierarchy, Is.True, "the Dev button stays");
+        yield return Tap(touchscreen, CenterOf(dev));
+
+        Assert.That(overlay.IsVisible, Is.True, "and still shows the overlay");
+    }
+
+    [UnityTest]
     public IEnumerator LoginButton_WhenTapped_IsNotLeftSelected()
     {
         // A selected control receives the UI navigate action, which shares WASD and the gamepad stick with movement.

@@ -33,7 +33,6 @@ public sealed class TouchControls : MonoBehaviour
 
     private GameObject? m_stickRoot;
     private GameObject? m_targetButtons;
-    private GameObject? m_overlayToggle;
 
     public bool IsVisible => m_stickRoot != null && m_stickRoot.activeSelf;
 
@@ -41,7 +40,7 @@ public sealed class TouchControls : MonoBehaviour
 
     public RectTransform? Knob { get; private set; }
 
-    /// <param name="toggleOverlay">What the overlay's toggle does; without it there is no toggle.</param>
+    /// <param name="toggleOverlay">What the Dev button does; without it there is no Dev button.</param>
     public static TouchControls Create(UnityAction? toggleOverlay = null)
     {
         var root = new GameObject("TouchControls");
@@ -50,6 +49,10 @@ public sealed class TouchControls : MonoBehaviour
         return controls;
     }
 
+    /// <summary>
+    ///     Shows or hides the stick and the target buttons. The Dev button stays: on a device without a keyboard it is
+    ///     the only way back to the overlay, whose toggle calls this.
+    /// </summary>
     public void SetVisible(bool isVisible)
     {
         if (m_stickRoot != null)
@@ -60,11 +63,6 @@ public sealed class TouchControls : MonoBehaviour
         if (m_targetButtons != null)
         {
             m_targetButtons.SetActive(isVisible);
-        }
-
-        if (m_overlayToggle != null)
-        {
-            m_overlayToggle.SetActive(isVisible);
         }
     }
 
@@ -99,7 +97,7 @@ public sealed class TouchControls : MonoBehaviour
 
         if (toggleOverlay != null)
         {
-            m_overlayToggle = CreateOverlayToggle(canvasObject.transform, toggleOverlay);
+            CreateOverlayToggle(canvasObject.transform, toggleOverlay);
         }
     }
 
@@ -120,7 +118,7 @@ public sealed class TouchControls : MonoBehaviour
     }
 
     // On the left edge, clear of the stick: the overlay's F1 for a device without a keyboard.
-    private static GameObject CreateOverlayToggle(Transform parent, UnityAction toggleOverlay)
+    private static void CreateOverlayToggle(Transform parent, UnityAction toggleOverlay)
     {
         GameObject toggle = CreateImage("Dev", parent, ToggleSize, AreaColor);
         var rect = (RectTransform)toggle.transform;
@@ -132,7 +130,6 @@ public sealed class TouchControls : MonoBehaviour
         button.navigation = new Navigation { mode = Navigation.Mode.None };
         button.onClick.AddListener(toggleOverlay);
         AddLabel("Dev", toggle.transform);
-        return toggle;
     }
 
     private static void AddLabel(string text, Transform parent)

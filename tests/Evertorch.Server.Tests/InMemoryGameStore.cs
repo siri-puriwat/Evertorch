@@ -34,6 +34,12 @@ internal sealed class InMemoryGameStore : IGameStore
     public Exception? MigrationQueryFailure { get; set; }
 
     /// <summary>
+    ///     When set, runs at the start of each pending-migrations query, before the store answers, so a test can hold a
+    ///     probe while it queues work.
+    /// </summary>
+    public Action? BeforeMigrationQuery { get; set; }
+
+    /// <summary>
     ///     When set, the next character created gets this ID instead of the next free one, so a test can name it.
     /// </summary>
     public long? NextCharacterId { get; set; }
@@ -88,6 +94,7 @@ internal sealed class InMemoryGameStore : IGameStore
 
     public Task<IReadOnlyList<string>> GetPendingMigrationsAsync(CancellationToken cancellationToken)
     {
+        BeforeMigrationQuery?.Invoke();
         ThrowIfUnavailable();
         if (MigrationQueryFailure != null)
         {

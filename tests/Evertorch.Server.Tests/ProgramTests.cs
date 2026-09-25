@@ -1,9 +1,11 @@
 using System;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using Evertorch.Persistence;
@@ -98,6 +100,56 @@ public sealed class ProgramTests
             m_hasAnswered = true;
             m_started.Wait(TimeSpan.FromSeconds(30));
             return "shutdown";
+        }
+    }
+
+    [Test]
+    public void Main_OnAHostWithAThaiCulture_StampsItsLogsInGregorianUtc()
+    {
+        using var package = new TemporaryDirectory();
+        PackageFixture.WriteTo(package.Path, PackageFixture.BuildRepositoryPackage());
+        TextReader originalIn = Console.In;
+        TextWriter originalOut = Console.Out;
+        CultureInfo originalCulture = CultureInfo.CurrentCulture;
+        CultureInfo? originalDefault = CultureInfo.DefaultThreadCurrentCulture;
+        using var output = new StartedWatcher();
+        int year = DateTime.UtcNow.Year;
+        int exitCode;
+
+        // Its default calendar is the Thai Buddhist one: a stamp in the host's culture would read 2569 for 2026. The
+        // user's regional overrides are left out, so the calendar is that default on any machine.
+        var thai = new CultureInfo("th-TH", false);
+        CultureInfo.CurrentCulture = thai;
+        CultureInfo.DefaultThreadCurrentCulture = thai;
+        Console.SetOut(output);
+        Console.SetIn(new ShutdownOnceStarted(output.Started));
+        try
+        {
+            exitCode = RunMain(
+                $"--Content:ServerPackagePath={package.Path}",
+                $"--ConnectionStrings:Evertorch={TestHosts.UnreachableDatabase}",
+                "--Network:Port=0",
+                "--Health:Port=0");
+        }
+        finally
+        {
+            Console.SetIn(originalIn);
+            Console.SetOut(originalOut);
+            CultureInfo.CurrentCulture = originalCulture;
+            CultureInfo.DefaultThreadCurrentCulture = originalDefault;
+        }
+
+        MatchCollection headers = Regex.Matches(
+            output.Text,
+            @"^(\S+) (?:trce|dbug|info|warn|fail|crit): ",
+            RegexOptions.Multiline);
+        Assert.That(exitCode, Is.Zero);
+        Assert.That(headers, Is.Not.Empty);
+        foreach (Match header in headers)
+        {
+            string stamp = header.Groups[1].Value;
+            Assert.That(stamp, Does.Match(@"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$"));
+            Assert.That(stamp, Does.StartWith($"{year:D4}-").Or.StartWith($"{year + 1:D4}-"));
         }
     }
 
