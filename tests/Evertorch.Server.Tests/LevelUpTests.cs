@@ -70,6 +70,11 @@ public sealed class LevelUpTests
         Assert.That(
             server.Transport.ControlOpcodesSentTo(connection),
             Has.None.EqualTo(MessageOpcode.CharacterHealth));
+        CharacterProgress progress = server.Transport.ControlSentTo(connection)
+            .Where(message => message.Opcode == MessageOpcode.CharacterProgress)
+            .Select(message => CharacterProgress.TryRead(message.Payload, out CharacterProgress read) ? read : default)
+            .Single();
+        Assert.That(progress.ExperienceToNextLevel, Is.Zero, "nothing more at the cap");
         Assert.That(server.ProgressionLog.Entries, Is.Empty);
     }
 
@@ -159,6 +164,26 @@ public sealed class LevelUpTests
             .Single();
         Assert.That(health.Current, Is.EqualTo((uint)levelTwo.MaxHp));
         Assert.That(health.Maximum, Is.EqualTo((uint)levelTwo.MaxHp));
+        Assert.That(health.CurrentSpirit, Is.EqualTo((uint)levelTwo.MaxSp));
+        Assert.That(health.MaximumSpirit, Is.EqualTo((uint)levelTwo.MaxSp));
+
+        CharacterProgress progress = server.Transport.ControlSentTo(connection)
+            .Where(message => message.Opcode == MessageOpcode.CharacterProgress)
+            .Select(message => CharacterProgress.TryRead(message.Payload, out CharacterProgress read) ? read : default)
+            .Single();
+        Assert.That(progress.Level, Is.EqualTo(2));
+        Assert.That(progress.Experience, Is.EqualTo(5UL));
+        Assert.That(progress.ExperienceToNextLevel, Is.EqualTo(50UL));
+        MessageOpcode[] order = server.Transport.ControlOpcodesSentTo(connection)
+            .Where(opcode => opcode is MessageOpcode.EntityDied
+                or MessageOpcode.CharacterHealth
+                or MessageOpcode.CharacterProgress)
+            .ToArray();
+        Assert.That(
+            order,
+            Is.EqualTo(new[]
+                { MessageOpcode.EntityDied, MessageOpcode.CharacterHealth, MessageOpcode.CharacterProgress }),
+            "the death, then HP and SP, then the progress");
     }
 
     [Test]

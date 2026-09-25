@@ -64,6 +64,29 @@ public sealed class MessageSender
         m_outbound.Send(connection, m_buffer.AsSpan(0, message.Write(m_buffer)));
     }
 
+    /// <summary>
+    ///     <paramref name="player" />'s exact HP and SP to its owner alone (Network Protocol §9); nothing while no
+    ///     connection controls it.
+    /// </summary>
+    public void SendHealth(PlayerEntity player)
+    {
+        if (player.Owner != default)
+        {
+            Send(
+                player.Owner,
+                new CharacterHealth(
+                    (uint)player.CurrentHealth,
+                    (uint)player.MaxHealth,
+                    (uint)player.CurrentSpirit,
+                    (uint)player.MaxSpirit));
+        }
+    }
+
+    public void Send(ConnectionId connection, CharacterProgress message)
+    {
+        m_outbound.Send(connection, m_buffer.AsSpan(0, message.Write(m_buffer)));
+    }
+
     public void Send(ConnectionId connection, CharacterHealth message)
     {
         m_outbound.Send(connection, m_buffer.AsSpan(0, message.Write(m_buffer)));

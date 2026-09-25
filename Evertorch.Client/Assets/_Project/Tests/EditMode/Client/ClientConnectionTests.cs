@@ -159,6 +159,21 @@ public sealed class ClientConnectionTests
     }
 
     [Test]
+    public void CharacterProgress_InTheWorld_ReachesTheWorld()
+    {
+        var harness = new Harness();
+        harness.EnterWorld();
+        var progress = new CharacterProgress(2, 5, 50);
+
+        harness.Deliver(ProtocolChannel.Control, Encode(CharacterProgress.EncodedLength, progress.Write));
+        harness.Deliver(ProtocolChannel.Control, new byte[] { 0x1A, 0x80, 0x00 });
+
+        Assert.That(harness.Connection.World!.Level, Is.EqualTo(2));
+        Assert.That(harness.Connection.World.Experience, Is.EqualTo(5UL));
+        Assert.That(harness.Connection.MalformedMessages, Is.EqualTo(1), "a truncated progress");
+    }
+
+    [Test]
     public void CommandRejected_InTheWorld_ReachesTheWorldWithItsSequence()
     {
         var harness = new Harness();
@@ -391,6 +406,22 @@ public sealed class ClientConnectionTests
         Assert.That(EnterWorldRequest.TryRead(sent.Payload, out EnterWorldRequest request), Is.True);
         Assert.That(request.Character, Is.EqualTo(new CharacterId(7)));
         Assert.That(harness.Connection.State, Is.EqualTo(ClientConnectionState.EnteringWorld));
+    }
+
+    [Test]
+    public void EnterWorld_TwiceDuringOneLoad_TheWorldNamesTheCharacterTheServerEntered()
+    {
+        var harness = new Harness();
+        harness.ConnectAndReceiveHello();
+        harness.ReceiveList(Entry(7, "Ann0"), Entry(9, "Bob12"));
+        harness.Connection.EnterWorld(new CharacterId(7));
+        harness.Connection.EnterWorld(new CharacterId(9));
+
+        WorldEntered entered = ClientWorldFixture.Entered(Start, character: 7);
+        harness.Deliver(ProtocolChannel.Control, Encode(entered.GetEncodedLength(), entered.Write));
+
+        Assert.That(harness.Connection.World!.Character, Is.EqualTo(new CharacterId(7)),
+            "the second request is not the one the server answered");
     }
 
     [Test]

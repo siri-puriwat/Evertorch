@@ -63,7 +63,14 @@ public sealed class PlayerPanelTests
             5f,
             71,
             71,
-            1.5f);
+            1.5f,
+            0,
+            new CharacterId(1),
+            1,
+            0,
+            30,
+            24,
+            24);
         var world = new ClientWorld(new NavigationGrid(4, 4, 1f, 0f, 0f, 0.3f, 0.4f, cells), entered, 20);
         typeof(GameClient)
             .GetField("m_world", BindingFlags.NonPublic | BindingFlags.Instance)!
@@ -138,6 +145,45 @@ public sealed class PlayerPanelTests
         Assert.That(Label(bar, "Map").text, Is.EqualTo("Training Ground"));
         Assert.That(Label(bar, "Ping").text, Is.EqualTo("42 ms"));
         Assert.That(bar.IsVisible, Is.False, "out of the world the bar stays hidden");
+    }
+
+    [UnityTest]
+    public IEnumerator StatusBar_ShowsTheWorldsSpAndExperience_FullAtTheCap()
+    {
+        GameClient client = CreateIdleClient();
+        ClientWorld world = GiveWorld(client);
+        var bar = StatusBar.Create(client);
+        m_created.Add(bar.gameObject);
+        world.OnCharacterHealth(new CharacterHealth(50, 71, 12, 24));
+        world.OnCharacterProgress(new CharacterProgress(1, 15, 30));
+        yield return null;
+
+        string spirit = Label(bar, "Spirit").text;
+        float half = bar.ShownExperienceRatio;
+        world.OnCharacterProgress(new CharacterProgress(10, 0, 0));
+        yield return null;
+
+        Assert.That(bar.IsVisible, Is.True);
+        Assert.That(spirit, Is.EqualTo("SP 12 / 24"));
+        Assert.That(half, Is.EqualTo(0.5f).Within(0.001f));
+        Assert.That(bar.ShownExperienceRatio, Is.EqualTo(1f), "nothing more to earn at the cap");
+    }
+
+    [UnityTest]
+    public IEnumerator FeedbackLines_SayLevelUp_OnlyWhenTheLevelRises()
+    {
+        GameClient client = CreateIdleClient();
+        ClientWorld world = GiveWorld(client);
+        var lines = FeedbackLines.Create(client);
+        m_created.Add(lines.gameObject);
+        yield return null;
+
+        world.OnCharacterProgress(new CharacterProgress(1, 10, 30));
+        string afterAward = lines.Text;
+        world.OnCharacterProgress(new CharacterProgress(2, 5, 50));
+
+        Assert.That(afterAward, Is.Empty);
+        Assert.That(lines.Text, Is.EqualTo("Level up"));
     }
 
     [UnityTest]

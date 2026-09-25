@@ -365,6 +365,19 @@ public sealed class PrototypeAcceptanceTests
             clients);
         string shares = string.Join(", ", dealt.Select(pair => $"{pair.Key.Value} dealt {pair.Value}"));
         Assert.That(isShared, Is.True, $"{step}: each character got its share ({shares} of {total})");
+
+        // Each client hears its own progress (Network Protocol §9), and its SP arrived with its HP.
+        bool isSeen = SocketClients.PumpUntil(
+            () => clients.All(client =>
+                client.World.Level == expected[client.World.LocalEntity].Level
+                && client.World.Experience == (ulong)expected[client.World.LocalEntity].Experience),
+            clients);
+        Assert.That(isSeen, Is.True, $"{step}: each client shows its own level and experience");
+        foreach (SocketClient client in clients)
+        {
+            Assert.That(client.World.LocalMaximumSpirit, Is.GreaterThan(0u), $"{step}: SP reached the client");
+            Assert.That(client.World.ExperienceToNextLevel, Is.GreaterThan(client.World.Experience), step);
+        }
     }
 
     private static void AwaitConvergence(IAdminCommandService admin, string step, params SocketClient[] clients)

@@ -49,6 +49,14 @@ public sealed class CharacterProgression
     }
 
     /// <summary>
+    ///     What <paramref name="player" />'s next level needs in all; 0 at its job's level cap.
+    /// </summary>
+    public long ExperienceToNextLevel(PlayerEntity player)
+    {
+        return m_rules.ExperienceToNextLevel(TableOf(player), player.Level);
+    }
+
+    /// <summary>
     ///     Awards <paramref name="monster" />'s base experience, which has just died on <paramref name="map" />: each
     ///     character in its damage log that is alive on the map, not logging out, and not expelled gets its share of
     ///     the whole log. A character in its reconnect grace period is still on the map and shares.
@@ -85,37 +93,47 @@ public sealed class CharacterProgression
     private void Award(CharacterSession character, long experience)
     {
         PlayerEntity player = character.Player;
-        JobDefinition job = m_content.Jobs[player.Job];
-        ExperienceTableDefinition table = m_content.ExperienceTables[job.ExperienceTable];
         int previousLevel = player.Level;
         LevelProgress progress = m_rules.AddExperience(
-            table,
+            TableOf(player),
             new LevelProgress(previousLevel, player.Experience),
             experience);
         player.Experience = progress.Experience;
         m_instruments.RecordExperience(experience);
-        if (progress.Level == previousLevel)
+        if (progress.Level != previousLevel)
         {
-            return;
+            LevelUp(character, progress.Level, previousLevel);
         }
 
+        if (player.Owner != default)
+        {
+            m_sender.Send(
+                player.Owner,
+                new CharacterProgress(
+                    (ushort)player.Level,
+                    (ulong)player.Experience,
+                    (ulong)ExperienceToNextLevel(player)));
+        }
+    }
+
+    private void LevelUp(CharacterSession character, int level, int previousLevel)
+    {
+        PlayerEntity player = character.Player;
+
         // A level-up restores HP and SP in full, as the reference does.
-        player.Level = progress.Level;
-        m_stats.Recalculate(player, job);
+        player.Level = level;
+        m_stats.Recalculate(player, m_content.Jobs[player.Job]);
         player.CurrentHealth = player.MaxHealth;
         player.CurrentSpirit = player.MaxSpirit;
-        m_instruments.RecordLevelUps(progress.Level - previousLevel);
+        m_instruments.RecordLevelUps(level - previousLevel);
         LogLeveledUp(
             m_logger,
             character.Character.Value,
             character.Connection?.Connection.Value ?? 0,
-            progress.Level,
+            level,
             previousLevel,
             null);
-        if (player.Owner != default)
-        {
-            m_sender.Send(player.Owner, new CharacterHealth((uint)player.CurrentHealth, (uint)player.MaxHealth));
-        }
+        m_sender.SendHealth(player);
 
         // An important transition (Persistence §6). A character logging out or expelled shares nothing, so this never
         // takes the place of the checkpoint that ends its time in the world.
@@ -123,6 +141,11 @@ public sealed class CharacterProgression
         {
             m_lifetime.QueueCheckpoint(character);
         }
+    }
+
+    private ExperienceTableDefinition TableOf(PlayerEntity player)
+    {
+        return m_content.ExperienceTables[m_content.Jobs[player.Job].ExperienceTable];
     }
 }
 }

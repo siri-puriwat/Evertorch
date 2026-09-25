@@ -9,7 +9,7 @@ namespace Evertorch.Client
 {
 /// <summary>
 ///     Short-lived lines over the lower middle of the screen (Prototype Content §2): a refused command in plain words,
-///     and what the player picked up.
+///     what the player picked up, and a level-up.
 /// </summary>
 public sealed class FeedbackLines : MonoBehaviour
 {
@@ -86,6 +86,7 @@ public sealed class FeedbackLines : MonoBehaviour
         {
             m_watched.CommandRejectedReceived -= OnRejected;
             m_watched.ItemPickedUpReceived -= OnPickedUp;
+            m_watched.LeveledUp -= OnLeveledUp;
         }
 
         m_watched = world;
@@ -93,6 +94,7 @@ public sealed class FeedbackLines : MonoBehaviour
         {
             world.CommandRejectedReceived += OnRejected;
             world.ItemPickedUpReceived += OnPickedUp;
+            world.LeveledUp += OnLeveledUp;
         }
 
         if (m_lines.Count > 0)
@@ -113,6 +115,11 @@ public sealed class FeedbackLines : MonoBehaviour
         {
             Add($"Picked up {ItemName(m_client != null ? m_client.Content : null, pickedUp.Item)} x {pickedUp.Amount}");
         }
+    }
+
+    private void OnLeveledUp()
+    {
+        Add("Level up");
     }
 
     private static string ItemName(ClientContent? content, ItemDefinitionId item)

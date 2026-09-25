@@ -36,8 +36,14 @@ public sealed class ClientWorld
         MapInstance = entered.MapInstance;
         LocalEntity = entered.LocalEntity;
         LocalJob = entered.Job;
+        Character = entered.Character;
         LocalHealth = entered.CurrentHealth;
         LocalMaximumHealth = entered.MaximumHealth;
+        LocalSpirit = entered.CurrentSpirit;
+        LocalMaximumSpirit = entered.MaximumSpirit;
+        Level = entered.Level;
+        Experience = entered.Experience;
+        ExperienceToNextLevel = entered.ExperienceToNextLevel;
 
         // A reconnect to a character that died during its grace period enters it dead (Gameplay Systems §10.1).
         IsLocalDead = entered.CurrentHealth == 0;
@@ -65,11 +71,32 @@ public sealed class ClientWorld
     public JobDefinitionId LocalJob { get; }
 
     /// <summary>
+    ///     The character the server entered, which may not be the one asked for last (Network Protocol §5).
+    /// </summary>
+    public CharacterId Character { get; }
+
+    /// <summary>
     ///     The local character's exact HP as the server last reported it.
     /// </summary>
     public uint LocalHealth { get; private set; }
 
     public uint LocalMaximumHealth { get; private set; }
+
+    public uint LocalSpirit { get; private set; }
+
+    public uint LocalMaximumSpirit { get; private set; }
+
+    public ushort Level { get; private set; }
+
+    /// <summary>
+    ///     Experience toward the next level.
+    /// </summary>
+    public ulong Experience { get; private set; }
+
+    /// <summary>
+    ///     What the next level needs in all; 0 at the level cap.
+    /// </summary>
+    public ulong ExperienceToNextLevel { get; private set; }
 
     public bool IsLocalDead { get; private set; }
 
@@ -134,6 +161,11 @@ public sealed class ClientWorld
     public event Action<EntityRevived>? EntityRevivedReceived;
 
     public event Action<ItemDropped>? ItemDroppedReceived;
+
+    /// <summary>
+    ///     The local character reached a higher level.
+    /// </summary>
+    public event Action? LeveledUp;
 
     /// <summary>
     ///     A drop this client knows was picked up; its despawn follows.
@@ -313,6 +345,20 @@ public sealed class ClientWorld
     {
         LocalHealth = health.Current;
         LocalMaximumHealth = health.Maximum;
+        LocalSpirit = health.CurrentSpirit;
+        LocalMaximumSpirit = health.MaximumSpirit;
+    }
+
+    public void OnCharacterProgress(CharacterProgress progress)
+    {
+        bool isLevelUp = progress.Level > Level;
+        Level = progress.Level;
+        Experience = progress.Experience;
+        ExperienceToNextLevel = progress.ExperienceToNextLevel;
+        if (isLevelUp)
+        {
+            LeveledUp?.Invoke();
+        }
     }
 
     /// <summary>

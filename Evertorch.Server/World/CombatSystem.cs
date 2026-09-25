@@ -216,9 +216,9 @@ public sealed class CombatSystem : ITickPhase
             monster.Brain.LastAttacker = attacker.Id;
         }
 
-        if (target is PlayerEntity player && amount > 0 && player.Owner != default)
+        if (target is PlayerEntity player && amount > 0)
         {
-            m_sender.Send(player.Owner, new CharacterHealth((uint)player.CurrentHealth, (uint)player.MaxHealth));
+            m_sender.SendHealth(player);
         }
 
         if (target.CurrentHealth == 0)

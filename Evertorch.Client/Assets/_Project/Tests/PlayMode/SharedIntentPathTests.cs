@@ -626,7 +626,14 @@ public sealed class SharedIntentPathTests : InputTestFixture
                 Speed,
                 71,
                 71,
-                1.5f);
+                1.5f,
+                0,
+                new CharacterId(1),
+                1,
+                0,
+                30,
+                24,
+                24);
             m_world = new ClientWorld(grid, entered, (uint)Mathf.RoundToInt(1f / TickSeconds));
             Controller = new MovementController(grid);
             m_driver = new LocalPlayerDriver(Controller, new MoveIntentProducer(), m_world, this);

@@ -90,7 +90,6 @@ public sealed class GameClient : MonoBehaviour
     private CombatPresenter? m_combat;
     private Material? m_runtimeMaterial;
     private string m_leaveReason = string.Empty;
-    private CharacterId m_enteringCharacter;
     private CharacterId m_lastCharacter;
     private CharacterId m_reconnectCharacter;
 
@@ -399,7 +398,6 @@ public sealed class GameClient : MonoBehaviour
     {
         if (Connection != null && Connection.EnterWorld(character))
         {
-            m_enteringCharacter = character;
             Status = "Entering the world";
         }
     }
@@ -482,7 +480,8 @@ public sealed class GameClient : MonoBehaviour
 
     private void OnEnteredWorld(ClientWorld world)
     {
-        m_lastCharacter = m_enteringCharacter;
+        // The server names the character it entered: after two quick requests it need not be the last one asked for.
+        m_lastCharacter = world.Character;
         StartCoroutine(EnterMap(world));
     }
 

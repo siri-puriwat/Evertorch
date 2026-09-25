@@ -64,6 +64,7 @@ public sealed class SessionManager : ITickPhase
     private readonly Targeting m_targeting;
     private readonly PlayerLife m_life;
     private readonly CharacterLifetime m_lifetime;
+    private readonly CharacterProgression m_progression;
     private readonly PickupSystem m_pickups;
     private readonly TimeProvider m_time;
     private readonly ServerInstruments m_instruments;
@@ -90,6 +91,7 @@ public sealed class SessionManager : ITickPhase
         Targeting targeting,
         PlayerLife life,
         CharacterLifetime lifetime,
+        CharacterProgression progression,
         PickupSystem pickups,
         TimeProvider time,
         IOptions<SimulationOptions> simulation,
@@ -114,6 +116,7 @@ public sealed class SessionManager : ITickPhase
         m_targeting = targeting;
         m_life = life;
         m_lifetime = lifetime;
+        m_progression = progression;
         m_pickups = pickups;
         m_pickups.Settled += OnPickupSettled;
         m_time = time;
@@ -608,7 +611,13 @@ public sealed class SessionManager : ITickPhase
                 (uint)player.CurrentHealth,
                 (uint)player.MaxHealth,
                 player.AttackRange,
-                character.LastCommandSequence));
+                character.LastCommandSequence,
+                character.Character,
+                (ushort)player.Level,
+                (ulong)player.Experience,
+                (ulong)m_progression.ExperienceToNextLevel(player),
+                (uint)player.CurrentSpirit,
+                (uint)player.MaxSpirit));
         LogWorldEntered(
             m_logger,
             session.Connection.Value,

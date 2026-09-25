@@ -46,6 +46,11 @@ public ref struct WireWriter
         BinaryPrimitives.WriteInt64LittleEndian(Reserve(sizeof(long)), value);
     }
 
+    public void WriteUInt64(ulong value)
+    {
+        BinaryPrimitives.WriteUInt64LittleEndian(Reserve(sizeof(ulong)), value);
+    }
+
     public void WriteSingle(float value)
     {
         // The target framework has no single-precision BinaryPrimitives overload.

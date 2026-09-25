@@ -87,7 +87,7 @@ public sealed class SharedCombatMessageTests
         Assert.That(written, Is.EqualTo(golden));
         Assert.That(isRead, Is.True);
         Assert.That(read!.Amount, Is.EqualTo(2u));
-        Assert.That(ProtocolConstants.ProtocolVersion, Is.EqualTo(13));
+        Assert.That(ProtocolConstants.ProtocolVersion, Is.EqualTo(14));
     }
 
     [Test]
@@ -121,7 +121,10 @@ public sealed class SharedCombatMessageTests
             0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
             0x20, 0x00, 0x00, 0x00
         };
-        byte[] health = { 0x14, 0x80, 0x3C, 0x00, 0x00, 0x00, 0x44, 0x00, 0x00, 0x00 };
+        byte[] health =
+        {
+            0x14, 0x80, 0x3C, 0x00, 0x00, 0x00, 0x44, 0x00, 0x00, 0x00, 0x14, 0x00, 0x00, 0x00, 0x18, 0x00, 0x00, 0x00
+        };
         byte[] revived =
         {
             0x15, 0x80,
@@ -143,7 +146,7 @@ public sealed class SharedCombatMessageTests
         byte[] writtenDied = new byte[EntityDied.EncodedLength];
         new EntityDied(new EntityId(42), new EntityId(1), 32).Write(writtenDied);
         byte[] writtenHealth = new byte[CharacterHealth.EncodedLength];
-        new CharacterHealth(60, 68).Write(writtenHealth);
+        new CharacterHealth(60, 68, 20, 24).Write(writtenHealth);
         byte[] writtenRevived = new byte[EntityRevived.EncodedLength];
         new EntityRevived(new EntityId(1), new WorldPosition(1f, 0.5f, -2f), new WorldDirection(0f, 1f), 48)
             .Write(writtenRevived);

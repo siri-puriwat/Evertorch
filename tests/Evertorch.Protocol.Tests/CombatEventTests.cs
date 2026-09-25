@@ -38,7 +38,10 @@ public sealed class CombatEventTests
         0x20, 0x00, 0x00, 0x00
     };
 
-    private static readonly byte[] HealthBytes = { 0x14, 0x80, 0x3C, 0x00, 0x00, 0x00, 0x44, 0x00, 0x00, 0x00 };
+    private static readonly byte[] HealthBytes =
+    {
+        0x14, 0x80, 0x3C, 0x00, 0x00, 0x00, 0x44, 0x00, 0x00, 0x00, 0x14, 0x00, 0x00, 0x00, 0x18, 0x00, 0x00, 0x00
+    };
 
     private static readonly byte[] RevivedBytes =
     {
@@ -126,14 +129,21 @@ public sealed class CombatEventTests
     [Test]
     public void CharacterHealth_ForGoldenBytes_RoundTripsAndRefusesImpossibleValues()
     {
-        byte[] written = Write(CharacterHealth.EncodedLength, buffer => new CharacterHealth(60, 68).Write(buffer));
+        byte[] written = Write(
+            CharacterHealth.EncodedLength,
+            buffer => new CharacterHealth(60, 68, 20, 24).Write(buffer));
         byte[] aboveMaximum = WireMatrix.With(HealthBytes, 2, 0x45, 0x00, 0x00, 0x00);
-        byte[] zeroMaximum = { 0x14, 0x80, 0, 0, 0, 0, 0, 0, 0, 0 };
+        byte[] zeroMaximum = WireMatrix.With(HealthBytes, 2, 0, 0, 0, 0, 0, 0, 0, 0);
+        byte[] spAboveMaximum = WireMatrix.With(HealthBytes, 10, 0x19, 0x00, 0x00, 0x00);
+        byte[] noSp = WireMatrix.With(HealthBytes, 10, 0, 0, 0, 0, 0, 0, 0, 0);
 
         Assert.That(written, Is.EqualTo(HealthBytes));
         AssertStrict(HealthBytes, bytes => CharacterHealth.TryRead(bytes, out _));
         Assert.That(CharacterHealth.TryRead(aboveMaximum, out _), Is.False);
         Assert.That(CharacterHealth.TryRead(zeroMaximum, out _), Is.False);
+        Assert.That(CharacterHealth.TryRead(spAboveMaximum, out _), Is.False);
+        Assert.That(CharacterHealth.TryRead(noSp, out CharacterHealth read), Is.True, "a job may have no SP");
+        Assert.That(read.MaximumSpirit, Is.Zero);
     }
 
     [Test]

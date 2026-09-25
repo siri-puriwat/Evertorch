@@ -20,7 +20,12 @@ internal static class ClientWorldFixture
         WorldPosition position,
         uint serverTick = 0,
         uint health = 71,
-        uint lastCommandSequence = 0)
+        uint lastCommandSequence = 0,
+        ushort level = 1,
+        ulong experience = 0,
+        ulong experienceToNextLevel = 30,
+        uint spirit = 24,
+        long character = 1)
     {
         return new WorldEntered(
             new MapDefinitionId("map.training_ground"),
@@ -34,7 +39,13 @@ internal static class ClientWorldFixture
             health,
             71,
             1.5f,
-            lastCommandSequence);
+            lastCommandSequence,
+            new CharacterId(character),
+            level,
+            experience,
+            experienceToNextLevel,
+            spirit,
+            24);
     }
 
     public static EntitySnapshot Snapshot(uint tick, uint acknowledged, params EntityState[] states)

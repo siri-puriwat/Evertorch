@@ -16,9 +16,14 @@ public sealed class RegenerationTests
 
     private static uint[] HealthSentTo(TestServer server, ConnectionId connection)
     {
+        return HealthMessagesSentTo(server, connection).Select(health => health.Current).ToArray();
+    }
+
+    private static CharacterHealth[] HealthMessagesSentTo(TestServer server, ConnectionId connection)
+    {
         return server.Transport.ControlSentTo(connection)
             .Where(message => message.Opcode == MessageOpcode.CharacterHealth)
-            .Select(message => CharacterHealth.TryRead(message.Payload, out CharacterHealth read) ? read.Current : 0u)
+            .Select(message => CharacterHealth.TryRead(message.Payload, out CharacterHealth read) ? read : default)
             .ToArray();
     }
 
@@ -117,6 +122,42 @@ public sealed class RegenerationTests
         Assert.That(player.CurrentSpirit, Is.EqualTo(1), "8000 ms after the spawn");
         server.Tick(SpiritTicks);
         Assert.That(player.CurrentSpirit, Is.EqualTo(2), "16000 ms after the spawn");
+    }
+
+    [Test]
+    public void Tick_SendsTheOwnerItsSpStep_AndNobodyElse()
+    {
+        var server = new TestServer();
+        ConnectionId connection = server.EnterWorld(1);
+        ConnectionId other = server.EnterWorld(2);
+        PlayerEntity player = server.PlayerOf(connection);
+        player.CurrentSpirit = 0;
+        server.Transport.ClearSent();
+
+        server.Tick(SpiritTicks);
+
+        CharacterHealth sent = HealthMessagesSentTo(server, connection).Single();
+        Assert.That(sent.CurrentSpirit, Is.EqualTo(1u));
+        Assert.That(sent.MaximumSpirit, Is.EqualTo((uint)player.MaxSpirit));
+        Assert.That(sent.Current, Is.EqualTo((uint)player.CurrentHealth));
+        Assert.That(HealthMessagesSentTo(server, other), Is.Empty);
+    }
+
+    [Test]
+    public void Tick_WhenHpAndSpStepTogether_SendsOneMessage()
+    {
+        var server = new TestServer();
+        ConnectionId connection = server.EnterWorld(1);
+        PlayerEntity player = server.PlayerOf(connection);
+        server.Tick(4 * HealthTicks - 1);
+        player.CurrentHealth = 10;
+        player.CurrentSpirit = 0;
+        server.Transport.ClearSent();
+
+        server.Tick();
+
+        CharacterHealth sent = HealthMessagesSentTo(server, connection).Single();
+        Assert.That((sent.Current, sent.CurrentSpirit), Is.EqualTo((12u, 1u)), "24 s after the spawn, both at once");
     }
 
     [Test]

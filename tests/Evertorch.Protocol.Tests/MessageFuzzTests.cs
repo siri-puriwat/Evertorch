@@ -51,7 +51,13 @@ public sealed class MessageFuzzTests
                     60,
                     68,
                     1.5f,
-                    41)),
+                    41,
+                    new CharacterId(7),
+                    2,
+                    45,
+                    50,
+                    20,
+                    24)),
             payload => WorldEntered.TryRead(payload, out WorldEntered? message) ? Encode(message!) : null);
         yield return Case(
             "EntitySpawn",
@@ -112,8 +118,12 @@ public sealed class MessageFuzzTests
             payload => EntityDied.TryRead(payload, out EntityDied message) ? Encode(message) : null);
         yield return Case(
             "CharacterHealth",
-            Encode(new CharacterHealth(60, 68)),
+            Encode(new CharacterHealth(60, 68, 20, 24)),
             payload => CharacterHealth.TryRead(payload, out CharacterHealth message) ? Encode(message) : null);
+        yield return Case(
+            "CharacterProgress",
+            Encode(new CharacterProgress(2, 45, 50)),
+            payload => CharacterProgress.TryRead(payload, out CharacterProgress message) ? Encode(message) : null);
         yield return Case(
             "EntityRevived",
             Encode(new EntityRevived(new EntityId(9), new WorldPosition(1f, 2f, 3f), new WorldDirection(0f, 1f), 70)),
@@ -472,6 +482,13 @@ public sealed class MessageFuzzTests
     private static byte[] Encode(CharacterHealth message)
     {
         byte[] buffer = new byte[CharacterHealth.EncodedLength];
+        message.Write(buffer);
+        return buffer;
+    }
+
+    private static byte[] Encode(CharacterProgress message)
+    {
+        byte[] buffer = new byte[CharacterProgress.EncodedLength];
         message.Write(buffer);
         return buffer;
     }

@@ -47,7 +47,13 @@ public sealed class SharedLifecycleMessageTests
         0x44, 0x00, 0x00, 0x00,
         0x44, 0x00, 0x00, 0x00,
         0x00, 0x00, 0xC0, 0x3F,
-        0x0D, 0x0C, 0x0B, 0x0A
+        0x0D, 0x0C, 0x0B, 0x0A,
+        0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x02, 0x00,
+        0x08, 0x07, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01,
+        0x18, 0x17, 0x16, 0x15, 0x14, 0x13, 0x12, 0x11,
+        0x14, 0x00, 0x00, 0x00,
+        0x18, 0x00, 0x00, 0x00
     };
 
     private static readonly byte[] EntitySpawnBytes =
@@ -270,7 +276,13 @@ public sealed class SharedLifecycleMessageTests
             68,
             68,
             1.5f,
-            0x0A0B0C0D);
+            0x0A0B0C0D,
+            new CharacterId(7),
+            2,
+            0x0102030405060708UL,
+            0x1112131415161718UL,
+            20,
+            24);
         byte[] buffer = new byte[message.GetEncodedLength()];
         message.Write(buffer);
 
@@ -283,6 +295,12 @@ public sealed class SharedLifecycleMessageTests
         Assert.That(read.Position, Is.EqualTo(new WorldPosition(1f, 0.5f, -2f)));
         Assert.That(read.MovementSpeed, Is.EqualTo(5f));
         Assert.That(read.LastCommandSequence, Is.EqualTo(0x0A0B0C0Du));
+        Assert.That(read.Character, Is.EqualTo(new CharacterId(7)));
+        Assert.That(read.Level, Is.EqualTo(2));
+        Assert.That(read.Experience, Is.EqualTo(0x0102030405060708UL));
+        Assert.That(read.ExperienceToNextLevel, Is.EqualTo(0x1112131415161718UL));
+        Assert.That(read.CurrentSpirit, Is.EqualTo(20u));
+        Assert.That(read.MaximumSpirit, Is.EqualTo(24u));
     }
 }
 }

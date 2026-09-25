@@ -77,6 +77,19 @@ public ref struct WireReader
         return true;
     }
 
+    public bool TryReadUInt64(out ulong value)
+    {
+        if (m_remaining.Length < sizeof(ulong))
+        {
+            value = 0;
+            return false;
+        }
+
+        value = BinaryPrimitives.ReadUInt64LittleEndian(m_remaining);
+        m_remaining = m_remaining.Slice(sizeof(ulong));
+        return true;
+    }
+
     /// <summary>
     ///     Fails on NaN and infinities: no message has a use for them and they poison arithmetic downstream.
     /// </summary>

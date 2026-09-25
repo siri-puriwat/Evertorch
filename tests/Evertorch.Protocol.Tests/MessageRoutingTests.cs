@@ -38,6 +38,7 @@ public sealed class MessageRoutingTests
     [TestCase(MessageOpcode.ItemDropped)]
     [TestCase(MessageOpcode.ItemPickedUp)]
     [TestCase(MessageOpcode.CharacterHealth)]
+    [TestCase(MessageOpcode.CharacterProgress)]
     [TestCase(MessageOpcode.EntityRevived)]
     [TestCase(MessageOpcode.DisconnectNotice)]
     [TestCase(MessageOpcode.CharacterList)]
@@ -134,7 +135,7 @@ public sealed class MessageRoutingTests
             "DisconnectNotice=0x8013",
             "CharacterHealth=0x8014", "EntityRevived=0x8015", "CharacterList=0x8016",
             "CreateCharacterResult=0x8017", "CommandRejected=0x8018",
-            "LogoutComplete=0x8019"
+            "LogoutComplete=0x8019", "CharacterProgress=0x801A"
         };
 
         string[] actual = ((MessageOpcode[])Enum.GetValues(typeof(MessageOpcode)))
@@ -155,9 +156,9 @@ public sealed class MessageRoutingTests
     }
 
     [Test]
-    public void ProtocolVersion_IsThirteen()
+    public void ProtocolVersion_IsFourteen()
     {
-        Assert.That(ProtocolConstants.ProtocolVersion, Is.EqualTo(13));
+        Assert.That(ProtocolConstants.ProtocolVersion, Is.EqualTo(14));
     }
 
     [Test]

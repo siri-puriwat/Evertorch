@@ -32,12 +32,32 @@ public sealed class CombatEventWorldTests
         ClientWorld world = CreateWorld();
         uint enteredWith = world.LocalHealth;
 
-        world.OnCharacterHealth(new CharacterHealth(40, 71));
+        world.OnCharacterHealth(new CharacterHealth(40, 71, 20, 24));
 
         Assert.That(enteredWith, Is.EqualTo(71u));
         Assert.That(world.LocalHealth, Is.EqualTo(40u));
         Assert.That(world.LocalMaximumHealth, Is.EqualTo(71u));
+        Assert.That(world.LocalSpirit, Is.EqualTo(20u));
+        Assert.That(world.LocalMaximumSpirit, Is.EqualTo(24u));
         Assert.That(world.AttackRange, Is.EqualTo(1.5f));
+    }
+
+    [Test]
+    public void CharacterProgress_UpdatesLevelAndExperience_AndAnnouncesOnlyAHigherLevel()
+    {
+        ClientWorld world = CreateWorld();
+        int levelUps = 0;
+        world.LeveledUp += () => levelUps++;
+
+        world.OnCharacterProgress(new CharacterProgress(1, 10, 30));
+        int afterAward = levelUps;
+        world.OnCharacterProgress(new CharacterProgress(3, 20, 80));
+
+        Assert.That(afterAward, Is.Zero, "experience without a new level");
+        Assert.That(levelUps, Is.EqualTo(1), "two levels at once are one level-up");
+        Assert.That(world.Level, Is.EqualTo(3));
+        Assert.That(world.Experience, Is.EqualTo(20UL));
+        Assert.That(world.ExperienceToNextLevel, Is.EqualTo(80UL));
     }
 
     [Test]
@@ -51,6 +71,27 @@ public sealed class CombatEventWorldTests
 
         Assert.That(world.Remotes[Slime].HealthPermille, Is.EqualTo(800));
         Assert.That(received.Count, Is.EqualTo(1));
+    }
+
+    [Test]
+    public void Entering_TakesTheCharacterLevelExperienceAndSpFromTheServer()
+    {
+        WorldEntered entered = ClientWorldFixture.Entered(
+            ClientTestGrids.Center(2, 8),
+            level: 3,
+            experience: 42,
+            experienceToNextLevel: 80,
+            spirit: 9,
+            character: 7);
+
+        var world = new ClientWorld(ClientTestGrids.CreateYard(), entered, ClientWorldFixture.TickRate);
+
+        Assert.That(world.Character, Is.EqualTo(new CharacterId(7)));
+        Assert.That(world.Level, Is.EqualTo(3));
+        Assert.That(world.Experience, Is.EqualTo(42UL));
+        Assert.That(world.ExperienceToNextLevel, Is.EqualTo(80UL));
+        Assert.That(world.LocalSpirit, Is.EqualTo(9u));
+        Assert.That(world.LocalMaximumSpirit, Is.EqualTo(24u));
     }
 
     [Test]

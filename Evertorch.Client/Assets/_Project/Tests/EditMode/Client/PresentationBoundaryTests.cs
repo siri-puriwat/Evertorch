@@ -35,10 +35,10 @@ public sealed class PresentationBoundaryTests
         + @"|ForgetPendingStops|OnTick|OnCorrected|Observe)\("
         + @"|[Pp]redictor\??\.Apply\(|\.Buffer\.(Add|Clear)\("
         + @"|\.On(Spawn|Despawn|Snapshot|TargetChanged|AttackStarted|Damage|EntityDied|EntityRevived|CommandRejected"
-        + @"|ItemDropped|ItemPickedUp|CharacterHealth|Changed)\("
+        + @"|ItemDropped|ItemPickedUp|CharacterHealth|CharacterProgress|Changed)\("
         + @"|\.(Advance|CollectTargetCandidates|CollectDropCandidates)\("
         + @"|\.(Target|LastRejection|LocalHealth|LocalMaximumHealth|HealthPermille|StateFlags|CurrentHealth|IsLocked"
-        + @"|IsDead)\s*=(?![=>])");
+        + @"|IsDead|LocalSpirit|LocalMaximumSpirit|Level|Experience|ExperienceToNextLevel)\s*=(?![=>])");
 
     private static readonly Regex UsesPresentation = new(
         @"\b(CombatAnimation|CombatTimeline|CombatPresenter|HitMark|FloatingNumber|HealthBar|EntityView)\b"
@@ -97,14 +97,16 @@ public sealed class PresentationBoundaryTests
             "controller.CancelPath();", "m_client.Clock?.NextTick();", "world.Inventory.OnChanged(change);",
             "predictor.Teleport(position, facing);", "smoother.OnCorrected(before, after);",
             "world.ServerTime.Observe(now);", "remote.Buffer.Clear();", "m_predictor.Apply(intent);",
-            "controller.IsDead = true;", "world.Target ="
+            "controller.IsDead = true;", "world.Target =", "world.OnCharacterProgress(progress);",
+            "world.Level = 3;", "world.LocalSpirit = 0;"
         };
         string[] allowed =
         {
             "client.EnterWorld(entry.Character);", "client.RequestRespawn();", "if (world.Target == entity)",
             "int rtt = client.Connection.RoundTripMilliseconds;", "WorldPosition self = world.Predictor.Position;",
             "if (m_client.Clock != null && m_client.Clock.SkippedTicks > 0)", "bool isLocked = controller.IsLocked;",
-            "if (target.IsDead == wasDead)", "world.Inventory.Changed += Refresh;", "m_lines.Clear();"
+            "if (target.IsDead == wasDead)", "world.Inventory.Changed += Refresh;", "m_lines.Clear();",
+            "world.LeveledUp += OnLeveledUp;", "ShowCharacter(played.Value.Name, world.Level);"
         };
 
         Assert.That(probes.Where(probe => !UiForbidden.IsMatch(probe)), Is.Empty);

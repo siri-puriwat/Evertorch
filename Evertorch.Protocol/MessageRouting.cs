@@ -38,6 +38,7 @@ public static class MessageRouting
             case MessageOpcode.ItemDropped:
             case MessageOpcode.ItemPickedUp:
             case MessageOpcode.CharacterHealth:
+            case MessageOpcode.CharacterProgress:
             case MessageOpcode.EntityRevived:
             case MessageOpcode.DisconnectNotice:
             case MessageOpcode.CharacterList:

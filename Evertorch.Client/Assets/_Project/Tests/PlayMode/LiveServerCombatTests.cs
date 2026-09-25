@@ -121,6 +121,7 @@ public sealed class LiveServerCombatTests : InputTestFixture
         Assert.That(gel.IsPlaceholder, Is.False, "the body is the pickup_slime_gel prefab, not the placeholder");
         Assert.That(m_dropped.Any(dropped => dropped.ItemId == SlimeGel), Is.True);
         Assert.That(m_kills, Is.GreaterThanOrEqualTo(1));
+        yield return ExpectProgressOnTheStatusBar(client, world);
         Debug.Log($"Live combat: {m_kills} kills, {m_respawns} respawns, {m_dropped.Count} drops announced");
     }
 
@@ -301,6 +302,36 @@ public sealed class LiveServerCombatTests : InputTestFixture
         reconnect.onClick.Invoke();
         yield return WaitUntil(() => client.World?.Inventory.IsCurrent == true, StartTimeoutSeconds);
         Assert.That(client.World?.Inventory.IsCurrent, Is.True, client.Status);
+    }
+
+    // The status bar shows the level, SP, and experience the server sent (Prototype Content §2). Regeneration can
+    // move SP between frames, so the bar gets a moment to catch up before the comparison.
+    private static IEnumerator ExpectProgressOnTheStatusBar(GameClient client, ClientWorld world)
+    {
+        StatusBar bar = client.GetComponentsInChildren<StatusBar>(true).Single();
+        TMP_Text[] labels = bar.GetComponentsInChildren<TMP_Text>(true);
+        TMP_Text name = labels.Single(label => label.name == "Name");
+        TMP_Text spirit = labels.Single(label => label.name == "Spirit");
+        yield return WaitUntil(() => IsShowing(bar, name, spirit, world), 2f);
+
+        Assert.That(world.Level > 1 || world.Experience > 0, Is.True, "the kills gave experience");
+        Assert.That(name.text, Does.EndWith($"Lv {world.Level}"), "the level comes from the world");
+        Assert.That(spirit.text, Is.EqualTo($"SP {world.LocalSpirit} / {world.LocalMaximumSpirit}"));
+        Assert.That(bar.ShownExperienceRatio, Is.EqualTo(ExperienceRatio(world)).Within(0.001f));
+    }
+
+    private static bool IsShowing(StatusBar bar, TMP_Text name, TMP_Text spirit, ClientWorld world)
+    {
+        return name.text.EndsWith($"Lv {world.Level}", StringComparison.Ordinal)
+            && spirit.text == $"SP {world.LocalSpirit} / {world.LocalMaximumSpirit}"
+            && Math.Abs(bar.ShownExperienceRatio - ExperienceRatio(world)) < 0.001f;
+    }
+
+    private static float ExperienceRatio(ClientWorld world)
+    {
+        return world.ExperienceToNextLevel == 0
+            ? 1f
+            : Mathf.Floor(world.Experience * 1000f / world.ExperienceToNextLevel) / 1000f;
     }
 
     private static IEnumerator WaitUntil(Func<bool> condition, float timeoutSeconds)

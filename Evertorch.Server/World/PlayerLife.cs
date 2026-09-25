@@ -5,7 +5,7 @@ namespace Evertorch.Server
 {
 /// <summary>
 ///     Brings a dead player back on request (Gameplay Systems §10.1): at its map's spawn point, with full HP and SP,
-///     told to every client that knows it before visibility is recomputed, then its HP to the owner.
+///     told to every client that knows it before visibility is recomputed, then its HP and SP to the owner.
 /// </summary>
 public sealed class PlayerLife
 {
@@ -53,7 +53,7 @@ public sealed class PlayerLife
             }
         }
 
-        m_sender.Send(session.Connection, new CharacterHealth((uint)player.CurrentHealth, (uint)player.MaxHealth));
+        m_sender.SendHealth(player);
         return true;
     }
 }

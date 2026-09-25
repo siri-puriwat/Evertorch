@@ -123,6 +123,15 @@ internal sealed class TestServer
             simulation,
             Audit,
             PickupLog);
+        Progression = new CharacterProgression(
+            Sessions,
+            Lifetime,
+            stats,
+            new RenewalProgressionRules(),
+            Content,
+            sender,
+            Instruments,
+            ProgressionLog);
         var tokens = new DevelopmentTokenValidator(Options.Create(authentication), Time);
         var handshake = new HandshakeValidator(compatibility, tokens, Content);
         SessionManager = new SessionManager(
@@ -136,6 +145,7 @@ internal sealed class TestServer
             targeting,
             new PlayerLife(Sessions, sender),
             Lifetime,
+            Progression,
             Pickups,
             Time,
             simulation,
@@ -148,15 +158,6 @@ internal sealed class TestServer
             Log);
         AdminQueue = new AdminQueue(Lifetime, Audit);
         Drops = new ItemDropSystem(World, dropRandom ?? Random, Options.Create(world), simulation);
-        Progression = new CharacterProgression(
-            Sessions,
-            Lifetime,
-            stats,
-            new RenewalProgressionRules(),
-            Content,
-            sender,
-            Instruments,
-            ProgressionLog);
         Combat = new CombatSystem(
             World,
             Sessions,

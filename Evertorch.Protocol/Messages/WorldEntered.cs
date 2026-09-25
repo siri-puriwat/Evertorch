@@ -4,8 +4,9 @@ using Evertorch.Game;
 namespace Evertorch.Protocol
 {
 /// <summary>
-///     Tells the client which entity it controls and where it stands. The rest of the baseline follows on the same
-///     reliable stream as one <see cref="EntitySpawn" /> per visible entity.
+///     Tells the client which character and entity it controls, where it stands, and its HP, SP, level, and
+///     experience. The rest of the baseline follows on the same reliable stream as one <see cref="EntitySpawn" /> per
+///     visible entity.
 /// </summary>
 public sealed class WorldEntered
 {
@@ -21,7 +22,13 @@ public sealed class WorldEntered
         uint currentHealth,
         uint maximumHealth,
         float attackRange,
-        uint lastCommandSequence = 0)
+        uint lastCommandSequence,
+        CharacterId character,
+        ushort level,
+        ulong experience,
+        ulong experienceToNextLevel,
+        uint currentSpirit,
+        uint maximumSpirit)
     {
         Map = map;
         MapInstance = mapInstance;
@@ -35,6 +42,12 @@ public sealed class WorldEntered
         MaximumHealth = maximumHealth;
         AttackRange = attackRange;
         LastCommandSequence = lastCommandSequence;
+        Character = character;
+        Level = level;
+        Experience = experience;
+        ExperienceToNextLevel = experienceToNextLevel;
+        CurrentSpirit = currentSpirit;
+        MaximumSpirit = maximumSpirit;
     }
 
     public MapDefinitionId Map { get; }
@@ -83,6 +96,34 @@ public sealed class WorldEntered
     /// </summary>
     public uint LastCommandSequence { get; }
 
+    /// <summary>
+    ///     The character the server entered, so a client that asked twice knows which one it got (Network Protocol
+    ///     §5); never 0.
+    /// </summary>
+    public CharacterId Character { get; }
+
+    /// <summary>
+    ///     The base level; at least 1.
+    /// </summary>
+    public ushort Level { get; }
+
+    /// <summary>
+    ///     Experience toward the next level.
+    /// </summary>
+    public ulong Experience { get; }
+
+    /// <summary>
+    ///     What the next level needs in all; 0 at the level cap.
+    /// </summary>
+    public ulong ExperienceToNextLevel { get; }
+
+    /// <summary>
+    ///     Never more than <see cref="MaximumSpirit" />.
+    /// </summary>
+    public uint CurrentSpirit { get; }
+
+    public uint MaximumSpirit { get; }
+
     public static bool TryRead(ReadOnlySpan<byte> source, out WorldEntered? message)
     {
         message = null;
@@ -100,11 +141,20 @@ public sealed class WorldEntered
             || !reader.TryReadUInt32(out uint maximumHealth)
             || !reader.TryReadSingle(out float attackRange)
             || !reader.TryReadUInt32(out uint lastCommandSequence)
+            || !reader.TryReadInt64(out long character)
+            || !reader.TryReadUInt16(out ushort level)
+            || !reader.TryReadUInt64(out ulong experience)
+            || !reader.TryReadUInt64(out ulong experienceToNextLevel)
+            || !reader.TryReadUInt32(out uint currentSpirit)
+            || !reader.TryReadUInt32(out uint maximumSpirit)
             || !reader.IsAtEnd
             || movementSpeed < 0f
             || maximumHealth == 0
             || currentHealth > maximumHealth
             || attackRange < 0f
+            || character == 0
+            || level == 0
+            || currentSpirit > maximumSpirit
             || !MapDefinitionId.TryCreate(mapText, out MapDefinitionId map)
             || !JobDefinitionId.TryCreate(jobText, out JobDefinitionId job))
         {
@@ -123,7 +173,13 @@ public sealed class WorldEntered
             currentHealth,
             maximumHealth,
             attackRange,
-            lastCommandSequence);
+            lastCommandSequence,
+            new CharacterId(character),
+            level,
+            experience,
+            experienceToNextLevel,
+            currentSpirit,
+            maximumSpirit);
         return true;
     }
 
@@ -141,7 +197,11 @@ public sealed class WorldEntered
             + sizeof(uint)
             + sizeof(uint)
             + sizeof(float)
-            + sizeof(uint);
+            + sizeof(uint)
+            + sizeof(long)
+            + sizeof(ushort)
+            + 2 * sizeof(ulong)
+            + 2 * sizeof(uint);
     }
 
     public int Write(Span<byte> destination)
@@ -160,6 +220,12 @@ public sealed class WorldEntered
         writer.WriteUInt32(MaximumHealth);
         writer.WriteSingle(AttackRange);
         writer.WriteUInt32(LastCommandSequence);
+        writer.WriteInt64(Character.Value);
+        writer.WriteUInt16(Level);
+        writer.WriteUInt64(Experience);
+        writer.WriteUInt64(ExperienceToNextLevel);
+        writer.WriteUInt32(CurrentSpirit);
+        writer.WriteUInt32(MaximumSpirit);
         return writer.Position;
     }
 }

@@ -167,11 +167,8 @@ public sealed class TargetFrame : MonoBehaviour
         m_name = Ui.CreateLabel("Name", panel);
         m_name.alignment = TextAlignmentOptions.Center;
 
-        GameObject bar = UiBuilder.CreateUiObject("Bar", panel);
-        bar.AddComponent<LayoutElement>().preferredHeight = BarHeight;
-        bar.AddComponent<Image>().color = BarBackColor;
-        m_fill = UiBuilder.CreateImage("Fill", bar.transform, BarFillColor, 0f, 0f).rectTransform;
-        m_fill.anchorMax = new Vector2(0f, 1f);
+        m_fill = UiBuilder.CreateBar("Bar", panel, BarBackColor, BarFillColor);
+        m_fill.parent.gameObject.AddComponent<LayoutElement>().preferredHeight = BarHeight;
 
         m_detail = Ui.CreateLabel("Detail", panel);
         m_detail.alignment = TextAlignmentOptions.Center;

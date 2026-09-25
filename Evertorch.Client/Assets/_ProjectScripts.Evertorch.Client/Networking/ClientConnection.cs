@@ -192,6 +192,17 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
                 }
 
                 break;
+            case MessageOpcode.CharacterProgress:
+                if (CharacterProgress.TryRead(payload, out CharacterProgress progress))
+                {
+                    WithWorld(world => world.OnCharacterProgress(progress));
+                }
+                else
+                {
+                    MalformedMessages++;
+                }
+
+                break;
             case MessageOpcode.EntityRevived:
                 if (EntityRevived.TryRead(payload, out EntityRevived revived))
                 {

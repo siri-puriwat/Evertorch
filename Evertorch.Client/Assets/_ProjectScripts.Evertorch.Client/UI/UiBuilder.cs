@@ -65,6 +65,19 @@ public sealed class UiBuilder
     }
 
     /// <summary>
+    ///     A bar of <paramref name="backColor" /> whose fill of <paramref name="fillColor" /> starts empty; the fill's
+    ///     <c>anchorMax.x</c> is the ratio it shows. Returns the fill.
+    /// </summary>
+    public static RectTransform CreateBar(string objectName, Transform parent, Color backColor, Color fillColor)
+    {
+        GameObject bar = CreateUiObject(objectName, parent);
+        bar.AddComponent<Image>().color = backColor;
+        RectTransform fill = CreateImage("Fill", bar.transform, fillColor, 0f, 0f).rectTransform;
+        fill.anchorMax = new Vector2(0f, 1f);
+        return fill;
+    }
+
+    /// <summary>
     ///     A panel that grows with its column of controls, pinned by <paramref name="anchor" /> to an edge or a corner
     ///     of the screen.
     /// </summary>

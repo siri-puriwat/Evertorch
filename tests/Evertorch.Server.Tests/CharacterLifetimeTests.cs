@@ -207,6 +207,14 @@ public sealed class CharacterLifetimeTests
         Assert.That(player.CurrentSpirit, Is.EqualTo(9));
         Assert.That(player.MaxHealth, Is.EqualTo(levelThree.MaxHp));
         Assert.That(player.MaxSpirit, Is.EqualTo(levelThree.MaxSp));
+
+        WorldEntered entered = LastWorldEntered(server, connection);
+        Assert.That(entered.Character, Is.EqualTo(new CharacterId(7)));
+        Assert.That(entered.Level, Is.EqualTo(3));
+        Assert.That(entered.Experience, Is.EqualTo(42UL));
+        Assert.That(entered.ExperienceToNextLevel, Is.EqualTo(80UL), "the adventurer's table asks 80 at level 3");
+        Assert.That(entered.CurrentSpirit, Is.EqualTo(9u));
+        Assert.That(entered.MaximumSpirit, Is.EqualTo((uint)levelThree.MaxSp));
     }
 
     [Test]

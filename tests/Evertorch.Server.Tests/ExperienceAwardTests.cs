@@ -65,6 +65,14 @@ public sealed class ExperienceAwardTests
         }
     }
 
+    private static CharacterProgress[] ProgressSentTo(TestServer server, ConnectionId connection)
+    {
+        return server.Transport.ControlSentTo(connection)
+            .Where(message => message.Opcode == MessageOpcode.CharacterProgress)
+            .Select(message => CharacterProgress.TryRead(message.Payload, out CharacterProgress read) ? read : default)
+            .ToArray();
+    }
+
     [Test]
     public void Attack_LogsTheWholeRoll_OverkillIncluded()
     {
@@ -112,6 +120,25 @@ public sealed class ExperienceAwardTests
             server.Transport.ControlOpcodesSentTo(first),
             Has.None.EqualTo(MessageOpcode.CharacterHealth));
         Assert.That(server.ProgressionLog.Entries, Is.Empty);
+    }
+
+    [Test]
+    public void Kill_SendsEachOwnerItsOwnProgressAndNoOneElses()
+    {
+        var server = new TestServer(withMonsters: true, withMonsterAi: false);
+        ConnectionId first = server.EnterWorld(1);
+        ConnectionId second = server.EnterWorld(2);
+        MonsterEntity slime = SlimeOf(server);
+        slime.LogDamage(server.PlayerOf(first).Character, 30);
+        slime.LogDamage(server.PlayerOf(second).Character, 20);
+        server.Transport.ClearSent();
+
+        Kill(server, slime);
+
+        CharacterProgress mine = ProgressSentTo(server, first).Single();
+        CharacterProgress theirs = ProgressSentTo(server, second).Single();
+        Assert.That((mine.Level, mine.Experience, mine.ExperienceToNextLevel), Is.EqualTo((1, 6UL, 30UL)));
+        Assert.That((theirs.Level, theirs.Experience, theirs.ExperienceToNextLevel), Is.EqualTo((1, 4UL, 30UL)));
     }
 
     [Test]
@@ -182,10 +209,13 @@ public sealed class ExperienceAwardTests
         server.Tick();
         Assert.That(retained.Owner, Is.EqualTo(default(ConnectionId)), "retained, with no connection");
 
+        server.Transport.ClearSent();
+
         Kill(server, slime);
 
         Assert.That(retained.Experience, Is.EqualTo(6));
         Assert.That(server.PlayerOf(second).Experience, Is.EqualTo(4));
+        Assert.That(server.Transport.ControlSentTo(first), Is.Empty, "no connection to tell");
     }
 
     [Test]

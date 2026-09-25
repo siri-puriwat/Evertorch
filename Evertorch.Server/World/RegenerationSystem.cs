@@ -1,5 +1,4 @@
 using System;
-using Evertorch.Protocol;
 using Evertorch.Rules;
 using Microsoft.Extensions.Options;
 
@@ -7,8 +6,8 @@ namespace Evertorch.Server
 {
 /// <summary>
 ///     Natural regeneration (Gameplay Systems §2.1): a live player regains HP and SP on the first tick at or after
-///     each step of its own schedule, counted from the tick it was placed, walking or not. A step at full HP or SP
-///     changes and sends nothing, and the schedule goes on through death.
+///     each step of its own schedule, counted from the tick it was placed, walking or not, and its owner hears of it
+///     once a tick. A step at full HP or SP changes and sends nothing, and the schedule goes on through death.
 /// </summary>
 public sealed class RegenerationSystem : ITickPhase
 {
@@ -54,18 +53,14 @@ public sealed class RegenerationSystem : ITickPhase
             return;
         }
 
+        bool hasChanged = false;
         if (now >= player.NextHealthRegenerationMs)
         {
             player.NextHealthRegenerationMs += regeneration.HealthIntervalMs;
             if (!player.IsDead && player.CurrentHealth < player.MaxHealth)
             {
                 player.CurrentHealth = Math.Min(player.MaxHealth, player.CurrentHealth + regeneration.Health);
-                if (player.Owner != default)
-                {
-                    m_sender.Send(
-                        player.Owner,
-                        new CharacterHealth((uint)player.CurrentHealth, (uint)player.MaxHealth));
-                }
+                hasChanged = true;
             }
         }
 
@@ -75,7 +70,13 @@ public sealed class RegenerationSystem : ITickPhase
             if (!player.IsDead && player.CurrentSpirit < player.MaxSpirit)
             {
                 player.CurrentSpirit = Math.Min(player.MaxSpirit, player.CurrentSpirit + regeneration.Spirit);
+                hasChanged = true;
             }
+        }
+
+        if (hasChanged)
+        {
+            m_sender.SendHealth(player);
         }
     }
 }

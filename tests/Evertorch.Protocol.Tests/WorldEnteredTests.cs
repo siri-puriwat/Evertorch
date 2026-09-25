@@ -12,6 +12,10 @@ public sealed class WorldEnteredTests
     private const int CurrentHealthOffset = 56;
     private const int MaximumHealthOffset = 60;
     private const int AttackRangeOffset = 64;
+    private const int CharacterOffset = 72;
+    private const int LevelOffset = 80;
+    private const int CurrentSpiritOffset = 98;
+    private const int MaximumSpiritOffset = 102;
 
     private static readonly byte[] NotANumber = { 0x00, 0x00, 0xC0, 0x7F };
     private static readonly byte[] PositiveInfinity = { 0x00, 0x00, 0x80, 0x7F };
@@ -31,7 +35,13 @@ public sealed class WorldEnteredTests
         0x44, 0x00, 0x00, 0x00,
         0x44, 0x00, 0x00, 0x00,
         0x00, 0x00, 0xC0, 0x3F,
-        0x0D, 0x0C, 0x0B, 0x0A
+        0x0D, 0x0C, 0x0B, 0x0A,
+        0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x02, 0x00,
+        0x08, 0x07, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01,
+        0x18, 0x17, 0x16, 0x15, 0x14, 0x13, 0x12, 0x11,
+        0x14, 0x00, 0x00, 0x00,
+        0x18, 0x00, 0x00, 0x00
     };
 
     private static WorldEntered Golden => new(
@@ -46,7 +56,27 @@ public sealed class WorldEnteredTests
         68,
         68,
         1.5f,
-        0x0A0B0C0D);
+        0x0A0B0C0D,
+        new CharacterId(7),
+        2,
+        0x0102030405060708UL,
+        0x1112131415161718UL,
+        20,
+        24);
+
+    [Test]
+    public void TryRead_ForAJobWithoutSp_AcceptsZeroOfZero()
+    {
+        byte[] none = WireMatrix.With(
+            WireMatrix.With(GoldenBytes, CurrentSpiritOffset, 0, 0, 0, 0),
+            MaximumSpiritOffset,
+            0,
+            0,
+            0,
+            0);
+
+        Assert.That(WorldEntered.TryRead(none, out _), Is.True);
+    }
 
     [Test]
     public void TryRead_ForGoldenBytes_ReturnsKnownMessage()
@@ -66,6 +96,12 @@ public sealed class WorldEnteredTests
         Assert.That(message.MaximumHealth, Is.EqualTo(68u));
         Assert.That(message.AttackRange, Is.EqualTo(1.5f));
         Assert.That(message.LastCommandSequence, Is.EqualTo(0x0A0B0C0Du));
+        Assert.That(message.Character, Is.EqualTo(new CharacterId(7)));
+        Assert.That(message.Level, Is.EqualTo(2));
+        Assert.That(message.Experience, Is.EqualTo(0x0102030405060708UL));
+        Assert.That(message.ExperienceToNextLevel, Is.EqualTo(0x1112131415161718UL));
+        Assert.That(message.CurrentSpirit, Is.EqualTo(20u));
+        Assert.That(message.MaximumSpirit, Is.EqualTo(24u));
     }
 
     [Test]
@@ -83,6 +119,16 @@ public sealed class WorldEnteredTests
     {
         Assert.That(WorldEntered.TryRead(WireMatrix.With(GoldenBytes, AttackRangeOffset, MinusOne), out _), Is.False);
         Assert.That(WorldEntered.TryRead(WireMatrix.With(GoldenBytes, AttackRangeOffset, NotANumber), out _), Is.False);
+    }
+
+    [Test]
+    public void TryRead_WhenCharacterOrLevelIsZero_ReturnsFalse()
+    {
+        byte[] noCharacter = WireMatrix.With(GoldenBytes, CharacterOffset, 0, 0, 0, 0, 0, 0, 0, 0);
+        byte[] noLevel = WireMatrix.With(GoldenBytes, LevelOffset, 0, 0);
+
+        Assert.That(WorldEntered.TryRead(noCharacter, out _), Is.False);
+        Assert.That(WorldEntered.TryRead(noLevel, out _), Is.False);
     }
 
     [Test]
@@ -132,6 +178,14 @@ public sealed class WorldEnteredTests
     }
 
     [Test]
+    public void TryRead_WhenSpIsAboveItsMaximum_ReturnsFalse()
+    {
+        byte[] aboveMaximum = WireMatrix.With(GoldenBytes, CurrentSpiritOffset, 0x19, 0x00, 0x00, 0x00);
+
+        Assert.That(WorldEntered.TryRead(aboveMaximum, out _), Is.False);
+    }
+
+    [Test]
     public void TryRead_WhenTrailingDataPresent_ReturnsFalse()
     {
         WireMatrix.AssertRejectsTrailingData(GoldenBytes, bytes => WorldEntered.TryRead(bytes, out _));
@@ -178,14 +232,21 @@ public sealed class WorldEnteredTests
             0f,
             0,
             1,
-            0f);
+            0f,
+            0,
+            new CharacterId(1),
+            1,
+            0,
+            0,
+            0,
+            0);
         byte[] buffer = new byte[original.GetEncodedLength()];
         original.Write(buffer);
 
         bool isRead = WorldEntered.TryRead(buffer, out WorldEntered? message);
 
         Assert.That(isRead, Is.True);
-        Assert.That(buffer.Length, Is.EqualTo(190), "the largest WorldEntered");
+        Assert.That(buffer.Length, Is.EqualTo(224), "the largest WorldEntered");
         Assert.That(message!.Map, Is.EqualTo(longestMap));
         Assert.That(message.Job, Is.EqualTo(longestJob));
     }

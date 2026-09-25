@@ -66,7 +66,14 @@ public sealed class CombatPresenterTests
             5f,
             71,
             71,
-            1.5f);
+            1.5f,
+            0,
+            new CharacterId(1),
+            1,
+            0,
+            30,
+            24,
+            24);
         var world = new ClientWorld(grid, entered, 20);
         world.OnSpawn(
             new EntitySpawn(
@@ -193,7 +200,7 @@ public sealed class CombatPresenterTests
             {
                 world.OnDamage(new Damage(Local, Slime, CombatResult.Critical, 30, 30, 400));
                 world.OnDamage(new Damage(Slime, Local, CombatResult.Hit, 7, 30, 0));
-                world.OnCharacterHealth(new CharacterHealth(64, 71));
+                world.OnCharacterHealth(new CharacterHealth(64, 71, 24, 24));
             }
             else if (tick == 50)
             {
