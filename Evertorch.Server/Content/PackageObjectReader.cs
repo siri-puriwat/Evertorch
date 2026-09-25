@@ -199,6 +199,36 @@ internal sealed class PackageObjectReader
         return values;
     }
 
+    public IReadOnlyList<int> RequiredIntArray(string name, int minimum)
+    {
+        var values = new List<int>();
+        if (!TryGet(name, JsonValueKind.Array, "an array", out JsonElement value))
+        {
+            return values;
+        }
+
+        int index = 0;
+        foreach (JsonElement item in value.EnumerateArray())
+        {
+            if (item.ValueKind != JsonValueKind.Number || !item.TryGetInt32(out int number))
+            {
+                m_problems.Add($"{m_file}: {Combine(name)}[{index}]: must be a whole number");
+            }
+            else if (number < minimum)
+            {
+                m_problems.Add($"{m_file}: {Combine(name)}[{index}]: must be at least {minimum}");
+            }
+            else
+            {
+                values.Add(number);
+            }
+
+            index++;
+        }
+
+        return values;
+    }
+
     /// <summary>
     ///     Call after every expected property has been read.
     /// </summary>

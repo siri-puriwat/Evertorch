@@ -55,8 +55,10 @@ public sealed class InterestGridTests
             new WorldPosition(x, 0f, z),
             new WorldDirection(0f, 1f),
             5f,
+            1,
             new PrimaryStats(5, 5, 5, 5, 5, 5),
             TestStats.Adventurer,
+            default,
             1.5f);
     }
 

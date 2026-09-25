@@ -15,7 +15,8 @@ public sealed class RulesPurityTests
 
     private static readonly Type[] RuleImplementations =
     {
-        typeof(RenewalCharacterRules), typeof(RenewalCombatRules), typeof(RenewalMovementRules)
+        typeof(RenewalCharacterRules), typeof(RenewalCombatRules), typeof(RenewalMovementRules),
+        typeof(RenewalProgressionRules)
     };
 
     [Test]

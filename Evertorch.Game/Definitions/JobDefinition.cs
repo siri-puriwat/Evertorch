@@ -13,7 +13,8 @@ public sealed class JobDefinition
         int unarmedAttackSpeedPenalty,
         double baseSpeed,
         MapDefinitionId startingMap,
-        SkillDefinitionId basicAttack)
+        SkillDefinitionId basicAttack,
+        ExperienceDefinitionId experienceTable)
     {
         Id = id;
         DisplayName = displayName;
@@ -26,6 +27,7 @@ public sealed class JobDefinition
         BaseSpeed = baseSpeed;
         StartingMap = startingMap;
         BasicAttack = basicAttack;
+        ExperienceTable = experienceTable;
     }
 
     public JobDefinitionId Id { get; }
@@ -50,5 +52,7 @@ public sealed class JobDefinition
     public MapDefinitionId StartingMap { get; }
 
     public SkillDefinitionId BasicAttack { get; }
+
+    public ExperienceDefinitionId ExperienceTable { get; }
 }
 }

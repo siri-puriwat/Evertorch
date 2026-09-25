@@ -15,6 +15,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- One definition of each kind, so a loader test's text replacement changes exactly one definition. -->
+    <None Include="Fixtures\**" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- The database container setup belongs to the persistence tests (Coding Standards §10). -->
     <Compile Include="..\Evertorch.Persistence.Tests\PostgresFixture.cs" Link="Database\PostgresFixture.cs" />
   </ItemGroup>

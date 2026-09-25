@@ -54,6 +54,10 @@ internal static class JobDefinitionReader
             "basicAttack",
             SkillDefinitionId.TryCreate,
             SkillDefinitionId.KindPrefix);
+        ExperienceDefinitionId experienceTable = server.RequiredId<ExperienceDefinitionId>(
+            "experienceTable",
+            ExperienceDefinitionId.TryCreate,
+            ExperienceDefinitionId.KindPrefix);
 
         YamlFieldReader client = root.RequiredMapping("client");
         string prefab = client.RequiredAssetKey("prefab");
@@ -75,7 +79,8 @@ internal static class JobDefinitionReader
             unarmedAttackSpeedPenalty,
             baseSpeed,
             startingMap,
-            basicAttack);
+            basicAttack,
+            experienceTable);
         return new AuthoredJob(root.ToSource(), definition, prefab);
     }
 }

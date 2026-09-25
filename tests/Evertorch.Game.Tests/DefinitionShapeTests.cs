@@ -7,6 +7,16 @@ namespace Evertorch.Game.Tests
 public sealed class DefinitionShapeTests
 {
     [Test]
+    public void ExperienceTableDefinition_WithValues_ExposesThem()
+    {
+        var table = new ExperienceTableDefinition(new ExperienceDefinitionId("experience.adventurer"),
+            new[] { 30, 50 });
+
+        Assert.That(table.Id.Value, Is.EqualTo("experience.adventurer"));
+        Assert.That(table.Levels, Is.EqualTo(new[] { 30, 50 }));
+    }
+
+    [Test]
     public void ItemDefinition_WithValues_ExposesThem()
     {
         var item = new ItemDefinition(
@@ -40,7 +50,8 @@ public sealed class DefinitionShapeTests
             44,
             5.0,
             new MapDefinitionId("map.training_ground"),
-            new SkillDefinitionId("skill.basic_attack"));
+            new SkillDefinitionId("skill.basic_attack"),
+            new ExperienceDefinitionId("experience.adventurer"));
 
         Assert.That(job.Id.Value, Is.EqualTo("job.adventurer"));
         Assert.That(job.DisplayName, Is.EqualTo("Adventurer"));
@@ -53,6 +64,7 @@ public sealed class DefinitionShapeTests
         Assert.That(job.BaseSpeed, Is.EqualTo(5.0));
         Assert.That(job.StartingMap.Value, Is.EqualTo("map.training_ground"));
         Assert.That(job.BasicAttack.Value, Is.EqualTo("skill.basic_attack"));
+        Assert.That(job.ExperienceTable.Value, Is.EqualTo("experience.adventurer"));
     }
 
     [Test]
@@ -123,6 +135,7 @@ public sealed class DefinitionShapeTests
             4000,
             5000,
             100,
+            10,
             new[] { drop });
 
         Assert.That(monster.Id.Value, Is.EqualTo("monster.training_slime"));
@@ -143,6 +156,7 @@ public sealed class DefinitionShapeTests
         Assert.That(monster.Behavior, Is.EqualTo(MonsterBehavior.Passive));
         Assert.That(monster.PerceptionRadius, Is.EqualTo(6.0));
         Assert.That(monster.LeashRadius, Is.EqualTo(12.0));
+        Assert.That(monster.BaseExperience, Is.EqualTo(10));
         Assert.That(monster.Drops, Is.EqualTo(new[] { drop }));
         Assert.That(drop.Item.Value, Is.EqualTo("item.material.slime_gel"));
         Assert.That(drop.Chance, Is.EqualTo(0.35));

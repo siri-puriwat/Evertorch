@@ -22,7 +22,7 @@ public sealed class WorldSimulation
     private readonly Dictionary<MapDefinitionId, MapInstance> m_maps = new();
     private readonly Dictionary<MapInstance, MonsterPlacement> m_placements = new();
     private readonly ServerContent m_content;
-    private readonly ICharacterRules m_characterRules;
+    private readonly CharacterStats m_stats;
     private readonly IMovementRules m_movementRules;
     private readonly IRandomSource m_random;
     private readonly JobDefinition m_startingJob;
@@ -32,12 +32,12 @@ public sealed class WorldSimulation
     public WorldSimulation(
         ServerContent content,
         IOptions<WorldOptions> options,
-        ICharacterRules characterRules,
+        CharacterStats stats,
         IMovementRules movementRules,
         IRandomSource random)
     {
         m_content = content;
-        m_characterRules = characterRules;
+        m_stats = stats;
         m_movementRules = movementRules;
         m_random = random;
         WorldOptions world = options.Value;
@@ -49,7 +49,7 @@ public sealed class WorldSimulation
         }
 
         m_startingJob = job;
-        m_startingStats = CalculateStats(job, StartingLevel, job.StartingStats, characterRules);
+        m_startingStats = stats.Calculate(job, StartingLevel, job.StartingStats);
 
         foreach (MapDefinition map in content.Maps.Values.OrderBy(map => map.Id.Value, StringComparer.Ordinal))
         {
@@ -129,7 +129,7 @@ public sealed class WorldSimulation
         }
 
         int level = Math.Max(StartingLevel, stored.BaseLevel);
-        DerivedStats stats = CalculateStats(job, level, stored.Stats, m_characterRules);
+        DerivedStats stats = m_stats.Calculate(job, level, stored.Stats);
         MapDefinition definition = instance.Definition;
         NavigationGrid grid = definition.Navigation;
         bool isStandable = grid.CanOccupy(stored.Position.X, stored.Position.Z)
@@ -146,8 +146,10 @@ public sealed class WorldSimulation
             position,
             MovementModel.NormalizeOrZero(definition.SpawnFacing.X, definition.SpawnFacing.Z),
             speed,
+            level,
             stored.Stats,
             stats,
+            m_stats.CalculateRegeneration(stored.Stats, stats),
             (float)m_content.Skills[job.BasicAttack].Range);
         player.CurrentHealth = health;
         instance.Add(player);
@@ -200,24 +202,6 @@ public sealed class WorldSimulation
     {
         m_lastEntityId++;
         return new EntityId(m_lastEntityId);
-    }
-
-    private static DerivedStats CalculateStats(
-        JobDefinition job,
-        int level,
-        PrimaryStats primary,
-        ICharacterRules characterRules)
-    {
-        var build = new CharacterBuild(
-            level,
-            primary,
-            job.HealthBase,
-            job.HealthPerLevel,
-            job.SpiritBase,
-            job.SpiritPerLevel,
-            job.UnarmedAttackSpeedPenalty,
-            (float)job.BaseSpeed);
-        return characterRules.CalculateDerivedStats(build);
     }
 }
 }

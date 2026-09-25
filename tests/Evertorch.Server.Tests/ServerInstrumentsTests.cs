@@ -267,6 +267,33 @@ public sealed class ServerInstrumentsTests
     }
 
     [Test]
+    public void Progression_CountsTheExperienceAwardedAndTheLevelsGained()
+    {
+        var server = new TestServer(withMonsters: true, withMonsterAi: false);
+        using var recorder = new MeterRecorder(server.Instruments.Meter);
+        ConnectionId first = server.EnterWorld(1);
+        ConnectionId second = server.EnterWorld(2);
+        MapInstance map = server.World.Maps.Single();
+        MonsterEntity slime = server.MonstersNear(map.Definition.SpawnPosition).First();
+        server.PlayerOf(first).Experience = 25;
+        slime.LogDamage(server.PlayerOf(first).Character, 30);
+        slime.LogDamage(server.PlayerOf(second).Character, 20);
+
+        server.Combat.Kill(map, slime, null, server.CurrentTick);
+
+        Assert.That(
+            Named(recorder, "evertorch.progression.experience").Select(measurement => measurement.Value),
+            Is.EqualTo(new[] { 6d, 4d }));
+        Assert.That(Single(recorder, "evertorch.progression.level_ups"), Is.EqualTo(1));
+        string[] progression = { "evertorch.progression.experience", "evertorch.progression.level_ups" };
+        Assert.That(
+            recorder.Measurements
+                .Where(measurement => progression.Contains(measurement.Instrument))
+                .SelectMany(measurement => measurement.Tags),
+            Is.Empty);
+    }
+
+    [Test]
     public void RunningHost_RecordsTheDurationOfItsTicks()
     {
         using var root = new TemporaryDirectory();

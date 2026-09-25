@@ -4,8 +4,8 @@ using Evertorch.Protocol;
 namespace Evertorch.Server
 {
 /// <summary>
-///     Brings a dead player back on request (Gameplay Systems §10.1): at its map's spawn point, with full HP, told to
-///     every client that knows it before visibility is recomputed, then its HP to the owner.
+///     Brings a dead player back on request (Gameplay Systems §10.1): at its map's spawn point, with full HP and SP,
+///     told to every client that knows it before visibility is recomputed, then its HP to the owner.
 /// </summary>
 public sealed class PlayerLife
 {
@@ -37,6 +37,7 @@ public sealed class PlayerLife
         player.VelocityZ = 0f;
         player.StateFlags = EntityStateFlags.None;
         player.CurrentHealth = player.MaxHealth;
+        player.CurrentSpirit = player.MaxSpirit;
         player.Target = default;
         player.Combat.IsAutoAttacking = false;
         player.Combat.EndSwing();

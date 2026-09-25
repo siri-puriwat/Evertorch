@@ -84,10 +84,11 @@ internal sealed class TestServer
         Audit = new AuditLog(AuditLogger, Clock);
         Inbound = new InboundQueue(Options.Create(network), abuse, simulation, Clock, Instruments);
         Sessions = new SessionRegistry();
+        var stats = new CharacterStats(new RenewalCharacterRules());
         World = new WorldSimulation(
             Content,
             Options.Create(world),
-            new RenewalCharacterRules(),
+            stats,
             new RenewalMovementRules(),
             Random);
         Log = new CapturingLogger<SessionManager>();
@@ -147,12 +148,21 @@ internal sealed class TestServer
             Log);
         AdminQueue = new AdminQueue(Lifetime, Audit);
         Drops = new ItemDropSystem(World, dropRandom ?? Random, Options.Create(world), simulation);
+        Progression = new CharacterProgression(
+            Sessions,
+            stats,
+            new RenewalProgressionRules(),
+            Content,
+            sender,
+            Instruments,
+            ProgressionLog);
         Combat = new CombatSystem(
             World,
             Sessions,
             sender,
             targeting,
             Drops,
+            Progression,
             new RenewalCombatRules(),
             combatRandom ?? Random,
             Options.Create(world),
@@ -180,6 +190,7 @@ internal sealed class TestServer
             new InventorySyncPhase(Sessions, sender),
             new MovementSystem(Sessions, World, Options.Create(world), simulation),
             Combat,
+            new RegenerationSystem(World, sender, simulation),
             Drops,
             SessionManager,
             new RecordingPhase(TickPhase.ApplyCommands, "test", new List<string>(), _ => RunAfterCommands()),
@@ -251,6 +262,10 @@ internal sealed class TestServer
     public FakeClock Clock { get; } = new();
 
     public CapturingLogger<PickupSystem> PickupLog { get; } = new();
+
+    public CharacterProgression Progression { get; }
+
+    public CapturingLogger<CharacterProgression> ProgressionLog { get; } = new();
 
     public AuditLog Audit { get; }
 
@@ -589,7 +604,8 @@ internal sealed class TestServer
             new Dictionary<MonsterDefinitionId, MonsterDefinition>(content.Monsters),
             new Dictionary<SkillDefinitionId, SkillDefinition>(content.Skills),
             new Dictionary<JobDefinitionId, JobDefinition>(content.Jobs),
-            maps);
+            maps,
+            new Dictionary<ExperienceDefinitionId, ExperienceTableDefinition>(content.ExperienceTables));
     }
 }
 }

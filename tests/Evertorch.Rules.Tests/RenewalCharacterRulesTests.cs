@@ -167,6 +167,59 @@ public sealed class RenewalCharacterRulesTests
         return new RenewalCharacterRules().CalculateDerivedStats(build);
     }
 
+    // Research note vectors, from the golden rows above: HP vit ÷ 5 + max(1, maxHp ÷ 200) every 6 s; SP
+    // 1 + int ÷ 6 + maxSp ÷ 100 every 8 s.
+    // level, every primary statistic => HP per step, SP per step
+    [TestCase(1, 5, 2, 1)]
+    [TestCase(1, 1, 1, 1)]
+    [TestCase(99, 99, 27, 23)]
+    [TestCase(175, 130, 42, 43)]
+    public void CalculateRegeneration_ForResearchVector_MatchesTheAmounts(int level, int stat, int health, int spirit)
+    {
+        var stats = new PrimaryStats(stat, stat, stat, stat, stat, stat);
+
+        Regeneration regeneration = new RenewalCharacterRules().CalculateRegeneration(stats, Calculate(level, stats));
+
+        Assert.That(regeneration.Health, Is.EqualTo(health), "HP");
+        Assert.That(regeneration.Spirit, Is.EqualTo(spirit), "SP");
+        Assert.That(regeneration.HealthIntervalMs, Is.EqualTo(6000));
+        Assert.That(regeneration.SpiritIntervalMs, Is.EqualTo(8000));
+    }
+
+    // From INT 120 SP gains (int − 120) ÷ 2 + 4 more; below it, nothing.
+    [TestCase(119, 0, 20)]
+    [TestCase(120, 0, 25)]
+    [TestCase(121, 0, 25)]
+    [TestCase(122, 0, 26)]
+    [TestCase(1, 199, 2)]
+    [TestCase(1, 200, 3)]
+    public void CalculateRegeneration_AroundTheThresholds_AddsAtEachStep(int intelligence, int maxSp, int spirit)
+    {
+        var stats = new PrimaryStats(1, 1, 1, intelligence, 1, 1);
+
+        Regeneration regeneration = new RenewalCharacterRules().CalculateRegeneration(stats, WithMaximums(1, maxSp));
+
+        Assert.That(regeneration.Spirit, Is.EqualTo(spirit));
+    }
+
+    [TestCase(0, 199, 1)]
+    [TestCase(0, 400, 2)]
+    [TestCase(4, 1, 1)]
+    [TestCase(5, 1, 2)]
+    public void CalculateRegeneration_ForHealth_NeverGivesLessThanOnePerStep(int vit, int maxHp, int health)
+    {
+        var stats = new PrimaryStats(1, 1, vit, 1, 1, 1);
+
+        Regeneration regeneration = new RenewalCharacterRules().CalculateRegeneration(stats, WithMaximums(maxHp, 0));
+
+        Assert.That(regeneration.Health, Is.EqualTo(health));
+    }
+
+    private static DerivedStats WithMaximums(int maxHp, int maxSp)
+    {
+        return new DerivedStats(maxHp, maxSp, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0f, 1000, 1000);
+    }
+
     [Test]
     public void CalculateDerivedStats_ForIdenticalBuilds_IsDeterministic()
     {

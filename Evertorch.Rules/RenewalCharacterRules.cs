@@ -14,6 +14,9 @@ public sealed class RenewalCharacterRules : ICharacterRules
     private const int AttackSpeedBase = 196;
     private const int VariableCastStatScale = 530;
     private const int FullCastPermille = 1000;
+    private const int HealthRegenerationIntervalMs = 6000;
+    private const int SpiritRegenerationIntervalMs = 8000;
+    private const int HighIntelligence = 120;
 
     public DerivedStats CalculateDerivedStats(CharacterBuild build)
     {
@@ -52,6 +55,18 @@ public sealed class RenewalCharacterRules : ICharacterRules
             build.BaseMovementSpeed,
             CalculateVariableCastPermille(stats),
             FullCastPermille);
+    }
+
+    public Regeneration CalculateRegeneration(PrimaryStats stats, DerivedStats derived)
+    {
+        int health = stats.Vit / 5 + Math.Max(1, derived.MaxHp / 200);
+        int spirit = 1 + stats.Int / 6 + derived.MaxSp / 100;
+        if (stats.Int >= HighIntelligence)
+        {
+            spirit += (stats.Int - HighIntelligence) / 2 + 4;
+        }
+
+        return new Regeneration(health, HealthRegenerationIntervalMs, spirit, SpiritRegenerationIntervalMs);
     }
 
     private static int ScaleByPercent(long value, int percent)

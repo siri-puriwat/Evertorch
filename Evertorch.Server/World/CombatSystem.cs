@@ -22,6 +22,7 @@ public sealed class CombatSystem : ITickPhase
     private readonly MessageSender m_sender;
     private readonly Targeting m_targeting;
     private readonly ItemDropSystem m_drops;
+    private readonly CharacterProgression m_progression;
     private readonly ICombatRules m_rules;
     private readonly IRandomSource m_random;
     private readonly int m_tickRate;
@@ -35,6 +36,7 @@ public sealed class CombatSystem : ITickPhase
         MessageSender sender,
         Targeting targeting,
         ItemDropSystem drops,
+        CharacterProgression progression,
         ICombatRules rules,
         IRandomSource random,
         IOptions<WorldOptions> worldOptions,
@@ -45,6 +47,7 @@ public sealed class CombatSystem : ITickPhase
         m_sender = sender;
         m_targeting = targeting;
         m_drops = drops;
+        m_progression = progression;
         m_rules = rules;
         m_random = random;
         m_tickRate = simulation.Value.TickRate;
@@ -111,6 +114,7 @@ public sealed class CombatSystem : ITickPhase
 
         if (entity is MonsterEntity monster)
         {
+            m_progression.AwardKill(map, monster);
             CharacterId killer = source is PlayerEntity player ? player.Character : default;
             m_drops.DropLoot(map, monster, killer, tick);
         }
@@ -187,6 +191,12 @@ public sealed class CombatSystem : ITickPhase
                 CreateDamageContext(attacker, target, hit.Outcome == HitOutcome.Critical));
             amount = damage.Amount;
             target.CurrentHealth = Math.Max(0, target.CurrentHealth - amount);
+        }
+
+        if (target is MonsterEntity damaged && attacker is PlayerEntity damager && amount > 0)
+        {
+            // The whole roll counts toward the experience share, a killing blow's overkill included.
+            damaged.LogDamage(damager.Character, amount);
         }
 
         foreach (ClientSession session in SessionsOn(map))

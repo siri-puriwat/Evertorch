@@ -10,6 +10,7 @@ internal static class ContentLimits
     public const int MaxHp = 100_000_000;
     public const int MaxStack = 1_000_000;
     public const int MaxPrice = 1_000_000_000;
+    public const int MaxExperience = 1_000_000_000;
     public const int MaxDurationMs = 86_400_000;
     public const int MaxSpawnCount = 1000;
     public const double MaxDistance = 10_000d;

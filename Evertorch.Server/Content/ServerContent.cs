@@ -16,7 +16,8 @@ public sealed class ServerContent
         IDictionary<MonsterDefinitionId, MonsterDefinition> monsters,
         IDictionary<SkillDefinitionId, SkillDefinition> skills,
         IDictionary<JobDefinitionId, JobDefinition> jobs,
-        IDictionary<MapDefinitionId, MapDefinition> maps)
+        IDictionary<MapDefinitionId, MapDefinition> maps,
+        IDictionary<ExperienceDefinitionId, ExperienceTableDefinition> experienceTables)
     {
         ServerContentVersion = serverContentVersion;
         ClientContentVersion = clientContentVersion;
@@ -25,6 +26,7 @@ public sealed class ServerContent
         Skills = Freeze(skills);
         Jobs = Freeze(jobs);
         Maps = Freeze(maps);
+        ExperienceTables = Freeze(experienceTables);
     }
 
     public string ServerContentVersion { get; }
@@ -43,6 +45,8 @@ public sealed class ServerContent
     public IReadOnlyDictionary<JobDefinitionId, JobDefinition> Jobs { get; }
 
     public IReadOnlyDictionary<MapDefinitionId, MapDefinition> Maps { get; }
+
+    public IReadOnlyDictionary<ExperienceDefinitionId, ExperienceTableDefinition> ExperienceTables { get; }
 
     private static IReadOnlyDictionary<TKey, TValue> Freeze<TKey, TValue>(IDictionary<TKey, TValue> source)
         where TKey : notnull

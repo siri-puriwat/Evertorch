@@ -53,6 +53,10 @@ internal static class MonsterDefinitionReader
 
         int scanIntervalMs = ai.RequiredInt("scanIntervalMs", 1, ContentLimits.MaxDurationMs);
 
+        int baseExperience = root.Has("rewards")
+            ? root.RequiredMapping("rewards").RequiredInt("baseExperience", 0, ContentLimits.MaxExperience)
+            : 0;
+
         var drops = new List<MonsterDrop>();
         foreach (YamlFieldReader drop in root.OptionalMappingSequence("drops"))
         {
@@ -88,6 +92,7 @@ internal static class MonsterDefinitionReader
             idlePauseMinMs,
             idlePauseMaxMs,
             scanIntervalMs,
+            baseExperience,
             drops);
         return new AuthoredMonster(root.ToSource(), definition, prefab, icon);
     }

@@ -17,7 +17,9 @@ public sealed class PlayerSummary
         int queuedInputs,
         long staleInputs,
         long droppedInputs,
-        long refusedCommands)
+        long refusedCommands,
+        int level,
+        long experience)
     {
         Connection = connection;
         Character = character;
@@ -29,6 +31,8 @@ public sealed class PlayerSummary
         StaleInputs = staleInputs;
         DroppedInputs = droppedInputs;
         RefusedCommands = refusedCommands;
+        Level = level;
+        Experience = experience;
     }
 
     public ConnectionId Connection { get; }
@@ -56,5 +60,12 @@ public sealed class PlayerSummary
     ///     Well-formed commands the server refused, such as a target the client may not select.
     /// </summary>
     public long RefusedCommands { get; }
+
+    public int Level { get; }
+
+    /// <summary>
+    ///     Experience toward the next level.
+    /// </summary>
+    public long Experience { get; }
 }
 }

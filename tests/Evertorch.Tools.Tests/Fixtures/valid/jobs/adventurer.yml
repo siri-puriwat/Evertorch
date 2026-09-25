@@ -9,5 +9,6 @@ server:
     baseSpeed: 5.1875
   startingMap: map.training_ground
   basicAttack: skill.basic_attack
+  experienceTable: experience.adventurer
 client:
   prefab: character_adventurer

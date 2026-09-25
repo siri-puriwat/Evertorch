@@ -13,12 +13,34 @@ internal static class ServerProjection
     {
         return new List<PackageFile>
         {
+            new("experience.json", PackageJson.Write(writer => WriteExperienceTables(writer, content))),
             new("items.json", PackageJson.Write(writer => WriteItems(writer, content))),
             new("jobs.json", PackageJson.Write(writer => WriteJobs(writer, content))),
             new("maps.json", PackageJson.Write(writer => WriteMaps(writer, content))),
             new("monsters.json", PackageJson.Write(writer => WriteMonsters(writer, content))),
             new("skills.json", PackageJson.Write(writer => WriteSkills(writer, content)))
         };
+    }
+
+    private static void WriteExperienceTables(Utf8JsonWriter writer, ContentSet content)
+    {
+        BeginFile(writer);
+        foreach (AuthoredExperienceTable authored in content.ExperienceTables)
+        {
+            ExperienceTableDefinition table = authored.Definition;
+            writer.WriteStartObject();
+            writer.WriteString("id", table.Id.Value);
+            writer.WriteStartArray("levels");
+            foreach (int level in table.Levels)
+            {
+                writer.WriteNumberValue(level);
+            }
+
+            writer.WriteEndArray();
+            writer.WriteEndObject();
+        }
+
+        EndFile(writer);
     }
 
     private static void WriteItems(Utf8JsonWriter writer, ContentSet content)
@@ -65,6 +87,7 @@ internal static class ServerProjection
             writer.WriteNumber("baseSpeed", job.BaseSpeed);
             writer.WriteString("startingMap", job.StartingMap.Value);
             writer.WriteString("basicAttack", job.BasicAttack.Value);
+            writer.WriteString("experienceTable", job.ExperienceTable.Value);
             writer.WriteEndObject();
         }
 
@@ -132,6 +155,7 @@ internal static class ServerProjection
             writer.WriteNumber("idlePauseMinMs", monster.IdlePauseMinMs);
             writer.WriteNumber("idlePauseMaxMs", monster.IdlePauseMaxMs);
             writer.WriteNumber("scanIntervalMs", monster.ScanIntervalMs);
+            writer.WriteNumber("baseExperience", monster.BaseExperience);
             writer.WriteStartArray("drops");
             foreach (MonsterDrop drop in monster.Drops)
             {

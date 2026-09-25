@@ -17,22 +17,21 @@ internal static class PackageFixture
 
     public static string RepositoryContentDirectory => Path.Combine(FindRepositoryRoot(), "content");
 
+    /// <summary>
+    ///     Canonical content with one definition of each kind, so a text replacement in a package file changes exactly
+    ///     one definition however much the repository's content grows.
+    /// </summary>
+    public static string FixtureContentDirectory =>
+        Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", "content");
+
     public static Dictionary<string, byte[]> BuildRepositoryPackage()
     {
-        ContentPipelineResult result = ContentPipeline.Run(RepositoryContentDirectory);
-        if (result.Packages == null)
-        {
-            string diagnostics = string.Join("; ", result.Diagnostics.Select(item => item.ToString()));
-            throw new InvalidOperationException($"Repository content is invalid: {diagnostics}");
-        }
+        return Build(RepositoryContentDirectory);
+    }
 
-        ContentPackage server = result.Packages.Server;
-        var files = server.DataFiles.ToDictionary(
-            file => file.Path,
-            file => file.Content,
-            StringComparer.Ordinal);
-        files[server.Manifest.Path] = server.Manifest.Content;
-        return files;
+    public static Dictionary<string, byte[]> BuildFixturePackage()
+    {
+        return Build(FixtureContentDirectory);
     }
 
     public static string ReadText(IReadOnlyDictionary<string, byte[]> files, string file)
@@ -101,6 +100,24 @@ internal static class PackageFixture
         {
             File.WriteAllBytes(Path.Combine(directory, file.Key), file.Value);
         }
+    }
+
+    private static Dictionary<string, byte[]> Build(string contentDirectory)
+    {
+        ContentPipelineResult result = ContentPipeline.Run(contentDirectory);
+        if (result.Packages == null)
+        {
+            string diagnostics = string.Join("; ", result.Diagnostics.Select(item => item.ToString()));
+            throw new InvalidOperationException($"{contentDirectory} is invalid: {diagnostics}");
+        }
+
+        ContentPackage server = result.Packages.Server;
+        var files = server.DataFiles.ToDictionary(
+            file => file.Path,
+            file => file.Content,
+            StringComparer.Ordinal);
+        files[server.Manifest.Path] = server.Manifest.Content;
+        return files;
     }
 
     private static string FindRepositoryRoot()

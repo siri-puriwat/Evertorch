@@ -14,6 +14,8 @@ public sealed class ContentValidationTests
     private const string Skill = "skills/basic_attack.yml";
     private const string Job = "jobs/adventurer.yml";
     private const string Map = "maps/training_ground.yml";
+    private const string Experience = "experience/adventurer.yml";
+    private const string Levels = "levels: [30211, 50423, 80637]";
 
     [TestCase(Potion, "id: item.consumable.minor_health", "id: Item.Consumable.MinorHealth", "id", "not a valid ID")]
     [TestCase(Potion, "id: item.consumable.minor_health", "id: item..minor_health", "id", "not a valid ID")]
@@ -94,9 +96,30 @@ public sealed class ContentValidationTests
         "basicAttack: skill.missing",
         "server.basicAttack",
         "references unknown skill 'skill.missing'")]
+    [TestCase(
+        Job,
+        "experienceTable: experience.adventurer",
+        "experienceTable: experience.missing",
+        "server.experienceTable",
+        "references unknown experience table 'experience.missing'")]
+    [TestCase(
+        Job,
+        "  experienceTable: experience.adventurer\n",
+        "",
+        "server.experienceTable",
+        "required field is missing")]
     [TestCase(Job, "str: 5", "str: -1", "server.startingStats.str", "between 0 and")]
     [TestCase(Job, "baseSpeed: 5.1875", "baseSpeed: 0", "server.movement.baseSpeed", "greater than 0")]
     [TestCase(Skill, "targetType: enemy", "targetType: everyone", "targetType", "one of: enemy, self")]
+    [TestCase(Experience, Levels, "levels: [30211, 0, 80637]", "levels[1]", "between 1 and")]
+    [TestCase(Experience, Levels, "levels: [30211, 1.5, 80637]", "levels[1]", "whole number")]
+    [TestCase(Experience, Levels, "levels: [30211, \"50423\", 80637]", "levels[1]", "whole number")]
+    [TestCase(Experience, Levels, "levels: 30211", "levels", "must be a sequence")]
+    [TestCase(Experience, Levels, "levels: []", "levels", "must list between 1 and 998 levels")]
+    [TestCase(Experience, Levels, Levels + "\ncap: 4", "cap", "unknown field")]
+    [TestCase(Monster, "baseExperience: 77173", "baseExperience: -1", "rewards.baseExperience", "between 0 and")]
+    [TestCase(Monster, "rewards:\n  baseExperience: 77173", "rewards: {}", "rewards.baseExperience", "required field")]
+    [TestCase(Monster, "rewards:\n  baseExperience: 77173", "rewards: 77173", "rewards", "must be a mapping")]
     public void Run_WhenOneFieldIsBroken_ReportsThatFileFieldAndLine(
         string file,
         string oldText,
@@ -153,6 +176,24 @@ public sealed class ContentValidationTests
         return string.Join("\n", result.Diagnostics.Select(diagnostic => diagnostic.ToString()));
     }
 
+    [TestCase(998, true)]
+    [TestCase(999, false)]
+    public void Run_ForAnExperienceTable_AcceptsAtMostOneLevelBelowTheLevelLimit(int levels, bool isValid)
+    {
+        using (var workspace = new ContentWorkspace())
+        {
+            string table = string.Join(", ", Enumerable.Repeat("10", levels));
+            workspace.Replace(Experience, Levels, $"levels: [{table}]");
+
+            ContentPipelineResult result = ContentPipeline.Run(workspace.ContentRoot);
+
+            Assert.That(result.Packages != null, Is.EqualTo(isValid), Describe(result));
+            Assert.That(
+                result.Diagnostics.Select(diagnostic => diagnostic.Message),
+                isValid ? Is.Empty : Is.EqualTo(new[] { "must list between 1 and 998 levels" }));
+        }
+    }
+
     [Test]
     public void Run_ForRepositoryContent_HasNoDiagnostics()
     {
@@ -187,6 +228,24 @@ public sealed class ContentValidationTests
             Assert.That(result.Content.Skills, Has.Count.EqualTo(1));
             Assert.That(result.Content.Jobs, Has.Count.EqualTo(1));
             Assert.That(result.Content.Maps, Has.Count.EqualTo(1));
+            Assert.That(result.Content.ExperienceTables, Has.Count.EqualTo(1));
+            Assert.That(
+                result.Content.ExperienceTables[0].Definition.Levels,
+                Is.EqualTo(new[] { 30211, 50423, 80637 }));
+        }
+    }
+
+    [Test]
+    public void Run_WhenAMonsterHasNoRewards_GivesItNoExperience()
+    {
+        using (var workspace = new ContentWorkspace())
+        {
+            workspace.Replace(Monster, "rewards:\n  baseExperience: 77173\n", "");
+
+            ContentPipelineResult result = ContentPipeline.Run(workspace.ContentRoot);
+
+            Assert.That(result.Diagnostics, Is.Empty, Describe(result));
+            Assert.That(result.Content.Monsters.Single().Definition.BaseExperience, Is.Zero);
         }
     }
 
@@ -321,6 +380,21 @@ public sealed class ContentValidationTests
                 result.Diagnostics.Where(diagnostic => diagnostic.File == Item)
                     .Select(diagnostic => diagnostic.FieldPath),
                 Is.EquivalentTo(new[] { "stackLimit", "server.sellPrice" }));
+        }
+    }
+
+    [Test]
+    public void Run_WhenTwoExperienceTablesShareAnId_ReportsTheSecondFile()
+    {
+        using (var workspace = new ContentWorkspace())
+        {
+            workspace.Write("experience/copy.yml", "id: experience.adventurer\nlevels: [5]\n");
+
+            ContentPipelineResult result = ContentPipeline.Run(workspace.ContentRoot);
+
+            Assert.That(result.Diagnostics, Has.Count.EqualTo(1), Describe(result));
+            Assert.That(result.Diagnostics[0].File, Is.EqualTo("experience/copy.yml"));
+            Assert.That(result.Diagnostics[0].Message, Does.Contain("duplicate ID 'experience.adventurer'"));
         }
     }
 

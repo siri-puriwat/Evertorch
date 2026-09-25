@@ -72,6 +72,8 @@ public sealed class ServerInstruments
     private readonly Counter<long> m_rateLimited;
     private readonly Counter<long> m_violations;
     private readonly Counter<long> m_violationDisconnects;
+    private readonly Counter<long> m_experience;
+    private readonly Counter<long> m_levelUps;
 
     public ServerInstruments(IMeterFactory meters)
     {
@@ -120,6 +122,14 @@ public sealed class ServerInstruments
             "evertorch.abuse.disconnects",
             "{connection}",
             "Connections closed for violations or for rate excess, by reason.");
+        m_experience = Meter.CreateCounter<long>(
+            "evertorch.progression.experience",
+            "{experience}",
+            "Experience awarded to characters for the monsters they helped kill.");
+        m_levelUps = Meter.CreateCounter<long>(
+            "evertorch.progression.level_ups",
+            "{level}",
+            "Levels characters gained.");
     }
 
     public Meter Meter { get; }
@@ -177,6 +187,16 @@ public sealed class ServerInstruments
     public void RecordViolationDisconnect(DisconnectReason reason)
     {
         m_violationDisconnects.Add(1, reason == DisconnectReason.Kicked ? KickedReason : RateLimitedReason);
+    }
+
+    public void RecordExperience(long experience)
+    {
+        m_experience.Add(experience);
+    }
+
+    public void RecordLevelUps(int levels)
+    {
+        m_levelUps.Add(levels);
     }
 
     /// <summary>

@@ -19,7 +19,7 @@ public sealed class ContentProjectionTests
     {
         "3917", "3918", "73219", "73220", "54321", "7613", "2917", "1553", "1027", "4.0625", "1.5625", "12347",
         "6.125", "12.375", "0.7321", "1.8125", "60413", "8123", "20417", "3119", "5.1875", "3.4375", "7.5625",
-        "12.6875", "14.3125", "6.875", "86421", "6.4375", "4111", "5227", "139"
+        "12.6875", "14.3125", "6.875", "86421", "6.4375", "4111", "5227", "139", "30211", "50423", "80637", "77173"
     };
 
     private static readonly string[] ServerOnlyFieldNames =
@@ -29,13 +29,14 @@ public sealed class ContentProjectionTests
         "leashRadius", "drops", "chance", "amount", "minAmount", "maxAmount", "range", "damageType",
         "startingStats", "health", "spirit", "healthBase", "healthPerLevel", "spiritBase", "spiritPerLevel",
         "unarmedAttackSpeedPenalty", "startingMap", "basicAttack", "spawnPoint", "monsterSpawns", "respawnMs",
-        "serverContentVersion", "roamRadius", "idlePauseMs", "idlePauseMinMs", "idlePauseMaxMs", "scanIntervalMs"
+        "serverContentVersion", "roamRadius", "idlePauseMs", "idlePauseMinMs", "idlePauseMaxMs", "scanIntervalMs",
+        "experienceTable", "rewards", "baseExperience", "levels"
     };
 
     // Authoring sections that the projection flattens into their fields, so no package carries these names.
     private static readonly string[] FlattenedAuthoringSections =
     {
-        "server", "stats", "movement", "combat", "ai", "amount", "health", "spirit", "idlePauseMs"
+        "server", "stats", "movement", "combat", "ai", "amount", "health", "spirit", "idlePauseMs", "rewards"
     };
 
     private static ContentPackages BuildValid(ContentWorkspace workspace)
@@ -69,6 +70,15 @@ public sealed class ContentProjectionTests
         for (int index = 0; index < left.DataFiles.Count; index++)
         {
             Assert.That(left.DataFiles[index].Content, Is.EqualTo(right.DataFiles[index].Content));
+        }
+    }
+
+    private static JsonElement FirstDefinition(ContentPackage package, string path)
+    {
+        PackageFile file = package.DataFiles.Single(candidate => candidate.Path == path);
+        using (var document = JsonDocument.Parse(file.Content))
+        {
+            return document.RootElement.GetProperty("definitions")[0].Clone();
         }
     }
 
@@ -233,6 +243,28 @@ public sealed class ContentProjectionTests
     }
 
     [Test]
+    public void Build_ForValidFixture_WritesExperienceForTheServerOnly()
+    {
+        using (var workspace = new ContentWorkspace())
+        {
+            ContentPackages packages = BuildValid(workspace);
+
+            JsonElement table = FirstDefinition(packages.Server, "experience.json");
+            Assert.That(table.GetProperty("id").GetString(), Is.EqualTo("experience.adventurer"));
+            Assert.That(
+                table.GetProperty("levels").EnumerateArray().Select(level => level.GetInt32()),
+                Is.EqualTo(new[] { 30211, 50423, 80637 }));
+            Assert.That(
+                FirstDefinition(packages.Server, "jobs.json").GetProperty("experienceTable").GetString(),
+                Is.EqualTo("experience.adventurer"));
+            Assert.That(
+                FirstDefinition(packages.Server, "monsters.json").GetProperty("baseExperience").GetInt32(),
+                Is.EqualTo(77173));
+            Assert.That(packages.Client.DataFiles.Select(file => file.Path), Does.Not.Contain("experience.json"));
+        }
+    }
+
+    [Test]
     public void Build_ForValidFixture_WritesManifestsThatDescribeTheirFiles()
     {
         using (var workspace = new ContentWorkspace())
@@ -298,6 +330,8 @@ public sealed class ContentProjectionTests
         {
             rebalanced.Replace(Monster, "chance: 0.7321", "chance: 0.25");
             rebalanced.Replace(Item, "sellPrice: 73219", "sellPrice: 5");
+            rebalanced.Replace(Monster, "baseExperience: 77173", "baseExperience: 3");
+            rebalanced.Replace("experience/adventurer.yml", "30211", "30");
 
             ContentPackages before = BuildValid(original);
             ContentPackages after = BuildValid(rebalanced);

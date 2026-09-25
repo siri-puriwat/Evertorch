@@ -15,6 +15,7 @@ public sealed class ContentSet
         IEnumerable<AuthoredSkill> skills,
         IEnumerable<AuthoredJob> jobs,
         IEnumerable<AuthoredMap> maps,
+        IEnumerable<AuthoredExperienceTable> experienceTables,
         IEnumerable<string> declaredIds)
     {
         Items = items.OrderBy(item => item.Definition.Id.Value, StringComparer.Ordinal).ToList();
@@ -22,6 +23,9 @@ public sealed class ContentSet
         Skills = skills.OrderBy(skill => skill.Definition.Id.Value, StringComparer.Ordinal).ToList();
         Jobs = jobs.OrderBy(job => job.Definition.Id.Value, StringComparer.Ordinal).ToList();
         Maps = maps.OrderBy(map => map.Definition.Id.Value, StringComparer.Ordinal).ToList();
+        ExperienceTables = experienceTables
+            .OrderBy(table => table.Definition.Id.Value, StringComparer.Ordinal)
+            .ToList();
         DeclaredIds = new HashSet<string>(declaredIds, StringComparer.Ordinal);
     }
 
@@ -34,6 +38,8 @@ public sealed class ContentSet
     public IReadOnlyList<AuthoredJob> Jobs { get; }
 
     public IReadOnlyList<AuthoredMap> Maps { get; }
+
+    public IReadOnlyList<AuthoredExperienceTable> ExperienceTables { get; }
 
     /// <summary>
     ///     Every valid ID some file declared, including files rejected for another error. A reference to one of these

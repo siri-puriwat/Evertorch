@@ -23,6 +23,7 @@ public sealed class MonsterDefinition
         int idlePauseMinMs,
         int idlePauseMaxMs,
         int scanIntervalMs,
+        int baseExperience,
         IReadOnlyList<MonsterDrop> drops)
     {
         Id = id;
@@ -43,6 +44,7 @@ public sealed class MonsterDefinition
         IdlePauseMinMs = idlePauseMinMs;
         IdlePauseMaxMs = idlePauseMaxMs;
         ScanIntervalMs = scanIntervalMs;
+        BaseExperience = baseExperience;
         Drops = drops;
     }
 
@@ -85,6 +87,12 @@ public sealed class MonsterDefinition
 
     /// <summary>The cadence of the AI's decisions: acquiring, scanning, re-pathing, and the leash.</summary>
     public int ScanIntervalMs { get; }
+
+    /// <summary>
+    ///     The experience shared by the characters that damaged the monster when it dies (Gameplay Systems §2.1); 0
+    ///     gives none.
+    /// </summary>
+    public int BaseExperience { get; }
 
     public IReadOnlyList<MonsterDrop> Drops { get; }
 }

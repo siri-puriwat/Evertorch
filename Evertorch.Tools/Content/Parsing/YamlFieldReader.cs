@@ -319,6 +319,56 @@ public sealed class YamlFieldReader
         return values;
     }
 
+    /// <summary>
+    ///     Whole numbers from <paramref name="min" /> to <paramref name="max" />, each reported at its own index. A
+    ///     missing or malformed sequence yields an empty list and one diagnostic.
+    /// </summary>
+    public IReadOnlyList<int> RequiredIntSequence(string key, int min, int max)
+    {
+        var values = new List<int>();
+        YamlNode? node = Find(key);
+        if (node == null)
+        {
+            ReportMissing(key);
+            return values;
+        }
+
+        if (!(node is YamlSequenceNode sequence))
+        {
+            Report(key, node, "must be a sequence");
+            return values;
+        }
+
+        for (int index = 0; index < sequence.Children.Count; index++)
+        {
+            string elementPath = string.Format(CultureInfo.InvariantCulture, "{0}[{1}]", PathOf(key), index);
+            YamlNode element = sequence.Children[index];
+            m_fieldLines[elementPath] = LineOf(element);
+            int value = 0;
+            bool isWholeNumber = element is YamlScalarNode scalar
+                && scalar.Style == ScalarStyle.Plain
+                && int.TryParse(scalar.Value, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out value);
+            if (!isWholeNumber)
+            {
+                AddDiagnostic(elementPath, element, "must be a whole number");
+                continue;
+            }
+
+            if (value < min || value > max)
+            {
+                AddDiagnostic(
+                    elementPath,
+                    element,
+                    string.Format(CultureInfo.InvariantCulture, "must be between {0} and {1}", min, max));
+                continue;
+            }
+
+            values.Add(value);
+        }
+
+        return values;
+    }
+
     public bool Has(string key)
     {
         return Find(key) != null;

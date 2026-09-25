@@ -70,13 +70,14 @@ public sealed class ContentBuildCommandTests
             int exitCode = Build(workspace);
 
             Assert.That(exitCode, Is.EqualTo(0));
-            foreach (string side in new[] { "server", "client" })
+            // The experience tables stay on the server (Content Pipeline §5).
+            foreach ((string side, int files) in new[] { ("server", 7), ("client", 6) })
             {
                 string directory = Path.Combine(workspace.OutputDirectory, side);
                 Assert.That(
                     Directory.GetFiles(directory),
-                    Has.Length.EqualTo(6),
-                    $"five definition files and a manifest in {side}");
+                    Has.Length.EqualTo(files),
+                    $"{files - 1} definition files and a manifest in {side}");
                 Assert.That(File.Exists(Path.Combine(directory, "manifest.json")), Is.True);
             }
         }

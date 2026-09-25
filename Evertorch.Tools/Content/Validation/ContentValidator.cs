@@ -28,9 +28,14 @@ public static class ContentValidator
             skill => skill.Source,
             diagnostics);
         HashSet<string> maps = CollectIds(content.Maps, map => map.Definition.Id.Value, map => map.Source, diagnostics);
+        HashSet<string> experienceTables = CollectIds(
+            content.ExperienceTables,
+            table => table.Definition.Id.Value,
+            table => table.Source,
+            diagnostics);
         CollectIds(content.Jobs, job => job.Definition.Id.Value, job => job.Source, diagnostics);
 
-        foreach (HashSet<string> known in new[] { items, monsters, skills, maps })
+        foreach (HashSet<string> known in new[] { items, monsters, skills, maps, experienceTables })
         {
             known.UnionWith(content.DeclaredIds);
         }
@@ -80,6 +85,13 @@ public static class ContentValidator
             RequireReference(maps, job.Definition.StartingMap.Value, "map", job.Source, "server.startingMap",
                 diagnostics);
             RequireReference(skills, job.Definition.BasicAttack.Value, "skill", job.Source, "server.basicAttack",
+                diagnostics);
+            RequireReference(
+                experienceTables,
+                job.Definition.ExperienceTable.Value,
+                "experience table",
+                job.Source,
+                "server.experienceTable",
                 diagnostics);
         }
     }

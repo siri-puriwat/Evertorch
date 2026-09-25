@@ -6,6 +6,7 @@ using Evertorch.Client;
 using Evertorch.Game;
 using Evertorch.Persistence.Tests;
 using Evertorch.Protocol;
+using Evertorch.Rules;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using NUnit.Framework;
@@ -86,6 +87,7 @@ public sealed class PrototypeAcceptanceTests
         WatchEachOtherWalk(first, second);
         WalkOnALossyLink(admin, first, second);
         FightSlimes("fight", first, second);
+        ShareAKill(content, admin, first, second);
 
         EntityId firstEntity = first.World.LocalEntity;
         EntityId secondEntity = second.World.LocalEntity;
@@ -280,6 +282,76 @@ public sealed class PrototypeAcceptanceTests
         {
             Assert.That(client.World.IsLocalDead, Is.False, $"{step}: both players survived");
         }
+    }
+
+    // Both players attack one slime. Once it dies, each character's level and experience in the server's players view
+    // are what its share of all the damage the slime took gives it (Gameplay Systems §2.1).
+    private static void ShareAKill(
+        ServerContent content,
+        IAdminCommandService admin,
+        SocketClient first,
+        SocketClient second)
+    {
+        const string step = "share";
+        SocketClient[] clients = { first, second };
+        EntityId slime = first.CycleTarget(true);
+        Assert.That(slime, Is.Not.EqualTo(default(EntityId)), $"{step}: Tab found a slime");
+        Assert.That(
+            SocketClients.PumpUntil(() => second.World.Remotes.ContainsKey(slime), clients),
+            Is.True,
+            $"{step}: both players see the slime");
+        second.Connection.SendTarget(slime);
+        Assert.That(
+            SocketClients.PumpUntil(() => clients.All(client => client.World.Target == slime), clients),
+            Is.True,
+            $"{step}: the server confirmed the shared target");
+
+        // The players view is republished once a second; two of those carry the earlier fight's experience.
+        SocketClients.PumpFor(TimeSpan.FromSeconds(2.2), clients);
+        IReadOnlyList<PlayerSummary> before = admin.GetPlayers(AdminActor.LocalConsole);
+        var dealt = new Dictionary<EntityId, long>();
+        bool isDead = false;
+        first.World.DamageReceived += damage =>
+        {
+            if (damage.Target == slime)
+            {
+                dealt.TryGetValue(damage.Source, out long sum);
+                dealt[damage.Source] = sum + damage.Amount;
+            }
+        };
+        first.World.EntityDiedReceived += death => isDead |= death.Entity == slime;
+        foreach (SocketClient client in clients)
+        {
+            client.AttackTarget();
+        }
+
+        Assert.That(SocketClients.PumpUntil(() => isDead, FightLimit, clients), Is.True, $"{step}: the slime died");
+
+        long baseExperience = content.Monsters[new MonsterDefinitionId(TrainingSlime)].BaseExperience;
+        ExperienceDefinitionId tableId = content.Jobs[new JobDefinitionId(Adventurer)].ExperienceTable;
+        var rules = new RenewalProgressionRules();
+        long total = dealt.Values.Sum();
+        var expected = new Dictionary<EntityId, LevelProgress>();
+        foreach (SocketClient client in clients)
+        {
+            EntityId entity = client.World.LocalEntity;
+            Assert.That(dealt.TryGetValue(entity, out long damage), Is.True, $"{step}: both players hit the slime");
+            PlayerSummary was = before.Single(player => player.Entity == entity);
+            long share = rules.ShareExperience(baseExperience, damage, total);
+            expected[entity] = rules.AddExperience(
+                content.ExperienceTables[tableId],
+                new LevelProgress(was.Level, was.Experience),
+                share);
+        }
+
+        bool isShared = SocketClients.PumpUntil(
+            () => admin.GetPlayers(AdminActor.LocalConsole).Count(player =>
+                expected.TryGetValue(player.Entity, out LevelProgress progress)
+                && player.Level == progress.Level
+                && player.Experience == progress.Experience) == expected.Count,
+            clients);
+        string shares = string.Join(", ", dealt.Select(pair => $"{pair.Key.Value} dealt {pair.Value}"));
+        Assert.That(isShared, Is.True, $"{step}: each character got its share ({shares} of {total})");
     }
 
     private static void AwaitConvergence(IAdminCommandService admin, string step, params SocketClient[] clients)

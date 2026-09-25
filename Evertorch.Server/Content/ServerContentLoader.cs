@@ -17,6 +17,7 @@ public static class ServerContentLoader
     public const int SupportedSchemaVersion = 1;
     public const string ManifestFile = "manifest.json";
 
+    private const string ExperienceFile = "experience.json";
     private const string ItemsFile = "items.json";
     private const string JobsFile = "jobs.json";
     private const string MapsFile = "maps.json";
@@ -24,7 +25,10 @@ public static class ServerContentLoader
     private const string SkillsFile = "skills.json";
     private const int ContentVersionLength = 16;
 
-    private static readonly string[] DataFiles = { ItemsFile, JobsFile, MapsFile, MonstersFile, SkillsFile };
+    private static readonly string[] DataFiles =
+    {
+        ExperienceFile, ItemsFile, JobsFile, MapsFile, MonstersFile, SkillsFile
+    };
 
     public static ServerContent LoadFromDirectory(string directory)
     {
@@ -65,6 +69,7 @@ public static class ServerContentLoader
         var skills = new Dictionary<SkillDefinitionId, SkillDefinition>();
         var jobs = new Dictionary<JobDefinitionId, JobDefinition>();
         var maps = new Dictionary<MapDefinitionId, MapDefinition>();
+        var experienceTables = new Dictionary<ExperienceDefinitionId, ExperienceTableDefinition>();
 
         HashSet<ItemDefinitionId> declaredItems = ReadDefinitions(
             files,
@@ -101,6 +106,13 @@ public static class ServerContentLoader
             maps,
             MapDefinitionId.TryCreate,
             ReadMap);
+        HashSet<ExperienceDefinitionId> declaredExperienceTables = ReadDefinitions(
+            files,
+            ExperienceFile,
+            problems,
+            experienceTables,
+            ExperienceDefinitionId.TryCreate,
+            ReadExperienceTable);
 
         CheckReferences(
             monsters.Values,
@@ -110,6 +122,7 @@ public static class ServerContentLoader
             declaredMonsters,
             declaredSkills,
             declaredMaps,
+            declaredExperienceTables,
             problems);
 
         if (problems.Count != 0)
@@ -124,7 +137,8 @@ public static class ServerContentLoader
             monsters,
             skills,
             jobs,
-            maps);
+            maps,
+            experienceTables);
     }
 
     private static PackageManifest? ReadManifest(IReadOnlyDictionary<string, byte[]> files, List<string> problems)
@@ -324,6 +338,7 @@ public static class ServerContentLoader
         }
 
         int scanIntervalMs = entry.RequiredInt("scanIntervalMs", 1);
+        int baseExperience = entry.RequiredInt("baseExperience", 0);
 
         var drops = new List<MonsterDrop>();
         foreach (PackageObjectReader drop in entry.RequiredObjectArray("drops"))
@@ -371,6 +386,7 @@ public static class ServerContentLoader
             idlePauseMinMs,
             idlePauseMaxMs,
             scanIntervalMs,
+            baseExperience,
             drops.AsReadOnly());
     }
 
@@ -419,6 +435,9 @@ public static class ServerContentLoader
         double baseSpeed = RequiredNonNegative(entry, "baseSpeed");
         MapDefinitionId startingMap = entry.RequiredId<MapDefinitionId>("startingMap", MapDefinitionId.TryCreate);
         SkillDefinitionId basicAttack = entry.RequiredId<SkillDefinitionId>("basicAttack", SkillDefinitionId.TryCreate);
+        ExperienceDefinitionId experienceTable = entry.RequiredId<ExperienceDefinitionId>(
+            "experienceTable",
+            ExperienceDefinitionId.TryCreate);
         entry.ReportUnexpectedProperties();
 
         if (problems.Count != problemsBefore)
@@ -437,7 +456,26 @@ public static class ServerContentLoader
             unarmedAttackSpeedPenalty,
             baseSpeed,
             startingMap,
-            basicAttack);
+            basicAttack,
+            experienceTable);
+    }
+
+    private static ExperienceTableDefinition? ReadExperienceTable(
+        PackageObjectReader entry,
+        ExperienceDefinitionId id,
+        List<string> problems)
+    {
+        int problemsBefore = problems.Count;
+        IReadOnlyList<int> levels = entry.RequiredIntArray("levels", 1);
+        entry.ReportUnexpectedProperties();
+        if (problems.Count == problemsBefore && levels.Count == 0)
+        {
+            entry.Report("levels", "must list at least one level");
+        }
+
+        return problems.Count == problemsBefore
+            ? new ExperienceTableDefinition(id, new List<int>(levels).AsReadOnly())
+            : null;
     }
 
     private static MapDefinition? ReadMap(PackageObjectReader entry, MapDefinitionId id, List<string> problems)
@@ -536,6 +574,7 @@ public static class ServerContentLoader
         HashSet<MonsterDefinitionId> declaredMonsters,
         HashSet<SkillDefinitionId> declaredSkills,
         HashSet<MapDefinitionId> declaredMaps,
+        HashSet<ExperienceDefinitionId> declaredExperienceTables,
         List<string> problems)
     {
         foreach (MonsterDefinition monster in monsters)
@@ -570,6 +609,11 @@ public static class ServerContentLoader
             if (!declaredSkills.Contains(job.BasicAttack))
             {
                 problems.Add($"{JobsFile}: {job.Id}: uses unknown skill '{job.BasicAttack}'");
+            }
+
+            if (!declaredExperienceTables.Contains(job.ExperienceTable))
+            {
+                problems.Add($"{JobsFile}: {job.Id}: uses unknown experience table '{job.ExperienceTable}'");
             }
         }
     }

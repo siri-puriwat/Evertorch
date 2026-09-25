@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Evertorch.Game;
 using Evertorch.Protocol;
 
@@ -8,6 +9,8 @@ namespace Evertorch.Server
 /// </summary>
 public sealed class MonsterEntity : WorldEntity
 {
+    private readonly List<DamageLogEntry> m_damageLog = new();
+
     public MonsterEntity(
         EntityId id,
         MonsterDefinition definition,
@@ -29,8 +32,27 @@ public sealed class MonsterEntity : WorldEntity
 
     public MonsterBrain Brain { get; } = new();
 
+    /// <summary>
+    ///     One entry per character that damaged the monster, in the order they first did (Gameplay Systems §2.1).
+    /// </summary>
+    public IReadOnlyList<DamageLogEntry> DamageLog => m_damageLog;
+
     public override EntityKind Kind => EntityKind.Monster;
 
     public override string DefinitionId => Definition.Id.Value;
+
+    public void LogDamage(CharacterId character, int damage)
+    {
+        for (int index = 0; index < m_damageLog.Count; index++)
+        {
+            if (m_damageLog[index].Character == character)
+            {
+                m_damageLog[index] = new DamageLogEntry(character, m_damageLog[index].Damage + damage);
+                return;
+            }
+        }
+
+        m_damageLog.Add(new DamageLogEntry(character, damage));
+    }
 }
 }

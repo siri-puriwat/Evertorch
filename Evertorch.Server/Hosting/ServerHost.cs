@@ -76,6 +76,7 @@ public static class ServerHost
         builder.Services.AddSingleton<ICharacterRules, RenewalCharacterRules>();
         builder.Services.AddSingleton<IMovementRules, RenewalMovementRules>();
         builder.Services.AddSingleton<ICombatRules, RenewalCombatRules>();
+        builder.Services.AddSingleton<IProgressionRules, RenewalProgressionRules>();
         builder.Services.AddSingleton(services =>
             ServerRandom.FromOptions(services.GetRequiredService<IOptions<WorldOptions>>().Value));
         builder.Services.AddSingleton<IRandomSource>(services => services.GetRequiredService<ServerRandom>());
@@ -84,11 +85,13 @@ public static class ServerHost
         builder.Services.AddSingleton<SessionRegistry>();
         builder.Services.AddSingleton<ISessionTokenValidator, DevelopmentTokenValidator>();
         builder.Services.AddSingleton<HandshakeValidator>();
+        builder.Services.AddSingleton<CharacterStats>();
         builder.Services.AddSingleton<WorldSimulation>();
         builder.Services.AddSingleton<MessageSender>();
         builder.Services.AddSingleton<Targeting>();
         builder.Services.AddSingleton<PlayerLife>();
         builder.Services.AddSingleton<CharacterLifetime>();
+        builder.Services.AddSingleton<CharacterProgression>();
         builder.Services.AddSingleton<PickupSystem>();
         builder.Services.AddSingleton<ITickPhase>(services => services.GetRequiredService<PickupSystem>());
         builder.Services.AddSingleton<AddressThrottle>();
@@ -103,6 +106,7 @@ public static class ServerHost
         builder.Services.AddSingleton<ITickPhase, MovementSystem>();
         builder.Services.AddSingleton<CombatSystem>();
         builder.Services.AddSingleton<ITickPhase>(services => services.GetRequiredService<CombatSystem>());
+        builder.Services.AddSingleton<ITickPhase, RegenerationSystem>();
         builder.Services.AddSingleton<ITickPhase, MonsterAiSystem>();
         builder.Services.AddSingleton<ItemDropSystem>();
         builder.Services.AddSingleton<ITickPhase>(services => services.GetRequiredService<ItemDropSystem>());

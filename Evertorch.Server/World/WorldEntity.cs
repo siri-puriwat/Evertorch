@@ -57,7 +57,7 @@ public abstract class WorldEntity
     /// </summary>
     public float MovementSpeed { get; }
 
-    public int MaxHealth { get; }
+    public int MaxHealth { get; protected set; }
 
     public int CurrentHealth { get; set; }
 

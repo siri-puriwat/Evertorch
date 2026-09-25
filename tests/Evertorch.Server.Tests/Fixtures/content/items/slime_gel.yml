@@ -1,0 +1,10 @@
+id: item.material.slime_gel
+displayName: Slime Gel
+type: material
+stackLimit: 999
+server:
+  weight: 1
+  sellPrice: 2
+client:
+  icon: item_slime_gel
+  model: pickup_slime_gel
