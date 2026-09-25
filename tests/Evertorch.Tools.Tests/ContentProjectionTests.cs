@@ -32,6 +32,12 @@ public sealed class ContentProjectionTests
         "serverContentVersion", "roamRadius", "idlePauseMs", "idlePauseMinMs", "idlePauseMaxMs", "scanIntervalMs"
     };
 
+    // Authoring sections that the projection flattens into their fields, so no package carries these names.
+    private static readonly string[] FlattenedAuthoringSections =
+    {
+        "server", "stats", "movement", "combat", "ai", "amount", "health", "spirit", "idlePauseMs"
+    };
+
     private static ContentPackages BuildValid(ContentWorkspace workspace)
     {
         ContentPipelineResult result = ContentPipeline.Run(workspace.ContentRoot);
@@ -91,6 +97,17 @@ public sealed class ContentProjectionTests
         }
     }
 
+    private static HashSet<string> PropertyNamesOf(string file)
+    {
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        using (var document = JsonDocument.Parse(File.ReadAllBytes(file)))
+        {
+            CollectPropertyNames(document.RootElement, names);
+        }
+
+        return names;
+    }
+
     [Test]
     public void Build_ForIdenticalInput_ProducesIdenticalBytes()
     {
@@ -102,6 +119,44 @@ public sealed class ContentProjectionTests
 
             AssertSameBytes(left.Server, right.Server);
             AssertSameBytes(left.Client, right.Client);
+        }
+    }
+
+    [Test]
+    public void Build_ForRepositoryContent_KeepsServerOnlyFieldNamesOutOfEveryClientFile()
+    {
+        using (var workspace = new ContentWorkspace())
+        using (var output = new StringWriter())
+        using (var error = new StringWriter())
+        {
+            string content = Path.Combine(ContentValidationTests.RepositoryRoot(), "content");
+            string[] args =
+            {
+                "content", "build", "--content", content, "--out", workspace.OutputDirectory, "--client-out",
+                workspace.ClientDirectory
+            };
+
+            int exitCode = Program.Run(args, output, error);
+
+            Assert.That(exitCode, Is.EqualTo(0), error.ToString());
+            Assert.That(error.ToString(), Is.Empty);
+            string[] clientFiles = Directory.GetFiles(Path.Combine(workspace.OutputDirectory, "client"), "*.json")
+                .Concat(Directory.GetFiles(workspace.ClientDirectory, "*.json"))
+                .ToArray();
+            Assert.That(clientFiles, Has.Length.EqualTo(12), "six files in the package and six in its copy");
+            foreach (string file in clientFiles)
+            {
+                Assert.That(PropertyNamesOf(file).Intersect(ServerOnlyFieldNames), Is.Empty, file);
+            }
+
+            var serverNames = new HashSet<string>(StringComparer.Ordinal);
+            foreach (string file in Directory.GetFiles(Path.Combine(workspace.OutputDirectory, "server"), "*.json"))
+            {
+                serverNames.UnionWith(PropertyNamesOf(file));
+            }
+
+            // A name the real content no longer authors would make the check above prove nothing.
+            Assert.That(serverNames, Is.SupersetOf(ServerOnlyFieldNames.Except(FlattenedAuthoringSections)));
         }
     }
 
