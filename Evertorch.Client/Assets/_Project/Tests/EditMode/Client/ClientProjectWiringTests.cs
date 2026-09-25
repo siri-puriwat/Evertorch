@@ -32,6 +32,10 @@ public sealed class ClientProjectWiringTests
 
     [TestCase("Player/Move")]
     [TestCase("Player/MoveTo")]
+    [TestCase("Player/Look")]
+    [TestCase("Player/Orbit")]
+    [TestCase("Player/Zoom")]
+    [TestCase("Player/ZoomStep")]
     public void InputActions_HaveTheActionsTheClientBinds(string actionPath)
     {
         Assert.That(LoadActions().FindAction(actionPath), Is.Not.Null);
@@ -63,6 +67,22 @@ public sealed class ClientProjectWiringTests
         string first = Path.GetFileNameWithoutExtension(EditorBuildSettings.scenes[0].path);
 
         Assert.That(first, Is.EqualTo(BootstrapRedirect.BootstrapScene));
+    }
+
+    [Test]
+    public void InputActions_CameraFollowsThePrototypeControls()
+    {
+        InputActionAsset actions = LoadActions();
+
+        Assert.That(
+            Paths(actions, "Player/Look"),
+            Is.EquivalentTo(new[] { "<Gamepad>/rightStick", "<Joystick>/{Hatswitch}" }),
+            "no pointer delta, which would orbit the camera on every mouse move");
+        Assert.That(
+            Paths(actions, "Player/Orbit"),
+            Is.EquivalentTo(new[] { "OneModifier", "<Mouse>/rightButton", "<Mouse>/delta" }));
+        Assert.That(Paths(actions, "Player/Zoom"), Is.EquivalentTo(new[] { "<Mouse>/scroll/y" }));
+        Assert.That(Paths(actions, "Player/ZoomStep"), Is.EquivalentTo(new[] { "<Gamepad>/rightStickPress" }));
     }
 
     [Test]

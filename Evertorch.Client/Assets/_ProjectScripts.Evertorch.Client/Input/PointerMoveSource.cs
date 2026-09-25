@@ -12,12 +12,18 @@ namespace Evertorch.Client
 public sealed class PointerMoveSource : IDisposable
 {
     private readonly InputAction m_moveTo;
+    private readonly Func<TouchControl, bool>? m_isGestureTap;
     private bool m_hasRequest;
     private Vector2 m_requestPosition;
 
-    public PointerMoveSource(InputAction moveTo)
+    /// <param name="moveTo">The click and tap action.</param>
+    /// <param name="isGestureTap">
+    ///     Whether a tap belongs to a two-finger camera gesture, which never walks (Prototype Content §3).
+    /// </param>
+    public PointerMoveSource(InputAction moveTo, Func<TouchControl, bool>? isGestureTap = null)
     {
         m_moveTo = moveTo ?? throw new ArgumentNullException(nameof(moveTo));
+        m_isGestureTap = isGestureTap;
         m_moveTo.performed += OnMoveTo;
         m_moveTo.Enable();
     }
@@ -42,6 +48,11 @@ public sealed class PointerMoveSource : IDisposable
         // position change in the same event, the action has no value yet at the moment the click is reported.
         if (context.control.parent is TouchControl touch)
         {
+            if (m_isGestureTap != null && m_isGestureTap(touch))
+            {
+                return;
+            }
+
             m_requestPosition = touch.position.ReadValue();
         }
         else if (context.control.device is Pointer pointer)

@@ -6,6 +6,7 @@ using Evertorch.Protocol;
 using UnityEngine;
 using UnityEngine.Events;
 using UnityEngine.InputSystem;
+using UnityEngine.InputSystem.Controls;
 using UnityEngine.SceneManagement;
 using EntityId = Evertorch.Game.EntityId;
 
@@ -40,6 +41,21 @@ public sealed class GameClient : MonoBehaviour
     [SerializeField]
     private bool m_connectOnStart = true;
 
+    [SerializeField]
+    private float m_cameraMaxYawDegrees = 90f;
+
+    [SerializeField]
+    private float m_cameraMinPitchDegrees = 30f;
+
+    [SerializeField]
+    private float m_cameraMaxPitchDegrees = 60f;
+
+    [SerializeField]
+    private float m_cameraMinDistance = 6f;
+
+    [SerializeField]
+    private float m_cameraMaxDistance = 20f;
+
     private readonly Dictionary<EntityId, EntityView> m_remoteViews = new();
     private readonly StreamingContentLoader m_contentLoader = new();
     private readonly EntityViewCatalog m_viewCatalog = new();
@@ -52,6 +68,7 @@ public sealed class GameClient : MonoBehaviour
     private PointerMoveSource? m_pointerSource;
     private PointerMoveHandler? m_pointerHandler;
     private CombatInputSource? m_combatSource;
+    private CameraInputSource? m_cameraSource;
     private TargetMarker? m_targetMarker;
     private AutoAttackState? m_autoAttack;
     private PickupState? m_pickup;
@@ -112,6 +129,12 @@ public sealed class GameClient : MonoBehaviour
     public TouchControls? Touch { get; private set; }
 
     /// <summary>
+    ///     Where the camera sits around the player (Prototype Content §3). It lives here rather than on a map scene's
+    ///     camera, so it survives the scene loads.
+    /// </summary>
+    public OrbitCameraState? CameraState { get; private set; }
+
+    /// <summary>
     ///     Whether the last close allows <see cref="Reconnect" />: not after a refusal only an update or another sign-in
     ///     can cure (<see cref="DisconnectMessages.CanReconnect" />).
     /// </summary>
@@ -147,6 +170,12 @@ public sealed class GameClient : MonoBehaviour
     {
         DontDestroyOnLoad(gameObject);
         Application.runInBackground = true;
+        CameraState = new OrbitCameraState(
+            m_cameraMaxYawDegrees,
+            m_cameraMinPitchDegrees,
+            m_cameraMaxPitchDegrees,
+            m_cameraMinDistance,
+            m_cameraMaxDistance);
 
         // Each identity is its own account. Every client on the machine, including each Multiplayer Play Mode
         // window, starts with its own, so windows started together never share characters. A GUID is random per
@@ -199,6 +228,11 @@ public sealed class GameClient : MonoBehaviour
             m_pointerSource?.TryTakeRequest(out Vector2 _);
             m_combatSource?.TakeRequest();
             return;
+        }
+
+        if (CameraState != null)
+        {
+            m_cameraSource?.Apply(CameraState, Time.unscaledDeltaTime);
         }
 
         float yaw = m_camera == null ? 0f : m_camera.YawDegrees;
@@ -268,6 +302,7 @@ public sealed class GameClient : MonoBehaviour
         TearDownWorld();
         m_pointerSource?.Dispose();
         m_combatSource?.Dispose();
+        m_cameraSource?.Dispose();
         m_socket?.Dispose();
         m_viewCatalog.Dispose();
         if (m_runtimeMaterial != null)
@@ -505,7 +540,7 @@ public sealed class GameClient : MonoBehaviour
                 m_camera = mainCamera.gameObject.AddComponent<FollowCamera>();
             }
 
-            m_camera.Follow(m_localView.transform);
+            m_camera.Follow(m_localView.transform, CameraState, m_map.GroundCollider);
         }
 
         BindInput();
@@ -540,8 +575,19 @@ public sealed class GameClient : MonoBehaviour
             return;
         }
 
+        InputAction? look = actions?.FindAction("Player/Look");
+        InputAction? orbit = actions?.FindAction("Player/Orbit");
+        InputAction? zoom = actions?.FindAction("Player/Zoom");
+        InputAction? zoomStep = actions?.FindAction("Player/ZoomStep");
+        Func<TouchControl, bool>? isGestureTap = null;
+        if (look != null && orbit != null && zoom != null && zoomStep != null)
+        {
+            m_cameraSource = new CameraInputSource(look, orbit, zoom, zoomStep, m_uiHitTest);
+            isGestureTap = m_cameraSource.IsGestureTap;
+        }
+
         m_manualSource = new ManualMoveSource(move);
-        m_pointerSource = new PointerMoveSource(moveTo);
+        m_pointerSource = new PointerMoveSource(moveTo, isGestureTap);
         m_pointerHandler = new PointerMoveHandler(m_pointerSource, m_uiHitTest);
 
         InputAction? next = actions?.FindAction("Player/Next");
@@ -722,7 +768,7 @@ public sealed class GameClient : MonoBehaviour
         m_map = null;
         if (m_camera != null)
         {
-            m_camera.Follow(null);
+            m_camera.Follow(null, null, null);
         }
     }
 
