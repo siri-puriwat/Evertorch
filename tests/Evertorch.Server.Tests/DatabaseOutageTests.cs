@@ -1,11 +1,15 @@
 using System;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
+using System.Net;
+using System.Net.Http;
 using System.Threading;
 using Evertorch.Game;
 using Evertorch.Persistence;
 using Evertorch.Persistence.Tests;
 using Evertorch.Protocol;
+using Microsoft.Extensions.Hosting;
 using NUnit.Framework;
 
 namespace Evertorch.Server.Tests
@@ -27,6 +31,8 @@ public sealed class DatabaseOutageTests
 
     private const string SlimeGel = "item.material.slime_gel";
     private const int CommandTimeoutMs = 1000;
+    private const string DatabaseAvailable = "\"database\":\"available\"";
+    private const string DatabaseUnavailable = "\"database\":\"unavailable\"";
 
     private PostgresFixture m_database = null!;
     private PostgresGameStore m_store = null!;
@@ -249,6 +255,45 @@ public sealed class DatabaseOutageTests
         Assert.That(server.World.Maps.Single().Contains(drop.Id), Is.True);
         Assert.That(WasToldOfAPickup(server, picker), Is.False);
         Assert.That(Ledger(drop, character), Is.Null);
+    }
+
+    [Test]
+    public void Readiness_OfAHostOnThePausedDatabase_FollowsItDownAndBack()
+    {
+        using var root = new TemporaryDirectory();
+        PackageFixture.WriteTo(
+            Path.Combine(root.Path, "content", "server"),
+            PackageFixture.BuildRepositoryPackage());
+        HostApplicationBuilder builder = TestHosts.CreateBuilderWithDatabase(
+            new[]
+            {
+                "--Network:Port=0",
+                "--Health:Enabled=true",
+                "--Persistence:IdleProbeIntervalMs=100",
+                $"--Persistence:CommandTimeoutMs={CommandTimeoutMs}"
+            },
+            root.Path,
+            m_database.ConnectionString);
+        using IHost host = builder.Build();
+        host.Start();
+        using HttpClient http = HealthTests.ClientFor(host);
+
+        bool isReady = HealthTests.WaitFor(http, "/health/ready", HttpStatusCode.OK, DatabaseAvailable);
+        Pause();
+        bool isUnready = HealthTests.WaitFor(
+            http,
+            "/health/ready",
+            HttpStatusCode.ServiceUnavailable,
+            DatabaseUnavailable);
+        (HttpStatusCode live, string liveBody) = HealthTests.Get(http, "/health/live");
+        Resume();
+        bool isReadyAgain = HealthTests.WaitFor(http, "/health/ready", HttpStatusCode.OK, DatabaseAvailable);
+        host.StopAsync().GetAwaiter().GetResult();
+
+        Assert.That(isReady, Is.True, "ready while the database answers");
+        Assert.That(isUnready, Is.True, "the idle writer's probe met the paused database, and readiness dropped");
+        Assert.That(live, Is.EqualTo(HttpStatusCode.OK), $"still live: {liveBody}");
+        Assert.That(isReadyAgain, Is.True, "ready again once the database answers");
     }
 }
 }

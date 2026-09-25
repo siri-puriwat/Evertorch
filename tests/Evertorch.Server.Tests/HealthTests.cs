@@ -64,19 +64,19 @@ public sealed class HealthTests
         return host;
     }
 
-    private static HttpClient ClientFor(IHost host)
+    internal static HttpClient ClientFor(IHost host)
     {
         int port = host.Services.GetRequiredService<HealthEndpoint>().Port;
         return new HttpClient { BaseAddress = new Uri($"http://127.0.0.1:{port}") };
     }
 
-    private static (HttpStatusCode Status, string Body) Get(HttpClient http, string path)
+    internal static (HttpStatusCode Status, string Body) Get(HttpClient http, string path)
     {
         using HttpResponseMessage response = http.GetAsync(path).GetAwaiter().GetResult();
         return (response.StatusCode, response.Content.ReadAsStringAsync().GetAwaiter().GetResult());
     }
 
-    private static bool WaitFor(HttpClient http, string path, HttpStatusCode status, string fragment)
+    internal static bool WaitFor(HttpClient http, string path, HttpStatusCode status, string fragment)
     {
         var elapsed = Stopwatch.StartNew();
         while (elapsed.Elapsed < WaitLimit)

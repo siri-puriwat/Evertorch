@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.Net;
 using System.Net.Sockets;
@@ -35,6 +36,17 @@ public sealed class ProgramTests
         private readonly StringBuilder m_text = new();
 
         public ManualResetEventSlim Started { get; } = new();
+
+        public string Text
+        {
+            get
+            {
+                lock (m_text)
+                {
+                    return m_text.ToString();
+                }
+            }
+        }
 
         public override Encoding Encoding => Encoding.UTF8;
 
@@ -240,6 +252,61 @@ public sealed class ProgramTests
         Assert.That(text, Does.Contain("scripts\\run-server.cmd"));
         Assert.That(text, Does.Contain("DOTNET_ENVIRONMENT=Development"));
         Assert.That(text, Does.Not.Contain("Press Enter"), "only a window of its own makes the server wait");
+    }
+
+    [Test]
+    public void ServerProcess_WhenItsStandardInputSaysShutdown_AuditsItAndExitsWithZero()
+    {
+        using var package = new TemporaryDirectory();
+        PackageFixture.WriteTo(package.Path, PackageFixture.BuildRepositoryPackage());
+        using var output = new StartedWatcher();
+        var start = new ProcessStartInfo(Environment.GetEnvironmentVariable("DOTNET_HOST_PATH") ?? "dotnet")
+        {
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            WorkingDirectory = AppContext.BaseDirectory
+        };
+        start.ArgumentList.Add(Path.Combine(AppContext.BaseDirectory, "Evertorch.Server.dll"));
+        start.ArgumentList.Add($"--Content:ServerPackagePath={package.Path}");
+        start.ArgumentList.Add($"--ConnectionStrings:Evertorch={TestHosts.UnreachableDatabase}");
+        start.ArgumentList.Add("--Network:Port=0");
+        start.ArgumentList.Add("--Health:Port=0");
+        start.Environment["DOTNET_ENVIRONMENT"] = "Production";
+        using var process = new Process { StartInfo = start };
+        process.OutputDataReceived += (_, line) => output.WriteLine(line.Data);
+        process.ErrorDataReceived += (_, line) => output.WriteLine(line.Data);
+        bool hasExited;
+
+        process.Start();
+        try
+        {
+            process.BeginOutputReadLine();
+            process.BeginErrorReadLine();
+            Assert.That(output.Started.Wait(TimeSpan.FromSeconds(60)), Is.True, $"the process started: {output.Text}");
+            process.StandardInput.WriteLine("shutdown test");
+            process.StandardInput.Flush();
+            hasExited = process.WaitForExit(30000);
+            if (hasExited)
+            {
+                // The timed wait can return before the handlers have seen the last lines of output.
+                process.WaitForExit();
+            }
+        }
+        finally
+        {
+            if (!process.HasExited)
+            {
+                process.Kill(true);
+            }
+        }
+
+        Assert.That(hasExited, Is.True, $"the console's shutdown stopped the process: {output.Text}");
+        Assert.That(process.ExitCode, Is.Zero, output.Text);
+        Assert.That(output.Text, Does.Contain("Evertorch.Audit[6002]"), "the operator's shutdown was audited");
+        Assert.That(output.Text, Does.Contain("shut the server down: \"test\""));
     }
 }
 }

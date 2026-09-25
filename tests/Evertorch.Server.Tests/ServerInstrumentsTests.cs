@@ -4,6 +4,7 @@ using System.Diagnostics.Metrics;
 using System.IO;
 using System.Linq;
 using System.Threading;
+using System.Threading.Tasks;
 using Evertorch.Game;
 using Evertorch.Protocol;
 using Microsoft.Extensions.DependencyInjection;
@@ -182,6 +183,55 @@ public sealed class ServerInstrumentsTests
     }
 
     [Test]
+    public void Gauges_ReadTheQueuesAndTheDatabaseState()
+    {
+        var server = new TestServer(maxInboundEvents: 16);
+        using var recorder = new MeterRecorder(server.Instruments.Meter);
+        ConnectionId player = server.EnterWorld(7);
+
+        // A connection the server never saw has no budget and no session: its garbage is counted, never scored.
+        var stranger = new ConnectionId(999);
+        SendGarbage(server, stranger, 20);
+        server.Tick();
+        server.RunsPersistence = false;
+        server.Lifetime.QueueCheckpoint(server.SessionOf(player).Character!);
+        var completed = new List<PersistenceOutcome>();
+        for (int index = 0; index < 2; index++)
+        {
+            var job = new PersistenceJob<bool>(
+                "test",
+                default,
+                0,
+                (_, _) => Task.FromResult(true),
+                (outcome, _) => completed.Add(outcome));
+            Assert.That(server.Persistence.TryEnqueue(job), Is.True);
+        }
+
+        server.Store.IsUnavailable = true;
+        server.Persistence.Probe();
+        while (server.CurrentTick % TestServer.TickRate != TestServer.TickRate - 1)
+        {
+            server.Tick();
+        }
+
+        // Queued after the tick's commands were drained, so they are still waiting when the status is published.
+        server.AfterCommandsOnce(() => SendGarbage(server, stranger, 3));
+        server.Tick();
+        recorder.Observe();
+
+        Assert.That(Single(recorder, "evertorch.inbound.depth"), Is.EqualTo(3));
+        Assert.That(Single(recorder, "evertorch.inbound.dropped"), Is.EqualTo(4), "beyond the 16 the queue holds");
+        Assert.That(Single(recorder, "evertorch.inbound.malformed"), Is.EqualTo(23));
+        Assert.That(Tagged(recorder, "evertorch.transport.packets", "direction", "received"), Is.EqualTo(10));
+        Assert.That(Tagged(recorder, "evertorch.transport.packets", "direction", "sent"), Is.EqualTo(20));
+        Assert.That(Single(recorder, "evertorch.persistence.pending"), Is.EqualTo(2));
+        Assert.That(Single(recorder, "evertorch.persistence.waiting_checkpoints"), Is.EqualTo(1));
+        Assert.That(Tagged(recorder, "evertorch.persistence.database.state", "state", "unavailable"), Is.EqualTo(1));
+        Assert.That(Tagged(recorder, "evertorch.persistence.database.state", "state", "available"), Is.Zero);
+        Assert.That(completed, Is.Empty, "the held writer ran nothing");
+    }
+
+    [Test]
     public void Host_CreatesItsMeterThroughTheMeterFactory()
     {
         using IHost first = TestHosts.CreateBuilder(new[] { "--Network:Port=0" }, AppContext.BaseDirectory).Build();
@@ -296,6 +346,7 @@ public sealed class ServerInstrumentsTests
         Assert.That(SumTagged(recorder, "evertorch.abuse.violations", "violation", "command_rate"), Is.EqualTo(10));
         Assert.That(SumTagged(recorder, "evertorch.abuse.disconnects", "reason", "kicked"), Is.EqualTo(1));
         Assert.That(SumTagged(recorder, "evertorch.abuse.disconnects", "reason", "rate_limited"), Is.EqualTo(1));
+        Assert.That(SumTagged(recorder, "evertorch.abuse.rate_limited", "limit", "session_combat"), Is.EqualTo(10));
     }
 }
 }
