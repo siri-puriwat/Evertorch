@@ -90,7 +90,7 @@ public sealed class ServerContentLoaderTests
         Skills,
         "\"cooldownMs\": 0",
         "\"cooldownMs\": 0,\n      \"effect\": {}",
-        "definitions[0].effect.damageRatio: an effect must have exactly one of damageRatio or healHp")]
+        "definitions[0].effect.damageRatio: an effect must have exactly one of damageRatio, healHp, or status")]
     [TestCase(
         Skills,
         "      \"damageType\": \"physical\",\n",
@@ -185,6 +185,28 @@ public sealed class ServerContentLoaderTests
 
         Assert.That(problems, Has.Count.EqualTo(1));
         Assert.That(problems[0], Does.Contain(problem));
+    }
+
+    private const string StatusEffectsFile = "status-effects.json";
+
+    private static void AddFocus(Dictionary<string, byte[]> files, string percent)
+    {
+        PackageFixture.Replace(
+            files,
+            StatusEffectsFile,
+            "\"definitions\": []",
+            "\"definitions\": [ { \"id\": \"status.focus\", \"displayName\": \"Focus\", \"statPercent\": "
+            + $"{{ \"str\": 0, \"agi\": {percent}, \"vit\": 0, \"int\": 0, \"dex\": 100, \"luk\": 0 }} }} ]");
+    }
+
+    private static void MakeTheBasicAttackApply(Dictionary<string, byte[]> files, string status, string targetType)
+    {
+        PackageFixture.Replace(files, Skills, "\"targetType\": \"enemy\"", $"\"targetType\": \"{targetType}\"");
+        PackageFixture.Replace(
+            files,
+            Skills,
+            "\"cooldownMs\": 0",
+            $"\"cooldownMs\": 0, \"effect\": {{ \"status\": \"{status}\", \"durationMs\": 60000 }}");
     }
 
     [Test]
@@ -326,6 +348,34 @@ public sealed class ServerContentLoaderTests
             problems,
             Is.EqualTo(new[]
                 { "jobs.json: definitions[0].skills: lists more than the 11 skills a skill list carries" }));
+    }
+
+    [Test]
+    public void Load_WhenASkillAppliesAnUnknownStatusEffect_OrAppliesOneToAnEnemy_Fails()
+    {
+        Dictionary<string, byte[]> unknown = PackageFixture.BuildFixturePackage();
+        MakeTheBasicAttackApply(unknown, "status.none", "self");
+        Dictionary<string, byte[]> enemy = PackageFixture.BuildFixturePackage();
+        AddFocus(enemy, "100");
+        MakeTheBasicAttackApply(enemy, "status.focus", "enemy");
+
+        Assert.That(
+            ProblemsOf(unknown),
+            Is.EqualTo(new[] { "skills.json: skill.basic_attack: applies unknown status effect 'status.none'" }));
+        Assert.That(
+            ProblemsOf(enemy),
+            Is.EqualTo(new[] { "skills.json: definitions[0].targetType: must be self for a status effect" }));
+    }
+
+    [Test]
+    public void Load_WhenAStatusEffectAddsMoreThanATenfold_Fails()
+    {
+        Dictionary<string, byte[]> files = PackageFixture.BuildFixturePackage();
+        AddFocus(files, "1001");
+
+        Assert.That(
+            ProblemsOf(files),
+            Is.EqualTo(new[] { "status-effects.json: definitions[0].statPercent.agi: must be at most 1000" }));
     }
 
     [Test]
@@ -510,6 +560,22 @@ public sealed class ServerContentLoaderTests
         files["extra.json"] = new[] { (byte)'{', (byte)'}' };
 
         Assert.That(ProblemsOf(files), Is.EqualTo(new[] { "extra.json: not listed in the manifest" }));
+    }
+
+    [Test]
+    public void Load_WithMoreStatusEffectsThanAStatusListCarries_Fails()
+    {
+        Dictionary<string, byte[]> files = PackageFixture.BuildFixturePackage();
+        string fifteen = string.Join(
+            ", ",
+            Enumerable.Range(1, 15).Select(index =>
+                $"{{ \"id\": \"status.s{index}\", \"displayName\": \"S\", \"statPercent\": "
+                + "{ \"str\": 1, \"agi\": 0, \"vit\": 0, \"int\": 0, \"dex\": 0, \"luk\": 0 } }"));
+        PackageFixture.Replace(files, StatusEffectsFile, "\"definitions\": []", $"\"definitions\": [ {fifteen} ]");
+
+        Assert.That(
+            ProblemsOf(files),
+            Is.EqualTo(new[] { "status-effects.json: lists more than the 14 status effects a status list carries" }));
     }
 
     [Test]

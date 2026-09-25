@@ -307,6 +307,36 @@ public sealed class PlayerPanelTests
     }
 
     [UnityTest]
+    public IEnumerator StatusBar_ShowsEachStatusEffect_WithItsWholeSecondsLeft()
+    {
+        GameClient client = CreateIdleClient();
+        ClientWorld world = GiveWorld(client);
+        var bar = StatusBar.Create(client);
+        m_created.Add(bar.gameObject);
+        yield return null;
+        string withoutEffects = Label(bar, "Effects").text;
+
+        world.OnStatusEffects(
+            new StatusEffects(new[] { new StatusEffectEntry(new StatusDefinitionId("status.focus"), 59_200) }));
+        yield return null;
+        string started = Label(bar, "Effects").text;
+        int changes = bar.TextChanges;
+        yield return null;
+        int changesLater = bar.TextChanges;
+        world.Advance(20f);
+        yield return null;
+        string later = Label(bar, "Effects").text;
+        world.OnStatusEffects(new StatusEffects(new StatusEffectEntry[0]));
+        yield return null;
+
+        Assert.That(withoutEffects, Is.Empty);
+        Assert.That(started, Is.EqualTo("status.focus 60s"), "without content the bar names the definition");
+        Assert.That(changesLater, Is.EqualTo(changes), "an unchanged second rewrites nothing");
+        Assert.That(later, Is.EqualTo("status.focus 40s"));
+        Assert.That(Label(bar, "Effects").text, Is.Empty);
+    }
+
+    [UnityTest]
     public IEnumerator SkillBar_ShowsTheListedSlots_WithTheirKeyOrWhatIsLeftOfTheCooldown()
     {
         GameClient client = CreateIdleClient();

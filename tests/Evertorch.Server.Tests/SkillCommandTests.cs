@@ -89,7 +89,12 @@ public sealed class SkillCommandTests
         Assert.That(
             baseline.Skills.Select(entry => (entry.Skill.Value, entry.Range, entry.SpCost, entry.CooldownMs,
                 entry.AfterCastDelayMs, entry.RemainingCooldownMs)),
-            Is.EqualTo(new[] { (Strike, 1.5f, 8u, 2000u, 500u, 0u), (FirstAid, 0f, 3u, 0u, 0u, 0u) }));
+            Is.EqualTo(
+                new[]
+                {
+                    (Strike, 1.5f, 8u, 2000u, 500u, 0u), (FirstAid, 0f, 3u, 0u, 0u, 0u),
+                    ("skill.focus", 0f, 15u, 0u, 0u, 0u)
+                }));
         SkillListEntry strike = SkillLists(server, player).Single().Skills.First();
         Assert.That(strike.RemainingCooldownMs, Is.EqualTo(2000u), "sent in the tick the cast resolved");
     }

@@ -1,4 +1,7 @@
 using System;
+using System.Collections.Generic;
+using System.Globalization;
+using System.Text;
 using Evertorch.Game;
 using Evertorch.Protocol;
 using TMPro;
@@ -9,8 +12,9 @@ namespace Evertorch.Client
 {
 /// <summary>
 ///     The line along the top of the screen while in the world (Prototype Content §2): the character's name and level,
-///     its HP and SP, the map, and the round-trip time, over a thin experience bar. Each part is rewritten only when
-///     its value changes. The name comes from the character list, the level from the world (owner decision 9).
+///     its HP and SP, its status effects with their seconds left, the map, and the round-trip time, over a thin
+///     experience bar. Each part is rewritten only when its value changes. The name comes from the character list, the
+///     level from the world (owner decision 9).
 /// </summary>
 public sealed class StatusBar : MonoBehaviour
 {
@@ -23,12 +27,15 @@ public sealed class StatusBar : MonoBehaviour
     private static readonly UiBuilder Ui = new(24f, Height, 0f, 24f);
     private static readonly Color ExperienceBackColor = new(0.15f, 0.16f, 0.2f);
     private static readonly Color ExperienceFillColor = new(0.95f, 0.78f, 0.25f);
+    private readonly List<(StatusDefinitionId Status, int Seconds)> m_effectsNow = new();
+    private readonly List<(StatusDefinitionId Status, int Seconds)> m_shownEffects = new();
 
     private GameClient? m_client;
     private GameObject? m_bar;
     private TMP_Text? m_name;
     private TMP_Text? m_health;
     private TMP_Text? m_spirit;
+    private TMP_Text? m_effects;
     private RectTransform? m_experienceFill;
     private TMP_Text? m_map;
     private TMP_Text? m_ping;
@@ -73,6 +80,7 @@ public sealed class StatusBar : MonoBehaviour
 
         ShowHealth(world.LocalHealth, world.LocalMaximumHealth, world.IsLocalDead);
         ShowSpirit(world.LocalSpirit, world.LocalMaximumSpirit);
+        ShowEffects(world, m_client.Content);
         ShowExperience(world.Experience, world.ExperienceToNextLevel);
         if (world.Map != m_shownMap)
         {
@@ -128,6 +136,63 @@ public sealed class StatusBar : MonoBehaviour
         m_shownSpirit = current;
         m_shownSpiritMaximum = maximum;
         Write(m_spirit!, $"SP {current} / {maximum}");
+    }
+
+    // Whole seconds, rounded up; an effect whose time ran out here is left out while its end is on its way. The text
+    // is built only when a name or a second changes.
+    private void ShowEffects(ClientWorld world, ClientContent? content)
+    {
+        m_effectsNow.Clear();
+        foreach (StatusEffectEntry effect in world.StatusEffects)
+        {
+            int seconds = (int)Math.Ceiling(world.StatusRemaining(effect.Status));
+            if (seconds > 0)
+            {
+                m_effectsNow.Add((effect.Status, seconds));
+            }
+        }
+
+        if (IsShown(m_effectsNow))
+        {
+            return;
+        }
+
+        m_shownEffects.Clear();
+        m_shownEffects.AddRange(m_effectsNow);
+        var text = new StringBuilder();
+        foreach ((StatusDefinitionId status, int seconds) in m_shownEffects)
+        {
+            if (text.Length > 0)
+            {
+                text.Append("   ");
+            }
+
+            string name = content != null && content.TryGetStatusEffect(status, out ClientStatusEffect? found)
+                && found != null
+                    ? found.DisplayName
+                    : status.Value;
+            text.Append(name).Append(' ').Append(seconds.ToString(CultureInfo.InvariantCulture)).Append('s');
+        }
+
+        Write(m_effects!, text.ToString());
+    }
+
+    private bool IsShown(List<(StatusDefinitionId Status, int Seconds)> effects)
+    {
+        if (effects.Count != m_shownEffects.Count)
+        {
+            return false;
+        }
+
+        for (int index = 0; index < effects.Count; index++)
+        {
+            if (!effects[index].Equals(m_shownEffects[index]))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /// <summary>
@@ -201,6 +266,7 @@ public sealed class StatusBar : MonoBehaviour
         m_name = CreatePart("Name", TextAlignmentOptions.MidlineLeft);
         m_health = CreatePart("Health", TextAlignmentOptions.Midline);
         m_spirit = CreatePart("Spirit", TextAlignmentOptions.Midline);
+        m_effects = CreatePart("Effects", TextAlignmentOptions.Midline);
         m_map = CreatePart("Map", TextAlignmentOptions.Midline);
         m_ping = CreatePart("Ping", TextAlignmentOptions.MidlineRight);
 

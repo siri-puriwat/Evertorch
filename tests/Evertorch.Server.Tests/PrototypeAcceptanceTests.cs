@@ -89,6 +89,7 @@ public sealed class PrototypeAcceptanceTests
         FightSlimes("fight", first, second);
         ShareAKill(content, admin, first, second);
         UseSkills(first, second);
+        FocusQuickensTheSwing(first, second);
 
         EntityId firstEntity = first.World.LocalEntity;
         EntityId secondEntity = second.World.LocalEntity;
@@ -440,8 +441,57 @@ public sealed class PrototypeAcceptanceTests
                 Is.EqualTo((caster, SkillOutcome.Healed, 15u)), $"{step}: the nominal heal");
         }
 
-        Assert.That(first.World.Skills.Select(entry => entry.Skill), Is.EqualTo(new[] { strike, firstAid }), step);
+        Assert.That(
+            first.World.Skills.Select(entry => entry.Skill.Value),
+            Is.EqualTo(new[] { "skill.strike", "skill.first_aid", "skill.focus" }),
+            step);
         Assert.That(first.Skill.SkillsSent, Is.EqualTo(2), $"{step}: both through the skill state, once each");
+    }
+
+    // The second player, whose SP the other skills left untouched, casts Focus: its client hears of the effect, and
+    // its next swing at a slime comes at the shorter interval of the research note's vector, 940 ms to 920 ms
+    // (Gameplay Systems §9.1).
+    private static void FocusQuickensTheSwing(SocketClient first, SocketClient second)
+    {
+        const string step = "focus";
+        SocketClient[] clients = { first, second };
+        var focus = new SkillDefinitionId("skill.focus");
+        var status = new StatusDefinitionId("status.focus");
+        var swings = new List<AttackStarted>();
+        var observed = new List<SkillResolved>();
+        second.World.AttackStartedReceived += started =>
+        {
+            if (started.Attacker == second.World.LocalEntity)
+            {
+                swings.Add(started);
+            }
+        };
+        first.World.SkillResolvedReceived += observed.Add;
+
+        EntityId slime = second.CycleTarget(true);
+        Assert.That(slime, Is.Not.EqualTo(default(EntityId)), $"{step}: Tab found a slime");
+        Assert.That(
+            SocketClients.PumpUntil(() => second.World.Target == slime, clients),
+            Is.True,
+            $"{step}: the server confirmed the target");
+        Assert.That(second.UseSkill(focus), Is.True, $"{step}: Focus");
+        Assert.That(
+            SocketClients.PumpUntil(() => second.World.StatusRemaining(status) > 0, clients),
+            Is.True,
+            $"{step}: the owner heard of the effect");
+        swings.Clear();
+        second.AttackTarget();
+        Assert.That(SocketClients.PumpUntil(() => swings.Count > 0, clients), Is.True, $"{step}: a swing began");
+
+        Assert.That(swings[0].Timing.Interval, Is.EqualTo(TimeSpan.FromMilliseconds(920)), step);
+        Assert.That(second.World.StatusRemaining(status), Is.InRange(50.0, 60.0), step);
+        Assert.That(
+            observed.Where(result => result.Skill == focus).Select(result => (result.Outcome, result.Amount)),
+            Is.EqualTo(new[] { (SkillOutcome.Applied, 0u) }),
+            $"{step}: the other client sees the effect applied, and nothing about it");
+        Assert.That(first.World.StatusEffects, Is.Empty, $"{step}: only the owner hears of its effects");
+        second.AutoAttack.OnWalkRequested();
+        SocketClients.PumpFor(TimeSpan.FromSeconds(1), clients);
     }
 
     private static void AwaitConvergence(IAdminCommandService admin, string step, params SocketClient[] clients)

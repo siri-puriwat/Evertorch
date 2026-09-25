@@ -8,6 +8,12 @@
       "icon": "skill_basic_attack"
     },
     {
+      "id": "skill.focus",
+      "displayName": "Focus",
+      "targetType": "self",
+      "icon": "skill_focus"
+    },
+    {
       "id": "skill.strike",
       "displayName": "Strike",
       "targetType": "enemy",

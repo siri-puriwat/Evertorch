@@ -21,6 +21,7 @@ public static class ClientContentParser
     public const string MonstersFile = "monsters.json";
     public const string ItemsFile = "items.json";
     public const string SkillsFile = "skills.json";
+    public const string StatusEffectsFile = "status-effects.json";
 
     private const int SupportedSchemaVersion = 1;
 
@@ -76,7 +77,8 @@ public static class ClientContentParser
             || !TryGetListedFile(manifest, files, JobsFile, out byte[] jobsBytes, out error)
             || !TryGetListedFile(manifest, files, MonstersFile, out byte[] monstersBytes, out error)
             || !TryGetListedFile(manifest, files, ItemsFile, out byte[] itemsBytes, out error)
-            || !TryGetListedFile(manifest, files, SkillsFile, out byte[] skillsBytes, out error))
+            || !TryGetListedFile(manifest, files, SkillsFile, out byte[] skillsBytes, out error)
+            || !TryGetListedFile(manifest, files, StatusEffectsFile, out byte[] statusBytes, out error))
         {
             return null;
         }
@@ -106,7 +108,15 @@ public static class ClientContentParser
         }
 
         Dictionary<SkillDefinitionId, ClientSkill>? skills = ParseSkills(skillsBytes, out error);
-        return skills == null ? null : new ClientContent(version, maps, jobs, monsters, items, skills);
+        if (skills == null)
+        {
+            return null;
+        }
+
+        Dictionary<StatusDefinitionId, ClientStatusEffect>? statusEffects = ParseStatusEffects(statusBytes, out error);
+        return statusEffects == null
+            ? null
+            : new ClientContent(version, maps, jobs, monsters, items, skills, statusEffects);
     }
 
     private static bool TryGetListedFile(
@@ -335,6 +345,41 @@ public static class ClientContentParser
         }
 
         return skills;
+    }
+
+    private static Dictionary<StatusDefinitionId, ClientStatusEffect>? ParseStatusEffects(
+        byte[] statusBytes,
+        out string error)
+    {
+        error = string.Empty;
+        StatusEffectsDto? dto = FromJson<StatusEffectsDto>(statusBytes);
+        if (dto == null || dto.definitions == null || dto.schemaVersion != SupportedSchemaVersion)
+        {
+            error = $"'{StatusEffectsFile}' is not readable or has an unsupported schema version.";
+            return null;
+        }
+
+        var effects = new Dictionary<StatusDefinitionId, ClientStatusEffect>();
+        foreach (StatusEffectDto effect in dto.definitions)
+        {
+            if (!StatusDefinitionId.TryCreate(effect.id, out StatusDefinitionId id) || effects.ContainsKey(id))
+            {
+                error = $"'{StatusEffectsFile}' has an invalid or repeated status effect ID.";
+                return null;
+            }
+
+            // The icon is optional; JsonUtility reads an absent one as empty.
+            string? icon = string.IsNullOrEmpty(effect.icon) ? null : effect.icon;
+            if (icon != null && !IsLogicalKey(icon))
+            {
+                error = $"Status effect '{effect.id}': icon is not a logical key.";
+                return null;
+            }
+
+            effects.Add(id, new ClientStatusEffect(id, effect.displayName ?? string.Empty, icon));
+        }
+
+        return effects;
     }
 
     private static bool TryParseTargetType(string? text, out SkillTargetType targetType)
@@ -641,6 +686,21 @@ public static class ClientContentParser
     {
         public int schemaVersion = 0;
         public SkillDto[] definitions = Array.Empty<SkillDto>();
+    }
+
+    [Serializable]
+    private sealed class StatusEffectsDto
+    {
+        public int schemaVersion = 0;
+        public StatusEffectDto[] definitions = Array.Empty<StatusEffectDto>();
+    }
+
+    [Serializable]
+    private sealed class StatusEffectDto
+    {
+        public string? id = string.Empty;
+        public string? displayName = string.Empty;
+        public string? icon = string.Empty;
     }
 
     [Serializable]

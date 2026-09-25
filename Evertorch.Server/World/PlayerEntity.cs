@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Evertorch.Game;
 using Evertorch.Protocol;
 using Evertorch.Rules;
@@ -10,6 +11,8 @@ namespace Evertorch.Server
 /// </summary>
 public sealed class PlayerEntity : WorldEntity
 {
+    private readonly List<ActiveStatusEffect> m_statusEffects = new();
+
     public PlayerEntity(
         EntityId id,
         CharacterId character,
@@ -73,9 +76,48 @@ public sealed class PlayerEntity : WorldEntity
 
     public long NextSpiritRegenerationMs { get; set; } = long.MinValue;
 
+    /// <summary>
+    ///     The status effects on the player, in the order they started; they are not persisted (Gameplay Systems §9.1).
+    /// </summary>
+    public IReadOnlyList<ActiveStatusEffect> StatusEffects => m_statusEffects;
+
     public override EntityKind Kind => EntityKind.Player;
 
     public override string DefinitionId => Job.Value;
+
+    /// <summary>
+    ///     Adds <paramref name="effect" />, or renews the active effect of the same status to its end. True when it was
+    ///     not active.
+    /// </summary>
+    public bool StartStatusEffect(ActiveStatusEffect effect)
+    {
+        for (int index = 0; index < m_statusEffects.Count; index++)
+        {
+            if (m_statusEffects[index].Status == effect.Status)
+            {
+                m_statusEffects[index] = effect;
+                return false;
+            }
+        }
+
+        m_statusEffects.Add(effect);
+        return true;
+    }
+
+    /// <summary>
+    ///     Ends the effects whose time is up at <paramref name="nowMs" />; returns how many ended.
+    /// </summary>
+    public int EndStatusEffectsDueBy(long nowMs)
+    {
+        return m_statusEffects.RemoveAll(effect => effect.EndMs <= nowMs);
+    }
+
+    public int EndAllStatusEffects()
+    {
+        int count = m_statusEffects.Count;
+        m_statusEffects.Clear();
+        return count;
+    }
 
     /// <summary>
     ///     Takes recalculated statistics, keeping the current HP and SP within the new maximums (Gameplay Systems §2).

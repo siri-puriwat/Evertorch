@@ -34,6 +34,10 @@ public sealed class ClientContentParserTests
         "{\"schemaVersion\":1,\"definitions\":[{\"id\":\"item.material.slime_gel\",\"displayName\":\"Slime Gel\","
         + "\"type\":\"material\",\"stackLimit\":999,\"icon\":\"item_slime_gel\",\"model\":\"pickup_slime_gel\"}]}";
 
+    private const string StatusEffectsJson =
+        "{\"schemaVersion\":1,\"definitions\":[{\"id\":\"status.focus\",\"displayName\":\"Focus\","
+        + "\"icon\":\"status_focus\"},{\"id\":\"status.plain\",\"displayName\":\"Plain\"}]}";
+
     private const string Skills =
         "{\"schemaVersion\":1,\"definitions\":[{\"id\":\"skill.first_aid\",\"displayName\":\"First Aid\","
         + "\"targetType\":\"self\",\"icon\":\"skill_first_aid\"},{\"id\":\"skill.strike\","
@@ -44,6 +48,7 @@ public sealed class ClientContentParserTests
     [TestCase(ClientContentParser.MonstersFile)]
     [TestCase(ClientContentParser.ItemsFile)]
     [TestCase(ClientContentParser.SkillsFile)]
+    [TestCase(ClientContentParser.StatusEffectsFile)]
     public void Parse_WhenARequiredFileIsNotInThePackage_IsRefused(string fileName)
     {
         var package = Package.Without(fileName);
@@ -195,6 +200,21 @@ public sealed class ClientContentParserTests
         "\"schemaVersion\":1",
         "\"schemaVersion\":2",
         "'skills.json' is not readable or has an unsupported schema version")]
+    [TestCase(
+        ClientContentParser.StatusEffectsFile,
+        "\"id\":\"status.plain\"",
+        "\"id\":\"skill.plain\"",
+        "'status-effects.json' has an invalid or repeated status effect ID")]
+    [TestCase(
+        ClientContentParser.StatusEffectsFile,
+        "\"icon\":\"status_focus\"",
+        "\"icon\":\"Status/Focus.png\"",
+        "Status effect 'status.focus': icon is not a logical key")]
+    [TestCase(
+        ClientContentParser.StatusEffectsFile,
+        "\"schemaVersion\":1",
+        "\"schemaVersion\":2",
+        "'status-effects.json' is not readable or has an unsupported schema version")]
     public void Parse_ForMalformedDefinitions_IsRefusedWithAReason(
         string fileName,
         string oldText,
@@ -251,7 +271,8 @@ public sealed class ClientContentParserTests
                 [ClientContentParser.JobsFile] = Jobs,
                 [ClientContentParser.MonstersFile] = Monsters,
                 [ClientContentParser.ItemsFile] = Items,
-                [ClientContentParser.SkillsFile] = Skills
+                [ClientContentParser.SkillsFile] = Skills,
+                [ClientContentParser.StatusEffectsFile] = StatusEffectsJson
             };
         }
 
@@ -381,6 +402,12 @@ public sealed class ClientContentParserTests
         Assert.That(content.TryGetSkill(new SkillDefinitionId("skill.first_aid"), out ClientSkill? aid), Is.True);
         Assert.That(aid!.TargetType, Is.EqualTo(SkillTargetType.Self));
         Assert.That(content.Skills.Count(), Is.EqualTo(2));
+        Assert.That(content.TryGetStatusEffect(new StatusDefinitionId("status.focus"), out ClientStatusEffect? focus),
+            Is.True);
+        Assert.That((focus!.DisplayName, focus.IconKey), Is.EqualTo(("Focus", "status_focus")));
+        Assert.That(content.TryGetStatusEffect(new StatusDefinitionId("status.plain"), out ClientStatusEffect? plain),
+            Is.True);
+        Assert.That(plain!.IconKey, Is.Null, "an icon is optional");
     }
 
     [Test]
@@ -443,7 +470,11 @@ public sealed class ClientContentParserTests
         Assert.That(error, Is.Empty);
         Assert.That(
             names,
-            Is.EquivalentTo(new[] { "items.json", "jobs.json", "maps.json", "monsters.json", "skills.json" }));
+            Is.EquivalentTo(
+                new[]
+                {
+                    "items.json", "jobs.json", "maps.json", "monsters.json", "skills.json", "status-effects.json"
+                }));
     }
 }
 }

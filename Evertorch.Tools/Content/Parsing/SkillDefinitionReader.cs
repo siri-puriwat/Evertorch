@@ -52,6 +52,12 @@ internal static class SkillDefinitionReader
             root.ReportField("damageType", "is required for a damage effect");
         }
 
+        // A status effect is only ever the caster's own in this milestone (Gameplay Systems §9.1).
+        if (effect?.Kind == SkillEffectKind.Status && targetType != SkillTargetType.Self)
+        {
+            root.ReportField("targetType", "must be self for a status effect");
+        }
+
         YamlFieldReader client = root.RequiredMapping("client");
         string icon = client.RequiredAssetKey("icon");
 
@@ -87,9 +93,10 @@ internal static class SkillDefinitionReader
     {
         bool isDamage = effect.Has("damage");
         bool isHeal = effect.Has("heal");
-        if (isDamage == isHeal)
+        bool isStatus = effect.Has("status");
+        if ((isDamage ? 1 : 0) + (isHeal ? 1 : 0) + (isStatus ? 1 : 0) != 1)
         {
-            effect.ReportField("damage", "an effect must have exactly one of damage or heal");
+            effect.ReportField("damage", "an effect must have exactly one of damage, heal, or status");
             return null;
         }
 
@@ -97,6 +104,17 @@ internal static class SkillDefinitionReader
         {
             int ratio = effect.RequiredMapping("damage").RequiredInt("ratio", 1, MaxDamageRatioPercent);
             return ratio > 0 ? SkillEffect.Damage(ratio) : null;
+        }
+
+        if (isStatus)
+        {
+            YamlFieldReader status = effect.RequiredMapping("status");
+            StatusDefinitionId id = status.RequiredId<StatusDefinitionId>(
+                "status",
+                StatusDefinitionId.TryCreate,
+                StatusDefinitionId.KindPrefix);
+            int durationMs = status.RequiredInt("durationMs", 1, ContentLimits.MaxDurationMs);
+            return id != default && durationMs > 0 ? SkillEffect.StatusEffect(id, durationMs) : null;
         }
 
         int hp = effect.RequiredMapping("heal").RequiredInt("hp", 1, ContentLimits.MaxHp);

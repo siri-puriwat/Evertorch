@@ -199,6 +199,20 @@ public sealed class DefinitionShapeTests
     }
 
     [Test]
+    public void SkillEffect_ForAStatus_NamesItAndItsDuration()
+    {
+        var focus = SkillEffect.StatusEffect(new StatusDefinitionId("status.focus"), 60_000);
+        Action noStatus = () => SkillEffect.StatusEffect(default, 60_000);
+        Action noDuration = () => SkillEffect.StatusEffect(new StatusDefinitionId("status.focus"), 0);
+
+        Assert.That(
+            (focus.Kind, focus.Status.Value, focus.StatusDurationMs, focus.HealHp),
+            Is.EqualTo((SkillEffectKind.Status, "status.focus", 60_000, 0)));
+        Assert.That(noStatus, Throws.ArgumentException);
+        Assert.That(noDuration, Throws.InstanceOf<ArgumentOutOfRangeException>());
+    }
+
+    [Test]
     public void SkillEffect_OfEachKind_KeepsOnlyItsOwnValue()
     {
         var heal = SkillEffect.Heal(15);
@@ -208,6 +222,29 @@ public sealed class DefinitionShapeTests
         Assert.That((heal.Kind, heal.HealHp, heal.DamageRatioPercent), Is.EqualTo((SkillEffectKind.Heal, 15, 0)));
         Assert.That(noRatio, Throws.InstanceOf<ArgumentOutOfRangeException>());
         Assert.That(noHeal, Throws.InstanceOf<ArgumentOutOfRangeException>());
+    }
+
+    [Test]
+    public void StatPercentages_OfTwoEffects_AddUp_AndNeverGoNegative()
+    {
+        StatPercentages sum = new StatPercentages(1, 2, 3, 4, 5, 6).Plus(new StatPercentages(10, 0, 0, 0, 10, 0));
+        Action negative = () => _ = new StatPercentages(0, -1, 0, 0, 0, 0);
+
+        Assert.That(sum, Is.EqualTo(new StatPercentages(11, 2, 3, 4, 15, 6)));
+        Assert.That(negative, Throws.InstanceOf<ArgumentOutOfRangeException>());
+    }
+
+    [Test]
+    public void StatusEffectDefinition_WithValues_ExposesThem()
+    {
+        var focus = new StatusEffectDefinition(
+            new StatusDefinitionId("status.focus"),
+            "Focus",
+            new StatPercentages(0, 100, 0, 0, 100, 0));
+
+        Assert.That(focus.Id.Value, Is.EqualTo("status.focus"));
+        Assert.That(focus.DisplayName, Is.EqualTo("Focus"));
+        Assert.That(focus.StatPercent, Is.EqualTo(new StatPercentages(0, 100, 0, 0, 100, 0)));
     }
 }
 }

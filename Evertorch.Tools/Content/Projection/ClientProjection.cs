@@ -18,8 +18,28 @@ internal static class ClientProjection
             new("jobs.json", PackageJson.Write(writer => WriteJobs(writer, content))),
             new("maps.json", PackageJson.Write(writer => WriteMaps(writer, content))),
             new("monsters.json", PackageJson.Write(writer => WriteMonsters(writer, content))),
-            new("skills.json", PackageJson.Write(writer => WriteSkills(writer, content)))
+            new("skills.json", PackageJson.Write(writer => WriteSkills(writer, content))),
+            new("status-effects.json", PackageJson.Write(writer => WriteStatusEffects(writer, content)))
         };
+    }
+
+    private static void WriteStatusEffects(Utf8JsonWriter writer, ContentSet content)
+    {
+        BeginFile(writer);
+        foreach (AuthoredStatusEffect authored in content.StatusEffects)
+        {
+            writer.WriteStartObject();
+            writer.WriteString("id", authored.Definition.Id.Value);
+            writer.WriteString("displayName", authored.Definition.DisplayName);
+            if (authored.Icon != null)
+            {
+                writer.WriteString("icon", authored.Icon);
+            }
+
+            writer.WriteEndObject();
+        }
+
+        EndFile(writer);
     }
 
     private static void WriteItems(Utf8JsonWriter writer, ContentSet content)

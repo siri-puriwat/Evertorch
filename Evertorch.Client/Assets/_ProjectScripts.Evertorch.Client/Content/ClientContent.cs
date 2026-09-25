@@ -14,6 +14,7 @@ public sealed class ClientContent : IMapProvider
     private readonly IReadOnlyDictionary<MonsterDefinitionId, ClientMonster> m_monsters;
     private readonly IReadOnlyDictionary<ItemDefinitionId, ClientItem> m_items;
     private readonly IReadOnlyDictionary<SkillDefinitionId, ClientSkill> m_skills;
+    private readonly IReadOnlyDictionary<StatusDefinitionId, ClientStatusEffect> m_statusEffects;
 
     public ClientContent(
         string version,
@@ -21,7 +22,8 @@ public sealed class ClientContent : IMapProvider
         IReadOnlyDictionary<JobDefinitionId, ClientJob> jobs,
         IReadOnlyDictionary<MonsterDefinitionId, ClientMonster> monsters,
         IReadOnlyDictionary<ItemDefinitionId, ClientItem> items,
-        IReadOnlyDictionary<SkillDefinitionId, ClientSkill> skills)
+        IReadOnlyDictionary<SkillDefinitionId, ClientSkill> skills,
+        IReadOnlyDictionary<StatusDefinitionId, ClientStatusEffect> statusEffects)
     {
         Version = version ?? throw new ArgumentNullException(nameof(version));
         m_maps = maps ?? throw new ArgumentNullException(nameof(maps));
@@ -29,6 +31,7 @@ public sealed class ClientContent : IMapProvider
         m_monsters = monsters ?? throw new ArgumentNullException(nameof(monsters));
         m_items = items ?? throw new ArgumentNullException(nameof(items));
         m_skills = skills ?? throw new ArgumentNullException(nameof(skills));
+        m_statusEffects = statusEffects ?? throw new ArgumentNullException(nameof(statusEffects));
     }
 
     public string Version { get; }
@@ -42,6 +45,8 @@ public sealed class ClientContent : IMapProvider
     public IEnumerable<ClientItem> Items => m_items.Values;
 
     public IEnumerable<ClientSkill> Skills => m_skills.Values;
+
+    public IEnumerable<ClientStatusEffect> StatusEffects => m_statusEffects.Values;
 
     public bool TryGetNavigation(MapDefinitionId map, out NavigationGrid? grid)
     {
@@ -73,6 +78,11 @@ public sealed class ClientContent : IMapProvider
     public bool TryGetSkill(SkillDefinitionId id, out ClientSkill? skill)
     {
         return m_skills.TryGetValue(id, out skill);
+    }
+
+    public bool TryGetStatusEffect(StatusDefinitionId id, out ClientStatusEffect? effect)
+    {
+        return m_statusEffects.TryGetValue(id, out effect);
     }
 }
 }

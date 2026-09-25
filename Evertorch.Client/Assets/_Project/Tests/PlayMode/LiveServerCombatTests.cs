@@ -125,6 +125,7 @@ public sealed class LiveServerCombatTests : InputTestFixture
         Assert.That(m_kills, Is.GreaterThanOrEqualTo(1));
         yield return ExpectProgressOnTheStatusBar(client, world);
         yield return UseFirstAidByKeyThenByButton(client, world, keyboard);
+        yield return UseFocusThenSwingSooner(client, world, keyboard, gamepad);
         Debug.Log($"Live combat: {m_kills} kills, {m_respawns} respawns, {m_dropped.Count} drops announced");
     }
 
@@ -365,6 +366,40 @@ public sealed class LiveServerCombatTests : InputTestFixture
         m_skillLog.Add($"button@{Time.frameCount}");
         firstAid.onClick.Invoke();
         yield return ExpectCastBarAndHeal(client, world, heals, 2, "the bar's button");
+    }
+
+    // Focus from its key (Prototype Content §4): the status bar shows it with its seconds left, and the player's next
+    // swing comes at the shorter interval of the research note's vector.
+    private IEnumerator UseFocusThenSwingSooner(GameClient client, ClientWorld world, Keyboard keyboard,
+        Gamepad gamepad)
+    {
+        TMP_Text effects = client.GetComponentsInChildren<StatusBar>(true)
+            .Single()
+            .GetComponentsInChildren<TMP_Text>(true)
+            .Single(label => label.name == "Effects");
+        var swings = new List<AttackStarted>();
+        world.AttackStartedReceived += started =>
+        {
+            if (started.Attacker == world.LocalEntity)
+            {
+                swings.Add(started);
+            }
+        };
+
+        yield return Tap(keyboard.digit3Key);
+        yield return WaitUntil(() => effects.text.StartsWith("Focus ", StringComparison.Ordinal), 5f);
+        Assert.That(
+            effects.text,
+            Does.Match("^Focus [0-9]+s$"),
+            $"the status bar shows Focus; SP {world.LocalSpirit}, refusal {world.LastRejection}");
+        swings.Clear();
+        yield return Tap(keyboard.tabKey);
+        yield return WaitUntil(() => world.Target != default, 2f);
+        yield return Tap(gamepad.buttonWest);
+        yield return WaitUntil(() => swings.Count > 0, 10f);
+
+        Assert.That(swings, Is.Not.Empty, "a swing began");
+        Assert.That(swings[0].Timing.Interval, Is.EqualTo(TimeSpan.FromMilliseconds(920)), "Focus quickens it");
     }
 
     private IEnumerator ExpectCastBarAndHeal(

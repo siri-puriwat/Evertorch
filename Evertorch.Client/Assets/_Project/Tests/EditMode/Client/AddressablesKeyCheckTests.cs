@@ -29,7 +29,8 @@ public sealed class AddressablesKeyCheckTests
             new Dictionary<JobDefinitionId, ClientJob> { { job.Id, job } },
             new Dictionary<MonsterDefinitionId, ClientMonster> { { monster.Id, monster } },
             new Dictionary<ItemDefinitionId, ClientItem> { { item.Id, item } },
-            new Dictionary<SkillDefinitionId, ClientSkill>());
+            new Dictionary<SkillDefinitionId, ClientSkill>(),
+            new Dictionary<StatusDefinitionId, ClientStatusEffect>());
     }
 
     private static Dictionary<string, Type?> Prefabs()

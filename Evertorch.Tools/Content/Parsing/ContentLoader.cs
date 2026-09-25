@@ -18,6 +18,7 @@ public static class ContentLoader
     private const string JobsFolder = "jobs";
     private const string MapsFolder = "maps";
     private const string ExperienceFolder = "experience";
+    private const string StatusEffectsFolder = "status-effects";
 
     public static ContentSet Load(string contentRoot, List<ContentDiagnostic> diagnostics)
     {
@@ -27,12 +28,13 @@ public static class ContentLoader
         var jobs = new List<AuthoredJob>();
         var maps = new List<AuthoredMap>();
         var experienceTables = new List<AuthoredExperienceTable>();
+        var statusEffects = new List<AuthoredStatusEffect>();
         var declaredIds = new HashSet<string>(StringComparer.Ordinal);
 
         if (!Directory.Exists(contentRoot))
         {
             diagnostics.Add(new ContentDiagnostic(".", string.Empty, 0, "content directory does not exist"));
-            return new ContentSet(items, monsters, skills, jobs, maps, experienceTables, declaredIds);
+            return new ContentSet(items, monsters, skills, jobs, maps, experienceTables, statusEffects, declaredIds);
         }
 
         foreach (string file in EnumerateFiles(contentRoot))
@@ -75,6 +77,9 @@ public static class ContentLoader
                 case ExperienceFolder:
                     AddIfValid(experienceTables, ExperienceTableReader.Read(root, diagnostics, declaredIds));
                     break;
+                case StatusEffectsFolder:
+                    AddIfValid(statusEffects, StatusEffectReader.Read(root, diagnostics, declaredIds));
+                    break;
                 default:
                     diagnostics.Add(
                         new ContentDiagnostic(
@@ -82,12 +87,12 @@ public static class ContentLoader
                             string.Empty,
                             0,
                             "file is not inside a known definition folder (items, monsters, skills, jobs, maps, "
-                            + "experience)"));
+                            + "experience, status-effects)"));
                     break;
             }
         }
 
-        return new ContentSet(items, monsters, skills, jobs, maps, experienceTables, declaredIds);
+        return new ContentSet(items, monsters, skills, jobs, maps, experienceTables, statusEffects, declaredIds);
     }
 
     private static IEnumerable<string> EnumerateFiles(string contentRoot)

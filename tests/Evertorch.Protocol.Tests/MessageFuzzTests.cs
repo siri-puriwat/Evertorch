@@ -151,6 +151,10 @@ public sealed class MessageFuzzTests
                     })),
             payload => SkillList.TryRead(payload, out SkillList? message) ? Encode(message!) : null);
         yield return Case(
+            "StatusEffects",
+            Encode(new StatusEffects(new[] { new StatusEffectEntry(new StatusDefinitionId("status.focus"), 42_000) })),
+            payload => StatusEffects.TryRead(payload, out StatusEffects? message) ? Encode(message!) : null);
+        yield return Case(
             "CharacterProgress",
             Encode(new CharacterProgress(2, 45, 50)),
             payload => CharacterProgress.TryRead(payload, out CharacterProgress message) ? Encode(message) : null);
@@ -531,6 +535,13 @@ public sealed class MessageFuzzTests
     }
 
     private static byte[] Encode(SkillResolved message)
+    {
+        byte[] buffer = new byte[message.GetEncodedLength()];
+        message.Write(buffer);
+        return buffer;
+    }
+
+    private static byte[] Encode(StatusEffects message)
     {
         byte[] buffer = new byte[message.GetEncodedLength()];
         message.Write(buffer);

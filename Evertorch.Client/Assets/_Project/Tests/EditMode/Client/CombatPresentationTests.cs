@@ -128,6 +128,20 @@ public sealed class CombatPresentationTests
         Assert.That(timeline.TryGetCastProgress(new EntityId(302), 1.0, 1.0, out float _), Is.False, "no cast time");
     }
 
+    // Focus quickens the adventurer's swing to 920 ms (the research note's vector): the lunge follows the timing the
+    // swing's AttackStarted carries and peaks 10 ms sooner.
+    [Test]
+    public void Timeline_ForAFocusedSwing_LungesToItsSoonerImpact()
+    {
+        var timeline = new CombatTimeline();
+
+        timeline.BeginSwing(Local, 10.0, Timing(920, 460, 460, 230), true);
+        timeline.BeginSwing(Slime, 10.0, Adventurer, true);
+
+        Assert.That(timeline.Lunge(Local, 10.46, 0.0), Is.EqualTo(1f).Within(1e-4f));
+        Assert.That(timeline.Lunge(Slime, 10.46, 0.0), Is.LessThan(1f), "the unfocused swing is still rising");
+    }
+
     [Test]
     public void Timeline_ForgetsEverythingAboutADespawnedEntity()
     {

@@ -24,11 +24,13 @@ public static class ServerContentLoader
     private const string MapsFile = "maps.json";
     private const string MonstersFile = "monsters.json";
     private const string SkillsFile = "skills.json";
+    private const string StatusEffectsFile = "status-effects.json";
     private const int ContentVersionLength = 16;
+    private const int MaxStatPercent = 1000;
 
     private static readonly string[] DataFiles =
     {
-        ExperienceFile, ItemsFile, JobsFile, MapsFile, MonstersFile, SkillsFile
+        ExperienceFile, ItemsFile, JobsFile, MapsFile, MonstersFile, SkillsFile, StatusEffectsFile
     };
 
     public static ServerContent LoadFromDirectory(string directory)
@@ -71,6 +73,7 @@ public static class ServerContentLoader
         var jobs = new Dictionary<JobDefinitionId, JobDefinition>();
         var maps = new Dictionary<MapDefinitionId, MapDefinition>();
         var experienceTables = new Dictionary<ExperienceDefinitionId, ExperienceTableDefinition>();
+        var statusEffects = new Dictionary<StatusDefinitionId, StatusEffectDefinition>();
 
         HashSet<ItemDefinitionId> declaredItems = ReadDefinitions(
             files,
@@ -114,6 +117,19 @@ public static class ServerContentLoader
             experienceTables,
             ExperienceDefinitionId.TryCreate,
             ReadExperienceTable);
+        HashSet<StatusDefinitionId> declaredStatusEffects = ReadDefinitions(
+            files,
+            StatusEffectsFile,
+            problems,
+            statusEffects,
+            StatusDefinitionId.TryCreate,
+            ReadStatusEffect);
+        if (declaredStatusEffects.Count > StatusEffects.MaxEntries)
+        {
+            problems.Add(
+                $"{StatusEffectsFile}: lists more than the {StatusEffects.MaxEntries} status effects a status list "
+                + "carries");
+        }
 
         CheckReferences(
             monsters.Values,
@@ -125,6 +141,7 @@ public static class ServerContentLoader
             declaredSkills,
             declaredMaps,
             declaredExperienceTables,
+            declaredStatusEffects,
             problems);
 
         if (problems.Count != 0)
@@ -140,7 +157,8 @@ public static class ServerContentLoader
             skills,
             jobs,
             maps,
-            experienceTables);
+            experienceTables,
+            statusEffects);
     }
 
     private static PackageManifest? ReadManifest(IReadOnlyDictionary<string, byte[]> files, List<string> problems)
@@ -413,6 +431,11 @@ public static class ServerContentLoader
             entry.Report("damageType", "is required for a damage effect");
         }
 
+        if (effect?.Kind == SkillEffectKind.Status && targetType != SkillTargetType.Self)
+        {
+            entry.Report("targetType", "must be self for a status effect");
+        }
+
         entry.ReportUnexpectedProperties();
         return problems.Count == problemsBefore
             ? new SkillDefinition(
@@ -440,15 +463,22 @@ public static class ServerContentLoader
 
         bool isDamage = effect.Has("damageRatio");
         bool isHeal = effect.Has("healHp");
+        bool isStatus = effect.Has("status");
         SkillEffect? read = null;
-        if (isDamage == isHeal)
+        if ((isDamage ? 1 : 0) + (isHeal ? 1 : 0) + (isStatus ? 1 : 0) != 1)
         {
-            effect.Report("damageRatio", "an effect must have exactly one of damageRatio or healHp");
+            effect.Report("damageRatio", "an effect must have exactly one of damageRatio, healHp, or status");
         }
         else if (isDamage)
         {
             int ratio = effect.RequiredInt("damageRatio", 1);
             read = ratio > 0 ? SkillEffect.Damage(ratio) : null;
+        }
+        else if (isStatus)
+        {
+            StatusDefinitionId status = effect.RequiredId<StatusDefinitionId>("status", StatusDefinitionId.TryCreate);
+            int durationMs = effect.RequiredInt("durationMs", 1);
+            read = status != default && durationMs > 0 ? SkillEffect.StatusEffect(status, durationMs) : null;
         }
         else
         {
@@ -554,6 +584,39 @@ public static class ServerContentLoader
             : null;
     }
 
+    private static StatusEffectDefinition? ReadStatusEffect(
+        PackageObjectReader entry,
+        StatusDefinitionId id,
+        List<string> problems)
+    {
+        int problemsBefore = problems.Count;
+        string displayName = entry.RequiredString("displayName");
+        PackageObjectReader? percent = entry.RequiredObject("statPercent");
+        int[] values = new int[6];
+        if (percent != null)
+        {
+            string[] names = { "str", "agi", "vit", "int", "dex", "luk" };
+            for (int index = 0; index < names.Length; index++)
+            {
+                values[index] = percent.RequiredInt(names[index], 0);
+                if (values[index] > MaxStatPercent)
+                {
+                    percent.Report(names[index], $"must be at most {MaxStatPercent}");
+                }
+            }
+
+            percent.ReportUnexpectedProperties();
+        }
+
+        entry.ReportUnexpectedProperties();
+        return problems.Count == problemsBefore
+            ? new StatusEffectDefinition(
+                id,
+                displayName,
+                new StatPercentages(values[0], values[1], values[2], values[3], values[4], values[5]))
+            : null;
+    }
+
     private static MapDefinition? ReadMap(PackageObjectReader entry, MapDefinitionId id, List<string> problems)
     {
         int problemsBefore = problems.Count;
@@ -652,8 +715,17 @@ public static class ServerContentLoader
         HashSet<SkillDefinitionId> declaredSkills,
         HashSet<MapDefinitionId> declaredMaps,
         HashSet<ExperienceDefinitionId> declaredExperienceTables,
+        HashSet<StatusDefinitionId> declaredStatusEffects,
         List<string> problems)
     {
+        foreach (SkillDefinition skill in skills.Values)
+        {
+            if (skill.Effect?.Kind == SkillEffectKind.Status && !declaredStatusEffects.Contains(skill.Effect.Status))
+            {
+                problems.Add($"{SkillsFile}: {skill.Id}: applies unknown status effect '{skill.Effect.Status}'");
+            }
+        }
+
         foreach (MonsterDefinition monster in monsters)
         {
             foreach (MonsterDrop drop in monster.Drops)

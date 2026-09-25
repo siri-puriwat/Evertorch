@@ -18,7 +18,7 @@ public sealed class PresentationBoundaryTests
         @"ClientConnection|ICombatCommandSink|IMoveIntentSink|\bSend\w*\(|AutoAttackState|SkillState|MovementController"
         + @"|LocalPlayerDriver|MovementPredictor|\.Predictor\b|\.IsLocked\b|RequestRespawn|\.ActionLock\b"
         + @"|\.On(Spawn|Despawn|Snapshot|TargetChanged|AttackStarted|Damage|EntityDied|EntityRevived|ItemDropped"
-        + @"|CharacterHealth|SkillCastStarted|SkillResolved|SkillList|LocalCancel)\("
+        + @"|CharacterHealth|SkillCastStarted|SkillResolved|SkillList|StatusEffects|LocalCancel)\("
         + @"|\.(HealthPermille|StateFlags|CurrentHealth)\s*=[^=]");
 
     // UI may ask GameClient for anything a player can do, and read what it likes; it may not send, build a message,
@@ -37,7 +37,7 @@ public sealed class PresentationBoundaryTests
         + @"|[Pp]redictor\??\.Apply\(|\.Buffer\.(Add|Clear)\("
         + @"|\.On(Spawn|Despawn|Snapshot|TargetChanged|AttackStarted|Damage|EntityDied|EntityRevived|CommandRejected"
         + @"|ItemDropped|ItemPickedUp|CharacterHealth|CharacterProgress|SkillCastStarted|SkillResolved|SkillList"
-        + @"|LocalCancel|Changed)\("
+        + @"|StatusEffects|LocalCancel|Changed)\("
         + @"|\.(Advance|CollectTargetCandidates|CollectDropCandidates)\("
         + @"|\.(Target|LastRejection|LocalHealth|LocalMaximumHealth|HealthPermille|StateFlags|CurrentHealth|IsLocked"
         + @"|IsDead|LocalSpirit|LocalMaximumSpirit|Level|Experience|ExperienceToNextLevel)\s*=(?![=>])");
@@ -81,7 +81,7 @@ public sealed class PresentationBoundaryTests
         {
             "connection.SendAttack(target);", "m_world.OnDamage(damage);", "remote.HealthPermille = 0;",
             "controller.IsLocked = true;", "new AutoAttackState(world, controller, sink, 0.05);",
-            "var skill = new SkillState(world, controller, sink);"
+            "var skill = new SkillState(world, controller, sink);", "m_world.OnStatusEffects(effects);"
         };
 
         Assert.That(probes.Where(probe => !Forbidden.IsMatch(probe)), Is.Empty);
@@ -104,7 +104,7 @@ public sealed class PresentationBoundaryTests
             "controller.IsDead = true;", "world.Target =", "world.OnCharacterProgress(progress);",
             "world.Level = 3;", "world.LocalSpirit = 0;", "world.OnSkillResolved(resolved);",
             "m_world.OnLocalCancel();", "var use = new UseSkill(skill, target, 3);",
-            "SkillState? skill = m_client.Skill;"
+            "SkillState? skill = m_client.Skill;", "world.OnStatusEffects(effects);"
         };
         string[] allowed =
         {
@@ -113,7 +113,8 @@ public sealed class PresentationBoundaryTests
             "if (m_client.Clock != null && m_client.Clock.SkippedTicks > 0)", "bool isLocked = controller.IsLocked;",
             "if (target.IsDead == wasDead)", "world.Inventory.Changed += Refresh;", "m_lines.Clear();",
             "world.LeveledUp += OnLeveledUp;", "ShowCharacter(played.Value.Name, world.Level);",
-            "m_client.UseSkillSlot(number);", "Show(slot, world.CooldownRemaining(slot.Skill));"
+            "m_client.UseSkillSlot(number);", "Show(slot, world.CooldownRemaining(slot.Skill));",
+            "int seconds = (int)Math.Ceiling(world.StatusRemaining(effect.Status));"
         };
         string[] lockProbes = { "world.ActionLock.LockForSwing(4);", "bool held = m_world.ActionLock.IsCastLocked;" };
 

@@ -39,7 +39,7 @@ internal static class WireEnums
 
     public static bool IsDefined(SkillOutcome value)
     {
-        return value >= SkillOutcome.Hit && value <= SkillOutcome.Healed;
+        return value >= SkillOutcome.Hit && value <= SkillOutcome.Applied;
     }
 
     public static bool IsDefined(EntityStateFlags value)

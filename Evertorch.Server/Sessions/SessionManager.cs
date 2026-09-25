@@ -599,6 +599,7 @@ public sealed class SessionManager : ITickPhase
         session.KnownEntities.Clear();
         session.NeedsInventorySnapshot = true;
         session.NeedsSkillList = true;
+        session.NeedsStatusEffects = true;
         session.State = SessionState.InWorld;
         PlayerEntity player = character.Player;
         MapInstance map = character.Map;

@@ -18,7 +18,8 @@ internal static class ServerProjection
             new("jobs.json", PackageJson.Write(writer => WriteJobs(writer, content))),
             new("maps.json", PackageJson.Write(writer => WriteMaps(writer, content))),
             new("monsters.json", PackageJson.Write(writer => WriteMonsters(writer, content))),
-            new("skills.json", PackageJson.Write(writer => WriteSkills(writer, content)))
+            new("skills.json", PackageJson.Write(writer => WriteSkills(writer, content))),
+            new("status-effects.json", PackageJson.Write(writer => WriteStatusEffects(writer, content)))
         };
     }
 
@@ -210,6 +211,11 @@ internal static class ServerProjection
                 {
                     writer.WriteNumber("damageRatio", skill.Effect.DamageRatioPercent);
                 }
+                else if (skill.Effect.Kind == SkillEffectKind.Status)
+                {
+                    writer.WriteString("status", skill.Effect.Status.Value);
+                    writer.WriteNumber("durationMs", skill.Effect.StatusDurationMs);
+                }
                 else
                 {
                     writer.WriteNumber("healHp", skill.Effect.HealHp);
@@ -218,6 +224,29 @@ internal static class ServerProjection
                 writer.WriteEndObject();
             }
 
+            writer.WriteEndObject();
+        }
+
+        EndFile(writer);
+    }
+
+    private static void WriteStatusEffects(Utf8JsonWriter writer, ContentSet content)
+    {
+        BeginFile(writer);
+        foreach (AuthoredStatusEffect authored in content.StatusEffects)
+        {
+            StatusEffectDefinition status = authored.Definition;
+            writer.WriteStartObject();
+            writer.WriteString("id", status.Id.Value);
+            writer.WriteString("displayName", status.DisplayName);
+            writer.WriteStartObject("statPercent");
+            writer.WriteNumber("str", status.StatPercent.Str);
+            writer.WriteNumber("agi", status.StatPercent.Agi);
+            writer.WriteNumber("vit", status.StatPercent.Vit);
+            writer.WriteNumber("int", status.StatPercent.Int);
+            writer.WriteNumber("dex", status.StatPercent.Dex);
+            writer.WriteNumber("luk", status.StatPercent.Luk);
+            writer.WriteEndObject();
             writer.WriteEndObject();
         }
 

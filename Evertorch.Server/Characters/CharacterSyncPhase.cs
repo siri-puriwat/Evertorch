@@ -7,9 +7,10 @@ using Microsoft.Extensions.Options;
 namespace Evertorch.Server
 {
 /// <summary>
-///     Sends each owner the state of its own character that no other message carries: the skill list, with what is
-///     left of each cooldown, after the inventory in every baseline and whenever one of its casts resolves (Network
-///     Protocol §9). Registered after <see cref="InventorySyncPhase" /> in the same phase.
+///     Sends each owner the state of its own character that no other message carries (Network Protocol §9): the skill
+///     list, with what is left of each cooldown, after the inventory in every baseline and whenever one of its casts
+///     resolves; then its status effects, with what is left of each, in every baseline and whenever one starts, is
+///     renewed, or ends. Registered after <see cref="InventorySyncPhase" /> in the same phase.
 /// </summary>
 public sealed class CharacterSyncPhase : ITickPhase
 {
@@ -20,6 +21,7 @@ public sealed class CharacterSyncPhase : ITickPhase
     private readonly MessageSender m_sender;
     private readonly int m_tickRate;
     private readonly List<SkillListEntry> m_entries = new();
+    private readonly List<StatusEffectEntry> m_effects = new();
 
     public CharacterSyncPhase(
         SessionRegistry sessions,
@@ -40,14 +42,34 @@ public sealed class CharacterSyncPhase : ITickPhase
         long now = (long)(context.Tick - 1) * MillisecondsPerSecond / m_tickRate;
         foreach (ClientSession session in m_sessions.Sessions)
         {
-            if (!session.NeedsSkillList || session.State != SessionState.InWorld || session.Player == null)
+            if (session.State != SessionState.InWorld || session.Player == null)
             {
                 continue;
             }
 
-            session.NeedsSkillList = false;
-            m_sender.Send(session.Connection, CreateSkillList(session.Player, now));
+            if (session.NeedsSkillList)
+            {
+                session.NeedsSkillList = false;
+                m_sender.Send(session.Connection, CreateSkillList(session.Player, now));
+            }
+
+            if (session.NeedsStatusEffects)
+            {
+                session.NeedsStatusEffects = false;
+                m_sender.Send(session.Connection, CreateStatusEffects(session.Player, now));
+            }
         }
+    }
+
+    private StatusEffects CreateStatusEffects(PlayerEntity player, long now)
+    {
+        m_effects.Clear();
+        foreach (ActiveStatusEffect effect in player.StatusEffects)
+        {
+            m_effects.Add(new StatusEffectEntry(effect.Status, (uint)Math.Max(0, effect.EndMs - now)));
+        }
+
+        return new StatusEffects(m_effects.ToArray());
     }
 
     private SkillList CreateSkillList(PlayerEntity player, long now)

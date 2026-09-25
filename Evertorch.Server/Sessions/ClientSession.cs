@@ -92,6 +92,11 @@ public sealed class ClientSession
     public bool NeedsSkillList { get; set; }
 
     /// <summary>
+    ///     The owner is to hear of its character's status effects in this tick's finalize phase.
+    /// </summary>
+    public bool NeedsStatusEffects { get; set; }
+
+    /// <summary>
     ///     Commands that were well formed but refused: a target that is missing, hidden, or not targetable.
     /// </summary>
     public long RefusedCommands { get; set; }

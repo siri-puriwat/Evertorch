@@ -1,0 +1,10 @@
+id: skill.focus
+displayName: Focus
+targetType: self
+server:
+  range: 0
+  spCost: 15
+  effect:
+    status: { status: status.focus, durationMs: 60000 }
+client:
+  icon: skill_focus

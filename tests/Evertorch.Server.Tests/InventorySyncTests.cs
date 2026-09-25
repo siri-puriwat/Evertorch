@@ -71,8 +71,11 @@ public sealed class InventorySyncTests
         Assert.That(firstPart, Is.GreaterThan(lastSpawn));
         Assert.That(
             opcodes.Skip(firstPart),
-            Is.EqualTo(Enumerable.Repeat(MessageOpcode.InventorySnapshot, 9).Append(MessageOpcode.SkillList)),
-            "the parts, then the skill list that ends the baseline");
+            Is.EqualTo(
+                Enumerable.Repeat(MessageOpcode.InventorySnapshot, 9)
+                    .Append(MessageOpcode.SkillList)
+                    .Append(MessageOpcode.StatusEffects)),
+            "the parts, then the skill list and the status effects that end the baseline");
 
         InventorySnapshot[] parts = Snapshots(server, connection);
         Assert.That(parts, Has.Length.EqualTo(9));

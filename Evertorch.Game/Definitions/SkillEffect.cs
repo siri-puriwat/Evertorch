@@ -4,15 +4,22 @@ namespace Evertorch.Game
 {
 /// <summary>
 ///     The one thing a skill does when it resolves (Gameplay Systems §9): damage as a percentage of the caster's basic
-///     attack, or a flat heal.
+///     attack, a flat heal, or a status effect for a time.
 /// </summary>
 public sealed class SkillEffect
 {
-    private SkillEffect(SkillEffectKind kind, int damageRatioPercent, int healHp)
+    private SkillEffect(
+        SkillEffectKind kind,
+        int damageRatioPercent,
+        int healHp,
+        StatusDefinitionId status,
+        int statusDurationMs)
     {
         Kind = kind;
         DamageRatioPercent = damageRatioPercent;
         HealHp = healHp;
+        Status = status;
+        StatusDurationMs = statusDurationMs;
     }
 
     public SkillEffectKind Kind { get; }
@@ -27,6 +34,13 @@ public sealed class SkillEffect
     /// </summary>
     public int HealHp { get; }
 
+    /// <summary>
+    ///     For a status effect, the effect it starts or renews.
+    /// </summary>
+    public StatusDefinitionId Status { get; }
+
+    public int StatusDurationMs { get; }
+
     public static SkillEffect Damage(int ratioPercent)
     {
         if (ratioPercent <= 0)
@@ -34,7 +48,7 @@ public sealed class SkillEffect
             throw new ArgumentOutOfRangeException(nameof(ratioPercent), "A damage ratio must be positive.");
         }
 
-        return new SkillEffect(SkillEffectKind.Damage, ratioPercent, 0);
+        return new SkillEffect(SkillEffectKind.Damage, ratioPercent, 0, default, 0);
     }
 
     public static SkillEffect Heal(int hp)
@@ -44,7 +58,22 @@ public sealed class SkillEffect
             throw new ArgumentOutOfRangeException(nameof(hp), "A heal must restore something.");
         }
 
-        return new SkillEffect(SkillEffectKind.Heal, 0, hp);
+        return new SkillEffect(SkillEffectKind.Heal, 0, hp, default, 0);
+    }
+
+    public static SkillEffect StatusEffect(StatusDefinitionId status, int durationMs)
+    {
+        if (status == default)
+        {
+            throw new ArgumentException("A status effect names its status.", nameof(status));
+        }
+
+        if (durationMs <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(durationMs), "A status effect must last.");
+        }
+
+        return new SkillEffect(SkillEffectKind.Status, 0, 0, status, durationMs);
     }
 }
 }

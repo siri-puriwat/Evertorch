@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "definitions": [
+    {
+      "id": "status.focus",
+      "displayName": "Focus",
+      "icon": "status_focus"
+    }
+  ]
+}

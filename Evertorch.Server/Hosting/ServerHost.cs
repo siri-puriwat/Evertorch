@@ -105,6 +105,8 @@ public static class ServerHost
         builder.Services.AddSingleton<SessionManager>();
         builder.Services.AddSingleton<ITickPhase>(services => services.GetRequiredService<SessionManager>());
         builder.Services.AddSingleton<ITickPhase, MovementSystem>();
+        builder.Services.AddSingleton<StatusEffectSystem>();
+        builder.Services.AddSingleton<ITickPhase>(services => services.GetRequiredService<StatusEffectSystem>());
         builder.Services.AddSingleton<CombatSystem>();
         builder.Services.AddSingleton<ITickPhase>(services => services.GetRequiredService<CombatSystem>());
         builder.Services.AddSingleton<ITickPhase, RegenerationSystem>();

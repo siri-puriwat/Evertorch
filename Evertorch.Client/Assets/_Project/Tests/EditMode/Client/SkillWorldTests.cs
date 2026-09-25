@@ -171,5 +171,27 @@ public sealed class SkillWorldTests
         Assert.That(heard, Has.Count.EqualTo(1));
         Assert.That(world.UnknownEntityEvents, Is.EqualTo(1));
     }
+
+    [Test]
+    public void StatusEffects_ReplaceTheOwnersEffects_AndCountDownFromWhenTheyArrived()
+    {
+        ClientWorld world = CreateWorld();
+        var focus = new StatusDefinitionId("status.focus");
+        int changes = 0;
+        world.StatusEffectsChanged += () => changes++;
+        world.Advance(2f);
+
+        world.OnStatusEffects(new StatusEffects(new[] { new StatusEffectEntry(focus, 60_000) }));
+        double atArrival = world.StatusRemaining(focus);
+        world.Advance(18.5f);
+        double later = world.StatusRemaining(focus);
+        world.OnStatusEffects(new StatusEffects(new StatusEffectEntry[0]));
+
+        Assert.That(atArrival, Is.EqualTo(60.0).Within(1e-6));
+        Assert.That(later, Is.EqualTo(41.5).Within(1e-6));
+        Assert.That(world.StatusEffects, Is.Empty, "the effect ended");
+        Assert.That(world.StatusRemaining(focus), Is.Zero);
+        Assert.That(changes, Is.EqualTo(2));
+    }
 }
 }

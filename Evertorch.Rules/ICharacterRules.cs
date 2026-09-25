@@ -11,5 +11,10 @@ public interface ICharacterRules
     ///     <paramref name="derived" />.
     /// </summary>
     Regeneration CalculateRegeneration(PrimaryStats stats, DerivedStats derived);
+
+    /// <summary>
+    ///     The primary statistics with the status effects' <paramref name="percent" /> added to each, floored.
+    /// </summary>
+    PrimaryStats ApplyStatPercent(PrimaryStats stats, StatPercentages percent);
 }
 }

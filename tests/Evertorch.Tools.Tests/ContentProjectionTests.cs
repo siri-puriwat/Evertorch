@@ -33,7 +33,7 @@ public sealed class ContentProjectionTests
         "serverContentVersion", "roamRadius", "idlePauseMs", "idlePauseMinMs", "idlePauseMaxMs", "scanIntervalMs",
         "experienceTable", "rewards", "baseExperience", "levels", "skills", "spCost", "spPaidAt", "castTimeMs",
         "fixedCastMs", "variableCastMs", "afterCastDelayMs", "cooldownMs", "effect", "damage", "ratio", "heal",
-        "damageRatio", "healHp"
+        "damageRatio", "healHp", "statPercent", "status", "durationMs"
     };
 
     // Authoring sections that the projection flattens into their fields, so no package carries these names.
@@ -169,7 +169,7 @@ public sealed class ContentProjectionTests
             string[] clientFiles = Directory.GetFiles(Path.Combine(workspace.OutputDirectory, "client"), "*.json")
                 .Concat(Directory.GetFiles(workspace.ClientDirectory, "*.json"))
                 .ToArray();
-            Assert.That(clientFiles, Has.Length.EqualTo(12), "six files in the package and six in its copy");
+            Assert.That(clientFiles, Has.Length.EqualTo(14), "seven files in the package and seven in its copy");
             foreach (string file in clientFiles)
             {
                 Assert.That(PropertyNamesOf(file).Intersect(ServerOnlyFieldNames), Is.Empty, file);
@@ -305,6 +305,30 @@ public sealed class ContentProjectionTests
                 AssertManifestHashes(server.RootElement, packages.Server);
                 AssertManifestHashes(client.RootElement, packages.Client);
             }
+        }
+    }
+
+    [Test]
+    public void Build_ForValidFixture_WritesStatusEffectsForBoth_ButTheirNumbersForTheServerOnly()
+    {
+        using (var workspace = new ContentWorkspace())
+        {
+            ContentPackages packages = BuildValid(workspace);
+
+            JsonElement server = FirstDefinition(packages.Server, "status-effects.json");
+            JsonElement percent = server.GetProperty("statPercent");
+            JsonElement client = FirstDefinition(packages.Client, "status-effects.json");
+            JsonElement effect = Definition(packages.Server, "skills.json", "skill.focus").GetProperty("effect");
+
+            Assert.That(server.GetProperty("id").GetString(), Is.EqualTo("status.focus"));
+            Assert.That(
+                new[] { "str", "agi", "vit", "int", "dex", "luk" }.Select(stat => percent.GetProperty(stat).GetInt32()),
+                Is.EqualTo(new[] { 0, 137, 0, 0, 211, 7 }));
+            Assert.That(effect.GetProperty("status").GetString(), Is.EqualTo("status.focus"));
+            Assert.That(effect.GetProperty("durationMs").GetInt32(), Is.EqualTo(43117));
+            Assert.That(
+                client.EnumerateObject().Select(property => property.Name),
+                Is.EqualTo(new[] { "id", "displayName", "icon" }));
         }
     }
 

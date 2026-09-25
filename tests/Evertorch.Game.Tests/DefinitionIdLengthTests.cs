@@ -16,6 +16,7 @@ public sealed class DefinitionIdLengthTests
         Assert.That(JobDefinitionId.TryCreate(OfLength("job", length), out _), Is.EqualTo(expected));
         Assert.That(MapDefinitionId.TryCreate(OfLength("map", length), out _), Is.EqualTo(expected));
         Assert.That(ExperienceDefinitionId.TryCreate(OfLength("experience", length), out _), Is.EqualTo(expected));
+        Assert.That(StatusDefinitionId.TryCreate(OfLength("status", length), out _), Is.EqualTo(expected));
     }
 
     private static string OfLength(string kindPrefix, int length)

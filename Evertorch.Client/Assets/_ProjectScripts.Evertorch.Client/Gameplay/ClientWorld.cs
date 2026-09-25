@@ -126,6 +126,16 @@ public sealed class ClientWorld
     public double SkillsReceivedAt { get; private set; }
 
     /// <summary>
+    ///     The status effects on the local character, with the time each had left when the server sent them.
+    /// </summary>
+    public IReadOnlyList<StatusEffectEntry> StatusEffects { get; private set; } = Array.Empty<StatusEffectEntry>();
+
+    /// <summary>
+    ///     The estimated server time, in seconds, when the status effects arrived; their times count down from then.
+    /// </summary>
+    public double StatusEffectsReceivedAt { get; private set; }
+
+    /// <summary>
     ///     The local player's movement lock; a new world starts unlocked.
     /// </summary>
     public ActionLock ActionLock { get; } = new();
@@ -183,6 +193,8 @@ public sealed class ClientWorld
     public event Action<SkillResolved>? SkillResolvedReceived;
 
     public event Action? SkillsChanged;
+
+    public event Action? StatusEffectsChanged;
 
     /// <summary>
     ///     The local player's own cast ended before its time: it died, its target died or left, or it cancelled.
@@ -285,6 +297,30 @@ public sealed class ClientWorld
         Skills = list.Skills;
         SkillsReceivedAt = ServerTime.Now;
         SkillsChanged?.Invoke();
+    }
+
+    public void OnStatusEffects(StatusEffects effects)
+    {
+        StatusEffects = effects.Effects;
+        StatusEffectsReceivedAt = ServerTime.Now;
+        StatusEffectsChanged?.Invoke();
+    }
+
+    /// <summary>
+    ///     What is left of a status effect on the local character now, in seconds; 0 once it has ended by its time,
+    ///     and for one it does not have.
+    /// </summary>
+    public double StatusRemaining(StatusDefinitionId status)
+    {
+        foreach (StatusEffectEntry effect in StatusEffects)
+        {
+            if (effect.Status == status)
+            {
+                return Math.Max(0.0, effect.RemainingMs / 1000.0 - (ServerTime.Now - StatusEffectsReceivedAt));
+            }
+        }
+
+        return 0.0;
     }
 
     /// <summary>

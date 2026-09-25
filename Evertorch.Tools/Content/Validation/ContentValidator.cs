@@ -10,6 +10,9 @@ namespace Evertorch.Tools
 /// </summary>
 public static class ContentValidator
 {
+    // One StatusEffects message carries at most this many (Network Protocol §9).
+    private const int MaxStatusEffects = 14;
+
     public static void Validate(ContentSet content, List<ContentDiagnostic> diagnostics)
     {
         HashSet<string> items = CollectIds(
@@ -33,11 +36,42 @@ public static class ContentValidator
             table => table.Definition.Id.Value,
             table => table.Source,
             diagnostics);
+        HashSet<string> statusEffects = CollectIds(
+            content.StatusEffects,
+            status => status.Definition.Id.Value,
+            status => status.Source,
+            diagnostics);
         CollectIds(content.Jobs, job => job.Definition.Id.Value, job => job.Source, diagnostics);
 
-        foreach (HashSet<string> known in new[] { items, monsters, skills, maps, experienceTables })
+        foreach (HashSet<string> known in new[] { items, monsters, skills, maps, experienceTables, statusEffects })
         {
             known.UnionWith(content.DeclaredIds);
+        }
+
+        for (int index = MaxStatusEffects; index < content.StatusEffects.Count; index++)
+        {
+            Report(
+                content.StatusEffects[index].Source,
+                "id",
+                string.Format(
+                    CultureInfo.InvariantCulture,
+                    "is one more than the {0} status effects a status list carries",
+                    MaxStatusEffects),
+                diagnostics);
+        }
+
+        foreach (AuthoredSkill skill in content.Skills)
+        {
+            if (skill.Definition.Effect?.Kind == SkillEffectKind.Status)
+            {
+                RequireReference(
+                    statusEffects,
+                    skill.Definition.Effect.Status.Value,
+                    "status effect",
+                    skill.Source,
+                    "server.effect.status.status",
+                    diagnostics);
+            }
         }
 
         var skillsById = new Dictionary<string, SkillDefinition>(StringComparer.Ordinal);

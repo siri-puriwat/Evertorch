@@ -17,6 +17,8 @@ public sealed class ContentValidationTests
     private const string Map = "maps/training_ground.yml";
     private const string Experience = "experience/adventurer.yml";
     private const string Strike = "skills/strike.yml";
+    private const string Focus = "skills/focus.yml";
+    private const string FocusStatus = "status-effects/focus.yml";
     private const string JobSkills = "skills: [skill.strike]";
     private const string Levels = "levels: [30211, 50423, 80637]";
 
@@ -119,7 +121,21 @@ public sealed class ContentValidationTests
         "    damage: { ratio: 1319 }",
         "    damage: { ratio: 1319 }\n    heal: { hp: 5 }",
         "server.effect.damage",
-        "exactly one of damage or heal")]
+        "exactly one of damage, heal, or status")]
+    [TestCase(Focus, "targetType: self", "targetType: enemy", "targetType", "must be self for a status effect")]
+    [TestCase(
+        Focus,
+        "status: status.focus",
+        "status: status.missing",
+        "server.effect.status.status",
+        "references unknown status effect 'status.missing'")]
+    [TestCase(Focus, "durationMs: 43117", "durationMs: 0", "server.effect.status.durationMs", "between 1 and")]
+    [TestCase(Focus, "status: status.focus", "status: skill.focus", "server.effect.status.status",
+        "expected 'status.'")]
+    [TestCase(FocusStatus, "agi: 137", "agi: 1001", "server.statPercent.agi", "between 0 and")]
+    [TestCase(FocusStatus, "agi: 137", "agi: -1", "server.statPercent.agi", "between 0 and")]
+    [TestCase(FocusStatus, "displayName: Focus\n", "", "displayName", "required field is missing")]
+    [TestCase(FocusStatus, "icon: status_focus", "icon: Status/Focus.png", "client.icon", "logical asset key")]
     [TestCase(Strike, "ratio: 1319", "ratio: 0", "server.effect.damage.ratio", "between 1 and")]
     [TestCase(Strike, "damageType: physical\n", "", "damageType", "required for a damage effect")]
     [TestCase(Strike, "spPaidAt: castStart", "spPaidAt: later", "server.spPaidAt", "one of: resolution, castStart")]
@@ -271,10 +287,11 @@ public sealed class ContentValidationTests
             Assert.That(result.Packages, Is.Not.Null);
             Assert.That(result.Content.Items, Has.Count.EqualTo(2));
             Assert.That(result.Content.Monsters, Has.Count.EqualTo(1));
-            Assert.That(result.Content.Skills, Has.Count.EqualTo(2));
+            Assert.That(result.Content.Skills, Has.Count.EqualTo(3));
             Assert.That(result.Content.Jobs, Has.Count.EqualTo(1));
             Assert.That(result.Content.Maps, Has.Count.EqualTo(1));
             Assert.That(result.Content.ExperienceTables, Has.Count.EqualTo(1));
+            Assert.That(result.Content.StatusEffects, Has.Count.EqualTo(1));
             Assert.That(
                 result.Content.ExperienceTables[0].Definition.Levels,
                 Is.EqualTo(new[] { 30211, 50423, 80637 }));
@@ -310,6 +327,29 @@ public sealed class ContentValidationTests
 
             Assert.That(result.Diagnostics, Is.Empty, Describe(result));
             Assert.That(result.Content.Monsters.Single().Definition.BaseExperience, Is.Zero);
+        }
+    }
+
+    [Test]
+    public void Run_WhenAStatusEffectHasNoIcon_IsValid_AndMoreThanFourteenAreRefused()
+    {
+        using (var workspace = new ContentWorkspace())
+        {
+            workspace.Replace(FocusStatus, "client:\n  icon: status_focus\n", "");
+            ContentPipelineResult withoutIcon = ContentPipeline.Run(workspace.ContentRoot);
+            for (int index = 1; index <= 14; index++)
+            {
+                workspace.Write(
+                    $"status-effects/extra_{index:D2}.yml",
+                    $"id: status.extra_{index:D2}\ndisplayName: Extra\nserver:\n  statPercent: {{ str: 1 }}\n");
+            }
+
+            ContentPipelineResult fifteen = ContentPipeline.Run(workspace.ContentRoot);
+
+            Assert.That(withoutIcon.Diagnostics, Is.Empty, Describe(withoutIcon));
+            Assert.That(fifteen.Diagnostics, Has.Count.EqualTo(1), Describe(fifteen));
+            Assert.That(fifteen.Diagnostics[0].File, Is.EqualTo(FocusStatus), "the fifteenth by ID");
+            Assert.That(fifteen.Diagnostics[0].Message, Does.Contain("more than the 14 status effects"));
         }
     }
 

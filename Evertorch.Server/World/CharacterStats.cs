@@ -4,8 +4,8 @@ using Evertorch.Rules;
 namespace Evertorch.Server
 {
 /// <summary>
-///     The one path that derives a character's statistics (Gameplay Systems §2): its level, its primary statistics,
-///     and its job's tuning, through the character rules.
+///     The one path that derives a character's statistics (Gameplay Systems §2): its level, its primary statistics
+///     with its status effects' percentages, and its job's tuning, through the character rules.
 /// </summary>
 public sealed class CharacterStats
 {
@@ -36,12 +36,20 @@ public sealed class CharacterStats
     }
 
     /// <summary>
-    ///     Derives <paramref name="player" />'s statistics again from its current level and primary statistics.
+    ///     Derives <paramref name="player" />'s statistics again from its current level, primary statistics, and
+    ///     status effects.
     /// </summary>
     public void Recalculate(PlayerEntity player, JobDefinition job)
     {
-        DerivedStats stats = Calculate(job, player.Level, player.Primary);
-        player.ApplyStats(stats, m_rules.CalculateRegeneration(player.Primary, stats));
+        var percent = new StatPercentages(0, 0, 0, 0, 0, 0);
+        foreach (ActiveStatusEffect effect in player.StatusEffects)
+        {
+            percent = percent.Plus(effect.StatPercent);
+        }
+
+        PrimaryStats primary = m_rules.ApplyStatPercent(player.Primary, percent);
+        DerivedStats stats = Calculate(job, player.Level, primary);
+        player.ApplyStats(stats, m_rules.CalculateRegeneration(primary, stats));
     }
 }
 }

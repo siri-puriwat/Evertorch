@@ -135,6 +135,7 @@ internal sealed class TestServer
         var tokens = new DevelopmentTokenValidator(Options.Create(authentication), Time);
         var handshake = new HandshakeValidator(compatibility, tokens, Content);
         Drops = new ItemDropSystem(World, dropRandom ?? Random, Options.Create(world), simulation);
+        StatusEffects = new StatusEffectSystem(World, Sessions, Content, stats, sender, Instruments, simulation);
         Combat = new CombatSystem(
             World,
             Sessions,
@@ -142,6 +143,7 @@ internal sealed class TestServer
             targeting,
             Drops,
             Progression,
+            StatusEffects,
             Content,
             new RenewalCombatRules(),
             new RenewalSkillRules(),
@@ -196,6 +198,7 @@ internal sealed class TestServer
             new InventorySyncPhase(Sessions, sender),
             new CharacterSyncPhase(Sessions, Content, sender, simulation),
             new MovementSystem(Sessions, World, Options.Create(world), simulation),
+            StatusEffects,
             Combat,
             new RegenerationSystem(World, sender, simulation),
             Drops,
@@ -219,6 +222,8 @@ internal sealed class TestServer
     public ServerRandom Random { get; }
 
     public CombatSystem Combat { get; }
+
+    public StatusEffectSystem StatusEffects { get; }
 
     public ItemDropSystem Drops { get; }
 
@@ -620,7 +625,8 @@ internal sealed class TestServer
             new Dictionary<SkillDefinitionId, SkillDefinition>(content.Skills),
             new Dictionary<JobDefinitionId, JobDefinition>(content.Jobs),
             maps,
-            new Dictionary<ExperienceDefinitionId, ExperienceTableDefinition>(content.ExperienceTables));
+            new Dictionary<ExperienceDefinitionId, ExperienceTableDefinition>(content.ExperienceTables),
+            new Dictionary<StatusDefinitionId, StatusEffectDefinition>(content.StatusEffects));
     }
 }
 }

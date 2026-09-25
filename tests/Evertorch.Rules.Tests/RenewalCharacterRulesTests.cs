@@ -143,6 +143,22 @@ public sealed class RenewalCharacterRulesTests
         Assert.That(derived.VariableCastPermille, Is.EqualTo(expected));
     }
 
+    [TestCase(7, 50, 10)]
+    [TestCase(1, 99, 1)]
+    [TestCase(99, 150, 247)]
+    [TestCase(5, 0, 5)]
+    [TestCase(0, 1000, 0)]
+    public void ApplyStatPercent_FloorsWhatEachStatisticGains(int stat, int percent, int expected)
+    {
+        var stats = new PrimaryStats(stat, stat, stat, stat, stat, stat);
+
+        PrimaryStats changed = new RenewalCharacterRules().ApplyStatPercent(
+            stats,
+            new StatPercentages(percent, percent, percent, percent, percent, percent));
+
+        Assert.That(changed, Is.EqualTo(new PrimaryStats(expected, expected, expected, expected, expected, expected)));
+    }
+
     [TestCase(0)]
     [TestCase(-1)]
     public void CharacterBuild_WhenLevelIsBelowOne_Throws(int level)
@@ -218,6 +234,23 @@ public sealed class RenewalCharacterRulesTests
     private static DerivedStats WithMaximums(int maxHp, int maxSp)
     {
         return new DerivedStats(maxHp, maxSp, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0f, 1000, 1000);
+    }
+
+    // Research note vector: Focus adds 100 % to AGI and DEX; with every statistic 5 the attack speed goes from 153 to
+    // 154 (an interval of 940 ms to 920 ms) and the hit from 182 to 187.
+    [Test]
+    public void ApplyStatPercent_ForFocus_DoublesAgiAndDex_AndQuickensTheAttack()
+    {
+        var rules = new RenewalCharacterRules();
+        var stats = new PrimaryStats(5, 5, 5, 5, 5, 5);
+
+        PrimaryStats focused = rules.ApplyStatPercent(stats, new StatPercentages(0, 100, 0, 0, 100, 0));
+        DerivedStats before = Calculate(1, stats);
+        DerivedStats after = Calculate(1, focused);
+
+        Assert.That(focused, Is.EqualTo(new PrimaryStats(5, 10, 5, 5, 10, 5)));
+        Assert.That((before.AttackSpeed, after.AttackSpeed), Is.EqualTo((153, 154)));
+        Assert.That((before.Hit, after.Hit), Is.EqualTo((182, 187)));
     }
 
     [Test]

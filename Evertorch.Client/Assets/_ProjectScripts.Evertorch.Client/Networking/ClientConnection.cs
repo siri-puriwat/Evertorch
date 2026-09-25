@@ -203,6 +203,17 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
                 }
 
                 break;
+            case MessageOpcode.StatusEffects:
+                if (StatusEffects.TryRead(payload, out StatusEffects? effects) && effects != null)
+                {
+                    WithWorld(world => world.OnStatusEffects(effects));
+                }
+                else
+                {
+                    MalformedMessages++;
+                }
+
+                break;
             case MessageOpcode.EntityDied:
                 if (EntityDied.TryRead(payload, out EntityDied died))
                 {

@@ -43,6 +43,7 @@ public enum MessageOpcode : ushort
     CommandRejected = 0x8018,
     LogoutComplete = 0x8019,
     CharacterProgress = 0x801A,
-    SkillList = 0x801B
+    SkillList = 0x801B,
+    StatusEffects = 0x801C
 }
 }

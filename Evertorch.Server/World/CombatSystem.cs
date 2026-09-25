@@ -24,6 +24,7 @@ public sealed class CombatSystem : ITickPhase
     private readonly Targeting m_targeting;
     private readonly ItemDropSystem m_drops;
     private readonly CharacterProgression m_progression;
+    private readonly StatusEffectSystem m_statusEffects;
     private readonly ServerContent m_content;
     private readonly ICombatRules m_rules;
     private readonly ISkillRules m_skillRules;
@@ -41,6 +42,7 @@ public sealed class CombatSystem : ITickPhase
         Targeting targeting,
         ItemDropSystem drops,
         CharacterProgression progression,
+        StatusEffectSystem statusEffects,
         ServerContent content,
         ICombatRules rules,
         ISkillRules skillRules,
@@ -55,6 +57,7 @@ public sealed class CombatSystem : ITickPhase
         m_targeting = targeting;
         m_drops = drops;
         m_progression = progression;
+        m_statusEffects = statusEffects;
         m_content = content;
         m_rules = rules;
         m_skillRules = skillRules;
@@ -199,6 +202,10 @@ public sealed class CombatSystem : ITickPhase
         entity.Combat.EndSwing();
         InterruptCast(entity);
         ClearTarget(entity);
+        if (entity is PlayerEntity dead)
+        {
+            m_statusEffects.EndAll(dead);
+        }
 
         foreach (WorldEntity other in map.Entities)
         {
@@ -418,6 +425,18 @@ public sealed class CombatSystem : ITickPhase
             {
                 ownerSession.NeedsSkillList = true;
             }
+        }
+
+        if (skill.Effect!.Kind == SkillEffectKind.Status)
+        {
+            // Effects are players' alone this milestone; the content keeps them to skills on the caster (§9.1).
+            if (target is PlayerEntity affected)
+            {
+                m_statusEffects.Apply(affected, skill.Effect.Status, now + skill.Effect.StatusDurationMs);
+            }
+
+            AnnounceResolved(map, caster, target, skill.Id, SkillOutcome.Applied, 0, tick);
+            return;
         }
 
         SkillResolution resolution = m_skillRules.Resolve(

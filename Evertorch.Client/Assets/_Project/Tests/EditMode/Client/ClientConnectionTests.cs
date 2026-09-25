@@ -798,9 +798,12 @@ public sealed class ClientConnectionTests
             0);
         var heard = new List<SkillResolved>();
         harness.Connection.World!.SkillResolvedReceived += heard.Add;
+        var effects = new StatusEffects(new[]
+            { new StatusEffectEntry(new StatusDefinitionId("status.focus"), 60_000) });
 
         harness.Deliver(ProtocolChannel.Control, Encode(started.GetEncodedLength(), started.Write));
         harness.Deliver(ProtocolChannel.Control, Encode(list.GetEncodedLength(), list.Write));
+        harness.Deliver(ProtocolChannel.Control, Encode(effects.GetEncodedLength(), effects.Write));
         bool isLocked = harness.Connection.World.ActionLock.IsCastLocked;
         harness.Connection.SendCancel();
         harness.Deliver(ProtocolChannel.Control, Encode(resolved.GetEncodedLength(), resolved.Write));
@@ -808,6 +811,7 @@ public sealed class ClientConnectionTests
         Assert.That(isLocked, Is.True);
         Assert.That(harness.Connection.World.ActionLock.IsCastLocked, Is.False, "the player's own cancel");
         Assert.That(harness.Connection.World.Skills.Count, Is.EqualTo(1));
+        Assert.That(harness.Connection.World.StatusEffects.Count, Is.EqualTo(1));
         Assert.That(heard, Has.Count.EqualTo(1));
         Assert.That(harness.Connection.MalformedMessages, Is.Zero);
     }

@@ -339,6 +339,23 @@ public sealed class ServerInstrumentsTests
     }
 
     [Test]
+    public void StatusEffects_AreCountedByChange()
+    {
+        var rig = new CombatRig();
+        using var recorder = new MeterRecorder(rig.Server.Instruments.Meter);
+        var focus = new StatusDefinitionId("status.focus");
+        long now = (long)(rig.Server.CurrentTick - 1) * 1000 / TestServer.TickRate;
+
+        rig.Server.StatusEffects.Apply(rig.Entity, focus, now + 100);
+        rig.Server.StatusEffects.Apply(rig.Entity, focus, now + 150);
+        rig.Server.Tick(5);
+
+        Assert.That(SumTagged(recorder, "evertorch.combat.status_effects", "change", "started"), Is.EqualTo(1));
+        Assert.That(SumTagged(recorder, "evertorch.combat.status_effects", "change", "renewed"), Is.EqualTo(1));
+        Assert.That(SumTagged(recorder, "evertorch.combat.status_effects", "change", "ended"), Is.EqualTo(1));
+    }
+
+    [Test]
     public void Tags_NeverNameAConnectionAccountOrCharacter()
     {
         var server = new TestServer();

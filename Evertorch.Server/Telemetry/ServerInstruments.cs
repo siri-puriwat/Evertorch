@@ -60,6 +60,9 @@ public sealed class ServerInstruments
 
     private static readonly KeyValuePair<string, object?> CastResolved = new(OutcomeTag, "resolved");
     private static readonly KeyValuePair<string, object?> CastInterrupted = new(OutcomeTag, "interrupted");
+    private static readonly KeyValuePair<string, object?> StatusStarted = new("change", "started");
+    private static readonly KeyValuePair<string, object?> StatusRenewed = new("change", "renewed");
+    private static readonly KeyValuePair<string, object?> StatusEnded = new("change", "ended");
 
     private static readonly KeyValuePair<string, object?> RateLimitedReason = new("reason", "rate_limited");
     private static readonly KeyValuePair<string, object?> KickedReason = new("reason", "kicked");
@@ -78,6 +81,7 @@ public sealed class ServerInstruments
     private readonly Counter<long> m_experience;
     private readonly Counter<long> m_levelUps;
     private readonly Counter<long> m_casts;
+    private readonly Counter<long> m_statusEffects;
 
     public ServerInstruments(IMeterFactory meters)
     {
@@ -138,6 +142,10 @@ public sealed class ServerInstruments
             "evertorch.combat.casts",
             "{cast}",
             "Skill casts that resolved or were interrupted, by outcome.");
+        m_statusEffects = Meter.CreateCounter<long>(
+            "evertorch.combat.status_effects",
+            "{effect}",
+            "Status effects started, renewed, or ended, by change.");
     }
 
     public Meter Meter { get; }
@@ -210,6 +218,17 @@ public sealed class ServerInstruments
     public void RecordCast(bool isResolved)
     {
         m_casts.Add(1, isResolved ? CastResolved : CastInterrupted);
+    }
+
+    public void RecordStatusEffects(StatusEffectChange change, int count)
+    {
+        KeyValuePair<string, object?> tag = change switch
+        {
+            StatusEffectChange.Started => StatusStarted,
+            StatusEffectChange.Renewed => StatusRenewed,
+            _ => StatusEnded
+        };
+        m_statusEffects.Add(count, tag);
     }
 
     /// <summary>
