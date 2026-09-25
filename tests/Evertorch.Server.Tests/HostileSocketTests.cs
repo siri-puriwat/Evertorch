@@ -29,6 +29,7 @@ public sealed class HostileSocketTests
 {
     private const string Key = "evertorch";
     private const int CooldownMs = 2000;
+    private const string OversizedSentinel = "secret-oversized-request";
 
     private static IHost StartHost(TemporaryDirectory root, CapturingLoggerProvider logs)
     {
@@ -78,13 +79,16 @@ public sealed class HostileSocketTests
         var random = new Random(11);
 
         // The header of a real request, then data in place of the key, up to nearly the largest datagram loopback
-        // carries.
+        // carries. The data starts with a word no log may repeat. LiteNetLib reads at most 1432 bytes of a datagram
+        // and drops a longer one, so only the first reaches the key check.
         int key = IndexOf(connectRequest, Encoding.UTF8.GetBytes(Key));
+        byte[] sentinel = Encoding.ASCII.GetBytes(OversizedSentinel);
         foreach (int size in new[] { 1000, 20000, 60000 })
         {
             byte[] oversized = new byte[key + size];
             connectRequest.AsSpan(0, key).CopyTo(oversized);
             random.NextBytes(oversized.AsSpan(key));
+            sentinel.CopyTo(oversized, key);
             yield return oversized;
         }
 
@@ -145,6 +149,34 @@ public sealed class HostileSocketTests
         return client;
     }
 
+    private static void SignIn(TestNetClient client, uint contentVersion, string token)
+    {
+        client.Send(
+            Hello(ProtocolConstants.ProtocolVersion, contentVersion, token),
+            ProtocolChannel.Control,
+            DeliveryMethod.ReliableOrdered);
+        Assert.That(
+            client.WaitFor(() => client.Received.Any(message =>
+                MessageRouting.TryReadOpcode(message.Payload, out MessageOpcode opcode)
+                && opcode == MessageOpcode.ServerHello)),
+            Is.True,
+            "signed in");
+    }
+
+    private static byte[] Cancel(uint commandSequence)
+    {
+        byte[] payload = new byte[CancelAction.EncodedLength];
+        new CancelAction(commandSequence).Write(payload);
+        return payload;
+    }
+
+    private static void AssertNoSecretIn(IReadOnlyList<string> lines)
+    {
+        Assert.That(lines.Where(line => line.Contains("secret", StringComparison.OrdinalIgnoreCase)), Is.Empty);
+        Assert.That(lines.Where(line => line.Contains("Password", StringComparison.OrdinalIgnoreCase)), Is.Empty);
+        Assert.That(lines.Where(line => line.Contains(TestHosts.UnreachableDatabase)), Is.Empty);
+    }
+
     private static void SendGarbage(TestNetClient client, int count)
     {
         for (int index = 0; index < count; index++)
@@ -194,16 +226,7 @@ public sealed class HostileSocketTests
         uint content = host.Services.GetRequiredService<HandshakeValidator>().RequiredClientContentVersion;
 
         using TestNetClient signedIn = Connected(port);
-        signedIn.Send(
-            Hello(ProtocolConstants.ProtocolVersion, content, "dev:secret-login-one"),
-            ProtocolChannel.Control,
-            DeliveryMethod.ReliableOrdered);
-        Assert.That(
-            signedIn.WaitFor(() => signedIn.Received.Any(message =>
-                MessageRouting.TryReadOpcode(message.Payload, out MessageOpcode opcode)
-                && opcode == MessageOpcode.ServerHello)),
-            Is.True,
-            "signed in");
+        SignIn(signedIn, content, "dev:secret-login-one");
         signedIn.Send(
             Hello(ProtocolConstants.ProtocolVersion, content, "dev:secret-login-two"),
             ProtocolChannel.Control,
@@ -217,18 +240,33 @@ public sealed class HostileSocketTests
             Hello(ProtocolConstants.ProtocolVersion, content, "secret-token-four"),
             ProtocolChannel.Control,
             DeliveryMethod.ReliableOrdered);
+        using TestNetClient tooLong = Connected(port);
+        tooLong.Send(
+            Hello(ProtocolConstants.ProtocolVersion, content, $"dev:secret-{new string('x', 58)}"),
+            ProtocolChannel.Control,
+            DeliveryMethod.ReliableOrdered);
+
+        // Signed in first: a flood from a connection that has no account would cool the whole address down.
+        using TestNetClient flooder = Connected(port);
+        SignIn(flooder, content, "dev:secret-login-five");
+        for (uint sequence = 1; sequence <= 400; sequence++)
+        {
+            flooder.Send(Cancel(sequence), ProtocolChannel.Control, DeliveryMethod.ReliableOrdered);
+        }
 
         Assert.That(signedIn.WaitFor(() => signedIn.IsDisconnected), Is.True);
         Assert.That(mismatched.WaitFor(() => mismatched.IsDisconnected), Is.True);
         Assert.That(forged.WaitFor(() => forged.IsDisconnected), Is.True);
+        Assert.That(tooLong.WaitFor(() => tooLong.IsDisconnected), Is.True);
+        Assert.That(flooder.WaitFor(() => flooder.IsDisconnected), Is.True);
         host.StopAsync().GetAwaiter().GetResult();
 
         IReadOnlyList<string> lines = logs.Lines;
         Assert.That(signedIn.Notice!.Reason, Is.EqualTo(DisconnectReason.Kicked));
+        Assert.That(tooLong.Notice!.Reason, Is.EqualTo(DisconnectReason.AuthenticationFailed), "an identity too long");
+        Assert.That(flooder.Notice!.Reason, Is.EqualTo(DisconnectReason.RateLimited), "the control flood");
         Assert.That(lines.Any(line => line.Contains("ViolationDisconnect")), Is.True, "the audit events were written");
-        Assert.That(lines.Where(line => line.Contains("secret", StringComparison.OrdinalIgnoreCase)), Is.Empty);
-        Assert.That(lines.Where(line => line.Contains("Password", StringComparison.OrdinalIgnoreCase)), Is.Empty);
-        Assert.That(lines.Where(line => line.Contains(TestHosts.UnreachableDatabase)), Is.Empty);
+        AssertNoSecretIn(lines);
     }
 
     [Test]
@@ -265,6 +303,9 @@ public sealed class HostileSocketTests
         Assert.That(host.Services.GetRequiredService<SessionRegistry>().Sessions, Has.Count.EqualTo(1));
         Assert.That(honest.Connection.MalformedMessages + honest.Connection.UnexpectedMessages, Is.Zero);
         host.StopAsync().GetAwaiter().GetResult();
+        IReadOnlyList<string> lines = logs.Lines;
+        Assert.That(lines.Any(line => line.Contains("ConnectionRefused")), Is.True, "the refusals were audited");
+        AssertNoSecretIn(lines);
     }
 }
 }
