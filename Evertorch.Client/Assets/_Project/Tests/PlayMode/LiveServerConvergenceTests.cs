@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Linq;
 using System.Threading.Tasks;
 using Evertorch.Game;
 using Evertorch.Protocol;
@@ -107,11 +108,15 @@ public sealed class LiveServerConvergenceTests
         yield return Simulate(connection, driver, world, clock, 1.5f, () => false);
         server.ClearOutput();
 
+        long character = connection.Characters.Single(entry => entry.Name == picker.Name).Character.Value;
         server.SendCommand("players");
-        yield return WaitUntil(() => server.HasOutput(" at ("), StepTimeoutSeconds);
+        yield return WaitUntil(() => server.HasOutput(LiveServer.CharacterMarker(character)), StepTimeoutSeconds);
 
         WorldPosition predicted = world.Predictor.Position;
-        Assert.That(server.TryReadPlayerPosition(out float serverX, out float serverZ), Is.True, server.JoinOutput());
+        Assert.That(
+            server.TryReadPlayerPosition(character, out float serverX, out float serverZ),
+            Is.True,
+            server.JoinOutput());
         Assert.That(predicted.X, Is.GreaterThan(3f), "the player really walked");
         Assert.That(link.Dropped, Is.GreaterThan(0), "the link really lost messages");
         Assert.That(world.Smoother.Snaps, Is.EqualTo(0));

@@ -333,6 +333,7 @@ public sealed class LiveServerCombatTests : InputTestFixture
         LossyTransport link = client.Link!;
         MovementController controller = client.Controller!;
         WorldPosition start = world.Predictor.Position;
+        long character = client.PlayedCharacter!.Value.Character.Value;
 
         link.LatencyMilliseconds = 50;
         HoldKeys(keyboard, Key.W);
@@ -342,7 +343,7 @@ public sealed class LiveServerCombatTests : InputTestFixture
         HoldKeys(keyboard);
         yield return new WaitForSecondsRealtime(0.5f);
         link.LossPercent = 0;
-        yield return AwaitConvergence(world, "a lost stop");
+        yield return AwaitConvergence(world, character, "a lost stop");
         Assert.That(
             world.Smoother.LargestCorrection,
             Is.GreaterThan(Math.Max(before, 0.5f)),
@@ -356,7 +357,7 @@ public sealed class LiveServerCombatTests : InputTestFixture
         HoldKeys(keyboard, Key.S);
         yield return new WaitForSecondsRealtime(1.5f);
         HoldKeys(keyboard);
-        yield return AwaitConvergence(world, "a lossy WASD walk");
+        yield return AwaitConvergence(world, character, "a lossy WASD walk");
 
         // Back towards the spawn, where the slimes are.
         WorldPosition target = ClearGroundNear(client, world, start);
@@ -365,7 +366,7 @@ public sealed class LiveServerCombatTests : InputTestFixture
         yield return WaitUntil(() => controller.HasPath, 2f);
         Assert.That(controller.HasPath, Is.True, $"a click at {onScreen} on {target} started a walk");
         yield return WaitUntil(() => !controller.HasPath, WalkTimeoutSeconds);
-        yield return AwaitConvergence(world, "a lossy click walk");
+        yield return AwaitConvergence(world, character, "a lossy click walk");
         Assert.That(link.Dropped, Is.GreaterThan(dropped), "the link really lost messages");
         Assert.That(world.Smoother.Snaps, Is.Zero, "no correction was large enough to snap");
         Debug.Log(
@@ -379,7 +380,7 @@ public sealed class LiveServerCombatTests : InputTestFixture
     }
 
     // The console republishes what it reads once a second, so agreement shows up within a few of those.
-    private IEnumerator AwaitConvergence(ClientWorld world, string step)
+    private IEnumerator AwaitConvergence(ClientWorld world, long character, string step)
     {
         LiveServer server = m_server!;
         float deadline = Time.realtimeSinceStartup + ConvergeTimeoutSeconds;
@@ -395,10 +396,10 @@ public sealed class LiveServerCombatTests : InputTestFixture
 
             server.ClearOutput();
             server.SendCommand("players");
-            yield return WaitUntil(() => server.HasOutput(" at ("), 5f);
+            yield return WaitUntil(() => server.HasOutput(LiveServer.CharacterMarker(character)), 5f);
             serverView = server.JoinOutput();
             WorldPosition predicted = world.Predictor.Position;
-            isConverged = server.TryReadPlayerPosition(out float x, out float z)
+            isConverged = server.TryReadPlayerPosition(character, out float x, out float z)
                 && Mathf.Abs(predicted.X - x) <= ConvergedDistance
                 && Mathf.Abs(predicted.Z - z) <= ConvergedDistance;
         }

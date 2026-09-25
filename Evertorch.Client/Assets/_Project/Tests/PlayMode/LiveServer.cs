@@ -165,17 +165,18 @@ internal sealed class LiveServer : IDisposable
     }
 
     /// <summary>
-    ///     The position the console's <c>players</c> command printed last, for a server with one player in it.
+    ///     The position of <paramref name="character" /> in what the console's <c>players</c> command printed.
     /// </summary>
-    public bool TryReadPlayerPosition(out float x, out float z)
+    public bool TryReadPlayerPosition(long character, out float x, out float z)
     {
         x = 0f;
         z = 0f;
         var position = new Regex(@" at \(([^,]+), ([^,]+), ([^)]+)\)");
+        string named = CharacterMarker(character);
         foreach (string line in Output())
         {
             Match match = position.Match(line);
-            if (match.Success)
+            if (match.Success && line.Contains(named))
             {
                 x = float.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture);
                 z = float.Parse(match.Groups[3].Value, CultureInfo.InvariantCulture);
@@ -184,6 +185,15 @@ internal sealed class LiveServer : IDisposable
         }
 
         return false;
+    }
+
+    /// <summary>
+    ///     The text that names <paramref name="character" /> on its line of the <c>players</c> output, for waiting on
+    ///     that line rather than on the first line of any player.
+    /// </summary>
+    public static string CharacterMarker(long character)
+    {
+        return $"character {character.ToString(CultureInfo.InvariantCulture)} ";
     }
 
     public bool TryReadListeningPort(out int port)
