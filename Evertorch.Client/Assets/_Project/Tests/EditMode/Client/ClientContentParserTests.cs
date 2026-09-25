@@ -321,6 +321,9 @@ public sealed class ClientContentParserTests
         Assert.That(map!.Navigation.Columns, Is.EqualTo(48));
         Assert.That(map.Navigation.CanOccupy(0f, 0f), Is.True, "players spawn at the origin");
         Assert.That(MapSceneResolver.TryResolve(map.SceneKey, out string _), Is.True);
+        Assert.That(content.TryGetMap(new MapDefinitionId("map.training_field"), out ClientMap? field), Is.True);
+        Assert.That(MapSceneResolver.TryResolve(field!.SceneKey, out string fieldScene), Is.True);
+        Assert.That(fieldScene, Is.EqualTo("11_TrainingField"));
         Assert.That(content.TryGetJob(new JobDefinitionId("job.adventurer"), out ClientJob? job), Is.True);
         Assert.That(job!.PrefabKey, Is.EqualTo("character_adventurer"));
         Assert.That(

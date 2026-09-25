@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using Evertorch.Game;
@@ -189,6 +190,12 @@ public sealed class ServerContentLoaderTests
 
     private const string StatusEffectsFile = "status-effects.json";
 
+    private static string Portal(string center, string map, string position, string facing = "\"x\": 1, \"z\": 0")
+    {
+        return "\"portals\": [ { \"center\": { " + center + " }, \"radius\": 1, \"destination\": { \"map\": \""
+            + map + "\", \"position\": { " + position + " }, \"facing\": { " + facing + " } } } ]";
+    }
+
     private static void AddFocus(Dictionary<string, byte[]> files, string percent)
     {
         PackageFixture.Replace(
@@ -207,6 +214,29 @@ public sealed class ServerContentLoaderTests
             Skills,
             "\"cooldownMs\": 0",
             $"\"cooldownMs\": 0, \"effect\": {{ \"status\": \"{status}\", \"durationMs\": 60000 }}");
+    }
+
+    [TestCase("map.elsewhere", "\"x\": 2, \"y\": 0, \"z\": 0", "a portal leads to unknown map 'map.elsewhere'")]
+    [TestCase("map.training_ground", "\"x\": -999, \"y\": 0, \"z\": 0",
+        "arrival on 'map.training_ground' is not a place")]
+    [TestCase("map.training_ground", "\"x\": 3, \"y\": 0, \"z\": -3",
+        "arrival lies inside a portal of 'map.training_ground'")]
+    public void Load_WhenAPortalLeadsNowhereToStand_Fails(string map, string position, string problem)
+    {
+        Dictionary<string, byte[]> files = PackageFixture.BuildFixturePackage();
+        PackageFixture.Replace(files, Maps, "\"portals\": []",
+            Portal("\"x\": 3.5, \"y\": 0, \"z\": -3.5", map, position));
+
+        IReadOnlyList<string> problems = ProblemsOf(files);
+
+        Assert.That(problems, Has.Count.EqualTo(1));
+        Assert.That(problems[0], Does.StartWith("maps.json: map.training_ground: ").And.Contain(problem));
+    }
+
+    private static bool GateBeside(MapDefinition map, WorldPosition portal, float step)
+    {
+        return map.Navigation.TryGetCellIndex(portal.X + step, portal.Z, out int column, out int row)
+            && map.Navigation.GetCell(column, row).Surface == NavigationSurface.Gate;
     }
 
     [Test]
@@ -292,6 +322,27 @@ public sealed class ServerContentLoaderTests
                 Assert.That(loaded.GetCell(column, row), Is.EqualTo(authored.GetCell(column, row)));
             }
         }
+    }
+
+    [Test]
+    public void Load_ForRepositoryContent_JoinsTheGroundAndTheFieldBothWays()
+    {
+        ServerContent content = ServerContentLoader.Load(PackageFixture.BuildRepositoryPackage());
+        MapDefinition ground = content.Maps[new MapDefinitionId("map.training_ground")];
+        MapDefinition field = content.Maps[new MapDefinitionId("map.training_field")];
+
+        MapPortal toField = ground.Portals.Single();
+        MapPortal toGround = field.Portals.Single();
+
+        Assert.That(toField.DestinationMap, Is.EqualTo(field.Id));
+        Assert.That(toGround.DestinationMap, Is.EqualTo(ground.Id));
+        Assert.That(toField.DestinationPosition, Is.EqualTo(field.SpawnPosition), "arrivals by the field's gate");
+        Assert.That(field.IsInPortal(toField.DestinationPosition), Is.False);
+        Assert.That(ground.IsInPortal(toGround.DestinationPosition), Is.False);
+        Assert.That(ground.IsInPortal(ground.SpawnPosition) || field.IsInPortal(field.SpawnPosition), Is.False);
+        Assert.That((toField.DestinationFacing.X, toGround.DestinationFacing.X), Is.EqualTo((1f, -1f)));
+        Assert.That(GateBeside(ground, toField.Center, 1f), Is.True, "the ground's portal lies before its east gate");
+        Assert.That(GateBeside(field, toGround.Center, -1f), Is.True, "the field's lies before its west gate");
     }
 
     [Test]
@@ -551,6 +602,29 @@ public sealed class ServerContentLoaderTests
             {
                 "maps.json: definitions[0].spawnPoint.position: is not a place the navigation grid lets an agent stand"
             }));
+    }
+
+    [Test]
+    public void Load_WhenTheSpawnPointIsInsideAPortal_OrAPortalHasNoRadius_Fails()
+    {
+        MapDefinition map = ServerContentLoader.Load(PackageFixture.BuildFixturePackage()).Maps.Values.Single();
+        string spawn = string.Format(
+            CultureInfo.InvariantCulture,
+            "\"x\": {0}, \"y\": {1}, \"z\": {2}",
+            map.SpawnPosition.X,
+            map.SpawnPosition.Y,
+            map.SpawnPosition.Z);
+        Dictionary<string, byte[]> onSpawn = PackageFixture.BuildFixturePackage();
+        PackageFixture.Replace(onSpawn, Maps, "\"portals\": []",
+            Portal(spawn, "map.training_ground", "\"x\": 3.5, \"y\": 0, \"z\": -3.5"));
+        Dictionary<string, byte[]> noRadius = PackageFixture.BuildFixturePackage();
+        PackageFixture.Replace(noRadius, Maps, "\"portals\": []",
+            Portal(spawn, "map.training_ground", spawn).Replace("\"radius\": 1", "\"radius\": 0"));
+
+        Assert.That(ProblemsOf(onSpawn),
+            Is.EqualTo(new[] { "maps.json: definitions[0].spawnPoint.position: lies inside a portal" }));
+        Assert.That(ProblemsOf(noRadius),
+            Is.EqualTo(new[] { "maps.json: definitions[0].portals[0].radius: must be greater than 0" }));
     }
 
     [Test]

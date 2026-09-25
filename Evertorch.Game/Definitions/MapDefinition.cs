@@ -11,7 +11,8 @@ public sealed class MapDefinition
         WorldPosition spawnPosition,
         WorldDirection spawnFacing,
         IReadOnlyList<MonsterSpawn> monsterSpawns,
-        NavigationGrid navigation)
+        NavigationGrid navigation,
+        IReadOnlyList<MapPortal>? portals = null)
     {
         Id = id;
         DisplayName = displayName;
@@ -19,6 +20,7 @@ public sealed class MapDefinition
         SpawnFacing = spawnFacing;
         MonsterSpawns = monsterSpawns;
         Navigation = navigation ?? throw new ArgumentNullException(nameof(navigation));
+        Portals = portals ?? Array.Empty<MapPortal>();
     }
 
     public MapDefinitionId Id { get; }
@@ -32,5 +34,26 @@ public sealed class MapDefinition
     public IReadOnlyList<MonsterSpawn> MonsterSpawns { get; }
 
     public NavigationGrid Navigation { get; }
+
+    /// <summary>
+    ///     The ways to other maps; none on a map without portals.
+    /// </summary>
+    public IReadOnlyList<MapPortal> Portals { get; }
+
+    /// <summary>
+    ///     Whether <paramref name="position" /> is inside one of the map's portals.
+    /// </summary>
+    public bool IsInPortal(WorldPosition position)
+    {
+        foreach (MapPortal portal in Portals)
+        {
+            if (portal.Contains(position))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 }
 }

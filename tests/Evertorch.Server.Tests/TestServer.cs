@@ -24,9 +24,16 @@ internal sealed class TestServer
     private static readonly Lazy<ServerContent> RepositoryContent =
         new(() => ServerContentLoader.Load(PackageFixture.BuildRepositoryPackage()));
 
-    // Most server tests are about players; without monsters their message counts stay exact.
-    private static readonly Lazy<ServerContent> RepositoryContentWithoutMonsters =
-        new(() => WithoutMonsterSpawns(RepositoryContent.Value));
+    // Most server tests are about players on the starting map; without the other maps and without monsters their
+    // message counts stay exact.
+    private static readonly Lazy<ServerContent> StartingMapContent =
+        new(() => Copy(RepositoryContent.Value, IsStartingMap, true));
+
+    private static readonly Lazy<ServerContent> StartingMapContentWithoutMonsters =
+        new(() => Copy(RepositoryContent.Value, IsStartingMap, false));
+
+    private static readonly Lazy<ServerContent> EveryMapContentWithoutMonsters =
+        new(() => Copy(RepositoryContent.Value, _ => true, false));
 
     private readonly TickPipeline m_pipeline;
     private readonly List<Action> m_afterCommands = new();
@@ -52,9 +59,18 @@ internal sealed class TestServer
         IGameStore? store = null,
         int reconnectGraceMs = 0,
         bool isAbuseControlEnabled = true,
-        AbuseOptions? abuseOptions = null)
+        AbuseOptions? abuseOptions = null,
+        bool withEveryMap = false)
     {
-        Content = withMonsters ? RepositoryContent.Value : RepositoryContentWithoutMonsters.Value;
+        if (withEveryMap)
+        {
+            Content = withMonsters ? RepositoryContent.Value : EveryMapContentWithoutMonsters.Value;
+        }
+        else
+        {
+            Content = withMonsters ? StartingMapContent.Value : StartingMapContentWithoutMonsters.Value;
+        }
+
         var network = new NetworkOptions
         {
             HandshakeTimeoutMs = handshakeTimeoutMs,
@@ -431,11 +447,11 @@ internal sealed class TestServer
     }
 
     /// <summary>
-    ///     The monsters of the one map, nearest to <paramref name="position" /> first.
+    ///     The monsters of the starting map, nearest to <paramref name="position" /> first.
     /// </summary>
     public IReadOnlyList<MonsterEntity> MonstersNear(WorldPosition position)
     {
-        var monsters = new List<MonsterEntity>(World.Maps.First().Monsters);
+        var monsters = new List<MonsterEntity>(World.Maps.Single(map => IsStartingMap(map.Definition)).Monsters);
         monsters.Sort((left, right) => Distance(left.Position, position).CompareTo(Distance(right.Position, position)));
         return monsters;
     }
@@ -601,10 +617,16 @@ internal sealed class TestServer
         return (float)Math.Sqrt(dx * dx + dz * dz);
     }
 
-    private static ServerContent WithoutMonsterSpawns(ServerContent content)
+    private static bool IsStartingMap(MapDefinition map)
+    {
+        return RepositoryContent.Value.Jobs.Values.Any(job => job.StartingMap == map.Id);
+    }
+
+    // A portal whose destination is left out stays: a test that asks for every map gets the transfers too.
+    private static ServerContent Copy(ServerContent content, Func<MapDefinition, bool> keep, bool withMonsters)
     {
         var maps = new Dictionary<MapDefinitionId, MapDefinition>();
-        foreach (MapDefinition map in content.Maps.Values)
+        foreach (MapDefinition map in content.Maps.Values.Where(keep))
         {
             maps.Add(
                 map.Id,
@@ -613,8 +635,9 @@ internal sealed class TestServer
                     map.DisplayName,
                     map.SpawnPosition,
                     map.SpawnFacing,
-                    Array.Empty<MonsterSpawn>(),
-                    map.Navigation));
+                    withMonsters ? map.MonsterSpawns : Array.Empty<MonsterSpawn>(),
+                    map.Navigation,
+                    map.Portals));
         }
 
         return new ServerContent(

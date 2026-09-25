@@ -131,6 +131,24 @@ internal static class ServerProjection
             }
 
             writer.WriteEndArray();
+            writer.WriteStartArray("portals");
+            foreach (MapPortal portal in map.Portals)
+            {
+                writer.WriteStartObject();
+                WritePosition(writer, "center", portal.Center);
+                writer.WriteNumber("radius", portal.Radius);
+                writer.WriteStartObject("destination");
+                writer.WriteString("map", portal.DestinationMap.Value);
+                WritePosition(writer, "position", portal.DestinationPosition);
+                writer.WriteStartObject("facing");
+                writer.WriteNumber("x", portal.DestinationFacing.X);
+                writer.WriteNumber("z", portal.DestinationFacing.Z);
+                writer.WriteEndObject();
+                writer.WriteEndObject();
+                writer.WriteEndObject();
+            }
+
+            writer.WriteEndArray();
             NavigationJson.Write(writer, map.Navigation);
             writer.WriteEndObject();
         }

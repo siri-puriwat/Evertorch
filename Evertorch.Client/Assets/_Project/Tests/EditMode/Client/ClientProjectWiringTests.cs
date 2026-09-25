@@ -1,3 +1,4 @@
+using System;
 using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
@@ -18,6 +19,8 @@ public sealed class ClientProjectWiringTests
 
     [TestCase("10_TrainingGround", false, true)]
     [TestCase("10_TrainingGround", true, false)]
+    [TestCase("11_TrainingField", false, true)]
+    [TestCase("11_TrainingField", true, false)]
     [TestCase("01_MainMenu", false, true)]
     [TestCase("01_MainMenu", true, false)]
     [TestCase("00_Bootstrap", false, false)]
@@ -62,6 +65,17 @@ public sealed class ClientProjectWiringTests
         InputActionAsset asset = AssetDatabase.LoadAssetAtPath<InputActionAsset>(ActionsPath);
         Assert.That(asset, Is.Not.Null, ActionsPath);
         return asset;
+    }
+
+    [TestCase("map_training_ground", "10_TrainingGround")]
+    [TestCase("map_training_field", "11_TrainingField")]
+    public void MapSceneResolver_KnownKey_NamesItsMapScene(string sceneKey, string expected)
+    {
+        bool found = MapSceneResolver.TryResolve(sceneKey, out string sceneName);
+
+        Assert.That(found, Is.True);
+        Assert.That(sceneName, Is.EqualTo(expected));
+        Assert.That(MapSceneResolver.IsMapScene(sceneName), Is.True);
     }
 
     [Test]
@@ -203,6 +217,19 @@ public sealed class ClientProjectWiringTests
     {
         Assert.That(MapSceneResolver.TryResolve("map_nowhere", out string sceneName), Is.False);
         Assert.That(sceneName, Is.Empty);
+    }
+
+    [Test]
+    public void MapScenes_FollowOneAnotherInTheBuild_TheFieldAfterTheGround()
+    {
+        string[] buildScenes = EditorBuildSettings.scenes
+            .Where(scene => scene.enabled)
+            .Select(scene => Path.GetFileNameWithoutExtension(scene.path))
+            .ToArray();
+
+        int ground = Array.IndexOf(buildScenes, "10_TrainingGround");
+        Assert.That(ground, Is.GreaterThan(1));
+        Assert.That(buildScenes[ground + 1], Is.EqualTo("11_TrainingField"));
     }
 }
 }

@@ -45,6 +45,17 @@ internal static class MapDefinitionReader
             monsterSpawns.Add(ReadSpawn(spawn));
         }
 
+        var portals = new List<MapPortal>();
+        IReadOnlyList<YamlFieldReader> portalReaders = server.OptionalMappingSequence("portals");
+        foreach (YamlFieldReader portal in portalReaders)
+        {
+            MapPortal? read = ReadPortal(portal);
+            if (read != null)
+            {
+                portals.Add(read);
+            }
+        }
+
         NavigationGrid? navigation = NavigationReader.Read(root.RequiredMapping("navigation"), diagnostics);
 
         YamlFieldReader client = root.RequiredMapping("client");
@@ -57,6 +68,7 @@ internal static class MapDefinitionReader
         }
 
         CheckPlacement(navigation, spawnPoint, spawnPosition, spawnReaders, monsterSpawns);
+        CheckPortals(navigation, spawnPoint, spawnPosition, portalReaders, portals);
         if (diagnostics.Count != errorsBefore)
         {
             return null;
@@ -68,7 +80,8 @@ internal static class MapDefinitionReader
             spawnPosition,
             spawnFacing,
             monsterSpawns,
-            navigation);
+            navigation,
+            portals);
         return new AuthoredMap(root.ToSource(), definition, scene);
     }
 
@@ -97,6 +110,60 @@ internal static class MapDefinitionReader
                 spawnReaders[index].ReportField("center", "cannot be reached from the spawn point");
             }
         }
+    }
+
+    // A portal nobody can walk into is useless, and a spawn point inside one would send every arrival on at once.
+    private static void CheckPortals(
+        NavigationGrid navigation,
+        YamlFieldReader spawnPoint,
+        WorldPosition spawnPosition,
+        IReadOnlyList<YamlFieldReader> portalReaders,
+        List<MapPortal> portals)
+    {
+        // An unstandable spawn point is already reported, and nothing is reachable from it.
+        if (!navigation.CanOccupy(spawnPosition.X, spawnPosition.Z))
+        {
+            return;
+        }
+
+        var pathfinder = new GridPathfinder(navigation);
+        var waypoints = new List<WorldPosition>();
+        int nodeBudget = navigation.Columns * navigation.Rows;
+        for (int index = 0; index < portals.Count; index++)
+        {
+            MapPortal portal = portals[index];
+            if (CheckStandable(navigation, portalReaders[index], "center", portal.Center)
+                && !pathfinder.TryFindPath(spawnPosition, portal.Center, nodeBudget, waypoints))
+            {
+                portalReaders[index].ReportField("center", "cannot be reached from the spawn point");
+            }
+
+            if (portal.Contains(spawnPosition))
+            {
+                spawnPoint.ReportField("position", "lies inside a portal");
+            }
+        }
+    }
+
+    private static MapPortal? ReadPortal(YamlFieldReader portal)
+    {
+        WorldPosition center = ReadPosition(portal.RequiredMapping("center"));
+        double radius = portal.RequiredDouble("radius", 0d, ContentLimits.MaxDistance, true);
+        YamlFieldReader destination = portal.RequiredMapping("destination");
+        MapDefinitionId map = destination.RequiredId<MapDefinitionId>(
+            "map",
+            MapDefinitionId.TryCreate,
+            MapDefinitionId.KindPrefix);
+        WorldPosition position = ReadPosition(destination.RequiredMapping("position"));
+        YamlFieldReader facingReader = destination.RequiredMapping("facing");
+        var facing = new WorldDirection(ReadCoordinate(facingReader, "x"), ReadCoordinate(facingReader, "z"));
+        if (facing == new WorldDirection(0f, 0f))
+        {
+            destination.ReportField("facing", "must not be the zero direction");
+            return null;
+        }
+
+        return radius > 0d && map != default ? new MapPortal(center, radius, map, position, facing) : null;
     }
 
     private static bool CheckStandable(

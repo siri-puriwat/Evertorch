@@ -235,6 +235,23 @@ public sealed class CharacterLifetimeTests
     }
 
     [Test]
+    public void Enter_WhereTheStoredSpotIsInsideAPortal_LoadsAtTheSpawnPoint()
+    {
+        var server = new TestServer();
+        server.Disconnect(server.EnterWorld(7));
+        server.Tick(2);
+        MapDefinition map = server.World.Maps.Single().Definition;
+        WorldPosition portal = map.Portals.Single().Center;
+        server.Store.Edit(7, position: portal, health: 30);
+
+        ConnectionId connection = EnterAgain(server, 7);
+
+        Assert.That(map.Navigation.CanOccupy(portal.X, portal.Z), Is.True, "a place to stand, but a way out");
+        Assert.That(server.PlayerOf(connection).Position, Is.EqualTo(map.SpawnPosition));
+        Assert.That(server.PlayerOf(connection).CurrentHealth, Is.EqualTo(30));
+    }
+
+    [Test]
     public void Enter_WhereTheStoredSpotIsNoLongerStandable_LoadsAtTheSpawnPoint()
     {
         var server = new TestServer();

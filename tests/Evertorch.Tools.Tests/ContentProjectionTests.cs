@@ -33,7 +33,7 @@ public sealed class ContentProjectionTests
         "serverContentVersion", "roamRadius", "idlePauseMs", "idlePauseMinMs", "idlePauseMaxMs", "scanIntervalMs",
         "experienceTable", "rewards", "baseExperience", "levels", "skills", "spCost", "spPaidAt", "castTimeMs",
         "fixedCastMs", "variableCastMs", "afterCastDelayMs", "cooldownMs", "effect", "damage", "ratio", "heal",
-        "damageRatio", "healHp", "statPercent", "status", "durationMs"
+        "damageRatio", "healHp", "statPercent", "status", "durationMs", "portals", "destination"
     };
 
     // Authoring sections that the projection flattens into their fields, so no package carries these names.
@@ -305,6 +305,26 @@ public sealed class ContentProjectionTests
                 AssertManifestHashes(server.RootElement, packages.Server);
                 AssertManifestHashes(client.RootElement, packages.Client);
             }
+        }
+    }
+
+    [Test]
+    public void Build_ForValidFixture_WritesPortalsForTheServerOnly()
+    {
+        using (var workspace = new ContentWorkspace())
+        {
+            ContentPackages packages = BuildValid(workspace);
+
+            JsonElement portal = FirstDefinition(packages.Server, "maps.json").GetProperty("portals").EnumerateArray()
+                .Single();
+            JsonElement destination = portal.GetProperty("destination");
+
+            Assert.That(portal.GetProperty("center").GetProperty("x").GetDouble(), Is.EqualTo(6.5));
+            Assert.That(portal.GetProperty("radius").GetDouble(), Is.EqualTo(1.1875));
+            Assert.That(destination.GetProperty("map").GetString(), Is.EqualTo("map.training_ground"));
+            Assert.That(destination.GetProperty("position").GetProperty("z").GetDouble(), Is.EqualTo(3.5));
+            Assert.That(destination.GetProperty("facing").GetProperty("z").GetDouble(), Is.EqualTo(-1.0));
+            Assert.That(FirstDefinition(packages.Client, "maps.json").TryGetProperty("portals", out _), Is.False);
         }
     }
 

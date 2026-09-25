@@ -96,7 +96,7 @@ public static class ServerContentLoader
             skills,
             SkillDefinitionId.TryCreate,
             ReadSkill);
-        ReadDefinitions<JobDefinitionId, JobDefinition>(
+        ReadDefinitions(
             files,
             JobsFile,
             problems,
@@ -642,6 +642,44 @@ public static class ServerContentLoader
             spawnPoint.ReportUnexpectedProperties();
         }
 
+        var portals = new List<MapPortal>();
+        foreach (PackageObjectReader portal in entry.RequiredObjectArray("portals"))
+        {
+            WorldPosition center = ReadPosition(portal.RequiredObject("center"));
+            double radius = RequiredNonNegative(portal, "radius");
+            PackageObjectReader? destination = portal.RequiredObject("destination");
+            if (destination != null)
+            {
+                MapDefinitionId map = destination.RequiredId<MapDefinitionId>("map", MapDefinitionId.TryCreate);
+                WorldPosition position = ReadPosition(destination.RequiredObject("position"));
+                WorldDirection facing = default;
+                PackageObjectReader? facingReader = destination.RequiredObject("facing");
+                if (facingReader != null)
+                {
+                    facing = new WorldDirection(
+                        (float)facingReader.RequiredDouble("x"),
+                        (float)facingReader.RequiredDouble("z"));
+                    facingReader.ReportUnexpectedProperties();
+                }
+
+                destination.ReportUnexpectedProperties();
+                if (radius <= 0d)
+                {
+                    portal.Report("radius", "must be greater than 0");
+                }
+                else if (facing == default)
+                {
+                    destination.Report("facing", "must not be the zero direction");
+                }
+                else if (map != default)
+                {
+                    portals.Add(new MapPortal(center, radius, map, position, facing));
+                }
+            }
+
+            portal.ReportUnexpectedProperties();
+        }
+
         var monsterSpawns = new List<MonsterSpawn>();
         foreach (PackageObjectReader spawn in entry.RequiredObjectArray("monsterSpawns"))
         {
@@ -670,13 +708,21 @@ public static class ServerContentLoader
             return null;
         }
 
-        return new MapDefinition(
+        var definition = new MapDefinition(
             id,
             displayName,
             spawnPosition,
             spawnFacing,
             monsterSpawns.AsReadOnly(),
-            navigation);
+            navigation,
+            portals.AsReadOnly());
+        if (definition.IsInPortal(spawnPosition))
+        {
+            spawnPoint!.Report("position", "lies inside a portal");
+            return null;
+        }
+
+        return definition;
     }
 
     private static WorldPosition ReadPosition(PackageObjectReader? position)
@@ -737,6 +783,12 @@ public static class ServerContentLoader
             }
         }
 
+        var mapsById = new Dictionary<MapDefinitionId, MapDefinition>();
+        foreach (MapDefinition map in maps)
+        {
+            mapsById[map.Id] = map;
+        }
+
         foreach (MapDefinition map in maps)
         {
             foreach (MonsterSpawn spawn in map.MonsterSpawns)
@@ -746,6 +798,8 @@ public static class ServerContentLoader
                     problems.Add($"{MapsFile}: {map.Id}: spawns unknown monster '{spawn.Monster}'");
                 }
             }
+
+            CheckPortalDestinations(map, declaredMaps, mapsById, problems);
         }
 
         foreach (JobDefinition job in jobs)
@@ -780,6 +834,39 @@ public static class ServerContentLoader
                 {
                     problems.Add($"{JobsFile}: {job.Id}: knows skill '{skill}', which has no effect");
                 }
+            }
+        }
+    }
+
+    // Reachability is the tools' check; the loader still refuses an arrival it could not place (Gameplay Systems §4.2).
+    private static void CheckPortalDestinations(
+        MapDefinition map,
+        HashSet<MapDefinitionId> declaredMaps,
+        Dictionary<MapDefinitionId, MapDefinition> mapsById,
+        List<string> problems)
+    {
+        foreach (MapPortal portal in map.Portals)
+        {
+            if (!declaredMaps.Contains(portal.DestinationMap))
+            {
+                problems.Add($"{MapsFile}: {map.Id}: a portal leads to unknown map '{portal.DestinationMap}'");
+                continue;
+            }
+
+            if (!mapsById.TryGetValue(portal.DestinationMap, out MapDefinition? destination))
+            {
+                continue;
+            }
+
+            WorldPosition at = portal.DestinationPosition;
+            if (!destination.Navigation.CanOccupy(at.X, at.Z))
+            {
+                problems.Add(
+                    $"{MapsFile}: {map.Id}: a portal's arrival on '{destination.Id}' is not a place to stand");
+            }
+            else if (destination.IsInPortal(at))
+            {
+                problems.Add($"{MapsFile}: {map.Id}: a portal's arrival lies inside a portal of '{destination.Id}'");
             }
         }
     }

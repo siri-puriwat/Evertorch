@@ -211,8 +211,12 @@ public sealed class PickupDurabilityTests
         public void Execute(in TickContext context)
         {
             long player = Interlocked.Exchange(ref m_player, 0);
-            MapInstance map = m_world.Maps.Single();
-            if (player != 0 && map.TryGetPlayer(new EntityId(player), out PlayerEntity? entity) && entity != null)
+            // The real host loads every map; the players of this test enter the training ground.
+            m_world.TryGetMap(new MapDefinitionId("map.training_ground"), out MapInstance? map);
+            if (player != 0
+                && map != null
+                && map.TryGetPlayer(new EntityId(player), out PlayerEntity? entity)
+                && entity != null)
             {
                 m_world.SpawnItemDrop(
                     map,

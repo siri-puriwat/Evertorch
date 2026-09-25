@@ -102,8 +102,15 @@ public static class ContentValidator
             }
         }
 
+        var mapsById = new Dictionary<string, MapDefinition>(StringComparer.Ordinal);
         foreach (AuthoredMap map in content.Maps)
         {
+            mapsById[map.Definition.Id.Value] = map.Definition;
+        }
+
+        foreach (AuthoredMap map in content.Maps)
+        {
+            RequirePortalDestinations(map, maps, mapsById, diagnostics);
             for (int index = 0; index < map.Definition.MonsterSpawns.Count; index++)
             {
                 string fieldPath = string.Format(
@@ -134,6 +141,45 @@ public static class ContentValidator
                 "server.experienceTable",
                 diagnostics);
             RequireJobSkills(job, skills, skillsById, diagnostics);
+        }
+    }
+
+    // A destination must be a place to stand on an existing map, outside every portal there, or an arrival would
+    // strand the character or send it straight on (Gameplay Systems §4.2).
+    private static void RequirePortalDestinations(
+        AuthoredMap map,
+        HashSet<string> knownMaps,
+        Dictionary<string, MapDefinition> mapsById,
+        List<ContentDiagnostic> diagnostics)
+    {
+        for (int index = 0; index < map.Definition.Portals.Count; index++)
+        {
+            MapPortal portal = map.Definition.Portals[index];
+            string prefix = string.Format(CultureInfo.InvariantCulture, "server.portals[{0}].destination", index);
+            RequireReference(
+                knownMaps,
+                portal.DestinationMap.Value,
+                "map",
+                map.Source,
+                prefix + ".map",
+                diagnostics);
+            if (!mapsById.TryGetValue(portal.DestinationMap.Value, out MapDefinition? destination))
+            {
+                continue;
+            }
+
+            WorldPosition at = portal.DestinationPosition;
+            NavigationGrid grid = destination.Navigation;
+            if (!grid.CanOccupy(at.X, at.Z)
+                || !grid.TrySampleHeight(at.X, at.Z, out float height)
+                || Math.Abs(at.Y - height) > 0.01f)
+            {
+                Report(map.Source, prefix + ".position", "is not a place to stand on the destination map", diagnostics);
+            }
+            else if (destination.IsInPortal(at))
+            {
+                Report(map.Source, prefix + ".position", "lies inside a portal of the destination map", diagnostics);
+            }
         }
     }
 

@@ -10,6 +10,14 @@ server:
       radius: 6.0
       count: 4
       respawnMs: 8000
+  portals:
+    # In front of the east gate; arrivals on the field face east beside its west gate.
+    - center: { x: 22.5, y: 0.0, z: 0.0 }
+      radius: 1.0
+      destination:
+        map: map.training_field
+        position: { x: -21.0, y: 0.0, z: 0.0 }
+        facing: { x: 1.0, z: 0.0 }
 navigation:
   # One symbol per cell, northern row first. The grid is the graybox geometry: the client builds its
   # visuals from it and the server validates movement against it.

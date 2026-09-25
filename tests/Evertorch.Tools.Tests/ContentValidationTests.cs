@@ -15,6 +15,8 @@ public sealed class ContentValidationTests
     private const string Skill = "skills/basic_attack.yml";
     private const string Job = "jobs/adventurer.yml";
     private const string Map = "maps/training_ground.yml";
+    private const string PortalCenter = "center: { x: 6.5, y: 0.0, z: -2.5 }";
+    private const string Arrival = "position: { x: -3.5, y: 0.0, z: 3.5 }";
     private const string Experience = "experience/adventurer.yml";
     private const string Strike = "skills/strike.yml";
     private const string Focus = "skills/focus.yml";
@@ -159,6 +161,43 @@ public sealed class ContentValidationTests
     [TestCase(Monster, "baseExperience: 77173", "baseExperience: -1", "rewards.baseExperience", "between 0 and")]
     [TestCase(Monster, "rewards:\n  baseExperience: 77173", "rewards: {}", "rewards.baseExperience", "required field")]
     [TestCase(Monster, "rewards:\n  baseExperience: 77173", "rewards: 77173", "rewards", "must be a mapping")]
+    [TestCase(
+        Map,
+        "        map: map.training_ground",
+        "        map: map.elsewhere",
+        "server.portals[0].destination.map",
+        "references unknown map 'map.elsewhere'")]
+    [TestCase(
+        Map,
+        Arrival,
+        "position: { x: -99.0, y: 0.0, z: 3.5 }",
+        "server.portals[0].destination.position",
+        "is not a place to stand on the destination map")]
+    [TestCase(
+        Map,
+        Arrival,
+        "position: { x: 6.5, y: 0.0, z: -2.5 }",
+        "server.portals[0].destination.position",
+        "lies inside a portal of the destination map")]
+    [TestCase(
+        Map,
+        PortalCenter,
+        "center: { x: -99.0, y: 0.0, z: -2.5 }",
+        "server.portals[0].center",
+        "is not a place the navigation grid lets an agent stand")]
+    [TestCase(
+        Map,
+        PortalCenter,
+        "center: { x: 3.4375, y: 0.0, z: -7.5625 }",
+        "server.spawnPoint.position",
+        "lies inside a portal")]
+    [TestCase(Map, "radius: 1.1875", "radius: 0", "server.portals[0].radius", "greater than 0")]
+    [TestCase(
+        Map,
+        "facing: { x: 0.0, z: -1.0 }",
+        "facing: { x: 0.0, z: 0.0 }",
+        "server.portals[0].destination.facing",
+        "must not be the zero direction")]
     public void Run_WhenOneFieldIsBroken_ReportsThatFileFieldAndLine(
         string file,
         string oldText,

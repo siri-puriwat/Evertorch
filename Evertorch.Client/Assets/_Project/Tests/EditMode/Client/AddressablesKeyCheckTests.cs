@@ -11,7 +11,7 @@ namespace Evertorch.Client.Tests.EditMode
 [TestFixture]
 public sealed class AddressablesKeyCheckTests
 {
-    private static readonly string[] EnabledScenes = { "00_Bootstrap", "10_TrainingGround" };
+    private static readonly string[] EnabledScenes = { "00_Bootstrap", "10_TrainingGround", "11_TrainingField" };
 
     private static ClientContent CreateContent(
         string jobPrefab = "character_adventurer",

@@ -69,6 +69,11 @@ public sealed class WorldSimulation
 
     public IReadOnlyCollection<MapInstance> Maps => m_maps.Values;
 
+    public bool TryGetMap(MapDefinitionId id, out MapInstance? map)
+    {
+        return m_maps.TryGetValue(id, out map);
+    }
+
     /// <summary>
     ///     A new character named <paramref name="name" />: <c>World:StartingJob</c> at level 1, the job's starting
     ///     statistics, full HP and SP, at its starting map's spawn point (Persistence §4).
@@ -91,7 +96,8 @@ public sealed class WorldSimulation
     ///     Places a stored character in the world (Persistence §6, §8): its stored job, level, experience, and
     ///     statistics, on its stored map, with its HP and SP within their maximums. It stands where it was
     ///     checkpointed, at the map's spawn point with full HP and SP when it was checkpointed dead, and at the spawn
-    ///     point with its HP when its spot is no longer standable. Returns false, placing nothing, when the content does
+    ///     point with its HP when its spot is no longer standable or lies inside a portal (Gameplay Systems §4.2).
+    ///     Returns false, placing nothing, when the content does
     ///     not define its job, its map, or one of its items; <paramref name="problem" /> then names what is missing.
     /// </summary>
     public bool TrySpawnPlayer(
@@ -132,7 +138,8 @@ public sealed class WorldSimulation
         MapDefinition definition = instance.Definition;
         NavigationGrid grid = definition.Navigation;
         bool isStandable = grid.CanOccupy(stored.Position.X, stored.Position.Z)
-            && grid.TrySampleHeight(stored.Position.X, stored.Position.Z, out float _);
+            && grid.TrySampleHeight(stored.Position.X, stored.Position.Z, out float _)
+            && !definition.IsInPortal(stored.Position);
         bool wasDead = stored.Health <= 0;
         WorldPosition position = wasDead || !isStandable ? definition.SpawnPosition : stored.Position;
         int health = wasDead ? stats.MaxHp : Math.Min(stored.Health, stats.MaxHp);
