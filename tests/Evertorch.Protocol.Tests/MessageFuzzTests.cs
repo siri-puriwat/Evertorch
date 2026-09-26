@@ -1,5 +1,7 @@
 using System;
+using System.Buffers.Binary;
 using System.Collections.Generic;
+using System.Linq;
 using Evertorch.Game;
 using NUnit.Framework;
 
@@ -642,6 +644,21 @@ public sealed class MessageFuzzTests
         byte[] buffer = new byte[TargetEntity.EncodedLength];
         message.Write(buffer);
         return buffer;
+    }
+
+    [Test]
+    public void Messages_AcrossTheCases_NameEveryOpcode()
+    {
+        var fuzzed = new HashSet<MessageOpcode>(
+            Messages()
+                .Select(data => (byte[])data.Arguments[0]!)
+                .Select(valid => (MessageOpcode)BinaryPrimitives.ReadUInt16LittleEndian(valid)));
+        MessageOpcode[] opcodes = Enum.GetValues<MessageOpcode>()
+            .Where(opcode => opcode != MessageOpcode.None)
+            .ToArray();
+
+        Assert.That(opcodes.Except(fuzzed), Is.Empty, "opcodes without a fuzz case");
+        Assert.That(fuzzed.Except(opcodes), Is.Empty, "fuzz cases of no opcode");
     }
 }
 }

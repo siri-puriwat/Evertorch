@@ -13,23 +13,24 @@ public sealed class SharedTargetEntityTests
         0xEF, 0xCD, 0xAB, 0x89, 0x67, 0x45, 0x23, 0x01
     };
 
+    private static readonly byte[] TargetChangedBytes =
+    {
+        0x07, 0x80,
+        0xEF, 0xCD, 0xAB, 0x89, 0x67, 0x45, 0x23, 0x01,
+        0x2A, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+    };
+
     private static readonly EntityId GoldenTarget = new(0x0123456789ABCDEF);
 
     [Test]
     public void TargetChanged_WriteAndRead_MatchGoldenBytes()
     {
-        byte[] golden =
-        {
-            0x07, 0x80,
-            0xEF, 0xCD, 0xAB, 0x89, 0x67, 0x45, 0x23, 0x01,
-            0x2A, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
-        };
         byte[] buffer = new byte[TargetChanged.EncodedLength];
         new TargetChanged(GoldenTarget, new EntityId(42)).Write(buffer);
 
-        bool isRead = TargetChanged.TryRead(golden, out TargetChanged read);
+        bool isRead = TargetChanged.TryRead(TargetChangedBytes, out TargetChanged read);
 
-        Assert.That(buffer, Is.EqualTo(golden));
+        Assert.That(buffer, Is.EqualTo(TargetChangedBytes));
         Assert.That(isRead, Is.True);
         Assert.That(read.Actor, Is.EqualTo(GoldenTarget));
         Assert.That(read.Target, Is.EqualTo(new EntityId(42)));
