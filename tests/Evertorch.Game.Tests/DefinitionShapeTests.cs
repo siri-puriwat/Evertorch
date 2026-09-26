@@ -71,6 +71,38 @@ public sealed class DefinitionShapeTests
     }
 
     [Test]
+    public void MapDefinition_WithNpcs_ExposesThem_AndPlacesNoneByDefault()
+    {
+        var placement = new NpcPlacement(
+            new NpcDefinitionId("npc.quartermaster"),
+            new WorldPosition(-3.5f, 0f, 4.5f),
+            new WorldDirection(0.6f, -0.8f));
+        NavigationGrid navigation = TestGrids.FromRows("..", "..");
+        var withNpc = new MapDefinition(
+            new MapDefinitionId("map.training_ground"),
+            "Training Ground",
+            default,
+            new WorldDirection(0f, 1f),
+            new MonsterSpawn[0],
+            navigation,
+            null,
+            new[] { placement });
+        var without = new MapDefinition(
+            new MapDefinitionId("map.training_field"),
+            "Training Field",
+            default,
+            new WorldDirection(0f, 1f),
+            new MonsterSpawn[0],
+            navigation);
+
+        Assert.That(withNpc.Npcs, Is.EqualTo(new[] { placement }));
+        Assert.That(without.Npcs, Is.Empty);
+        Assert.That(placement.Npc.Value, Is.EqualTo("npc.quartermaster"));
+        Assert.That(placement.Position, Is.EqualTo(new WorldPosition(-3.5f, 0f, 4.5f)));
+        Assert.That(placement.Facing, Is.EqualTo(new WorldDirection(0.6f, -0.8f)));
+    }
+
+    [Test]
     public void MapDefinition_WithValues_ExposesThem()
     {
         var spawn = new MonsterSpawn(
@@ -171,6 +203,42 @@ public sealed class DefinitionShapeTests
         Assert.That(drop.Chance, Is.EqualTo(0.35));
         Assert.That(drop.MinAmount, Is.EqualTo(1));
         Assert.That(drop.MaxAmount, Is.EqualTo(2));
+    }
+
+    [Test]
+    public void NpcDefinition_WithAShop_ExposesIt_AndWithoutOneHasNone()
+    {
+        var potion = new ShopEntry(new ItemDefinitionId("item.consumable.minor_health"), 20);
+        var quartermaster =
+            new NpcDefinition(new NpcDefinitionId("npc.quartermaster"), "Quartermaster", new[] { potion });
+        var warden = new NpcDefinition(new NpcDefinitionId("npc.gate_warden"), "Gate Warden");
+
+        Assert.That(quartermaster.Id.Value, Is.EqualTo("npc.quartermaster"));
+        Assert.That(quartermaster.DisplayName, Is.EqualTo("Quartermaster"));
+        Assert.That(quartermaster.Shop, Is.EqualTo(new[] { potion }));
+        Assert.That(quartermaster.HasShop, Is.True);
+        Assert.That((potion.Item.Value, potion.Price), Is.EqualTo(("item.consumable.minor_health", 20)));
+        Assert.That(warden.Shop, Is.Empty);
+        Assert.That(warden.HasShop, Is.False);
+    }
+
+    [Test]
+    public void QuestDefinition_WithValues_ExposesThem()
+    {
+        var quest = new QuestDefinition(
+            new QuestDefinitionId("quest.crawler_hunt"),
+            "Crawler Hunt",
+            new NpcDefinitionId("npc.gate_warden"),
+            new MonsterDefinitionId("monster.forest_crawler"),
+            5,
+            150,
+            100);
+
+        Assert.That(quest.Id.Value, Is.EqualTo("quest.crawler_hunt"));
+        Assert.That(quest.DisplayName, Is.EqualTo("Crawler Hunt"));
+        Assert.That(quest.Giver.Value, Is.EqualTo("npc.gate_warden"));
+        Assert.That(quest.Monster.Value, Is.EqualTo("monster.forest_crawler"));
+        Assert.That((quest.Count, quest.BaseExperience, quest.Currency), Is.EqualTo((5, 150, 100)));
     }
 
     [Test]

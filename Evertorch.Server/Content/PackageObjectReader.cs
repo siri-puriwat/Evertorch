@@ -83,6 +83,21 @@ internal sealed class PackageObjectReader
         return number;
     }
 
+    /// <summary>
+    ///     A whole number within the bounds the tools check (Content Pipeline §7).
+    /// </summary>
+    public int RequiredInt(string name, int minimum, int maximum)
+    {
+        int number = RequiredInt(name, minimum);
+        if (number > maximum)
+        {
+            Report(name, $"must be at most {maximum}");
+            return maximum;
+        }
+
+        return number;
+    }
+
     public double RequiredDouble(string name)
     {
         if (!TryGet(name, JsonValueKind.Number, "a number", out JsonElement value))
@@ -199,7 +214,7 @@ internal sealed class PackageObjectReader
         return values;
     }
 
-    public IReadOnlyList<int> RequiredIntArray(string name, int minimum)
+    public IReadOnlyList<int> RequiredIntArray(string name, int minimum, int maximum)
     {
         var values = new List<int>();
         if (!TryGet(name, JsonValueKind.Array, "an array", out JsonElement value))
@@ -217,6 +232,10 @@ internal sealed class PackageObjectReader
             else if (number < minimum)
             {
                 m_problems.Add($"{m_file}: {Combine(name)}[{index}]: must be at least {minimum}");
+            }
+            else if (number > maximum)
+            {
+                m_problems.Add($"{m_file}: {Combine(name)}[{index}]: must be at most {maximum}");
             }
             else
             {

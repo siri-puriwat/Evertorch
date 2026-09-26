@@ -18,6 +18,14 @@ server:
         map: map.training_field
         position: { x: -21.0, y: 0.0, z: 0.0 }
         facing: { x: 1.0, z: 0.0 }
+  npcs:
+    # Each on its own marker cell, which nobody can walk onto.
+    - npc: npc.quartermaster
+      position: { x: -3.5, y: 0.0, z: 4.5 }
+      facing: { x: 0.614, z: -0.789 } # toward the spawn point
+    - npc: npc.gate_warden
+      position: { x: 20.5, y: 0.0, z: 3.5 }
+      facing: { x: 0.0, z: -1.0 } # toward where the field's portal lands a player
 navigation:
   # One symbol per cell, northern row first. The grid is the graybox geometry: the client builds its
   # visuals from it and the server validates movement against it.
@@ -57,7 +65,7 @@ navigation:
     - "#.................#............................#"
     - "#...........................oo.................#"
     - "#...................N.......oo.................#"
-    - "#..............................................#"
+    - "#...........................................N..#"
     - "#..............................o...............#"
     - "#..............................................#"
     - "#..............................................G"

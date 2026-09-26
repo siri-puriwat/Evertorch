@@ -18,7 +18,9 @@ public sealed class ServerContent
         IDictionary<JobDefinitionId, JobDefinition> jobs,
         IDictionary<MapDefinitionId, MapDefinition> maps,
         IDictionary<ExperienceDefinitionId, ExperienceTableDefinition> experienceTables,
-        IDictionary<StatusDefinitionId, StatusEffectDefinition> statusEffects)
+        IDictionary<StatusDefinitionId, StatusEffectDefinition> statusEffects,
+        IDictionary<NpcDefinitionId, NpcDefinition> npcs,
+        IDictionary<QuestDefinitionId, QuestDefinition> quests)
     {
         ServerContentVersion = serverContentVersion;
         ClientContentVersion = clientContentVersion;
@@ -29,6 +31,8 @@ public sealed class ServerContent
         Maps = Freeze(maps);
         ExperienceTables = Freeze(experienceTables);
         StatusEffects = Freeze(statusEffects);
+        Npcs = Freeze(npcs);
+        Quests = Freeze(quests);
     }
 
     public string ServerContentVersion { get; }
@@ -51,6 +55,10 @@ public sealed class ServerContent
     public IReadOnlyDictionary<ExperienceDefinitionId, ExperienceTableDefinition> ExperienceTables { get; }
 
     public IReadOnlyDictionary<StatusDefinitionId, StatusEffectDefinition> StatusEffects { get; }
+
+    public IReadOnlyDictionary<NpcDefinitionId, NpcDefinition> Npcs { get; }
+
+    public IReadOnlyDictionary<QuestDefinitionId, QuestDefinition> Quests { get; }
 
     private static IReadOnlyDictionary<TKey, TValue> Freeze<TKey, TValue>(IDictionary<TKey, TValue> source)
         where TKey : notnull

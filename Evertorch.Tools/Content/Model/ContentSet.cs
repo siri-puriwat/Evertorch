@@ -17,6 +17,8 @@ public sealed class ContentSet
         IEnumerable<AuthoredMap> maps,
         IEnumerable<AuthoredExperienceTable> experienceTables,
         IEnumerable<AuthoredStatusEffect> statusEffects,
+        IEnumerable<AuthoredNpc> npcs,
+        IEnumerable<AuthoredQuest> quests,
         IEnumerable<string> declaredIds)
     {
         Items = items.OrderBy(item => item.Definition.Id.Value, StringComparer.Ordinal).ToList();
@@ -30,6 +32,8 @@ public sealed class ContentSet
         StatusEffects = statusEffects
             .OrderBy(status => status.Definition.Id.Value, StringComparer.Ordinal)
             .ToList();
+        Npcs = npcs.OrderBy(npc => npc.Definition.Id.Value, StringComparer.Ordinal).ToList();
+        Quests = quests.OrderBy(quest => quest.Definition.Id.Value, StringComparer.Ordinal).ToList();
         DeclaredIds = new HashSet<string>(declaredIds, StringComparer.Ordinal);
     }
 
@@ -46,6 +50,10 @@ public sealed class ContentSet
     public IReadOnlyList<AuthoredExperienceTable> ExperienceTables { get; }
 
     public IReadOnlyList<AuthoredStatusEffect> StatusEffects { get; }
+
+    public IReadOnlyList<AuthoredNpc> Npcs { get; }
+
+    public IReadOnlyList<AuthoredQuest> Quests { get; }
 
     /// <summary>
     ///     Every valid ID some file declared, including files rejected for another error. A reference to one of these

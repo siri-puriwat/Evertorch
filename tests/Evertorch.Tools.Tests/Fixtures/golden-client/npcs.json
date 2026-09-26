@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "definitions": [
+    {
+      "id": "npc.quartermaster",
+      "displayName": "Quartermaster",
+      "prefab": "npc_quartermaster"
+    }
+  ]
+}

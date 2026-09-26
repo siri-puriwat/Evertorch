@@ -1,0 +1,9 @@
+id: quest.slime_hunt
+displayName: Slime Hunt
+server:
+  giver: npc.quartermaster
+  objective:
+    kill: { monster: monster.training_slime, count: 7 }
+  rewards:
+    baseExperience: 61933
+    currency: 71129

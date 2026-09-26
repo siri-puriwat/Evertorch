@@ -56,6 +56,17 @@ internal static class MapDefinitionReader
             }
         }
 
+        var npcs = new List<NpcPlacement>();
+        IReadOnlyList<YamlFieldReader> npcReaders = server.OptionalMappingSequence("npcs");
+        foreach (YamlFieldReader npc in npcReaders)
+        {
+            NpcPlacement? read = ReadNpc(npc);
+            if (read != null)
+            {
+                npcs.Add(read);
+            }
+        }
+
         NavigationGrid? navigation = NavigationReader.Read(root.RequiredMapping("navigation"), diagnostics);
 
         YamlFieldReader client = root.RequiredMapping("client");
@@ -69,6 +80,7 @@ internal static class MapDefinitionReader
 
         CheckPlacement(navigation, spawnPoint, spawnPosition, spawnReaders, monsterSpawns);
         CheckPortals(navigation, spawnPoint, spawnPosition, portalReaders, portals);
+        CheckNpcs(navigation, spawnPosition, npcReaders, npcs);
         if (diagnostics.Count != errorsBefore)
         {
             return null;
@@ -81,7 +93,8 @@ internal static class MapDefinitionReader
             spawnFacing,
             monsterSpawns,
             navigation,
-            portals);
+            portals,
+            npcs);
         return new AuthoredMap(root.ToSource(), definition, scene);
     }
 
@@ -143,6 +156,88 @@ internal static class MapDefinitionReader
                 spawnPoint.ReportField("position", "lies inside a portal");
             }
         }
+    }
+
+    // An NPC stands on a marker cell of its own, which no body can enter, so a player needs a place to stand within
+    // reach of it that can be walked to (Gameplay Systems §6.1).
+    private static void CheckNpcs(
+        NavigationGrid navigation,
+        WorldPosition spawnPosition,
+        IReadOnlyList<YamlFieldReader> npcReaders,
+        List<NpcPlacement> npcs)
+    {
+        // An unstandable spawn point is already reported, and nothing is reachable from it.
+        if (!navigation.CanOccupy(spawnPosition.X, spawnPosition.Z))
+        {
+            return;
+        }
+
+        var pathfinder = new GridPathfinder(navigation);
+        var waypoints = new List<WorldPosition>();
+        var places = new List<WorldPosition>();
+        var markers = new HashSet<(int Column, int Row)>();
+        int nodeBudget = navigation.Columns * navigation.Rows;
+        for (int index = 0; index < npcs.Count; index++)
+        {
+            WorldPosition position = npcs[index].Position;
+            YamlFieldReader reader = npcReaders[index];
+            if (!navigation.TryGetCellIndex(position.X, position.Z, out int column, out int row)
+                || navigation.GetCell(column, row).Surface != NavigationSurface.NpcMarker)
+            {
+                reader.ReportField("position", "is not on an NPC marker cell");
+                continue;
+            }
+
+            float height = navigation.GetCell(column, row).HeightAtMin;
+            if (Math.Abs(position.Y - height) > GroundHeightTolerance)
+            {
+                reader.ReportField(
+                    "position",
+                    string.Format(CultureInfo.InvariantCulture, "y must be the marker's height {0}", height));
+            }
+
+            if (!markers.Add((column, row)))
+            {
+                reader.ReportField("position", "is on a marker cell where another NPC already stands");
+            }
+
+            navigation.CollectStandingPlaces(position, NpcInteraction.Range, places);
+            bool isReachable = false;
+            foreach (WorldPosition place in places)
+            {
+                if (pathfinder.TryFindPath(spawnPosition, place, nodeBudget, waypoints))
+                {
+                    isReachable = true;
+                    break;
+                }
+            }
+
+            if (!isReachable)
+            {
+                reader.ReportField(
+                    "position",
+                    string.Format(
+                        CultureInfo.InvariantCulture,
+                        "has no place to stand within {0} m that can be reached from the spawn point",
+                        NpcInteraction.Range));
+            }
+        }
+    }
+
+    private static NpcPlacement? ReadNpc(YamlFieldReader npc)
+    {
+        NpcDefinitionId id =
+            npc.RequiredId<NpcDefinitionId>("npc", NpcDefinitionId.TryCreate, NpcDefinitionId.KindPrefix);
+        WorldPosition position = ReadPosition(npc.RequiredMapping("position"));
+        YamlFieldReader facingReader = npc.RequiredMapping("facing");
+        var facing = new WorldDirection(ReadCoordinate(facingReader, "x"), ReadCoordinate(facingReader, "z"));
+        if (facing == new WorldDirection(0f, 0f))
+        {
+            npc.ReportField("facing", "must not be the zero direction");
+            return null;
+        }
+
+        return id != default ? new NpcPlacement(id, position, facing) : null;
     }
 
     private static MapPortal? ReadPortal(YamlFieldReader portal)

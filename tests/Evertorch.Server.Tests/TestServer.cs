@@ -688,7 +688,8 @@ internal sealed class TestServer
                     map.SpawnFacing,
                     withMonsters ? map.MonsterSpawns : Array.Empty<MonsterSpawn>(),
                     map.Navigation,
-                    map.Portals));
+                    map.Portals,
+                    map.Npcs));
         }
 
         return new ServerContent(
@@ -700,7 +701,9 @@ internal sealed class TestServer
             new Dictionary<JobDefinitionId, JobDefinition>(content.Jobs),
             maps,
             new Dictionary<ExperienceDefinitionId, ExperienceTableDefinition>(content.ExperienceTables),
-            new Dictionary<StatusDefinitionId, StatusEffectDefinition>(content.StatusEffects));
+            new Dictionary<StatusDefinitionId, StatusEffectDefinition>(content.StatusEffects),
+            new Dictionary<NpcDefinitionId, NpcDefinition>(content.Npcs),
+            new Dictionary<QuestDefinitionId, QuestDefinition>(content.Quests));
     }
 }
 }

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace Evertorch.Game
 {
@@ -307,6 +308,61 @@ public sealed class NavigationGrid
         }
 
         return HasLineOfSight(GetCellCenter(fromColumn, fromRow), GetCellCenter(toColumn, toRow));
+    }
+
+    /// <summary>
+    ///     Fills <paramref name="places" /> with the centre of every cell within <paramref name="radius" /> of
+    ///     <paramref name="point" />, measured on the ground, where an agent can stand: nearest first, and at equal
+    ///     distances by row, then column. An NPC stands on a marker cell no body can enter, so walking up to one means
+    ///     walking to one of these (Gameplay Systems §6.1).
+    /// </summary>
+    public void CollectStandingPlaces(WorldPosition point, float radius, List<WorldPosition> places)
+    {
+        if (places == null)
+        {
+            throw new ArgumentNullException(nameof(places));
+        }
+
+        places.Clear();
+        if (!IsFinite(point.X) || !IsFinite(point.Z) || !IsFinite(radius) || radius < 0f)
+        {
+            return;
+        }
+
+        int minColumn = Math.Max(0, ToIndex(point.X - radius, OriginX));
+        int maxColumn = Math.Min(Columns - 1, ToIndex(point.X + radius, OriginX));
+        int minRow = Math.Max(0, ToIndex(point.Z - radius, OriginZ));
+        int maxRow = Math.Min(Rows - 1, ToIndex(point.Z + radius, OriginZ));
+        for (int row = minRow; row <= maxRow; row++)
+        {
+            for (int column = minColumn; column <= maxColumn; column++)
+            {
+                WorldPosition center = GetCellCenter(column, row);
+                if (GroundDistanceSquared(center, point) <= radius * radius && IsStandable(column, row))
+                {
+                    places.Add(center);
+                }
+            }
+        }
+
+        places.Sort((left, right) =>
+        {
+            int byDistance = GroundDistanceSquared(left, point).CompareTo(GroundDistanceSquared(right, point));
+            if (byDistance != 0)
+            {
+                return byDistance;
+            }
+
+            int byRow = left.Z.CompareTo(right.Z);
+            return byRow != 0 ? byRow : left.X.CompareTo(right.X);
+        });
+    }
+
+    private static float GroundDistanceSquared(WorldPosition left, WorldPosition right)
+    {
+        float deltaX = left.X - right.X;
+        float deltaZ = left.Z - right.Z;
+        return deltaX * deltaX + deltaZ * deltaZ;
     }
 
     private bool IsStandable(int column, int row)

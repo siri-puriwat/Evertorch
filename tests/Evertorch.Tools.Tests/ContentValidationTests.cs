@@ -24,6 +24,10 @@ public sealed class ContentValidationTests
     private const string JobSkills = "skills: [skill.strike]";
     private const string Levels = "levels: [30211, 50423, 80637]";
     private const string SlimeCenter = "center: { x: 12.6875, y: 0.0, z: 14.3125 }";
+    private const string Npc = "npcs/quartermaster.yml";
+    private const string Quest = "quests/slime_hunt.yml";
+    private const string NpcPosition = "position: { x: -1.5, y: 0.0, z: -3.5 }";
+    private const string Rewards = "    baseExperience: 61933\n    currency: 71129";
 
     [TestCase(Potion, "id: item.consumable.minor_health", "id: Item.Consumable.MinorHealth", "id", "not a valid ID")]
     [TestCase(Potion, "id: item.consumable.minor_health", "id: item..minor_health", "id", "not a valid ID")]
@@ -223,6 +227,85 @@ public sealed class ContentValidationTests
         "facing: { x: 0.0, z: 0.0 }",
         "server.portals[0].destination.facing",
         "must not be the zero direction")]
+    [TestCase(Npc, "price: 146443", "price: 0", "server.shop[0].price", "between 1 and")]
+    [TestCase(Npc, "price: 146443", "price: 1000000001", "server.shop[0].price", "between 1 and")]
+    [TestCase(
+        Npc,
+        "price: 146443",
+        "price: 73218",
+        "server.shop[0].price",
+        "is below the sell price 73219 of item 'item.material.slime_gel'")]
+    [TestCase(
+        Npc,
+        "item: item.material.slime_gel",
+        "item: item.material.missing",
+        "server.shop[0].item",
+        "references unknown item 'item.material.missing'")]
+    [TestCase(
+        Npc,
+        "      price: 146443\n",
+        "      price: 146443\n    - item: item.material.slime_gel\n      price: 146443\n",
+        "server.shop[1].item",
+        "more than once")]
+    [TestCase(
+        Npc,
+        "  shop:\n    - item: item.material.slime_gel\n      price: 146443\n",
+        "  shop: []\n",
+        "server.shop",
+        "must list at least one item")]
+    [TestCase(
+        Npc,
+        "  shop:\n    - item: item.material.slime_gel\n      price: 146443\n",
+        "  {}\n",
+        "server.shop",
+        "required field is missing")]
+    [TestCase(Npc, "prefab: npc_quartermaster", "prefab: Npcs/Quartermaster.prefab", "client.prefab",
+        "logical asset key")]
+    [TestCase(Npc, "displayName: Quartermaster\n", "", "displayName", "required field is missing")]
+    [TestCase(Quest, "count: 7", "count: 0", "server.objective.kill.count", "between 1 and")]
+    [TestCase(Quest, "count: 7", "count: 1001", "server.objective.kill.count", "between 1 and")]
+    [TestCase(
+        Quest,
+        "giver: npc.quartermaster",
+        "giver: npc.missing",
+        "server.giver",
+        "references unknown NPC 'npc.missing'")]
+    [TestCase(Quest, "giver: npc.quartermaster", "giver: monster.training_slime", "server.giver", "expected 'npc.'")]
+    [TestCase(
+        Quest,
+        "monster: monster.training_slime",
+        "monster: monster.missing",
+        "server.objective.kill.monster",
+        "references unknown monster 'monster.missing'")]
+    [TestCase(
+        Quest,
+        Rewards,
+        "    baseExperience: 0\n    currency: 0",
+        "server.rewards",
+        "must give base experience, coins, or both")]
+    [TestCase(Quest, "currency: 71129", "currency: 1000000001", "server.rewards.currency", "between 0 and")]
+    [TestCase(Quest, "baseExperience: 61933", "baseExperience: -1", "server.rewards.baseExperience", "between 0 and")]
+    [TestCase(Quest, "    currency: 71129\n", "", "server.rewards.currency", "required field is missing")]
+    [TestCase(
+        Map,
+        NpcPosition,
+        "position: { x: -2.5, y: 0.0, z: -3.5 }",
+        "server.npcs[0].position",
+        "is not on an NPC marker cell")]
+    [TestCase(
+        Map,
+        NpcPosition,
+        "position: { x: -1.5, y: 0.5, z: -3.5 }",
+        "server.npcs[0].position",
+        "y must be the marker's height 0")]
+    [TestCase(
+        Map,
+        "facing: { x: 0.6875, z: -0.3125 }",
+        "facing: { x: 0.0, z: 0.0 }",
+        "server.npcs[0].facing",
+        "must not be the zero direction")]
+    [TestCase(Map, "    - npc: npc.quartermaster", "    - npc: Npc.Quartermaster", "server.npcs[0].npc",
+        "not a valid ID")]
     public void Run_WhenOneFieldIsBroken_ReportsThatFileFieldAndLine(
         string file,
         string oldText,
@@ -392,6 +475,8 @@ public sealed class ContentValidationTests
             Assert.That(result.Content.Maps, Has.Count.EqualTo(1));
             Assert.That(result.Content.ExperienceTables, Has.Count.EqualTo(1));
             Assert.That(result.Content.StatusEffects, Has.Count.EqualTo(1));
+            Assert.That(result.Content.Npcs, Has.Count.EqualTo(1));
+            Assert.That(result.Content.Quests, Has.Count.EqualTo(1));
             Assert.That(
                 result.Content.ExperienceTables[0].Definition.Levels,
                 Is.EqualTo(new[] { 30211, 50423, 80637 }));

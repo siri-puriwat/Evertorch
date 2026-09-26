@@ -5,8 +5,6 @@ namespace Evertorch.Tools
 {
 internal static class StatusEffectReader
 {
-    private const int MaxStatPercent = 1000;
-
     public static AuthoredStatusEffect? Read(
         YamlFieldReader root,
         List<ContentDiagnostic> diagnostics,
@@ -52,7 +50,7 @@ internal static class StatusEffectReader
 
     private static int OptionalPercent(YamlFieldReader reader, string key)
     {
-        return reader.Has(key) ? reader.RequiredInt(key, 0, MaxStatPercent) : 0;
+        return reader.Has(key) ? reader.RequiredInt(key, 0, ContentLimits.MaxStatPercent) : 0;
     }
 }
 }

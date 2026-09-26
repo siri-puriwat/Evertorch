@@ -23,14 +23,24 @@ public static class ServerContentLoader
     private const string JobsFile = "jobs.json";
     private const string MapsFile = "maps.json";
     private const string MonstersFile = "monsters.json";
+    private const string NpcsFile = "npcs.json";
+    private const string QuestsFile = "quests.json";
     private const string SkillsFile = "skills.json";
     private const string StatusEffectsFile = "status-effects.json";
     private const int ContentVersionLength = 16;
-    private const int MaxStatPercent = 1000;
+    private const float GroundHeightTolerance = 0.01f;
+
+    // One NpcServices message (Network Protocol §6): its header, then each item the NPC trades and each quest it gives
+    // at their largest, with every ID at the 64-byte limit; one datagram carries 1,020 bytes. The tools check the same.
+    private const int ServicesHeaderBytes = 12;
+    private const int ServicesEntryBytes = 74;
+    private const int ServicesOfferBytes = 146;
+    private const int MaxServicesBytes = 1020;
 
     private static readonly string[] DataFiles =
     {
-        ExperienceFile, ItemsFile, JobsFile, MapsFile, MonstersFile, SkillsFile, StatusEffectsFile
+        ExperienceFile, ItemsFile, JobsFile, MapsFile, MonstersFile, NpcsFile, QuestsFile, SkillsFile,
+        StatusEffectsFile
     };
 
     public static ServerContent LoadFromDirectory(string directory)
@@ -74,6 +84,8 @@ public static class ServerContentLoader
         var maps = new Dictionary<MapDefinitionId, MapDefinition>();
         var experienceTables = new Dictionary<ExperienceDefinitionId, ExperienceTableDefinition>();
         var statusEffects = new Dictionary<StatusDefinitionId, StatusEffectDefinition>();
+        var npcs = new Dictionary<NpcDefinitionId, NpcDefinition>();
+        var quests = new Dictionary<QuestDefinitionId, QuestDefinition>();
 
         HashSet<ItemDefinitionId> declaredItems = ReadDefinitions(
             files,
@@ -124,6 +136,20 @@ public static class ServerContentLoader
             statusEffects,
             StatusDefinitionId.TryCreate,
             ReadStatusEffect);
+        HashSet<NpcDefinitionId> declaredNpcs = ReadDefinitions(
+            files,
+            NpcsFile,
+            problems,
+            npcs,
+            NpcDefinitionId.TryCreate,
+            ReadNpc);
+        ReadDefinitions(
+            files,
+            QuestsFile,
+            problems,
+            quests,
+            QuestDefinitionId.TryCreate,
+            ReadQuest);
         if (declaredStatusEffects.Count > StatusEffects.MaxEntries)
         {
             problems.Add(
@@ -144,6 +170,16 @@ public static class ServerContentLoader
             declaredExperienceTables,
             declaredStatusEffects,
             problems);
+        CheckNpcsAndQuests(
+            npcs.Values,
+            quests.Values,
+            maps.Values,
+            items,
+            declaredItems,
+            declaredMonsters,
+            declaredNpcs,
+            maps.Count == declaredMaps.Count,
+            problems);
 
         if (problems.Count != 0)
         {
@@ -159,7 +195,9 @@ public static class ServerContentLoader
             jobs,
             maps,
             experienceTables,
-            statusEffects);
+            statusEffects,
+            npcs,
+            quests);
     }
 
     private static PackageManifest? ReadManifest(IReadOnlyDictionary<string, byte[]> files, List<string> problems)
@@ -321,9 +359,9 @@ public static class ServerContentLoader
         int problemsBefore = problems.Count;
         string displayName = entry.RequiredString("displayName");
         ItemType type = entry.RequiredEnum<ItemType>("type");
-        int stackLimit = entry.RequiredInt("stackLimit", 1);
-        int weight = entry.RequiredInt("weight", 0);
-        int sellPrice = entry.RequiredInt("sellPrice", 0);
+        int stackLimit = entry.RequiredInt("stackLimit", 1, ContentLimits.MaxStack);
+        int weight = entry.RequiredInt("weight", 0, ContentLimits.MaxStack);
+        int sellPrice = entry.RequiredInt("sellPrice", 0, ContentLimits.MaxPrice);
         ItemEquipment? equipment = null;
         bool isEquipment = type == ItemType.Weapon || type == ItemType.Armor;
         if (isEquipment && stackLimit != 1)
@@ -372,8 +410,8 @@ public static class ServerContentLoader
             return null;
         }
 
-        int health = values.RequiredInt("hp", 0);
-        int spirit = values.RequiredInt("sp", 0);
+        int health = values.RequiredInt("hp", 0, ContentLimits.MaxStat);
+        int spirit = values.RequiredInt("sp", 0, ContentLimits.MaxStat);
         values.ReportUnexpectedProperties();
         if (health == 0 && spirit == 0)
         {
@@ -393,17 +431,17 @@ public static class ServerContentLoader
         }
 
         var stats = new PrimaryStats(
-            bonus.RequiredInt("str", 0),
-            bonus.RequiredInt("agi", 0),
-            bonus.RequiredInt("vit", 0),
-            bonus.RequiredInt("int", 0),
-            bonus.RequiredInt("dex", 0),
-            bonus.RequiredInt("luk", 0));
+            bonus.RequiredInt("str", 0, ContentLimits.MaxStat),
+            bonus.RequiredInt("agi", 0, ContentLimits.MaxStat),
+            bonus.RequiredInt("vit", 0, ContentLimits.MaxStat),
+            bonus.RequiredInt("int", 0, ContentLimits.MaxStat),
+            bonus.RequiredInt("dex", 0, ContentLimits.MaxStat),
+            bonus.RequiredInt("luk", 0, ContentLimits.MaxStat));
         bonus.ReportUnexpectedProperties();
         var equipment = new ItemEquipment(
-            values.RequiredInt("attack", 0),
-            values.RequiredInt("attackSpeedPenalty", 0),
-            values.RequiredInt("defense", 0),
+            values.RequiredInt("attack", 0, ContentLimits.MaxStat),
+            values.RequiredInt("attackSpeedPenalty", 0, ContentLimits.MaxStat),
+            values.RequiredInt("defense", 0, ContentLimits.MaxStat),
             stats);
         values.ReportUnexpectedProperties();
         return equipment;
@@ -416,35 +454,35 @@ public static class ServerContentLoader
     {
         int problemsBefore = problems.Count;
         string displayName = entry.RequiredString("displayName");
-        int level = entry.RequiredInt("level", 1);
-        int hp = entry.RequiredInt("hp", 1);
-        int physicalAttack = entry.RequiredInt("physicalAttack", 0);
-        int physicalDefense = entry.RequiredInt("physicalDefense", 0);
-        int hit = entry.RequiredInt("hit", 0);
-        int flee = entry.RequiredInt("flee", 0);
-        int magicAttack = entry.RequiredInt("magicAttack", 0);
-        double baseSpeed = RequiredNonNegative(entry, "baseSpeed");
-        double attackRange = RequiredNonNegative(entry, "attackRange");
-        int attackIntervalMs = entry.RequiredInt("attackIntervalMs", 1);
+        int level = entry.RequiredInt("level", 1, ContentLimits.MaxLevel);
+        int hp = entry.RequiredInt("hp", 1, ContentLimits.MaxHp);
+        int physicalAttack = entry.RequiredInt("physicalAttack", 0, ContentLimits.MaxStat);
+        int physicalDefense = entry.RequiredInt("physicalDefense", 0, ContentLimits.MaxStat);
+        int hit = entry.RequiredInt("hit", 0, ContentLimits.MaxStat);
+        int flee = entry.RequiredInt("flee", 0, ContentLimits.MaxStat);
+        int magicAttack = entry.RequiredInt("magicAttack", 0, ContentLimits.MaxStat);
+        double baseSpeed = RequiredNonNegative(entry, "baseSpeed", ContentLimits.MaxSpeed);
+        double attackRange = RequiredPositive(entry, "attackRange", ContentLimits.MaxDistance);
+        int attackIntervalMs = entry.RequiredInt("attackIntervalMs", 1, ContentLimits.MaxDurationMs);
         MonsterBehavior behavior = entry.RequiredEnum<MonsterBehavior>("behavior");
-        double perceptionRadius = RequiredNonNegative(entry, "perceptionRadius");
-        double leashRadius = RequiredNonNegative(entry, "leashRadius");
-        double roamRadius = RequiredNonNegative(entry, "roamRadius");
-        int idlePauseMinMs = entry.RequiredInt("idlePauseMinMs", 0);
-        int idlePauseMaxMs = entry.RequiredInt("idlePauseMaxMs", 0);
+        double perceptionRadius = RequiredNonNegative(entry, "perceptionRadius", ContentLimits.MaxDistance);
+        double leashRadius = RequiredPositive(entry, "leashRadius", ContentLimits.MaxDistance);
+        double roamRadius = RequiredNonNegative(entry, "roamRadius", ContentLimits.MaxDistance);
+        int idlePauseMinMs = entry.RequiredInt("idlePauseMinMs", 0, ContentLimits.MaxDurationMs);
+        int idlePauseMaxMs = entry.RequiredInt("idlePauseMaxMs", 0, ContentLimits.MaxDurationMs);
         if (idlePauseMinMs > idlePauseMaxMs)
         {
             entry.Report("idlePauseMinMs", "must not be greater than idlePauseMaxMs");
         }
 
-        int scanIntervalMs = entry.RequiredInt("scanIntervalMs", 1);
-        double keepDistance = RequiredNonNegative(entry, "keepDistance");
+        int scanIntervalMs = entry.RequiredInt("scanIntervalMs", 1, ContentLimits.MaxDurationMs);
+        double keepDistance = RequiredNonNegative(entry, "keepDistance", ContentLimits.MaxDistance);
         if (keepDistance > 0d && keepDistance >= attackRange)
         {
             entry.Report("keepDistance", "must be below attackRange");
         }
 
-        int baseExperience = entry.RequiredInt("baseExperience", 0);
+        int baseExperience = entry.RequiredInt("baseExperience", 0, ContentLimits.MaxExperience);
 
         var drops = new List<MonsterDrop>();
         foreach (PackageObjectReader drop in entry.RequiredObjectArray("drops"))
@@ -456,8 +494,8 @@ public static class ServerContentLoader
                 drop.Report("chance", "must be between 0 and 1");
             }
 
-            int minAmount = drop.RequiredInt("minAmount", 1);
-            int maxAmount = drop.RequiredInt("maxAmount", 1);
+            int minAmount = drop.RequiredInt("minAmount", 1, ContentLimits.MaxStack);
+            int maxAmount = drop.RequiredInt("maxAmount", 1, ContentLimits.MaxStack);
             if (minAmount > maxAmount)
             {
                 drop.Report("minAmount", "must not be greater than maxAmount");
@@ -468,6 +506,7 @@ public static class ServerContentLoader
         }
 
         var skills = new List<MonsterSkill>();
+        var listedSkills = new HashSet<SkillDefinitionId>();
         foreach (PackageObjectReader tried in entry.RequiredObjectArray("skills"))
         {
             SkillDefinitionId skill = tried.RequiredId<SkillDefinitionId>("skill", SkillDefinitionId.TryCreate);
@@ -475,6 +514,11 @@ public static class ServerContentLoader
             if (chance < 0d || chance > 1d)
             {
                 tried.Report("chance", "must be between 0 and 1");
+            }
+
+            if (skill != default && !listedSkills.Add(skill))
+            {
+                tried.Report("skill", $"'{skill}' appears more than once");
             }
 
             tried.ReportUnexpectedProperties();
@@ -521,13 +565,13 @@ public static class ServerContentLoader
         SkillDamageType? damageType = entry.Has("damageType")
             ? entry.RequiredEnum<SkillDamageType>("damageType")
             : null;
-        double range = RequiredNonNegative(entry, "range");
-        int spCost = entry.RequiredInt("spCost", 0);
+        double range = RequiredNonNegative(entry, "range", ContentLimits.MaxDistance);
+        int spCost = entry.RequiredInt("spCost", 0, ContentLimits.MaxHp);
         SkillPaymentPoint spPaidAt = entry.RequiredEnum<SkillPaymentPoint>("spPaidAt");
-        int fixedCastMs = entry.RequiredInt("fixedCastMs", 0);
-        int variableCastMs = entry.RequiredInt("variableCastMs", 0);
-        int afterCastDelayMs = entry.RequiredInt("afterCastDelayMs", 0);
-        int cooldownMs = entry.RequiredInt("cooldownMs", 0);
+        int fixedCastMs = entry.RequiredInt("fixedCastMs", 0, ContentLimits.MaxDurationMs);
+        int variableCastMs = entry.RequiredInt("variableCastMs", 0, ContentLimits.MaxDurationMs);
+        int afterCastDelayMs = entry.RequiredInt("afterCastDelayMs", 0, ContentLimits.MaxDurationMs);
+        int cooldownMs = entry.RequiredInt("cooldownMs", 0, ContentLimits.MaxDurationMs);
         SkillEffect? effect = entry.Has("effect") ? ReadEffect(entry.RequiredObject("effect")) : null;
         if (effect?.Kind == SkillEffectKind.Damage && damageType == null)
         {
@@ -580,18 +624,18 @@ public static class ServerContentLoader
         }
         else if (isDamage)
         {
-            int ratio = effect.RequiredInt("damageRatio", 1);
+            int ratio = effect.RequiredInt("damageRatio", 1, ContentLimits.MaxDamageRatioPercent);
             read = ratio > 0 ? SkillEffect.Damage(ratio) : null;
         }
         else if (isStatus)
         {
             StatusDefinitionId status = effect.RequiredId<StatusDefinitionId>("status", StatusDefinitionId.TryCreate);
-            int durationMs = effect.RequiredInt("durationMs", 1);
+            int durationMs = effect.RequiredInt("durationMs", 1, ContentLimits.MaxDurationMs);
             read = status != default && durationMs > 0 ? SkillEffect.StatusEffect(status, durationMs) : null;
         }
         else
         {
-            int hp = effect.RequiredInt("healHp", 1);
+            int hp = effect.RequiredInt("healHp", 1, ContentLimits.MaxHp);
             read = hp > 0 ? SkillEffect.Heal(hp) : null;
         }
 
@@ -613,21 +657,24 @@ public static class ServerContentLoader
         PackageObjectReader? stats = entry.RequiredObject("startingStats");
         if (stats != null)
         {
-            str = stats.RequiredInt("str", 0);
-            agi = stats.RequiredInt("agi", 0);
-            vit = stats.RequiredInt("vit", 0);
-            intelligence = stats.RequiredInt("int", 0);
-            dex = stats.RequiredInt("dex", 0);
-            luk = stats.RequiredInt("luk", 0);
+            str = stats.RequiredInt("str", 0, ContentLimits.MaxStat);
+            agi = stats.RequiredInt("agi", 0, ContentLimits.MaxStat);
+            vit = stats.RequiredInt("vit", 0, ContentLimits.MaxStat);
+            intelligence = stats.RequiredInt("int", 0, ContentLimits.MaxStat);
+            dex = stats.RequiredInt("dex", 0, ContentLimits.MaxStat);
+            luk = stats.RequiredInt("luk", 0, ContentLimits.MaxStat);
             stats.ReportUnexpectedProperties();
         }
 
-        int healthBase = entry.RequiredInt("healthBase", 1);
-        int healthPerLevel = entry.RequiredInt("healthPerLevel", 0);
-        int spiritBase = entry.RequiredInt("spiritBase", 0);
-        int spiritPerLevel = entry.RequiredInt("spiritPerLevel", 0);
-        int unarmedAttackSpeedPenalty = entry.RequiredInt("unarmedAttackSpeedPenalty", 0);
-        double baseSpeed = RequiredNonNegative(entry, "baseSpeed");
+        int healthBase = entry.RequiredInt("healthBase", 1, ContentLimits.MaxHp);
+        int healthPerLevel = entry.RequiredInt("healthPerLevel", 0, ContentLimits.MaxHp);
+        int spiritBase = entry.RequiredInt("spiritBase", 0, ContentLimits.MaxHp);
+        int spiritPerLevel = entry.RequiredInt("spiritPerLevel", 0, ContentLimits.MaxHp);
+        int unarmedAttackSpeedPenalty = entry.RequiredInt(
+            "unarmedAttackSpeedPenalty",
+            0,
+            ContentLimits.MaxAttackSpeedPenalty);
+        double baseSpeed = RequiredPositive(entry, "baseSpeed", ContentLimits.MaxSpeed);
         MapDefinitionId startingMap = entry.RequiredId<MapDefinitionId>("startingMap", MapDefinitionId.TryCreate);
         SkillDefinitionId basicAttack = entry.RequiredId<SkillDefinitionId>("basicAttack", SkillDefinitionId.TryCreate);
         ExperienceDefinitionId experienceTable = entry.RequiredId<ExperienceDefinitionId>(
@@ -675,17 +722,64 @@ public static class ServerContentLoader
             skills.AsReadOnly());
     }
 
+    private static NpcDefinition? ReadNpc(PackageObjectReader entry, NpcDefinitionId id, List<string> problems)
+    {
+        int problemsBefore = problems.Count;
+        string displayName = entry.RequiredString("displayName");
+        var shop = new List<ShopEntry>();
+        var listed = new HashSet<ItemDefinitionId>();
+        foreach (PackageObjectReader stock in entry.RequiredObjectArray("shop"))
+        {
+            ItemDefinitionId item = stock.RequiredId<ItemDefinitionId>("item", ItemDefinitionId.TryCreate);
+            int price = stock.RequiredInt("price", 1, ContentLimits.MaxPrice);
+            stock.ReportUnexpectedProperties();
+            if (item != default && !listed.Add(item))
+            {
+                stock.Report("item", $"'{item}' appears more than once");
+            }
+
+            shop.Add(new ShopEntry(item, price));
+        }
+
+        entry.ReportUnexpectedProperties();
+        return problems.Count == problemsBefore ? new NpcDefinition(id, displayName, shop.AsReadOnly()) : null;
+    }
+
+    private static QuestDefinition? ReadQuest(PackageObjectReader entry, QuestDefinitionId id, List<string> problems)
+    {
+        int problemsBefore = problems.Count;
+        string displayName = entry.RequiredString("displayName");
+        NpcDefinitionId giver = entry.RequiredId<NpcDefinitionId>("giver", NpcDefinitionId.TryCreate);
+        MonsterDefinitionId monster = entry.RequiredId<MonsterDefinitionId>("monster", MonsterDefinitionId.TryCreate);
+        int count = entry.RequiredInt("count", 1, ContentLimits.MaxKillCount);
+        int baseExperience = entry.RequiredInt("baseExperience", 0, ContentLimits.MaxExperience);
+        int currency = entry.RequiredInt("currency", 0, ContentLimits.MaxCurrency);
+        entry.ReportUnexpectedProperties();
+        if (problems.Count == problemsBefore && baseExperience == 0 && currency == 0)
+        {
+            entry.Report("baseExperience", "a quest must reward base experience, coins, or both");
+        }
+
+        return problems.Count == problemsBefore
+            ? new QuestDefinition(id, displayName, giver, monster, count, baseExperience, currency)
+            : null;
+    }
+
     private static ExperienceTableDefinition? ReadExperienceTable(
         PackageObjectReader entry,
         ExperienceDefinitionId id,
         List<string> problems)
     {
         int problemsBefore = problems.Count;
-        IReadOnlyList<int> levels = entry.RequiredIntArray("levels", 1);
+        IReadOnlyList<int> levels = entry.RequiredIntArray("levels", 1, ContentLimits.MaxExperience);
         entry.ReportUnexpectedProperties();
         if (problems.Count == problemsBefore && levels.Count == 0)
         {
             entry.Report("levels", "must list at least one level");
+        }
+        else if (levels.Count > ContentLimits.MaxExperienceLevels)
+        {
+            entry.Report("levels", $"must list at most {ContentLimits.MaxExperienceLevels} levels");
         }
 
         return problems.Count == problemsBefore
@@ -707,11 +801,7 @@ public static class ServerContentLoader
             string[] names = { "str", "agi", "vit", "int", "dex", "luk" };
             for (int index = 0; index < names.Length; index++)
             {
-                values[index] = percent.RequiredInt(names[index], 0);
-                if (values[index] > MaxStatPercent)
-                {
-                    percent.Report(names[index], $"must be at most {MaxStatPercent}");
-                }
+                values[index] = percent.RequiredInt(names[index], 0, ContentLimits.MaxStatPercent);
             }
 
             percent.ReportUnexpectedProperties();
@@ -740,7 +830,7 @@ public static class ServerContentLoader
             PackageObjectReader? facing = spawnPoint.RequiredObject("facing");
             if (facing != null)
             {
-                spawnFacing = new WorldDirection((float)facing.RequiredDouble("x"), (float)facing.RequiredDouble("z"));
+                spawnFacing = new WorldDirection(RequiredCoordinate(facing, "x"), RequiredCoordinate(facing, "z"));
                 facing.ReportUnexpectedProperties();
                 if (spawnFacing == default)
                 {
@@ -755,7 +845,7 @@ public static class ServerContentLoader
         foreach (PackageObjectReader portal in entry.RequiredObjectArray("portals"))
         {
             WorldPosition center = ReadPosition(portal.RequiredObject("center"));
-            double radius = RequiredNonNegative(portal, "radius");
+            double radius = RequiredPositive(portal, "radius", ContentLimits.MaxDistance);
             PackageObjectReader? destination = portal.RequiredObject("destination");
             if (destination != null)
             {
@@ -766,21 +856,17 @@ public static class ServerContentLoader
                 if (facingReader != null)
                 {
                     facing = new WorldDirection(
-                        (float)facingReader.RequiredDouble("x"),
-                        (float)facingReader.RequiredDouble("z"));
+                        RequiredCoordinate(facingReader, "x"),
+                        RequiredCoordinate(facingReader, "z"));
                     facingReader.ReportUnexpectedProperties();
                 }
 
                 destination.ReportUnexpectedProperties();
-                if (radius <= 0d)
-                {
-                    portal.Report("radius", "must be greater than 0");
-                }
-                else if (facing == default)
+                if (facing == default)
                 {
                     destination.Report("facing", "must not be the zero direction");
                 }
-                else if (map != default)
+                else if (radius > 0d && map != default)
                 {
                     portals.Add(new MapPortal(center, radius, map, position, facing));
                 }
@@ -796,11 +882,37 @@ public static class ServerContentLoader
                 "monster",
                 MonsterDefinitionId.TryCreate);
             WorldPosition center = ReadPosition(spawn.RequiredObject("center"));
-            double radius = RequiredNonNegative(spawn, "radius");
-            int count = spawn.RequiredInt("count", 1);
-            int respawnMs = spawn.RequiredInt("respawnMs", 0);
+            double radius = RequiredNonNegative(spawn, "radius", ContentLimits.MaxDistance);
+            int count = spawn.RequiredInt("count", 1, ContentLimits.MaxSpawnCount);
+            int respawnMs = spawn.RequiredInt("respawnMs", 0, ContentLimits.MaxDurationMs);
             spawn.ReportUnexpectedProperties();
             monsterSpawns.Add(new MonsterSpawn(monster, center, radius, count, respawnMs));
+        }
+
+        var npcs = new List<NpcPlacement>();
+        foreach (PackageObjectReader npc in entry.RequiredObjectArray("npcs"))
+        {
+            NpcDefinitionId placed = npc.RequiredId<NpcDefinitionId>("npc", NpcDefinitionId.TryCreate);
+            WorldPosition position = ReadPosition(npc.RequiredObject("position"));
+            WorldDirection facing = default;
+            PackageObjectReader? facingReader = npc.RequiredObject("facing");
+            if (facingReader != null)
+            {
+                facing = new WorldDirection(
+                    RequiredCoordinate(facingReader, "x"),
+                    RequiredCoordinate(facingReader, "z"));
+                facingReader.ReportUnexpectedProperties();
+            }
+
+            npc.ReportUnexpectedProperties();
+            if (facing == default)
+            {
+                npc.Report("facing", "must not be the zero direction");
+            }
+            else if (placed != default)
+            {
+                npcs.Add(new NpcPlacement(placed, position, facing));
+            }
         }
 
         NavigationGrid? navigation = NavigationPackageReader.Read(entry, problems);
@@ -824,14 +936,42 @@ public static class ServerContentLoader
             spawnFacing,
             monsterSpawns.AsReadOnly(),
             navigation,
-            portals.AsReadOnly());
+            portals.AsReadOnly(),
+            npcs.AsReadOnly());
         if (definition.IsInPortal(spawnPosition))
         {
             spawnPoint!.Report("position", "lies inside a portal");
             return null;
         }
 
-        return definition;
+        return CheckNpcPlacements(definition, problems) ? definition : null;
+    }
+
+    // Each NPC stands on a marker cell of its own at the marker's height. Whether a player can walk up to it is the
+    // tools' check, as a portal's reachability is.
+    private static bool CheckNpcPlacements(MapDefinition map, List<string> problems)
+    {
+        int problemsBefore = problems.Count;
+        NavigationGrid grid = map.Navigation;
+        var markers = new HashSet<(int Column, int Row)>();
+        foreach (NpcPlacement npc in map.Npcs)
+        {
+            if (!grid.TryGetCellIndex(npc.Position.X, npc.Position.Z, out int column, out int row)
+                || grid.GetCell(column, row).Surface != NavigationSurface.NpcMarker)
+            {
+                problems.Add($"{MapsFile}: {map.Id}: NPC '{npc.Npc}' does not stand on an NPC marker cell");
+            }
+            else if (Math.Abs(npc.Position.Y - grid.GetCell(column, row).HeightAtMin) > GroundHeightTolerance)
+            {
+                problems.Add($"{MapsFile}: {map.Id}: NPC '{npc.Npc}' does not stand at its marker's height");
+            }
+            else if (!markers.Add((column, row)))
+            {
+                problems.Add($"{MapsFile}: {map.Id}: NPC '{npc.Npc}' stands on a marker cell another NPC stands on");
+            }
+        }
+
+        return problems.Count == problemsBefore;
     }
 
     private static WorldPosition ReadPosition(PackageObjectReader? position)
@@ -842,19 +982,52 @@ public static class ServerContentLoader
         }
 
         var result = new WorldPosition(
-            (float)position.RequiredDouble("x"),
-            (float)position.RequiredDouble("y"),
-            (float)position.RequiredDouble("z"));
+            RequiredCoordinate(position, "x"),
+            RequiredCoordinate(position, "y"),
+            RequiredCoordinate(position, "z"));
         position.ReportUnexpectedProperties();
         return result;
     }
 
-    private static double RequiredNonNegative(PackageObjectReader reader, string name)
+    // The bounds below are the tools', so a hand-edited package cannot carry a value the tools refuse (finding 5 of
+    // the Milestone 6 review).
+    private static float RequiredCoordinate(PackageObjectReader reader, string name)
+    {
+        double value = reader.RequiredDouble(name);
+        if (Math.Abs(value) > ContentLimits.MaxCoordinate)
+        {
+            reader.Report(name, $"must be between -{ContentLimits.MaxCoordinate} and {ContentLimits.MaxCoordinate}");
+        }
+
+        // Kept within the bounds, so a direction out of range is not also reported as the zero direction.
+        return (float)Math.Max(-ContentLimits.MaxCoordinate, Math.Min(ContentLimits.MaxCoordinate, value));
+    }
+
+    private static double RequiredNonNegative(PackageObjectReader reader, string name, double maximum)
     {
         double value = reader.RequiredDouble(name);
         if (value < 0d)
         {
             reader.Report(name, "must not be negative");
+        }
+        else if (value > maximum)
+        {
+            reader.Report(name, $"must be at most {maximum}");
+        }
+
+        return value;
+    }
+
+    private static double RequiredPositive(PackageObjectReader reader, string name, double maximum)
+    {
+        double value = reader.RequiredDouble(name);
+        if (!(value > 0d))
+        {
+            reader.Report(name, "must be greater than 0");
+        }
+        else if (value > maximum)
+        {
+            reader.Report(name, $"must be at most {maximum}");
         }
 
         return value;
@@ -969,6 +1142,91 @@ public static class ServerContentLoader
                 {
                     problems.Add($"{JobsFile}: {job.Id}: knows skill '{skill}', which has no effect");
                 }
+            }
+        }
+    }
+
+    // Each NPC stands in one place in the world; a shop never sells below what it pays, so no buy and sale can gain
+    // (Gameplay Systems §11.3); an NPC's services fit one message; a quest's giver stands somewhere.
+    private static void CheckNpcsAndQuests(
+        IEnumerable<NpcDefinition> npcs,
+        IEnumerable<QuestDefinition> quests,
+        IEnumerable<MapDefinition> maps,
+        IReadOnlyDictionary<ItemDefinitionId, ItemDefinition> items,
+        HashSet<ItemDefinitionId> declaredItems,
+        HashSet<MonsterDefinitionId> declaredMonsters,
+        HashSet<NpcDefinitionId> declaredNpcs,
+        bool isEveryMapRead,
+        List<string> problems)
+    {
+        var placedOn = new Dictionary<NpcDefinitionId, MapDefinitionId>();
+        foreach (MapDefinition map in maps)
+        {
+            foreach (NpcPlacement npc in map.Npcs)
+            {
+                if (!declaredNpcs.Contains(npc.Npc))
+                {
+                    problems.Add($"{MapsFile}: {map.Id}: places unknown NPC '{npc.Npc}'");
+                }
+                else if (placedOn.TryGetValue(npc.Npc, out MapDefinitionId first))
+                {
+                    problems.Add($"{MapsFile}: {map.Id}: places NPC '{npc.Npc}', which '{first}' already places");
+                }
+                else
+                {
+                    placedOn.Add(npc.Npc, map.Id);
+                }
+            }
+        }
+
+        var questList = quests.ToList();
+        foreach (NpcDefinition npc in npcs)
+        {
+            var traded = new HashSet<ItemDefinitionId>();
+            foreach (ShopEntry entry in npc.Shop)
+            {
+                traded.Add(entry.Item);
+                if (!declaredItems.Contains(entry.Item))
+                {
+                    problems.Add($"{NpcsFile}: {npc.Id}: sells unknown item '{entry.Item}'");
+                }
+                else if (items.TryGetValue(entry.Item, out ItemDefinition? item) && entry.Price < item.SellPrice)
+                {
+                    problems.Add(
+                        $"{NpcsFile}: {npc.Id}: sells '{entry.Item}' for {entry.Price}, below its sell price of "
+                        + $"{item.SellPrice}");
+                }
+            }
+
+            if (npc.HasShop)
+            {
+                traded.UnionWith(items.Values.Where(item => item.SellPrice > 0).Select(item => item.Id));
+            }
+
+            int offers = questList.Count(quest => quest.Giver == npc.Id);
+            int size = ServicesHeaderBytes + ServicesEntryBytes * traded.Count + ServicesOfferBytes * offers;
+            if (size > MaxServicesBytes)
+            {
+                problems.Add(
+                    $"{NpcsFile}: {npc.Id}: its services take {size} bytes, more than the {MaxServicesBytes} one "
+                    + "message carries");
+            }
+        }
+
+        foreach (QuestDefinition quest in questList)
+        {
+            if (!declaredNpcs.Contains(quest.Giver))
+            {
+                problems.Add($"{QuestsFile}: {quest.Id}: is given by unknown NPC '{quest.Giver}'");
+            }
+            else if (isEveryMapRead && !placedOn.ContainsKey(quest.Giver))
+            {
+                problems.Add($"{QuestsFile}: {quest.Id}: is given by NPC '{quest.Giver}', which no map places");
+            }
+
+            if (!declaredMonsters.Contains(quest.Monster))
+            {
+                problems.Add($"{QuestsFile}: {quest.Id}: asks for unknown monster '{quest.Monster}'");
             }
         }
     }

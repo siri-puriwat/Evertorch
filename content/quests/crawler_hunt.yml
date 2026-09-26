@@ -1,0 +1,9 @@
+id: quest.crawler_hunt
+displayName: Crawler Hunt
+server:
+  giver: npc.gate_warden
+  objective:
+    kill: { monster: monster.forest_crawler, count: 5 }
+  rewards:
+    baseExperience: 150
+    currency: 100

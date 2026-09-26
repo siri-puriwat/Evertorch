@@ -18,12 +18,14 @@ public sealed class AddressablesKeyCheckTests
         string jobPrefab = "character_adventurer",
         string monsterPrefab = "monster_training_slime",
         string itemModel = "pickup_slime_gel",
-        string sceneKey = "map_training_ground")
+        string sceneKey = "map_training_ground",
+        string npcPrefab = "npc_quartermaster")
     {
         var map = new ClientMap(new MapDefinitionId("map.a"), "A", sceneKey, ClientTestGrids.CreateYard());
         var job = new ClientJob(new JobDefinitionId("job.a"), "A", jobPrefab);
         var monster = new ClientMonster(new MonsterDefinitionId("monster.a"), "A", monsterPrefab, "monster_icon");
         var item = new ClientItem(new ItemDefinitionId("item.a"), "A", ItemType.Material, itemModel, "item_icon");
+        var npc = new ClientNpc(new NpcDefinitionId("npc.a"), "A", npcPrefab);
         return new ClientContent(
             "0000000000000000",
             new Dictionary<MapDefinitionId, ClientMap> { { map.Id, map } },
@@ -31,7 +33,8 @@ public sealed class AddressablesKeyCheckTests
             new Dictionary<MonsterDefinitionId, ClientMonster> { { monster.Id, monster } },
             new Dictionary<ItemDefinitionId, ClientItem> { { item.Id, item } },
             new Dictionary<SkillDefinitionId, ClientSkill>(),
-            new Dictionary<StatusDefinitionId, ClientStatusEffect>());
+            new Dictionary<StatusDefinitionId, ClientStatusEffect>(),
+            new Dictionary<NpcDefinitionId, ClientNpc> { { npc.Id, npc } });
     }
 
     private static Dictionary<string, Type?> Prefabs()
@@ -40,19 +43,22 @@ public sealed class AddressablesKeyCheckTests
         {
             { "character_adventurer", typeof(GameObject) },
             { "monster_training_slime", typeof(GameObject) },
-            { "pickup_slime_gel", typeof(GameObject) }
+            { "pickup_slime_gel", typeof(GameObject) },
+            { "npc_quartermaster", typeof(GameObject) }
         };
     }
 
     [TestCase("job")]
     [TestCase("monster")]
     [TestCase("item")]
+    [TestCase("npc")]
     public void Check_WhenARequiredKeyHasNoEntry_ReportsIt(string kind)
     {
         ClientContent content = kind switch
         {
             "job" => CreateContent("absent_key"),
             "monster" => CreateContent(monsterPrefab: "absent_key"),
+            "npc" => CreateContent(npcPrefab: "absent_key"),
             _ => CreateContent(itemModel: "absent_key")
         };
 

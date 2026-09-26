@@ -18,6 +18,8 @@ internal static class ServerProjection
             new("jobs.json", PackageJson.Write(writer => WriteJobs(writer, content))),
             new("maps.json", PackageJson.Write(writer => WriteMaps(writer, content))),
             new("monsters.json", PackageJson.Write(writer => WriteMonsters(writer, content))),
+            new("npcs.json", PackageJson.Write(writer => WriteNpcs(writer, content))),
+            new("quests.json", PackageJson.Write(writer => WriteQuests(writer, content))),
             new("skills.json", PackageJson.Write(writer => WriteSkills(writer, content))),
             new("status-effects.json", PackageJson.Write(writer => WriteStatusEffects(writer, content)))
         };
@@ -175,7 +177,66 @@ internal static class ServerProjection
             }
 
             writer.WriteEndArray();
+            writer.WriteStartArray("npcs");
+            foreach (NpcPlacement npc in map.Npcs)
+            {
+                writer.WriteStartObject();
+                writer.WriteString("npc", npc.Npc.Value);
+                WritePosition(writer, "position", npc.Position);
+                writer.WriteStartObject("facing");
+                writer.WriteNumber("x", npc.Facing.X);
+                writer.WriteNumber("z", npc.Facing.Z);
+                writer.WriteEndObject();
+                writer.WriteEndObject();
+            }
+
+            writer.WriteEndArray();
             NavigationJson.Write(writer, map.Navigation);
+            writer.WriteEndObject();
+        }
+
+        EndFile(writer);
+    }
+
+    private static void WriteNpcs(Utf8JsonWriter writer, ContentSet content)
+    {
+        BeginFile(writer);
+        foreach (AuthoredNpc authored in content.Npcs)
+        {
+            NpcDefinition npc = authored.Definition;
+            writer.WriteStartObject();
+            writer.WriteString("id", npc.Id.Value);
+            writer.WriteString("displayName", npc.DisplayName);
+            writer.WriteStartArray("shop");
+            foreach (ShopEntry entry in npc.Shop)
+            {
+                writer.WriteStartObject();
+                writer.WriteString("item", entry.Item.Value);
+                writer.WriteNumber("price", entry.Price);
+                writer.WriteEndObject();
+            }
+
+            writer.WriteEndArray();
+            writer.WriteEndObject();
+        }
+
+        EndFile(writer);
+    }
+
+    private static void WriteQuests(Utf8JsonWriter writer, ContentSet content)
+    {
+        BeginFile(writer);
+        foreach (AuthoredQuest authored in content.Quests)
+        {
+            QuestDefinition quest = authored.Definition;
+            writer.WriteStartObject();
+            writer.WriteString("id", quest.Id.Value);
+            writer.WriteString("displayName", quest.DisplayName);
+            writer.WriteString("giver", quest.Giver.Value);
+            writer.WriteString("monster", quest.Monster.Value);
+            writer.WriteNumber("count", quest.Count);
+            writer.WriteNumber("baseExperience", quest.BaseExperience);
+            writer.WriteNumber("currency", quest.Currency);
             writer.WriteEndObject();
         }
 

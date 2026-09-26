@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using Evertorch.Game;
 
 namespace Evertorch.Tools
@@ -12,6 +13,13 @@ public static class ContentValidator
 {
     // One StatusEffects message carries at most this many (Network Protocol §9).
     private const int MaxStatusEffects = 14;
+
+    // One NpcServices message (Network Protocol §6): its header, then each item the NPC trades and each quest it gives
+    // at their largest, with every ID at the 64-byte limit; one datagram carries 1,020 bytes.
+    private const int ServicesHeaderBytes = 12;
+    private const int ServicesEntryBytes = 74;
+    private const int ServicesOfferBytes = 146;
+    private const int MaxServicesBytes = 1020;
 
     public static void Validate(ContentSet content, List<ContentDiagnostic> diagnostics)
     {
@@ -42,8 +50,11 @@ public static class ContentValidator
             status => status.Source,
             diagnostics);
         CollectIds(content.Jobs, job => job.Definition.Id.Value, job => job.Source, diagnostics);
+        HashSet<string> npcs = CollectIds(content.Npcs, npc => npc.Definition.Id.Value, npc => npc.Source, diagnostics);
+        CollectIds(content.Quests, quest => quest.Definition.Id.Value, quest => quest.Source, diagnostics);
 
-        foreach (HashSet<string> known in new[] { items, monsters, skills, maps, experienceTables, statusEffects })
+        HashSet<string>[] references = { items, monsters, skills, maps, experienceTables, statusEffects, npcs };
+        foreach (HashSet<string> known in references)
         {
             known.UnionWith(content.DeclaredIds);
         }
@@ -135,6 +146,42 @@ public static class ContentValidator
             }
         }
 
+        Dictionary<string, string> placedOn = RequireNpcsPlacedOnce(content.Maps, npcs, diagnostics);
+
+        // A map rejected for another error may be the one that places a quest's giver.
+        bool isEveryMapRead = content.DeclaredIds
+            .Where(id => id.StartsWith(MapDefinitionId.KindPrefix + ".", StringComparison.Ordinal))
+            .All(mapsById.ContainsKey);
+        var itemsById = new Dictionary<string, ItemDefinition>(StringComparer.Ordinal);
+        foreach (AuthoredItem item in content.Items)
+        {
+            itemsById[item.Definition.Id.Value] = item.Definition;
+        }
+
+        foreach (AuthoredNpc npc in content.Npcs)
+        {
+            RequireShop(npc, items, itemsById, diagnostics);
+            RequireServicesFit(npc, content, diagnostics);
+        }
+
+        foreach (AuthoredQuest quest in content.Quests)
+        {
+            string giver = quest.Definition.Giver.Value;
+            RequireReference(npcs, giver, "NPC", quest.Source, "server.giver", diagnostics);
+            if (isEveryMapRead && npcs.Contains(giver) && !placedOn.ContainsKey(giver))
+            {
+                Report(quest.Source, "server.giver", $"names NPC '{giver}', which no map places", diagnostics);
+            }
+
+            RequireReference(
+                monsters,
+                quest.Definition.Monster.Value,
+                "monster",
+                quest.Source,
+                "server.objective.kill.monster",
+                diagnostics);
+        }
+
         foreach (AuthoredJob job in content.Jobs)
         {
             RequireReference(maps, job.Definition.StartingMap.Value, "map", job.Source, "server.startingMap",
@@ -149,6 +196,107 @@ public static class ContentValidator
                 "server.experienceTable",
                 diagnostics);
             RequireJobSkills(job, skills, skillsById, diagnostics);
+        }
+    }
+
+    // Each NPC stands in one place in the whole world (Content Pipeline §4). Returns the map that places each NPC.
+    private static Dictionary<string, string> RequireNpcsPlacedOnce(
+        IReadOnlyList<AuthoredMap> maps,
+        HashSet<string> knownNpcs,
+        List<ContentDiagnostic> diagnostics)
+    {
+        var placedOn = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (AuthoredMap map in maps)
+        {
+            for (int index = 0; index < map.Definition.Npcs.Count; index++)
+            {
+                string fieldPath = string.Format(CultureInfo.InvariantCulture, "server.npcs[{0}].npc", index);
+                string npc = map.Definition.Npcs[index].Npc.Value;
+                RequireReference(knownNpcs, npc, "NPC", map.Source, fieldPath, diagnostics);
+                if (placedOn.TryGetValue(npc, out string? first))
+                {
+                    Report(map.Source, fieldPath, $"places NPC '{npc}', which {first} already places", diagnostics);
+                }
+                else
+                {
+                    placedOn.Add(npc, map.Definition.Id.Value);
+                }
+            }
+        }
+
+        return placedOn;
+    }
+
+    // Each item the shop sells must exist, and no price may undercut what the shop pays for the item, so no buy and
+    // sale can gain (Gameplay Systems §11.3).
+    private static void RequireShop(
+        AuthoredNpc npc,
+        HashSet<string> knownItems,
+        Dictionary<string, ItemDefinition> itemsById,
+        List<ContentDiagnostic> diagnostics)
+    {
+        for (int index = 0; index < npc.Definition.Shop.Count; index++)
+        {
+            ShopEntry entry = npc.Definition.Shop[index];
+            string prefix = string.Format(CultureInfo.InvariantCulture, "server.shop[{0}]", index);
+            RequireReference(knownItems, entry.Item.Value, "item", npc.Source, prefix + ".item", diagnostics);
+            if (itemsById.TryGetValue(entry.Item.Value, out ItemDefinition? item) && entry.Price < item.SellPrice)
+            {
+                Report(
+                    npc.Source,
+                    prefix + ".price",
+                    string.Format(
+                        CultureInfo.InvariantCulture,
+                        "is below the sell price {0} of item '{1}'",
+                        item.SellPrice,
+                        item.Id.Value),
+                    diagnostics);
+            }
+        }
+    }
+
+    // An NPC's services travel in one message: every item it trades (its stock and, with a shop, every item it buys)
+    // and every quest it gives.
+    private static void RequireServicesFit(AuthoredNpc npc, ContentSet content, List<ContentDiagnostic> diagnostics)
+    {
+        var traded = new HashSet<string>(StringComparer.Ordinal);
+        foreach (ShopEntry entry in npc.Definition.Shop)
+        {
+            traded.Add(entry.Item.Value);
+        }
+
+        if (npc.Definition.HasShop)
+        {
+            foreach (AuthoredItem item in content.Items)
+            {
+                if (item.Definition.SellPrice > 0)
+                {
+                    traded.Add(item.Definition.Id.Value);
+                }
+            }
+        }
+
+        int offers = 0;
+        foreach (AuthoredQuest quest in content.Quests)
+        {
+            if (quest.Definition.Giver == npc.Definition.Id)
+            {
+                offers++;
+            }
+        }
+
+        int size = ServicesHeaderBytes + ServicesEntryBytes * traded.Count + ServicesOfferBytes * offers;
+        if (size > MaxServicesBytes)
+        {
+            Report(
+                npc.Source,
+                "id",
+                string.Format(
+                    CultureInfo.InvariantCulture,
+                    "offers services that take {0} bytes, more than the {1} one message carries",
+                    size,
+                    MaxServicesBytes),
+                diagnostics);
         }
     }
 

@@ -5,8 +5,6 @@ namespace Evertorch.Tools
 {
 internal static class SkillDefinitionReader
 {
-    private const int MaxDamageRatioPercent = 10_000;
-
     public static AuthoredSkill? Read(
         YamlFieldReader root,
         List<ContentDiagnostic> diagnostics,
@@ -108,7 +106,7 @@ internal static class SkillDefinitionReader
 
         if (isDamage)
         {
-            int ratio = effect.RequiredMapping("damage").RequiredInt("ratio", 1, MaxDamageRatioPercent);
+            int ratio = effect.RequiredMapping("damage").RequiredInt("ratio", 1, ContentLimits.MaxDamageRatioPercent);
             return ratio > 0 ? SkillEffect.Damage(ratio) : null;
         }
 

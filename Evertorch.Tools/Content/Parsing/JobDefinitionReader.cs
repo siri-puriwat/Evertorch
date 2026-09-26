@@ -45,7 +45,8 @@ internal static class JobDefinitionReader
         int spiritBase = spirit.RequiredInt("base", 0, ContentLimits.MaxHp);
         int spiritPerLevel = spirit.RequiredInt("perLevel", 0, ContentLimits.MaxHp);
 
-        int unarmedAttackSpeedPenalty = server.RequiredInt("unarmedAttackSpeedPenalty", 0, 200);
+        int unarmedAttackSpeedPenalty =
+            server.RequiredInt("unarmedAttackSpeedPenalty", 0, ContentLimits.MaxAttackSpeedPenalty);
 
         YamlFieldReader movement = server.RequiredMapping("movement");
         double baseSpeed = movement.RequiredDouble("baseSpeed", 0d, ContentLimits.MaxSpeed, true);

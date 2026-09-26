@@ -17,6 +17,8 @@ public sealed class DefinitionIdLengthTests
         Assert.That(MapDefinitionId.TryCreate(OfLength("map", length), out _), Is.EqualTo(expected));
         Assert.That(ExperienceDefinitionId.TryCreate(OfLength("experience", length), out _), Is.EqualTo(expected));
         Assert.That(StatusDefinitionId.TryCreate(OfLength("status", length), out _), Is.EqualTo(expected));
+        Assert.That(NpcDefinitionId.TryCreate(OfLength("npc", length), out _), Is.EqualTo(expected));
+        Assert.That(QuestDefinitionId.TryCreate(OfLength("quest", length), out _), Is.EqualTo(expected));
     }
 
     private static string OfLength(string kindPrefix, int length)

@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using NUnit.Framework;
 
 namespace Evertorch.Tools.Tests
@@ -20,7 +21,7 @@ public sealed class ContentProjectionTests
         "3917", "3918", "73219", "73220", "54321", "7613", "2917", "1553", "1027", "4.0625", "1.5625", "12347",
         "6.125", "12.375", "0.7321", "1.8125", "60413", "8123", "20417", "3119", "5.1875", "3.4375", "7.5625",
         "12.6875", "14.3125", "6.875", "86421", "6.4375", "4111", "5227", "139", "30211", "50423", "80637", "77173",
-        "1.6875", "4127", "3171", "7193", "5231", "21133", "1319"
+        "1.6875", "4127", "3171", "7193", "5231", "21133", "1319", "146443", "61933", "71129", "0.6875", "0.3125"
     };
 
     private static readonly string[] ServerOnlyFieldNames =
@@ -35,7 +36,8 @@ public sealed class ContentProjectionTests
         "fixedCastMs", "variableCastMs", "afterCastDelayMs", "cooldownMs", "effect", "damage", "ratio", "heal",
         "damageRatio", "healHp", "statPercent", "status", "durationMs", "portals", "destination", "magicAttack",
         "keepDistance", "skill", "equipment",
-        "attack", "attackSpeedPenalty", "defense", "bonus", "sp"
+        "attack", "attackSpeedPenalty", "defense", "bonus", "sp", "shop", "price", "npcs", "npc", "giver", "objective",
+        "kill", "monster", "count", "currency"
     };
 
     // The client package's allow-list (Content Pipeline §5), by file: a name not reviewed here fails.
@@ -55,6 +57,8 @@ public sealed class ContentProjectionTests
         {
             "schemaVersion", "definitions", "id", "displayName", "level", "prefab", "icon", "projectile"
         },
+        ["npcs.json"] = new[] { "schemaVersion", "definitions", "id", "displayName", "prefab" },
+        ["quests.json"] = new[] { "schemaVersion", "definitions", "id", "displayName" },
         ["skills.json"] = new[] { "schemaVersion", "definitions", "id", "displayName", "targetType", "icon" },
         ["status-effects.json"] = new[] { "schemaVersion", "definitions", "id", "displayName", "icon" }
     };
@@ -63,7 +67,7 @@ public sealed class ContentProjectionTests
     private static readonly string[] FlattenedAuthoringSections =
     {
         "server", "stats", "movement", "combat", "ai", "amount", "health", "spirit", "idlePauseMs", "rewards",
-        "castTimeMs", "damage", "ratio", "heal"
+        "castTimeMs", "damage", "ratio", "heal", "objective", "kill"
     };
 
     private static ContentPackages BuildValid(ContentWorkspace workspace)
@@ -127,6 +131,13 @@ public sealed class ContentProjectionTests
             package.DataFiles.Append(package.Manifest).Select(file => Encoding.UTF8.GetString(file.Content)));
     }
 
+    // The manifest's versions and SHA-256 digests are hexadecimal, and a digest can hold a sentinel's digits by
+    // chance; it did once this fixture gained its NPC.
+    private static string WithoutDigests(string text)
+    {
+        return Regex.Replace(text, "[0-9a-f]{16,}", string.Empty);
+    }
+
     private static void CollectPropertyNames(JsonElement element, HashSet<string> names)
     {
         if (element.ValueKind == JsonValueKind.Object)
@@ -179,7 +190,7 @@ public sealed class ContentProjectionTests
         string[] clientFiles = Directory.GetFiles(Path.Combine(workspace.OutputDirectory, "client"), "*.json")
             .Concat(Directory.GetFiles(workspace.ClientDirectory, "*.json"))
             .ToArray();
-        Assert.That(clientFiles, Has.Length.EqualTo(14), "seven files in the package and seven in its copy");
+        Assert.That(clientFiles, Has.Length.EqualTo(18), "nine files in the package and nine in its copy");
         return clientFiles;
     }
 
@@ -260,8 +271,8 @@ public sealed class ContentProjectionTests
         using (var workspace = new ContentWorkspace())
         {
             ContentPackages packages = BuildValid(workspace);
-            string clientText = AllText(packages.Client);
-            string serverText = AllText(packages.Server);
+            string clientText = WithoutDigests(AllText(packages.Client));
+            string serverText = WithoutDigests(AllText(packages.Server));
 
             foreach (string sentinel in ServerOnlySentinels)
             {

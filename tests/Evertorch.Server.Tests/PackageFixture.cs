@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Text.Json.Nodes;
 using Evertorch.Tools;
 using NUnit.Framework;
 
@@ -66,6 +68,50 @@ internal static class PackageFixture
         RewriteManifest(files);
     }
 
+    /// <summary>
+    ///     Sets one property of the definition <paramref name="id" /> in a data file to the JSON
+    ///     <paramref name="json" /> and re-signs the manifest. The path is dotted, with <c>name[index]</c> for an
+    ///     array element. Returns the path the loader reports the property under.
+    /// </summary>
+    public static string SetValue(
+        Dictionary<string, byte[]> files,
+        string file,
+        string id,
+        string path,
+        string json)
+    {
+        JsonNode root = ReadTree(files[file]);
+        JsonArray definitions = root["definitions"]!.AsArray();
+        int index = definitions.ToList().FindIndex(definition => (string?)definition!["id"] == id);
+        if (index < 0)
+        {
+            throw new InvalidOperationException($"{file} defines no '{id}'.");
+        }
+
+        string[] steps = path.Split('.');
+        JsonNode parent = definitions[index]!;
+        for (int step = 0; step < steps.Length - 1; step++)
+        {
+            parent = Child(parent, steps[step]);
+        }
+
+        string last = steps[steps.Length - 1];
+        int open = last.IndexOf('[', StringComparison.Ordinal);
+        if (open < 0)
+        {
+            parent[last] = JsonNode.Parse(json);
+        }
+        else
+        {
+            int element = int.Parse(last.Substring(open + 1, last.Length - open - 2), CultureInfo.InvariantCulture);
+            parent[last.Substring(0, open)]![element] = JsonNode.Parse(json);
+        }
+
+        files[file] = Encoding.UTF8.GetBytes(root.ToJsonString());
+        RewriteManifest(files);
+        return $"definitions[{index}].{path}";
+    }
+
     public static void RewriteManifest(Dictionary<string, byte[]> files)
     {
         string[] dataFiles = files.Keys
@@ -118,6 +164,23 @@ internal static class PackageFixture
             StringComparer.Ordinal);
         files[server.Manifest.Path] = server.Manifest.Content;
         return files;
+    }
+
+    private static JsonNode ReadTree(byte[] content)
+    {
+        return JsonNode.Parse(content) ?? throw new InvalidOperationException("The file holds no JSON.");
+    }
+
+    private static JsonNode Child(JsonNode parent, string step)
+    {
+        int open = step.IndexOf('[', StringComparison.Ordinal);
+        if (open < 0)
+        {
+            return parent[step] ?? throw new InvalidOperationException($"No '{step}'.");
+        }
+
+        int element = int.Parse(step.Substring(open + 1, step.Length - open - 2), CultureInfo.InvariantCulture);
+        return parent[step.Substring(0, open)]![element] ?? throw new InvalidOperationException($"No '{step}'.");
     }
 
     private static string FindRepositoryRoot()

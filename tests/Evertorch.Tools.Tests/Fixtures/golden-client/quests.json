@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "definitions": [
+    {
+      "id": "quest.slime_hunt",
+      "displayName": "Slime Hunt"
+    }
+  ]
+}

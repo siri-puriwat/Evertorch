@@ -22,6 +22,8 @@ public static class ClientContentParser
     public const string ItemsFile = "items.json";
     public const string SkillsFile = "skills.json";
     public const string StatusEffectsFile = "status-effects.json";
+    public const string NpcsFile = "npcs.json";
+    public const string QuestsFile = "quests.json";
 
     private const int SupportedSchemaVersion = 1;
 
@@ -78,7 +80,9 @@ public static class ClientContentParser
             || !TryGetListedFile(manifest, files, MonstersFile, out byte[] monstersBytes, out error)
             || !TryGetListedFile(manifest, files, ItemsFile, out byte[] itemsBytes, out error)
             || !TryGetListedFile(manifest, files, SkillsFile, out byte[] skillsBytes, out error)
-            || !TryGetListedFile(manifest, files, StatusEffectsFile, out byte[] statusBytes, out error))
+            || !TryGetListedFile(manifest, files, StatusEffectsFile, out byte[] statusBytes, out error)
+            || !TryGetListedFile(manifest, files, NpcsFile, out byte[] npcsBytes, out error)
+            || !TryGetListedFile(manifest, files, QuestsFile, out byte[] questsBytes, out error))
         {
             return null;
         }
@@ -114,9 +118,21 @@ public static class ClientContentParser
         }
 
         Dictionary<StatusDefinitionId, ClientStatusEffect>? statusEffects = ParseStatusEffects(statusBytes, out error);
-        return statusEffects == null
+        if (statusEffects == null)
+        {
+            return null;
+        }
+
+        Dictionary<NpcDefinitionId, ClientNpc>? npcs = ParseNpcs(npcsBytes, out error);
+        if (npcs == null)
+        {
+            return null;
+        }
+
+        Dictionary<QuestDefinitionId, ClientQuest>? quests = ParseQuests(questsBytes, out error);
+        return quests == null
             ? null
-            : new ClientContent(version, maps, jobs, monsters, items, skills, statusEffects);
+            : new ClientContent(version, maps, jobs, monsters, items, skills, statusEffects, npcs, quests);
     }
 
     private static bool TryGetListedFile(
@@ -394,6 +410,62 @@ public static class ClientContentParser
         }
 
         return effects;
+    }
+
+    private static Dictionary<NpcDefinitionId, ClientNpc>? ParseNpcs(byte[] npcsBytes, out string error)
+    {
+        error = string.Empty;
+        NpcsDto? dto = FromJson<NpcsDto>(npcsBytes);
+        if (dto == null || dto.definitions == null || dto.schemaVersion != SupportedSchemaVersion)
+        {
+            error = $"'{NpcsFile}' is not readable or has an unsupported schema version.";
+            return null;
+        }
+
+        var npcs = new Dictionary<NpcDefinitionId, ClientNpc>();
+        foreach (NpcDto npc in dto.definitions)
+        {
+            if (!NpcDefinitionId.TryCreate(npc.id, out NpcDefinitionId id) || npcs.ContainsKey(id))
+            {
+                error = $"'{NpcsFile}' has an invalid or repeated NPC ID.";
+                return null;
+            }
+
+            if (!IsLogicalKey(npc.prefab))
+            {
+                error = $"NPC '{npc.id}': prefab is not a logical key.";
+                return null;
+            }
+
+            npcs.Add(id, new ClientNpc(id, npc.displayName ?? string.Empty, npc.prefab));
+        }
+
+        return npcs;
+    }
+
+    private static Dictionary<QuestDefinitionId, ClientQuest>? ParseQuests(byte[] questsBytes, out string error)
+    {
+        error = string.Empty;
+        QuestsDto? dto = FromJson<QuestsDto>(questsBytes);
+        if (dto == null || dto.definitions == null || dto.schemaVersion != SupportedSchemaVersion)
+        {
+            error = $"'{QuestsFile}' is not readable or has an unsupported schema version.";
+            return null;
+        }
+
+        var quests = new Dictionary<QuestDefinitionId, ClientQuest>();
+        foreach (QuestDto quest in dto.definitions)
+        {
+            if (!QuestDefinitionId.TryCreate(quest.id, out QuestDefinitionId id) || quests.ContainsKey(id))
+            {
+                error = $"'{QuestsFile}' has an invalid or repeated quest ID.";
+                return null;
+            }
+
+            quests.Add(id, new ClientQuest(id, quest.displayName ?? string.Empty));
+        }
+
+        return quests;
     }
 
     private static bool TryParseItemType(string? text, out ItemType type)
@@ -748,6 +820,35 @@ public static class ClientContentParser
         public string? displayName = string.Empty;
         public string? targetType = string.Empty;
         public string? icon = string.Empty;
+    }
+
+    [Serializable]
+    private sealed class NpcsDto
+    {
+        public int schemaVersion = 0;
+        public NpcDto[] definitions = Array.Empty<NpcDto>();
+    }
+
+    [Serializable]
+    private sealed class NpcDto
+    {
+        public string? id = string.Empty;
+        public string? displayName = string.Empty;
+        public string? prefab = string.Empty;
+    }
+
+    [Serializable]
+    private sealed class QuestsDto
+    {
+        public int schemaVersion = 0;
+        public QuestDto[] definitions = Array.Empty<QuestDto>();
+    }
+
+    [Serializable]
+    private sealed class QuestDto
+    {
+        public string? id = string.Empty;
+        public string? displayName = string.Empty;
     }
     // ReSharper restore InconsistentNaming, RedundantDefaultMemberInitializer
 }

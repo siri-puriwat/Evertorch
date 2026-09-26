@@ -637,10 +637,10 @@ public sealed class ServerContentLoaderTests
     public void Load_WhenManifestListsUnknownDataFile_Fails()
     {
         Dictionary<string, byte[]> files = PackageFixture.BuildFixturePackage();
-        files["quests.json"] = files[Skills];
+        files["notes.json"] = files[Skills];
         PackageFixture.RewriteManifest(files);
 
-        Assert.That(ProblemsOf(files), Has.Exactly(1).Contains("'quests.json' is not a known data file"));
+        Assert.That(ProblemsOf(files), Has.Exactly(1).Contains("'notes.json' is not a known data file"));
     }
 
     [Test]
@@ -682,8 +682,14 @@ public sealed class ServerContentLoaderTests
 
         IReadOnlyList<string> problems = ProblemsOf(files);
 
-        Assert.That(problems, Has.Count.EqualTo(1));
-        Assert.That(problems[0], Does.Contain("drops unknown item 'item.material.slime_gel'"));
+        Assert.That(
+            problems,
+            Is.EquivalentTo(
+                new[]
+                {
+                    "monsters.json: monster.training_slime: drops unknown item 'item.material.slime_gel'",
+                    "npcs.json: npc.quartermaster: sells unknown item 'item.material.slime_gel'"
+                }));
     }
 
     [Test]

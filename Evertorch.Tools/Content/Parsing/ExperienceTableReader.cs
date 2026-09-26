@@ -6,9 +6,6 @@ namespace Evertorch.Tools
 {
 internal static class ExperienceTableReader
 {
-    // A table of n levels caps its jobs at level n + 1, which must stay within the level limit.
-    private const int MaxLevels = ContentLimits.MaxLevel - 1;
-
     public static AuthoredExperienceTable? Read(
         YamlFieldReader root,
         List<ContentDiagnostic> diagnostics,
@@ -27,11 +24,15 @@ internal static class ExperienceTableReader
 
         int errorsBeforeLevels = diagnostics.Count;
         IReadOnlyList<int> levels = root.RequiredIntSequence("levels", 1, ContentLimits.MaxExperience);
-        if (diagnostics.Count == errorsBeforeLevels && (levels.Count == 0 || levels.Count > MaxLevels))
+        bool isCountOutOfRange = levels.Count == 0 || levels.Count > ContentLimits.MaxExperienceLevels;
+        if (diagnostics.Count == errorsBeforeLevels && isCountOutOfRange)
         {
             root.ReportField(
                 "levels",
-                string.Format(CultureInfo.InvariantCulture, "must list between 1 and {0} levels", MaxLevels));
+                string.Format(
+                    CultureInfo.InvariantCulture,
+                    "must list between 1 and {0} levels",
+                    ContentLimits.MaxExperienceLevels));
         }
 
         root.ReportUnknownFields();

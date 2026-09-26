@@ -18,6 +18,8 @@ internal static class ClientProjection
             new("jobs.json", PackageJson.Write(writer => WriteJobs(writer, content))),
             new("maps.json", PackageJson.Write(writer => WriteMaps(writer, content))),
             new("monsters.json", PackageJson.Write(writer => WriteMonsters(writer, content))),
+            new("npcs.json", PackageJson.Write(writer => WriteNpcs(writer, content))),
+            new("quests.json", PackageJson.Write(writer => WriteQuests(writer, content))),
             new("skills.json", PackageJson.Write(writer => WriteSkills(writer, content))),
             new("status-effects.json", PackageJson.Write(writer => WriteStatusEffects(writer, content)))
         };
@@ -113,6 +115,37 @@ internal static class ClientProjection
                 writer.WriteString("projectile", authored.Projectile);
             }
 
+            writer.WriteEndObject();
+        }
+
+        EndFile(writer);
+    }
+
+    // A shop's prices and a quest's objective and rewards travel on the wire, where the player sees them (Content
+    // Pipeline §5); the package holds names and the NPC's prefab only.
+    private static void WriteNpcs(Utf8JsonWriter writer, ContentSet content)
+    {
+        BeginFile(writer);
+        foreach (AuthoredNpc authored in content.Npcs)
+        {
+            writer.WriteStartObject();
+            writer.WriteString("id", authored.Definition.Id.Value);
+            writer.WriteString("displayName", authored.Definition.DisplayName);
+            writer.WriteString("prefab", authored.Prefab);
+            writer.WriteEndObject();
+        }
+
+        EndFile(writer);
+    }
+
+    private static void WriteQuests(Utf8JsonWriter writer, ContentSet content)
+    {
+        BeginFile(writer);
+        foreach (AuthoredQuest authored in content.Quests)
+        {
+            writer.WriteStartObject();
+            writer.WriteString("id", authored.Definition.Id.Value);
+            writer.WriteString("displayName", authored.Definition.DisplayName);
             writer.WriteEndObject();
         }
 

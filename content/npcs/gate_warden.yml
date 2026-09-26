@@ -1,0 +1,4 @@
+id: npc.gate_warden
+displayName: Gate Warden
+client:
+  prefab: npc_gate_warden

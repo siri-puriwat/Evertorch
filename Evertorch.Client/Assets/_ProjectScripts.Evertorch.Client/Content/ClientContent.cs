@@ -15,6 +15,8 @@ public sealed class ClientContent : IMapProvider
     private readonly IReadOnlyDictionary<ItemDefinitionId, ClientItem> m_items;
     private readonly IReadOnlyDictionary<SkillDefinitionId, ClientSkill> m_skills;
     private readonly IReadOnlyDictionary<StatusDefinitionId, ClientStatusEffect> m_statusEffects;
+    private readonly IReadOnlyDictionary<NpcDefinitionId, ClientNpc> m_npcs;
+    private readonly IReadOnlyDictionary<QuestDefinitionId, ClientQuest> m_quests;
 
     public ClientContent(
         string version,
@@ -23,7 +25,9 @@ public sealed class ClientContent : IMapProvider
         IReadOnlyDictionary<MonsterDefinitionId, ClientMonster> monsters,
         IReadOnlyDictionary<ItemDefinitionId, ClientItem> items,
         IReadOnlyDictionary<SkillDefinitionId, ClientSkill> skills,
-        IReadOnlyDictionary<StatusDefinitionId, ClientStatusEffect> statusEffects)
+        IReadOnlyDictionary<StatusDefinitionId, ClientStatusEffect> statusEffects,
+        IReadOnlyDictionary<NpcDefinitionId, ClientNpc>? npcs = null,
+        IReadOnlyDictionary<QuestDefinitionId, ClientQuest>? quests = null)
     {
         Version = version ?? throw new ArgumentNullException(nameof(version));
         m_maps = maps ?? throw new ArgumentNullException(nameof(maps));
@@ -32,6 +36,8 @@ public sealed class ClientContent : IMapProvider
         m_items = items ?? throw new ArgumentNullException(nameof(items));
         m_skills = skills ?? throw new ArgumentNullException(nameof(skills));
         m_statusEffects = statusEffects ?? throw new ArgumentNullException(nameof(statusEffects));
+        m_npcs = npcs ?? new Dictionary<NpcDefinitionId, ClientNpc>();
+        m_quests = quests ?? new Dictionary<QuestDefinitionId, ClientQuest>();
     }
 
     public string Version { get; }
@@ -47,6 +53,10 @@ public sealed class ClientContent : IMapProvider
     public IEnumerable<ClientSkill> Skills => m_skills.Values;
 
     public IEnumerable<ClientStatusEffect> StatusEffects => m_statusEffects.Values;
+
+    public IEnumerable<ClientNpc> Npcs => m_npcs.Values;
+
+    public IEnumerable<ClientQuest> Quests => m_quests.Values;
 
     public bool TryGetNavigation(MapDefinitionId map, out NavigationGrid? grid)
     {
@@ -83,6 +93,16 @@ public sealed class ClientContent : IMapProvider
     public bool TryGetStatusEffect(StatusDefinitionId id, out ClientStatusEffect? effect)
     {
         return m_statusEffects.TryGetValue(id, out effect);
+    }
+
+    public bool TryGetNpc(NpcDefinitionId id, out ClientNpc? npc)
+    {
+        return m_npcs.TryGetValue(id, out npc);
+    }
+
+    public bool TryGetQuest(QuestDefinitionId id, out ClientQuest? quest)
+    {
+        return m_quests.TryGetValue(id, out quest);
     }
 }
 }

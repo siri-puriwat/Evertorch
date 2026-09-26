@@ -18,18 +18,24 @@ internal static class NavigationPackageReader
             return null;
         }
 
-        double cellSize = navigation.RequiredDouble("cellSize");
-        double originX = navigation.RequiredDouble("originX");
-        double originZ = navigation.RequiredDouble("originZ");
-        double agentRadius = navigation.RequiredDouble("agentRadius");
-        double maxStepHeight = navigation.RequiredDouble("maxStepHeight");
+        double cellSize = AtMost(navigation, "cellSize", ContentLimits.MaxCellSize);
+        double originX = Coordinate(navigation, "originX");
+        double originZ = Coordinate(navigation, "originZ");
+        double agentRadius = AtMost(navigation, "agentRadius", ContentLimits.MaxAgentRadius);
+        double maxStepHeight = AtMost(navigation, "maxStepHeight", ContentLimits.MaxStepHeight);
         int columns = navigation.RequiredInt("columns", 1);
         int rows = navigation.RequiredInt("rows", 1);
 
         var legend = new Dictionary<char, NavigationCell>();
-        foreach (PackageObjectReader entry in navigation.RequiredObjectArray("legend"))
+        IReadOnlyList<PackageObjectReader> entries = navigation.RequiredObjectArray("legend");
+        if (entries.Count > ContentLimits.MaxLegendEntries)
         {
-            ReadLegendEntry(entry, legend);
+            navigation.Report("legend", $"has more than {ContentLimits.MaxLegendEntries} entries");
+        }
+
+        foreach (PackageObjectReader entry in entries)
+        {
+            ReadLegendEntry(entry, legend, problems);
         }
 
         IReadOnlyList<string> cellRows = navigation.RequiredStringArray("cellRows");
@@ -70,14 +76,29 @@ internal static class NavigationPackageReader
         }
     }
 
-    private static void ReadLegendEntry(PackageObjectReader entry, Dictionary<char, NavigationCell> legend)
+    private static void ReadLegendEntry(
+        PackageObjectReader entry,
+        Dictionary<char, NavigationCell> legend,
+        List<string> problems)
     {
+        int problemsBefore = problems.Count;
         string symbol = entry.RequiredString("symbol");
         NavigationSurface surface = entry.RequiredEnum<NavigationSurface>("surface");
         RampAxis axis = entry.RequiredEnum<RampAxis>("axis");
-        double heightAtMin = entry.RequiredDouble("heightAtMin");
-        double heightAtMax = entry.RequiredDouble("heightAtMax");
+        double heightAtMin = Coordinate(entry, "heightAtMin");
+        double heightAtMax = Coordinate(entry, "heightAtMax");
         entry.ReportUnexpectedProperties();
+        if (problems.Count != problemsBefore)
+        {
+            return;
+        }
+
+        // Only floor can be walked on, so a ramp of anything else would be a slope nobody could climb.
+        if (axis != RampAxis.None && surface != NavigationSurface.Floor)
+        {
+            entry.Report("surface", "a ramp must be floor");
+            return;
+        }
 
         if (symbol.Length != 1)
         {
@@ -99,6 +120,29 @@ internal static class NavigationPackageReader
         {
             entry.Report("heightAtMax", exception.Message);
         }
+    }
+
+    // The tools' upper bounds; a size of 0 or less is the grid's to refuse.
+    private static double AtMost(PackageObjectReader reader, string name, double maximum)
+    {
+        double value = reader.RequiredDouble(name);
+        if (value > maximum)
+        {
+            reader.Report(name, $"must be at most {maximum}");
+        }
+
+        return value;
+    }
+
+    private static double Coordinate(PackageObjectReader reader, string name)
+    {
+        double value = reader.RequiredDouble(name);
+        if (Math.Abs(value) > ContentLimits.MaxCoordinate)
+        {
+            reader.Report(name, $"must be between -{ContentLimits.MaxCoordinate} and {ContentLimits.MaxCoordinate}");
+        }
+
+        return value;
     }
 
     private static NavigationCell[]? ReadCells(

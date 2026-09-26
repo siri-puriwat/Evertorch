@@ -62,6 +62,11 @@ public static class AddressablesKeyCheck
             NoteOptional(addresses, item.IconKey, $"{item.Id.Value} icon", missingOptional);
         }
 
+        foreach (ClientNpc npc in content.Npcs)
+        {
+            RequirePrefab(addresses, npc.PrefabKey, $"{npc.Id.Value} prefab", missing);
+        }
+
         var scenes = new HashSet<string>(enabledScenes, StringComparer.Ordinal);
         foreach (ClientMap map in content.Maps)
         {

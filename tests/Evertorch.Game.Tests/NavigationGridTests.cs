@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using NUnit.Framework;
 
 namespace Evertorch.Game.Tests
@@ -40,6 +41,16 @@ public sealed class NavigationGridTests
 
         Assert.That(create, Throws.ArgumentException);
     }
+
+    // A marker cell in a small yard, an obstacle south of it.
+    private static readonly string[] Yard =
+    {
+        "#####",
+        "#...#",
+        "#.N.#",
+        "#.o.#",
+        "#####"
+    };
 
     [TestCase(1.5f, 2.5f, true)]
     [TestCase(1.5f, 1.5f, false)]
@@ -116,6 +127,19 @@ public sealed class NavigationGridTests
         Assert.That(grid.CanTraverse(fromColumn, fromRow, toColumn, toRow), Is.EqualTo(expected));
     }
 
+    [TestCase(2.5f, 2.5f, 0.9f)]
+    [TestCase(float.NaN, 2.5f, 3f)]
+    [TestCase(40f, 40f, 3f)]
+    public void CollectStandingPlaces_WithNoCentreInReach_ListsNothing(float x, float z, float radius)
+    {
+        NavigationGrid grid = TestGrids.FromRows(Yard);
+        var places = new List<WorldPosition>();
+
+        grid.CollectStandingPlaces(new WorldPosition(x, 0f, z), radius, places);
+
+        Assert.That(places, Is.Empty);
+    }
+
     [Test]
     public void CanOccupy_AtGridEdgeWithoutWall_TreatsOutsideAsBlocked()
     {
@@ -164,6 +188,27 @@ public sealed class NavigationGridTests
 
         Assert.That(grid.CanTraverse(1, 1, 2, 1), Is.True);
         Assert.That(grid.CanTraverse(2, 1, 1, 1), Is.True);
+    }
+
+    [Test]
+    public void CollectStandingPlaces_AroundAMarker_ListsTheStandableCentresNearestFirstThenByRow()
+    {
+        NavigationGrid grid = TestGrids.FromRows(Yard);
+        var places = new List<WorldPosition> { new(9f, 0f, 9f) };
+
+        grid.CollectStandingPlaces(new WorldPosition(2.5f, 0f, 2.5f), 1.5f, places);
+
+        Assert.That(
+            places,
+            Is.EqualTo(
+                new[]
+                {
+                    new WorldPosition(1.5f, 0f, 2.5f), new WorldPosition(3.5f, 0f, 2.5f),
+                    new WorldPosition(2.5f, 0f, 3.5f), new WorldPosition(1.5f, 0f, 1.5f),
+                    new WorldPosition(3.5f, 0f, 1.5f), new WorldPosition(1.5f, 0f, 3.5f),
+                    new WorldPosition(3.5f, 0f, 3.5f)
+                }),
+            "the obstacle and the marker itself are no place to stand; the list started empty");
     }
 
     [Test]

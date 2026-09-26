@@ -1,0 +1,17 @@
+id: npc.quartermaster
+displayName: Quartermaster
+server:
+  # Twice each item's sell price; the shop also buys every item with a sell price above 0.
+  shop:
+    - item: item.consumable.minor_health
+      price: 20
+    - item: item.consumable.minor_mana
+      price: 30
+    - item: item.armor.cloth
+      price: 40
+    - item: item.weapon.training_sword
+      price: 50
+    - item: item.weapon.training_staff
+      price: 50
+client:
+  prefab: npc_quartermaster

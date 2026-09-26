@@ -221,6 +221,34 @@ public sealed class NavigationContentTests
         Assert.That(grid.HasLineOfSight(map.SpawnPosition, map.MonsterSpawns[0].Center), Is.False);
     }
 
+    // Each NPC stands on a marker cell of its own, and no marker is left empty (Prototype Content §5).
+    [Test]
+    public void Run_ForRepositoryContent_TrainingGroundHasAMarkerCellUnderEachNpc()
+    {
+        ContentPipelineResult result = ContentPipeline.Run(RepositoryContentDirectory());
+        MapDefinition map = result.Content.Maps
+            .Single(candidate => candidate.Definition.Id.Value == "map.training_ground")
+            .Definition;
+        NavigationGrid grid = map.Navigation;
+
+        var markers = new List<WorldPosition>();
+        for (int row = 0; row < grid.Rows; row++)
+        {
+            for (int column = 0; column < grid.Columns; column++)
+            {
+                if (grid.GetCell(column, row).Surface == NavigationSurface.NpcMarker)
+                {
+                    markers.Add(grid.GetCellCenter(column, row));
+                }
+            }
+        }
+
+        Assert.That(markers, Is.EquivalentTo(map.Npcs.Select(npc => npc.Position)));
+        Assert.That(
+            markers,
+            Is.EquivalentTo(new[] { new WorldPosition(-3.5f, 0f, 4.5f), new WorldPosition(20.5f, 0f, 3.5f) }));
+    }
+
     [Test]
     public void Run_ForValidFixture_ReadsRowsNorthFirstIntoTheGrid()
     {

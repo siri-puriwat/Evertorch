@@ -17,6 +17,10 @@ server:
         map: map.training_ground
         position: { x: -3.5, y: 0.0, z: 3.5 }
         facing: { x: 0.0, z: -1.0 }
+  npcs:
+    - npc: npc.quartermaster
+      position: { x: -1.5, y: 0.0, z: -3.5 }
+      facing: { x: 0.6875, z: -0.3125 }
 navigation:
   # One symbol per cell, northern row first. The grid is the graybox geometry: the client builds its
   # visuals from it and the server validates movement against it.

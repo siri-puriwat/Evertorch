@@ -10,6 +10,10 @@ server:
       radius: 6.0
       count: 4
       respawnMs: 8000
+  npcs:
+    - npc: npc.quartermaster
+      position: { x: -3.5, y: 0.0, z: 4.5 }
+      facing: { x: 0.0, z: -1.0 }
 navigation:
   # One symbol per cell, northern row first. The grid is the graybox geometry: the client builds its
   # visuals from it and the server validates movement against it.

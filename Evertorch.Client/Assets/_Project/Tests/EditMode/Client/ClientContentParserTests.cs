@@ -43,12 +43,22 @@ public sealed class ClientContentParserTests
         + "\"targetType\":\"self\",\"icon\":\"skill_first_aid\"},{\"id\":\"skill.strike\","
         + "\"displayName\":\"Strike\",\"targetType\":\"enemy\",\"icon\":\"skill_strike\"}]}";
 
+    private const string Npcs =
+        "{\"schemaVersion\":1,\"definitions\":[{\"id\":\"npc.gate_warden\",\"displayName\":\"Gate Warden\","
+        + "\"prefab\":\"npc_gate_warden\"},{\"id\":\"npc.quartermaster\",\"displayName\":\"Quartermaster\","
+        + "\"prefab\":\"npc_quartermaster\"}]}";
+
+    private const string Quests =
+        "{\"schemaVersion\":1,\"definitions\":[{\"id\":\"quest.crawler_hunt\",\"displayName\":\"Crawler Hunt\"}]}";
+
     [TestCase(ClientContentParser.MapsFile)]
     [TestCase(ClientContentParser.JobsFile)]
     [TestCase(ClientContentParser.MonstersFile)]
     [TestCase(ClientContentParser.ItemsFile)]
     [TestCase(ClientContentParser.SkillsFile)]
     [TestCase(ClientContentParser.StatusEffectsFile)]
+    [TestCase(ClientContentParser.NpcsFile)]
+    [TestCase(ClientContentParser.QuestsFile)]
     public void Parse_WhenARequiredFileIsNotInThePackage_IsRefused(string fileName)
     {
         var package = Package.Without(fileName);
@@ -225,6 +235,36 @@ public sealed class ClientContentParserTests
         "\"schemaVersion\":1",
         "\"schemaVersion\":2",
         "'status-effects.json' is not readable or has an unsupported schema version")]
+    [TestCase(
+        ClientContentParser.NpcsFile,
+        "\"id\":\"npc.gate_warden\"",
+        "\"id\":\"npc.quartermaster\"",
+        "'npcs.json' has an invalid or repeated NPC ID")]
+    [TestCase(
+        ClientContentParser.NpcsFile,
+        "\"id\":\"npc.gate_warden\"",
+        "\"id\":\"quest.gate_warden\"",
+        "'npcs.json' has an invalid or repeated NPC ID")]
+    [TestCase(
+        ClientContentParser.NpcsFile,
+        "\"prefab\":\"npc_gate_warden\"",
+        "\"prefab\":\"Npcs/GateWarden.prefab\"",
+        "NPC 'npc.gate_warden': prefab is not a logical key")]
+    [TestCase(
+        ClientContentParser.NpcsFile,
+        "\"schemaVersion\":1",
+        "\"schemaVersion\":2",
+        "'npcs.json' is not readable or has an unsupported schema version")]
+    [TestCase(
+        ClientContentParser.QuestsFile,
+        "\"id\":\"quest.crawler_hunt\"",
+        "\"id\":\"npc.crawler_hunt\"",
+        "'quests.json' has an invalid or repeated quest ID")]
+    [TestCase(
+        ClientContentParser.QuestsFile,
+        "\"schemaVersion\":1",
+        "\"schemaVersion\":2",
+        "'quests.json' is not readable or has an unsupported schema version")]
     public void Parse_ForMalformedDefinitions_IsRefusedWithAReason(
         string fileName,
         string oldText,
@@ -282,7 +322,9 @@ public sealed class ClientContentParserTests
                 [ClientContentParser.MonstersFile] = Monsters,
                 [ClientContentParser.ItemsFile] = Items,
                 [ClientContentParser.SkillsFile] = Skills,
-                [ClientContentParser.StatusEffectsFile] = StatusEffectsJson
+                [ClientContentParser.StatusEffectsFile] = StatusEffectsJson,
+                [ClientContentParser.NpcsFile] = Npcs,
+                [ClientContentParser.QuestsFile] = Quests
             };
         }
 
@@ -342,6 +384,12 @@ public sealed class ClientContentParserTests
         Assert.That(monster!.PrefabKey, Is.EqualTo("monster_training_slime"));
         Assert.That(content.TryGetItem(new ItemDefinitionId("item.material.slime_gel"), out ClientItem? item), Is.True);
         Assert.That(item!.ModelKey, Is.EqualTo("pickup_slime_gel"));
+        Assert.That(content.TryGetNpc(new NpcDefinitionId("npc.gate_warden"), out ClientNpc? warden), Is.True);
+        Assert.That((warden!.DisplayName, warden.PrefabKey), Is.EqualTo(("Gate Warden", "npc_gate_warden")));
+        Assert.That(
+            content.TryGetQuest(new QuestDefinitionId("quest.crawler_hunt"), out ClientQuest? hunt),
+            Is.True);
+        Assert.That(hunt!.DisplayName, Is.EqualTo("Crawler Hunt"));
     }
 
     [Test]
@@ -488,7 +536,8 @@ public sealed class ClientContentParserTests
             Is.EquivalentTo(
                 new[]
                 {
-                    "items.json", "jobs.json", "maps.json", "monsters.json", "skills.json", "status-effects.json"
+                    "items.json", "jobs.json", "maps.json", "monsters.json", "npcs.json", "quests.json",
+                    "skills.json", "status-effects.json"
                 }));
     }
 }

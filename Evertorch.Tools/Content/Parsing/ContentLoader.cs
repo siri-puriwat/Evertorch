@@ -19,6 +19,8 @@ public static class ContentLoader
     private const string MapsFolder = "maps";
     private const string ExperienceFolder = "experience";
     private const string StatusEffectsFolder = "status-effects";
+    private const string NpcsFolder = "npcs";
+    private const string QuestsFolder = "quests";
 
     public static ContentSet Load(string contentRoot, List<ContentDiagnostic> diagnostics)
     {
@@ -29,12 +31,24 @@ public static class ContentLoader
         var maps = new List<AuthoredMap>();
         var experienceTables = new List<AuthoredExperienceTable>();
         var statusEffects = new List<AuthoredStatusEffect>();
+        var npcs = new List<AuthoredNpc>();
+        var quests = new List<AuthoredQuest>();
         var declaredIds = new HashSet<string>(StringComparer.Ordinal);
 
         if (!Directory.Exists(contentRoot))
         {
             diagnostics.Add(new ContentDiagnostic(".", string.Empty, 0, "content directory does not exist"));
-            return new ContentSet(items, monsters, skills, jobs, maps, experienceTables, statusEffects, declaredIds);
+            return new ContentSet(
+                items,
+                monsters,
+                skills,
+                jobs,
+                maps,
+                experienceTables,
+                statusEffects,
+                npcs,
+                quests,
+                declaredIds);
         }
 
         foreach (string file in EnumerateFiles(contentRoot))
@@ -80,6 +94,12 @@ public static class ContentLoader
                 case StatusEffectsFolder:
                     AddIfValid(statusEffects, StatusEffectReader.Read(root, diagnostics, declaredIds));
                     break;
+                case NpcsFolder:
+                    AddIfValid(npcs, NpcDefinitionReader.Read(root, diagnostics, declaredIds));
+                    break;
+                case QuestsFolder:
+                    AddIfValid(quests, QuestDefinitionReader.Read(root, diagnostics, declaredIds));
+                    break;
                 default:
                     diagnostics.Add(
                         new ContentDiagnostic(
@@ -87,12 +107,22 @@ public static class ContentLoader
                             string.Empty,
                             0,
                             "file is not inside a known definition folder (items, monsters, skills, jobs, maps, "
-                            + "experience, status-effects)"));
+                            + "experience, status-effects, npcs, quests)"));
                     break;
             }
         }
 
-        return new ContentSet(items, monsters, skills, jobs, maps, experienceTables, statusEffects, declaredIds);
+        return new ContentSet(
+            items,
+            monsters,
+            skills,
+            jobs,
+            maps,
+            experienceTables,
+            statusEffects,
+            npcs,
+            quests,
+            declaredIds);
     }
 
     private static IEnumerable<string> EnumerateFiles(string contentRoot)

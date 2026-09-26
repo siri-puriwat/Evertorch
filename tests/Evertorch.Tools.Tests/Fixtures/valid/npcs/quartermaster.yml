@@ -1,0 +1,8 @@
+id: npc.quartermaster
+displayName: Quartermaster
+server:
+  shop:
+    - item: item.material.slime_gel
+      price: 146443
+client:
+  prefab: npc_quartermaster

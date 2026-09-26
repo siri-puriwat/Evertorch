@@ -71,7 +71,7 @@ public sealed class ContentBuildCommandTests
 
             Assert.That(exitCode, Is.EqualTo(0));
             // The experience tables stay on the server (Content Pipeline §5); the status effects go to both.
-            foreach ((string side, int files) in new[] { ("server", 8), ("client", 7) })
+            foreach ((string side, int files) in new[] { ("server", 10), ("client", 9) })
             {
                 string directory = Path.Combine(workspace.OutputDirectory, side);
                 Assert.That(
@@ -224,7 +224,7 @@ public sealed class ContentBuildCommandTests
             int exitCode = BuildWithClientOut(workspace, out _, out string error);
 
             Assert.That(exitCode, Is.EqualTo(0), error);
-            Assert.That(Directory.GetFiles(workspace.ClientDirectory), Has.Length.EqualTo(7));
+            Assert.That(Directory.GetFiles(workspace.ClientDirectory), Has.Length.EqualTo(9));
         }
     }
 
@@ -244,7 +244,7 @@ public sealed class ContentBuildCommandTests
                 Assert.That(File.ReadAllBytes(copy), Is.EqualTo(File.ReadAllBytes(file)), Path.GetFileName(file));
             }
 
-            Assert.That(Directory.GetFiles(workspace.ClientDirectory), Has.Length.EqualTo(7));
+            Assert.That(Directory.GetFiles(workspace.ClientDirectory), Has.Length.EqualTo(9));
         }
     }
 
