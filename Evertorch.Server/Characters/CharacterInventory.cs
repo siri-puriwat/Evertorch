@@ -7,8 +7,9 @@ using Evertorch.Protocol;
 namespace Evertorch.Server
 {
 /// <summary>
-///     The character's inventory as last committed, its revision, and the row each equipment slot holds (Persistence
-///     §5). The database is the authority: this copy changes only when a committed change comes back, never ahead of it.
+///     The character's inventory as last committed, its revision, its coins, and the row each equipment slot holds
+///     (Persistence §5). The database is the authority: this copy changes only when a committed change comes back, never
+///     ahead of it.
 /// </summary>
 public sealed class CharacterInventory
 {
@@ -25,6 +26,11 @@ public sealed class CharacterInventory
 
     public uint Revision { get; set; }
 
+    /// <summary>
+    ///     The character's coins at <see cref="Revision" /> (Gameplay Systems §11.3).
+    /// </summary>
+    public long Coins { get; private set; }
+
     public IReadOnlyList<InventoryEntry> Rows => m_rows;
 
     /// <summary>
@@ -32,7 +38,10 @@ public sealed class CharacterInventory
     /// </summary>
     public static CharacterInventory FromStored(StoredCharacter stored)
     {
-        var inventory = new CharacterInventory(stored.InventoryRevision, Array.Empty<InventoryEntry>());
+        var inventory = new CharacterInventory(stored.InventoryRevision, Array.Empty<InventoryEntry>())
+        {
+            Coins = stored.Coins
+        };
         foreach (StoredItem item in stored.Items)
         {
             inventory.Take(item);
@@ -97,9 +106,9 @@ public sealed class CharacterInventory
     }
 
     /// <summary>
-    ///     Takes a committed change: every row it changed as it is now, with its slot, at its revision. A row the change
-    ///     emptied, with a quantity of 0, is gone, as the client removes it too (Network Protocol §9). Returns the rows
-    ///     as the owner is told them.
+    ///     Takes a committed change: every row it changed as it is now, with its slot, and the coins, at its revision. A
+    ///     row the change emptied, with a quantity of 0, is gone, as the client removes it too (Network Protocol §9).
+    ///     Returns the rows as the owner is told them.
     /// </summary>
     public InventoryEntry[] Apply(InventoryResult result)
     {
@@ -110,12 +119,13 @@ public sealed class CharacterInventory
         }
 
         Revision = result.InventoryRevision;
+        Coins = result.Coins;
         return rows;
     }
 
     public IReadOnlyList<InventorySnapshot> CreateSnapshot()
     {
-        return InventorySnapshot.CreateParts(Revision, m_rows);
+        return InventorySnapshot.CreateParts(Revision, (uint)Coins, m_rows);
     }
 
     private InventoryEntry Take(StoredItem stored)

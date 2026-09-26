@@ -20,7 +20,8 @@ public sealed class PlayerSummary
         long refusedCommands,
         int level,
         long experience,
-        long otherEpochInputs)
+        long otherEpochInputs,
+        long coins)
     {
         Connection = connection;
         Character = character;
@@ -35,6 +36,7 @@ public sealed class PlayerSummary
         Level = level;
         Experience = experience;
         OtherEpochInputs = otherEpochInputs;
+        Coins = coins;
     }
 
     public ConnectionId Connection { get; }
@@ -74,5 +76,10 @@ public sealed class PlayerSummary
     ///     Movement inputs dropped because they were made for the map before a transfer.
     /// </summary>
     public long OtherEpochInputs { get; }
+
+    /// <summary>
+    ///     The character's coins as last committed.
+    /// </summary>
+    public long Coins { get; }
 }
 }

@@ -89,7 +89,11 @@ public sealed class TelemetryTests
     public void Execute_Players_ListsEveryPlayerWithoutCredentials()
     {
         var server = new TestServer();
-        server.EnterWorld(7);
+        ConnectionId seven = server.Connect();
+        server.SignInWithCharacter(seven, 7);
+        server.Store.Edit(7, coins: 250);
+        server.SendEnterWorld(seven, 7);
+        server.TickUntil(() => server.SessionOf(seven).State == SessionState.InWorld);
         server.EnterWorld(8);
         server.Tick(19);
         var output = new StringWriter();
@@ -99,7 +103,7 @@ public sealed class TelemetryTests
         string[] lines = output.ToString().Split(new[] { Environment.NewLine }, StringSplitOptions.RemoveEmptyEntries);
         Assert.That(lines, Has.Length.EqualTo(2));
         Assert.That(lines[0], Does.Contain("character 7").And.Contain("map.training_ground").And.Contain("rtt 42 ms"));
-        Assert.That(lines[0], Does.EndWith(" other epoch 0"), "movement input made for another map");
+        Assert.That(lines[0], Does.EndWith(" other epoch 0 coins 250"), "input for another map, then the coins");
         Assert.That(lines[1], Does.Contain("character 8"));
         Assert.That(output.ToString(), Does.Not.Contain("dev:").And.Not.Contain("tester"));
     }

@@ -1,5 +1,7 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
+using Evertorch.Persistence;
 using Evertorch.Protocol;
 using NUnit.Framework;
 
@@ -53,6 +55,49 @@ public sealed class InventorySyncTests
         Assert.That(part.Revision, Is.EqualTo(9u));
         Assert.That(part.Entries, Has.Count.EqualTo(3));
         Assert.That(server.Store.Loads[7], Is.EqualTo(1), "the attach reuses the loaded inventory");
+    }
+
+    // Before protocol version 22 a change could not be empty, so a revision raised without a row sent the whole
+    // inventory; now only the coins travel.
+    [Test]
+    public void Change_WithoutARow_IsSentAsAChangeCarryingTheCoins_NotAsASnapshot()
+    {
+        var server = new TestServer();
+        ConnectionId connection = server.EnterWorld(1);
+        CharacterSession character = server.SessionOf(connection).Character!;
+        uint prior = character.Inventory.Revision;
+        character.Inventory.Apply(
+            new InventoryResult(InventoryStatus.Committed, prior + 1, 70, Array.Empty<StoredItem>()));
+        server.Transport.ClearSent();
+
+        new MessageSender(server.Transport).SendInventoryChange(character, prior, Array.Empty<InventoryEntry>());
+        server.Tick();
+
+        InventoryChanged change = server.Transport.ControlSentTo(connection)
+            .Where(message => message.Opcode == MessageOpcode.InventoryChanged)
+            .Select(message => InventoryChanged.TryRead(message.Payload, out InventoryChanged? read) ? read! : null)
+            .Single()!;
+        Assert.That(
+            (change.PriorRevision, change.NewRevision, change.Coins, change.Changes.Count),
+            Is.EqualTo((prior, prior + 1, 70u, 0)));
+        Assert.That(Snapshots(server, connection), Is.Empty);
+    }
+
+    [Test]
+    public void Enter_SendsTheStoredCoinsInEveryPart()
+    {
+        var server = new TestServer();
+        ConnectionId connection = server.Connect();
+        server.SignInWithCharacter(connection, 3);
+        server.Store.GiveItems(3, SlimeGel, 30, 5, 4);
+        server.Store.Edit(3, coins: 1_000_000_000);
+        server.SendEnterWorld(connection, 3);
+        server.TickUntil(() => server.SessionOf(connection).State == SessionState.InWorld);
+
+        InventorySnapshot[] parts = Snapshots(server, connection);
+
+        Assert.That(parts, Has.Length.EqualTo(3));
+        Assert.That(parts.Select(part => part.Coins), Is.All.EqualTo(1_000_000_000u));
     }
 
     [Test]

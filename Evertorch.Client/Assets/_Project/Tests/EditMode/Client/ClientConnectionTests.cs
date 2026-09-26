@@ -472,12 +472,12 @@ public sealed class ClientConnectionTests
     {
         var harness = new Harness();
         harness.EnterWorld();
-        var part = new InventorySnapshot(4, 0, 1, Array.Empty<InventoryEntry>());
+        var part = new InventorySnapshot(4, 0, 0, 1, Array.Empty<InventoryEntry>());
         harness.Deliver(ProtocolChannel.Control, Encode(part.GetEncodedLength(), part.Write));
         int before = harness.Transport.Sent.Count;
         var gel = new ItemDefinitionId("item.material.slime_gel");
-        var skipped = new InventoryChanged(5, 6, new[] { new InventoryEntry(11, gel, 1) });
-        var next = new InventoryChanged(6, 7, new[] { new InventoryEntry(11, gel, 2) });
+        var skipped = new InventoryChanged(5, 6, 0, new[] { new InventoryEntry(11, gel, 1) });
+        var next = new InventoryChanged(6, 7, 0, new[] { new InventoryEntry(11, gel, 2) });
 
         harness.Deliver(ProtocolChannel.Control, Encode(skipped.GetEncodedLength(), skipped.Write));
         harness.Deliver(ProtocolChannel.Control, Encode(next.GetEncodedLength(), next.Write));
@@ -498,6 +498,7 @@ public sealed class ClientConnectionTests
         var part = new InventorySnapshot(
             4,
             0,
+            0,
             1,
             new[] { new InventoryEntry(11, new ItemDefinitionId("item.material.slime_gel"), 3) });
 
@@ -513,7 +514,7 @@ public sealed class ClientConnectionTests
     {
         var harness = new Harness();
         harness.ConnectAndReceiveHello();
-        var part = new InventorySnapshot(4, 0, 1, Array.Empty<InventoryEntry>());
+        var part = new InventorySnapshot(4, 0, 0, 1, Array.Empty<InventoryEntry>());
 
         harness.Deliver(ProtocolChannel.Control, Encode(part.GetEncodedLength(), part.Write));
 

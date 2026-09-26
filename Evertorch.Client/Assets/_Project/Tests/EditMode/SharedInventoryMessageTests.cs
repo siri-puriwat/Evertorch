@@ -14,20 +14,28 @@ public sealed class SharedInventoryMessageTests
 {
     private static readonly byte[] ResyncBytes = { 0x0F, 0x00 };
 
+    // Revision 7 and 250 coins, part 1 of 3.
     private static readonly byte[] SnapshotBytes =
     {
-        0x0F, 0x80, 0x07, 0x00, 0x00, 0x00, 0x01, 0x03, 0x01,
+        0x0F, 0x80, 0x07, 0x00, 0x00, 0x00, 0xFA, 0x00, 0x00, 0x00, 0x01, 0x03, 0x01,
         0x0B, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x06, 0x00,
         0x69, 0x74, 0x65, 0x6D, 0x2E, 0x61, 0x02, 0x00, 0x00, 0x00,
         0x01
     };
 
+    // From revision 7 to 8 with 250 coins.
     private static readonly byte[] ChangedBytes =
     {
-        0x10, 0x80, 0x07, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x01,
+        0x10, 0x80, 0x07, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0xFA, 0x00, 0x00, 0x00, 0x01,
         0x0B, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x06, 0x00,
         0x69, 0x74, 0x65, 0x6D, 0x2E, 0x61, 0x00, 0x00, 0x00, 0x00,
         0x00
+    };
+
+    // From revision 7 to 8, where only the coins moved, to 250.
+    private static readonly byte[] CoinsOnlyBytes =
+    {
+        0x10, 0x80, 0x07, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0xFA, 0x00, 0x00, 0x00, 0x00
     };
 
     private static readonly byte[] EquipBytes =
@@ -68,9 +76,24 @@ public sealed class SharedInventoryMessageTests
     }
 
     [Test]
+    public void InventoryChanged_WhereOnlyTheCoinsMoved_MatchesGoldenBytes()
+    {
+        var message = new InventoryChanged(7, 8, 250, new InventoryEntry[0]);
+        byte[] buffer = new byte[message.GetEncodedLength()];
+        message.Write(buffer);
+
+        bool isRead = InventoryChanged.TryRead(CoinsOnlyBytes, out InventoryChanged? read);
+
+        Assert.That(buffer, Is.EqualTo(CoinsOnlyBytes));
+        Assert.That(isRead, Is.True);
+        Assert.That(read!.Coins, Is.EqualTo(250u));
+        Assert.That(read.Changes, Is.Empty);
+    }
+
+    [Test]
     public void InventoryChanged_WriteAndRead_MatchGoldenBytes()
     {
-        var message = new InventoryChanged(7, 8, new[] { new InventoryEntry(11, ItemA, 0) });
+        var message = new InventoryChanged(7, 8, 250, new[] { new InventoryEntry(11, ItemA, 0) });
         byte[] buffer = new byte[message.GetEncodedLength()];
         message.Write(buffer);
 
@@ -79,6 +102,7 @@ public sealed class SharedInventoryMessageTests
         Assert.That(buffer, Is.EqualTo(ChangedBytes));
         Assert.That(isRead, Is.True);
         Assert.That(read!.NewRevision, Is.EqualTo(8u));
+        Assert.That(read.Coins, Is.EqualTo(250u));
         Assert.That(read.Changes[0].Quantity, Is.EqualTo(0u));
     }
 
@@ -93,20 +117,27 @@ public sealed class SharedInventoryMessageTests
     }
 
     [Test]
-    public void InventorySnapshot_AtItsLargest_Is957Bytes()
+    public void InventorySnapshot_AtItsLargest_Is961Bytes()
     {
         var item = new ItemDefinitionId($"item.{new string('a', 59)}");
         InventoryEntry[] entries = Enumerable.Range(1, InventorySnapshot.MaxEntries)
             .Select(id => new InventoryEntry(id, item, uint.MaxValue))
             .ToArray();
 
-        Assert.That(new InventorySnapshot(uint.MaxValue, 0, 1, entries).GetEncodedLength(), Is.EqualTo(957));
+        Assert.That(
+            new InventorySnapshot(uint.MaxValue, 1_000_000_000, 0, 1, entries).GetEncodedLength(),
+            Is.EqualTo(961));
     }
 
     [Test]
     public void InventorySnapshot_WriteAndRead_MatchGoldenBytes()
     {
-        var message = new InventorySnapshot(7, 1, 3, new[] { new InventoryEntry(11, ItemA, 2, EquipmentSlot.Weapon) });
+        var message = new InventorySnapshot(
+            7,
+            250,
+            1,
+            3,
+            new[] { new InventoryEntry(11, ItemA, 2, EquipmentSlot.Weapon) });
         byte[] buffer = new byte[message.GetEncodedLength()];
         message.Write(buffer);
 
@@ -114,7 +145,8 @@ public sealed class SharedInventoryMessageTests
 
         Assert.That(buffer, Is.EqualTo(SnapshotBytes));
         Assert.That(isRead, Is.True);
-        Assert.That(read!.Entries[0].InventoryItem, Is.EqualTo(11L));
+        Assert.That(read!.Coins, Is.EqualTo(250u));
+        Assert.That(read.Entries[0].InventoryItem, Is.EqualTo(11L));
         Assert.That(read.Entries[0].Item, Is.EqualTo(ItemA));
         Assert.That(read.Entries[0].Slot, Is.EqualTo(EquipmentSlot.Weapon));
     }

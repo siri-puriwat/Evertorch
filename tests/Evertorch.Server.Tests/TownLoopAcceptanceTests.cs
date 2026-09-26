@@ -120,6 +120,7 @@ public sealed class TownLoopAcceptanceTests
         Assert.That(client.World.Map, Is.EqualTo(new MapDefinitionId(TrainingGround)), "enter: in town");
         Assert.That(client.World.Inventory.Rows, Is.Empty, "enter: a new character carries nothing");
         Assert.That((client.World.Level, client.World.Experience), Is.EqualTo(((ushort)1, 0ul)), "enter: level 1");
+        Assert.That(client.World.Inventory.Coins, Is.Zero, "enter: a new character holds no coins");
 
         MeetTheNpcs(content, admin, client);
         CrossToTheField(content, admin, client);
@@ -169,6 +170,8 @@ public sealed class TownLoopAcceptanceTests
             return now != null && now.Level == stopped.Summary.Level && now.Experience == stopped.Summary.Experience;
         });
         Assert.That(isKept, Is.True, "restart: the server kept the level and experience");
+        Assert.That(client.World.Inventory.Coins, Is.Zero, "restart: still no coins");
+        Assert.That(SummaryOf(admin, client.World.LocalEntity).Coins, Is.Zero, "restart: the server holds none either");
         Assert.That(RowsOf(client.World), Is.EqualTo(stopped.Rows), "restart: the same inventory, equipment included");
         Assert.That(
             client.World.Inventory.Rows.Where(row => row.Slot != EquipmentSlot.None)

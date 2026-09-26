@@ -28,6 +28,8 @@ public sealed class LiveServerTownLoopTests : InputTestFixture
     private const string ActionsAsset = "_Project/Settings/InputSystem_Actions.inputactions";
     private const string ClientName = "LiveTownOne";
     private const string NpcClientName = "LiveTownTwo";
+    private const string CoinsClientName = "LiveTownThree";
+    private const long SeededCoins = 4321;
     private const string QuartermasterPrefab = "npc_quartermaster";
     private const string GateWardenPrefab = "npc_gate_warden";
     private const string GroundScene = "10_TrainingGround";
@@ -223,6 +225,41 @@ public sealed class LiveServerTownLoopTests : InputTestFixture
         Assert.That(client.Connection.MalformedMessages + client.Connection.UnexpectedMessages, Is.Zero);
     }
 
+    // Nothing earns coins before the shop and the quest, so the test writes them to the database before the character
+    // enters; the inventory window shows them above the rows, and the console's players line ends with them
+    // (Prototype Content §2; System Architecture §10).
+    [UnityTest]
+    [Timeout(TestTimeoutMs)]
+    public IEnumerator Coins_WrittenToTheDatabase_ShowInTheInventoryWindowAndOnTheConsole()
+    {
+        string actionsPath = RequirePrerequisites();
+        yield return StartDatabaseAndServer();
+        LiveServer server = m_server!;
+        LiveDatabase database = m_database!;
+        Assert.That(server.TryReadListeningPort(out int port), Is.True, $"server output: {server.JoinOutput()}");
+        GameClient client = CreateClient(port, actionsPath);
+
+        yield return EnterByName(
+            client,
+            CoinsClientName,
+            () => database.Execute(
+                $"UPDATE characters SET currency = {SeededCoins} WHERE name = '{CoinsClientName}'"));
+        InventoryWindow window = client.GetComponentsInChildren<InventoryWindow>(true).Single();
+        yield return WaitUntil(() => window.CoinsText == $"Coins: {SeededCoins}", StepTimeoutSeconds);
+
+        Assert.That(window.CoinsText, Is.EqualTo($"Coins: {SeededCoins}"));
+        Assert.That(client.World!.Inventory.Coins, Is.EqualTo((uint)SeededCoins));
+
+        // The console republishes what it reads once a second.
+        yield return new WaitForSecondsRealtime(1.5f);
+        long character = client.Connection!.Characters.Single(entry => entry.Name == CoinsClientName).Character.Value;
+        server.ClearOutput();
+        server.SendCommand("players");
+        yield return WaitUntil(() => server.HasOutput(LiveServer.CharacterMarker(character)), StepTimeoutSeconds);
+        string line = server.Output().First(text => text.Contains(LiveServer.CharacterMarker(character)));
+        Assert.That(line, Does.EndWith($" coins {SeededCoins}"));
+    }
+
     private static EntityView? NpcView(GameClient client, string prefab)
     {
         ClientWorld? world = client.World;
@@ -269,7 +306,8 @@ public sealed class LiveServerTownLoopTests : InputTestFixture
         return actionsPath;
     }
 
-    private static IEnumerator EnterByName(GameClient client, string name)
+    // Creates the named character, runs beforeEntering, and enters the world with it.
+    private static IEnumerator EnterByName(GameClient client, string name, Action? beforeEntering = null)
     {
         yield return WaitUntil(() => client.Connection != null, StartTimeoutSeconds);
         ClientConnection connection = client.Connection!;
@@ -279,6 +317,7 @@ public sealed class LiveServerTownLoopTests : InputTestFixture
         Assert.That(hasList, Is.True, $"no character list: {client.Status}");
         client.CreateCharacter(name);
         yield return WaitUntil(() => connection.Characters.Any(entry => entry.Name == name), StartTimeoutSeconds);
+        beforeEntering?.Invoke();
         client.EnterWorld(connection.Characters.Single(entry => entry.Name == name).Character);
         yield return WaitUntil(() => client.World?.Inventory.IsCurrent == true, StartTimeoutSeconds);
         Assert.That(client.World?.Inventory.IsCurrent, Is.True, client.Status);

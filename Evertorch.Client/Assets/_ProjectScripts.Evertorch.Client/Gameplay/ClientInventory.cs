@@ -5,15 +5,16 @@ using Evertorch.Protocol;
 namespace Evertorch.Client
 {
 /// <summary>
-///     The local character's inventory as the server last committed it (Network Protocol §9, §12). A snapshot is
-///     applied only once all its parts have arrived; a change applies only to the revision it was made from, and any
-///     other revision means something was missed, so the whole inventory is asked for again.
+///     The local character's inventory and coins as the server last committed them (Network Protocol §9, §12). A
+///     snapshot is applied only once all its parts have arrived; a change applies only to the revision it was made from,
+///     and any other revision means something was missed, so the whole inventory is asked for again.
 /// </summary>
 public sealed class ClientInventory
 {
     private readonly List<InventoryEntry> m_rows = new();
     private readonly List<InventoryEntry> m_assembly = new();
     private uint m_assemblyRevision;
+    private uint m_assemblyCoins;
     private int m_nextPart;
     private int m_partCount;
     private bool m_isAwaitingResync;
@@ -21,6 +22,11 @@ public sealed class ClientInventory
     public IReadOnlyList<InventoryEntry> Rows => m_rows;
 
     public uint Revision { get; private set; }
+
+    /// <summary>
+    ///     The character's coins at <see cref="Revision" />.
+    /// </summary>
+    public uint Coins { get; private set; }
 
     /// <summary>
     ///     A whole snapshot has been applied and no gap has been seen since; until then changes are ignored.
@@ -48,12 +54,16 @@ public sealed class ClientInventory
         {
             m_assembly.Clear();
             m_assemblyRevision = part.Revision;
+            m_assemblyCoins = part.Coins;
             m_partCount = part.PartCount;
             m_nextPart = 0;
         }
-        else if (m_nextPart != part.Part || m_assemblyRevision != part.Revision || m_partCount != part.PartCount)
+        else if (m_nextPart != part.Part
+                 || m_assemblyRevision != part.Revision
+                 || m_partCount != part.PartCount
+                 || m_assemblyCoins != part.Coins)
         {
-            // A part of another snapshot discards the unfinished one.
+            // A part of another snapshot discards the unfinished one; parts of one snapshot carry the same coins.
             m_assembly.Clear();
             m_nextPart = 0;
             m_partCount = 0;
@@ -73,6 +83,7 @@ public sealed class ClientInventory
         m_nextPart = 0;
         m_partCount = 0;
         Revision = part.Revision;
+        Coins = m_assemblyCoins;
         IsCurrent = true;
         m_isAwaitingResync = false;
         Changed?.Invoke();
@@ -123,6 +134,7 @@ public sealed class ClientInventory
         }
 
         Revision = change.NewRevision;
+        Coins = change.Coins;
         Changed?.Invoke();
         return false;
     }

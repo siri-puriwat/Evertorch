@@ -115,7 +115,8 @@ public sealed class StatusPublisher : ITickPhase
                     session.RefusedCommands,
                     session.Player.Level,
                     session.Player.Experience,
-                    session.OtherEpochInputs));
+                    session.OtherEpochInputs,
+                    session.Character?.Inventory.Coins ?? 0));
         }
 
         return new ServerStatus(

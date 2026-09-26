@@ -41,9 +41,9 @@ public sealed class ServerOutputTests
         ["EntitySpawn"] = new[]
             { "DefinitionId", "Entity", "Facing", "HealthPermille", "Kind", "Position", "StateFlags" },
         ["EntityState"] = new[] { "Entity", "Facing", "Position", "StateFlags", "VelocityX", "VelocityY", "VelocityZ" },
-        ["InventoryChanged"] = new[] { "Changes", "NewRevision", "PriorRevision" },
+        ["InventoryChanged"] = new[] { "Changes", "Coins", "NewRevision", "PriorRevision" },
         ["InventoryEntry"] = new[] { "InventoryItem", "Item", "Quantity", "Slot" },
-        ["InventorySnapshot"] = new[] { "Entries", "IsLast", "Part", "PartCount", "Revision" },
+        ["InventorySnapshot"] = new[] { "Coins", "Entries", "IsLast", "Part", "PartCount", "Revision" },
         ["ItemDefinitionId"] = new[] { "Value" },
         ["ItemDropped"] = new[] { "Amount", "Entity", "ItemId", "Position" },
         ["ItemPickedUp"] = new[] { "Amount", "Drop", "Item", "Recipient" },

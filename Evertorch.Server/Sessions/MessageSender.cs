@@ -161,13 +161,16 @@ public sealed class MessageSender
             return;
         }
 
-        if (rows.Count == 0)
+        // A change in which only the coins moved carries no row (Network Protocol §9).
+        if (owner.State == SessionState.InWorld)
         {
-            owner.NeedsInventorySnapshot = true;
-        }
-        else if (owner.State == SessionState.InWorld)
-        {
-            Send(owner.Connection, new InventoryChanged(priorRevision, character.Inventory.Revision, rows));
+            Send(
+                owner.Connection,
+                new InventoryChanged(
+                    priorRevision,
+                    character.Inventory.Revision,
+                    (uint)character.Inventory.Coins,
+                    rows));
         }
     }
 

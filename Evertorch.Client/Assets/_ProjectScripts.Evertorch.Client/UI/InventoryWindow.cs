@@ -10,9 +10,10 @@ using UnityEngine.UI;
 namespace Evertorch.Client
 {
 /// <summary>
-///     The character's items as text (Prototype Content §2), along the right edge while in the world. A row whose item
-///     has an action is a button that asks for it (<see cref="InventoryActions" />), and a worn row ends
-///     "(equipped)". Icons would pull the optional icon keys into the Addressables key check.
+///     The character's coins and items as text (Prototype Content §2), along the right edge while in the world. The
+///     coins share the heading's line above the rows, which scroll; a row whose item has an action is a button that asks
+///     for it (<see cref="InventoryActions" />), and a worn row ends "(equipped)". Icons would pull the optional icon
+///     keys into the Addressables key check.
 /// </summary>
 public sealed class InventoryWindow : MonoBehaviour
 {
@@ -25,6 +26,8 @@ public sealed class InventoryWindow : MonoBehaviour
     private const float RowHeight = 30f;
     private const float RowSpacing = 4f;
 
+    private const float TitleWidth = 110f;
+
     // The padding, the heading, and the space below it.
     private const float Chrome = 2 * Padding + RowHeight + RowSpacing;
 
@@ -35,6 +38,7 @@ public sealed class InventoryWindow : MonoBehaviour
     private GameClient? m_client;
     private GameObject? m_panel;
     private Transform? m_rows;
+    private TMP_Text? m_coins;
     private LayoutElement? m_list;
     private float m_listHeight = -1f;
     private ClientInventory? m_shownInventory;
@@ -48,6 +52,11 @@ public sealed class InventoryWindow : MonoBehaviour
     ///     The rows as shown, one line each.
     /// </summary>
     public string Text { get; private set; } = string.Empty;
+
+    /// <summary>
+    ///     The coins as shown, "Coins: N"; empty until the inventory is current.
+    /// </summary>
+    public string CoinsText => m_coins != null ? m_coins.text : string.Empty;
 
     public bool IsVisible => m_panel != null && m_panel.activeSelf;
 
@@ -126,6 +135,7 @@ public sealed class InventoryWindow : MonoBehaviour
         m_hadContent = hasContent;
         ClearRows();
         m_text.Clear();
+        m_coins!.text = inventory.IsCurrent ? $"Coins: {inventory.Coins}" : string.Empty;
         if (!inventory.IsCurrent)
         {
             AddLine("Waiting for the server");
@@ -232,10 +242,16 @@ public sealed class InventoryWindow : MonoBehaviour
             Width,
             Padding);
         m_panel = panel.gameObject;
-        TMP_Text heading = Ui.CreateLabel("Heading", panel);
-        heading.text = "Inventory";
-        heading.fontStyle = FontStyles.Bold;
-        heading.gameObject.AddComponent<LayoutElement>().preferredHeight = RowHeight;
+        // The coins share the heading's line, so the rows keep all the room there is on a short screen.
+        GameObject heading = Ui.CreateRow("Heading", panel);
+        TMP_Text title = Ui.CreateLabel("Title", heading.transform);
+        title.text = "Inventory";
+        title.fontStyle = FontStyles.Bold;
+        title.gameObject.AddComponent<LayoutElement>().preferredWidth = TitleWidth;
+        m_coins = Ui.CreateLabel("Coins", heading.transform);
+        m_coins.alignment = TextAlignmentOptions.MidlineRight;
+        m_coins.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1f;
+        FitOnOneLine(m_coins);
         m_rows = CreateList(panel);
         m_panel.SetActive(false);
     }

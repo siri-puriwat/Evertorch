@@ -19,7 +19,7 @@ public sealed class ClientInventoryTests
     private static ClientInventory Current(uint revision, params InventoryEntry[] rows)
     {
         var inventory = new ClientInventory();
-        foreach (InventorySnapshot part in InventorySnapshot.CreateParts(revision, rows))
+        foreach (InventorySnapshot part in InventorySnapshot.CreateParts(revision, 0, rows))
         {
             inventory.OnSnapshot(part);
         }
@@ -32,7 +32,7 @@ public sealed class ClientInventoryTests
     {
         var inventory = new ClientInventory();
 
-        bool needsResync = inventory.OnChanged(new InventoryChanged(0, 1, new[] { Row(1, 1) }));
+        bool needsResync = inventory.OnChanged(new InventoryChanged(0, 1, 0, new[] { Row(1, 1) }));
 
         Assert.That(needsResync, Is.False);
         Assert.That(inventory.Rows, Is.Empty);
@@ -44,8 +44,8 @@ public sealed class ClientInventoryTests
     {
         ClientInventory inventory = Current(3, Row(1, 5));
 
-        bool first = inventory.OnChanged(new InventoryChanged(4, 5, new[] { Row(1, 9) }));
-        bool second = inventory.OnChanged(new InventoryChanged(5, 6, new[] { Row(1, 10) }));
+        bool first = inventory.OnChanged(new InventoryChanged(4, 5, 0, new[] { Row(1, 9) }));
+        bool second = inventory.OnChanged(new InventoryChanged(5, 6, 0, new[] { Row(1, 10) }));
 
         Assert.That(first, Is.True);
         Assert.That(second, Is.False);
@@ -54,8 +54,8 @@ public sealed class ClientInventoryTests
         Assert.That(inventory.IgnoredChanges, Is.EqualTo(2));
         Assert.That(inventory.Rows.Single().Quantity, Is.EqualTo(5u));
 
-        inventory.OnSnapshot(new InventorySnapshot(6, 0, 1, new[] { Row(1, 10) }));
-        bool afterSnapshot = inventory.OnChanged(new InventoryChanged(6, 7, new[] { Row(1, 11) }));
+        inventory.OnSnapshot(new InventorySnapshot(6, 0, 0, 1, new[] { Row(1, 10) }));
+        bool afterSnapshot = inventory.OnChanged(new InventoryChanged(6, 7, 0, new[] { Row(1, 11) }));
 
         Assert.That(afterSnapshot, Is.False);
         Assert.That(inventory.IsCurrent, Is.True);
@@ -67,7 +67,8 @@ public sealed class ClientInventoryTests
     {
         ClientInventory inventory = Current(3, Row(1, 5), Row(2, 6));
 
-        bool needsResync = inventory.OnChanged(new InventoryChanged(3, 4, new[] { Row(1, 0), Row(2, 7), Row(3, 1) }));
+        bool needsResync =
+            inventory.OnChanged(new InventoryChanged(3, 4, 0, new[] { Row(1, 0), Row(2, 7), Row(3, 1) }));
 
         Assert.That(needsResync, Is.False);
         Assert.That(inventory.Revision, Is.EqualTo(4u));
@@ -88,6 +89,7 @@ public sealed class ClientInventoryTests
             new InventoryChanged(
                 3,
                 4,
+                0,
                 new[] { new InventoryEntry(2, sword, 1, EquipmentSlot.Weapon), new InventoryEntry(1, sword, 1) }));
 
         Assert.That(
@@ -96,28 +98,62 @@ public sealed class ClientInventoryTests
     }
 
     [Test]
+    public void Coins_ComeWithTheLastPart_ThenWithEachChangeInRevisionOrder()
+    {
+        IReadOnlyList<InventorySnapshot> parts =
+            InventorySnapshot.CreateParts(3, 250, Enumerable.Range(1, 13).Select(id => Row(id, 1)).ToArray());
+        var inventory = new ClientInventory();
+        inventory.OnSnapshot(parts[0]);
+        uint beforeTheLastPart = inventory.Coins;
+        inventory.OnSnapshot(parts[1]);
+        uint afterTheSnapshot = inventory.Coins;
+
+        bool skipped = inventory.OnChanged(new InventoryChanged(5, 6, 900, new InventoryEntry[0]));
+        inventory.OnSnapshot(new InventorySnapshot(4, 250, 0, 1, new InventoryEntry[0]));
+        bool coinsOnly = inventory.OnChanged(new InventoryChanged(4, 5, 70, new InventoryEntry[0]));
+
+        Assert.That((beforeTheLastPart, afterTheSnapshot), Is.EqualTo((0u, 250u)));
+        Assert.That(skipped, Is.True, "a change from another revision moves no coins");
+        Assert.That(coinsOnly, Is.False);
+        Assert.That((inventory.Revision, inventory.Coins, inventory.Rows.Count), Is.EqualTo((5u, 70u, 0)));
+    }
+
+    [Test]
     public void Part_OfAnotherSnapshot_DiscardsTheUnfinishedOneAndAsksAgain()
     {
         ClientInventory inventory = Current(3, Row(1, 5));
-        inventory.OnSnapshot(new InventorySnapshot(8, 0, 2, new[] { Row(2, 1) }));
+        inventory.OnSnapshot(new InventorySnapshot(8, 0, 0, 2, new[] { Row(2, 1) }));
 
-        bool needsResync = inventory.OnSnapshot(new InventorySnapshot(9, 1, 2, new[] { Row(3, 1) }));
+        bool needsResync = inventory.OnSnapshot(new InventorySnapshot(9, 0, 1, 2, new[] { Row(3, 1) }));
 
         Assert.That(needsResync, Is.True);
         Assert.That(inventory.IsCurrent, Is.False);
         Assert.That(inventory.Rows.Single().InventoryItem, Is.EqualTo(1L));
 
-        inventory.OnSnapshot(new InventorySnapshot(10, 0, 1, new[] { Row(4, 1) }));
+        inventory.OnSnapshot(new InventorySnapshot(10, 0, 0, 1, new[] { Row(4, 1) }));
 
         Assert.That(inventory.IsCurrent, Is.True);
         Assert.That(inventory.Rows.Single().InventoryItem, Is.EqualTo(4L));
     }
 
     [Test]
+    public void Parts_ThatDisagreeOnTheCoins_AreAGap()
+    {
+        ClientInventory inventory = Current(3, Row(1, 5));
+        inventory.OnSnapshot(new InventorySnapshot(8, 250, 0, 2, new[] { Row(2, 1) }));
+
+        bool needsResync = inventory.OnSnapshot(new InventorySnapshot(8, 260, 1, 2, new[] { Row(3, 1) }));
+
+        Assert.That(needsResync, Is.True);
+        Assert.That(inventory.IsCurrent, Is.False);
+        Assert.That((inventory.Revision, inventory.Coins), Is.EqualTo((3u, 0u)), "nothing of the parts applied");
+    }
+
+    [Test]
     public void Snapshot_OfAHundredRowsInParts_IsAppliedWhenTheLastPartArrives()
     {
         InventoryEntry[] rows = Enumerable.Range(1, 100).Select(id => Row(id, (uint)id)).ToArray();
-        IReadOnlyList<InventorySnapshot> parts = InventorySnapshot.CreateParts(42, rows);
+        IReadOnlyList<InventorySnapshot> parts = InventorySnapshot.CreateParts(42, 0, rows);
         var inventory = new ClientInventory();
         int changed = 0;
         inventory.Changed += () => changed++;
@@ -145,7 +181,7 @@ public sealed class ClientInventoryTests
     {
         ClientInventory inventory = Current(3, Row(1, 5), Row(2, 6));
 
-        inventory.OnSnapshot(new InventorySnapshot(9, 0, 1, new[] { Row(4, 1) }));
+        inventory.OnSnapshot(new InventorySnapshot(9, 0, 0, 1, new[] { Row(4, 1) }));
 
         Assert.That(inventory.Revision, Is.EqualTo(9u));
         Assert.That(inventory.Rows.Select(row => row.InventoryItem), Is.EqualTo(new[] { 4L }));

@@ -439,6 +439,7 @@ public sealed class PlayerPanelTests
             new InventorySnapshot(
                 4,
                 0,
+                0,
                 1,
                 new[] { new InventoryEntry(7, new ItemDefinitionId("item.consumable.minor_health"), 3) }));
         yield return null;
@@ -505,6 +506,7 @@ public sealed class PlayerPanelTests
             new InventorySnapshot(
                 4,
                 0,
+                0,
                 1,
                 new[]
                 {
@@ -539,6 +541,7 @@ public sealed class PlayerPanelTests
             new InventorySnapshot(
                 4,
                 0,
+                0,
                 1,
                 new[] { new InventoryEntry(2, new ItemDefinitionId(Sword), 1, EquipmentSlot.Weapon) }));
         yield return null;
@@ -572,6 +575,7 @@ public sealed class PlayerPanelTests
             new InventorySnapshot(
                 4,
                 0,
+                0,
                 1,
                 Enumerable.Range(1, InventorySnapshot.MaxEntries)
                     .Select(row => new InventoryEntry(row, new ItemDefinitionId(Sword), 1))
@@ -594,6 +598,35 @@ public sealed class PlayerPanelTests
     }
 
     [UnityTest]
+    public IEnumerator InventoryWindow_ShowsTheCoinsAboveTheRows_OnceCurrent_AndAfterEachChange()
+    {
+        GameClient client = CreateIdleClient();
+        ClientWorld world = GiveWorld(client);
+        GiveItems(client);
+        var window = InventoryWindow.Create(client);
+        m_created.Add(window.gameObject);
+        yield return null;
+        string waiting = window.CoinsText;
+
+        world.Inventory.OnSnapshot(
+            new InventorySnapshot(4, 250, 0, 1, new[] { new InventoryEntry(1, new ItemDefinitionId(Gel), 3) }));
+        yield return null;
+        yield return null;
+        string shown = window.CoinsText;
+        Rect coins =
+            ScreenRect(window.GetComponentsInChildren<RectTransform>(true).Single(rect => rect.name == "Coins"));
+        Rect list = ScreenRect(window.GetComponentsInChildren<RectTransform>(true).Single(rect => rect.name == "List"));
+        world.Inventory.OnChanged(new InventoryChanged(4, 5, 70, new InventoryEntry[0]));
+        yield return null;
+
+        Assert.That(waiting, Is.Empty, "no coins until the inventory is current");
+        Assert.That(shown, Is.EqualTo("Coins: 250"));
+        Assert.That(coins.yMin, Is.GreaterThanOrEqualTo(list.yMax - 0.5f), "on the heading's line, above the rows");
+        Assert.That(window.CoinsText, Is.EqualTo("Coins: 70"));
+        Assert.That(window.Text, Is.EqualTo("Slime Gel x 3"), "a change of coins alone leaves the rows");
+    }
+
+    [UnityTest]
     public IEnumerator InventoryWindow_ListsTheRows_AndRewritesOnlyForANewRevision()
     {
         GameClient client = CreateIdleClient();
@@ -604,7 +637,7 @@ public sealed class PlayerPanelTests
         string waiting = window.Text;
 
         world.Inventory.OnSnapshot(
-            new InventorySnapshot(4, 0, 1, new[] { new InventoryEntry(1, new ItemDefinitionId(Gel), 3) }));
+            new InventorySnapshot(4, 0, 0, 1, new[] { new InventoryEntry(1, new ItemDefinitionId(Gel), 3) }));
         yield return null;
         string listed = window.Text;
         int changes = window.TextChanges;
@@ -612,7 +645,7 @@ public sealed class PlayerPanelTests
         int changesLater = window.TextChanges;
 
         world.Inventory.OnChanged(
-            new InventoryChanged(4, 5, new[] { new InventoryEntry(1, new ItemDefinitionId(Gel), 0) }));
+            new InventoryChanged(4, 5, 0, new[] { new InventoryEntry(1, new ItemDefinitionId(Gel), 0) }));
         yield return null;
 
         Assert.That(waiting, Is.EqualTo("Waiting for the server"));

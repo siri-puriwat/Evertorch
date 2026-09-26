@@ -212,6 +212,7 @@ public sealed class MessageFuzzTests
             Encode(
                 new InventorySnapshot(
                     7,
+                    250,
                     1,
                     3,
                     new[]
@@ -226,6 +227,7 @@ public sealed class MessageFuzzTests
                 new InventoryChanged(
                     7,
                     8,
+                    250,
                     new[]
                     {
                         new InventoryEntry(11, new ItemDefinitionId("item.material.slime_gel"), 0),
