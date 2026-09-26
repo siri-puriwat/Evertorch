@@ -149,10 +149,12 @@ public sealed class LiteNetLibServerTransportTests
         Assert.That(client.Notice!.Reason, Is.EqualTo(DisconnectReason.Maintenance));
     }
 
+    // Three seconds, so that the kick and both rejections fit inside it even on a loaded machine (a 20-run soak once
+    // took 2.1 s for them).
     [Test]
     public void Connect_FromACoolingAddress_IsRejectedWithRateLimitedAfterTheKeyCheckUntilTheCooldownEnds()
     {
-        using var harness = new Harness(abuse: new AbuseOptions { KickCooldownMs = 1000 });
+        using var harness = new Harness(abuse: new AbuseOptions { KickCooldownMs = 3000 });
         using TestNetClient kicked = ConnectedClient(harness, out ConnectionId connection);
         var cooling = Stopwatch.StartNew();
         harness.Transport.CoolDownAddress(connection);
@@ -165,9 +167,9 @@ public sealed class LiteNetLibServerTransportTests
         keyless.Connect(harness.Port, "not-the-key");
         Assert.That(again.WaitFor(() => again.IsDisconnected), Is.True);
         Assert.That(keyless.WaitFor(() => keyless.IsDisconnected), Is.True);
-        Assert.That(cooling.Elapsed, Is.LessThan(TimeSpan.FromSeconds(1)), "the rejections came within the cooldown");
+        Assert.That(cooling.Elapsed, Is.LessThan(TimeSpan.FromSeconds(3)), "the rejections came within the cooldown");
 
-        Thread.Sleep(TimeSpan.FromMilliseconds(1100) - cooling.Elapsed);
+        Thread.Sleep(TimeSpan.FromMilliseconds(3100) - cooling.Elapsed);
         using var later = new TestNetClient();
         later.Connect(harness.Port, Key);
 
