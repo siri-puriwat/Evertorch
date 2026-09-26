@@ -75,6 +75,13 @@ public interface IGameStore
     Task<InventoryResult> CommitUnequipAsync(UnequipCommit unequip, CancellationToken cancellationToken);
 
     /// <summary>
+    ///     Takes one unit of the row in one transaction with a <c>consume</c> ledger row of −1, like
+    ///     <see cref="CommitEquipAsync" />; the last unit deletes the row, which then reports a quantity of 0.
+    ///     <see cref="InventoryStatus.Refused" /> when the row is not the character's.
+    /// </summary>
+    Task<InventoryResult> CommitConsumeAsync(ConsumeCommit consume, CancellationToken cancellationToken);
+
+    /// <summary>
     ///     What became of an inventory operation whose commit may or may not have happened, looked up under the
     ///     character's lock: null when the ledger has no entry for <paramref name="operationId" />, else
     ///     <see cref="InventoryStatus.TakenByOther" /> when another character made it, or

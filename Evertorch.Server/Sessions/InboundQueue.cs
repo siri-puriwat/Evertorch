@@ -277,6 +277,14 @@ public sealed class InboundQueue
 
                 decoded = InboundEvent.ForUnequip(connection, unequip.Slot, unequip.CommandSequence);
                 return true;
+            case MessageOpcode.UseItem:
+                if (!UseItem.TryRead(payload, out UseItem use))
+                {
+                    return false;
+                }
+
+                decoded = InboundEvent.ForUseItem(connection, use.InventoryItem, use.CommandSequence);
+                return true;
             case MessageOpcode.CancelAction:
                 if (!CancelAction.TryRead(payload, out CancelAction cancel))
                 {

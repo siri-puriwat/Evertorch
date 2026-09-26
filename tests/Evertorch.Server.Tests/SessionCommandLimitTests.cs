@@ -140,7 +140,7 @@ public sealed class SessionCommandLimitTests
     }
 
     [Test]
-    public void ItemCommands_OverTheItemBucket_AreRefusedAsNotAllowedNow_BothKindsFromOneBucket()
+    public void ItemCommands_OverTheItemBucket_AreRefusedAsNotAllowedNow_EveryKindFromOneBucket()
     {
         var server = new TestServer();
         ConnectionId player = server.EnterWorld(7);
@@ -152,7 +152,7 @@ public sealed class SessionCommandLimitTests
             server.SendUnequip(player, EquipmentSlot.Weapon, sequence++);
         }
 
-        server.SendEquip(player, 999999, sequence);
+        server.SendUseItem(player, 999999, sequence);
         server.Tick();
 
         CommandRejected[] rejections = Rejections(server, player);

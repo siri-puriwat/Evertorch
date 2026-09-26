@@ -84,6 +84,12 @@ public enum InboundEventKind
     /// <summary>
     ///     A request to empty the equipment slot <see cref="InboundEvent.Slot" />, carrying a command sequence.
     /// </summary>
-    Unequip = 18
+    Unequip = 18,
+
+    /// <summary>
+    ///     A request to use one unit of the inventory row <see cref="InboundEvent.InventoryItem" />, carrying a command
+    ///     sequence.
+    /// </summary>
+    UseItem = 19
 }
 }

@@ -45,6 +45,7 @@ public sealed class CommandRejectionTests
     [TestCase(InboundEventKind.Logout)]
     [TestCase(InboundEventKind.Equip)]
     [TestCase(InboundEventKind.Unequip)]
+    [TestCase(InboundEventKind.UseItem)]
     public void Command_WhileDead_IsRejectedAsNotAllowedNow(InboundEventKind kind)
     {
         (TestServer server, ConnectionId player, EntityId slime) = EnterNearSlimes();
@@ -64,6 +65,9 @@ public sealed class CommandRejectionTests
                 break;
             case InboundEventKind.Unequip:
                 server.SendUnequip(player, EquipmentSlot.Weapon, 7);
+                break;
+            case InboundEventKind.UseItem:
+                server.SendUseItem(player, 999999, 7);
                 break;
             default:
                 server.SendLogout(player, 7);

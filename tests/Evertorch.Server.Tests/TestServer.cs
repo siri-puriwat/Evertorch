@@ -578,6 +578,13 @@ internal sealed class TestServer
         Inbound.OnPayload(connection, ProtocolChannel.Control, payload);
     }
 
+    public void SendUseItem(ConnectionId connection, long inventoryItem, uint commandSequence)
+    {
+        byte[] payload = new byte[UseItem.EncodedLength];
+        new UseItem(inventoryItem, commandSequence).Write(payload);
+        Inbound.OnPayload(connection, ProtocolChannel.Control, payload);
+    }
+
     public void SendLogout(ConnectionId connection, uint commandSequence)
     {
         byte[] payload = new byte[Logout.EncodedLength];

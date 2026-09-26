@@ -461,6 +461,18 @@ public sealed class GameClient : MonoBehaviour
     /// </summary>
     public void UseSkillSlot(int slot)
     {
+        if (SkillSlots.TryGetItem(slot, out ItemDefinitionId item))
+        {
+            if (m_world != null
+                && Connection != null
+                && InventoryActions.TryFindRow(m_world.Inventory.Rows, item, out InventoryEntry row))
+            {
+                Connection.SendUseItem(row.InventoryItem);
+            }
+
+            return;
+        }
+
         ClientContent? content = m_contentLoader.Content;
         if (m_world == null
             || m_skill == null

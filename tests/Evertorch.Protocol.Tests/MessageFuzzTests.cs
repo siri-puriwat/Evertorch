@@ -175,6 +175,10 @@ public sealed class MessageFuzzTests
             Encode(new UnequipItem(EquipmentSlot.Weapon, 9)),
             payload => UnequipItem.TryRead(payload, out UnequipItem message) ? Encode(message) : null);
         yield return Case(
+            "UseItem",
+            Encode(new UseItem(41, 9)),
+            payload => UseItem.TryRead(payload, out UseItem message) ? Encode(message) : null);
+        yield return Case(
             "ItemPickedUp",
             Encode(new ItemPickedUp(new EntityId(7), new EntityId(3), new ItemDefinitionId("item.material.slime_gel"),
                 2)),
@@ -398,6 +402,13 @@ public sealed class MessageFuzzTests
     private static byte[] Encode(UnequipItem message)
     {
         byte[] buffer = new byte[UnequipItem.EncodedLength];
+        message.Write(buffer);
+        return buffer;
+    }
+
+    private static byte[] Encode(UseItem message)
+    {
+        byte[] buffer = new byte[UseItem.EncodedLength];
         message.Write(buffer);
         return buffer;
     }

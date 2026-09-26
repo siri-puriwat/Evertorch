@@ -1,0 +1,12 @@
+id: item.consumable.minor_mana
+displayName: Minor Mana Potion
+type: consumable
+stackLimit: 50
+server:
+  weight: 7
+  sellPrice: 15
+  effect:
+    sp: 15
+client:
+  icon: item_minor_mana
+  model: pickup_minor_mana

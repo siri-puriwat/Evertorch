@@ -80,6 +80,16 @@ internal sealed class InMemoryGameStore : IGameStore
     /// </summary>
     public List<Guid> EquipmentCommits { get; } = new();
 
+    /// <summary>
+    ///     How many of the next consume commits succeed and then throw as if the answer was lost.
+    /// </summary>
+    public int AmbiguousConsumeFailures { get; set; }
+
+    /// <summary>
+    ///     Every consume commit attempted, in order, by operation ID.
+    /// </summary>
+    public List<Guid> ConsumeCommits { get; } = new();
+
     public int LedgerCount
     {
         get
@@ -256,6 +266,24 @@ internal sealed class InMemoryGameStore : IGameStore
         }
     }
 
+    public Task<InventoryResult> CommitConsumeAsync(ConsumeCommit consume, CancellationToken cancellationToken)
+    {
+        ThrowIfUnavailable();
+        lock (m_gate)
+        {
+            ConsumeCommits.Add(consume.OperationId);
+            InventoryResult result = Find(consume.OperationId, consume.CharacterId, Array.Empty<long>())
+                ?? Consume(consume);
+            if (AmbiguousConsumeFailures > 0 && result.Status == InventoryStatus.Committed)
+            {
+                AmbiguousConsumeFailures--;
+                throw new StoreUnavailableException(new TimeoutException("scripted loss of the commit's answer"));
+            }
+
+            return Task.FromResult(result);
+        }
+    }
+
     public Task<InventoryResult?> FindOperationAsync(
         Guid operationId,
         long characterId,
@@ -391,7 +419,37 @@ internal sealed class InMemoryGameStore : IGameStore
         return new InventoryResult(
             InventoryStatus.Committed,
             row.InventoryRevision,
-            new[] { entry.Item }.Concat(rowIds.Where(id => id != entry.Item)).Select(row.Read).ToList());
+            new[] { entry.Item }
+                .Concat(rowIds.Where(id => id != entry.Item))
+                .Select(id => row.Read(id, id == entry.Item ? entry.ItemDefinition : string.Empty))
+                .ToList());
+    }
+
+    private InventoryResult Consume(ConsumeCommit consume)
+    {
+        Row row = m_characters[consume.CharacterId];
+        int index = row.Items.FindIndex(item => item.Id == consume.InventoryItemId);
+        if (index < 0)
+        {
+            return new InventoryResult(InventoryStatus.Refused, row.InventoryRevision, Array.Empty<StoredItem>());
+        }
+
+        StoredItem used = row.Items[index];
+        if (used.Quantity == 1)
+        {
+            row.Items.RemoveAt(index);
+        }
+        else
+        {
+            row.Items[index] = new StoredItem(used.Id, used.ItemDefinitionId, used.Quantity - 1);
+        }
+
+        row.InventoryRevision = unchecked(row.InventoryRevision + 1);
+        m_ledger.Add(consume.OperationId, new LedgerEntry(consume.CharacterId, used.Id, used.ItemDefinitionId));
+        return new InventoryResult(
+            InventoryStatus.Committed,
+            row.InventoryRevision,
+            new[] { row.Read(used.Id, used.ItemDefinitionId) });
     }
 
     private Task<InventoryResult> AnswerEquipment(InventoryResult result)
@@ -481,15 +539,21 @@ internal sealed class InMemoryGameStore : IGameStore
 
     private sealed class LedgerEntry
     {
-        public LedgerEntry(long character, long item)
+        public LedgerEntry(long character, long item, string itemDefinition = "")
         {
             Character = character;
             Item = item;
+            ItemDefinition = itemDefinition;
         }
 
         public long Character { get; }
 
         public long Item { get; }
+
+        /// <summary>
+        ///     The item the entry names, which an emptied row is reported under, as the PostgreSQL store's ledger does.
+        /// </summary>
+        public string ItemDefinition { get; }
     }
 
     private sealed class Row
@@ -536,10 +600,15 @@ internal sealed class InMemoryGameStore : IGameStore
         // A row as it is now, with its slot; one that no longer exists at quantity 0.
         public StoredItem Read(long id)
         {
+            return Read(id, string.Empty);
+        }
+
+        public StoredItem Read(long id, string emptiedItem)
+        {
             StoredItem? item = Items.SingleOrDefault(candidate => candidate.Id == id);
             string? slot = Equipment.Where(pair => pair.Value == id).Select(pair => pair.Key).FirstOrDefault();
             return item == null
-                ? new StoredItem(id, string.Empty, 0)
+                ? new StoredItem(id, emptiedItem, 0)
                 : new StoredItem(item.Id, item.ItemDefinitionId, item.Quantity, slot);
         }
 

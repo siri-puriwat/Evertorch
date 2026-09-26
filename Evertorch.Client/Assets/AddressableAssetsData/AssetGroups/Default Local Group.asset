@@ -20,6 +20,16 @@ MonoBehaviour:
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 0502bb26f9301534a9ceda6ed1081d92
+    m_Address: pickup_minor_mana
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 0bf35d29dc347d748a9522b623851094
+    m_Address: pickup_minor_health
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 181abfa4c4b28ae47afaffc821bd2baa
     m_Address: pickup_slime_gel
     m_ReadOnly: 0

@@ -16,5 +16,10 @@ public interface IItemCommandSink
     ///     Returns the command sequence the request carried; 0 when nothing was sent.
     /// </summary>
     uint SendUnequip(EquipmentSlot slot);
+
+    /// <summary>
+    ///     Returns the command sequence the request carried; 0 when nothing was sent.
+    /// </summary>
+    uint SendUseItem(long inventoryItem);
 }
 }

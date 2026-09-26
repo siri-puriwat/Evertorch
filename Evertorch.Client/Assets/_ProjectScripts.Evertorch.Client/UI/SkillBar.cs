@@ -10,8 +10,9 @@ namespace Evertorch.Client
 {
 /// <summary>
 ///     The skill bar across the bottom centre while in the world (Prototype Content §2, §4): a button for each slot
-///     whose skill the server listed, with the slot's key or what is left of the skill's cooldown. It is text only,
-///     and a press asks for the slot exactly as its key does.
+///     whose skill the server listed, with the slot's key or what is left of the skill's cooldown, and for each potion
+///     slot while the inventory holds its potion, with how many and the key. It is text only, and a press asks for the
+///     slot exactly as its key does.
 /// </summary>
 public sealed class SkillBar : MonoBehaviour
 {
@@ -53,13 +54,27 @@ public sealed class SkillBar : MonoBehaviour
         bool isAnyShown = false;
         foreach (Slot slot in m_slots)
         {
-            bool isListed = world != null && IsListed(world, slot.Skill);
-            UiBuilder.SetActive(slot.Button, isListed);
-            if (isListed)
+            bool isShown;
+            if (slot.IsPotion)
             {
-                isAnyShown = true;
-                Show(slot, world!.CooldownRemaining(slot.Skill));
+                int held = world != null ? InventoryActions.CountOf(world.Inventory.Rows, slot.Item) : 0;
+                isShown = held > 0;
+                if (isShown)
+                {
+                    ShowPotion(slot, held);
+                }
             }
+            else
+            {
+                isShown = world != null && IsListed(world, slot.Skill);
+                if (isShown)
+                {
+                    Show(slot, world!.CooldownRemaining(slot.Skill));
+                }
+            }
+
+            UiBuilder.SetActive(slot.Button, isShown);
+            isAnyShown |= isShown;
         }
 
         UiBuilder.SetActive(m_bar!, isAnyShown);
@@ -112,6 +127,27 @@ public sealed class SkillBar : MonoBehaviour
             : skill.Value;
     }
 
+    private static string ItemName(ClientContent? content, ItemDefinitionId item)
+    {
+        return content != null && content.TryGetItem(item, out ClientItem? found) && found != null
+            ? found.DisplayName
+            : item.Value;
+    }
+
+    private void ShowPotion(Slot slot, int held)
+    {
+        string name = ItemName(m_client != null ? m_client.Content : null, slot.Item);
+        if (held == slot.ShownTenths && string.Equals(name, slot.ShownName, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        slot.ShownTenths = held;
+        slot.ShownName = name;
+        slot.Label.text = $"{name} x {held}\n{slot.Number.ToString(CultureInfo.InvariantCulture)}";
+        TextChanges++;
+    }
+
     // Tenths of a second, rounded up, so a cooldown never reads 0.0 while it lasts.
     private void Show(Slot slot, double cooldownSeconds)
     {
@@ -158,10 +194,17 @@ public sealed class SkillBar : MonoBehaviour
         {
             int number = index + 1;
             SkillSlots.TryGetSkill(number, out SkillDefinitionId skill);
+            SkillSlots.TryGetItem(number, out ItemDefinitionId item);
             GameObject button = Ui.CreateButton($"Slot {number}", m_bar.transform, () => UseSlot(number));
             button.GetComponent<LayoutElement>().preferredWidth = SlotWidth;
             button.SetActive(false);
-            m_slots[index] = new Slot(number, skill, button, button.GetComponentInChildren<TMP_Text>(true));
+            TMP_Text label = button.GetComponentInChildren<TMP_Text>(true);
+
+            // A potion's name is longer than a slot is wide, so a label shrinks to fit rather than overflow.
+            label.enableAutoSizing = true;
+            label.fontSizeMin = 12f;
+            label.fontSizeMax = label.fontSize;
+            m_slots[index] = new Slot(number, skill, item, button, label);
         }
 
         m_bar.SetActive(false);
@@ -177,10 +220,11 @@ public sealed class SkillBar : MonoBehaviour
 
     private sealed class Slot
     {
-        public Slot(int number, SkillDefinitionId skill, GameObject button, TMP_Text label)
+        public Slot(int number, SkillDefinitionId skill, ItemDefinitionId item, GameObject button, TMP_Text label)
         {
             Number = number;
             Skill = skill;
+            Item = item;
             Button = button;
             Label = label;
         }
@@ -189,10 +233,16 @@ public sealed class SkillBar : MonoBehaviour
 
         public SkillDefinitionId Skill { get; }
 
+        /// <summary>The slot's potion; default for a skill's slot.</summary>
+        public ItemDefinitionId Item { get; }
+
+        public bool IsPotion => Item != default;
+
         public GameObject Button { get; }
 
         public TMP_Text Label { get; }
 
+        /// <summary>The tenths of a second of cooldown shown, or for a potion the count.</summary>
         public int ShownTenths { get; set; } = -1;
 
         public string? ShownName { get; set; }

@@ -10,10 +10,10 @@ using Microsoft.Extensions.Logging;
 namespace Evertorch.Server
 {
 /// <summary>
-///     Equips and unequips items (Gameplay Systems §11.1, Persistence §5). The checks happen on the tick thread; the
-///     slots change only through the commit, and the server's copy of the inventory, the statistics, and the owner learn
-///     of it once its result is back. A commit whose answer was lost is settled from the ledger before the character may
-///     start another inventory operation.
+///     Equips, unequips, and uses items (Gameplay Systems §11.1, §11.2; Persistence §5). The checks happen on the tick
+///     thread; the inventory changes only through the commit, and the server's copy of it, the statistics, HP and SP,
+///     and the owner learn of it once its result is back. A commit whose answer was lost is settled from the ledger
+///     before the character may start another inventory operation.
 /// </summary>
 public sealed class ItemActionSystem : ITickPhase
 {
@@ -21,6 +21,8 @@ public sealed class ItemActionSystem : ITickPhase
     private const string UnequipOperation = "unequip";
     private const string EquipLookup = "equip lookup";
     private const string UnequipLookup = "unequip lookup";
+    private const string ConsumeOperation = "consume";
+    private const string ConsumeLookup = "consume lookup";
 
     private static readonly Action<ILogger, InventoryOperationKind, Guid, long, long, Exception?> LogUnsettled =
         LoggerMessage.Define<InventoryOperationKind, Guid, long, long>(
@@ -148,6 +150,41 @@ public sealed class ItemActionSystem : ITickPhase
         return TryCommit(session, operation, (store, cancellation) => store.CommitUnequipAsync(commit, cancellation));
     }
 
+    /// <summary>
+    ///     Checks a use (Gameplay Systems §11.2) and, when it passes, queues the commit of one unit of the row. The
+    ///     caller has already refused a dead or leaving character.
+    /// </summary>
+    public CommandRejectionReason TryUse(ClientSession session, long inventoryItem, uint commandSequence)
+    {
+        CharacterSession character = session.Character!;
+        if (character.Operation != null)
+        {
+            return CommandRejectionReason.ItemActionInFlight;
+        }
+
+        if (!character.Inventory.TryGetRow(inventoryItem, out InventoryEntry row))
+        {
+            return CommandRejectionReason.InvalidTarget;
+        }
+
+        if (m_content.Items[row.Item].Effect == null)
+        {
+            return CommandRejectionReason.NotAllowedNow;
+        }
+
+        var operation = new InventoryOperation(
+            InventoryOperationKind.Consume,
+            commandSequence,
+            Guid.NewGuid(),
+            item: row.Item);
+        var commit = new ConsumeCommit(
+            operation.OperationId,
+            character.Character.Value,
+            inventoryItem,
+            m_time.GetUtcNow().UtcDateTime);
+        return TryCommit(session, operation, (store, cancellation) => store.CommitConsumeAsync(commit, cancellation));
+    }
+
     // The ledger names the row an operation acted on; the row a swap took out of its slot is named here.
     private static long[] ReportRows(InventoryOperation operation)
     {
@@ -156,7 +193,32 @@ public sealed class ItemActionSystem : ITickPhase
 
     private static InboundEventKind CommandOf(InventoryOperation operation)
     {
-        return operation.Kind == InventoryOperationKind.Equip ? InboundEventKind.Equip : InboundEventKind.Unequip;
+        return operation.Kind switch
+        {
+            InventoryOperationKind.Equip => InboundEventKind.Equip,
+            InventoryOperationKind.Unequip => InboundEventKind.Unequip,
+            _ => InboundEventKind.UseItem
+        };
+    }
+
+    private static string CommitNameOf(InventoryOperation operation)
+    {
+        return operation.Kind switch
+        {
+            InventoryOperationKind.Equip => EquipOperation,
+            InventoryOperationKind.Unequip => UnequipOperation,
+            _ => ConsumeOperation
+        };
+    }
+
+    private static string LookupNameOf(InventoryOperation operation)
+    {
+        return operation.Kind switch
+        {
+            InventoryOperationKind.Equip => EquipLookup,
+            InventoryOperationKind.Unequip => UnequipLookup,
+            _ => ConsumeLookup
+        };
     }
 
     private CommandRejectionReason TryCommit(
@@ -166,7 +228,7 @@ public sealed class ItemActionSystem : ITickPhase
     {
         CharacterSession character = session.Character!;
         var job = new PersistenceJob<InventoryResult>(
-            operation.Kind == InventoryOperationKind.Equip ? EquipOperation : UnequipOperation,
+            CommitNameOf(operation),
             session.Connection,
             character.Character.Value,
             commit,
@@ -210,7 +272,7 @@ public sealed class ItemActionSystem : ITickPhase
         long id = character.Character.Value;
         long[] reportRows = ReportRows(operation);
         var lookup = new PersistenceJob<InventoryResult?>(
-            operation.Kind == InventoryOperationKind.Equip ? EquipLookup : UnequipLookup,
+            LookupNameOf(operation),
             character.Connection?.Connection ?? default,
             id,
             (store, cancellation) => store.FindOperationAsync(operation.OperationId, id, reportRows, cancellation),
@@ -249,8 +311,31 @@ public sealed class ItemActionSystem : ITickPhase
         uint prior = character.Inventory.Revision;
         InventoryEntry[] rows = character.Inventory.Apply(result);
         m_sender.SendInventoryChange(character, prior, rows);
-        Wear(character);
+        InventoryOperation operation = character.Operation!;
+        if (operation.Kind == InventoryOperationKind.Consume)
+        {
+            Restore(character.Player, m_content.Items[operation.Item].Effect!);
+        }
+        else
+        {
+            Wear(character);
+        }
+
         Finish(character);
+    }
+
+    // A use restores what its item gives once its commit returns, capped at the maximums (Gameplay Systems §11.2). A
+    // character that died meanwhile gets nothing back: the unit is spent either way.
+    private void Restore(PlayerEntity player, ItemEffect effect)
+    {
+        if (player.IsDead)
+        {
+            return;
+        }
+
+        player.CurrentHealth = Math.Min(player.MaxHealth, player.CurrentHealth + effect.Health);
+        player.CurrentSpirit = Math.Min(player.MaxSpirit, player.CurrentSpirit + effect.Spirit);
+        m_sender.SendHealth(player);
     }
 
     // The statistics follow the slots as committed (Gameplay Systems §2); the owner hears of new maximums as of any

@@ -29,6 +29,9 @@ drops:
   - item: item.weapon.training_staff
     chance: 0.12
     amount: { min: 1, max: 1 }
+  - item: item.consumable.minor_mana
+    chance: 0.30
+    amount: { min: 1, max: 2 }
 rewards:
   baseExperience: 30
 client:

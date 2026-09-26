@@ -392,6 +392,20 @@ public sealed class ServerContentLoaderTests
     }
 
     [Test]
+    public void Load_ForRepositoryContent_ReadsEachConsumablesEffect()
+    {
+        ServerContent content = ServerContentLoader.Load(PackageFixture.BuildRepositoryPackage());
+
+        ItemDefinition health = content.Items[new ItemDefinitionId("item.consumable.minor_health")];
+        ItemDefinition mana = content.Items[new ItemDefinitionId("item.consumable.minor_mana")];
+        ItemDefinition gel = content.Items[new ItemDefinitionId("item.material.slime_gel")];
+
+        Assert.That((health.StackLimit, health.Effect!.Health, health.Effect.Spirit), Is.EqualTo((50, 30, 0)));
+        Assert.That((mana.StackLimit, mana.Effect!.Health, mana.Effect.Spirit), Is.EqualTo((50, 0, 15)));
+        Assert.That(gel.Effect, Is.Null);
+    }
+
+    [Test]
     public void Load_ForRepositoryContent_ReadsEachItemsEquipmentAndSlot()
     {
         ServerContent content = ServerContentLoader.Load(PackageFixture.BuildRepositoryPackage());
@@ -463,6 +477,24 @@ public sealed class ServerContentLoaderTests
         Assert.That(
             ProblemsOf(files),
             Is.EqualTo(new[] { "status-effects.json: definitions[0].statPercent.agi: must be at most 1000" }));
+    }
+
+    [Test]
+    public void Load_WhenAnItemsEffectDoesNotMatchItsType_Fails()
+    {
+        Dictionary<string, byte[]> material = PackageFixture.BuildFixturePackage();
+        PackageFixture.Replace(material, Items, "\"weight\": 1",
+            "\"weight\": 1,\n      \"effect\": { \"hp\": 1, \"sp\": 0 }");
+        Dictionary<string, byte[]> consumable = PackageFixture.BuildFixturePackage();
+        PackageFixture.Replace(consumable, Items, "\"type\": \"material\"", "\"type\": \"consumable\"");
+        Dictionary<string, byte[]> empty = PackageFixture.BuildFixturePackage();
+        PackageFixture.Replace(empty, Items, "\"type\": \"material\"", "\"type\": \"consumable\"");
+        PackageFixture.Replace(empty, Items, "\"weight\": 1",
+            "\"weight\": 1,\n      \"effect\": { \"hp\": 0, \"sp\": 0 }");
+
+        Assert.That(ProblemsOf(material), Has.Some.Contains("effect: is only for a consumable"));
+        Assert.That(ProblemsOf(consumable), Has.Some.Contains("effect: required property is missing"));
+        Assert.That(ProblemsOf(empty), Has.Some.Contains("effect: must restore HP, SP, or both"));
     }
 
     [Test]

@@ -18,7 +18,8 @@ public enum InventoryStatus
     TakenByOther = 3,
 
     /// <summary>
-    ///     Nothing changed: the row is not the character's, is already in the slot, or the slot is empty.
+    ///     Nothing changed: the row is not the character's, is already in the slot, or the slot is empty; or a
+    ///     consumed row is not the character's.
     /// </summary>
     Refused = 4
 }

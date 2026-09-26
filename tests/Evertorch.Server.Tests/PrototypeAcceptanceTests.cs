@@ -37,6 +37,7 @@ public sealed class PrototypeAcceptanceTests
     private const string SparkWisp = "monster.spark_wisp";
     private const string TrainingSword = "item.weapon.training_sword";
     private const string ClothArmor = "item.armor.cloth";
+    private const string MinorHealth = "item.consumable.minor_health";
     private const float ConvergedDistance = 1e-3f;
     private const float WalkedDistance = 2f;
 
@@ -70,9 +71,9 @@ public sealed class PrototypeAcceptanceTests
 
     /// <summary>
     ///     Both players enter the training ground, see each other, walk, fight, and cross to the training field, where
-    ///     a crawler goes for one of them and drops a sword and armor they put on, a wisp answers from its range, and
-    ///     one reconnects; the server then stops. Returns each character as the server last showed it, by character
-    ///     name.
+    ///     a crawler goes for one of them and drops a sword and armor they put on and a potion one drinks, a wisp
+    ///     answers from its range, and one reconnects; the server then stops. Returns each character as the server last
+    ///     showed it, by character name.
     /// </summary>
     private static Dictionary<string, PlayerSummary> PlayTogether(IHost host, string connectionString)
     {
@@ -708,6 +709,7 @@ public sealed class PrototypeAcceptanceTests
             clients);
         Assert.That(isShared, Is.True, $"{step}: both players got a share of the crawler's experience");
         EquipTheCrawlersDrops(connectionString, first, second);
+        DrinkTheCrawlersPotion(connectionString, first, second);
 
         var back = new Dictionary<SocketClient, WorldPosition>
         {
@@ -764,6 +766,50 @@ public sealed class PrototypeAcceptanceTests
             Is.True,
             $"{step}: its client sees {item} worn");
         return row;
+    }
+
+    // The crawler also left a minor health potion. The first player picks it up and drinks it: its HP comes back once
+    // the commit returns, capped at its maximum, and PostgreSQL no longer holds the potion (Gameplay Systems §11.2).
+    private static void DrinkTheCrawlersPotion(string connectionString, SocketClient first, SocketClient second)
+    {
+        const string step = "potion";
+        SocketClient[] clients = { first, second };
+        RemoteEntity? drop = first.World.Remotes.Values.FirstOrDefault(remote => remote.DefinitionId == MinorHealth);
+        Assert.That(drop, Is.Not.Null, $"{step}: the crawler's potion lies where it died");
+        first.Pickup.Pickup(drop!.Entity);
+        Assert.That(
+            SocketClients.PumpUntil(
+                () => first.World.Inventory.Rows.Any(row => row.Item.Value == MinorHealth),
+                clients),
+            Is.True,
+            $"{step}: the potion was picked up");
+        long potion = first.World.Inventory.Rows.Single(entry => entry.Item.Value == MinorHealth).InventoryItem;
+        uint before = first.World.LocalHealth;
+        uint maximum = first.World.LocalMaximumHealth;
+
+        first.Connection.SendUseItem(potion);
+
+        Assert.That(
+            SocketClients.PumpUntil(
+                () => first.World.Inventory.Rows.All(entry => entry.InventoryItem != potion),
+                clients),
+            Is.True,
+            $"{step}: the last potion's row is gone");
+        Assert.That(
+            first.World.LocalHealth,
+            Is.GreaterThanOrEqualTo(Math.Min(maximum, before + 30)),
+            $"{step}: HP came back, from {before} of {maximum}");
+        using (var connection = new NpgsqlConnection(connectionString))
+        using (var command = new NpgsqlCommand(
+                   "SELECT count(*) FROM inventory_items i JOIN characters c ON c.id = i.character_id "
+                   + "WHERE c.name = @name AND i.item_definition_id = @item",
+                   connection))
+        {
+            connection.Open();
+            command.Parameters.AddWithValue("name", Players.FirstName);
+            command.Parameters.AddWithValue("item", MinorHealth);
+            Assert.That(Convert.ToInt64(command.ExecuteScalar()), Is.Zero, $"{step}: PostgreSQL holds no potion");
+        }
     }
 
     private static long WornRow(string connectionString, string character, EquipmentSlot slot)

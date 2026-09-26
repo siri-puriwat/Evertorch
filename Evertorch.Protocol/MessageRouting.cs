@@ -30,6 +30,7 @@ public static class MessageRouting
             case MessageOpcode.InventoryResyncRequest:
             case MessageOpcode.EquipItem:
             case MessageOpcode.UnequipItem:
+            case MessageOpcode.UseItem:
             case MessageOpcode.ServerHello:
             case MessageOpcode.WorldEntered:
             case MessageOpcode.EntitySpawn:

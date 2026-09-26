@@ -389,6 +389,23 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
         return sequence;
     }
 
+    /// <summary>
+    ///     Asks the server to use one unit of the inventory row <paramref name="inventoryItem" />. Returns the command's
+    ///     sequence, or 0 outside the world.
+    /// </summary>
+    public uint SendUseItem(long inventoryItem)
+    {
+        if (State != ClientConnectionState.InWorld)
+        {
+            return 0;
+        }
+
+        uint sequence = NextCommandSequence();
+        new UseItem(inventoryItem, sequence).Write(m_sendBuffer);
+        SendRouted(MessageOpcode.UseItem, UseItem.EncodedLength);
+        return sequence;
+    }
+
     public void Send(MoveIntent intent)
     {
         if (State != ClientConnectionState.InWorld)

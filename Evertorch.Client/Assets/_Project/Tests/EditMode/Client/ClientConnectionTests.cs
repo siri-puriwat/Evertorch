@@ -737,6 +737,26 @@ public sealed class ClientConnectionTests
     }
 
     [Test]
+    public void SendUseItem_InTheWorld_SharesTheCommandSequence_AndOutsideSendsNothing()
+    {
+        var outside = new Harness();
+        outside.ConnectAndReceiveHello();
+        int before = outside.Transport.Sent.Count;
+        var harness = new Harness();
+        harness.EnterWorld(4);
+
+        uint none = outside.Connection.SendUseItem(41);
+        uint sequence = harness.Connection.SendUseItem(41);
+
+        FakeClientTransport.SentMessage sent = harness.Transport.Sent.Last();
+        Assert.That((none, outside.Transport.Sent.Count), Is.EqualTo((0u, before)));
+        Assert.That(sequence, Is.EqualTo(5u));
+        Assert.That(UseItem.TryRead(sent.Payload, out UseItem use), Is.True);
+        Assert.That((use.InventoryItem, use.CommandSequence), Is.EqualTo((41L, 5u)));
+        Assert.That(sent.Channel, Is.EqualTo(ProtocolChannel.Control));
+    }
+
+    [Test]
     public void SendUseSkill_InTheWorld_SharesTheCommandSequenceOnTheReliableChannel()
     {
         var harness = new Harness();

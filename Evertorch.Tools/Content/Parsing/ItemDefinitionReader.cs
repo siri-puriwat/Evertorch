@@ -43,6 +43,16 @@ internal static class ItemDefinitionReader
             server.ReportField("equipment", "is only for a weapon or armor");
         }
 
+        ItemEffect? effect = null;
+        if (type == ItemType.Consumable)
+        {
+            effect = ReadEffect(server, server.RequiredMapping("effect"));
+        }
+        else if (server.Has("effect"))
+        {
+            server.ReportField("effect", "is only for a consumable");
+        }
+
         YamlFieldReader client = root.RequiredMapping("client");
         string icon = client.RequiredAssetKey("icon");
         string model = client.RequiredAssetKey("model");
@@ -53,7 +63,7 @@ internal static class ItemDefinitionReader
             return null;
         }
 
-        var definition = new ItemDefinition(id, displayName, type, stackLimit, weight, sellPrice, equipment);
+        var definition = new ItemDefinition(id, displayName, type, stackLimit, weight, sellPrice, equipment, effect);
         return new AuthoredItem(root.ToSource(), definition, icon, model);
     }
 
@@ -78,6 +88,20 @@ internal static class ItemDefinitionReader
         }
 
         return new ItemEquipment(attack, penalty, defense, bonus);
+    }
+
+    // A consumable restores HP, SP, or both, each an optional flat amount.
+    private static ItemEffect? ReadEffect(YamlFieldReader server, YamlFieldReader effect)
+    {
+        int health = OptionalStat(effect, "hp");
+        int spirit = OptionalStat(effect, "sp");
+        if (health == 0 && spirit == 0)
+        {
+            server.ReportField("effect", "must restore HP, SP, or both");
+            return null;
+        }
+
+        return new ItemEffect(health, spirit);
     }
 
     private static int OptionalStat(YamlFieldReader stats, string name)

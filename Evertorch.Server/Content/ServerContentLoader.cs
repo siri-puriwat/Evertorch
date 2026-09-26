@@ -343,11 +343,44 @@ public static class ServerContentLoader
             entry.Report("equipment", "required property is missing for a weapon or armor");
         }
 
+        ItemEffect? effect = null;
+        if (entry.Has("effect"))
+        {
+            effect = ReadEffect(entry, entry.RequiredObject("effect"));
+            if (type != ItemType.Consumable)
+            {
+                entry.Report("effect", "is only for a consumable");
+            }
+        }
+        else if (type == ItemType.Consumable)
+        {
+            entry.Report("effect", "required property is missing for a consumable");
+        }
+
         entry.ReportUnexpectedProperties();
 
         return problems.Count == problemsBefore
-            ? new ItemDefinition(id, displayName, type, stackLimit, weight, sellPrice, equipment)
+            ? new ItemDefinition(id, displayName, type, stackLimit, weight, sellPrice, equipment, effect)
             : null;
+    }
+
+    private static ItemEffect? ReadEffect(PackageObjectReader entry, PackageObjectReader? values)
+    {
+        if (values == null)
+        {
+            return null;
+        }
+
+        int health = values.RequiredInt("hp", 0);
+        int spirit = values.RequiredInt("sp", 0);
+        values.ReportUnexpectedProperties();
+        if (health == 0 && spirit == 0)
+        {
+            entry.Report("effect", "must restore HP, SP, or both");
+            return null;
+        }
+
+        return new ItemEffect(health, spirit);
     }
 
     private static ItemEquipment? ReadEquipment(PackageObjectReader? values)

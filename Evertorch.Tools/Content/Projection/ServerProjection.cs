@@ -75,6 +75,14 @@ internal static class ServerProjection
                 writer.WriteEndObject();
             }
 
+            if (item.Effect != null)
+            {
+                writer.WriteStartObject("effect");
+                writer.WriteNumber("hp", item.Effect.Health);
+                writer.WriteNumber("sp", item.Effect.Spirit);
+                writer.WriteEndObject();
+            }
+
             writer.WriteEndObject();
         }
 

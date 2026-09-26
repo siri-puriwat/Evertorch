@@ -457,6 +457,72 @@ RETURNING id AS ""Id"", status AS ""Status""")
             cancellationToken);
     }
 
+    public Task<InventoryResult> CommitConsumeAsync(ConsumeCommit consume, CancellationToken cancellationToken)
+    {
+        return RunAsync(
+            async context =>
+            {
+                await using (IDbContextTransaction transaction =
+                             await context.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false))
+                {
+                    CharacterRow character = await LockCharacterAsync(context, consume.CharacterId, cancellationToken)
+                        .ConfigureAwait(false);
+                    InventoryResult? earlier = await FindAsync(
+                            context,
+                            consume.OperationId,
+                            consume.CharacterId,
+                            Array.Empty<long>(),
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                    if (earlier != null)
+                    {
+                        return earlier;
+                    }
+
+                    InventoryItemRow? row = await context.InventoryItems
+                        .SingleOrDefaultAsync(
+                            item => item.Id == consume.InventoryItemId && item.CharacterId == consume.CharacterId,
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                    if (row == null || row.Quantity < 1)
+                    {
+                        return Refused(character);
+                    }
+
+                    // The last unit deletes the row, which the quantity check would refuse to keep at 0.
+                    if (row.Quantity == 1)
+                    {
+                        context.InventoryItems.Remove(row);
+                    }
+                    else
+                    {
+                        row.Quantity--;
+                        row.Version++;
+                    }
+
+                    return await CommitOperationAsync(
+                            context,
+                            transaction,
+                            character,
+                            new LedgerRow
+                            {
+                                OperationId = consume.OperationId,
+                                ActorCharacterId = consume.CharacterId,
+                                OperationType = LedgerRow.ConsumeOperation,
+                                ItemInstanceId = row.Id,
+                                ItemDefinitionId = row.ItemDefinitionId,
+                                QuantityDelta = -1,
+                                CreatedAt = consume.At
+                            },
+                            new[] { row.Id },
+                            Array.Empty<long>(),
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                }
+            },
+            cancellationToken);
+    }
+
     public Task<InventoryResult?> FindOperationAsync(
         Guid operationId,
         long characterId,

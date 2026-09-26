@@ -426,6 +426,34 @@ public sealed class PlayerPanelTests
     }
 
     [UnityTest]
+    public IEnumerator SkillBar_ShowsAPotionSlot_WhileTheInventoryHoldsItsPotion_WithHowMany()
+    {
+        GameClient client = CreateIdleClient();
+        ClientWorld world = GiveWorld(client);
+        var bar = SkillBar.Create(client);
+        m_created.Add(bar.gameObject);
+        yield return null;
+        bool isShownEmpty = Slot(bar, 4).activeSelf;
+
+        world.Inventory.OnSnapshot(
+            new InventorySnapshot(
+                4,
+                0,
+                1,
+                new[] { new InventoryEntry(7, new ItemDefinitionId("item.consumable.minor_health"), 3) }));
+        yield return null;
+
+        Assert.That(isShownEmpty, Is.False);
+        Assert.That(Slot(bar, 4).activeSelf, Is.True);
+        Assert.That(
+            SlotText(bar, 4),
+            Is.EqualTo("item.consumable.minor_health x 3\n4"),
+            "without content the bar names the definition");
+        Assert.That(Slot(bar, 5).activeSelf, Is.False, "no mana potion");
+        Assert.That(bar.IsVisible, Is.True, "a potion alone shows the bar");
+    }
+
+    [UnityTest]
     public IEnumerator SkillBarAndFeedbackLines_AtThisScreenSize_ClearEachOtherTheStickAndTheTouchButtons()
     {
         GameClient client = CreateIdleClient();

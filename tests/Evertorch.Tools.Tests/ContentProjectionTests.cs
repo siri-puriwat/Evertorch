@@ -35,7 +35,7 @@ public sealed class ContentProjectionTests
         "fixedCastMs", "variableCastMs", "afterCastDelayMs", "cooldownMs", "effect", "damage", "ratio", "heal",
         "damageRatio", "healHp", "statPercent", "status", "durationMs", "portals", "destination", "magicAttack",
         "keepDistance", "skill", "equipment",
-        "attack", "attackSpeedPenalty", "defense", "bonus"
+        "attack", "attackSpeedPenalty", "defense", "bonus", "sp"
     };
 
     // Authoring sections that the projection flattens into their fields, so no package carries these names.

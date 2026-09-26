@@ -42,6 +42,8 @@ public sealed class ClientProjectWiringTests
     [TestCase("Player/Slot1")]
     [TestCase("Player/Slot2")]
     [TestCase("Player/Slot3")]
+    [TestCase("Player/Slot4")]
+    [TestCase("Player/Slot5")]
     public void InputActions_HaveTheActionsTheClientBinds(string actionPath)
     {
         Assert.That(LoadActions().FindAction(actionPath), Is.Not.Null);
@@ -135,7 +137,13 @@ public sealed class ClientProjectWiringTests
         Assert.That(
             Paths(actions, "Player/Slot3"),
             Is.EquivalentTo(new[] { "<Keyboard>/3", "<Gamepad>/rightTrigger" }));
-        Assert.That(SkillSlots.Count, Is.EqualTo(3), "one action per slot of the bar");
+        Assert.That(
+            Paths(actions, "Player/Slot4"),
+            Is.EquivalentTo(new[] { "<Keyboard>/4", "<Gamepad>/dpad/down" }));
+        Assert.That(
+            Paths(actions, "Player/Slot5"),
+            Is.EquivalentTo(new[] { "<Keyboard>/5", "<Gamepad>/dpad/up" }));
+        Assert.That(SkillSlots.Count, Is.EqualTo(5), "one action per slot of the bar");
     }
 
     [Test]

@@ -3,8 +3,8 @@ displayName: Minor Health Potion
 type: consumable
 stackLimit: 50
 server:
-  weight: 3918
-  sellPrice: 73220
+  weight: 7
+  sellPrice: 10
   effect:
     hp: 30
 client:

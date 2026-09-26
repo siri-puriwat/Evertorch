@@ -28,7 +28,7 @@ namespace Evertorch.Client.Tests.PlayMode
 ///     success and survives a server restart"; the Milestone 5 acceptance path, Coding Standards §10):
 ///     <see cref="GameClient" /> with the project's input actions, driven only by simulated devices: WASD and a ground
 ///     click to walk, Tab to target, the gamepad's West button to attack, R to respawn, F to pick up, 2 and the skill
-///     bar for First Aid, the inventory window to equip, and the login panel to reconnect.
+///     bar for First Aid, 4 to drink a potion, the inventory window to equip, and the login panel to reconnect.
 /// </summary>
 public sealed class LiveServerCombatTests : InputTestFixture
 {
@@ -144,6 +144,51 @@ public sealed class LiveServerCombatTests : InputTestFixture
             swings[0].Timing.Interval,
             Is.EqualTo(TimeSpan.FromMilliseconds(1060)),
             "the sword slows the swing from 940 ms");
+    }
+
+    // A potion slot (Prototype Content §4): 4 drinks from the stored minor health potions. HP comes back only once the
+    // commit returns, and the slot shows one fewer. The potions and the missing HP are stored before the character
+    // enters, as an earlier session would have left them.
+    [UnityTest]
+    [Timeout(FightTestTimeoutMs)]
+    public IEnumerator Player_DrinksAPotionFromItsSlot_AndItsHpComesBackAfterTheCommit()
+    {
+        string actionsPath = RequirePrerequisites();
+        yield return StartDatabaseAndServer();
+        Assert.That(m_server!.TryReadListeningPort(out int port), Is.True, $"server output: {m_server.JoinOutput()}");
+
+        Keyboard keyboard = InputSystem.AddDevice<Keyboard>();
+        GameClient client = CreateClient(port, actionsPath);
+        yield return CreateAndEnterThroughTheLoginPanel(
+            client,
+            "LiveThirsty",
+            () =>
+            {
+                m_database!.Execute(
+                    "INSERT INTO inventory_items (character_id, item_definition_id, quantity, refine_level, version) "
+                    + "SELECT id, 'item.consumable.minor_health', 3, 0, 0 FROM characters WHERE name = 'LiveThirsty'");
+                m_database.Execute("UPDATE characters SET hp = 20 WHERE name = 'LiveThirsty'");
+            });
+        yield return WaitUntil(() => client.World?.Inventory.IsCurrent == true, StartTimeoutSeconds);
+        Assert.That(client.World, Is.Not.Null, $"{client.Status} server output: {m_server.JoinOutput()}");
+        ClientWorld world = client.World!;
+        SkillBar bar = client.GetComponentsInChildren<SkillBar>(true).Single();
+        GameObject potions = bar.GetComponentsInChildren<Button>(true).Single(button => button.name == "Slot 4")
+            .gameObject;
+        yield return WaitUntil(() => potions.activeInHierarchy, 2f);
+        Assert.That(potions.GetComponentInChildren<TMP_Text>().text, Is.EqualTo("Minor Health Potion x 3\n4"));
+        uint before = world.LocalHealth;
+
+        yield return Tap(keyboard.digit4Key);
+        yield return WaitUntil(() => world.Inventory.Rows.Single().Quantity == 2, 5f);
+
+        Assert.That(world.Inventory.Rows.Single().Quantity, Is.EqualTo(2u), world.LastRejection.ToString());
+        Assert.That(
+            world.LocalHealth,
+            Is.InRange(before + 30, before + 32),
+            "the potion's 30, and at most one regeneration step of 2");
+        yield return null;
+        Assert.That(potions.GetComponentInChildren<TMP_Text>().text, Is.EqualTo("Minor Health Potion x 2\n4"));
     }
 
     [UnityTest]

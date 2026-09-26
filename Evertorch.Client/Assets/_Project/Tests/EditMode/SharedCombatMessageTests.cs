@@ -87,7 +87,7 @@ public sealed class SharedCombatMessageTests
         Assert.That(written, Is.EqualTo(golden));
         Assert.That(isRead, Is.True);
         Assert.That(read!.Amount, Is.EqualTo(2u));
-        Assert.That(ProtocolConstants.ProtocolVersion, Is.EqualTo(19));
+        Assert.That(ProtocolConstants.ProtocolVersion, Is.EqualTo(20));
     }
 
     [Test]

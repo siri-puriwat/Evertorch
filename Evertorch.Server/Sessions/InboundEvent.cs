@@ -70,7 +70,8 @@ public readonly struct InboundEvent
     public byte MapEpoch { get; }
 
     /// <summary>
-    ///     For <see cref="InboundEventKind.Equip" />, the inventory row to wear.
+    ///     For <see cref="InboundEventKind.Equip" />, the inventory row to wear; for <see cref="InboundEventKind.UseItem" />,
+    ///     the row to use.
     /// </summary>
     public long InventoryItem { get; }
 
@@ -155,6 +156,18 @@ public readonly struct InboundEvent
     {
         return new InboundEvent(
             InboundEventKind.Equip,
+            connection,
+            null,
+            default,
+            default,
+            commandSequence: commandSequence,
+            inventoryItem: inventoryItem);
+    }
+
+    public static InboundEvent ForUseItem(ConnectionId connection, long inventoryItem, uint commandSequence)
+    {
+        return new InboundEvent(
+            InboundEventKind.UseItem,
             connection,
             null,
             default,

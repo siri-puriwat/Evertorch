@@ -219,7 +219,27 @@ public sealed class SkillStateTests
             skills.Add(SkillSlots.TryGetSkill(slot, out SkillDefinitionId skill) ? skill.Value : "-");
         }
 
-        Assert.That(skills, Is.EqualTo(new[] { "-", "skill.strike", "skill.first_aid", "skill.focus", "-" }));
+        Assert.That(
+            skills,
+            Is.EqualTo(new[] { "-", "skill.strike", "skill.first_aid", "skill.focus", "-", "-", "-" }));
+    }
+
+    [Test]
+    public void SkillSlots_HoldTheTwoPotions_OnFourAndFive()
+    {
+        var items = new List<string>();
+        for (int slot = 0; slot <= SkillSlots.Count + 1; slot++)
+        {
+            items.Add(SkillSlots.TryGetItem(slot, out ItemDefinitionId item) ? item.Value : "-");
+        }
+
+        Assert.That(
+            items,
+            Is.EqualTo(
+                new[]
+                {
+                    "-", "-", "-", "-", "item.consumable.minor_health", "item.consumable.minor_mana", "-"
+                }));
     }
 
     [Test]

@@ -300,9 +300,11 @@ public sealed class ServerInstrumentsTests
         ConnectionId player = server.Connect();
         server.SignInWithCharacter(player, 1);
         server.Store.GiveItems(1, "item.weapon.training_sword", 1, 1, 1);
+        server.Store.GiveItems(1, "item.consumable.minor_health", 1, 3, 1);
         server.SendEnterWorld(player, 1);
         server.TickUntil(() => server.SessionOf(player).State == SessionState.InWorld);
-        long sword = server.Store.Stored(1).Items.Single().Id;
+        long sword = server.Store.Stored(1).Items.First().Id;
+        long potions = server.Store.Stored(1).Items.Last().Id;
         var defaults = new AbuseOptions();
 
         server.Store.AmbiguousEquipmentFailures = 100;
@@ -312,8 +314,13 @@ public sealed class ServerInstrumentsTests
         server.TickUntil(() => server.SessionOf(player).Character!.Operation == null);
         server.SendUnequip(player, EquipmentSlot.Weapon, 2);
         server.TickUntil(() => server.SessionOf(player).Character!.Operation == null);
+        server.Store.AmbiguousConsumeFailures = 100;
+        server.SendUseItem(player, potions, 3);
+        server.Tick(2);
+        server.Store.AmbiguousConsumeFailures = 0;
+        server.TickUntil(() => server.SessionOf(player).Character!.Operation == null);
         server.Tick(2 * TestServer.TickRate * defaults.ItemCommandBurst / defaults.ItemCommandsPerSecond);
-        uint sequence = 3;
+        uint sequence = 4;
         for (int index = 0; index <= defaults.ItemCommandBurst; index++)
         {
             server.SendUnequip(player, EquipmentSlot.Weapon, sequence++);
@@ -325,7 +332,9 @@ public sealed class ServerInstrumentsTests
             .Select(measurement => (string)measurement.Tags.Single(tag => tag.Key == "operation").Value!)
             .Distinct()
             .ToArray();
-        Assert.That(operations, Is.SupersetOf(new[] { "equip", "equip lookup", "unequip" }));
+        Assert.That(
+            operations,
+            Is.SupersetOf(new[] { "equip", "equip lookup", "unequip", "consume", "consume lookup" }));
         Assert.That(SumTagged(recorder, "evertorch.abuse.rate_limited", "limit", "session_item"), Is.EqualTo(1));
     }
 

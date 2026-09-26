@@ -30,6 +30,7 @@ public sealed class MessageRoutingTests
     [TestCase(MessageOpcode.InventoryResyncRequest)]
     [TestCase(MessageOpcode.EquipItem)]
     [TestCase(MessageOpcode.UnequipItem)]
+    [TestCase(MessageOpcode.UseItem)]
     [TestCase(MessageOpcode.ServerHello)]
     [TestCase(MessageOpcode.WorldEntered)]
     [TestCase(MessageOpcode.EntitySpawn)]
@@ -94,6 +95,7 @@ public sealed class MessageRoutingTests
     [TestCase(MessageOpcode.PickupItem, true)]
     [TestCase(MessageOpcode.EquipItem, true)]
     [TestCase(MessageOpcode.UnequipItem, true)]
+    [TestCase(MessageOpcode.UseItem, true)]
     [TestCase(MessageOpcode.Respawn, true)]
     [TestCase(MessageOpcode.MoveInput, true)]
     [TestCase(MessageOpcode.StopMovement, true)]
@@ -135,7 +137,7 @@ public sealed class MessageRoutingTests
             "None=0x0000", "ClientHello=0x0001", "EnterWorldRequest=0x0002", "MoveInput=0x0003",
             "StopMovement=0x0004", "TargetEntity=0x0005", "AttackEntity=0x0006", "CancelAction=0x0007",
             "UseSkill=0x0008", "PickupItem=0x0009", "Respawn=0x000C", "CreateCharacter=0x000D", "Logout=0x000E",
-            "InventoryResyncRequest=0x000F", "EquipItem=0x0010", "UnequipItem=0x0011",
+            "InventoryResyncRequest=0x000F", "EquipItem=0x0010", "UnequipItem=0x0011", "UseItem=0x0012",
             "ServerHello=0x8001", "WorldEntered=0x8003",
             "EntitySpawn=0x8004", "EntityDespawn=0x8005", "EntitySnapshot=0x8006", "TargetChanged=0x8007",
             "AttackStarted=0x8008", "Damage=0x8009", "EntityDied=0x800A", "SkillCastStarted=0x800B",
@@ -167,9 +169,9 @@ public sealed class MessageRoutingTests
     }
 
     [Test]
-    public void ProtocolVersion_IsNineteen()
+    public void ProtocolVersion_IsTwenty()
     {
-        Assert.That(ProtocolConstants.ProtocolVersion, Is.EqualTo(19));
+        Assert.That(ProtocolConstants.ProtocolVersion, Is.EqualTo(20));
     }
 
     [Test]
