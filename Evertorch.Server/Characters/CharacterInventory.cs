@@ -17,9 +17,6 @@ public sealed class CharacterInventory
 
     private readonly List<InventoryEntry> m_rows = new();
 
-    // The row each slot holds, indexed by slot; 0 while the slot is empty. EquipmentSlot.None's entry stays 0.
-    private readonly long[] m_worn = new long[3];
-
     public CharacterInventory(uint revision, IEnumerable<InventoryEntry> rows)
     {
         Revision = revision;
@@ -85,7 +82,18 @@ public sealed class CharacterInventory
     /// </summary>
     public long WornIn(EquipmentSlot slot)
     {
-        return m_worn[(int)slot];
+        if (slot != EquipmentSlot.None)
+        {
+            foreach (InventoryEntry row in m_rows)
+            {
+                if (row.Slot == slot)
+                {
+                    return row.InventoryItem;
+                }
+            }
+        }
+
+        return 0;
     }
 
     /// <summary>
@@ -112,7 +120,11 @@ public sealed class CharacterInventory
 
     private InventoryEntry Take(StoredItem stored)
     {
-        var row = new InventoryEntry(stored.Id, new ItemDefinitionId(stored.ItemDefinitionId), (uint)stored.Quantity);
+        var row = new InventoryEntry(
+            stored.Id,
+            new ItemDefinitionId(stored.ItemDefinitionId),
+            (uint)stored.Quantity,
+            stored.Quantity == 0 ? EquipmentSlot.None : SlotOf(stored));
         int index = m_rows.FindIndex(existing => existing.InventoryItem == row.InventoryItem);
         if (row.Quantity == 0)
         {
@@ -128,20 +140,6 @@ public sealed class CharacterInventory
         else
         {
             m_rows.Add(row);
-        }
-
-        for (int slot = 0; slot < m_worn.Length; slot++)
-        {
-            if (m_worn[slot] == row.InventoryItem)
-            {
-                m_worn[slot] = 0;
-            }
-        }
-
-        EquipmentSlot worn = row.Quantity == 0 ? EquipmentSlot.None : SlotOf(stored);
-        if (worn != EquipmentSlot.None)
-        {
-            m_worn[(int)worn] = row.InventoryItem;
         }
 
         return row;

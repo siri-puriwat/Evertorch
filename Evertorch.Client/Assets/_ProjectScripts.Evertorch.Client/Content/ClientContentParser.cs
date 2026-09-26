@@ -312,7 +312,13 @@ public static class ClientContentParser
                 return null;
             }
 
-            items.Add(id, new ClientItem(id, item.displayName ?? string.Empty, item.model, item.icon));
+            if (!TryParseItemType(item.type, out ItemType type))
+            {
+                error = $"Item '{item.id}': type is not material, consumable, weapon, or armor.";
+                return null;
+            }
+
+            items.Add(id, new ClientItem(id, item.displayName ?? string.Empty, type, item.model, item.icon));
         }
 
         return items;
@@ -388,6 +394,28 @@ public static class ClientContentParser
         }
 
         return effects;
+    }
+
+    private static bool TryParseItemType(string? text, out ItemType type)
+    {
+        switch (text)
+        {
+            case "material":
+                type = ItemType.Material;
+                return true;
+            case "consumable":
+                type = ItemType.Consumable;
+                return true;
+            case "weapon":
+                type = ItemType.Weapon;
+                return true;
+            case "armor":
+                type = ItemType.Armor;
+                return true;
+            default:
+                type = ItemType.Material;
+                return false;
+        }
     }
 
     private static bool TryParseTargetType(string? text, out SkillTargetType targetType)
@@ -686,6 +714,7 @@ public static class ClientContentParser
     {
         public string? id = string.Empty;
         public string? displayName = string.Empty;
+        public string? type = string.Empty;
         public string? model = string.Empty;
         public string? icon = string.Empty;
     }

@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Text;
 using Evertorch.Game;
 using Evertorch.Protocol;
@@ -7,8 +8,9 @@ using UnityEngine;
 namespace Evertorch.Client
 {
 /// <summary>
-///     The character's items as text (Prototype Content §2), along the right edge while in the world. Icons would pull
-///     the optional icon keys into the Addressables key check.
+///     The character's items as text (Prototype Content §2), along the right edge while in the world. A row whose item
+///     has an action is a button that asks for it (<see cref="InventoryActions" />), and a worn row ends
+///     "(equipped)". Icons would pull the optional icon keys into the Addressables key check.
 /// </summary>
 public sealed class InventoryWindow : MonoBehaviour
 {
@@ -22,9 +24,10 @@ public sealed class InventoryWindow : MonoBehaviour
     private static readonly UiBuilder Ui = new(22f, 30f, 0f, 4f);
 
     private readonly StringBuilder m_text = new();
+    private readonly List<GameObject> m_rowObjects = new();
     private GameClient? m_client;
     private GameObject? m_panel;
-    private TMP_Text? m_rows;
+    private Transform? m_rows;
     private ClientInventory? m_shownInventory;
     private bool m_shownCurrent;
     private uint m_shownRevision;
@@ -32,7 +35,10 @@ public sealed class InventoryWindow : MonoBehaviour
 
     public int TextChanges { get; private set; }
 
-    public string Text => m_rows != null ? m_rows.text : string.Empty;
+    /// <summary>
+    ///     The rows as shown, one line each.
+    /// </summary>
+    public string Text { get; private set; } = string.Empty;
 
     public bool IsVisible => m_panel != null && m_panel.activeSelf;
 
@@ -57,7 +63,7 @@ public sealed class InventoryWindow : MonoBehaviour
     }
 
     /// <summary>
-    ///     Rewrites the list only when the inventory, its revision, or the names to show have changed.
+    ///     Rebuilds the rows only when the inventory, its revision, or the names to show have changed.
     /// </summary>
     public void Show(ClientInventory inventory, ClientContent? content)
     {
@@ -74,37 +80,85 @@ public sealed class InventoryWindow : MonoBehaviour
         m_shownCurrent = inventory.IsCurrent;
         m_shownRevision = inventory.Revision;
         m_hadContent = hasContent;
+        ClearRows();
         m_text.Clear();
         if (!inventory.IsCurrent)
         {
-            m_text.Append("Waiting for the server");
+            AddLine("Waiting for the server");
         }
         else if (inventory.Rows.Count == 0)
         {
-            m_text.Append("Empty");
+            AddLine("Empty");
         }
         else
         {
             foreach (InventoryEntry row in inventory.Rows)
             {
-                if (m_text.Length > 0)
-                {
-                    m_text.Append('\n');
-                }
-
-                m_text.Append($"{ItemName(content, row.Item)} x {row.Quantity}");
+                AddRow(row, content);
             }
         }
 
-        m_rows!.text = m_text.ToString();
+        Text = m_text.ToString();
         TextChanges++;
     }
 
-    private static string ItemName(ClientContent? content, ItemDefinitionId item)
+    private static string RowText(InventoryEntry row, ClientItem? item)
     {
-        return content != null && content.TryGetItem(item, out ClientItem? found) && found != null
-            ? found.DisplayName
-            : item.Value;
+        string name = item != null ? item.DisplayName : row.Item.Value;
+        return row.Slot == EquipmentSlot.None ? $"{name} x {row.Quantity}" : $"{name} x {row.Quantity} (equipped)";
+    }
+
+    private void AddRow(InventoryEntry row, ClientContent? content)
+    {
+        ClientItem? item = null;
+        if (content != null && content.TryGetItem(row.Item, out ClientItem? found))
+        {
+            item = found;
+        }
+
+        string text = RowText(row, item);
+        if (item != null && InventoryActions.HasAction(item.Type))
+        {
+            GameClient client = m_client!;
+            GameObject button = Ui.CreateButton(text, m_rows!, () => client.PressInventoryRow(row));
+            button.GetComponentInChildren<TMP_Text>().alignment = TextAlignmentOptions.MidlineLeft;
+            m_rowObjects.Add(button);
+            AppendText(text);
+        }
+        else
+        {
+            AddLine(text);
+        }
+    }
+
+    private void AddLine(string text)
+    {
+        TMP_Text label = Ui.CreateLabel("Row", m_rows!);
+        label.text = text;
+        m_rowObjects.Add(label.gameObject);
+        AppendText(text);
+    }
+
+    private void AppendText(string text)
+    {
+        if (m_text.Length > 0)
+        {
+            m_text.Append('\n');
+        }
+
+        m_text.Append(text);
+    }
+
+    // Hidden at once and destroyed at the end of the frame, so the layout never shows the old rows beside the new.
+    private void ClearRows()
+    {
+        foreach (GameObject row in m_rowObjects)
+        {
+            row.SetActive(false);
+            Destroy(row);
+        }
+
+        m_rowObjects.Clear();
     }
 
     private void Build(GameClient client)
@@ -123,7 +177,7 @@ public sealed class InventoryWindow : MonoBehaviour
         TMP_Text heading = Ui.CreateLabel("Heading", panel);
         heading.text = "Inventory";
         heading.fontStyle = FontStyles.Bold;
-        m_rows = Ui.CreateLabel("Rows", panel);
+        m_rows = Ui.CreateColumn("Rows", panel).transform;
         m_panel.SetActive(false);
     }
 }

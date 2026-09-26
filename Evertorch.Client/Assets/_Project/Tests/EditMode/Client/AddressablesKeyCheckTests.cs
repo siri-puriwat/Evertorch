@@ -23,7 +23,7 @@ public sealed class AddressablesKeyCheckTests
         var map = new ClientMap(new MapDefinitionId("map.a"), "A", sceneKey, ClientTestGrids.CreateYard());
         var job = new ClientJob(new JobDefinitionId("job.a"), "A", jobPrefab);
         var monster = new ClientMonster(new MonsterDefinitionId("monster.a"), "A", monsterPrefab, "monster_icon");
-        var item = new ClientItem(new ItemDefinitionId("item.a"), "A", itemModel, "item_icon");
+        var item = new ClientItem(new ItemDefinitionId("item.a"), "A", ItemType.Material, itemModel, "item_icon");
         return new ClientContent(
             "0000000000000000",
             new Dictionary<MapDefinitionId, ClientMap> { { map.Id, map } },

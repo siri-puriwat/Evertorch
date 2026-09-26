@@ -55,7 +55,7 @@ public sealed class InventoryChanged
             }
         }
 
-        if (!reader.IsAtEnd)
+        if (!reader.IsAtEnd || !InventoryEntry.IsEachSlotWornOnce(changes))
         {
             return false;
         }

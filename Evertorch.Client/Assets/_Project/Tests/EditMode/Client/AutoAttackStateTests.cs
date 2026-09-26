@@ -304,6 +304,34 @@ public sealed class AutoAttackStateTests
         Assert.That(rig.Tick(), Is.EqualTo(new WorldDirection(0f, 1f)));
     }
 
+    // The training sword's swing (equipment research note): an impact at 530 ms holds the player for 11 ticks, one more
+    // than a fist's 470 ms.
+    [Test]
+    public void OwnArmedAttackStarted_LocksMovementForItsLongerWindup()
+    {
+        var rig = new Rig(ClientTestGrids.Center(6, 8));
+        var sword = new AttackTiming(
+            TimeSpan.FromMilliseconds(1060),
+            TimeSpan.FromMilliseconds(530),
+            TimeSpan.FromMilliseconds(530),
+            TimeSpan.FromMilliseconds(265));
+        rig.World.OnAttackStarted(new AttackStarted(ClientWorldFixture.LocalEntity, Slime, 1, sword));
+        rig.Controller.SetManualDirection(0f, 1f);
+
+        var directions = new List<WorldDirection>();
+        for (int index = 0; index < 12; index++)
+        {
+            directions.Add(rig.Tick());
+        }
+
+        for (int index = 0; index < 11; index++)
+        {
+            Assert.That(directions[index], Is.EqualTo(default(WorldDirection)), $"tick {index}: 530 ms is 11 ticks");
+        }
+
+        Assert.That(directions[11], Is.EqualTo(new WorldDirection(0f, 1f)));
+    }
+
     [Test]
     public void OwnAttackStarted_LocksMovementForTheWindupThenReleasesIt()
     {

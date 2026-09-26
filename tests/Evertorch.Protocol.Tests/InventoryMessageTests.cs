@@ -15,14 +15,16 @@ public sealed class InventoryMessageTests
     {
         0x0F, 0x80, 0x07, 0x00, 0x00, 0x00, 0x01, 0x03, 0x01,
         0x0B, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x06, 0x00,
-        0x69, 0x74, 0x65, 0x6D, 0x2E, 0x61, 0x02, 0x00, 0x00, 0x00
+        0x69, 0x74, 0x65, 0x6D, 0x2E, 0x61, 0x02, 0x00, 0x00, 0x00,
+        0x01
     };
 
     private static readonly byte[] ChangedBytes =
     {
         0x10, 0x80, 0x07, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x01,
         0x0B, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x06, 0x00,
-        0x69, 0x74, 0x65, 0x6D, 0x2E, 0x61, 0x00, 0x00, 0x00, 0x00
+        0x69, 0x74, 0x65, 0x6D, 0x2E, 0x61, 0x00, 0x00, 0x00, 0x00,
+        0x00
     };
 
     private static readonly ItemDefinitionId ItemA = new("item.a");
@@ -54,13 +56,21 @@ public sealed class InventoryMessageTests
         return new InventoryEntry(id, new ItemDefinitionId($"item.{new string('a', 59)}"), uint.MaxValue);
     }
 
+    private static byte[] Encode(InventoryChanged message)
+    {
+        byte[] buffer = new byte[message.GetEncodedLength()];
+        message.Write(buffer);
+        return buffer;
+    }
+
     [TestCase(6, (byte)0x03)]
     [TestCase(7, (byte)0x00)]
     [TestCase(8, (byte)0x0D)]
     [TestCase(9, (byte)0x00)]
     [TestCase(19, (byte)0x6A)]
     [TestCase(25, (byte)0x00)]
-    public void InventorySnapshot_WithABadPartACountAnIdAnItemOrAZeroQuantity_IsRefused(int offset, byte value)
+    [TestCase(29, (byte)0x03)]
+    public void InventorySnapshot_WithABadPartACountAnIdAnItemAZeroQuantityOrASlot_IsRefused(int offset, byte value)
     {
         byte[] bytes = WireMatrix.With(SnapshotBytes, offset, value);
 
@@ -71,11 +81,25 @@ public sealed class InventoryMessageTests
     [TestCase(10, (byte)0x0D)]
     [TestCase(11, (byte)0x00)]
     [TestCase(21, (byte)0x6A)]
-    public void InventoryChanged_WithABadCountAnIdOrAnItem_IsRefused(int offset, byte value)
+    [TestCase(31, (byte)0x03)]
+    [TestCase(31, (byte)0x01)]
+    public void InventoryChanged_WithABadCountAnIdAnItemOrASlot_IsRefused(int offset, byte value)
     {
         byte[] bytes = WireMatrix.With(ChangedBytes, offset, value);
 
         Assert.That(InventoryChanged.TryRead(bytes, out _), Is.False);
+    }
+
+    [TestCase(EquipmentSlot.Weapon)]
+    [TestCase(EquipmentSlot.Armor)]
+    public void InventoryMessages_WithTwoRowsWornInOneSlot_AreRefused(EquipmentSlot slot)
+    {
+        InventoryEntry[] entries = { new(11, ItemA, 1, slot), new(12, ItemA, 1, slot) };
+
+        bool isSnapshotRead = InventorySnapshot.TryRead(Encode(new InventorySnapshot(7, 0, 1, entries)), out _);
+        bool isChangeRead = InventoryChanged.TryRead(Encode(new InventoryChanged(7, 8, entries)), out _);
+
+        Assert.That((isSnapshotRead, isChangeRead), Is.EqualTo((false, false)));
     }
 
     [Test]
@@ -115,6 +139,20 @@ public sealed class InventoryMessageTests
     }
 
     [Test]
+    public void InventoryChanged_AtItsLargest_FitsOneDatagram()
+    {
+        InventoryEntry[] entries =
+            Enumerable.Range(1, InventoryChanged.MaxChanges).Select(id => LargestEntry(id)).ToArray();
+        var message = new InventoryChanged(uint.MaxValue - 1, uint.MaxValue, entries);
+
+        bool isRead = InventoryChanged.TryRead(Encode(message), out InventoryChanged? read);
+
+        Assert.That(message.GetEncodedLength(), Is.EqualTo(959));
+        Assert.That(isRead, Is.True);
+        Assert.That(read!.Changes, Has.Count.EqualTo(12));
+    }
+
+    [Test]
     public void InventoryChanged_ForGoldenBytes_RoundTrips()
     {
         var message = new InventoryChanged(7, 8, new[] { new InventoryEntry(11, ItemA, 0) });
@@ -128,6 +166,22 @@ public sealed class InventoryMessageTests
         Assert.That(read!.PriorRevision, Is.EqualTo(7u));
         Assert.That(read.NewRevision, Is.EqualTo(8u));
         Assert.That(read.Changes[0].Quantity, Is.EqualTo(0u));
+    }
+
+    [Test]
+    public void InventoryChanged_OfASwap_CarriesBothRowsSlots()
+    {
+        var message = new InventoryChanged(
+            7,
+            8,
+            new[] { new InventoryEntry(12, ItemA, 1, EquipmentSlot.Weapon), new InventoryEntry(11, ItemA, 1) });
+
+        bool isRead = InventoryChanged.TryRead(Encode(message), out InventoryChanged? read);
+
+        Assert.That(isRead, Is.True);
+        Assert.That(
+            read!.Changes.Select(entry => (entry.InventoryItem, entry.Slot)),
+            Is.EqualTo(new[] { (12L, EquipmentSlot.Weapon), (11L, EquipmentSlot.None) }));
     }
 
     [Test]
@@ -175,7 +229,7 @@ public sealed class InventoryMessageTests
 
         bool isRead = InventorySnapshot.TryRead(Encode(message), out InventorySnapshot? read);
 
-        Assert.That(message.GetEncodedLength(), Is.EqualTo(945));
+        Assert.That(message.GetEncodedLength(), Is.EqualTo(957));
         Assert.That(isRead, Is.True);
         Assert.That(read!.Entries, Has.Count.EqualTo(12));
     }
@@ -183,7 +237,7 @@ public sealed class InventoryMessageTests
     [Test]
     public void InventorySnapshot_ForGoldenBytes_RoundTrips()
     {
-        var message = new InventorySnapshot(7, 1, 3, new[] { new InventoryEntry(11, ItemA, 2) });
+        var message = new InventorySnapshot(7, 1, 3, new[] { new InventoryEntry(11, ItemA, 2, EquipmentSlot.Weapon) });
 
         bool isRead = InventorySnapshot.TryRead(SnapshotBytes, out InventorySnapshot? read);
 
@@ -196,6 +250,7 @@ public sealed class InventoryMessageTests
         Assert.That(read.Entries[0].InventoryItem, Is.EqualTo(11L));
         Assert.That(read.Entries[0].Item, Is.EqualTo(ItemA));
         Assert.That(read.Entries[0].Quantity, Is.EqualTo(2u));
+        Assert.That(read.Entries[0].Slot, Is.EqualTo(EquipmentSlot.Weapon));
     }
 
     [Test]

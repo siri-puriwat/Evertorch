@@ -440,6 +440,22 @@ public sealed class GameClient : MonoBehaviour
     }
 
     /// <summary>
+    ///     A press of an inventory row (Prototype Content §2): what the row's item asks for, as the server last
+    ///     committed the row.
+    /// </summary>
+    public void PressInventoryRow(InventoryEntry row)
+    {
+        ClientContent? content = m_contentLoader.Content;
+        if (Connection != null
+            && content != null
+            && content.TryGetItem(row.Item, out ClientItem? item)
+            && item != null)
+        {
+            InventoryActions.Press(Connection, row, item.Type);
+        }
+    }
+
+    /// <summary>
     ///     Uses the skill in a slot of the skill bar, numbered from 1 (Prototype Content §4): what the slot's key,
     ///     gamepad button, and button on the bar ask for. An enemy skill is for the confirmed target.
     /// </summary>

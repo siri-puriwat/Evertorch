@@ -36,6 +36,7 @@ public sealed class PrototypeAcceptanceTests
     private const string ForestCrawler = "monster.forest_crawler";
     private const string SparkWisp = "monster.spark_wisp";
     private const string TrainingSword = "item.weapon.training_sword";
+    private const string ClothArmor = "item.armor.cloth";
     private const float ConvergedDistance = 1e-3f;
     private const float WalkedDistance = 2f;
 
@@ -69,8 +70,9 @@ public sealed class PrototypeAcceptanceTests
 
     /// <summary>
     ///     Both players enter the training ground, see each other, walk, fight, and cross to the training field, where
-    ///     a crawler goes for one of them and drops a sword one of them wears, a wisp answers from its range, and one
-    ///     reconnects; the server then stops. Returns each character as the server last showed it, by character name.
+    ///     a crawler goes for one of them and drops a sword and armor they put on, a wisp answers from its range, and
+    ///     one reconnects; the server then stops. Returns each character as the server last showed it, by character
+    ///     name.
     /// </summary>
     private static Dictionary<string, PlayerSummary> PlayTogether(IHost host, string connectionString)
     {
@@ -181,6 +183,14 @@ public sealed class PrototypeAcceptanceTests
             first,
             second);
         Assert.That(isKept, Is.True, "restart: both characters kept their level and experience");
+        Assert.That(
+            first.World.Inventory.Rows.Count(row => row.Slot == EquipmentSlot.Weapon),
+            Is.EqualTo(1),
+            "restart: the first player still wears the sword");
+        Assert.That(
+            second.World.Inventory.Rows.Count(row => row.Slot == EquipmentSlot.Armor),
+            Is.EqualTo(1),
+            "restart: the second player still wears the armor");
 
         SeeEachOther("restart", first, second);
         AssertCleanTraffic(first, "restart");
@@ -697,7 +707,7 @@ public sealed class PrototypeAcceptanceTests
             }),
             clients);
         Assert.That(isShared, Is.True, $"{step}: both players got a share of the crawler's experience");
-        EquipTheCrawlersSword(connectionString, first, second);
+        EquipTheCrawlersDrops(connectionString, first, second);
 
         var back = new Dictionary<SocketClient, WorldPosition>
         {
@@ -707,46 +717,67 @@ public sealed class PrototypeAcceptanceTests
         WalkTo(step, back, clients);
     }
 
-    // Every drop is scripted in, so the crawler left a training sword. Once its loot priority window has passed, the
-    // first player picks the sword up and equips it, and PostgreSQL holds it in the weapon slot (Gameplay Systems
-    // §11.1, Persistence §5).
-    private static void EquipTheCrawlersSword(string connectionString, SocketClient first, SocketClient second)
+    // Every drop is scripted in, so the crawler left a training sword and cloth armor. Once its loot priority window
+    // has passed, the first player picks the sword up and the second the armor, and each equips its own. Each client
+    // sees its row worn, and PostgreSQL holds both (Gameplay Systems §11.1, Persistence §5).
+    private static void EquipTheCrawlersDrops(string connectionString, SocketClient first, SocketClient second)
     {
         const string step = "equip";
         SocketClient[] clients = { first, second };
-        RemoteEntity? sword = first.World.Remotes.Values.FirstOrDefault(remote => remote.DefinitionId == TrainingSword);
-        Assert.That(sword, Is.Not.Null, $"{step}: the first player sees the crawler's sword");
-
         SocketClients.PumpFor(TimeSpan.FromMilliseconds(PickupSystem.LootPriorityMs), clients);
-        first.Pickup.Pickup(sword!.Entity);
+
+        long sword = PickUpAndEquip(step, first, TrainingSword, EquipmentSlot.Weapon, clients);
+        long armor = PickUpAndEquip(step, second, ClothArmor, EquipmentSlot.Armor, clients);
+
+        Assert.That(
+            WornRow(connectionString, Players.FirstName, EquipmentSlot.Weapon),
+            Is.EqualTo(sword),
+            $"{step}: PostgreSQL holds the sword in the first player's weapon slot");
+        Assert.That(
+            WornRow(connectionString, Players.SecondName, EquipmentSlot.Armor),
+            Is.EqualTo(armor),
+            $"{step}: PostgreSQL holds the armor in the second player's armor slot");
+    }
+
+    private static long PickUpAndEquip(
+        string step,
+        SocketClient player,
+        string item,
+        EquipmentSlot slot,
+        SocketClient[] clients)
+    {
+        RemoteEntity? drop = player.World.Remotes.Values.FirstOrDefault(remote => remote.DefinitionId == item);
+        Assert.That(drop, Is.Not.Null, $"{step}: {item} lies where the crawler died");
+        player.Pickup.Pickup(drop!.Entity);
+        Assert.That(
+            SocketClients.PumpUntil(() => player.World.Inventory.Rows.Any(row => row.Item.Value == item), clients),
+            Is.True,
+            $"{step}: {item} was picked up");
+        long row = player.World.Inventory.Rows.Single(entry => entry.Item.Value == item).InventoryItem;
+
+        player.Connection.SendEquip(row);
+
         Assert.That(
             SocketClients.PumpUntil(
-                () => first.World.Inventory.Rows.Any(row => row.Item.Value == TrainingSword),
+                () => player.World.Inventory.Rows.Any(entry => entry.InventoryItem == row && entry.Slot == slot),
                 clients),
             Is.True,
-            $"{step}: the first player picked the sword up");
-        InventoryEntry row = first.World.Inventory.Rows.Single(entry => entry.Item.Value == TrainingSword);
-        uint revision = first.World.Inventory.Revision;
+            $"{step}: its client sees {item} worn");
+        return row;
+    }
 
-        first.Connection.SendEquip(row.InventoryItem);
-
-        Assert.That(
-            SocketClients.PumpUntil(() => first.World.Inventory.Revision != revision, clients),
-            Is.True,
-            $"{step}: the equip was committed and told");
+    private static long WornRow(string connectionString, string character, EquipmentSlot slot)
+    {
         using (var connection = new NpgsqlConnection(connectionString))
         using (var command = new NpgsqlCommand(
-                   "SELECT count(*) FROM equipment e JOIN characters c ON c.id = e.character_id "
-                   + "WHERE c.name = @name AND e.slot = 'Weapon' AND e.inventory_item_id = @row",
+                   "SELECT coalesce(max(e.inventory_item_id), 0) FROM equipment e "
+                   + "JOIN characters c ON c.id = e.character_id WHERE c.name = @name AND e.slot = @slot",
                    connection))
         {
             connection.Open();
-            command.Parameters.AddWithValue("name", Players.FirstName);
-            command.Parameters.AddWithValue("row", row.InventoryItem);
-            Assert.That(
-                Convert.ToInt64(command.ExecuteScalar()),
-                Is.EqualTo(1),
-                $"{step}: PostgreSQL holds the sword in the weapon slot");
+            command.Parameters.AddWithValue("name", character);
+            command.Parameters.AddWithValue("slot", slot.ToString());
+            return Convert.ToInt64(command.ExecuteScalar());
         }
     }
 

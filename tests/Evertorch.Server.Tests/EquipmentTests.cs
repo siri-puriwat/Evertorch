@@ -64,9 +64,14 @@ public sealed class EquipmentTests
             CharacterHealth.TryRead(bytes, out read));
     }
 
-    private static (long, uint)[] Rows(InventoryChanged change)
+    private static (long, uint, EquipmentSlot)[] Rows(IReadOnlyList<InventoryEntry> rows)
     {
-        return change.Changes.Select(row => (row.InventoryItem, row.Quantity)).ToArray();
+        return rows.Select(row => (row.InventoryItem, row.Quantity, row.Slot)).ToArray();
+    }
+
+    private static (long, uint, EquipmentSlot)[] Rows(InventoryChanged change)
+    {
+        return Rows(change.Changes);
     }
 
     private static long RowOf(TestServer server, long character, string item)
@@ -205,7 +210,9 @@ public sealed class EquipmentTests
         server.TickUntil(() => CharacterOf(server, player).Operation == null);
 
         Assert.That(server.Store.LedgerCount, Is.EqualTo(ledger + 1));
-        Assert.That(Rows(Changes(server, player).Single()), Is.EqualTo(new[] { (staff, 1u), (sword, 1u) }));
+        Assert.That(
+            Rows(Changes(server, player).Single()),
+            Is.EqualTo(new[] { (staff, 1u, EquipmentSlot.Weapon), (sword, 1u, EquipmentSlot.None) }));
         Assert.That(CharacterOf(server, player).Inventory.WornIn(EquipmentSlot.Weapon), Is.EqualTo(staff));
         Assert.That(server.PlayerOf(player).MaxSpirit, Is.EqualTo(26));
         Assert.That(Rejections(server, player), Is.Empty);
@@ -247,7 +254,9 @@ public sealed class EquipmentTests
         Equip(server, player, staff, 2);
 
         InventoryChanged swap = Changes(server, player).Single();
-        Assert.That(Rows(swap), Is.EqualTo(new[] { (staff, 1u), (sword, 1u) }));
+        Assert.That(
+            Rows(swap),
+            Is.EqualTo(new[] { (staff, 1u, EquipmentSlot.Weapon), (sword, 1u, EquipmentSlot.None) }));
         Assert.That(swap.NewRevision, Is.EqualTo(Revision + 2u));
         Assert.That(server.Store.LedgerCount, Is.EqualTo(ledger + 1));
         Assert.That((SlotOf(server, 1, staff), SlotOf(server, 1, sword)), Is.EqualTo(("Weapon", (string?)null)));
@@ -281,7 +290,7 @@ public sealed class EquipmentTests
 
         InventoryChanged change = Changes(server, player).Single();
         Assert.That((change.PriorRevision, change.NewRevision), Is.EqualTo((Revision, Revision + 1u)));
-        Assert.That(Rows(change), Is.EqualTo(new[] { (sword, 1u) }));
+        Assert.That(Rows(change), Is.EqualTo(new[] { (sword, 1u, EquipmentSlot.Weapon) }));
         Assert.That(Changes(server, other), Is.Empty);
         Assert.That(SlotOf(server, 1, sword), Is.EqualTo("Weapon"));
         Assert.That(server.Store.EquipmentCommits, Has.Count.EqualTo(1));
@@ -318,6 +327,14 @@ public sealed class EquipmentTests
             "the stored SP is held to the staff's maximum, not the bare 24");
         Assert.That(server.PlayerOf(player).Stats.AttackSpeed, Is.EqualTo(143));
         Assert.That(CharacterOf(server, player).Inventory.WornIn(EquipmentSlot.Weapon), Is.EqualTo(staff));
+        InventorySnapshot baseline = Sent(server, player, MessageOpcode.InventorySnapshot,
+            (byte[] bytes, out InventorySnapshot read) =>
+            {
+                bool isRead = InventorySnapshot.TryRead(bytes, out InventorySnapshot? message);
+                read = message!;
+                return isRead;
+            }).Single();
+        Assert.That(Rows(baseline.Entries), Is.EqualTo(new[] { (staff, 1u, EquipmentSlot.Weapon) }), "the baseline");
     }
 
     [Test]
@@ -482,7 +499,7 @@ public sealed class EquipmentTests
         server.SendUnequip(player, EquipmentSlot.Weapon, 2);
         server.TickUntil(() => CharacterOf(server, player).Operation == null);
 
-        Assert.That(Rows(Changes(server, player).Single()), Is.EqualTo(new[] { (staff, 1u) }));
+        Assert.That(Rows(Changes(server, player).Single()), Is.EqualTo(new[] { (staff, 1u, EquipmentSlot.None) }));
         Assert.That(server.Store.Stored(1).Items.Select(item => (item.Id, item.EquippedSlot)),
             Is.EqualTo(new[] { (staff, (string?)null) }));
         PlayerEntity entity = server.PlayerOf(player);

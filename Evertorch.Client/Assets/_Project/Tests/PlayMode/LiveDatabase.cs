@@ -60,6 +60,15 @@ internal sealed class LiveDatabase : IDisposable
     }
 
     /// <summary>
+    ///     Runs <paramref name="sql" />, which holds no double quote, as stored state the game cannot give a test would
+    ///     have been left by an earlier session.
+    /// </summary>
+    public void Execute(string sql)
+    {
+        Run(m_docker, $"exec {m_container} psql -U postgres -d {Database} -v ON_ERROR_STOP=1 -c \"{sql}\"");
+    }
+
+    /// <summary>
     ///     Removes every labelled container and its volumes; the IDs of those removed.
     /// </summary>
     public static string[] RemoveLeftovers()

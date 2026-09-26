@@ -13,7 +13,7 @@ namespace Evertorch.Client
 ///     receives beyond what decodes cleanly.
 /// </summary>
 public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink, ICombatCommandSink,
-    IPickupCommandSink, ISkillCommandSink
+    IPickupCommandSink, ISkillCommandSink, IItemCommandSink
 {
     private readonly IClientTransport m_transport;
     private readonly ClientConnectionSettings m_settings;
@@ -356,6 +356,39 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
         World?.OnLocalCancel();
     }
 
+    /// <summary>
+    ///     Asks the server to wear the inventory row <paramref name="inventoryItem" /> in the slot its item fills.
+    ///     Returns the command's sequence, or 0 outside the world.
+    /// </summary>
+    public uint SendEquip(long inventoryItem)
+    {
+        if (State != ClientConnectionState.InWorld)
+        {
+            return 0;
+        }
+
+        uint sequence = NextCommandSequence();
+        new EquipItem(inventoryItem, sequence).Write(m_sendBuffer);
+        SendRouted(MessageOpcode.EquipItem, EquipItem.EncodedLength);
+        return sequence;
+    }
+
+    /// <summary>
+    ///     Asks the server to empty <paramref name="slot" />. Returns the command's sequence, or 0 outside the world.
+    /// </summary>
+    public uint SendUnequip(EquipmentSlot slot)
+    {
+        if (State != ClientConnectionState.InWorld)
+        {
+            return 0;
+        }
+
+        uint sequence = NextCommandSequence();
+        new UnequipItem(slot, sequence).Write(m_sendBuffer);
+        SendRouted(MessageOpcode.UnequipItem, UnequipItem.EncodedLength);
+        return sequence;
+    }
+
     public void Send(MoveIntent intent)
     {
         if (State != ClientConnectionState.InWorld)
@@ -405,39 +438,6 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
         uint sequence = NextCommandSequence();
         var message = new UseSkill(skill, target, sequence);
         SendRouted(MessageOpcode.UseSkill, message.Write(m_sendBuffer));
-        return sequence;
-    }
-
-    /// <summary>
-    ///     Asks the server to wear the inventory row <paramref name="inventoryItem" /> in the slot its item fills.
-    ///     Returns the command's sequence, or 0 outside the world.
-    /// </summary>
-    public uint SendEquip(long inventoryItem)
-    {
-        if (State != ClientConnectionState.InWorld)
-        {
-            return 0;
-        }
-
-        uint sequence = NextCommandSequence();
-        new EquipItem(inventoryItem, sequence).Write(m_sendBuffer);
-        SendRouted(MessageOpcode.EquipItem, EquipItem.EncodedLength);
-        return sequence;
-    }
-
-    /// <summary>
-    ///     Asks the server to empty <paramref name="slot" />. Returns the command's sequence, or 0 outside the world.
-    /// </summary>
-    public uint SendUnequip(EquipmentSlot slot)
-    {
-        if (State != ClientConnectionState.InWorld)
-        {
-            return 0;
-        }
-
-        uint sequence = NextCommandSequence();
-        new UnequipItem(slot, sequence).Write(m_sendBuffer);
-        SendRouted(MessageOpcode.UnequipItem, UnequipItem.EncodedLength);
         return sequence;
     }
 

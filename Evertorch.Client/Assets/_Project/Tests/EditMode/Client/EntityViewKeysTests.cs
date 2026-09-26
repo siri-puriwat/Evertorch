@@ -12,7 +12,8 @@ public sealed class EntityViewKeysTests
     {
         var job = new ClientJob(new JobDefinitionId("job.a"), "A", "character_a");
         var monster = new ClientMonster(new MonsterDefinitionId("monster.a"), "A", "monster_a", "monster_a_icon");
-        var item = new ClientItem(new ItemDefinitionId("item.material.a"), "A", "pickup_a", "item_a_icon");
+        var item = new ClientItem(new ItemDefinitionId("item.material.a"), "A", ItemType.Material, "pickup_a",
+            "item_a_icon");
         return new ClientContent(
             "0000000000000000",
             new Dictionary<MapDefinitionId, ClientMap>(),

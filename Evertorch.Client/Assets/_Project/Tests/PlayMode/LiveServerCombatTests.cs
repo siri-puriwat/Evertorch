@@ -28,7 +28,7 @@ namespace Evertorch.Client.Tests.PlayMode
 ///     success and survives a server restart"; the Milestone 5 acceptance path, Coding Standards §10):
 ///     <see cref="GameClient" /> with the project's input actions, driven only by simulated devices: WASD and a ground
 ///     click to walk, Tab to target, the gamepad's West button to attack, R to respawn, F to pick up, 2 and the skill
-///     bar for First Aid, and the login panel to reconnect.
+///     bar for First Aid, the inventory window to equip, and the login panel to reconnect.
 /// </summary>
 public sealed class LiveServerCombatTests : InputTestFixture
 {
@@ -91,6 +91,59 @@ public sealed class LiveServerCombatTests : InputTestFixture
         {
             yield return SceneManager.UnloadSceneAsync(loaded);
         }
+    }
+
+    // The inventory window's rows are buttons (Prototype Content §2): a press equips the training sword, the row ends
+    // "(equipped)", and the player's next swing comes at the sword's slower interval (equipment research note). The
+    // sword is stored before the character enters, as an earlier pickup would have left it.
+    [UnityTest]
+    [Timeout(FightTestTimeoutMs)]
+    public IEnumerator Player_EquipsASwordFromTheInventoryWindow_AndSwingsAtItsInterval()
+    {
+        string actionsPath = RequirePrerequisites();
+        yield return StartDatabaseAndServer();
+        Assert.That(m_server!.TryReadListeningPort(out int port), Is.True, $"server output: {m_server.JoinOutput()}");
+
+        Keyboard keyboard = InputSystem.AddDevice<Keyboard>();
+        Gamepad gamepad = InputSystem.AddDevice<Gamepad>();
+        GameClient client = CreateClient(port, actionsPath);
+        yield return CreateAndEnterThroughTheLoginPanel(
+            client,
+            "LiveArmed",
+            () => m_database!.Execute(
+                "INSERT INTO inventory_items (character_id, item_definition_id, quantity, refine_level, version) "
+                + "SELECT id, 'item.weapon.training_sword', 1, 0, 0 FROM characters WHERE name = 'LiveArmed'"));
+        yield return WaitUntil(() => client.World?.Inventory.IsCurrent == true, StartTimeoutSeconds);
+        Assert.That(client.World, Is.Not.Null, $"{client.Status} server output: {m_server.JoinOutput()}");
+        ClientWorld world = client.World!;
+        InventoryWindow window = client.GetComponentsInChildren<InventoryWindow>(true).Single();
+        yield return WaitUntil(() => window.GetComponentsInChildren<Button>().Length == 1, 2f);
+        Button[] rows = window.GetComponentsInChildren<Button>();
+        Assert.That(rows.Select(row => row.name), Is.EqualTo(new[] { "Training Sword x 1" }));
+
+        rows[0].onClick.Invoke();
+        yield return WaitUntil(() => window.Text == "Training Sword x 1 (equipped)", 5f);
+
+        Assert.That(window.Text, Is.EqualTo("Training Sword x 1 (equipped)"), world.LastRejection.ToString());
+        Assert.That(world.Inventory.Rows.Single().Slot, Is.EqualTo(EquipmentSlot.Weapon));
+        var swings = new List<AttackStarted>();
+        world.AttackStartedReceived += started =>
+        {
+            if (started.Attacker == world.LocalEntity)
+            {
+                swings.Add(started);
+            }
+        };
+        yield return Tap(keyboard.tabKey);
+        yield return WaitUntil(() => world.Target != default, 2f);
+        yield return Tap(gamepad.buttonWest);
+        yield return WaitUntil(() => swings.Count > 0, 10f);
+
+        Assert.That(swings, Is.Not.Empty, "a swing began");
+        Assert.That(
+            swings[0].Timing.Interval,
+            Is.EqualTo(TimeSpan.FromMilliseconds(1060)),
+            "the sword slows the swing from 940 ms");
     }
 
     [UnityTest]
@@ -248,7 +301,10 @@ public sealed class LiveServerCombatTests : InputTestFixture
     // The login panel's name field and buttons, as a player uses them to pick a character; the status bar then names
     // the character. A refused entry is never answered (Network Protocol §4), so the list has to stay on screen for
     // another choice.
-    private static IEnumerator CreateAndEnterThroughTheLoginPanel(GameClient client, string name)
+    private static IEnumerator CreateAndEnterThroughTheLoginPanel(
+        GameClient client,
+        string name,
+        Action? beforeEntering = null)
     {
         yield return WaitUntil(() => client.Connection != null, StartTimeoutSeconds);
         ClientConnection connection = client.Connection!;
@@ -266,6 +322,7 @@ public sealed class LiveServerCombatTests : InputTestFixture
         create.onClick.Invoke();
         yield return WaitUntil(() => connection.Characters.Any(entry => entry.Name == name), StartTimeoutSeconds);
         Assert.That(connection.LastCreateOutcome, Is.EqualTo(CreateCharacterOutcome.Created), client.Status);
+        beforeEntering?.Invoke();
 
         // The login panel refreshes its buttons in its own Update.
         yield return null;

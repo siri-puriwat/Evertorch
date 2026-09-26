@@ -142,6 +142,21 @@ public sealed class CombatPresentationTests
         Assert.That(timeline.Lunge(Slime, 10.46, 0.0), Is.LessThan(1f), "the unfocused swing is still rising");
     }
 
+    // The training sword slows the adventurer's swing to 1,060 ms (the equipment research note's vector): the lunge
+    // follows the timing the swing's AttackStarted carries and peaks at its later impact.
+    [Test]
+    public void Timeline_ForAnArmedSwing_LungesToItsLaterImpact()
+    {
+        var timeline = new CombatTimeline();
+
+        timeline.BeginSwing(Local, 10.0, Timing(1060, 530, 530, 265), true);
+        timeline.BeginSwing(Slime, 10.0, Adventurer, true);
+
+        Assert.That(timeline.Lunge(Local, 10.53, 0.0), Is.EqualTo(1f).Within(1e-4f));
+        Assert.That(timeline.Lunge(Local, 10.47, 0.0), Is.LessThan(1f), "the armed swing is still rising");
+        Assert.That(timeline.Lunge(Slime, 10.47, 10.47), Is.EqualTo(1f).Within(1e-4f));
+    }
+
     [Test]
     public void Timeline_ForgetsEverythingAboutADespawnedEntity()
     {

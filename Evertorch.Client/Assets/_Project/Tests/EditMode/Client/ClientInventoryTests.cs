@@ -76,6 +76,26 @@ public sealed class ClientInventoryTests
     }
 
     [Test]
+    public void Change_OfASwap_MovesTheSlotFromOneRowToTheOther()
+    {
+        var sword = new ItemDefinitionId("item.weapon.training_sword");
+        ClientInventory inventory = Current(
+            3,
+            new InventoryEntry(1, sword, 1, EquipmentSlot.Weapon),
+            new InventoryEntry(2, sword, 1));
+
+        inventory.OnChanged(
+            new InventoryChanged(
+                3,
+                4,
+                new[] { new InventoryEntry(2, sword, 1, EquipmentSlot.Weapon), new InventoryEntry(1, sword, 1) }));
+
+        Assert.That(
+            inventory.Rows.Select(row => (row.InventoryItem, row.Slot)),
+            Is.EqualTo(new[] { (1L, EquipmentSlot.None), (2L, EquipmentSlot.Weapon) }));
+    }
+
+    [Test]
     public void Part_OfAnotherSnapshot_DiscardsTheUnfinishedOneAndAsksAgain()
     {
         ClientInventory inventory = Current(3, Row(1, 5));

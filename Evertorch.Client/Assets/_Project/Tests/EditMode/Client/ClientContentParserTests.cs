@@ -181,6 +181,11 @@ public sealed class ClientContentParserTests
         "\"schemaVersion\":2",
         "'items.json' is not readable or has an unsupported schema version")]
     [TestCase(
+        ClientContentParser.ItemsFile,
+        "\"type\":\"material\"",
+        "\"type\":\"shield\"",
+        "Item 'item.material.slime_gel': type is not material, consumable, weapon, or armor")]
+    [TestCase(
         ClientContentParser.SkillsFile,
         "\"targetType\":\"self\"",
         "\"targetType\":\"ally\"",
@@ -402,6 +407,7 @@ public sealed class ClientContentParserTests
         Assert.That(monster.ProjectileKey, Is.Empty, "no projectile when the package names none");
         Assert.That(content.TryGetItem(new ItemDefinitionId("item.material.slime_gel"), out ClientItem? item), Is.True);
         Assert.That(item!.DisplayName, Is.EqualTo("Slime Gel"));
+        Assert.That(item.Type, Is.EqualTo(ItemType.Material));
         Assert.That(item.ModelKey, Is.EqualTo("pickup_slime_gel"));
         Assert.That(item.IconKey, Is.EqualTo("item_slime_gel"));
         Assert.That(content.TryGetSkill(new SkillDefinitionId("skill.strike"), out ClientSkill? strike), Is.True);

@@ -96,7 +96,7 @@ public sealed class InventorySnapshot
             }
         }
 
-        if (!reader.IsAtEnd)
+        if (!reader.IsAtEnd || !InventoryEntry.IsEachSlotWornOnce(entries))
         {
             return false;
         }

@@ -15,14 +15,16 @@ public sealed class SharedInventoryMessageTests
     {
         0x0F, 0x80, 0x07, 0x00, 0x00, 0x00, 0x01, 0x03, 0x01,
         0x0B, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x06, 0x00,
-        0x69, 0x74, 0x65, 0x6D, 0x2E, 0x61, 0x02, 0x00, 0x00, 0x00
+        0x69, 0x74, 0x65, 0x6D, 0x2E, 0x61, 0x02, 0x00, 0x00, 0x00,
+        0x01
     };
 
     private static readonly byte[] ChangedBytes =
     {
         0x10, 0x80, 0x07, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x01,
         0x0B, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x06, 0x00,
-        0x69, 0x74, 0x65, 0x6D, 0x2E, 0x61, 0x00, 0x00, 0x00, 0x00
+        0x69, 0x74, 0x65, 0x6D, 0x2E, 0x61, 0x00, 0x00, 0x00, 0x00,
+        0x00
     };
 
     private static readonly ItemDefinitionId ItemA = new("item.a");
@@ -53,20 +55,20 @@ public sealed class SharedInventoryMessageTests
     }
 
     [Test]
-    public void InventorySnapshot_AtItsLargest_Is945Bytes()
+    public void InventorySnapshot_AtItsLargest_Is957Bytes()
     {
         var item = new ItemDefinitionId($"item.{new string('a', 59)}");
         InventoryEntry[] entries = Enumerable.Range(1, InventorySnapshot.MaxEntries)
             .Select(id => new InventoryEntry(id, item, uint.MaxValue))
             .ToArray();
 
-        Assert.That(new InventorySnapshot(uint.MaxValue, 0, 1, entries).GetEncodedLength(), Is.EqualTo(945));
+        Assert.That(new InventorySnapshot(uint.MaxValue, 0, 1, entries).GetEncodedLength(), Is.EqualTo(957));
     }
 
     [Test]
     public void InventorySnapshot_WriteAndRead_MatchGoldenBytes()
     {
-        var message = new InventorySnapshot(7, 1, 3, new[] { new InventoryEntry(11, ItemA, 2) });
+        var message = new InventorySnapshot(7, 1, 3, new[] { new InventoryEntry(11, ItemA, 2, EquipmentSlot.Weapon) });
         byte[] buffer = new byte[message.GetEncodedLength()];
         message.Write(buffer);
 
@@ -76,6 +78,7 @@ public sealed class SharedInventoryMessageTests
         Assert.That(isRead, Is.True);
         Assert.That(read!.Entries[0].InventoryItem, Is.EqualTo(11L));
         Assert.That(read.Entries[0].Item, Is.EqualTo(ItemA));
+        Assert.That(read.Entries[0].Slot, Is.EqualTo(EquipmentSlot.Weapon));
     }
 
     [Test]

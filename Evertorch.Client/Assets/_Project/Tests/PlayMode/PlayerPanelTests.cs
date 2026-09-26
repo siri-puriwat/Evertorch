@@ -21,6 +21,7 @@ public sealed class PlayerPanelTests
 {
     private const string Slime = "monster.training_slime";
     private const string Gel = "item.material.slime_gel";
+    private const string Sword = "item.weapon.training_sword";
 
     private static readonly EntityId Local = new(100);
 
@@ -77,6 +78,30 @@ public sealed class PlayerPanelTests
             .GetField("m_world", BindingFlags.NonPublic | BindingFlags.Instance)!
             .SetValue(client, world);
         return world;
+    }
+
+    // The content the client would have loaded, which only the test gives it: a material and a weapon.
+    private static void GiveItems(GameClient client)
+    {
+        var gel = new ClientItem(new ItemDefinitionId(Gel), "Slime Gel", ItemType.Material, "pickup_slime_gel", "gel");
+        var sword = new ClientItem(
+            new ItemDefinitionId(Sword),
+            "Training Sword",
+            ItemType.Weapon,
+            "pickup_training_sword",
+            "sword");
+        var content = new ClientContent(
+            "0000000000000000",
+            new Dictionary<MapDefinitionId, ClientMap>(),
+            new Dictionary<JobDefinitionId, ClientJob>(),
+            new Dictionary<MonsterDefinitionId, ClientMonster>(),
+            new Dictionary<ItemDefinitionId, ClientItem> { { gel.Id, gel }, { sword.Id, sword } },
+            new Dictionary<SkillDefinitionId, ClientSkill>(),
+            new Dictionary<StatusDefinitionId, ClientStatusEffect>());
+        object loader = typeof(GameClient)
+            .GetField("m_contentLoader", BindingFlags.NonPublic | BindingFlags.Instance)!
+            .GetValue(client);
+        typeof(StreamingContentLoader).GetProperty(nameof(StreamingContentLoader.Content))!.SetValue(loader, content);
     }
 
     private static void Spawn(ClientWorld world, long entity, EntityKind kind, string definition, ushort healthPermille)
@@ -437,6 +462,39 @@ public sealed class PlayerPanelTests
         Assert.That(shownLines.yMin, Is.GreaterThanOrEqualTo(0.2f * Screen.height - 0.5f));
         Assert.That(covered.Where(rect => rect.Overlaps(shownBar)), Is.Empty, "the bar is clear of the touch controls");
         Assert.That(covered.Where(rect => rect.Overlaps(shownLines)), Is.Empty, "the lines are too");
+    }
+
+    [UnityTest]
+    public IEnumerator InventoryWindow_ShowsARowWithAnActionAsAButton_AndMarksTheWornOne()
+    {
+        GameClient client = CreateIdleClient();
+        ClientWorld world = GiveWorld(client);
+        GiveItems(client);
+        var window = InventoryWindow.Create(client);
+        m_created.Add(window.gameObject);
+
+        world.Inventory.OnSnapshot(
+            new InventorySnapshot(
+                4,
+                0,
+                1,
+                new[]
+                {
+                    new InventoryEntry(1, new ItemDefinitionId(Gel), 3),
+                    new InventoryEntry(2, new ItemDefinitionId(Sword), 1, EquipmentSlot.Weapon),
+                    new InventoryEntry(3, new ItemDefinitionId(Sword), 1)
+                }));
+        yield return null;
+        Button[] buttons = window.GetComponentsInChildren<Button>(true);
+
+        Assert.That(window.Text, Is.EqualTo("Slime Gel x 3\nTraining Sword x 1 (equipped)\nTraining Sword x 1"));
+        Assert.That(
+            buttons.Select(button => button.name),
+            Is.EqualTo(new[] { "Training Sword x 1 (equipped)", "Training Sword x 1" }),
+            "the gel has no action, so its row is text");
+        Assert.That(buttons.Select(button => button.navigation.mode), Is.All.EqualTo(Navigation.Mode.None));
+        buttons[1].onClick.Invoke();
+        Assert.That(window.Text, Does.EndWith("Training Sword x 1"), "without a connection a press sends nothing");
     }
 
     [UnityTest]
