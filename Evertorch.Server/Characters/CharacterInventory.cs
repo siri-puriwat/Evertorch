@@ -38,12 +38,20 @@ public sealed class CharacterInventory
     }
 
     /// <summary>
-    ///     Takes a committed change: <paramref name="row" /> as it is now, at <paramref name="revision" />.
+    ///     Takes a committed change: <paramref name="row" /> as it is now, at <paramref name="revision" />. A row the
+    ///     change emptied, with a quantity of 0, is gone, as the client removes it too (Network Protocol §9).
     /// </summary>
     public void Apply(uint revision, InventoryEntry row)
     {
         int index = m_rows.FindIndex(existing => existing.InventoryItem == row.InventoryItem);
-        if (index >= 0)
+        if (row.Quantity == 0)
+        {
+            if (index >= 0)
+            {
+                m_rows.RemoveAt(index);
+            }
+        }
+        else if (index >= 0)
         {
             m_rows[index] = row;
         }

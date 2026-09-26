@@ -150,7 +150,7 @@ RETURNING id AS ""Id"", status AS ""Status""")
                     .AsNoTracking()
                     .Where(item => item.CharacterId == characterId)
                     .OrderBy(item => item.Id)
-                    .Select(item => new StoredItem(item.Id, item.ItemDefinitionId, item.Quantity))
+                    .Select(item => new StoredItem(item.Id, item.ItemDefinitionId, item.Quantity, null))
                     .ToListAsync(cancellationToken)
                     .ConfigureAwait(false);
                 return new StoredCharacter(
@@ -216,7 +216,7 @@ RETURNING id AS ""Id"", status AS ""Status""")
             cancellationToken);
     }
 
-    public Task<PickupResult> CommitPickupAsync(PickupCommit pickup, CancellationToken cancellationToken)
+    public Task<InventoryResult> CommitPickupAsync(PickupCommit pickup, CancellationToken cancellationToken)
     {
         return RunAsync(
             async context =>
@@ -228,7 +228,11 @@ RETURNING id AS ""Id"", status AS ""Status""")
                     // finds it instead of adding the item twice.
                     CharacterRow character = await LockCharacterAsync(context, pickup.CharacterId, cancellationToken)
                         .ConfigureAwait(false);
-                    PickupResult? earlier = await FindAsync(context, pickup.DropId, pickup.CharacterId,
+                    InventoryResult? earlier = await FindAsync(
+                        context,
+                        pickup.DropId,
+                        pickup.CharacterId,
+                        Array.Empty<long>(),
                         cancellationToken).ConfigureAwait(false);
                     if (earlier != null)
                     {
@@ -244,7 +248,10 @@ RETURNING id AS ""Id"", status AS ""Status""")
                     int held = stack?.Quantity ?? 0;
                     if (held > pickup.StackLimit - pickup.Amount || (stack == null && rows.Count >= pickup.MaxRows))
                     {
-                        return new PickupResult(PickupStatus.InventoryFull, (uint)character.InventoryRevision, null);
+                        return new InventoryResult(
+                            InventoryStatus.InventoryFull,
+                            (uint)character.InventoryRevision,
+                            Array.Empty<StoredItem>());
                     }
 
                     if (stack == null)
@@ -286,23 +293,34 @@ RETURNING id AS ""Id"", status AS ""Status""")
                         // Another character's commit of the same drop won the race.
                         await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
                         context.ChangeTracker.Clear();
-                        return await FindAsync(context, pickup.DropId, pickup.CharacterId, cancellationToken)
+                        return await FindAsync(
+                                    context,
+                                    pickup.DropId,
+                                    pickup.CharacterId,
+                                    Array.Empty<long>(),
+                                    cancellationToken)
                                 .ConfigureAwait(false)
                             ?? throw new InvalidOperationException(
                                 $"Drop {pickup.DropId} clashed but is not in the ledger.");
                     }
 
                     await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
-                    return new PickupResult(
-                        PickupStatus.Committed,
+
+                    // A pickup only ever fills an unequipped row: an equipped item's stack limit is 1.
+                    return new InventoryResult(
+                        InventoryStatus.Committed,
                         (uint)character.InventoryRevision,
-                        new StoredItem(stack.Id, stack.ItemDefinitionId, stack.Quantity));
+                        new[] { new StoredItem(stack.Id, stack.ItemDefinitionId, stack.Quantity) });
                 }
             },
             cancellationToken);
     }
 
-    public Task<PickupResult?> FindPickupAsync(Guid dropId, long characterId, CancellationToken cancellationToken)
+    public Task<InventoryResult?> FindOperationAsync(
+        Guid operationId,
+        long characterId,
+        IReadOnlyCollection<long> rowIds,
+        CancellationToken cancellationToken)
     {
         return RunAsync(
             async context =>
@@ -313,7 +331,12 @@ RETURNING id AS ""Id"", status AS ""Status""")
                              await context.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false))
                 {
                     await LockCharacterAsync(context, characterId, cancellationToken).ConfigureAwait(false);
-                    PickupResult? found = await FindAsync(context, dropId, characterId, cancellationToken)
+                    InventoryResult? found = await FindAsync(
+                            context,
+                            operationId,
+                            characterId,
+                            rowIds,
+                            cancellationToken)
                         .ConfigureAwait(false);
                     await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
                     return found;
@@ -425,15 +448,16 @@ RETURNING id AS ""Id"", status AS ""Status""")
             : throw new InvalidOperationException($"Character {characterId} does not exist.");
     }
 
-    private static async Task<PickupResult?> FindAsync(
+    private static async Task<InventoryResult?> FindAsync(
         EvertorchDbContext context,
-        Guid dropId,
+        Guid operationId,
         long characterId,
+        IReadOnlyCollection<long> rowIds,
         CancellationToken cancellationToken)
     {
         LedgerRow? entry = await context.Ledger
             .AsNoTracking()
-            .SingleOrDefaultAsync(row => row.OperationId == dropId, cancellationToken)
+            .SingleOrDefaultAsync(row => row.OperationId == operationId, cancellationToken)
             .ConfigureAwait(false);
         if (entry == null)
         {
@@ -442,7 +466,7 @@ RETURNING id AS ""Id"", status AS ""Status""")
 
         if (entry.ActorCharacterId != characterId)
         {
-            return new PickupResult(PickupStatus.TakenByOther, 0, null);
+            return new InventoryResult(InventoryStatus.TakenByOther, 0, Array.Empty<StoredItem>());
         }
 
         long revision = await context.Characters
@@ -450,13 +474,54 @@ RETURNING id AS ""Id"", status AS ""Status""")
             .Select(row => row.InventoryRevision)
             .SingleAsync(cancellationToken)
             .ConfigureAwait(false);
-        StoredItem? item = await context.InventoryItems
-            .AsNoTracking()
-            .Where(row => row.Id == entry.ItemInstanceId)
-            .Select(row => new StoredItem(row.Id, row.ItemDefinitionId, row.Quantity))
-            .SingleOrDefaultAsync(cancellationToken)
+        var reported = new List<long>();
+        if (entry.ItemInstanceId.HasValue)
+        {
+            reported.Add(entry.ItemInstanceId.Value);
+        }
+
+        reported.AddRange(rowIds.Where(id => !reported.Contains(id)));
+        IReadOnlyList<StoredItem> rows = await ReadRowsAsync(
+                context,
+                characterId,
+                reported,
+                entry.ItemDefinitionId ?? string.Empty,
+                cancellationToken)
             .ConfigureAwait(false);
-        return new PickupResult(PickupStatus.Committed, (uint)revision, item);
+        return new InventoryResult(InventoryStatus.Committed, (uint)revision, rows);
+    }
+
+    // The rows as they are now, each with its equipped slot. A row that no longer exists was emptied, so it comes back
+    // with a quantity of 0; only the ledger's own row can be emptied, and the ledger names its item.
+    private static async Task<IReadOnlyList<StoredItem>> ReadRowsAsync(
+        EvertorchDbContext context,
+        long characterId,
+        IReadOnlyList<long> ids,
+        string emptiedItemDefinitionId,
+        CancellationToken cancellationToken)
+    {
+        List<InventoryItemRow> found = await context.InventoryItems
+            .AsNoTracking()
+            .Where(row => row.CharacterId == characterId && ids.Contains(row.Id))
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        List<EquipmentRow> slots = await context.Equipment
+            .AsNoTracking()
+            .Where(row => row.CharacterId == characterId && ids.Contains(row.InventoryItemId))
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        var rows = new List<StoredItem>(ids.Count);
+        foreach (long id in ids)
+        {
+            InventoryItemRow? row = found.FirstOrDefault(candidate => candidate.Id == id);
+            string? slot = slots.FirstOrDefault(candidate => candidate.InventoryItemId == id)?.Slot;
+            rows.Add(
+                row == null
+                    ? new StoredItem(id, emptiedItemDefinitionId, 0)
+                    : new StoredItem(row.Id, row.ItemDefinitionId, row.Quantity, slot));
+        }
+
+        return rows;
     }
 
     private static bool IsUniqueViolation(DbUpdateException exception, string index)

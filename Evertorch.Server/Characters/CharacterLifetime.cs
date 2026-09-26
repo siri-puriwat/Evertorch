@@ -129,8 +129,8 @@ public sealed class CharacterLifetime
     /// </summary>
     public void CheckpointAndRemove(CharacterSession character)
     {
-        // A pickup in flight still needs its character when its result comes back (Persistence §7).
-        if (character.Pickup != null)
+        // An inventory operation in flight still needs its character when its result comes back (Persistence §7).
+        if (character.Operation != null)
         {
             Release(character);
             character.GraceEndsTick = null;
@@ -143,9 +143,9 @@ public sealed class CharacterLifetime
     }
 
     /// <summary>
-    ///     The character's pickup settled; a removal that waited for it happens now.
+    ///     The character's inventory operation settled; a removal that waited for it happens now.
     /// </summary>
-    public void OnPickupSettled(CharacterSession character)
+    public void OnOperationSettled(CharacterSession character)
     {
         if (character.IsRemovalDeferred)
         {

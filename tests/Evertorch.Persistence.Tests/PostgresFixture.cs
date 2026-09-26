@@ -39,15 +39,16 @@ internal sealed class PostgresFixture : IDisposable, IAsyncDisposable
     }
 
     /// <inheritdoc cref="StartAsync" />
-    public static PostgresFixture Start(bool applyMigrations = true)
+    public static PostgresFixture Start(bool applyMigrations = true, string? targetMigration = null)
     {
-        return StartAsync(applyMigrations).GetAwaiter().GetResult();
+        return StartAsync(applyMigrations, targetMigration).GetAwaiter().GetResult();
     }
 
     /// <summary>
-    ///     Starts the container and, unless <paramref name="applyMigrations" /> is false, brings its schema up to date.
+    ///     Starts the container and, unless <paramref name="applyMigrations" /> is false, brings its schema up to
+    ///     <paramref name="targetMigration" />, or up to date when that is null.
     /// </summary>
-    public static async Task<PostgresFixture> StartAsync(bool applyMigrations = true)
+    public static async Task<PostgresFixture> StartAsync(bool applyMigrations = true, string? targetMigration = null)
     {
         PostgreSqlContainer container = new PostgreSqlBuilder(Image).Build();
         try
@@ -69,7 +70,7 @@ internal sealed class PostgresFixture : IDisposable, IAsyncDisposable
             return fixture;
         }
 
-        await EvertorchDatabase.ApplyMigrationsAsync(fixture.ConnectionString, CancellationToken.None)
+        await EvertorchDatabase.ApplyMigrationsAsync(fixture.ConnectionString, targetMigration, CancellationToken.None)
             .ConfigureAwait(false);
         return fixture;
     }

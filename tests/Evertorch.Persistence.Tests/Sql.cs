@@ -32,6 +32,14 @@ internal sealed class Sql
         return command.ExecuteNonQuery();
     }
 
+    public string Text(string commandText)
+    {
+        using var connection = new NpgsqlConnection(m_connectionString);
+        connection.Open();
+        using var command = new NpgsqlCommand(commandText, connection);
+        return Convert.ToString(command.ExecuteScalar()) ?? string.Empty;
+    }
+
     public long Scalar(string commandText)
     {
         using var connection = new NpgsqlConnection(m_connectionString);

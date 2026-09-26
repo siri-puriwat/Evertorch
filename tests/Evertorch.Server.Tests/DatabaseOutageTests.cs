@@ -122,9 +122,10 @@ public sealed class DatabaseOutageTests
             .Any(opcode => opcode == MessageOpcode.ItemPickedUp || opcode == MessageOpcode.InventoryChanged);
     }
 
-    private PickupResult? Ledger(ItemDropEntity drop, long character)
+    private InventoryResult? Ledger(ItemDropEntity drop, long character)
     {
-        return m_store.FindPickupAsync(drop.DropId, character, CancellationToken.None).GetAwaiter().GetResult();
+        return m_store.FindOperationAsync(drop.DropId, character, Array.Empty<long>(), CancellationToken.None)
+            .GetAwaiter().GetResult();
     }
 
     [Test]
@@ -153,7 +154,7 @@ public sealed class DatabaseOutageTests
         server.SendPickup(again, drop.Id, 1);
         server.TickUntil(() => !server.World.Maps.Single().Contains(drop.Id));
 
-        Assert.That(Ledger(drop, character)!.Status, Is.EqualTo(PickupStatus.Committed));
+        Assert.That(Ledger(drop, character)!.Status, Is.EqualTo(InventoryStatus.Committed));
         Assert.That(WasToldOfAPickup(server, again), Is.True);
     }
 

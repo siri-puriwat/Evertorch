@@ -4,6 +4,8 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Npgsql;
 
 namespace Evertorch.Persistence
@@ -45,10 +47,22 @@ public static class EvertorchDatabase
         return true;
     }
 
-    public static async Task ApplyMigrationsAsync(string connectionString, CancellationToken cancellationToken)
+    public static Task ApplyMigrationsAsync(string connectionString, CancellationToken cancellationToken)
+    {
+        return ApplyMigrationsAsync(connectionString, null, cancellationToken);
+    }
+
+    /// <summary>
+    ///     Brings the schema to <paramref name="targetMigration" />, or to the latest migration when it is null; the
+    ///     upgrade tests start from an older schema this way (Persistence §11).
+    /// </summary>
+    public static async Task ApplyMigrationsAsync(
+        string connectionString,
+        string? targetMigration,
+        CancellationToken cancellationToken)
     {
         await using var context = new EvertorchDbContext(CreateOptions(connectionString));
-        await context.Database.MigrateAsync(cancellationToken).ConfigureAwait(false);
+        await context.GetService<IMigrator>().MigrateAsync(targetMigration, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>

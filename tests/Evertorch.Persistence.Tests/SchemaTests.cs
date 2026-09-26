@@ -118,6 +118,19 @@ public sealed class SchemaTests
         Assert.That(failure!.SqlState, Is.EqualTo(sqlState), failure.MessageText);
     }
 
+    [TestCase("pickup")]
+    [TestCase("equip")]
+    [TestCase("unequip")]
+    [TestCase("consume")]
+    public void Ledger_WithAKnownOperationType_IsStored(string operationType)
+    {
+        long character = NewCharacter();
+
+        long entry = m_sql.Scalar(Sql.LedgerInsert(Guid.NewGuid(), character, operationType));
+
+        Assert.That(m_sql.Scalar($"SELECT count(*) FROM economy_ledger WHERE id = {entry}"), Is.EqualTo(1));
+    }
+
     [Test]
     public void Account_WithARepeatedLogin_IsRejected()
     {

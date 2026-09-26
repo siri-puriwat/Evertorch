@@ -42,10 +42,10 @@ public sealed class PickupConcurrencyTests
     }
 
     // Each commit runs on its own thread and connection, released together.
-    private PickupResult[] CommitTogether(params (long Character, Guid Drop)[] pickups)
+    private InventoryResult[] CommitTogether(params (long Character, Guid Drop)[] pickups)
     {
         using var start = new Barrier(pickups.Length);
-        Task<PickupResult>[] running = pickups
+        Task<InventoryResult>[] running = pickups
             .Select(pickup => Task.Run(() =>
             {
                 start.SignalAndWait();
@@ -76,9 +76,9 @@ public sealed class PickupConcurrencyTests
         long character = NewCharacter();
         (long, Guid)[] pickups = Enumerable.Range(0, 8).Select(_ => (character, Guid.NewGuid())).ToArray();
 
-        PickupResult[] results = CommitTogether(pickups);
+        InventoryResult[] results = CommitTogether(pickups);
 
-        Assert.That(results.Select(result => result.Status), Is.All.EqualTo(PickupStatus.Committed));
+        Assert.That(results.Select(result => result.Status), Is.All.EqualTo(InventoryStatus.Committed));
         Assert.That(results.Select(result => result.InventoryRevision), Is.EquivalentTo(Enumerable.Range(1, 8)
             .Select(revision => (uint)revision)));
         Assert.That(Held(character), Is.EqualTo(16));
@@ -94,9 +94,9 @@ public sealed class PickupConcurrencyTests
             long character = NewCharacter();
             var drop = Guid.NewGuid();
 
-            PickupResult[] results = CommitTogether((character, drop), (character, drop));
+            InventoryResult[] results = CommitTogether((character, drop), (character, drop));
 
-            Assert.That(results.Select(result => result.Status), Is.All.EqualTo(PickupStatus.Committed));
+            Assert.That(results.Select(result => result.Status), Is.All.EqualTo(InventoryStatus.Committed));
             Assert.That(results.Select(result => result.InventoryRevision), Is.All.EqualTo(1u));
             Assert.That(Held(character), Is.EqualTo(2));
             Assert.That(LedgerEntries(drop), Is.EqualTo(1));
@@ -112,13 +112,13 @@ public sealed class PickupConcurrencyTests
             long second = NewCharacter();
             var drop = Guid.NewGuid();
 
-            PickupResult[] results = CommitTogether((first, drop), (second, drop));
+            InventoryResult[] results = CommitTogether((first, drop), (second, drop));
 
-            Assert.That(results.Count(result => result.Status == PickupStatus.Committed), Is.EqualTo(1));
-            Assert.That(results.Count(result => result.Status == PickupStatus.TakenByOther), Is.EqualTo(1));
+            Assert.That(results.Count(result => result.Status == InventoryStatus.Committed), Is.EqualTo(1));
+            Assert.That(results.Count(result => result.Status == InventoryStatus.TakenByOther), Is.EqualTo(1));
             Assert.That(Held(first) + Held(second), Is.EqualTo(2));
             Assert.That(LedgerEntries(drop), Is.EqualTo(1));
-            long owner = results[0].Status == PickupStatus.Committed ? first : second;
+            long owner = results[0].Status == InventoryStatus.Committed ? first : second;
             long other = owner == first ? second : first;
             Assert.That(m_sql.Scalar($"SELECT inventory_revision FROM characters WHERE id = {owner}"), Is.EqualTo(1));
             Assert.That(m_sql.Scalar($"SELECT inventory_revision FROM characters WHERE id = {other}"), Is.Zero);

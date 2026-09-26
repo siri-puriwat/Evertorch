@@ -84,12 +84,14 @@ public sealed class CharacterSession
     public uint LogoutSequence { get; set; }
 
     /// <summary>
-    ///     The pickup being committed, if any. Logout and removal wait for it (Persistence §7).
+    ///     The inventory operation being committed, if any: one at a time, so the inventory changes in commit order.
+    ///     Logout, removal, and a map transfer wait for it (Persistence §7).
     /// </summary>
-    public PendingPickup? Pickup { get; set; }
+    public InventoryOperation? Operation { get; set; }
 
     /// <summary>
-    ///     The character was to leave the world while a pickup was in flight; it leaves once the pickup settles.
+    ///     The character was to leave the world while an inventory operation was in flight; it leaves once the
+    ///     operation settles.
     /// </summary>
     public bool IsRemovalDeferred { get; set; }
 }

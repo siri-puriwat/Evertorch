@@ -247,7 +247,7 @@ public sealed class PickupTests
             "the logout is answered; the pickup stays unsettled until the ledger answers");
 
         server.Store.IsUnavailable = false;
-        server.TickUntil(() => server.SessionOf(picker).Character!.Pickup == null);
+        server.TickUntil(() => server.SessionOf(picker).Character!.Operation == null);
         server.Tick(2);
 
         Assert.That(server.SessionOf(picker).State, Is.EqualTo(SessionState.InWorld));

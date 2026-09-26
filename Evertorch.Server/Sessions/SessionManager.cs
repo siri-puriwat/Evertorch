@@ -134,7 +134,7 @@ public sealed class SessionManager : ITickPhase
         m_progression = progression;
         m_combat = combat;
         m_pickups = pickups;
-        m_pickups.Settled += OnPickupSettled;
+        m_pickups.Settled += OnOperationSettled;
         m_time = time;
         m_instruments = instruments;
         m_logger = logger;
@@ -701,7 +701,7 @@ public sealed class SessionManager : ITickPhase
             return;
         }
 
-        if (player.IsDead || character.IsLoggingOut || character.IsExpelled || character.Pickup != null)
+        if (player.IsDead || character.IsLoggingOut || character.IsExpelled || character.Operation != null)
         {
             return;
         }
@@ -938,7 +938,7 @@ public sealed class SessionManager : ITickPhase
         character.Player.Combat.IsAutoAttacking = false;
         // Moves queued before the logout must not walk the character away from the checkpoint it is about to write.
         session.Input!.Halt();
-        if (character.Pickup == null)
+        if (character.Operation == null)
         {
             QueueLogoutCheckpoint(session, character);
         }
@@ -946,7 +946,7 @@ public sealed class SessionManager : ITickPhase
         return CommandRejectionReason.None;
     }
 
-    private void OnPickupSettled(CharacterSession character)
+    private void OnOperationSettled(CharacterSession character)
     {
         if (character.IsLoggingOut && character.LogoutCheckpoint == null && character.Connection != null)
         {

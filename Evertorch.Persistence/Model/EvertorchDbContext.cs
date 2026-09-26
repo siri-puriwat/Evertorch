@@ -157,7 +157,8 @@ internal sealed class EvertorchDbContext : DbContext
         {
             table.HasCheckConstraint(
                 "ck_economy_ledger_operation_type",
-                $"operation_type IN ('{LedgerRow.PickupOperation}')");
+                $"operation_type IN ('{LedgerRow.PickupOperation}', '{LedgerRow.EquipOperation}', "
+                + $"'{LedgerRow.UnequipOperation}', '{LedgerRow.ConsumeOperation}')");
         });
         entry.HasKey(row => row.Id).HasName("pk_economy_ledger");
         entry.Property(row => row.Id).UseIdentityAlwaysColumn();

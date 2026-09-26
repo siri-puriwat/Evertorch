@@ -58,14 +58,20 @@ public interface IGameStore
     ///     inventory revision goes up by one, and the ledger records the drop's ID. A drop already in the ledger
     ///     changes nothing and reports who has it.
     /// </summary>
-    Task<PickupResult> CommitPickupAsync(PickupCommit pickup, CancellationToken cancellationToken);
+    Task<InventoryResult> CommitPickupAsync(PickupCommit pickup, CancellationToken cancellationToken);
 
     /// <summary>
-    ///     What became of a drop whose commit may or may not have happened: null when the ledger has no entry for it,
-    ///     else <see cref="PickupStatus.Committed" /> with the inventory as it is now when
-    ///     <paramref name="characterId" /> holds it, or <see cref="PickupStatus.TakenByOther" />.
+    ///     What became of an inventory operation whose commit may or may not have happened, looked up under the
+    ///     character's lock: null when the ledger has no entry for <paramref name="operationId" />, else
+    ///     <see cref="InventoryStatus.TakenByOther" /> when another character made it, or
+    ///     <see cref="InventoryStatus.Committed" /> with the ledger's row and <paramref name="rowIds" /> as they are
+    ///     now. The caller names the rows the ledger does not, such as the one a swap took out of its slot.
     /// </summary>
-    Task<PickupResult?> FindPickupAsync(Guid dropId, long characterId, CancellationToken cancellationToken);
+    Task<InventoryResult?> FindOperationAsync(
+        Guid operationId,
+        long characterId,
+        IReadOnlyCollection<long> rowIds,
+        CancellationToken cancellationToken);
 
     /// <summary>
     ///     Every distinct job, map, and item definition ID stored for any character, for the startup comparison with

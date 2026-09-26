@@ -113,7 +113,7 @@ public sealed class MapTransferTests
             server.CurrentTick,
             long.MaxValue,
             default);
-        CharacterOf(server, waiting).Pickup = new PendingPickup(drop, 1);
+        CharacterOf(server, waiting).Operation = InventoryOperation.ForPickup(drop, 1);
         server.PlayerOf(dead).CurrentHealth = 0;
         server.PlayerOf(dead).StateFlags |= EntityStateFlags.Dead;
         CharacterOf(server, leaving).IsLoggingOut = true;
@@ -126,7 +126,7 @@ public sealed class MapTransferTests
         bool[] stayed = new[] { waiting, dead, leaving }
             .Select(player => CharacterOf(server, player).Map.Definition.Id == Ground)
             .ToArray();
-        CharacterOf(server, waiting).Pickup = null;
+        CharacterOf(server, waiting).Operation = null;
         server.Tick();
 
         Assert.That(stayed, Is.EqualTo(new[] { true, true, true }));

@@ -88,7 +88,7 @@ public sealed class PickupSystem : ITickPhase
     }
 
     /// <summary>
-    ///     A pickup finished, one way or the other, and its character may now log out or leave.
+    ///     A pickup finished, one way or the other, and its character may now log out, leave, or cross.
     /// </summary>
     public event Action<CharacterSession>? Settled;
 
@@ -99,8 +99,8 @@ public sealed class PickupSystem : ITickPhase
     public CommandRejectionReason TryStart(ClientSession session, EntityId target, uint commandSequence, uint tick)
     {
         CharacterSession character = session.Character!;
-        // One pickup at a time per character keeps its inventory changes in commit order.
-        if (character.Pickup != null)
+        // One inventory operation at a time per character keeps its inventory changes in commit order.
+        if (character.Operation != null)
         {
             return CommandRejectionReason.Busy;
         }
@@ -138,8 +138,8 @@ public sealed class PickupSystem : ITickPhase
             item!.StackLimit,
             MaxInventoryRows,
             m_time.GetUtcNow().UtcDateTime);
-        var pickup = new PendingPickup(drop, commandSequence);
-        var job = new PersistenceJob<PickupResult>(
+        var pickup = InventoryOperation.ForPickup(drop, commandSequence);
+        var job = new PersistenceJob<InventoryResult>(
             "pickup",
             session.Connection,
             character.Character.Value,
@@ -152,7 +152,7 @@ public sealed class PickupSystem : ITickPhase
         }
 
         drop.ReservedBy = character.Character;
-        character.Pickup = pickup;
+        character.Operation = pickup;
         return CommandRejectionReason.None;
     }
 
@@ -163,7 +163,7 @@ public sealed class PickupSystem : ITickPhase
         return (float)Math.Sqrt(dx * dx + dz * dz);
     }
 
-    private void CompleteCommit(CharacterSession character, PersistenceOutcome outcome, PickupResult result)
+    private void CompleteCommit(CharacterSession character, PersistenceOutcome outcome, InventoryResult result)
     {
         if (outcome == PersistenceOutcome.Succeeded)
         {
@@ -174,7 +174,7 @@ public sealed class PickupSystem : ITickPhase
         // The commit may have happened; only the ledger can say.
         LogUnsettled(
             m_logger,
-            character.Pickup!.Drop.DropId,
+            character.Operation!.OperationId,
             character.Character.Value,
             character.Connection?.Connection.Value ?? 0,
             null);
@@ -186,19 +186,19 @@ public sealed class PickupSystem : ITickPhase
 
     private bool TryQueueLookup(CharacterSession character)
     {
-        Guid dropId = character.Pickup!.Drop.DropId;
+        Guid dropId = character.Operation!.OperationId;
         long id = character.Character.Value;
-        var lookup = new PersistenceJob<PickupResult?>(
+        var lookup = new PersistenceJob<InventoryResult?>(
             "pickup lookup",
             character.Connection?.Connection ?? default,
             id,
-            (store, cancellation) => store.FindPickupAsync(dropId, id, cancellation),
+            (store, cancellation) => store.FindOperationAsync(dropId, id, Array.Empty<long>(), cancellation),
             (outcome, found) => CompleteLookup(character, outcome, found),
             dropId.ToString());
         return m_persistence.TryEnqueue(lookup);
     }
 
-    private void CompleteLookup(CharacterSession character, PersistenceOutcome outcome, PickupResult? found)
+    private void CompleteLookup(CharacterSession character, PersistenceOutcome outcome, InventoryResult? found)
     {
         if (outcome != PersistenceOutcome.Succeeded)
         {
@@ -215,28 +215,28 @@ public sealed class PickupSystem : ITickPhase
         Settle(character, found);
     }
 
-    private void Settle(CharacterSession character, PickupResult result)
+    private void Settle(CharacterSession character, InventoryResult result)
     {
         switch (result.Status)
         {
-            case PickupStatus.Committed:
+            case InventoryStatus.Committed:
                 PickUp(character, result);
                 break;
-            case PickupStatus.InventoryFull:
+            case InventoryStatus.InventoryFull:
                 Release(character, CommandRejectionReason.InventoryFull);
                 break;
             default:
                 // Committed to someone else before this drop existed here; it is stale, and it goes.
-                ItemDropEntity stale = character.Pickup!.Drop;
+                ItemDropEntity stale = character.Operation!.Drop!;
                 character.Map.Remove(stale);
                 Release(character, CommandRejectionReason.InvalidTarget);
                 break;
         }
     }
 
-    private void PickUp(CharacterSession character, PickupResult result)
+    private void PickUp(CharacterSession character, InventoryResult result)
     {
-        ItemDropEntity drop = character.Pickup!.Drop;
+        ItemDropEntity drop = character.Operation!.Drop!;
         MapInstance map = character.Map;
         PlayerEntity picker = character.Player;
         foreach (ClientSession session in m_sessions.Sessions)
@@ -254,7 +254,7 @@ public sealed class PickupSystem : ITickPhase
         map.Remove(drop);
         uint prior = character.Inventory.Revision;
         ClientSession? owner = character.Connection;
-        if (result.Row == null)
+        if (result.Rows.Count == 0)
         {
             character.Inventory.Revision = result.InventoryRevision;
             if (owner != null)
@@ -264,11 +264,20 @@ public sealed class PickupSystem : ITickPhase
         }
         else
         {
-            var row = new InventoryEntry(result.Row.Id, drop.Item, (uint)result.Row.Quantity);
-            character.Inventory.Apply(result.InventoryRevision, row);
+            var rows = new InventoryEntry[result.Rows.Count];
+            for (int index = 0; index < rows.Length; index++)
+            {
+                StoredItem stored = result.Rows[index];
+                rows[index] = new InventoryEntry(
+                    stored.Id,
+                    new ItemDefinitionId(stored.ItemDefinitionId),
+                    (uint)stored.Quantity);
+                character.Inventory.Apply(result.InventoryRevision, rows[index]);
+            }
+
             if (owner != null && owner.State == SessionState.InWorld)
             {
-                m_sender.Send(owner.Connection, new InventoryChanged(prior, result.InventoryRevision, new[] { row }));
+                m_sender.Send(owner.Connection, new InventoryChanged(prior, result.InventoryRevision, rows));
             }
         }
 
@@ -277,8 +286,8 @@ public sealed class PickupSystem : ITickPhase
 
     private void Release(CharacterSession character, CommandRejectionReason reason)
     {
-        PendingPickup pickup = character.Pickup!;
-        pickup.Drop.ReservedBy = default;
+        InventoryOperation pickup = character.Operation!;
+        pickup.Drop!.ReservedBy = default;
         ClientSession? owner = character.Connection;
         if (owner != null && owner.State == SessionState.InWorld)
         {
@@ -292,9 +301,9 @@ public sealed class PickupSystem : ITickPhase
 
     private void Finish(CharacterSession character)
     {
-        character.Pickup = null;
+        character.Operation = null;
         Settled?.Invoke(character);
-        m_lifetime.OnPickupSettled(character);
+        m_lifetime.OnOperationSettled(character);
     }
 }
 }

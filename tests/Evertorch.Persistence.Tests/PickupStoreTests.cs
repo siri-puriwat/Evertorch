@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Npgsql;
@@ -42,7 +43,7 @@ public sealed class PickupStoreTests
         return m_sql.InsertCharacter(m_sql.InsertAccount(), Sql.UniqueName("Pick"));
     }
 
-    private PickupResult Commit(long character, Guid drop, int amount, int stackLimit = StackLimit,
+    private InventoryResult Commit(long character, Guid drop, int amount, int stackLimit = StackLimit,
         int maxRows = MaxRows)
     {
         return m_store.CommitPickupAsync(
@@ -52,12 +53,19 @@ public sealed class PickupStoreTests
             .GetResult();
     }
 
-    private PickupResult? Find(long character, Guid drop)
+    private InventoryResult? Find(long character, Guid drop)
     {
-        return m_store.FindPickupAsync(drop, character, CancellationToken.None).GetAwaiter().GetResult();
+        return Find(character, drop, Array.Empty<long>());
     }
 
-    private Task<PickupResult?> FindInBackground(long character, Guid drop)
+    private InventoryResult? Find(long character, Guid operation, long[] rowIds)
+    {
+        return m_store.FindOperationAsync(operation, character, rowIds, CancellationToken.None)
+            .GetAwaiter()
+            .GetResult();
+    }
+
+    private Task<InventoryResult?> FindInBackground(long character, Guid drop)
     {
         return Task.Run(() => Find(character, drop));
     }
@@ -78,10 +86,10 @@ public sealed class PickupStoreTests
         return m_sql.Scalar($"SELECT count(*) FROM economy_ledger WHERE operation_id = '{drop}'");
     }
 
-    [TestCase(8, 2, 10, PickupStatus.Committed)]
-    [TestCase(8, 3, 10, PickupStatus.InventoryFull)]
-    [TestCase(0, 11, 10, PickupStatus.InventoryFull)]
-    public void Commit_AgainstTheStackLimit_IsAllOrNothing(int held, int amount, int limit, PickupStatus expected)
+    [TestCase(8, 2, 10, InventoryStatus.Committed)]
+    [TestCase(8, 3, 10, InventoryStatus.InventoryFull)]
+    [TestCase(0, 11, 10, InventoryStatus.InventoryFull)]
+    public void Commit_AgainstTheStackLimit_IsAllOrNothing(int held, int amount, int limit, InventoryStatus expected)
     {
         long character = NewCharacter();
         if (held > 0)
@@ -92,10 +100,10 @@ public sealed class PickupStoreTests
         long revisionBefore = Revision(character);
         var drop = Guid.NewGuid();
 
-        PickupResult result = Commit(character, drop, amount, limit);
+        InventoryResult result = Commit(character, drop, amount, limit);
 
         Assert.That(result.Status, Is.EqualTo(expected));
-        bool isCommitted = expected == PickupStatus.Committed;
+        bool isCommitted = expected == InventoryStatus.Committed;
         Assert.That(Held(character), Is.EqualTo(isCommitted ? held + amount : held));
         Assert.That(Revision(character), Is.EqualTo(isCommitted ? revisionBefore + 1 : revisionBefore));
         Assert.That(LedgerEntries(drop), Is.EqualTo(isCommitted ? 1 : 0));
@@ -107,7 +115,7 @@ public sealed class PickupStoreTests
         long character = NewCharacter();
         m_sql.Execute($"UPDATE characters SET inventory_revision = 4294967295 WHERE id = {character}");
 
-        PickupResult result = Commit(character, Guid.NewGuid(), 1);
+        InventoryResult result = Commit(character, Guid.NewGuid(), 1);
 
         Assert.That(result.InventoryRevision, Is.EqualTo(0u));
         Assert.That(Revision(character), Is.EqualTo(0));
@@ -119,19 +127,19 @@ public sealed class PickupStoreTests
         long character = NewCharacter();
         var drop = Guid.NewGuid();
 
-        PickupResult result = Commit(character, drop, 3);
+        InventoryResult result = Commit(character, drop, 3);
 
-        Assert.That(result.Status, Is.EqualTo(PickupStatus.Committed));
+        Assert.That(result.Status, Is.EqualTo(InventoryStatus.Committed));
         Assert.That(result.InventoryRevision, Is.EqualTo(1u));
-        Assert.That(result.Row!.ItemDefinitionId, Is.EqualTo(Gel));
-        Assert.That(result.Row.Quantity, Is.EqualTo(3));
+        Assert.That(result.Rows.Single().ItemDefinitionId, Is.EqualTo(Gel));
+        Assert.That(result.Rows.Single().Quantity, Is.EqualTo(3));
         Assert.That(Revision(character), Is.EqualTo(1));
         Assert.That(Held(character), Is.EqualTo(3));
         Assert.That(
             m_sql.Scalar(
                 "SELECT count(*) FROM economy_ledger WHERE "
                 + $"operation_id = '{drop}' AND actor_character_id = {character} AND operation_type = 'pickup' "
-                + $"AND item_instance_id = {result.Row.Id} AND item_definition_id = '{Gel}' AND quantity_delta = 3 "
+                + $"AND item_instance_id = {result.Rows.Single().Id} AND item_definition_id = '{Gel}' AND quantity_delta = 3 "
                 + "AND currency_delta = 0"),
             Is.EqualTo(1));
     }
@@ -145,15 +153,15 @@ public sealed class PickupStoreTests
             + $"VALUES ({character}, 'item.material.other', 1, 0, 0)");
         var refused = Guid.NewGuid();
 
-        PickupResult full = Commit(character, refused, 1, maxRows: 1);
-        PickupResult added = Commit(character, Guid.NewGuid(), 1, maxRows: 2);
-        PickupResult merged = Commit(character, Guid.NewGuid(), 1, maxRows: 2);
+        InventoryResult full = Commit(character, refused, 1, maxRows: 1);
+        InventoryResult added = Commit(character, Guid.NewGuid(), 1, maxRows: 2);
+        InventoryResult merged = Commit(character, Guid.NewGuid(), 1, maxRows: 2);
 
-        Assert.That(full.Status, Is.EqualTo(PickupStatus.InventoryFull));
+        Assert.That(full.Status, Is.EqualTo(InventoryStatus.InventoryFull));
         Assert.That(LedgerEntries(refused), Is.EqualTo(0));
-        Assert.That(added.Status, Is.EqualTo(PickupStatus.Committed));
-        Assert.That(merged.Status, Is.EqualTo(PickupStatus.Committed));
-        Assert.That(merged.Row!.Quantity, Is.EqualTo(2));
+        Assert.That(added.Status, Is.EqualTo(InventoryStatus.Committed));
+        Assert.That(merged.Status, Is.EqualTo(InventoryStatus.Committed));
+        Assert.That(merged.Rows.Single().Quantity, Is.EqualTo(2));
     }
 
     [Test]
@@ -164,9 +172,9 @@ public sealed class PickupStoreTests
         var drop = Guid.NewGuid();
         Commit(first, drop, 1);
 
-        PickupResult result = Commit(second, drop, 1);
+        InventoryResult result = Commit(second, drop, 1);
 
-        Assert.That(result.Status, Is.EqualTo(PickupStatus.TakenByOther));
+        Assert.That(result.Status, Is.EqualTo(InventoryStatus.TakenByOther));
         Assert.That(Held(second), Is.EqualTo(0));
         Assert.That(Revision(second), Is.EqualTo(0));
         Assert.That(LedgerEntries(drop), Is.EqualTo(1));
@@ -176,12 +184,12 @@ public sealed class PickupStoreTests
     public void Commit_OfAnItemAlreadyHeld_MergesIntoItsRow()
     {
         long character = NewCharacter();
-        long row = Commit(character, Guid.NewGuid(), 2).Row!.Id;
+        long row = Commit(character, Guid.NewGuid(), 2).Rows.Single().Id;
 
-        PickupResult result = Commit(character, Guid.NewGuid(), 5);
+        InventoryResult result = Commit(character, Guid.NewGuid(), 5);
 
-        Assert.That(result.Row!.Id, Is.EqualTo(row));
-        Assert.That(result.Row.Quantity, Is.EqualTo(7));
+        Assert.That(result.Rows.Single().Id, Is.EqualTo(row));
+        Assert.That(result.Rows.Single().Quantity, Is.EqualTo(7));
         Assert.That(result.InventoryRevision, Is.EqualTo(2u));
         Assert.That(m_sql.Scalar($"SELECT count(*) FROM inventory_items WHERE character_id = {character}"),
             Is.EqualTo(1));
@@ -194,11 +202,11 @@ public sealed class PickupStoreTests
         var drop = Guid.NewGuid();
         Commit(character, drop, 4);
 
-        PickupResult again = Commit(character, drop, 4);
+        InventoryResult again = Commit(character, drop, 4);
 
-        Assert.That(again.Status, Is.EqualTo(PickupStatus.Committed));
+        Assert.That(again.Status, Is.EqualTo(InventoryStatus.Committed));
         Assert.That(again.InventoryRevision, Is.EqualTo(1u));
-        Assert.That(again.Row!.Quantity, Is.EqualTo(4));
+        Assert.That(again.Rows.Single().Quantity, Is.EqualTo(4));
         Assert.That(Held(character), Is.EqualTo(4));
         Assert.That(LedgerEntries(drop), Is.EqualTo(1));
     }
@@ -216,7 +224,7 @@ public sealed class PickupStoreTests
         var drop = Guid.NewGuid();
         Commit(holder, drop, 2);
 
-        Assert.That(Find(NewCharacter(), drop)!.Status, Is.EqualTo(PickupStatus.TakenByOther));
+        Assert.That(Find(NewCharacter(), drop)!.Status, Is.EqualTo(InventoryStatus.TakenByOther));
     }
 
     [Test]
@@ -227,11 +235,11 @@ public sealed class PickupStoreTests
         Commit(character, drop, 2);
         Commit(character, Guid.NewGuid(), 3);
 
-        PickupResult? found = Find(character, drop);
+        InventoryResult? found = Find(character, drop);
 
-        Assert.That(found!.Status, Is.EqualTo(PickupStatus.Committed));
+        Assert.That(found!.Status, Is.EqualTo(InventoryStatus.Committed));
         Assert.That(found.InventoryRevision, Is.EqualTo(2u));
-        Assert.That(found.Row!.Quantity, Is.EqualTo(5));
+        Assert.That(found.Rows.Single().Quantity, Is.EqualTo(5));
     }
 
     [Test]
@@ -251,12 +259,34 @@ public sealed class PickupStoreTests
             locking.ExecuteNonQuery();
         }
 
-        Task<PickupResult?> lookup = FindInBackground(character, drop);
+        Task<InventoryResult?> lookup = FindInBackground(character, drop);
         bool isAnsweredEarly = lookup.Wait(500);
         transaction.Commit();
 
         Assert.That(isAnsweredEarly, Is.False, "the lookup waited for the character lock");
-        Assert.That(lookup.GetAwaiter().GetResult()!.Status, Is.EqualTo(PickupStatus.Committed));
+        Assert.That(lookup.GetAwaiter().GetResult()!.Status, Is.EqualTo(InventoryStatus.Committed));
+    }
+
+    // The lookup of Persistence §5: the ledger's row and the ones the caller names, each as it is now with its slot.
+    // An emptied row, gone from the table, reports a quantity of 0 under the item the ledger names.
+    [Test]
+    public void Find_WithRowsToReport_AnswersEachAsItIsNow_WithItsSlot_AndAnEmptiedRowAtZero()
+    {
+        long character = NewCharacter();
+        var drop = Guid.NewGuid();
+        long gel = Commit(character, drop, 3).Rows.Single().Id;
+        long equipped = m_sql.InsertItem(character, 1);
+        m_sql.Execute(Sql.EquipmentInsert(character, "Weapon", equipped));
+        m_sql.Execute($"DELETE FROM inventory_items WHERE id = {gel}");
+
+        InventoryResult found = Find(character, drop, new[] { equipped, gel })!;
+
+        Assert.That(found.Status, Is.EqualTo(InventoryStatus.Committed));
+        Assert.That(found.InventoryRevision, Is.EqualTo((uint)Revision(character)));
+        Assert.That(
+            found.Rows.Select(row => (row.Id, row.ItemDefinitionId, row.Quantity, row.EquippedSlot)),
+            Is.EqualTo(new[] { (gel, Gel, 0, (string?)null), (equipped, Gel, 1, "Weapon") }),
+            "the ledger's row first, once");
     }
 }
 }

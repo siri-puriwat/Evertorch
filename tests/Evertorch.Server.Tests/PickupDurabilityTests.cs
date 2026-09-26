@@ -109,9 +109,10 @@ public sealed class PickupDurabilityTests
             .Single();
     }
 
-    private PickupResult? Ledger(ItemDropEntity drop, long character)
+    private InventoryResult? Ledger(ItemDropEntity drop, long character)
     {
-        return m_store.FindPickupAsync(drop.DropId, character, CancellationToken.None).GetAwaiter().GetResult();
+        return m_store.FindOperationAsync(drop.DropId, character, Array.Empty<long>(), CancellationToken.None)
+            .GetAwaiter().GetResult();
     }
 
     private AccountId AccountOf(string identity)
@@ -326,7 +327,7 @@ public sealed class PickupDurabilityTests
             server.Tick();
             if (HasBeenTold(server, picker))
             {
-                Assert.That(Ledger(drop, character)!.Status, Is.EqualTo(PickupStatus.Committed));
+                Assert.That(Ledger(drop, character)!.Status, Is.EqualTo(InventoryStatus.Committed));
             }
         }
 
@@ -381,7 +382,7 @@ public sealed class PickupDurabilityTests
         Assert.That(told.Count(opcode => opcode == MessageOpcode.ItemPickedUp), Is.EqualTo(1), "told once");
         Assert.That(told.Count(opcode => opcode == MessageOpcode.InventoryChanged), Is.EqualTo(1), "changed once");
         Assert.That(server.Persistence.WaitingCheckpoints, Is.Zero, "the save's checkpoint was written too");
-        Assert.That(Ledger(drop, character)!.Status, Is.EqualTo(PickupStatus.Committed));
+        Assert.That(Ledger(drop, character)!.Status, Is.EqualTo(InventoryStatus.Committed));
         StoredCharacter stored = Stored(account, character);
         Assert.That(stored.InventoryRevision, Is.EqualTo(1u));
         Assert.That(GelIn(stored), Is.EqualTo(GelAmount));

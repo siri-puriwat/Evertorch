@@ -206,14 +206,14 @@ internal sealed class InMemoryGameStore : IGameStore
         return Task.CompletedTask;
     }
 
-    public Task<PickupResult> CommitPickupAsync(PickupCommit pickup, CancellationToken cancellationToken)
+    public Task<InventoryResult> CommitPickupAsync(PickupCommit pickup, CancellationToken cancellationToken)
     {
         ThrowIfUnavailable();
         lock (m_gate)
         {
             PickupCommits.Add(pickup);
-            PickupResult result = Find(pickup.DropId, pickup.CharacterId) ?? Commit(pickup);
-            if (AmbiguousPickupFailures > 0 && result.Status == PickupStatus.Committed)
+            InventoryResult result = Find(pickup.DropId, pickup.CharacterId, Array.Empty<long>()) ?? Commit(pickup);
+            if (AmbiguousPickupFailures > 0 && result.Status == InventoryStatus.Committed)
             {
                 AmbiguousPickupFailures--;
                 throw new StoreUnavailableException(new TimeoutException("scripted loss of the commit's answer"));
@@ -223,12 +223,16 @@ internal sealed class InMemoryGameStore : IGameStore
         }
     }
 
-    public Task<PickupResult?> FindPickupAsync(Guid dropId, long characterId, CancellationToken cancellationToken)
+    public Task<InventoryResult?> FindOperationAsync(
+        Guid operationId,
+        long characterId,
+        IReadOnlyCollection<long> rowIds,
+        CancellationToken cancellationToken)
     {
         ThrowIfUnavailable();
         lock (m_gate)
         {
-            return Task.FromResult(Find(dropId, characterId));
+            return Task.FromResult(Find(operationId, characterId, rowIds));
         }
     }
 
@@ -325,33 +329,37 @@ internal sealed class InMemoryGameStore : IGameStore
         }
     }
 
-    private PickupResult? Find(Guid dropId, long characterId)
+    // As the PostgreSQL store answers: the ledger's row and the named ones as they are now, an emptied one at 0.
+    private InventoryResult? Find(Guid operationId, long characterId, IReadOnlyCollection<long> rowIds)
     {
-        if (!m_ledger.TryGetValue(dropId, out LedgerEntry? entry))
+        if (!m_ledger.TryGetValue(operationId, out LedgerEntry? entry))
         {
             return null;
         }
 
         if (entry.Character != characterId)
         {
-            return new PickupResult(PickupStatus.TakenByOther, 0, null);
+            return new InventoryResult(InventoryStatus.TakenByOther, 0, Array.Empty<StoredItem>());
         }
 
         Row row = m_characters[characterId];
-        return new PickupResult(
-            PickupStatus.Committed,
-            row.InventoryRevision,
-            row.Items.SingleOrDefault(item => item.Id == entry.Item));
+        var rows = new List<StoredItem>();
+        foreach (long id in new[] { entry.Item }.Concat(rowIds.Where(id => id != entry.Item)))
+        {
+            rows.Add(row.Items.SingleOrDefault(item => item.Id == id) ?? new StoredItem(id, string.Empty, 0));
+        }
+
+        return new InventoryResult(InventoryStatus.Committed, row.InventoryRevision, rows);
     }
 
-    private PickupResult Commit(PickupCommit pickup)
+    private InventoryResult Commit(PickupCommit pickup)
     {
         Row row = m_characters[pickup.CharacterId];
         int index = row.Items.FindIndex(item => item.ItemDefinitionId == pickup.ItemDefinitionId);
         int held = index >= 0 ? row.Items[index].Quantity : 0;
         if (held > pickup.StackLimit - pickup.Amount || (index < 0 && row.Items.Count >= pickup.MaxRows))
         {
-            return new PickupResult(PickupStatus.InventoryFull, row.InventoryRevision, null);
+            return new InventoryResult(InventoryStatus.InventoryFull, row.InventoryRevision, Array.Empty<StoredItem>());
         }
 
         StoredItem stack = index >= 0
@@ -368,7 +376,7 @@ internal sealed class InMemoryGameStore : IGameStore
 
         row.InventoryRevision = unchecked(row.InventoryRevision + 1);
         m_ledger.Add(pickup.DropId, new LedgerEntry(pickup.CharacterId, stack.Id));
-        return new PickupResult(PickupStatus.Committed, row.InventoryRevision, stack);
+        return new InventoryResult(InventoryStatus.Committed, row.InventoryRevision, new[] { stack });
     }
 
     private IReadOnlyList<CharacterSummary> List(AccountId account)

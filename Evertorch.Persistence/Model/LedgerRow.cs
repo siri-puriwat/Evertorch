@@ -8,6 +8,9 @@ namespace Evertorch.Persistence
 internal sealed class LedgerRow
 {
     public const string PickupOperation = "pickup";
+    public const string EquipOperation = "equip";
+    public const string UnequipOperation = "unequip";
+    public const string ConsumeOperation = "consume";
 
     public long Id { get; set; }
 
