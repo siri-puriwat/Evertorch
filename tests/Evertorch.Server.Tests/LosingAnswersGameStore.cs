@@ -1,0 +1,118 @@
+using System;
+using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
+using Evertorch.Persistence;
+
+namespace Evertorch.Server.Tests
+{
+/// <summary>
+///     A real store whose inventory commits, while <see cref="IsLosingAnswers" /> is set, happen and then fail as if the
+///     answer was lost on the way back, so the server has to settle them from the ledger.
+/// </summary>
+internal sealed class LosingAnswersGameStore : IGameStore
+{
+    private readonly IGameStore m_inner;
+    private int m_lostAnswers;
+
+    public LosingAnswersGameStore(IGameStore inner)
+    {
+        m_inner = inner;
+    }
+
+    public bool IsLosingAnswers { get; set; }
+
+    /// <summary>
+    ///     How many commits happened whose answer was lost.
+    /// </summary>
+    public int LostAnswers => Volatile.Read(ref m_lostAnswers);
+
+    public Task<IReadOnlyList<string>> GetPendingMigrationsAsync(CancellationToken cancellationToken)
+    {
+        return m_inner.GetPendingMigrationsAsync(cancellationToken);
+    }
+
+    public Task<AccountId?> ProvisionAccountAsync(
+        string loginNormalized,
+        DateTime now,
+        CancellationToken cancellationToken)
+    {
+        return m_inner.ProvisionAccountAsync(loginNormalized, now, cancellationToken);
+    }
+
+    public Task<IReadOnlyList<CharacterSummary>> ListCharactersAsync(
+        AccountId account,
+        CancellationToken cancellationToken)
+    {
+        return m_inner.ListCharactersAsync(account, cancellationToken);
+    }
+
+    public Task<CharacterCreation> CreateCharacterAsync(
+        AccountId account,
+        NewCharacter character,
+        int maxCharacters,
+        CancellationToken cancellationToken)
+    {
+        return m_inner.CreateCharacterAsync(account, character, maxCharacters, cancellationToken);
+    }
+
+    public Task<StoredCharacter?> LoadCharacterAsync(
+        AccountId account,
+        long characterId,
+        CancellationToken cancellationToken)
+    {
+        return m_inner.LoadCharacterAsync(account, characterId, cancellationToken);
+    }
+
+    public Task SaveCheckpointAsync(CharacterCheckpoint checkpoint, CancellationToken cancellationToken)
+    {
+        return m_inner.SaveCheckpointAsync(checkpoint, cancellationToken);
+    }
+
+    public Task<InventoryResult> CommitPickupAsync(PickupCommit pickup, CancellationToken cancellationToken)
+    {
+        return AnswerAsync(m_inner.CommitPickupAsync(pickup, cancellationToken));
+    }
+
+    public Task<InventoryResult> CommitEquipAsync(EquipCommit equip, CancellationToken cancellationToken)
+    {
+        return AnswerAsync(m_inner.CommitEquipAsync(equip, cancellationToken));
+    }
+
+    public Task<InventoryResult> CommitUnequipAsync(UnequipCommit unequip, CancellationToken cancellationToken)
+    {
+        return AnswerAsync(m_inner.CommitUnequipAsync(unequip, cancellationToken));
+    }
+
+    public Task<InventoryResult> CommitConsumeAsync(ConsumeCommit consume, CancellationToken cancellationToken)
+    {
+        return AnswerAsync(m_inner.CommitConsumeAsync(consume, cancellationToken));
+    }
+
+    public Task<InventoryResult?> FindOperationAsync(
+        Guid operationId,
+        long characterId,
+        IReadOnlyCollection<long> rowIds,
+        CancellationToken cancellationToken)
+    {
+        return m_inner.FindOperationAsync(operationId, characterId, rowIds, cancellationToken);
+    }
+
+    public Task<IReadOnlyList<string>> ListStoredDefinitionIdsAsync(CancellationToken cancellationToken)
+    {
+        return m_inner.ListStoredDefinitionIdsAsync(cancellationToken);
+    }
+
+    private async Task<InventoryResult> AnswerAsync(Task<InventoryResult> commit)
+    {
+        InventoryResult result = await commit.ConfigureAwait(false);
+        if (IsLosingAnswers && result.Status == InventoryStatus.Committed)
+        {
+            Interlocked.Increment(ref m_lostAnswers);
+            throw new StoreUnavailableException(new TimeoutException("scripted loss of the commit's answer"));
+        }
+
+        return result;
+    }
+}
+}

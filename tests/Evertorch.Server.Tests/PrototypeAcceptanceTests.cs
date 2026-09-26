@@ -709,7 +709,7 @@ public sealed class PrototypeAcceptanceTests
             clients);
         Assert.That(isShared, Is.True, $"{step}: both players got a share of the crawler's experience");
         EquipTheCrawlersDrops(connectionString, first, second);
-        DrinkTheCrawlersPotion(connectionString, first, second);
+        long potion = PickUpTheCrawlersPotion(first, second);
 
         var back = new Dictionary<SocketClient, WorldPosition>
         {
@@ -717,6 +717,7 @@ public sealed class PrototypeAcceptanceTests
             [second] = new(start.X, 0f, start.Z - 0.8f)
         };
         WalkTo(step, back, clients);
+        DrinkThePotion(connectionString, potion, first, second);
     }
 
     // Every drop is scripted in, so the crawler left a training sword and cloth armor. Once its loot priority window
@@ -768,9 +769,8 @@ public sealed class PrototypeAcceptanceTests
         return row;
     }
 
-    // The crawler also left a minor health potion. The first player picks it up and drinks it: its HP comes back once
-    // the commit returns, capped at its maximum, and PostgreSQL no longer holds the potion (Gameplay Systems §11.2).
-    private static void DrinkTheCrawlersPotion(string connectionString, SocketClient first, SocketClient second)
+    // The crawler also left a minor health potion, which the first player picks up where the crawler died.
+    private static long PickUpTheCrawlersPotion(SocketClient first, SocketClient second)
     {
         const string step = "potion";
         SocketClient[] clients = { first, second };
@@ -783,7 +783,16 @@ public sealed class PrototypeAcceptanceTests
                 clients),
             Is.True,
             $"{step}: the potion was picked up");
-        long potion = first.World.Inventory.Rows.Single(entry => entry.Item.Value == MinorHealth).InventoryItem;
+        return first.World.Inventory.Rows.Single(entry => entry.Item.Value == MinorHealth).InventoryItem;
+    }
+
+    // Beyond the crawlers' leash, where no crawler's hit can race it, the first player drinks the potion: its HP comes
+    // back once the commit returns, capped at its maximum, and PostgreSQL no longer holds the potion (Gameplay Systems
+    // §11.2).
+    private static void DrinkThePotion(string connectionString, long potion, SocketClient first, SocketClient second)
+    {
+        const string step = "potion";
+        SocketClient[] clients = { first, second };
         uint before = first.World.LocalHealth;
         uint maximum = first.World.LocalMaximumHealth;
 
@@ -791,14 +800,12 @@ public sealed class PrototypeAcceptanceTests
 
         Assert.That(
             SocketClients.PumpUntil(
-                () => first.World.Inventory.Rows.All(entry => entry.InventoryItem != potion),
+                () => first.World.Inventory.Rows.All(entry => entry.InventoryItem != potion)
+                    && first.World.LocalHealth >= Math.Min(maximum, before + 30),
                 clients),
             Is.True,
-            $"{step}: the last potion's row is gone");
-        Assert.That(
-            first.World.LocalHealth,
-            Is.GreaterThanOrEqualTo(Math.Min(maximum, before + 30)),
-            $"{step}: HP came back, from {before} of {maximum}");
+            $"{step}: the last potion's row is gone and HP came back, from {before} of {maximum} to "
+            + first.World.LocalHealth);
         using (var connection = new NpgsqlConnection(connectionString))
         using (var command = new NpgsqlCommand(
                    "SELECT count(*) FROM inventory_items i JOIN characters c ON c.id = i.character_id "
