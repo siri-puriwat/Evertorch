@@ -55,6 +55,18 @@ public sealed class LiveServerCombatTests : InputTestFixture
     private GameObject? m_client;
     private InputActionAsset? m_actions;
 
+    // Runs before the fixture resets the input system, which comes before StopEverything: an on-screen stick disabled
+    // after the reset would try to remove a virtual gamepad that is already gone.
+    public override void TearDown()
+    {
+        if (m_client != null)
+        {
+            m_client.GetComponent<GameClient>().Touch?.SetVisible(false);
+        }
+
+        base.TearDown();
+    }
+
     [UnityTearDown]
     public IEnumerator StopEverything()
     {
@@ -96,6 +108,87 @@ public sealed class LiveServerCombatTests : InputTestFixture
     // The inventory window's rows are buttons (Prototype Content §2): a press equips the training sword, the row ends
     // "(equipped)", and the player's next swing comes at the sword's slower interval (equipment research note). The
     // sword is stored before the character enters, as an earlier pickup would have left it.
+    // Prototype Content §9's "both control schemes under simulated latency", through the real client: the development
+    // overlay's link set to 100 ms and 10 % loss, then WASD, a click on the ground, the on-screen stick, and a tap on
+    // the ground, each walk ending where the server process says the character stands.
+    [UnityTest]
+    [Timeout(FightTestTimeoutMs)]
+    public IEnumerator Player_WalksWithBothControlSchemes_OnTheOverlaysLink_AndEndsWhereTheServerSaysItIs()
+    {
+        // The stick is dragged through the UI event system, which ignores input without focus unless told otherwise.
+        InputSystem.settings.backgroundBehavior = InputSettings.BackgroundBehavior.IgnoreFocus;
+#if UNITY_EDITOR
+        InputSystem.settings.editorInputBehaviorInPlayMode =
+            InputSettings.EditorInputBehaviorInPlayMode.AllDeviceInputAlwaysGoesToGameView;
+#endif
+        string actionsPath = RequirePrerequisites();
+        yield return StartDatabaseAndServer();
+        Assert.That(m_server!.TryReadListeningPort(out int port), Is.True, $"server output: {m_server.JoinOutput()}");
+
+        Keyboard keyboard = InputSystem.AddDevice<Keyboard>();
+        Mouse mouse = InputSystem.AddDevice<Mouse>();
+        Touchscreen touchscreen = InputSystem.AddDevice<Touchscreen>();
+        GameClient client = CreateClient(port, actionsPath);
+        yield return CreateAndEnterThroughTheLoginPanel(client, "LiveBoth");
+        yield return WaitUntil(() => client.World?.Inventory.IsCurrent == true, StartTimeoutSeconds);
+        Assert.That(client.World, Is.Not.Null, $"{client.Status} server output: {m_server.JoinOutput()}");
+        ClientWorld world = client.World!;
+        long character = client.PlayedCharacter!.Value.Character.Value;
+        MovementController controller = client.Controller!;
+        WorldPosition start = world.Predictor.Position;
+
+        DevelopmentOverlay overlay = client.GetComponentsInChildren<DevelopmentOverlay>(true).Single();
+        overlay.Toggle();
+        yield return null;
+        OverlayRow(overlay, "Latency ms").GetComponentInChildren<Slider>(true).value = 100;
+        OverlayRow(overlay, "Loss %").GetComponentInChildren<Slider>(true).value = 10;
+        OverlayRow(overlay, "On-screen stick").GetComponent<Toggle>().isOn = true;
+        overlay.Toggle();
+        yield return null;
+        LossyTransport link = client.Link!;
+        Assert.That((link.LatencyMilliseconds, link.LossPercent), Is.EqualTo((100, 10)), "the overlay set the link");
+        Assert.That(client.Touch!.IsVisible, Is.True, "the overlay showed the on-screen stick");
+
+        HoldKeys(keyboard, Key.W);
+        yield return new WaitForSecondsRealtime(1.5f);
+        HoldKeys(keyboard);
+        yield return AwaitConvergence(world, character, "WASD on the overlay's link");
+        yield return WalkToWith(
+            "a click",
+            controller,
+            ClearGroundNear(client, world, start),
+            screen => ClickAt(mouse, screen));
+        yield return AwaitConvergence(world, character, "a click on the overlay's link");
+
+        Vector2 knob = RectTransformUtility.WorldToScreenPoint(null, client.Touch.Knob!.position);
+        BeginTouch(1, knob, screen: touchscreen);
+        yield return null;
+        MoveTouch(1, knob + new Vector2(-300f, 0f), screen: touchscreen);
+        yield return new WaitForSecondsRealtime(1.5f);
+        EndTouch(1, knob + new Vector2(-300f, 0f), screen: touchscreen);
+        yield return AwaitConvergence(world, character, "the on-screen stick on the overlay's link");
+        Assert.That(
+            HorizontalDistance(world.Predictor.Position, start),
+            Is.GreaterThan(2f),
+            "the stick really walked the character");
+        yield return WalkToWith(
+            "a tap",
+            controller,
+            ClearGroundNear(client, world, start),
+            screen =>
+            {
+                BeginTouch(2, screen, screen: touchscreen);
+                EndTouch(2, screen, screen: touchscreen);
+            });
+        yield return AwaitConvergence(world, character, "a tap on the overlay's link");
+
+        Assert.That(link.Dropped, Is.GreaterThan(0), "the link really lost messages");
+        Assert.That(world.Smoother.Snaps, Is.Zero, "no correction was large enough to snap");
+        Debug.Log(
+            $"Both schemes: largest correction {world.Smoother.LargestCorrection} m, dropped {link.Dropped}, "
+            + $"reordered {link.Reordered}");
+    }
+
     [UnityTest]
     [Timeout(FightTestTimeoutMs)]
     public IEnumerator Player_EquipsASwordFromTheInventoryWindow_AndSwingsAtItsInterval()
@@ -701,6 +794,25 @@ public sealed class LiveServerCombatTests : InputTestFixture
         float x = a.X - b.X;
         float z = a.Z - b.Z;
         return Mathf.Sqrt(x * x + z * z);
+    }
+
+    private static Transform OverlayRow(DevelopmentOverlay overlay, string name)
+    {
+        return overlay.GetComponentsInChildren<Transform>(true).Single(child => child.name == name);
+    }
+
+    // A walk to a point of clear ground, asked for by a click or a tap at where the camera shows it.
+    private static IEnumerator WalkToWith(
+        string how,
+        MovementController controller,
+        WorldPosition target,
+        Action<Vector2> press)
+    {
+        Vector3 onScreen = Camera.main!.WorldToScreenPoint(new Vector3(target.X, target.Y, target.Z));
+        press(onScreen);
+        yield return WaitUntil(() => controller.HasPath, 2f);
+        Assert.That(controller.HasPath, Is.True, $"{how} at {onScreen} on {target} started a walk");
+        yield return WaitUntil(() => !controller.HasPath, WalkTimeoutSeconds);
     }
 
     // A full keyboard state lasts across frames, which the fixture's Press does not promise once a frame has run.
