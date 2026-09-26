@@ -8,6 +8,7 @@ using System.Net.Sockets;
 using System.Text;
 using System.Threading;
 using Evertorch.Client;
+using Evertorch.Game;
 using Evertorch.Protocol;
 using LiteNetLib;
 using Microsoft.Extensions.DependencyInjection;
@@ -31,7 +32,7 @@ public sealed class HostileSocketTests
     private const int CooldownMs = 2000;
     private const string OversizedSentinel = "secret-oversized-request";
 
-    private static IHost StartHost(TemporaryDirectory root, CapturingLoggerProvider logs)
+    private static IHost StartHost(TemporaryDirectory root, CapturingLoggerProvider logs, params string[] settings)
     {
         PackageFixture.WriteTo(
             Path.Combine(root.Path, "content", "server"),
@@ -43,7 +44,7 @@ public sealed class HostileSocketTests
                 "--DevelopmentAuthentication:Enabled=true",
                 $"--Abuse:KickCooldownMs={CooldownMs}",
                 "--Logging:LogLevel:Default=Debug"
-            },
+            }.Concat(settings).ToArray(),
             root.Path,
             new InMemoryGameStore());
         builder.Logging.AddProvider(logs);
@@ -266,6 +267,57 @@ public sealed class HostileSocketTests
         Assert.That(tooLong.Notice!.Reason, Is.EqualTo(DisconnectReason.AuthenticationFailed), "an identity too long");
         Assert.That(flooder.Notice!.Reason, Is.EqualTo(DisconnectReason.RateLimited), "the control flood");
         Assert.That(lines.Any(line => line.Contains("ViolationDisconnect")), Is.True, "the audit events were written");
+        AssertNoSecretIn(lines);
+    }
+
+    // Milestone 6's commands from a player in the world: refused, over the item bucket, then malformed until the
+    // connection is closed. The identity carries a word no log may repeat.
+    [Test]
+    public void HostileItemAndSkillCommands_AreRefusedThrottledAndScored_AndLeaveNoSecretInTheLogs()
+    {
+        using var root = new TemporaryDirectory();
+        var logs = new CapturingLoggerProvider();
+        // A burst small enough that the refusals before the throttle stay within the audit's share of a connection.
+        const int itemBurst = 5;
+        using IHost host = StartHost(root, logs, $"--Abuse:ItemCommandBurst={itemBurst}");
+        int port = host.Services.GetRequiredService<IServerTransport>().LocalPort;
+        ServerContent content = host.Services.GetRequiredService<ServerContent>();
+        int violationsToClose = new AbuseOptions().ViolationThreshold / ViolationScore.Points;
+        // A skill and an equip cut short, an unequip of slot 0, and a use of row 0.
+        byte[][] malformed =
+        {
+            new byte[] { 0x08, 0x00, 0x01 },
+            new byte[] { 0x10, 0x00, 0x01 },
+            new byte[] { 0x11, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00 },
+            new byte[] { 0x12, 0x00, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0 }
+        };
+
+        using var player = new SocketClient(content, "secret-items-identity", "Hostile1");
+        player.EnterWorld(port);
+        player.Connection.SendUseSkill(new SkillDefinitionId("skill.spark_bolt"), default);
+        player.PumpFor(TimeSpan.FromMilliseconds(1100));
+        for (int index = 0; index <= itemBurst; index++)
+        {
+            player.Connection.SendEquip(999999);
+        }
+
+        player.PumpFor(TimeSpan.FromMilliseconds(1100));
+        for (int index = 0; index < 2 * violationsToClose; index++)
+        {
+            player.Link.Send(ProtocolChannel.Control, MessageDelivery.ReliableOrdered,
+                malformed[index % malformed.Length]);
+        }
+
+        bool isClosed = player.PumpUntil(() => player.Connection.State == ClientConnectionState.Disconnected);
+        host.StopAsync().GetAwaiter().GetResult();
+
+        IReadOnlyList<string> lines = logs.Lines;
+        Assert.That(isClosed, Is.True, "the connection was closed");
+        Assert.That(player.Connection.Notice?.Reason, Is.EqualTo(DisconnectReason.Kicked));
+        Assert.That(lines.Any(line => line.Contains("had UseSkill refused")), Is.True, "the refused skill was audited");
+        Assert.That(lines.Any(line => line.Contains("had Equip refused")), Is.True, "the refused equip was audited");
+        Assert.That(lines.Any(line => line.Contains("sent Equip over the session_item limit")), Is.True);
+        Assert.That(lines.Any(line => line.Contains("ViolationDisconnect")), Is.True);
         AssertNoSecretIn(lines);
     }
 

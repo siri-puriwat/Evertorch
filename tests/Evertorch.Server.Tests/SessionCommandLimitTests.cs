@@ -230,6 +230,23 @@ public sealed class SessionCommandLimitTests
     }
 
     [Test]
+    public void Skills_TakeFromTheCombatBucketWithAttacks_AndOverItAreRefusedAsNotAllowedNow()
+    {
+        var server = new TestServer();
+        ConnectionId player = server.EnterWorld(7);
+
+        uint focus = SendAttacks(server, player, 1, Defaults.CombatCommandBurst);
+        server.SendUseSkill(player, "skill.focus", default, focus);
+        server.Tick();
+
+        CommandRejected throttled = Rejections(server, player)
+            .Single(rejection => rejection.Reason == CommandRejectionReason.NotAllowedNow);
+        Assert.That(throttled.CommandSequence, Is.EqualTo(focus));
+        Assert.That(server.SessionOf(player).ThrottledCommands, Is.EqualTo(1));
+        Assert.That(server.PlayerOf(player).StatusEffects, Is.Empty, "the refused Focus was never cast");
+    }
+
+    [Test]
     public void Targets_OverTheCombatBucket_AreDroppedAndCounted()
     {
         var server = new TestServer();

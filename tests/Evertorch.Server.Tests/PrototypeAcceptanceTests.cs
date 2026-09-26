@@ -10,6 +10,8 @@ using Evertorch.Protocol;
 using Evertorch.Rules;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Console;
 using Npgsql;
 using NUnit.Framework;
 
@@ -57,13 +59,21 @@ public sealed class PrototypeAcceptanceTests
         m_database.Dispose();
     }
 
-    private IHost StartHost(string contentRootPath)
+    // The server's own events down to Debug, the audit's refusals included, go to the capture; the console keeps
+    // Information.
+    private IHost StartHost(string contentRootPath, CapturingLoggerProvider logs)
     {
         HostApplicationBuilder builder = TestHosts.CreateBuilderWithDatabase(
-            new[] { "--Network:Port=0", "--DevelopmentAuthentication:Enabled=true", "--World:RandomSeed=5" },
+            new[]
+            {
+                "--Network:Port=0", "--DevelopmentAuthentication:Enabled=true", "--World:RandomSeed=5",
+                "--Logging:LogLevel:Evertorch=Debug"
+            },
             contentRootPath,
             m_database.ConnectionString);
         TestHosts.ScriptOutcomes(builder, new SureHitRandom(), new ScriptedRandom(0));
+        builder.Logging.AddProvider(logs);
+        builder.Logging.AddFilter<ConsoleLoggerProvider>("Evertorch", LogLevel.Information);
         IHost host = builder.Build();
         host.Start();
         return host;
@@ -1048,17 +1058,30 @@ public sealed class PrototypeAcceptanceTests
             Path.Combine(root.Path, "content", "server"),
             PackageFixture.BuildRepositoryPackage());
 
+        var logs = new CapturingLoggerProvider();
         Dictionary<string, PlayerSummary> stopped;
-        using (IHost first = StartHost(root.Path))
+        using (IHost first = StartHost(root.Path, logs))
         {
             stopped = PlayTogether(first, m_database.ConnectionString);
         }
 
-        using (IHost restarted = StartHost(root.Path))
+        using (IHost restarted = StartHost(root.Path, logs))
         {
             PlayAfterTheRestart(restarted, stopped);
             restarted.StopAsync().GetAwaiter().GetResult();
         }
+
+        // Nothing the whole session logged, from sign-in through equipment, potions, skills, and the crossing to the
+        // restart, names the database's connection string or password or either player's identity.
+        IReadOnlyList<string> lines = logs.Lines;
+        Assert.That(lines.Any(line => line.Contains("MapTransferred")), Is.True, "logs: the session was captured");
+        Assert.That(
+            lines.Where(line => line.Contains(m_database.ConnectionString)
+                || line.Contains("Password", StringComparison.OrdinalIgnoreCase)
+                || line.Contains(Players.FirstIdentity)
+                || line.Contains(Players.SecondIdentity)),
+            Is.Empty,
+            "logs: no secret");
     }
 }
 }

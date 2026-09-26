@@ -1,4 +1,7 @@
+using System;
+using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 using Evertorch.Game;
 using Evertorch.Protocol;
 using Microsoft.Extensions.Logging;
@@ -43,6 +46,81 @@ public sealed class InboundQueueTests
         byte[] payload = new byte[hello.GetEncodedLength()];
         hello.Write(payload);
         return payload;
+    }
+
+    private static byte[] UseSkillPayload()
+    {
+        var useSkill = new UseSkill(new SkillDefinitionId("skill.strike"), new EntityId(42), 7);
+        byte[] payload = new byte[useSkill.GetEncodedLength()];
+        useSkill.Write(payload);
+        return payload;
+    }
+
+    private static byte[] EquipPayload()
+    {
+        byte[] payload = new byte[EquipItem.EncodedLength];
+        new EquipItem(41, 9).Write(payload);
+        return payload;
+    }
+
+    private static byte[] UnequipPayload()
+    {
+        byte[] payload = new byte[UnequipItem.EncodedLength];
+        new UnequipItem(EquipmentSlot.Weapon, 9).Write(payload);
+        return payload;
+    }
+
+    private static byte[] UseItemPayload()
+    {
+        byte[] payload = new byte[UseItem.EncodedLength];
+        new UseItem(41, 9).Write(payload);
+        return payload;
+    }
+
+    private static byte[] With(byte[] payload, int start, int count, byte value)
+    {
+        byte[] changed = (byte[])payload.Clone();
+        changed.AsSpan(start, count).Fill(value);
+        return changed;
+    }
+
+    // Milestone 6's commands cut short, one byte too long, or carrying a value no client may send (Network Protocol
+    // §11). The item row sits after the opcode, the slot too, and the skill ID's text after its two-byte length.
+    private static IEnumerable<TestCaseData> MalformedItemAndSkillCommands()
+    {
+        byte[] useSkill = UseSkillPayload();
+        byte[] equip = EquipPayload();
+        byte[] unequip = UnequipPayload();
+        byte[] useItem = UseItemPayload();
+        foreach ((string name, byte[] payload) in new[]
+                 {
+                     ("UseSkill", useSkill), ("EquipItem", equip), ("UnequipItem", unequip), ("UseItem", useItem)
+                 })
+        {
+            yield return new TestCaseData(payload.Take(payload.Length - 1).ToArray()).SetName($"{name} cut short");
+            yield return new TestCaseData(payload.Append((byte)0).ToArray()).SetName($"{name} one byte too long");
+        }
+
+        const int text = 4;
+        yield return new TestCaseData(With(useSkill, text + 5, 1, 0x20)).SetName("UseSkill naming no skill");
+        yield return new TestCaseData(With(useSkill, text, 1, 0xFF)).SetName("UseSkill of broken UTF-8");
+        yield return new TestCaseData(With(useSkill, text - 2, 2, 0xFF)).SetName("UseSkill longer than any ID");
+        yield return new TestCaseData(With(equip, 2, 8, 0x00)).SetName("EquipItem of row 0");
+        yield return new TestCaseData(With(equip, 2, 8, 0xFF)).SetName("EquipItem of row -1");
+        yield return new TestCaseData(With(unequip, 2, 1, 0)).SetName("UnequipItem of slot 0");
+        yield return new TestCaseData(With(unequip, 2, 1, 3)).SetName("UnequipItem of slot 3");
+        yield return new TestCaseData(With(useItem, 2, 8, 0x00)).SetName("UseItem of row 0");
+        yield return new TestCaseData(With(useItem, 2, 8, 0xFF)).SetName("UseItem of row -1");
+    }
+
+    [TestCaseSource(nameof(MalformedItemAndSkillCommands))]
+    public void ItemOrSkillCommand_ThatIsMalformed_IsRejected(byte[] payload)
+    {
+        InboundQueue queue = CreateQueue(16);
+
+        queue.OnPayload(Peer, ProtocolChannel.Control, payload);
+
+        AssertOnlyMalformed(queue, 1);
     }
 
     private static void AssertOnlyMalformed(InboundQueue queue, int expectedCount)
@@ -158,6 +236,34 @@ public sealed class InboundQueueTests
 
         Assert.That(server.SessionManager.IgnoredEvents, Is.EqualTo(1));
         Assert.That(server.Sessions.Sessions, Is.Empty);
+    }
+
+    [Test]
+    public void ItemAndSkillCommands_ThatAreWellFormed_AreQueuedAsCommands()
+    {
+        InboundQueue queue = CreateQueue(16);
+
+        foreach (byte[] payload in new[] { UseSkillPayload(), EquipPayload(), UnequipPayload(), UseItemPayload() })
+        {
+            queue.OnPayload(Peer, ProtocolChannel.Control, payload);
+        }
+
+        var kinds = new List<InboundEventKind>();
+        while (queue.TryDequeue(out InboundEvent inboundEvent))
+        {
+            kinds.Add(inboundEvent.Kind);
+        }
+
+        Assert.That(queue.Malformed, Is.Zero);
+        Assert.That(
+            kinds,
+            Is.EqualTo(
+                new[]
+                {
+                    InboundEventKind.UseSkill, InboundEventKind.Equip, InboundEventKind.Unequip,
+                    InboundEventKind.UseItem
+                }));
+        Assert.That(UseSkillPayload().Skip(4).Take(12), Is.EqualTo(Encoding.ASCII.GetBytes("skill.strike")));
     }
 
     [Test]
