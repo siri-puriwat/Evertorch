@@ -913,15 +913,13 @@ public sealed class PrototypeAcceptanceTests
         Assert.That(SocketClients.PumpUntil(() => isHit, FightLimit, clients), Is.True, $"{step}: the player hit it");
         first.AutoAttack.OnWalkRequested();
 
-        WorldPosition drawn = Drawn(first, wisp);
-        float backX = staging.X - drawn.X;
-        float backZ = staging.Z - drawn.Z;
-        float back = (float)Math.Sqrt(backX * backX + backZ * backZ);
+        // Within its range of 6 m and beyond its keep distance of 3.5 m, toward the staging point; the wisp roams, so
+        // the first choice can fall on an obstacle.
         WalkTo(
             step,
             new Dictionary<SocketClient, WorldPosition>
             {
-                [first] = new(drawn.X + backX / back * 5f, 0f, drawn.Z + backZ / back * 5f)
+                [first] = StandableToward(first.World.Grid, Drawn(first, wisp), staging, 5f, 4.5f, 5.5f, 4f)
             },
             clients);
         bool isAnswered = SocketClients.PumpUntil(
@@ -1027,6 +1025,30 @@ public sealed class PrototypeAcceptanceTests
     private static PlayerSummary SummaryOf(IAdminCommandService admin, EntityId entity)
     {
         return admin.GetPlayers(AdminActor.LocalConsole).Single(player => player.Entity == entity);
+    }
+
+    // The first point at one of the distances from `from` toward `toward` on which a player can stand.
+    private static WorldPosition StandableToward(
+        NavigationGrid grid,
+        WorldPosition from,
+        WorldPosition toward,
+        params float[] distances)
+    {
+        float length = Horizontal(from, toward);
+        foreach (float distance in distances)
+        {
+            var point = new WorldPosition(
+                from.X + (toward.X - from.X) / length * distance,
+                0f,
+                from.Z + (toward.Z - from.Z) / length * distance);
+            if (grid.CanOccupy(point.X, point.Z))
+            {
+                return point;
+            }
+        }
+
+        Assert.Fail($"no place to stand between {from} and {toward}");
+        return from;
     }
 
     private static float Horizontal(WorldPosition a, WorldPosition b)
