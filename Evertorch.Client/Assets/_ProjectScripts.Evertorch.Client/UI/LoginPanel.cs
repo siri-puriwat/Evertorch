@@ -98,11 +98,11 @@ public sealed class LoginPanel : MonoBehaviour
         Refresh(client);
     }
 
-    // Hidden once the world is drawn. Until then it says what the client is doing, and the list stays while an entry
-    // is unanswered, because a refused one never is (Network Protocol §4).
+    // Hidden once the world is drawn, and through a map change. Until then it says what the client is doing, and the
+    // list stays while an entry is unanswered, because a refused one never is (Network Protocol §4).
     private void Refresh(GameClient client)
     {
-        bool isInWorld = client.World != null;
+        bool isInWorld = client.IsInWorld;
         UiBuilder.SetActive(m_panel!, !isInWorld);
         if (isInWorld)
         {

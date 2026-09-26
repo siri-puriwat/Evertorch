@@ -198,6 +198,39 @@ public sealed class PlayerPanelTests
         Assert.That(bar.ShownExperienceRatio, Is.EqualTo(1f), "nothing more to earn at the cap");
     }
 
+    // What OnChangedMap leaves the panels while the next map loads: no world, and a map change under way.
+    private static void BeginMapChange(GameClient client)
+    {
+        typeof(GameClient)
+            .GetField("m_world", BindingFlags.NonPublic | BindingFlags.Instance)!
+            .SetValue(client, null);
+        typeof(GameClient)
+            .GetField("m_isChangingMap", BindingFlags.NonPublic | BindingFlags.Instance)!
+            .SetValue(client, true);
+    }
+
+    [UnityTest]
+    public IEnumerator LoginPanelAndFeedbackLines_ThroughAMapChange_TheLoginStaysHidden_AndTheLinesAreCleared()
+    {
+        GameClient client = CreateIdleClient();
+        GiveWorld(client);
+        var login = LoginPanel.Create(client);
+        var lines = FeedbackLines.Create(client);
+        m_created.Add(login.gameObject);
+        m_created.Add(lines.gameObject);
+        yield return null;
+        lines.Add("Picked up Slime Gel x 1");
+        bool wasShown = lines.IsVisible;
+
+        BeginMapChange(client);
+        yield return null;
+
+        Assert.That(wasShown, Is.True);
+        Assert.That(client.IsInWorld, Is.True);
+        Assert.That(login.IsVisible, Is.False, "no login panel while the next map loads");
+        Assert.That((lines.Text, lines.IsVisible), Is.EqualTo((string.Empty, false)), "a map change clears the lines");
+    }
+
     [UnityTest]
     public IEnumerator FeedbackLines_SayLevelUp_OnlyWhenTheLevelRises()
     {

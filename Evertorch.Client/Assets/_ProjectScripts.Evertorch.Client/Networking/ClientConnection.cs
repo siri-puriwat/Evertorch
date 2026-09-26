@@ -9,8 +9,8 @@ namespace Evertorch.Client
 {
 /// <summary>
 ///     Runs the client side of the protocol over a transport: hello, character selection, world entry, and then the
-///     routing of world messages into a <see cref="ClientWorld" />. It trusts nothing it receives beyond what decodes
-///     cleanly.
+///     routing of world messages into a <see cref="ClientWorld" />, a new one for each map change. It trusts nothing it
+///     receives beyond what decodes cleanly.
 /// </summary>
 public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink, ICombatCommandSink,
     IPickupCommandSink, ISkillCommandSink
@@ -493,6 +493,12 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
     public event Action<ClientWorld>? EnteredWorld;
 
     /// <summary>
+    ///     Raised when the server moves the character to another map (Gameplay Systems §4.2): <see cref="World" /> is
+    ///     already the new map's, and the previous world gets nothing more.
+    /// </summary>
+    public event Action<ClientWorld>? ChangedMap;
+
+    /// <summary>
     ///     Raised when a logout completes: the world is gone and characters are being selected again.
     /// </summary>
     public event Action? LeftWorld;
@@ -628,7 +634,10 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
             return;
         }
 
-        if (State != ClientConnectionState.EnteringWorld)
+        // In the world it is a map change, which keeps the connection and the character session (Network Protocol
+        // §3).
+        bool isMapChange = State == ClientConnectionState.InWorld;
+        if (State != ClientConnectionState.EnteringWorld && !isMapChange)
         {
             UnexpectedMessages++;
             return;
@@ -645,11 +654,23 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
         LastCreateOutcome = CreateCharacterOutcome.None;
 
         // The command sequence belongs to the character, not the connection: after a reconnect it goes on from the
-        // newest the server processed, or every command would look like a replay (Network Protocol §8).
-        m_commandSequence = entered.LastCommandSequence;
+        // newest the server processed, or every command would look like a replay (Network Protocol §8). A map change
+        // keeps the later of the two, so a command sent while the change was on its way is never numbered twice.
+        if (!isMapChange || unchecked((int)(entered.LastCommandSequence - m_commandSequence)) > 0)
+        {
+            m_commandSequence = entered.LastCommandSequence;
+        }
+
         MapEpoch = entered.MapEpoch;
         State = ClientConnectionState.InWorld;
-        EnteredWorld?.Invoke(World);
+        if (isMapChange)
+        {
+            ChangedMap?.Invoke(World);
+        }
+        else
+        {
+            EnteredWorld?.Invoke(World);
+        }
     }
 
     private void OnEntitySpawn(ReadOnlySpan<byte> payload)

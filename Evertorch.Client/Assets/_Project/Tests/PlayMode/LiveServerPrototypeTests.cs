@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Threading.Tasks;
+using Evertorch.Game;
 using Evertorch.Protocol;
 using NUnit.Framework;
 using UnityEngine;
@@ -26,6 +27,7 @@ public sealed class LiveServerPrototypeTests : InputTestFixture
     private const string ActionsAsset = "_Project/Settings/InputSystem_Actions.inputactions";
     private const string ClientName = "LiveProtoOne";
     private const string OtherName = "LiveProtoTwo";
+    private const string FieldScene = "11_TrainingField";
     private const float StartTimeoutSeconds = 30f;
     private const float StepTimeoutSeconds = 15f;
     private const float DrawnDistance = 1e-3f;
@@ -138,6 +140,73 @@ public sealed class LiveServerPrototypeTests : InputTestFixture
         Assert.That(drawn.z, Is.EqualTo(serverZ).Within(DrawnDistance));
         Assert.That(world.Remotes[otherEntity].Kind, Is.EqualTo(EntityKind.Player));
         Assert.That(other.MalformedMessages + other.UnexpectedMessages, Is.Zero, "the second player's traffic");
+    }
+
+    // The real client walks into the ground's portal before its east gate and follows its character to the field
+    // (Gameplay Systems §4.2, §5.1): the login panel never shows through the change, the feedback lines are cleared,
+    // and only the field is drawn. A walk there, with the new map's epoch and the movement sequence carried on, ends
+    // where the server has the character.
+    [UnityTest]
+    [Timeout(TestTimeoutMs)]
+    public IEnumerator Crossing_TheRealClientDrawsTheField_AndWalksOnThere()
+    {
+        string actionsPath = RequirePrerequisites(out ClientContent _);
+        yield return StartDatabaseAndServer();
+        LiveServer server = m_server!;
+        Assert.That(server.TryReadListeningPort(out int port), Is.True, $"server output: {server.JoinOutput()}");
+        GameClient client = CreateClient(port, actionsPath);
+        yield return EnterByName(client, ClientName);
+        ClientWorld ground = client.World!;
+        LoginPanel login = client.GetComponentInChildren<LoginPanel>();
+        FeedbackLines lines = client.GetComponentInChildren<FeedbackLines>();
+        lines.Add("Before the crossing");
+
+        Assert.That(
+            client.Controller!.TryMoveTo(ground.Predictor.Position, new WorldPosition(22.2f, 0f, 0f)),
+            Is.True,
+            "a way into the portal");
+        bool wasLoginShown = false;
+        yield return WaitUntil(
+            () =>
+            {
+                wasLoginShown |= login.IsVisible;
+                return client.World != null && client.World != ground && client.World.Inventory.IsCurrent;
+            },
+            StepTimeoutSeconds);
+        ClientWorld field = client.World!;
+        Assert.That(field.Map.Value, Is.EqualTo("map.training_field"), $"{client.Status} {server.JoinOutput()}");
+        Assert.That(SceneManager.GetActiveScene().name, Is.EqualTo(FieldScene));
+        Assert.That(wasLoginShown, Is.False, "the login panel never showed through the change");
+        Assert.That(lines.Text, Is.Empty, "the crossing cleared the feedback lines");
+        Assert.That(client.Status, Is.EqualTo("In Training Field"));
+        Assert.That(client.Connection!.MapEpoch, Is.EqualTo(1));
+        Assert.That(
+            Object.FindObjectsByType<GrayboxMap>(FindObjectsSortMode.None).Select(map => map.gameObject.scene.name),
+            Is.EqualTo(new[] { FieldScene }),
+            "only the field is drawn");
+
+        Assert.That(
+            client.Controller!.TryMoveTo(field.Predictor.Position, new WorldPosition(-17f, 0f, 0f)),
+            Is.True,
+            "a way on the field");
+        yield return WaitUntil(
+            () => client.Controller != null && !client.Controller.HasPath && field.Predictor.PendingCount == 0,
+            StepTimeoutSeconds);
+
+        // The console republishes what it reads once a second, so wait out one full period of quiet.
+        yield return new WaitForSecondsRealtime(1.5f);
+        long character = client.Connection.Characters.Single(entry => entry.Name == ClientName).Character.Value;
+        server.ClearOutput();
+        server.SendCommand("players");
+        yield return WaitUntil(() => server.HasOutput(LiveServer.CharacterMarker(character)), StepTimeoutSeconds);
+        Assert.That(server.TryReadPlayerPosition(character, out float serverX, out float serverZ), Is.True);
+        string line = server.Output().First(text => text.Contains(LiveServer.CharacterMarker(character)));
+        Assert.That(line, Does.Contain($"entity {field.LocalEntity.Value} map.training_field at"));
+        Assert.That(line, Does.Contain(" stale 0 dropped "), "the movement sequence went on: no input was stale");
+        Assert.That(serverX, Is.GreaterThan(-19f), "the character walked on from the arrival");
+        Assert.That(serverX, Is.EqualTo(field.Predictor.Position.X).Within(DrawnDistance), server.JoinOutput());
+        Assert.That(serverZ, Is.EqualTo(field.Predictor.Position.Z).Within(DrawnDistance));
+        Assert.That(client.Connection.MalformedMessages + client.Connection.UnexpectedMessages, Is.Zero);
     }
 
     private static bool Drawn(GameClient client, EntityId entity)

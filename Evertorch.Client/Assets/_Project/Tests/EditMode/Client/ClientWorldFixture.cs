@@ -26,10 +26,11 @@ internal static class ClientWorldFixture
         ulong experienceToNextLevel = 30,
         uint spirit = 24,
         long character = 1,
-        byte mapEpoch = 0)
+        byte mapEpoch = 0,
+        string map = "map.training_ground")
     {
         return new WorldEntered(
-            new MapDefinitionId("map.training_ground"),
+            new MapDefinitionId(map),
             1,
             LocalEntity,
             LocalJob,

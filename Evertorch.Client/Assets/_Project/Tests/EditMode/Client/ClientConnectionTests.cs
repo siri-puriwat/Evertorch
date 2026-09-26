@@ -92,6 +92,28 @@ public sealed class ClientConnectionTests
         return new CharacterListEntry(new CharacterId(character), name, new JobDefinitionId("job.adventurer"), 1);
     }
 
+    // The client has numbered two commands, 6 and 7. The server may report fewer, when the second was still on its way
+    // as it moved the character, or more; the next command goes on after the later of the two, never 7 again.
+    [TestCase(6u, 8u)]
+    [TestCase(40u, 41u)]
+    public void WorldEntered_InTheWorld_NumbersTheNextCommandAfterTheLaterSequence(uint reported, uint expected)
+    {
+        var harness = new Harness();
+        harness.EnterWorld(5);
+        harness.Connection.SendAttack(new EntityId(300));
+        harness.Connection.SendCancel();
+        WorldEntered field = ClientWorldFixture.Entered(
+            Start,
+            lastCommandSequence: reported,
+            mapEpoch: 1,
+            map: "map.training_field");
+
+        harness.Deliver(ProtocolChannel.Control, Encode(field.GetEncodedLength(), field.Write));
+        uint next = harness.Connection.SendAttack(new EntityId(301));
+
+        Assert.That(next, Is.EqualTo(expected));
+    }
+
     [Test]
     public void CharacterList_AfterALogout_IsNotTakenForTheAnswerToAnEarlierCreation()
     {
@@ -939,6 +961,35 @@ public sealed class ClientConnectionTests
         Assert.That(harness.Connection.LocalError, Does.Contain("map.training_ground"));
         Assert.That(harness.Transport.DisconnectCalls, Is.EqualTo(1));
         Assert.That(harness.ClosedCount, Is.EqualTo(1), "closing is announced once, not once per cause");
+    }
+
+    [Test]
+    public void WorldEntered_InTheWorld_ChangesTheMapOnTheSameConnection()
+    {
+        var harness = new Harness();
+        var entered = new List<ClientWorld>();
+        var changed = new List<ClientWorld>();
+        harness.Connection.EnteredWorld += entered.Add;
+        harness.Connection.ChangedMap += changed.Add;
+        harness.EnterWorld();
+        ClientWorld ground = harness.Connection.World!;
+        WorldPosition arrival = ClientTestGrids.Center(9, 1);
+        WorldEntered field = ClientWorldFixture.Entered(arrival, mapEpoch: 1, map: "map.training_field");
+
+        harness.Deliver(ProtocolChannel.Control, Encode(field.GetEncodedLength(), field.Write));
+        harness.Connection.Send(new MoveIntent(9, 9, 1f, 0f));
+
+        ClientWorld? world = harness.Connection.World;
+        Assert.That(harness.Connection.State, Is.EqualTo(ClientConnectionState.InWorld));
+        Assert.That((entered.Count, changed.Count), Is.EqualTo((1, 1)));
+        Assert.That(changed.Single(), Is.SameAs(world));
+        Assert.That(world, Is.Not.SameAs(ground));
+        Assert.That(world!.Map, Is.EqualTo(new MapDefinitionId("map.training_field")));
+        Assert.That(world.Predictor.Position, Is.EqualTo(arrival));
+        Assert.That(MoveInput.TryRead(harness.Transport.Sent.Last().Payload, out MoveInput move), Is.True);
+        Assert.That(move.MapEpoch, Is.EqualTo(1), "movement input carries the new map's epoch");
+        Assert.That(harness.Connection.UnexpectedMessages, Is.Zero);
+        Assert.That(harness.Transport.DisconnectCalls, Is.Zero);
     }
 }
 }

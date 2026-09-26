@@ -11,9 +11,10 @@ namespace Evertorch.Server.Tests
 {
 /// <summary>
 ///     A client over a real UDP socket, composed the way <c>GameClient</c> composes it: the LiteNetLib transport behind
-///     the simulated link, the connection, and once in the world the controller, auto-attack, pickup, skill, and
-///     driver. The test's own thread plays the Unity frame loop: it polls, runs whole ticks at the server's rate from a
-///     real clock, and makes the requests the player's keys would make.
+///     the simulated link, the connection, and for each map the controller, auto-attack, pickup, skill, and driver,
+///     with the movement sequence and the client tick carried across a map change. The test's own thread plays the
+///     Unity frame loop: it polls, runs whole ticks at the server's rate from a real clock, and makes the requests the
+///     player's keys would make.
 /// </summary>
 internal sealed class SocketClient : IDisposable
 {
@@ -33,7 +34,9 @@ internal sealed class SocketClient : IDisposable
     private PickupState? m_pickup;
     private SkillState? m_skill;
     private LocalPlayerDriver? m_driver;
+    private MoveIntentProducer? m_producer;
     private FixedTickClock? m_ticks;
+    private WorldDirection m_held;
     private double m_lastSeconds;
 
     public SocketClient(ServerContent content, string identity, string characterName)
@@ -131,6 +134,10 @@ internal sealed class SocketClient : IDisposable
         ClientWorld? world = Connection.World;
         if (world == null)
         {
+            // As in GameClient, only a new entry starts the movement sequence and the client tick again; a map change
+            // goes from one world straight to the next.
+            m_producer = null;
+            m_ticks = null;
             return;
         }
 
@@ -149,6 +156,16 @@ internal sealed class SocketClient : IDisposable
         }
 
         world.Advance(delta);
+    }
+
+    /// <summary>
+    ///     A held key or stick: unlike a direction set on <see cref="Controller" />, it outlives a map change, as
+    ///     <c>GameClient</c> reads the held key again every frame. A zero direction lets go.
+    /// </summary>
+    public void Hold(float directionX, float directionZ)
+    {
+        m_held = new WorldDirection(directionX, directionZ);
+        Controller.SetManualDirection(directionX, directionZ);
     }
 
     /// <summary>
@@ -219,18 +236,20 @@ internal sealed class SocketClient : IDisposable
     {
         m_world = world;
         m_controller = new MovementController(world.Grid);
+        m_controller.SetManualDirection(m_held.X, m_held.Z);
         m_autoAttack = new AutoAttackState(world, m_controller, Connection, 1.0 / Connection.ServerTickRate);
         m_pickup = new PickupState(world, m_controller, Connection);
         m_skill = new SkillState(world, m_controller, Connection, 1.0 / Connection.ServerTickRate);
+        m_producer ??= new MoveIntentProducer();
         m_driver = new LocalPlayerDriver(
             m_controller,
-            new MoveIntentProducer(),
+            m_producer,
             world,
             Connection,
             m_autoAttack,
             m_pickup,
             m_skill);
-        m_ticks = new FixedTickClock(1f / Connection.ServerTickRate);
+        m_ticks ??= new FixedTickClock(1f / Connection.ServerTickRate);
         m_lastSeconds = m_clock.Elapsed.TotalSeconds;
     }
 

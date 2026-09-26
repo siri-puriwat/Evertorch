@@ -28,6 +28,7 @@ namespace Evertorch.Server.Tests
 public sealed class PrototypeAcceptanceTests
 {
     private const string TrainingGround = "map.training_ground";
+    private const string TrainingField = "map.training_field";
     private const string Adventurer = "job.adventurer";
     private const string TrainingSlime = "monster.training_slime";
     private const float ConvergedDistance = 1e-3f;
@@ -62,8 +63,9 @@ public sealed class PrototypeAcceptanceTests
     }
 
     /// <summary>
-    ///     Both players enter the training ground, see each other, walk, fight, and one reconnects; the server then
-    ///     stops. Returns each character as the server last showed it, by character name.
+    ///     Both players enter the training ground, see each other, walk, fight, and cross to the training field, where
+    ///     one reconnects; the server then stops. Returns each character as the server last showed it, by character
+    ///     name.
     /// </summary>
     private static Dictionary<string, PlayerSummary> PlayTogether(IHost host)
     {
@@ -90,6 +92,7 @@ public sealed class PrototypeAcceptanceTests
         ShareAKill(content, admin, first, second);
         UseSkills(first, second);
         FocusQuickensTheSwing(first, second);
+        CrossToTheField(content, admin, first, second);
 
         EntityId firstEntity = first.World.LocalEntity;
         EntityId secondEntity = second.World.LocalEntity;
@@ -135,8 +138,8 @@ public sealed class PrototypeAcceptanceTests
     }
 
     /// <summary>
-    ///     After a clean stop and a second server on the same database, both sign in again to the same characters where
-    ///     they stood, at the level and experience they had, and see each other.
+    ///     After a clean stop and a second server on the same database, both sign in again to the same characters on
+    ///     the map and at the place where they stood, at the level and experience they had, and see each other.
     /// </summary>
     private static void PlayAfterTheRestart(IHost host, IReadOnlyDictionary<string, PlayerSummary> stopped)
     {
@@ -153,6 +156,7 @@ public sealed class PrototypeAcceptanceTests
         foreach ((SocketClient client, string name) in characters)
         {
             Assert.That(client.Connection.Characters.Single().Name, Is.EqualTo(name), "restart: the same character");
+            Assert.That(client.World.Map, Is.EqualTo(new MapDefinitionId(TrainingField)), "restart: on the field");
             Assert.That(
                 client.DistanceTo(stopped[name].Position),
                 Is.LessThanOrEqualTo(ConvergedDistance),
@@ -492,6 +496,83 @@ public sealed class PrototypeAcceptanceTests
         Assert.That(first.World.StatusEffects, Is.Empty, $"{step}: only the owner hears of its effects");
         second.AutoAttack.OnWalkRequested();
         SocketClients.PumpFor(TimeSpan.FromSeconds(1), clients);
+    }
+
+    // Both players line up before the ground's east gate and hold east through its portal over links with 100 ms of
+    // latency and 10 % loss. Each client follows its character to the field without a freeze, walks on there, and
+    // agrees with the server, which dropped input made for the ground (Gameplay Systems §4.2, §5.1; Network Protocol
+    // §3, §10).
+    private static void CrossToTheField(
+        ServerContent content,
+        IAdminCommandService admin,
+        SocketClient first,
+        SocketClient second)
+    {
+        const string step = "cross";
+        SocketClient[] clients = { first, second };
+        var field = new MapDefinitionId(TrainingField);
+        MapPortal portal = content.Maps[new MapDefinitionId(TrainingGround)].Portals.Single();
+        var lineUp = new Dictionary<SocketClient, WorldPosition>
+        {
+            [first] = new(portal.Center.X - 5.5f, 0f, 0.4f),
+            [second] = new(portal.Center.X - 5.5f, 0f, -0.4f)
+        };
+        foreach (SocketClient client in clients)
+        {
+            Assert.That(
+                client.Controller.TryMoveTo(client.World.Predictor.Position, lineUp[client]),
+                Is.True,
+                $"{step}: a way to the gate");
+        }
+
+        Assert.That(
+            SocketClients.PumpUntil(
+                () => clients.All(client => !client.Controller.HasPath && client.DistanceTo(lineUp[client]) < 0.5f),
+                clients),
+            Is.True,
+            $"{step}: both lined up before the gate: " + string.Join(
+                ", ",
+                clients.Select(client =>
+                    $"{client.World.Predictor.Position} path {client.Controller.HasPath} locked "
+                    + $"{client.Controller.IsLocked} dead {client.World.IsLocalDead} chasing {client.Controller.IsChasing}")));
+
+        foreach (SocketClient client in clients)
+        {
+            client.Link.LatencyMilliseconds = 100;
+            client.Link.LossPercent = 10;
+            client.Hold(1f, 0f);
+        }
+
+        Assert.That(
+            SocketClients.PumpUntil(() => clients.All(client => client.World.Map == field), clients),
+            Is.True,
+            $"{step}: both clients followed their characters to the field");
+        SocketClients.PumpFor(TimeSpan.FromSeconds(1), clients);
+        foreach (SocketClient client in clients)
+        {
+            client.Hold(0f, 0f);
+        }
+
+        AwaitConvergence(admin, step, first, second);
+        IReadOnlyList<PlayerSummary> server = admin.GetPlayers(AdminActor.LocalConsole);
+        foreach (SocketClient client in clients)
+        {
+            PlayerSummary summary = server.Single(player => player.Entity == client.World.LocalEntity);
+            Assert.That(summary.Map, Is.EqualTo(field), $"{step}: the server has the character on the field");
+            Assert.That(
+                summary.Position.X,
+                Is.GreaterThan(portal.DestinationPosition.X + WalkedDistance),
+                $"{step}: the held direction walked it on from the arrival");
+            Assert.That(client.Connection.MapEpoch, Is.EqualTo(1), step);
+            Assert.That(client.World.Smoother.Snaps, Is.Zero, $"{step}: no correction on the field was a snap");
+            client.Link.LatencyMilliseconds = 0;
+            client.Link.LossPercent = 0;
+        }
+
+        Assert.That(
+            server.Sum(player => player.OtherEpochInputs),
+            Is.GreaterThan(0),
+            $"{step}: input made for the ground reached the server after the crossing and was dropped");
     }
 
     private static void AwaitConvergence(IAdminCommandService admin, string step, params SocketClient[] clients)

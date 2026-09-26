@@ -76,8 +76,10 @@ public sealed class GameClient : MonoBehaviour
     private SkillState? m_skill;
     private MovementController? m_controller;
     private LocalPlayerDriver? m_driver;
+    private MoveIntentProducer? m_producer;
     private FixedTickClock? m_clock;
     private ClientWorld? m_world;
+    private bool m_isChangingMap;
     private GrayboxMap? m_map;
     private EntityView? m_localView;
     private MoveMarker? m_marker;
@@ -119,6 +121,12 @@ public sealed class GameClient : MonoBehaviour
     public LossyTransport? Link { get; private set; }
 
     public ClientWorld? World => m_world;
+
+    /// <summary>
+    ///     Whether the player is in the world: its map is drawn, or a map change is loading the next one. The panels for
+    ///     a player out of the world stay hidden meanwhile.
+    /// </summary>
+    public bool IsInWorld => m_world != null || m_isChangingMap;
 
     public CombatPresenter? Combat => m_combat;
 
@@ -334,6 +342,7 @@ public sealed class GameClient : MonoBehaviour
         {
             Connection.CharactersChanged -= OnCharactersChanged;
             Connection.EnteredWorld -= OnEnteredWorld;
+            Connection.ChangedMap -= OnChangedMap;
             Connection.LeftWorld -= OnLeftWorld;
             Connection.Closed -= OnClosed;
         }
@@ -357,6 +366,7 @@ public sealed class GameClient : MonoBehaviour
         Connection = new ClientConnection(Link, settings, m_contentLoader.Content);
         Connection.CharactersChanged += OnCharactersChanged;
         Connection.EnteredWorld += OnEnteredWorld;
+        Connection.ChangedMap += OnChangedMap;
         Connection.LeftWorld += OnLeftWorld;
         Connection.Closed += OnClosed;
         Status = $"Connecting to {m_host}:{m_port}";
@@ -512,14 +522,23 @@ public sealed class GameClient : MonoBehaviour
 
     private void OnLeftWorld()
     {
-        TearDownWorld();
-        LeaveMapScene();
+        LeaveWorld();
         Status = "Logged out: choose or create a character";
     }
 
     private void OnEnteredWorld(ClientWorld world)
     {
         // The server names the character it entered: after two quick requests it need not be the last one asked for.
+        m_lastCharacter = world.Character;
+        StartCoroutine(EnterMap(world));
+    }
+
+    // The old world stops at once (Gameplay Systems §5.1). The movement sequence and the client tick go on: the
+    // server keeps its input queue across the change and would take a sequence started again for stale input.
+    private void OnChangedMap(ClientWorld world)
+    {
+        TearDownWorld();
+        m_isChangingMap = true;
         m_lastCharacter = world.Character;
         StartCoroutine(EnterMap(world));
     }
@@ -539,10 +558,11 @@ public sealed class GameClient : MonoBehaviour
         Status = $"Loading {map.DisplayName}";
         yield return SceneManager.LoadSceneAsync(sceneName, LoadSceneMode.Single);
 
-        // The connection may have closed, or been replaced, while the scene was loading.
+        // The connection may have closed or been replaced, or the character moved on to another map, while the scene
+        // was loading. Only the newest world is drawn, and a map change never falls back to the menu.
         if (Connection == null || Connection.State != ClientConnectionState.InWorld || Connection.World != world)
         {
-            if (m_world == null)
+            if (!IsInWorld)
             {
                 LeaveMapScene();
             }
@@ -550,6 +570,7 @@ public sealed class GameClient : MonoBehaviour
             yield break;
         }
 
+        m_isChangingMap = false;
         m_world = world;
         Material material = ResolveMaterial();
         m_map = GrayboxMap.Create(world.Grid, material);
@@ -583,13 +604,14 @@ public sealed class GameClient : MonoBehaviour
 
         BindInput();
         m_controller = new MovementController(world.Grid);
-        m_clock = new FixedTickClock(1f / Connection.ServerTickRate);
+        m_clock ??= new FixedTickClock(1f / Connection.ServerTickRate);
+        m_producer ??= new MoveIntentProducer();
         m_autoAttack = new AutoAttackState(world, m_controller, Connection, 1.0 / Connection.ServerTickRate);
         m_pickup = new PickupState(world, m_controller, Connection);
         m_skill = new SkillState(world, m_controller, Connection, 1.0 / Connection.ServerTickRate);
         m_driver = new LocalPlayerDriver(
             m_controller,
-            new MoveIntentProducer(),
+            m_producer,
             world,
             Connection,
             m_autoAttack,
@@ -758,8 +780,7 @@ public sealed class GameClient : MonoBehaviour
 
     private void OnClosed()
     {
-        TearDownWorld();
-        LeaveMapScene();
+        LeaveWorld();
         m_reconnectCharacter = default;
         ClientConnection? connection = Connection;
         if (connection == null)
@@ -783,6 +804,16 @@ public sealed class GameClient : MonoBehaviour
             Status = DisconnectMessages.Describe(connection.Notice, connection.DisconnectCause);
             CanReconnect = DisconnectMessages.CanReconnect(connection.Notice);
         }
+    }
+
+    // Only a new entry starts the movement sequence and the client tick again, as the server starts its input state.
+    private void LeaveWorld()
+    {
+        TearDownWorld();
+        m_isChangingMap = false;
+        m_producer = null;
+        m_clock = null;
+        LeaveMapScene();
     }
 
     // Out of the world the map scene would be an empty stage, so the client shows the main menu scene instead.
@@ -810,7 +841,6 @@ public sealed class GameClient : MonoBehaviour
         m_pickup = null;
         m_skill = null;
         m_controller = null;
-        m_clock = null;
         foreach (EntityView view in m_remoteViews.Values)
         {
             DestroyView(view);
