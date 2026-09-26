@@ -137,6 +137,28 @@ public sealed class ServerInstrumentsTests
     }
 
     [Test]
+    public void Acquisitions_AreCountedByMonster_OncePerTargetTaken()
+    {
+        var server = new TestServer(withEveryMap: true, withMonsters: true);
+        using var recorder = new MeterRecorder(server.Instruments.Meter);
+        ConnectionId player = server.EnterWorld(1);
+        server.World.TryGetMap(new MapDefinitionId("map.training_ground"), out MapInstance? ground);
+        server.World.TryGetMap(new MapDefinitionId("map.training_field"), out MapInstance? field);
+        PlayerEntity entity = server.PlayerOf(player);
+        entity.Position = ground!.Definition.Portals.Single().Center;
+        server.Tick(2);
+        MonsterEntity crawler = field!.Monsters.First();
+
+        entity.Position = new WorldPosition(crawler.Position.X + 3f, 0f, crawler.Position.Z);
+        server.Tick(3);
+
+        int taken = field.Monsters.Count(monster => monster.Target == entity.Id);
+        Assert.That(crawler.Target, Is.EqualTo(entity.Id), "the crawler went for the player unprovoked");
+        Assert.That(SumTagged(recorder, "evertorch.ai.acquisitions", "monster", "monster.forest_crawler"),
+            Is.EqualTo(taken));
+    }
+
+    [Test]
     public void AuthenticationFailure_IsCountedOnceAndPublished()
     {
         var server = new TestServer();

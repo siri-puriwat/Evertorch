@@ -1,0 +1,10 @@
+id: item.material.crawler_shell
+displayName: Crawler Shell
+type: material
+stackLimit: 999
+server:
+  weight: 2
+  sellPrice: 5
+client:
+  icon: item_crawler_shell
+  model: pickup_crawler_shell

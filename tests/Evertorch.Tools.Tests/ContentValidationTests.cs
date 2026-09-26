@@ -23,6 +23,7 @@ public sealed class ContentValidationTests
     private const string FocusStatus = "status-effects/focus.yml";
     private const string JobSkills = "skills: [skill.strike]";
     private const string Levels = "levels: [30211, 50423, 80637]";
+    private const string SlimeCenter = "center: { x: 12.6875, y: 0.0, z: 14.3125 }";
 
     [TestCase(Potion, "id: item.consumable.minor_health", "id: Item.Consumable.MinorHealth", "id", "not a valid ID")]
     [TestCase(Potion, "id: item.consumable.minor_health", "id: item..minor_health", "id", "not a valid ID")]
@@ -218,6 +219,42 @@ public sealed class ContentValidationTests
             Assert.That(diagnostic.FieldPath, Is.EqualTo(expectedFieldPath));
             Assert.That(diagnostic.Message, Does.Contain(expectedMessagePart));
             Assert.That(diagnostic.Line, Is.GreaterThan(0));
+        }
+    }
+
+    // Made aggressive, the slime's spawn must lie farther than max(6.875, 6.4375) + 6.125 + 1 = 14 m from the spawn
+    // point (3.4375, 0, -7.5625) and from the arrival (-3.5, 0, 3.5) of the map's own portal; 14 m is not farther.
+    [TestCase("center: { x: 8.75, y: 0.0, z: -16.0 }", "the spawn point")]
+    [TestCase("center: { x: 17.4375, y: 0.0, z: -7.5625 }", "the spawn point")]
+    [TestCase("center: { x: -7.5, y: 0.0, z: 13.5 }", "the arrival from map.training_ground")]
+    public void Run_WhenAnAggressiveSpawnCouldPerceiveAnArrival_ReportsItsCenter(string center, string arrival)
+    {
+        using (var workspace = new ContentWorkspace())
+        {
+            workspace.Replace(Monster, "behavior: passive", "behavior: aggressive");
+            workspace.Replace(Map, SlimeCenter, center);
+
+            ContentPipelineResult result = ContentPipeline.Run(workspace.ContentRoot);
+
+            Assert.That(result.Diagnostics, Has.Count.EqualTo(1), Describe(result));
+            ContentDiagnostic diagnostic = result.Diagnostics[0];
+            Assert.That((diagnostic.File, diagnostic.FieldPath), Is.EqualTo((Map, "server.monsterSpawns[0].center")));
+            Assert.That(diagnostic.Message, Does.Contain($"not farther than 14 m from {arrival}"));
+        }
+    }
+
+    [TestCase("behavior: aggressive", "center: { x: 17.5, y: 0.0, z: -7.5625 }")]
+    [TestCase("behavior: passive", "center: { x: 8.75, y: 0.0, z: -16.0 }")]
+    public void Run_WhenASpawnIsOutOfReachOrItsMonsterPassive_IsValid(string behavior, string center)
+    {
+        using (var workspace = new ContentWorkspace())
+        {
+            workspace.Replace(Monster, "behavior: passive", behavior);
+            workspace.Replace(Map, SlimeCenter, center);
+
+            ContentPipelineResult result = ContentPipeline.Run(workspace.ContentRoot);
+
+            Assert.That(result.Diagnostics, Is.Empty, Describe(result));
         }
     }
 

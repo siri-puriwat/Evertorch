@@ -1,0 +1,31 @@
+id: monster.forest_crawler
+displayName: Forest Crawler
+level: 3
+stats:
+  hp: 80
+  physicalAttack: 10
+  physicalDefense: 4
+  hit: 170
+  flee: 110
+movement:
+  # Faster than the slime, slower than the adventurer, so a player can still walk away.
+  baseSpeed: 4.8
+combat:
+  attackRange: 1.5
+  attackIntervalMs: 1400
+ai:
+  behavior: aggressive
+  perceptionRadius: 6.0
+  leashRadius: 14.0
+  roamRadius: 5.0
+  idlePauseMs: { min: 4000, max: 5000 }
+  scanIntervalMs: 100
+drops:
+  - item: item.material.crawler_shell
+    chance: 0.60
+    amount: { min: 1, max: 2 }
+rewards:
+  baseExperience: 25
+client:
+  prefab: monster_forest_crawler
+  icon: monster_forest_crawler_icon

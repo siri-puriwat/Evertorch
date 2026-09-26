@@ -108,9 +108,16 @@ public static class ContentValidator
             mapsById[map.Definition.Id.Value] = map.Definition;
         }
 
+        var monstersById = new Dictionary<string, MonsterDefinition>(StringComparer.Ordinal);
+        foreach (AuthoredMonster monster in content.Monsters)
+        {
+            monstersById[monster.Definition.Id.Value] = monster.Definition;
+        }
+
         foreach (AuthoredMap map in content.Maps)
         {
             RequirePortalDestinations(map, maps, mapsById, diagnostics);
+            RequireAggressiveSpawnsOutOfReach(map, content.Maps, monstersById, diagnostics);
             for (int index = 0; index < map.Definition.MonsterSpawns.Count; index++)
             {
                 string fieldPath = string.Format(
@@ -179,6 +186,62 @@ public static class ContentValidator
             else if (destination.IsInPortal(at))
             {
                 Report(map.Source, prefix + ".position", "lies inside a portal of the destination map", diagnostics);
+            }
+        }
+    }
+
+    // An aggressive monster idle or roaming anywhere its spawn allows must not perceive a player who has only just
+    // spawned or arrived (Gameplay Systems §10), so its spawn's center lies farther than max(radius, roamRadius) +
+    // perceptionRadius + 1 m from the map's spawn point and from every arrival on the map.
+    private static void RequireAggressiveSpawnsOutOfReach(
+        AuthoredMap map,
+        IReadOnlyList<AuthoredMap> maps,
+        Dictionary<string, MonsterDefinition> monstersById,
+        List<ContentDiagnostic> diagnostics)
+    {
+        var arrivals = new List<(WorldPosition Position, string Name)>
+        {
+            (map.Definition.SpawnPosition, "the spawn point")
+        };
+        foreach (AuthoredMap origin in maps)
+        {
+            foreach (MapPortal portal in origin.Definition.Portals)
+            {
+                if (portal.DestinationMap == map.Definition.Id)
+                {
+                    arrivals.Add((portal.DestinationPosition, $"the arrival from {origin.Definition.Id.Value}"));
+                }
+            }
+        }
+
+        for (int index = 0; index < map.Definition.MonsterSpawns.Count; index++)
+        {
+            MonsterSpawn spawn = map.Definition.MonsterSpawns[index];
+            if (!monstersById.TryGetValue(spawn.Monster.Value, out MonsterDefinition? monster)
+                || monster.Behavior != MonsterBehavior.Aggressive)
+            {
+                continue;
+            }
+
+            double reach = Math.Max(spawn.Radius, monster.RoamRadius) + monster.PerceptionRadius + 1.0;
+            foreach ((WorldPosition position, string name) in arrivals)
+            {
+                double deltaX = spawn.Center.X - position.X;
+                double deltaZ = spawn.Center.Z - position.Z;
+                if (Math.Sqrt(deltaX * deltaX + deltaZ * deltaZ) <= reach)
+                {
+                    Report(
+                        map.Source,
+                        string.Format(CultureInfo.InvariantCulture, "server.monsterSpawns[{0}].center", index),
+                        string.Format(
+                            CultureInfo.InvariantCulture,
+                            "is not farther than {0} m from {1}, where the aggressive {2} could perceive a player "
+                            + "who has only just arrived",
+                            reach,
+                            name,
+                            monster.Id.Value),
+                        diagnostics);
+                }
             }
         }
     }

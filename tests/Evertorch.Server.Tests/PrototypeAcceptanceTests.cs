@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using Evertorch.Client;
@@ -31,6 +32,7 @@ public sealed class PrototypeAcceptanceTests
     private const string TrainingField = "map.training_field";
     private const string Adventurer = "job.adventurer";
     private const string TrainingSlime = "monster.training_slime";
+    private const string ForestCrawler = "monster.forest_crawler";
     private const float ConvergedDistance = 1e-3f;
     private const float WalkedDistance = 2f;
 
@@ -64,8 +66,8 @@ public sealed class PrototypeAcceptanceTests
 
     /// <summary>
     ///     Both players enter the training ground, see each other, walk, fight, and cross to the training field, where
-    ///     one reconnects; the server then stops. Returns each character as the server last showed it, by character
-    ///     name.
+    ///     a crawler goes for one of them and one reconnects; the server then stops. Returns each character as the
+    ///     server last showed it, by character name.
     /// </summary>
     private static Dictionary<string, PlayerSummary> PlayTogether(IHost host)
     {
@@ -93,6 +95,7 @@ public sealed class PrototypeAcceptanceTests
         UseSkills(first, second);
         FocusQuickensTheSwing(first, second);
         CrossToTheField(content, admin, first, second);
+        FightACrawler(content, admin, first, second);
 
         EntityId firstEntity = first.World.LocalEntity;
         EntityId secondEntity = second.World.LocalEntity;
@@ -573,6 +576,158 @@ public sealed class PrototypeAcceptanceTests
             server.Sum(player => player.OtherEpochInputs),
             Is.GreaterThan(0),
             $"{step}: input made for the ground reached the server after the crossing and was dropped");
+    }
+
+    // On the field a crawler goes for a player unprovoked (Gameplay Systems §10). The first player steps toward the
+    // crawler nearest the staging point, 12.5 m from the crawlers' home, and once it attacks leads it back there, out
+    // of the other crawlers' perception while they are home; both players kill it, each takes its share of the
+    // experience, and both walk back beyond the crawlers' leash.
+    private static void FightACrawler(
+        ServerContent content,
+        IAdminCommandService admin,
+        SocketClient first,
+        SocketClient second)
+    {
+        const string step = "crawler";
+        SocketClient[] clients = { first, second };
+        var crawlerId = new MonsterDefinitionId(ForestCrawler);
+        WorldPosition home = content.Maps[new MapDefinitionId(TrainingField)].MonsterSpawns
+            .Single(spawn => spawn.Monster == crawlerId)
+            .Center;
+        WorldPosition start = first.World.Predictor.Position;
+        float awayX = start.X - home.X;
+        float awayZ = start.Z - home.Z;
+        float away = (float)Math.Sqrt(awayX * awayX + awayZ * awayZ);
+        var staging = new WorldPosition(home.X + awayX / away * 12.5f, 0f, home.Z + awayZ / away * 12.5f);
+        var places = new Dictionary<SocketClient, WorldPosition>
+        {
+            [first] = new(staging.X, 0f, staging.Z + 0.5f),
+            [second] = new(staging.X, 0f, staging.Z - 0.5f)
+        };
+        WalkTo(step, places, clients);
+
+        var attacks = new List<AttackStarted>();
+        var deaths = new List<EntityId>();
+        first.World.AttackStartedReceived += attacks.Add;
+        first.World.EntityDiedReceived += death => deaths.Add(death.Entity);
+
+        bool IsCrawler(EntityId entity)
+        {
+            return first.World.Remotes.TryGetValue(entity, out RemoteEntity? remote)
+                && remote.DefinitionId == ForestCrawler;
+        }
+
+        bool IsAttackedByACrawler()
+        {
+            return attacks.Any(attack => IsCrawler(attack.Attacker) && attack.Target == first.World.LocalEntity);
+        }
+
+        // Each try walks to 4.5 m from a crawler, within its perception, and waits there for it to come; aiming again
+        // while it comes would only keep the player out of its reach.
+        var sinceStep = Stopwatch.StartNew();
+        var tries = new List<string>();
+        while (!IsAttackedByACrawler() && sinceStep.Elapsed < FightLimit)
+        {
+            RemoteEntity? nearest = first.World.Remotes.Values
+                .Where(remote => remote.DefinitionId == ForestCrawler && !remote.IsDead)
+                .OrderBy(remote => Horizontal(Drawn(first, remote), staging))
+                .FirstOrDefault();
+            Assert.That(nearest, Is.Not.Null, $"{step}: the first player sees a crawler");
+            WorldPosition crawler = Drawn(first, nearest!);
+            float towardX = staging.X - crawler.X;
+            float towardZ = staging.Z - crawler.Z;
+            float toward = (float)Math.Sqrt(towardX * towardX + towardZ * towardZ);
+            var goal = new WorldPosition(crawler.X + towardX / toward * 4.5f, 0f, crawler.Z + towardZ / toward * 4.5f);
+            bool isWalking = first.Controller.TryMoveTo(first.World.Predictor.Position, goal);
+            tries.Add($"{nearest!.Entity.Value} at {crawler} goal {goal} walking {isWalking}");
+            SocketClients.PumpUntil(IsAttackedByACrawler, TimeSpan.FromSeconds(4), clients);
+        }
+
+        Assert.That(
+            IsAttackedByACrawler(),
+            Is.True,
+            $"{step}: a crawler went for the first player; tries: {string.Join("; ", tries)}; attacks: "
+            + string.Join(", ", attacks.Select(attack => $"{attack.Attacker.Value}>{attack.Target.Value}")));
+        AttackStarted unprovoked = attacks.First(attack => IsCrawler(attack.Attacker));
+        EntityId target = unprovoked.Attacker;
+        Assert.That(
+            clients.Select(client => client.World.Target),
+            Is.All.EqualTo(default(EntityId)),
+            $"{step}: neither player had targeted anything when it attacked");
+
+        IReadOnlyList<PlayerSummary> before = admin.GetPlayers(AdminActor.LocalConsole);
+        WalkTo(step, new Dictionary<SocketClient, WorldPosition> { [first] = places[first] }, clients);
+        foreach (SocketClient client in clients)
+        {
+            client.Connection.SendTarget(target);
+        }
+
+        Assert.That(
+            SocketClients.PumpUntil(() => clients.All(client => client.World.Target == target), clients),
+            Is.True,
+            $"{step}: the server confirmed the crawler as both players' target");
+        foreach (SocketClient client in clients)
+        {
+            client.AttackTarget();
+        }
+
+        Assert.That(
+            SocketClients.PumpUntil(() => deaths.Contains(target), FightLimit, clients),
+            Is.True,
+            $"{step}: the crawler died");
+        foreach (SocketClient client in clients)
+        {
+            Assert.That(client.World.IsLocalDead, Is.False, $"{step}: both players survived");
+            client.AutoAttack.OnWalkRequested();
+        }
+
+        // The players view is republished once a second.
+        bool isShared = SocketClients.PumpUntil(
+            () => clients.All(client =>
+            {
+                PlayerSummary was = before.Single(player => player.Entity == client.World.LocalEntity);
+                PlayerSummary? now = admin.GetPlayers(AdminActor.LocalConsole)
+                    .SingleOrDefault(player => player.Entity == client.World.LocalEntity);
+                return now != null && (now.Level > was.Level || now.Experience > was.Experience);
+            }),
+            clients);
+        Assert.That(isShared, Is.True, $"{step}: both players got a share of the crawler's experience");
+
+        var back = new Dictionary<SocketClient, WorldPosition>
+        {
+            [first] = new(start.X, 0f, start.Z),
+            [second] = new(start.X, 0f, start.Z - 0.8f)
+        };
+        WalkTo(step, back, clients);
+    }
+
+    // Starts each walk, then pumps until every walker has arrived within a step of its goal.
+    private static void WalkTo(
+        string step,
+        IReadOnlyDictionary<SocketClient, WorldPosition> goals,
+        params SocketClient[] clients)
+    {
+        foreach (KeyValuePair<SocketClient, WorldPosition> goal in goals)
+        {
+            Assert.That(
+                goal.Key.Controller.TryMoveTo(goal.Key.World.Predictor.Position, goal.Value),
+                Is.True,
+                $"{step}: a way to {goal.Value}");
+        }
+
+        Assert.That(
+            SocketClients.PumpUntil(
+                () => goals.All(goal => !goal.Key.Controller.HasPath && goal.Key.DistanceTo(goal.Value) < 0.5f),
+                clients),
+            Is.True,
+            $"{step}: every walker arrived");
+    }
+
+    private static WorldPosition Drawn(SocketClient viewer, RemoteEntity remote)
+    {
+        return remote.Buffer.TrySample(viewer.World.RemoteRenderTime, out WorldPosition position, out WorldDirection _)
+            ? position
+            : default;
     }
 
     private static void AwaitConvergence(IAdminCommandService admin, string step, params SocketClient[] clients)

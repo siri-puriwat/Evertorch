@@ -85,6 +85,7 @@ public sealed class ServerInstruments
     private readonly Counter<long> m_statusEffects;
     private readonly Counter<long> m_mapTransfers;
     private readonly Counter<long> m_otherEpochInputs;
+    private readonly Counter<long> m_acquisitions;
 
     public ServerInstruments(IMeterFactory meters)
     {
@@ -157,6 +158,10 @@ public sealed class ServerInstruments
             "evertorch.world.stale_epoch_inputs",
             "{input}",
             "Movement inputs dropped because they were made for the map before a transfer.");
+        m_acquisitions = Meter.CreateCounter<long>(
+            "evertorch.ai.acquisitions",
+            "{acquisition}",
+            "Targets monsters took, whether a player hit them or an aggressive one perceived it, by monster.");
     }
 
     public Meter Meter { get; }
@@ -239,6 +244,11 @@ public sealed class ServerInstruments
     public void RecordOtherEpochInput()
     {
         m_otherEpochInputs.Add(1);
+    }
+
+    public void RecordAcquisition(MonsterDefinitionId monster)
+    {
+        m_acquisitions.Add(1, new KeyValuePair<string, object?>("monster", monster.Value));
     }
 
     public void RecordStatusEffects(StatusEffectChange change, int count)

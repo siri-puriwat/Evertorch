@@ -4,6 +4,13 @@ server:
   spawnPoint:
     position: { x: -21.0, y: 0.0, z: 0.0 }
     facing: { x: 1.0, z: 0.0 }
+  monsterSpawns:
+    # Aggressive: farther than max(radius, roam) + perception + 1 m = 12 m from the spawn point and the arrival.
+    - monster: monster.forest_crawler
+      center: { x: 8.0, y: 0.0, z: 12.0 }
+      radius: 4.0
+      count: 3
+      respawnMs: 12000
   portals:
     # In front of the west gate; arrivals face east, 1.5 m inside it.
     - center: { x: -22.5, y: 0.0, z: 0.0 }

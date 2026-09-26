@@ -23,6 +23,7 @@ public sealed class MonsterAiSystem : ITickPhase
 
     private readonly WorldSimulation m_world;
     private readonly IRandomSource m_random;
+    private readonly ServerInstruments m_instruments;
     private readonly int m_tickRate;
     private readonly int m_corpseMs;
     private readonly Dictionary<MapInstance, Navigator> m_navigators = new();
@@ -34,10 +35,12 @@ public sealed class MonsterAiSystem : ITickPhase
         WorldSimulation world,
         IRandomSource random,
         IOptions<WorldOptions> worldOptions,
-        IOptions<SimulationOptions> simulation)
+        IOptions<SimulationOptions> simulation,
+        ServerInstruments instruments)
     {
         m_world = world;
         m_random = random;
+        m_instruments = instruments;
         m_tickRate = simulation.Value.TickRate;
         m_corpseMs = worldOptions.Value.MonsterCorpseMs;
         foreach (MapInstance map in world.Maps)
@@ -145,6 +148,7 @@ public sealed class MonsterAiSystem : ITickPhase
                 monster.Combat.IsAutoAttacking = true;
                 brain.State = MonsterAiState.Chase;
                 brain.Path.Cancel();
+                m_instruments.RecordAcquisition(monster.Definition.Id);
             }
         }
 
