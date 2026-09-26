@@ -181,6 +181,24 @@ public sealed class MessageFuzzTests
                     })),
             payload => NpcServices.TryRead(payload, out NpcServices? message) ? Encode(message!) : null);
         yield return Case(
+            "AcceptQuest",
+            Encode(new AcceptQuest(new EntityId(14), new QuestDefinitionId("quest.crawler_hunt"), 7)),
+            payload => AcceptQuest.TryRead(payload, out AcceptQuest? message) ? Encode(message!) : null);
+        yield return Case(
+            "CompleteQuest",
+            Encode(new CompleteQuest(new EntityId(14), new QuestDefinitionId("quest.crawler_hunt"), 7)),
+            payload => CompleteQuest.TryRead(payload, out CompleteQuest? message) ? Encode(message!) : null);
+        yield return Case(
+            "QuestLog",
+            Encode(
+                new QuestLog(
+                    new[]
+                    {
+                        new QuestLogEntry(new QuestDefinitionId("quest.crawler_hunt"), QuestState.Active, 3, 5),
+                        new QuestLogEntry(new QuestDefinitionId("quest.first_steps"), QuestState.Completed, 1, 1)
+                    })),
+            payload => QuestLog.TryRead(payload, out QuestLog? message) ? Encode(message!) : null);
+        yield return Case(
             "CharacterProgress",
             Encode(new CharacterProgress(2, 45, 50)),
             payload => CharacterProgress.TryRead(payload, out CharacterProgress message) ? Encode(message) : null);
@@ -617,6 +635,27 @@ public sealed class MessageFuzzTests
     }
 
     private static byte[] Encode(NpcServices message)
+    {
+        byte[] buffer = new byte[message.GetEncodedLength()];
+        message.Write(buffer);
+        return buffer;
+    }
+
+    private static byte[] Encode(AcceptQuest message)
+    {
+        byte[] buffer = new byte[message.GetEncodedLength()];
+        message.Write(buffer);
+        return buffer;
+    }
+
+    private static byte[] Encode(CompleteQuest message)
+    {
+        byte[] buffer = new byte[message.GetEncodedLength()];
+        message.Write(buffer);
+        return buffer;
+    }
+
+    private static byte[] Encode(QuestLog message)
     {
         byte[] buffer = new byte[message.GetEncodedLength()];
         message.Write(buffer);

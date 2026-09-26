@@ -279,6 +279,8 @@ public sealed class SessionManager : ITickPhase
             case InboundEventKind.UseItem:
             case InboundEventKind.Buy:
             case InboundEventKind.Sell:
+            case InboundEventKind.AcceptQuest:
+            case InboundEventKind.CompleteQuest:
                 HandleCommand(session, inboundEvent, tick);
                 break;
             default:
@@ -628,14 +630,15 @@ public sealed class SessionManager : ITickPhase
     }
 
     // The full baseline starts here: WorldEntered now, then a spawn for everything in view from this tick's visibility
-    // pass, since the client knows no entity of this map yet, then the whole inventory, the skill list, and the status
-    // effects (Network Protocol §9). Entering, an attach, and a map change all send it.
+    // pass, since the client knows no entity of this map yet, then the whole inventory, the skill list, the status
+    // effects, and the quests (Network Protocol §9). Entering, an attach, and a map change all send it.
     private void SendBaseline(ClientSession session, CharacterSession character, uint tick)
     {
         session.KnownEntities.Clear();
         session.NeedsInventorySnapshot = true;
         session.NeedsSkillList = true;
         session.NeedsStatusEffects = true;
+        session.NeedsQuestLog = true;
         PlayerEntity player = character.Player;
         MapInstance map = character.Map;
         m_sender.Send(
@@ -924,6 +927,12 @@ public sealed class SessionManager : ITickPhase
                 command.Target,
                 command.InventoryItem,
                 command.Quantity,
+                command.CommandSequence),
+            InboundEventKind.AcceptQuest => m_progression.TryAcceptQuest(session, command.Target, command.Quest),
+            InboundEventKind.CompleteQuest => m_items.TryCompleteQuest(
+                session,
+                command.Target,
+                command.Quest,
                 command.CommandSequence),
             _ => CommandRejectionReason.NotAllowedNow
         };

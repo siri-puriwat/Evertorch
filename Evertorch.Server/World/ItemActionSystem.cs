@@ -6,16 +6,18 @@ using System.Threading.Tasks;
 using Evertorch.Game;
 using Evertorch.Persistence;
 using Evertorch.Protocol;
+using Evertorch.Rules;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace Evertorch.Server
 {
 /// <summary>
-///     Equips, unequips, uses, buys, and sells items (Gameplay Systems §6.1, §11.1–§11.3; Persistence §5). The checks
-///     happen on the tick thread; the inventory and the coins change only through the commit, and the server's copy of
-///     them, the statistics, HP and SP, and the owner learn of it once its result is back. A commit whose answer was
-///     lost is settled from the ledger before the character may start another inventory operation.
+///     Equips, unequips, uses, buys, and sells items, and turns in quests (Gameplay Systems §2.2, §6.1, §11.1–§11.3;
+///     Persistence §5). The checks happen on the tick thread; the inventory and the coins change only through the
+///     commit, and the server's copy of them, the statistics, HP and SP, the quests, and the owner learn of it once its
+///     result is back. A commit whose answer was lost is settled from the ledger before the character may start another
+///     inventory operation.
 /// </summary>
 public sealed class ItemActionSystem : ITickPhase
 {
@@ -29,6 +31,8 @@ public sealed class ItemActionSystem : ITickPhase
     private const string BuyLookup = "buy lookup";
     private const string SellOperation = "sell";
     private const string SellLookup = "sell lookup";
+    private const string QuestRewardOperation = "quest reward";
+    private const string QuestRewardLookup = "quest reward lookup";
     private const int MillisecondsPerSecond = 1000;
 
     // A lookup that failed for a reason other than an outage is asked again only after this long, not on every tick
@@ -65,6 +69,7 @@ public sealed class ItemActionSystem : ITickPhase
     private readonly AuditLog m_audit;
     private readonly ILogger<ItemActionSystem> m_logger;
     private readonly ServerInstruments m_instruments;
+    private readonly CharacterProgression m_progression;
     private readonly float m_npcReach;
     private readonly uint m_failedLookupDelayTicks;
     private readonly List<(CharacterSession Character, uint NotBefore)> m_unsettled = new();
@@ -80,6 +85,7 @@ public sealed class ItemActionSystem : ITickPhase
         IOptions<SimulationOptions> simulation,
         IOptions<WorldOptions> world,
         ServerInstruments instruments,
+        CharacterProgression progression,
         AuditLog audit,
         ILogger<ItemActionSystem> logger)
     {
@@ -92,6 +98,7 @@ public sealed class ItemActionSystem : ITickPhase
         m_audit = audit;
         m_logger = logger;
         m_instruments = instruments;
+        m_progression = progression;
         m_npcReach = NpcInteraction.Range + world.Value.AttackRangeTolerance;
         m_failedLookupDelayTicks =
             (uint)((long)FailedLookupDelayMs * simulation.Value.TickRate / MillisecondsPerSecond);
@@ -241,7 +248,7 @@ public sealed class ItemActionSystem : ITickPhase
             return CommandRejectionReason.ItemActionInFlight;
         }
 
-        CommandRejectionReason reach = CheckNpc(session, npc, out NpcEntity? trader);
+        CommandRejectionReason reach = NpcReach.Check(session, npc, m_npcReach, out NpcEntity? trader);
         if (reach != CommandRejectionReason.None)
         {
             return reach;
@@ -308,7 +315,7 @@ public sealed class ItemActionSystem : ITickPhase
             return CommandRejectionReason.ItemActionInFlight;
         }
 
-        CommandRejectionReason reach = CheckNpc(session, npc, out NpcEntity? trader);
+        CommandRejectionReason reach = NpcReach.Check(session, npc, m_npcReach, out NpcEntity? trader);
         if (reach != CommandRejectionReason.None)
         {
             return reach;
@@ -352,11 +359,69 @@ public sealed class ItemActionSystem : ITickPhase
         return TryCommit(session, operation, (store, cancellation) => store.CommitSellAsync(commit, cancellation));
     }
 
-    private static float HorizontalDistance(WorldPosition a, WorldPosition b)
+    /// <summary>
+    ///     Checks a turn-in (Gameplay Systems §2.2, after the checks of §6.1, in order) and, when it passes, queues its
+    ///     commit, which carries the level and experience the reward leaves. The caller has already refused a dead or
+    ///     leaving character.
+    /// </summary>
+    public CommandRejectionReason TryCompleteQuest(
+        ClientSession session,
+        EntityId npc,
+        QuestDefinitionId quest,
+        uint commandSequence)
     {
-        float dx = a.X - b.X;
-        float dz = a.Z - b.Z;
-        return (float)Math.Sqrt(dx * dx + dz * dz);
+        CharacterSession character = session.Character!;
+        if (character.Operation != null)
+        {
+            return CommandRejectionReason.ItemActionInFlight;
+        }
+
+        CommandRejectionReason reach = NpcReach.Check(session, npc, m_npcReach, out NpcEntity? giver);
+        if (reach != CommandRejectionReason.None)
+        {
+            return reach;
+        }
+
+        if (!m_content.Quests.TryGetValue(quest, out QuestDefinition? definition)
+            || definition!.Giver != giver!.Definition.Id)
+        {
+            return CommandRejectionReason.InvalidTarget;
+        }
+
+        if (!character.Quests.TryGet(quest, out CharacterQuest? entry)
+            || entry!.IsCompleted
+            || entry.Progress < definition.Count)
+        {
+            return CommandRejectionReason.NotAllowedNow;
+        }
+
+        // Refused rather than cut at the cap (Gameplay Systems §11.3).
+        if (character.Inventory.Coins > ContentLimits.MaxCurrency - definition.Currency)
+        {
+            return CommandRejectionReason.CoinCapReached;
+        }
+
+        LevelProgress carried = m_progression.WithExperience(character.Player, definition.BaseExperience);
+        var operation = new InventoryOperation(
+            InventoryOperationKind.QuestReward,
+            commandSequence,
+            Guid.NewGuid(),
+            coins: definition.Currency,
+            quest: quest);
+        var commit = new QuestRewardCommit(
+            operation.OperationId,
+            character.Character.Value,
+            quest.Value,
+            entry.Progress,
+            definition.Count,
+            definition.Currency,
+            carried.Level,
+            carried.Experience,
+            m_time.GetUtcNow().UtcDateTime);
+        return TryCommit(
+            session,
+            operation,
+            (store, cancellation) => store.CommitQuestRewardAsync(commit, cancellation));
     }
 
     // A stackable item merges into its one row; any other takes a new row.
@@ -376,21 +441,6 @@ public sealed class ItemActionSystem : ITickPhase
         return inventory.Rows.Count < PickupSystem.MaxInventoryRows;
     }
 
-    // An NPC the session knows on its own map (1), within its reach plus the tolerance (2): an NPC's commands are
-    // checked alone, since no dialogue state is kept (Gameplay Systems §6.1).
-    private CommandRejectionReason CheckNpc(ClientSession session, EntityId npc, out NpcEntity? trader)
-    {
-        trader = null;
-        if (!session.KnownEntities.Contains(npc) || session.Map == null || !session.Map.TryGetNpc(npc, out trader))
-        {
-            return CommandRejectionReason.InvalidTarget;
-        }
-
-        return HorizontalDistance(session.Player!.Position, trader!.Position) > m_npcReach
-            ? CommandRejectionReason.OutOfRange
-            : CommandRejectionReason.None;
-    }
-
     // The ledger names the row an operation acted on; the row a swap took out of its slot is named here.
     private static long[] ReportRows(InventoryOperation operation)
     {
@@ -406,6 +456,7 @@ public sealed class ItemActionSystem : ITickPhase
             InventoryOperationKind.Consume => InboundEventKind.UseItem,
             InventoryOperationKind.Buy => InboundEventKind.Buy,
             InventoryOperationKind.Sell => InboundEventKind.Sell,
+            InventoryOperationKind.QuestReward => InboundEventKind.CompleteQuest,
             _ => throw NotAnItemAction(operation)
         };
     }
@@ -419,6 +470,7 @@ public sealed class ItemActionSystem : ITickPhase
             InventoryOperationKind.Consume => ConsumeOperation,
             InventoryOperationKind.Buy => BuyOperation,
             InventoryOperationKind.Sell => SellOperation,
+            InventoryOperationKind.QuestReward => QuestRewardOperation,
             _ => throw NotAnItemAction(operation)
         };
     }
@@ -432,6 +484,7 @@ public sealed class ItemActionSystem : ITickPhase
             InventoryOperationKind.Consume => ConsumeLookup,
             InventoryOperationKind.Buy => BuyLookup,
             InventoryOperationKind.Sell => SellLookup,
+            InventoryOperationKind.QuestReward => QuestRewardLookup,
             _ => throw NotAnItemAction(operation)
         };
     }
@@ -567,6 +620,10 @@ public sealed class ItemActionSystem : ITickPhase
                     operation.OperationId,
                     null);
                 m_instruments.RecordCoins(SellOperation, operation.Coins);
+                break;
+            case InventoryOperationKind.QuestReward:
+                m_progression.CompleteQuest(character, operation.Quest, operation.OperationId);
+                m_instruments.RecordCoins(QuestRewardOperation, operation.Coins);
                 break;
             default:
                 throw NotAnItemAction(operation);

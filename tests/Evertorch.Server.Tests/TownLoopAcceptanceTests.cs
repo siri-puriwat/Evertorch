@@ -45,8 +45,16 @@ public sealed class TownLoopAcceptanceTests
     private const string CrawlerHunt = "quest.crawler_hunt";
     private const string Identity = "townloop";
     private const string CharacterName = "TownLoop1";
-    private const int HuntedCrawlers = 5;
+    private const string PartnerIdentity = "townloop2";
+    private const string PartnerName = "TownLoop2";
+    private const int QuestKills = 5;
     private const float ConvergedDistance = 1e-3f;
+
+    // Kills enough for both quests even when a few crawlers die before one of the two has hit them.
+    private const int MaxKills = 9;
+
+    // Where the partner stands, from the staging point toward the arrival.
+    private const float PartnerDistance = 1.5f;
 
     // Farther from the crawlers' home than a crawler at home perceives, max(radius, roam) + perception = 11 m, and
     // within their leash of 14 m, so a crawler led there keeps fighting and no other joins it.
@@ -62,6 +70,9 @@ public sealed class TownLoopAcceptanceTests
 
     // An attack counts as current for this long; a crawler that stopped swinging went home.
     private static readonly TimeSpan AttackMemory = TimeSpan.FromSeconds(3);
+
+    // Long enough for the quest logs of a death to arrive; a kill one player never hit changes nothing for it.
+    private static readonly TimeSpan QuestLogWait = TimeSpan.FromSeconds(1);
 
     // Where the player stops in town, away from the spawn point, so a restart that forgot the place would show.
     private static readonly WorldPosition TownSpot = new(10f, 0f, -3f);
@@ -105,9 +116,10 @@ public sealed class TownLoopAcceptanceTests
     }
 
     /// <summary>
-    ///     The player enters the training ground, crosses to the training field, kills five forest crawlers one at a
-    ///     time, crosses back, and stops in town; the server then stops. Returns what the server and the client last
-    ///     showed of the character.
+    ///     The player enters the training ground, meets the NPCs, and with a partner who joins accepts the Gate Warden's
+    ///     quest; both cross to the training field, fight forest crawlers together until both quests are ready, cross
+    ///     back, and turn the quest in; the player then trades at the Quartermaster and stops in town, and the server
+    ///     stops. Returns what the server and the client last showed of the player's character.
     /// </summary>
     private static Stopped PlayTheLoop(IHost host)
     {
@@ -122,11 +134,20 @@ public sealed class TownLoopAcceptanceTests
         Assert.That(client.World.Inventory.Rows, Is.Empty, "enter: a new character carries nothing");
         Assert.That((client.World.Level, client.World.Experience), Is.EqualTo(((ushort)1, 0ul)), "enter: level 1");
         Assert.That(client.World.Inventory.Coins, Is.Zero, "enter: a new character holds no coins");
+        Assert.That(client.World.Quests, Is.Empty, "enter: a new character has taken no quest");
 
         MeetTheNpcs(content, admin, client);
+        using var partner = new SocketClient(content, PartnerIdentity, PartnerName);
+        partner.EnterWorld(port);
+        AcceptTheHunt("accept", client);
+        AcceptTheHunt("partner accepts", partner);
         CrossToTheField(content, admin, client);
-        HuntCrawlers(content, admin, client);
+        CrossToTheField(content, admin, partner);
+        HuntCrawlers(content, admin, client, partner);
+        CrossBack("partner returns", content, partner);
         ReturnToTown(content, admin, client);
+        TurnInTheHunt("turn in", content, admin, client);
+        TurnInTheHunt("partner turns in", content, admin, partner);
         TradeAtTheQuartermaster(content, admin, client);
 
         var stopped = new Stopped(
@@ -139,6 +160,7 @@ public sealed class TownLoopAcceptanceTests
             "stop: the client heard the server stop");
         Assert.That(client.Connection.Notice?.Reason, Is.EqualTo(DisconnectReason.Maintenance), "stop");
         AssertCleanTraffic(client, "loop");
+        AssertCleanTraffic(partner, "partner");
         return stopped;
     }
 
@@ -178,6 +200,10 @@ public sealed class TownLoopAcceptanceTests
             Is.EqualTo(stopped.Summary.Coins),
             "restart: the server holds them too");
         Assert.That(RowsOf(client.World), Is.EqualTo(stopped.Rows), "restart: the same inventory, equipment included");
+        Assert.That(
+            client.PumpUntil(() => QuestOf(client.World) == "Completed 5/5"),
+            Is.True,
+            "restart: the quest stays completed");
         Assert.That(
             client.World.Inventory.Rows.Where(row => row.Slot != EquipmentSlot.None)
                 .Select(row => (row.Item.Value, row.Slot)),
@@ -251,24 +277,32 @@ public sealed class TownLoopAcceptanceTests
     }
 
     // At a staging point beyond the reach of any crawler at home, the player walks within the perception of the
-    // nearest one and leads it back once it attacks; a crawler already attacking is fought first. Five crawlers die
-    // one at a time, the later ones after their respawn (Gameplay Systems §10). The player picks up everything each
-    // one drops, wears the first sword and armor, and drinks a potion when below half its HP. Each kill gives the
-    // player the whole of the crawler's experience, since nobody else hurt it (Gameplay Systems §2.1).
-    private static void HuntCrawlers(ServerContent content, IAdminCommandService admin, SocketClient client)
+    // nearest one and leads it back once it attacks; a crawler already attacking is fought first. The partner stands
+    // beside the staging point and joins every fight, so both damage each crawler and each kill counts for both quests
+    // (Gameplay Systems §2.2), however the damage splits. Crawlers die one at a time, the later ones after their respawn
+    // (Gameplay Systems §10), until both quests are ready. Whoever lands the killing blow picks up everything the crawler
+    // drops, the player wears the first sword and armor it holds, and each drinks a potion when below half its HP.
+    private static void HuntCrawlers(
+        ServerContent content,
+        IAdminCommandService admin,
+        SocketClient client,
+        SocketClient partner)
     {
         const string step = "hunt";
         ClientWorld world = client.World;
+        ClientWorld partnerWorld = partner.World;
         var crawlerId = new MonsterDefinitionId(ForestCrawler);
         MonsterDefinition crawler = content.Monsters[crawlerId];
         MapDefinition field = content.Maps[new MapDefinitionId(TrainingField)];
         WorldPosition home = field.MonsterSpawns.Single(spawn => spawn.Monster == crawlerId).Center;
         WorldPosition arrival = content.Maps[new MapDefinitionId(TrainingGround)].Portals.Single().DestinationPosition;
         WorldPosition staging = Toward(home, arrival, StagingDistance);
+        WorldPosition beside = Toward(staging, arrival, PartnerDistance);
         Assert.That(world.Grid.CanOccupy(staging.X, staging.Z), Is.True, $"{step}: the staging point is standable");
+        Assert.That(world.Grid.CanOccupy(beside.X, beside.Z), Is.True, $"{step}: the partner's place is standable");
 
         var attacks = new Dictionary<EntityId, Stopwatch>();
-        var deaths = new List<EntityId>();
+        var killers = new Dictionary<EntityId, EntityId>();
         var drops = new List<ItemDropped>();
         world.AttackStartedReceived += started =>
         {
@@ -277,65 +311,82 @@ public sealed class TownLoopAcceptanceTests
                 attacks[started.Attacker] = Stopwatch.StartNew();
             }
         };
-        world.EntityDiedReceived += died => deaths.Add(died.Entity);
+        world.EntityDiedReceived += died => killers[died.Entity] = died.Source;
         world.ItemDroppedReceived += drops.Add;
 
         WalkTo(step, client, staging);
-        var progress = new LevelProgress(world.Level, (long)world.Experience);
-        ExperienceTableDefinition table =
-            content.ExperienceTables[content.Jobs[new JobDefinitionId(Adventurer)].ExperienceTable];
-        var rules = new RenewalProgressionRules();
-        for (int kill = 1; kill <= HuntedCrawlers; kill++)
+        WalkTo(step, partner, beside);
+        int kills = 0;
+        int shared = 0;
+        while (Progress(world) < QuestKills || Progress(partnerWorld) < QuestKills)
         {
-            string killStep = $"{step} {kill}";
+            kills++;
+            Assert.That(kills, Is.LessThanOrEqualTo(MaxKills), $"{step}: both quests ready within {MaxKills} kills");
+            string killStep = $"{step} {kills}";
             EntityId target = CurrentAttacker(world, attacks) ?? Lure(killStep, client, staging, attacks);
             WalkTo(killStep, client, staging);
             int dropsBefore = drops.Count;
+            int mine = Progress(world);
+            int theirs = Progress(partnerWorld);
             client.Connection.SendTarget(target);
+            partner.Connection.SendTarget(target);
             Assert.That(
-                client.PumpUntil(() => world.Target == target),
+                SocketClients.PumpUntil(() => world.Target == target && partnerWorld.Target == target, client, partner),
                 Is.True,
-                $"{killStep}: the server confirmed the crawler as the target");
+                $"{killStep}: the server confirmed the crawler as the target of both");
+            partner.AttackTarget();
             client.AttackTarget();
-            Assert.That(client.PumpUntil(() => deaths.Contains(target), FightLimit), Is.True, $"{killStep}: it died");
-            Assert.That(world.IsLocalDead, Is.False, $"{killStep}: the player survived");
+            Assert.That(
+                SocketClients.PumpUntil(() => killers.ContainsKey(target), FightLimit, client, partner),
+                Is.True,
+                $"{killStep}: it died");
+            Assert.That(world.IsLocalDead || partnerWorld.IsLocalDead, Is.False, $"{killStep}: both survived");
             client.AutoAttack.OnWalkRequested();
+            partner.AutoAttack.OnWalkRequested();
             attacks.Remove(target);
-            progress = rules.AddExperience(table, progress, crawler.BaseExperience);
+
+            // Each quest log comes with the tick of the death, the drops just after it.
+            SocketClients.PumpUntil(
+                () => Progress(world) > mine && Progress(partnerWorld) > theirs,
+                QuestLogWait,
+                client,
+                partner);
+            if (Progress(world) > mine && Progress(partnerWorld) > theirs)
+            {
+                shared++;
+            }
 
             Assert.That(
                 client.PumpUntil(() => drops.Count - dropsBefore == crawler.Drops.Count),
                 Is.True,
                 $"{killStep}: every entry of its table dropped");
+            SocketClient looter = killers[target] == partnerWorld.LocalEntity ? partner : client;
             foreach (ItemDropped drop in drops.Skip(dropsBefore).ToList())
             {
-                PickUp(killStep, client, drop);
+                PickUp(killStep, looter, drop);
             }
 
-            if (kill == 1)
-            {
-                Equip(killStep, client, TrainingSword, EquipmentSlot.Weapon);
-                Equip(killStep, client, ClothArmor, EquipmentSlot.Armor);
-            }
-
+            WearWhatIsHeld(killStep, client, TrainingSword, EquipmentSlot.Weapon);
+            WearWhatIsHeld(killStep, client, ClothArmor, EquipmentSlot.Armor);
             DrinkWhenHurt(killStep, client);
+            DrinkWhenHurt(killStep, partner);
         }
 
-        LevelProgress expected = progress;
-        bool isAwarded = client.PumpUntil(() =>
+        Assert.That(shared, Is.Positive, $"{step}: kills counted for both players");
+        Assert.That(
+            (QuestOf(world), QuestOf(partnerWorld)),
+            Is.EqualTo(("Active 5/5", "Active 5/5")),
+            $"{step}: both quests ready");
+        bool isAgreed = client.PumpUntil(() =>
         {
             PlayerSummary summary = SummaryOf(admin, world.LocalEntity);
-            return summary.Level == expected.Level && summary.Experience == expected.Experience;
+            return summary.Level == world.Level && summary.Experience == (long)world.Experience;
         });
-        Assert.That(isAwarded, Is.True, $"{step}: the server holds level {expected.Level} at {expected.Experience}");
+        Assert.That(isAgreed, Is.True, $"{step}: the client shows the level and experience the server holds");
         Assert.That(
-            (world.Level, world.Experience),
-            Is.EqualTo(((ushort)expected.Level, (ulong)expected.Experience)),
-            $"{step}: the client shows its level and experience");
-        Assert.That(
-            world.Inventory.Rows.Count(row => row.Item.Value == TrainingSword),
-            Is.EqualTo(HuntedCrawlers),
-            $"{step}: a sword from every crawler");
+            world.Inventory.Rows.Where(row => row.Slot != EquipmentSlot.None).Select(row => row.Slot),
+            Is.EquivalentTo(new[] { EquipmentSlot.Weapon, EquipmentSlot.Armor }),
+            $"{step}: the player wears a sword and armor");
     }
 
     // Each try walks within a crawler's perception and waits there for it to come; aiming again while it comes would
@@ -402,6 +453,92 @@ public sealed class TownLoopAcceptanceTests
             $"{step}: picked up {drop.Amount} {drop.ItemId}");
     }
 
+    // Each player walks into town, from where the Gate Warden by the east gate is in view, walks up to it, and accepts
+    // its quest (Gameplay Systems §2.2, §6.1): the quest log answers, active, with no kill counted.
+    private static void AcceptTheHunt(string step, SocketClient client)
+    {
+        ClientWorld world = client.World;
+        WalkTo(step, client, TownSpot);
+        Assert.That(
+            client.PumpUntil(() => IsInViewWithServices(world, GateWarden)),
+            Is.True,
+            $"{step}: the Gate Warden in view");
+        RemoteEntity warden = NpcInView(world, GateWarden)!;
+        int windows = client.NpcWindows.Count;
+        client.TalkTo(warden.Entity);
+        Assert.That(client.PumpUntil(() => client.NpcWindows.Count > windows), Is.True, $"{step}: walked up to it");
+        client.Connection.SendAcceptQuest(warden.Entity, new QuestDefinitionId(CrawlerHunt));
+        Assert.That(
+            client.PumpUntil(() => QuestOf(world) == "Active 0/5"),
+            Is.True,
+            $"{step}: accepted; {world.LastRejection}");
+    }
+
+    // The player walks up to the Gate Warden and turns the quest in (Gameplay Systems §2.2): the reward's coins come
+    // with the inventory's revision, its base experience through the award path, a level-up at least, and the quest
+    // log says completed.
+    private static void TurnInTheHunt(
+        string step,
+        ServerContent content,
+        IAdminCommandService admin,
+        SocketClient client)
+    {
+        ClientWorld world = client.World;
+        QuestDefinition quest = content.Quests[new QuestDefinitionId(CrawlerHunt)];
+        ExperienceTableDefinition table =
+            content.ExperienceTables[content.Jobs[new JobDefinitionId(Adventurer)].ExperienceTable];
+        Assert.That(
+            client.PumpUntil(() => IsInViewWithServices(world, GateWarden)),
+            Is.True,
+            $"{step}: the Gate Warden in view");
+        RemoteEntity warden = NpcInView(world, GateWarden)!;
+        int windows = client.NpcWindows.Count;
+        client.TalkTo(warden.Entity);
+        Assert.That(client.PumpUntil(() => client.NpcWindows.Count > windows), Is.True, $"{step}: walked up to it");
+        uint coins = world.Inventory.Coins;
+        ushort level = world.Level;
+        LevelProgress expected = new RenewalProgressionRules().AddExperience(
+            table,
+            new LevelProgress(world.Level, (long)world.Experience),
+            quest.BaseExperience);
+
+        client.Connection.SendCompleteQuest(warden.Entity, quest.Id);
+        Assert.That(
+            client.PumpUntil(() =>
+                QuestOf(world) == "Completed 5/5" && world.Inventory.Coins == coins + quest.Currency),
+            Is.True,
+            $"{step}: completed and paid; {world.LastRejection}");
+        Assert.That(
+            client.PumpUntil(() => world.Level == expected.Level && (long)world.Experience == expected.Experience),
+            Is.True,
+            $"{step}: level {expected.Level} at {expected.Experience}, shown {world.Level} at {world.Experience}");
+        Assert.That(world.Level, Is.GreaterThan(level), $"{step}: the reward brought a level-up");
+        bool isAgreed = client.PumpUntil(() =>
+        {
+            PlayerSummary summary = SummaryOf(admin, world.LocalEntity);
+            return summary.Level == expected.Level && summary.Coins == world.Inventory.Coins;
+        });
+        Assert.That(isAgreed, Is.True, $"{step}: the server holds the same level and coins");
+    }
+
+    // The player walks into the field's portal and follows its character back to the ground, where it arrives by the
+    // Gate Warden.
+    private static void CrossBack(string step, ServerContent content, SocketClient client)
+    {
+        MapPortal portal = content.Maps[new MapDefinitionId(TrainingField)].Portals.Single();
+        Assert.That(
+            client.Controller.TryMoveTo(
+                client.World.Predictor.Position,
+                new WorldPosition(portal.Center.X + 0.3f, 0f, portal.Center.Z)),
+            Is.True,
+            $"{step}: a way into the portal");
+        Assert.That(
+            client.PumpUntil(() => client.Connection.World?.Map == new MapDefinitionId(TrainingGround)
+                && client.Connection.World.Inventory.IsCurrent),
+            Is.True,
+            $"{step}: back on the ground");
+    }
+
     // Back in town the player walks up to the Quartermaster and sells what the hunt brought back but the potions and
     // what it wears, then buys a new training sword and cloth armor and wears them (Gameplay Systems §11.3). Each
     // trade answers with the coins, one operation at a time.
@@ -409,11 +546,17 @@ public sealed class TownLoopAcceptanceTests
     {
         const string step = "trade";
         ClientWorld world = client.World;
+        WalkTo(step, client, TownSpot);
+        Assert.That(
+            client.PumpUntil(() => IsInViewWithServices(world, Quartermaster)),
+            Is.True,
+            $"{step}: the Quartermaster in view");
         RemoteEntity quartermaster = NpcInView(world, Quartermaster)!;
         int windows = client.NpcWindows.Count;
         client.TalkTo(quartermaster.Entity);
         Assert.That(client.PumpUntil(() => client.NpcWindows.Count > windows), Is.True, $"{step}: walked up to it");
 
+        uint start = world.Inventory.Coins;
         uint earned = 0;
         foreach (InventoryEntry row in world.Inventory.Rows
                      .Where(row => row.Slot == EquipmentSlot.None && row.Item.Value != MinorHealth)
@@ -436,7 +579,10 @@ public sealed class TownLoopAcceptanceTests
         EquipRow(step, client, sword, EquipmentSlot.Weapon);
         EquipRow(step, client, armor, EquipmentSlot.Armor);
 
-        Assert.That(world.Inventory.Coins, Is.EqualTo(earned - 90u), $"{step}: 50 for the sword and 40 for the armor");
+        Assert.That(
+            world.Inventory.Coins,
+            Is.EqualTo(start + earned - 90u),
+            $"{step}: 50 for the sword and 40 for the armor");
         bool isAgreed = client.PumpUntil(() => SummaryOf(admin, world.LocalEntity).Coins == world.Inventory.Coins);
         Assert.That(isAgreed, Is.True, $"{step}: the server holds the same coins");
     }
@@ -469,9 +615,16 @@ public sealed class TownLoopAcceptanceTests
             $"{step}: row {row} worn");
     }
 
-    private static void Equip(string step, SocketClient client, string item, EquipmentSlot slot)
+    // Wears the first row of the item the player holds while the slot is empty.
+    private static void WearWhatIsHeld(string step, SocketClient client, string item, EquipmentSlot slot)
     {
         ClientWorld world = client.World;
+        if (world.Inventory.Rows.Any(entry => entry.Slot == slot)
+            || world.Inventory.Rows.All(entry => entry.Item.Value != item))
+        {
+            return;
+        }
+
         long row = world.Inventory.Rows.First(entry => entry.Item.Value == item).InventoryItem;
         client.Connection.SendEquip(row);
         Assert.That(
@@ -612,6 +765,21 @@ public sealed class TownLoopAcceptanceTests
             $"{step}: no NPC in a snapshot");
     }
 
+    // The crawler hunt as the quest log last showed it: "Active 3/5", "Completed 5/5", or empty before accepting.
+    private static string QuestOf(ClientWorld world)
+    {
+        return world.Quests
+            .Where(entry => entry.Quest.Value == CrawlerHunt)
+            .Select(entry => $"{entry.State} {entry.Progress}/{entry.Count}")
+            .SingleOrDefault() ?? string.Empty;
+    }
+
+    private static int Progress(ClientWorld world)
+    {
+        return world.Quests.Where(entry => entry.Quest.Value == CrawlerHunt).Select(entry => (int)entry.Progress)
+            .SingleOrDefault();
+    }
+
     private static bool IsCrawler(ClientWorld world, EntityId entity)
     {
         return world.Remotes.TryGetValue(entity, out RemoteEntity? remote) && remote.DefinitionId == ForestCrawler;
@@ -661,15 +829,15 @@ public sealed class TownLoopAcceptanceTests
         Assert.That(client.Connection.UnexpectedMessages, Is.Zero, $"{step}: no unexpected message");
     }
 
-    // Every sale and purchase of the loop is one ledger row, and together they account for the coins the character
-    // holds (Persistence §5).
+    // Every sale, purchase, and quest reward of the loop is one ledger row, and together they account for the coins the
+    // character holds (Persistence §5).
     private void AssertTheTradesInTheLedger(Stopped stopped)
     {
         using var connection = new NpgsqlConnection(m_database.ConnectionString);
         connection.Open();
         using var command = new NpgsqlCommand(
             "SELECT operation_type, currency_delta FROM economy_ledger "
-            + "WHERE actor_character_id = @character AND operation_type IN ('buy', 'sell') ORDER BY id",
+            + "WHERE actor_character_id = @character AND operation_type IN ('buy', 'sell', 'quest_reward') ORDER BY id",
             connection);
         command.Parameters.AddWithValue("character", stopped.Summary.Character.Value);
         var trades = new List<(string Type, long Coins)>();
@@ -683,6 +851,10 @@ public sealed class TownLoopAcceptanceTests
 
         Assert.That(trades.Count(trade => trade.Type == "buy"), Is.EqualTo(2), "ledger: the sword and the armor");
         Assert.That(trades.Where(trade => trade.Type == "sell").Select(trade => trade.Coins), Is.All.Positive);
+        Assert.That(
+            trades.Where(trade => trade.Type == "quest_reward").Select(trade => trade.Coins),
+            Is.EqualTo(new[] { 100L }),
+            "ledger: the quest's reward, once");
         Assert.That(trades.Sum(trade => trade.Coins), Is.EqualTo(stopped.Summary.Coins), "ledger: the coins held");
     }
 

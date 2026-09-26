@@ -259,7 +259,12 @@ public sealed class MapTransferTests
         Assert.That(sent.First(), Is.EqualTo(MessageOpcode.WorldEntered));
         Assert.That(
             sent.SkipWhile(opcode => opcode != MessageOpcode.InventorySnapshot),
-            Is.EqualTo(new[] { MessageOpcode.InventorySnapshot, MessageOpcode.SkillList, MessageOpcode.StatusEffects }),
+            Is.EqualTo(
+                new[]
+                {
+                    MessageOpcode.InventorySnapshot, MessageOpcode.SkillList, MessageOpcode.StatusEffects,
+                    MessageOpcode.QuestLog
+                }),
             "the whole baseline of the new map");
         WorldEntered entered = WorldEnteredOf(server, player).Single();
         Assert.That((entered.Map, entered.MapEpoch), Is.EqualTo((Field, (byte)1)));

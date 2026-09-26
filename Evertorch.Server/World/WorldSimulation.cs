@@ -161,6 +161,16 @@ public sealed class WorldSimulation
             }
         }
 
+        foreach (StoredQuest quest in stored.Quests)
+        {
+            if (!QuestDefinitionId.TryCreate(quest.QuestDefinitionId, out QuestDefinitionId questId)
+                || !m_content.Quests.ContainsKey(questId))
+            {
+                problem = $"quest '{quest.QuestDefinitionId}'";
+                return false;
+            }
+        }
+
         int level = Math.Max(StartingLevel, stored.BaseLevel);
         DerivedStats stats = m_stats.Calculate(job, level, stored.Stats);
         MapDefinition definition = instance.Definition;

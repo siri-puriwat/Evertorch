@@ -103,6 +103,18 @@ public enum InboundEventKind
     ///     <see cref="InboundEvent.InventoryItem" /> to the NPC <see cref="InboundEvent.Target" />, carrying a command
     ///     sequence.
     /// </summary>
-    Sell = 21
+    Sell = 21,
+
+    /// <summary>
+    ///     A request to accept <see cref="InboundEvent.Quest" /> from the NPC <see cref="InboundEvent.Target" />,
+    ///     carrying a command sequence.
+    /// </summary>
+    AcceptQuest = 22,
+
+    /// <summary>
+    ///     A request to turn in <see cref="InboundEvent.Quest" /> to the NPC <see cref="InboundEvent.Target" />,
+    ///     carrying a command sequence.
+    /// </summary>
+    CompleteQuest = 23
 }
 }

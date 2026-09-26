@@ -92,6 +92,22 @@ public sealed class InboundQueueTests
         return payload;
     }
 
+    private static byte[] AcceptQuestPayload()
+    {
+        var message = new AcceptQuest(new EntityId(14), new QuestDefinitionId("quest.a"), 9);
+        byte[] payload = new byte[message.GetEncodedLength()];
+        message.Write(payload);
+        return payload;
+    }
+
+    private static byte[] CompleteQuestPayload()
+    {
+        var message = new CompleteQuest(new EntityId(14), new QuestDefinitionId("quest.a"), 9);
+        byte[] payload = new byte[message.GetEncodedLength()];
+        message.Write(payload);
+        return payload;
+    }
+
     private static byte[] With(byte[] payload, int start, int count, byte value)
     {
         byte[] changed = (byte[])payload.Clone();
@@ -267,7 +283,8 @@ public sealed class InboundQueueTests
 
         foreach (byte[] payload in new[]
                  {
-                     UseSkillPayload(), EquipPayload(), UnequipPayload(), UseItemPayload(), BuyPayload(), SellPayload()
+                     UseSkillPayload(), EquipPayload(), UnequipPayload(), UseItemPayload(), BuyPayload(), SellPayload(),
+                     AcceptQuestPayload(), CompleteQuestPayload()
                  })
         {
             queue.OnPayload(Peer, ProtocolChannel.Control, payload);
@@ -286,7 +303,8 @@ public sealed class InboundQueueTests
                 new[]
                 {
                     InboundEventKind.UseSkill, InboundEventKind.Equip, InboundEventKind.Unequip,
-                    InboundEventKind.UseItem, InboundEventKind.Buy, InboundEventKind.Sell
+                    InboundEventKind.UseItem, InboundEventKind.Buy, InboundEventKind.Sell, InboundEventKind.AcceptQuest,
+                    InboundEventKind.CompleteQuest
                 }));
         Assert.That(UseSkillPayload().Skip(4).Take(12), Is.EqualTo(Encoding.ASCII.GetBytes("skill.strike")));
     }

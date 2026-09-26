@@ -97,6 +97,12 @@ public sealed class ClientSession
     public bool NeedsStatusEffects { get; set; }
 
     /// <summary>
+    ///     The owner is to hear of its character's quests in this tick's finalize phase: it entered or attached, or a
+    ///     quest was accepted, advanced, or completed.
+    /// </summary>
+    public bool NeedsQuestLog { get; set; }
+
+    /// <summary>
     ///     This connection's map changes, counted from 0 and wrapping; <c>WorldEntered</c> carries it, and movement input
     ///     made for another epoch is dropped (Network Protocol §10).
     /// </summary>

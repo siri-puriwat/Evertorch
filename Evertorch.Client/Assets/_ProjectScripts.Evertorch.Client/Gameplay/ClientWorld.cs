@@ -132,6 +132,11 @@ public sealed class ClientWorld
     public IReadOnlyList<StatusEffectEntry> StatusEffects { get; private set; } = Array.Empty<StatusEffectEntry>();
 
     /// <summary>
+    ///     The local character's quests as the server last listed them, active and completed, ordered by quest ID.
+    /// </summary>
+    public IReadOnlyList<QuestLogEntry> Quests { get; private set; } = Array.Empty<QuestLogEntry>();
+
+    /// <summary>
     ///     The estimated server time, in seconds, when the status effects arrived; their times count down from then.
     /// </summary>
     public double StatusEffectsReceivedAt { get; private set; }
@@ -196,6 +201,11 @@ public sealed class ClientWorld
     public event Action? SkillsChanged;
 
     public event Action? StatusEffectsChanged;
+
+    /// <summary>
+    ///     Raised after each <c>QuestLog</c>: a quest was accepted, advanced, or completed, or a baseline arrived.
+    /// </summary>
+    public event Action? QuestsChanged;
 
     /// <summary>
     ///     The local player's own cast ended before its time: it died, its target died or left, or it cancelled.
@@ -331,6 +341,17 @@ public sealed class ClientWorld
     public bool TryGetNpcServices(EntityId npc, out NpcServices? services)
     {
         return m_npcServices.TryGetValue(npc, out services);
+    }
+
+    public void OnQuestLog(QuestLog log)
+    {
+        if (log == null)
+        {
+            throw new ArgumentNullException(nameof(log));
+        }
+
+        Quests = log.Entries;
+        QuestsChanged?.Invoke();
     }
 
     public void OnStatusEffects(StatusEffects effects)

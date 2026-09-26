@@ -80,7 +80,9 @@ public sealed class DatabaseStartupCheck : IHostedService
         {
             bool isKnown = (JobDefinitionId.TryCreate(id, out JobDefinitionId job) && m_content.Jobs.ContainsKey(job))
                 || (MapDefinitionId.TryCreate(id, out MapDefinitionId map) && m_content.Maps.ContainsKey(map))
-                || (ItemDefinitionId.TryCreate(id, out ItemDefinitionId item) && m_content.Items.ContainsKey(item));
+                || (ItemDefinitionId.TryCreate(id, out ItemDefinitionId item) && m_content.Items.ContainsKey(item))
+                || (QuestDefinitionId.TryCreate(id, out QuestDefinitionId quest)
+                    && m_content.Quests.ContainsKey(quest));
             if (!isKnown)
             {
                 unknown.Add(id);

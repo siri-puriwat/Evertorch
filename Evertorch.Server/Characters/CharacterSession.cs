@@ -5,8 +5,8 @@ namespace Evertorch.Server
 {
 /// <summary>
 ///     One character in the world, and everything about it that outlives a single connection (Network Protocol §3,
-///     Persistence §7): its entity, its account, its inventory, its command sequence, and its checkpoint schedule. At
-///     most one exists per character.
+///     Persistence §7): its entity, its account, its inventory, its quests, its command sequence, and its checkpoint
+///     schedule. At most one exists per character.
 /// </summary>
 public sealed class CharacterSession
 {
@@ -15,13 +15,15 @@ public sealed class CharacterSession
         AccountId account,
         PlayerEntity player,
         MapInstance map,
-        CharacterInventory inventory)
+        CharacterInventory inventory,
+        CharacterQuests? quests = null)
     {
         Character = character;
         Account = account;
         Player = player;
         Map = map;
         Inventory = inventory;
+        Quests = quests ?? new CharacterQuests();
     }
 
     public CharacterId Character { get; }
@@ -46,6 +48,8 @@ public sealed class CharacterSession
     public uint? ArrivedThroughPortalTick { get; set; }
 
     public CharacterInventory Inventory { get; }
+
+    public CharacterQuests Quests { get; }
 
     /// <summary>
     ///     The connection controlling the character, or null while none does.

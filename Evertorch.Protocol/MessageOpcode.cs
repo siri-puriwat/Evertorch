@@ -25,6 +25,8 @@ public enum MessageOpcode : ushort
     UseItem = 0x0012,
     BuyItem = 0x0013,
     SellItem = 0x0014,
+    AcceptQuest = 0x0015,
+    CompleteQuest = 0x0016,
     ServerHello = 0x8001,
     WorldEntered = 0x8003,
     EntitySpawn = 0x8004,
@@ -50,6 +52,7 @@ public enum MessageOpcode : ushort
     CharacterProgress = 0x801A,
     SkillList = 0x801B,
     StatusEffects = 0x801C,
-    NpcServices = 0x801D
+    NpcServices = 0x801D,
+    QuestLog = 0x801E
 }
 }

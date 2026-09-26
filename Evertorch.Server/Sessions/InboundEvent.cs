@@ -23,7 +23,8 @@ public readonly struct InboundEvent
         long inventoryItem = 0,
         EquipmentSlot slot = EquipmentSlot.None,
         ItemDefinitionId item = default,
-        uint quantity = 0)
+        uint quantity = 0,
+        QuestDefinitionId quest = default)
     {
         Kind = kind;
         Connection = connection;
@@ -40,6 +41,7 @@ public readonly struct InboundEvent
         Slot = slot;
         Item = item;
         Quantity = quantity;
+        Quest = quest;
     }
 
     public InboundEventKind Kind { get; }
@@ -93,6 +95,11 @@ public readonly struct InboundEvent
     ///     For <see cref="InboundEventKind.Buy" /> and <see cref="InboundEventKind.Sell" />, how many.
     /// </summary>
     public uint Quantity { get; }
+
+    /// <summary>
+    ///     For <see cref="InboundEventKind.AcceptQuest" /> and <see cref="InboundEventKind.CompleteQuest" />, the quest.
+    /// </summary>
+    public QuestDefinitionId Quest { get; }
 
     public static InboundEvent Connected(ConnectionId connection)
     {
@@ -226,6 +233,40 @@ public readonly struct InboundEvent
             commandSequence,
             inventoryItem: inventoryItem,
             quantity: quantity);
+    }
+
+    public static InboundEvent ForAcceptQuest(
+        ConnectionId connection,
+        EntityId npc,
+        QuestDefinitionId quest,
+        uint commandSequence)
+    {
+        return new InboundEvent(
+            InboundEventKind.AcceptQuest,
+            connection,
+            null,
+            default,
+            default,
+            npc,
+            commandSequence,
+            quest: quest);
+    }
+
+    public static InboundEvent ForCompleteQuest(
+        ConnectionId connection,
+        EntityId npc,
+        QuestDefinitionId quest,
+        uint commandSequence)
+    {
+        return new InboundEvent(
+            InboundEventKind.CompleteQuest,
+            connection,
+            null,
+            default,
+            default,
+            npc,
+            commandSequence,
+            quest: quest);
     }
 
     public static InboundEvent ForUnequip(ConnectionId connection, EquipmentSlot slot, uint commandSequence)

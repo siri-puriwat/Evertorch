@@ -42,6 +42,11 @@ internal static class WireEnums
         return value >= SkillOutcome.Hit && value <= SkillOutcome.Applied;
     }
 
+    public static bool IsDefined(QuestState value)
+    {
+        return value == QuestState.Active || value == QuestState.Completed;
+    }
+
     public static bool IsDefined(EntityStateFlags value)
     {
         return (value & ~KnownStateFlags) == 0;

@@ -299,6 +299,8 @@ public sealed class CombatSystem : ITickPhase
 
         if (entity is MonsterEntity monster)
         {
+            // Before the award, which returns early for a monster that gives no experience (Gameplay Systems §2.2).
+            m_progression.CreditQuests(map, monster);
             m_progression.AwardKill(map, monster);
             CharacterId killer = source is PlayerEntity player ? player.Character : default;
             m_drops.DropLoot(map, monster, killer, tick);

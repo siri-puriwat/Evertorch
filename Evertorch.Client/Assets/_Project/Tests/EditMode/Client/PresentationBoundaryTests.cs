@@ -22,7 +22,7 @@ public sealed class PresentationBoundaryTests
         + @"|\.ActionLock\b"
         + @"|\.On(Spawn|Despawn|Snapshot|TargetChanged|AttackStarted|Damage|EntityDied|EntityRevived|CommandRejected"
         + @"|ItemDropped|ItemPickedUp|CharacterHealth|CharacterProgress|SkillCastStarted|SkillResolved|SkillList"
-        + @"|StatusEffects|NpcServices|LocalCancel|Changed)\("
+        + @"|StatusEffects|NpcServices|QuestLog|LocalCancel|Changed)\("
         + @"|\.(Advance|CollectTargetCandidates|CollectDropCandidates|CollectNpcCandidates)\("
         + @"|\.(HealthPermille|StateFlags|CurrentHealth|Target|LastRejection|LocalHealth|LocalMaximumHealth|IsDead"
         + @"|LocalSpirit|LocalMaximumSpirit|Level|Experience|ExperienceToNextLevel)\s*=(?![=>])");
@@ -44,7 +44,7 @@ public sealed class PresentationBoundaryTests
         + @"|[Pp]redictor\??\.Apply\(|\.Buffer\.(Add|Clear)\("
         + @"|\.On(Spawn|Despawn|Snapshot|TargetChanged|AttackStarted|Damage|EntityDied|EntityRevived|CommandRejected"
         + @"|ItemDropped|ItemPickedUp|CharacterHealth|CharacterProgress|SkillCastStarted|SkillResolved|SkillList"
-        + @"|StatusEffects|NpcServices|LocalCancel|Changed)\("
+        + @"|StatusEffects|NpcServices|QuestLog|LocalCancel|Changed)\("
         + @"|\.(Advance|CollectTargetCandidates|CollectDropCandidates|CollectNpcCandidates)\("
         + @"|\.(Target|LastRejection|LocalHealth|LocalMaximumHealth|HealthPermille|StateFlags|CurrentHealth|IsLocked"
         + @"|IsDead|LocalSpirit|LocalMaximumSpirit|Level|Experience|ExperienceToNextLevel)\s*=(?![=>])");
@@ -96,7 +96,7 @@ public sealed class PresentationBoundaryTests
             "m_world.OnCommandRejected(rejected);", "m_world.Advance(0.05f);",
             "var pickup = new PickupState(world, controller, sink);", "world.Level =", "m_world.Target = entity;",
             "var talk = new TalkState(world, controller);", "m_world.OnNpcServices(services);",
-            "m_world.CollectNpcCandidates(candidates);", "m_client.BuyFrom(npc, item, 1);",
+            "m_world.CollectNpcCandidates(candidates);", "m_client.BuyFrom(npc, item, 1);", "m_world.OnQuestLog(log);",
             "client.SellTo(npc, row.InventoryItem, 2);"
         };
         string[] allowed =
@@ -132,7 +132,8 @@ public sealed class PresentationBoundaryTests
             "IItemCommandSink items = client;", "ISkillCommandSink skills = client;",
             "var talk = new TalkState(world, controller);", "TalkState? talk = m_client.Talk;",
             "world.OnNpcServices(services);", "world.CollectNpcCandidates(candidates);",
-            "var buy = new BuyItem(npc, item, 1, 6);", "var sell = new SellItem(npc, row, 1, 7);"
+            "var buy = new BuyItem(npc, item, 1, 6);", "var sell = new SellItem(npc, row, 1, 7);",
+            "world.OnQuestLog(log);"
         };
         string[] allowed =
         {
@@ -150,7 +151,8 @@ public sealed class PresentationBoundaryTests
             "AddButton(text, () => client.BuyFrom(npc, item, 1));",
             "GameObject one = CreateButton(text, line.transform, () => client.SellTo(npc, inventoryItem, 1));",
             "world.Inventory.ChangeApplied += OnChangeApplied;",
-            "NpcServices? shop = world.TryGetNpcServices(Npc, out NpcServices? services)"
+            "NpcServices? shop = world.TryGetNpcServices(Npc, out NpcServices? services)",
+            "world.QuestsChanged += OnQuestsChanged;"
         };
         string[] lockProbes = { "world.ActionLock.LockForSwing(4);", "bool held = m_world.ActionLock.IsCastLocked;" };
 

@@ -89,6 +89,7 @@ public sealed class ServerInstruments
     private readonly Counter<long> m_acquisitions;
     private readonly Counter<long> m_retreats;
     private readonly Counter<long> m_coins;
+    private readonly Counter<long> m_quests;
 
     public ServerInstruments(IMeterFactory meters)
     {
@@ -173,6 +174,10 @@ public sealed class ServerInstruments
             "evertorch.economy.coins",
             "{coin}",
             "Coins characters spent or earned in committed operations, by operation.");
+        m_quests = Meter.CreateCounter<long>(
+            "evertorch.quests",
+            "{quest}",
+            "Quests accepted or completed, by change.");
     }
 
     public Meter Meter { get; }
@@ -272,6 +277,12 @@ public sealed class ServerInstruments
     public void RecordCoins(string operation, long coins)
     {
         m_coins.Add(coins, new KeyValuePair<string, object?>("operation", operation));
+    }
+
+    /// <param name="change">What happened to the quest: <c>accepted</c> or <c>completed</c>.</param>
+    public void RecordQuest(string change)
+    {
+        m_quests.Add(1, new KeyValuePair<string, object?>("change", change));
     }
 
     public void RecordStatusEffects(StatusEffectChange change, int count)

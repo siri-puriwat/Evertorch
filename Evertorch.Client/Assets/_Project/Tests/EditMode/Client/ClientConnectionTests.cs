@@ -631,6 +631,27 @@ public sealed class ClientConnectionTests
     }
 
     [Test]
+    public void QuestLog_InTheWorld_ReachesTheWorld_AndAMalformedOneIsCounted()
+    {
+        var harness = new Harness();
+        harness.EnterWorld();
+        int changes = 0;
+        harness.Connection.World!.QuestsChanged += () => changes++;
+        var log = new QuestLog(
+            new[] { new QuestLogEntry(new QuestDefinitionId("quest.a"), QuestState.Active, 3, 5) });
+
+        harness.Deliver(ProtocolChannel.Control, Encode(log.GetEncodedLength(), log.Write));
+        harness.Deliver(ProtocolChannel.Control, new byte[] { 0x1E, 0x80, 0x01 });
+
+        QuestLogEntry entry = harness.Connection.World.Quests.Single();
+        Assert.That(
+            (entry.Quest.Value, entry.State, entry.Progress, entry.Count),
+            Is.EqualTo(("quest.a", QuestState.Active, (ushort)3, (ushort)5)));
+        Assert.That(changes, Is.EqualTo(1));
+        Assert.That(harness.Connection.MalformedMessages, Is.EqualTo(1), "a log that ends before its entry");
+    }
+
+    [Test]
     public void SelectionRequests_OutsideSelection_SendNothing()
     {
         var harness = new Harness();
@@ -642,6 +663,36 @@ public sealed class ClientConnectionTests
 
         Assert.That(new[] { isCreated, isEntered }, Is.All.False);
         Assert.That(harness.Transport.Sent.Count, Is.EqualTo(before));
+    }
+
+    [Test]
+    public void SendAcceptAndCompleteQuest_InTheWorld_ShareTheCommandSequence_AndOutsideSendNothing()
+    {
+        var outside = new Harness();
+        outside.ConnectAndReceiveHello();
+        int before = outside.Transport.Sent.Count;
+        var harness = new Harness();
+        harness.EnterWorld(4);
+        var npc = new EntityId(14);
+        var quest = new QuestDefinitionId("quest.a");
+
+        uint[] none =
+        {
+            outside.Connection.SendAcceptQuest(npc, quest),
+            outside.Connection.SendCompleteQuest(npc, quest)
+        };
+        uint acceptSequence = harness.Connection.SendAcceptQuest(npc, quest);
+        FakeClientTransport.SentMessage acceptSent = harness.Transport.Sent.Last();
+        uint completeSequence = harness.Connection.SendCompleteQuest(npc, quest);
+        FakeClientTransport.SentMessage completeSent = harness.Transport.Sent.Last();
+
+        Assert.That((none[0], none[1], outside.Transport.Sent.Count), Is.EqualTo((0u, 0u, before)));
+        Assert.That((acceptSequence, completeSequence), Is.EqualTo((5u, 6u)));
+        Assert.That(AcceptQuest.TryRead(acceptSent.Payload, out AcceptQuest? accept), Is.True);
+        Assert.That((accept!.Npc, accept.Quest, accept.CommandSequence), Is.EqualTo((npc, quest, 5u)));
+        Assert.That(CompleteQuest.TryRead(completeSent.Payload, out CompleteQuest? complete), Is.True);
+        Assert.That((complete!.Npc, complete.Quest, complete.CommandSequence), Is.EqualTo((npc, quest, 6u)));
+        Assert.That(new[] { acceptSent.Channel, completeSent.Channel }, Is.All.EqualTo(ProtocolChannel.Control));
     }
 
     [Test]

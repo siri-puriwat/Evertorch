@@ -10,7 +10,8 @@ namespace Evertorch.Server
 ///     Sends each owner the state of its own character that no other message carries (Network Protocol §9): the skill
 ///     list, with what is left of each cooldown, after the inventory in every baseline and whenever one of its casts
 ///     resolves; then its status effects, with what is left of each, in every baseline and whenever one starts, is
-///     renewed, or ends. Registered after <see cref="InventorySyncPhase" /> in the same phase.
+///     renewed, or ends; and last its quests, in every baseline and whenever one is accepted, advances, or is
+///     completed. Registered after <see cref="InventorySyncPhase" /> in the same phase.
 /// </summary>
 public sealed class CharacterSyncPhase : ITickPhase
 {
@@ -22,6 +23,7 @@ public sealed class CharacterSyncPhase : ITickPhase
     private readonly int m_tickRate;
     private readonly List<SkillListEntry> m_entries = new();
     private readonly List<StatusEffectEntry> m_effects = new();
+    private readonly List<QuestLogEntry> m_quests = new();
 
     public CharacterSyncPhase(
         SessionRegistry sessions,
@@ -58,7 +60,31 @@ public sealed class CharacterSyncPhase : ITickPhase
                 session.NeedsStatusEffects = false;
                 m_sender.Send(session.Connection, CreateStatusEffects(session.Player, now));
             }
+
+            if (session.NeedsQuestLog && session.Character != null)
+            {
+                session.NeedsQuestLog = false;
+                m_sender.Send(session.Connection, CreateQuestLog(session.Character.Quests));
+            }
         }
+    }
+
+    // A completed quest shows its count as its progress.
+    private QuestLog CreateQuestLog(CharacterQuests quests)
+    {
+        m_quests.Clear();
+        foreach (CharacterQuest quest in quests.Entries)
+        {
+            int count = m_content.Quests[quest.Quest].Count;
+            m_quests.Add(
+                new QuestLogEntry(
+                    quest.Quest,
+                    quest.IsCompleted ? QuestState.Completed : QuestState.Active,
+                    (ushort)(quest.IsCompleted ? count : Math.Min(quest.Progress, count)),
+                    (ushort)count));
+        }
+
+        return new QuestLog(m_quests.ToArray());
     }
 
     private StatusEffects CreateStatusEffects(PlayerEntity player, long now)

@@ -432,6 +432,35 @@ public sealed class ServerInstrumentsTests
     }
 
     [Test]
+    public void Quests_AreCountedByChange_AndATurnInsCoinsAsAQuestReward()
+    {
+        var server = new TestServer(withNpcs: true);
+        using var recorder = new MeterRecorder(server.Instruments.Meter);
+        ConnectionId player = server.Connect();
+        server.SignInWithCharacter(player, 1);
+        server.SendEnterWorld(player, 1);
+        server.TickUntil(() => server.SessionOf(player).State == SessionState.InWorld);
+        NpcEntity warden = server.NpcOf("npc.gate_warden");
+        server.Place(player, warden.Position.X + 2f, warden.Position.Z);
+        server.Tick(2);
+
+        server.SendAcceptQuest(player, warden.Id, "quest.crawler_hunt", 1);
+        server.Tick(2);
+        server.SessionOf(player).Character!.Quests.Entries.Single().Progress = 5;
+        server.SendCompleteQuest(player, warden.Id, "quest.crawler_hunt", 2);
+        server.Tick(3);
+
+        Assert.That(
+            Named(recorder, "evertorch.quests")
+                .Select(measurement => (measurement.Value, measurement.Tags.Single().Value)),
+            Is.EqualTo(new[] { (1d, "accepted"), (1d, (object?)"completed") }));
+        Assert.That(
+            Named(recorder, "evertorch.economy.coins")
+                .Select(measurement => (measurement.Value, measurement.Tags.Single().Value)),
+            Is.EqualTo(new[] { (100d, (object?)"quest reward") }));
+    }
+
+    [Test]
     public void Retreats_AreCountedByMonster_OncePerWalk()
     {
         var server = new TestServer(withEveryMap: true, withMonsters: true);

@@ -4,20 +4,38 @@ using Evertorch.Game;
 using Evertorch.Protocol;
 using Evertorch.Rules;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace Evertorch.Server
 {
 /// <summary>
 ///     Shares a dead monster's experience among the characters that damaged it and levels them up (Gameplay Systems
-///     §2.1). Tick thread only.
+///     §2.1), and keeps their quests: acceptance, the kills that count, and the reward once a turn-in has committed
+///     (Gameplay Systems §2.2). Tick thread only.
 /// </summary>
 public sealed class CharacterProgression
 {
+    private const string QuestAccepted = "accepted";
+    private const string QuestCompleted = "completed";
+
     private static readonly Action<ILogger, long, long, int, int, Exception?> LogLeveledUp =
         LoggerMessage.Define<long, long, int, int>(
             LogLevel.Information,
             new EventId(1006, "CharacterLeveledUp"),
             "Character {Character} on connection {Connection} reached level {Level} from level {PreviousLevel}.");
+
+    private static readonly Action<ILogger, long, long, string, Exception?> LogQuestAccepted =
+        LoggerMessage.Define<long, long, string>(
+            LogLevel.Information,
+            new EventId(1009, "QuestAccepted"),
+            "Character {Character} on connection {Connection} accepted {Quest}.");
+
+    private static readonly Action<ILogger, long, long, string, long, long, Guid, Exception?> LogQuestCompleted =
+        LoggerMessage.Define<long, long, string, long, long, Guid>(
+            LogLevel.Information,
+            new EventId(1010, "QuestCompleted"),
+            "Character {Character} on connection {Connection} completed {Quest} for {Experience} base experience and "
+            + "{Coins} coins (operation {OperationId}).");
 
     private readonly SessionRegistry m_sessions;
     private readonly CharacterLifetime m_lifetime;
@@ -27,6 +45,7 @@ public sealed class CharacterProgression
     private readonly MessageSender m_sender;
     private readonly ServerInstruments m_instruments;
     private readonly ILogger<CharacterProgression> m_logger;
+    private readonly float m_npcReach;
 
     public CharacterProgression(
         SessionRegistry sessions,
@@ -36,6 +55,7 @@ public sealed class CharacterProgression
         ServerContent content,
         MessageSender sender,
         ServerInstruments instruments,
+        IOptions<WorldOptions> world,
         ILogger<CharacterProgression> logger)
     {
         m_sessions = sessions;
@@ -46,6 +66,7 @@ public sealed class CharacterProgression
         m_sender = sender;
         m_instruments = instruments;
         m_logger = logger;
+        m_npcReach = NpcInteraction.Range + world.Value.AttackRangeTolerance;
     }
 
     /// <summary>
@@ -57,9 +78,17 @@ public sealed class CharacterProgression
     }
 
     /// <summary>
+    ///     The level and experience <paramref name="player" /> would reach with <paramref name="experience" /> more, as
+    ///     an award would leave them.
+    /// </summary>
+    public LevelProgress WithExperience(PlayerEntity player, long experience)
+    {
+        return m_rules.AddExperience(TableOf(player), new LevelProgress(player.Level, player.Experience), experience);
+    }
+
+    /// <summary>
     ///     Awards <paramref name="monster" />'s base experience, which has just died on <paramref name="map" />: each
-    ///     character in its damage log that is alive on the map, not logging out, and not expelled gets its share of
-    ///     the whole log. A character in its reconnect grace period is still on the map and shares.
+    ///     character in its damage log that may share it gets its share of the whole log.
     /// </summary>
     public void AwardKill(MapInstance map, MonsterEntity monster)
     {
@@ -78,16 +107,131 @@ public sealed class CharacterProgression
 
         foreach (DamageLogEntry entry in log)
         {
-            if (m_sessions.TryGetCharacter(entry.Character, out CharacterSession? character)
-                && character != null
-                && character.Map == map
-                && !character.Player.IsDead
-                && !character.IsLoggingOut
-                && !character.IsExpelled)
+            if (TryGetSharer(entry.Character, map, out CharacterSession? character))
             {
-                Award(character, m_rules.ShareExperience(baseExperience, entry.Damage, total));
+                Award(character!, m_rules.ShareExperience(baseExperience, entry.Damage, total));
             }
         }
+    }
+
+    /// <summary>
+    ///     Counts <paramref name="monster" />'s death, which has just happened on <paramref name="map" />, for every
+    ///     character in its damage log that may share its experience, whether or not it gives any (Gameplay Systems
+    ///     §2.2): each of its active quests after this monster gains one, up to the count. Reaching the count queues a
+    ///     checkpoint, as a level-up does.
+    /// </summary>
+    public void CreditQuests(MapInstance map, MonsterEntity monster)
+    {
+        foreach (DamageLogEntry entry in monster.DamageLog)
+        {
+            if (!TryGetSharer(entry.Character, map, out CharacterSession? character))
+            {
+                continue;
+            }
+
+            bool isAdvanced = false;
+            bool isReady = false;
+            foreach (CharacterQuest quest in character!.Quests.Entries)
+            {
+                QuestDefinition definition = m_content.Quests[quest.Quest];
+                if (quest.IsCompleted
+                    || definition.Monster != monster.Definition.Id
+                    || quest.Progress >= definition.Count)
+                {
+                    continue;
+                }
+
+                quest.Progress++;
+                isAdvanced = true;
+                isReady |= quest.Progress == definition.Count;
+            }
+
+            if (isAdvanced && character.Connection != null)
+            {
+                character.Connection.NeedsQuestLog = true;
+            }
+
+            if (isReady)
+            {
+                m_lifetime.QueueCheckpoint(character);
+            }
+        }
+    }
+
+    /// <summary>
+    ///     Checks an acceptance (Gameplay Systems §2.2, after the checks of §6.1) and, when it passes, adds the quest
+    ///     active with no progress and queues a checkpoint. The caller has already refused a dead or leaving character.
+    /// </summary>
+    public CommandRejectionReason TryAcceptQuest(ClientSession session, EntityId npc, QuestDefinitionId quest)
+    {
+        CharacterSession character = session.Character!;
+        CommandRejectionReason reach = NpcReach.Check(session, npc, m_npcReach, out NpcEntity? giver);
+        if (reach != CommandRejectionReason.None)
+        {
+            return reach;
+        }
+
+        if (!m_content.Quests.TryGetValue(quest, out QuestDefinition? definition)
+            || definition!.Giver != giver!.Definition.Id)
+        {
+            return CommandRejectionReason.InvalidTarget;
+        }
+
+        // Taken once per character: active or completed, it cannot be accepted again.
+        if (character.Quests.TryGet(quest, out CharacterQuest? _))
+        {
+            return CommandRejectionReason.NotAllowedNow;
+        }
+
+        character.Quests.Accept(quest);
+        m_lifetime.QueueCheckpoint(character);
+        session.NeedsQuestLog = true;
+        LogQuestAccepted(m_logger, character.Character.Value, session.Connection.Value, quest.Value, null);
+        m_instruments.RecordQuest(QuestAccepted);
+        return CommandRejectionReason.None;
+    }
+
+    /// <summary>
+    ///     Completes <paramref name="quest" /> once its turn-in has committed and gives the reward's experience through
+    ///     the path a kill's share takes, the surplus carrying through several levels (Gameplay Systems §2.2).
+    /// </summary>
+    public void CompleteQuest(CharacterSession character, QuestDefinitionId quest, Guid operationId)
+    {
+        QuestDefinition definition = m_content.Quests[quest];
+        if (character.Quests.TryGet(quest, out CharacterQuest? entry))
+        {
+            entry!.IsCompleted = true;
+            entry.Progress = definition.Count;
+        }
+
+        Award(character, definition.BaseExperience);
+        if (character.Connection != null)
+        {
+            character.Connection.NeedsQuestLog = true;
+        }
+
+        LogQuestCompleted(
+            m_logger,
+            character.Character.Value,
+            character.Connection?.Connection.Value ?? 0,
+            quest.Value,
+            definition.BaseExperience,
+            definition.Currency,
+            operationId,
+            null);
+        m_instruments.RecordQuest(QuestCompleted);
+    }
+
+    // Alive on the monster's map, not logging out, and not expelled; a character in its reconnect grace period is
+    // still on the map and shares.
+    private bool TryGetSharer(CharacterId id, MapInstance map, out CharacterSession? character)
+    {
+        return m_sessions.TryGetCharacter(id, out character)
+            && character != null
+            && character.Map == map
+            && !character.Player.IsDead
+            && !character.IsLoggingOut
+            && !character.IsExpelled;
     }
 
     private void Award(CharacterSession character, long experience)
@@ -120,11 +264,16 @@ public sealed class CharacterProgression
     {
         PlayerEntity player = character.Player;
 
-        // A level-up restores HP and SP in full, as the reference does.
+        // A level-up restores HP and SP in full, as the reference does, but never revives: a quest's reward can reach
+        // a character that died while its turn-in was in flight.
         player.Level = level;
         m_stats.Recalculate(player, m_content.Jobs[player.Job]);
-        player.CurrentHealth = player.MaxHealth;
-        player.CurrentSpirit = player.MaxSpirit;
+        if (!player.IsDead)
+        {
+            player.CurrentHealth = player.MaxHealth;
+            player.CurrentSpirit = player.MaxSpirit;
+        }
+
         m_instruments.RecordLevelUps(level - previousLevel);
         LogLeveledUp(
             m_logger,

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Evertorch.Game;
@@ -160,6 +161,16 @@ RETURNING id AS ""Id"", status AS ""Status""")
                             .FirstOrDefault()))
                     .ToListAsync(cancellationToken)
                     .ConfigureAwait(false);
+                List<StoredQuest> quests = await context.CharacterQuests
+                    .AsNoTracking()
+                    .Where(quest => quest.CharacterId == characterId)
+                    .OrderBy(quest => quest.QuestDefinitionId)
+                    .Select(quest => new StoredQuest(
+                        quest.QuestDefinitionId,
+                        quest.State == CharacterQuestRow.CompletedState,
+                        quest.Progress))
+                    .ToListAsync(cancellationToken)
+                    .ConfigureAwait(false);
                 return new StoredCharacter(
                     row.Id,
                     account,
@@ -174,7 +185,8 @@ RETURNING id AS ""Id"", status AS ""Status""")
                     new WorldPosition(row.PositionX, row.PositionY, row.PositionZ),
                     (uint)row.InventoryRevision,
                     row.Currency,
-                    items);
+                    items,
+                    quests);
             },
             cancellationToken);
     }
@@ -192,34 +204,63 @@ RETURNING id AS ""Id"", status AS ""Status""")
                 int spirit = checkpoint.Spirit;
                 int level = checkpoint.Level;
                 long experience = checkpoint.Experience;
+                bool isRewardInFlight = checkpoint.IsRewardInFlight;
                 DateTime at = checkpoint.At;
+                await using (IDbContextTransaction transaction =
+                             await context.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false))
+                {
+                    // Level and experience move only forward, compared as a pair, so a checkpoint can never take back
+                    // what a turn-in committed; while a turn-in is in flight they stay as they are, since the ones in
+                    // memory may not hold its reward yet (Persistence §6).
+                    int updated = await context.Characters
+                        .Where(row => row.Id == checkpoint.CharacterId)
+                        .ExecuteUpdateAsync(
+                            update => update
+                                .SetProperty(row => row.MapDefinitionId, map)
+                                .SetProperty(row => row.PositionX, x)
+                                .SetProperty(row => row.PositionY, y)
+                                .SetProperty(row => row.PositionZ, z)
+                                .SetProperty(row => row.Hp, health)
+                                .SetProperty(row => row.Sp, spirit)
+                                .SetProperty(
+                                    row => row.BaseLevel,
+                                    row => !isRewardInFlight
+                                        && (level > row.BaseLevel
+                                            || (level == row.BaseLevel && experience >= row.BaseExp))
+                                            ? level
+                                            : row.BaseLevel)
+                                .SetProperty(
+                                    row => row.BaseExp,
+                                    row => !isRewardInFlight
+                                        && (level > row.BaseLevel
+                                            || (level == row.BaseLevel && experience >= row.BaseExp))
+                                            ? experience
+                                            : row.BaseExp)
+                                .SetProperty(row => row.LastPlayedAt, at)
+                                .SetProperty(row => row.Version, row => row.Version + 1),
+                            cancellationToken)
+                        .ConfigureAwait(false);
 
-                // One statement: level and experience move only forward, compared as a pair, so a checkpoint queued
-                // before a quest reward commits its experience can never take it back (Persistence §6).
-                return await context.Characters
-                    .Where(row => row.Id == checkpoint.CharacterId)
-                    .ExecuteUpdateAsync(
-                        update => update
-                            .SetProperty(row => row.MapDefinitionId, map)
-                            .SetProperty(row => row.PositionX, x)
-                            .SetProperty(row => row.PositionY, y)
-                            .SetProperty(row => row.PositionZ, z)
-                            .SetProperty(row => row.Hp, health)
-                            .SetProperty(row => row.Sp, spirit)
-                            .SetProperty(
-                                row => row.BaseLevel,
-                                row => level > row.BaseLevel || (level == row.BaseLevel && experience >= row.BaseExp)
-                                    ? level
-                                    : row.BaseLevel)
-                            .SetProperty(
-                                row => row.BaseExp,
-                                row => level > row.BaseLevel || (level == row.BaseLevel && experience >= row.BaseExp)
-                                    ? experience
-                                    : row.BaseExp)
-                            .SetProperty(row => row.LastPlayedAt, at)
-                            .SetProperty(row => row.Version, row => row.Version + 1),
-                        cancellationToken)
-                    .ConfigureAwait(false);
+                    // Forward only: an active quest's progress only rises, and a completed quest, which only its
+                    // turn-in writes, is never reopened (Persistence §6).
+                    foreach (StoredQuest quest in checkpoint.Quests)
+                    {
+                        await context.Database
+                            .ExecuteSqlInterpolatedAsync(
+                                $@"INSERT INTO character_quests
+    (character_id, quest_definition_id, state, progress, started_at, completed_at, version)
+VALUES ({checkpoint.CharacterId}, {quest.QuestDefinitionId}, {CharacterQuestRow.ActiveState}, {quest.Progress}, {at},
+    NULL, 0)
+ON CONFLICT (character_id, quest_definition_id) DO UPDATE
+SET progress = EXCLUDED.progress, version = character_quests.version + 1
+WHERE character_quests.state = {CharacterQuestRow.ActiveState} AND character_quests.progress < EXCLUDED.progress",
+                                cancellationToken)
+                            .ConfigureAwait(false);
+                    }
+
+                    await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+                    return updated;
+                }
             },
             cancellationToken);
     }
@@ -687,6 +728,91 @@ RETURNING id AS ""Id"", status AS ""Status""")
             cancellationToken);
     }
 
+    public Task<InventoryResult> CommitQuestRewardAsync(QuestRewardCommit reward, CancellationToken cancellationToken)
+    {
+        return RunAsync(
+            async context =>
+            {
+                await using (IDbContextTransaction transaction =
+                             await context.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false))
+                {
+                    CharacterRow character = await LockCharacterAsync(context, reward.CharacterId, cancellationToken)
+                        .ConfigureAwait(false);
+                    InventoryResult? earlier = await FindAsync(
+                            context,
+                            reward.OperationId,
+                            reward.CharacterId,
+                            Array.Empty<long>(),
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                    if (earlier != null)
+                    {
+                        return earlier;
+                    }
+
+                    CharacterQuestRow? quest = await context.CharacterQuests
+                        .SingleOrDefaultAsync(
+                            row => row.CharacterId == reward.CharacterId
+                                && row.QuestDefinitionId == reward.QuestDefinitionId,
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                    if (quest?.State == CharacterQuestRow.CompletedState
+                        || reward.Progress < reward.Count
+                        || character.Currency > EvertorchDbContext.MaxCurrency - reward.Coins)
+                    {
+                        return Refused(character);
+                    }
+
+                    // An acceptance whose checkpoint was never written left no row; the turn-in adds it.
+                    if (quest == null)
+                    {
+                        quest = new CharacterQuestRow
+                        {
+                            CharacterId = reward.CharacterId,
+                            QuestDefinitionId = reward.QuestDefinitionId,
+                            StartedAt = reward.At
+                        };
+                        context.CharacterQuests.Add(quest);
+                    }
+                    else
+                    {
+                        quest.Version++;
+                    }
+
+                    quest.State = CharacterQuestRow.CompletedState;
+                    quest.Progress = Math.Max(quest.Progress, reward.Count);
+                    quest.CompletedAt = reward.At;
+                    character.Currency += reward.Coins;
+                    if (reward.Level > character.BaseLevel
+                        || (reward.Level == character.BaseLevel && reward.Experience >= character.BaseExp))
+                    {
+                        character.BaseLevel = reward.Level;
+                        character.BaseExp = reward.Experience;
+                    }
+
+                    return await CommitOperationAsync(
+                            context,
+                            transaction,
+                            character,
+                            new LedgerRow
+                            {
+                                OperationId = reward.OperationId,
+                                ActorCharacterId = reward.CharacterId,
+                                OperationType = LedgerRow.QuestRewardOperation,
+                                CurrencyDelta = reward.Coins,
+                                MetadataJson = JsonSerializer.Serialize(
+                                    new Dictionary<string, string> { ["quest"] = reward.QuestDefinitionId }),
+                                CreatedAt = reward.At
+                            },
+                            Array.Empty<long>(),
+                            Array.Empty<long>(),
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                }
+            },
+            cancellationToken);
+    }
+
     public Task<InventoryResult?> FindOperationAsync(
         Guid operationId,
         long characterId,
@@ -727,7 +853,9 @@ RETURNING id AS ""Id"", status AS ""Status""")
                     .ToListAsync(cancellationToken).ConfigureAwait(false);
                 List<string> items = await context.InventoryItems.Select(row => row.ItemDefinitionId).Distinct()
                     .ToListAsync(cancellationToken).ConfigureAwait(false);
-                return (IReadOnlyList<string>)jobs.Concat(maps).Concat(items).Distinct()
+                List<string> quests = await context.CharacterQuests.Select(row => row.QuestDefinitionId).Distinct()
+                    .ToListAsync(cancellationToken).ConfigureAwait(false);
+                return (IReadOnlyList<string>)jobs.Concat(maps).Concat(items).Concat(quests).Distinct()
                     .OrderBy(id => id, StringComparer.Ordinal)
                     .ToList();
             },

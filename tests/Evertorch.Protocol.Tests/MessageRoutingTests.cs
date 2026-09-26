@@ -33,6 +33,8 @@ public sealed class MessageRoutingTests
     [TestCase(MessageOpcode.UseItem)]
     [TestCase(MessageOpcode.BuyItem)]
     [TestCase(MessageOpcode.SellItem)]
+    [TestCase(MessageOpcode.AcceptQuest)]
+    [TestCase(MessageOpcode.CompleteQuest)]
     [TestCase(MessageOpcode.ServerHello)]
     [TestCase(MessageOpcode.WorldEntered)]
     [TestCase(MessageOpcode.EntitySpawn)]
@@ -50,6 +52,7 @@ public sealed class MessageRoutingTests
     [TestCase(MessageOpcode.SkillList)]
     [TestCase(MessageOpcode.StatusEffects)]
     [TestCase(MessageOpcode.NpcServices)]
+    [TestCase(MessageOpcode.QuestLog)]
     [TestCase(MessageOpcode.EntityRevived)]
     [TestCase(MessageOpcode.DisconnectNotice)]
     [TestCase(MessageOpcode.CharacterList)]
@@ -141,7 +144,8 @@ public sealed class MessageRoutingTests
             "StopMovement=0x0004", "TargetEntity=0x0005", "AttackEntity=0x0006", "CancelAction=0x0007",
             "UseSkill=0x0008", "PickupItem=0x0009", "Respawn=0x000C", "CreateCharacter=0x000D", "Logout=0x000E",
             "InventoryResyncRequest=0x000F", "EquipItem=0x0010", "UnequipItem=0x0011", "UseItem=0x0012",
-            "BuyItem=0x0013", "SellItem=0x0014", "ServerHello=0x8001", "WorldEntered=0x8003",
+            "BuyItem=0x0013", "SellItem=0x0014", "AcceptQuest=0x0015", "CompleteQuest=0x0016",
+            "ServerHello=0x8001", "WorldEntered=0x8003",
             "EntitySpawn=0x8004", "EntityDespawn=0x8005", "EntitySnapshot=0x8006", "TargetChanged=0x8007",
             "AttackStarted=0x8008", "Damage=0x8009", "EntityDied=0x800A", "SkillCastStarted=0x800B",
             "SkillResolved=0x800C", "ItemDropped=0x800D",
@@ -151,7 +155,7 @@ public sealed class MessageRoutingTests
             "CharacterHealth=0x8014", "EntityRevived=0x8015", "CharacterList=0x8016",
             "CreateCharacterResult=0x8017", "CommandRejected=0x8018",
             "LogoutComplete=0x8019", "CharacterProgress=0x801A", "SkillList=0x801B",
-            "StatusEffects=0x801C", "NpcServices=0x801D"
+            "StatusEffects=0x801C", "NpcServices=0x801D", "QuestLog=0x801E"
         };
 
         string[] actual = ((MessageOpcode[])Enum.GetValues(typeof(MessageOpcode)))
@@ -172,9 +176,9 @@ public sealed class MessageRoutingTests
     }
 
     [Test]
-    public void ProtocolVersion_IsTwentyThree()
+    public void ProtocolVersion_IsTwentyFour()
     {
-        Assert.That(ProtocolConstants.ProtocolVersion, Is.EqualTo(23));
+        Assert.That(ProtocolConstants.ProtocolVersion, Is.EqualTo(24));
     }
 
     [Test]

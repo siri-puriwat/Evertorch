@@ -33,6 +33,8 @@ public static class MessageRouting
             case MessageOpcode.UseItem:
             case MessageOpcode.BuyItem:
             case MessageOpcode.SellItem:
+            case MessageOpcode.AcceptQuest:
+            case MessageOpcode.CompleteQuest:
             case MessageOpcode.ServerHello:
             case MessageOpcode.WorldEntered:
             case MessageOpcode.EntitySpawn:
@@ -50,6 +52,7 @@ public static class MessageRouting
             case MessageOpcode.SkillList:
             case MessageOpcode.StatusEffects:
             case MessageOpcode.NpcServices:
+            case MessageOpcode.QuestLog:
             case MessageOpcode.EntityRevived:
             case MessageOpcode.DisconnectNotice:
             case MessageOpcode.CharacterList:

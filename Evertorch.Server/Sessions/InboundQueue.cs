@@ -306,6 +306,26 @@ public sealed class InboundQueue
                     sell.Quantity,
                     sell.CommandSequence);
                 return true;
+            case MessageOpcode.AcceptQuest:
+                if (!AcceptQuest.TryRead(payload, out AcceptQuest? accept))
+                {
+                    return false;
+                }
+
+                decoded = InboundEvent.ForAcceptQuest(connection, accept!.Npc, accept.Quest, accept.CommandSequence);
+                return true;
+            case MessageOpcode.CompleteQuest:
+                if (!CompleteQuest.TryRead(payload, out CompleteQuest? complete))
+                {
+                    return false;
+                }
+
+                decoded = InboundEvent.ForCompleteQuest(
+                    connection,
+                    complete!.Npc,
+                    complete.Quest,
+                    complete.CommandSequence);
+                return true;
             case MessageOpcode.CancelAction:
                 if (!CancelAction.TryRead(payload, out CancelAction cancel))
                 {

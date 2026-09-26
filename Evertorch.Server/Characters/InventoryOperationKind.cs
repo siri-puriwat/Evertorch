@@ -10,6 +10,11 @@ public enum InventoryOperationKind
     Unequip = 3,
     Consume = 4,
     Buy = 5,
-    Sell = 6
+    Sell = 6,
+
+    /// <summary>
+    ///     A quest's turn-in, which pays the reward's coins with the inventory's revision.
+    /// </summary>
+    QuestReward = 7
 }
 }

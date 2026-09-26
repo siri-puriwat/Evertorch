@@ -104,6 +104,16 @@ internal sealed class InMemoryGameStore : IGameStore
     public List<Guid> TradeCommits { get; } = new();
 
     /// <summary>
+    ///     How many of the next turn-in commits succeed and then throw as if the answer was lost.
+    /// </summary>
+    public int AmbiguousRewardFailures { get; set; }
+
+    /// <summary>
+    ///     Every turn-in commit attempted, in order.
+    /// </summary>
+    public List<QuestRewardCommit> RewardCommits { get; } = new();
+
+    /// <summary>
     ///     How many of the next operation lookups fail with an error of the store's own, not an outage.
     /// </summary>
     public int FailingLookups { get; set; }
@@ -238,10 +248,25 @@ internal sealed class InMemoryGameStore : IGameStore
                 row.Spirit = checkpoint.Spirit;
                 bool isNotLower = checkpoint.Level > row.Level
                     || (checkpoint.Level == row.Level && checkpoint.Experience >= row.Experience);
-                if (isNotLower)
+                if (isNotLower && !checkpoint.IsRewardInFlight)
                 {
                     row.Level = checkpoint.Level;
                     row.Experience = checkpoint.Experience;
+                }
+
+                foreach (StoredQuest quest in checkpoint.Quests)
+                {
+                    if (!row.Quests.TryGetValue(quest.QuestDefinitionId, out StoredQuest? stored))
+                    {
+                        row.Quests.Add(
+                            quest.QuestDefinitionId,
+                            new StoredQuest(quest.QuestDefinitionId, false, quest.Progress));
+                    }
+                    else if (!stored.IsCompleted && stored.Progress < quest.Progress)
+                    {
+                        row.Quests[quest.QuestDefinitionId] =
+                            new StoredQuest(quest.QuestDefinitionId, false, quest.Progress);
+                    }
                 }
             }
         }
@@ -327,6 +352,24 @@ internal sealed class InMemoryGameStore : IGameStore
         }
     }
 
+    public Task<InventoryResult> CommitQuestRewardAsync(QuestRewardCommit reward, CancellationToken cancellationToken)
+    {
+        ThrowIfUnavailable();
+        lock (m_gate)
+        {
+            RewardCommits.Add(reward);
+            InventoryResult result =
+                Find(reward.OperationId, reward.CharacterId, Array.Empty<long>()) ?? Reward(reward);
+            if (AmbiguousRewardFailures > 0 && result.Status == InventoryStatus.Committed)
+            {
+                AmbiguousRewardFailures--;
+                throw new StoreUnavailableException(new TimeoutException("scripted loss of the commit's answer"));
+            }
+
+            return Task.FromResult(result);
+        }
+    }
+
     public Task<InventoryResult?> FindOperationAsync(
         Guid operationId,
         long characterId,
@@ -357,7 +400,9 @@ internal sealed class InMemoryGameStore : IGameStore
         lock (m_gate)
         {
             IReadOnlyList<string> ids = m_characters.Values
-                .SelectMany(row => new[] { row.Job, row.Map }.Concat(row.Items.Select(item => item.ItemDefinitionId)))
+                .SelectMany(row => new[] { row.Job, row.Map }
+                    .Concat(row.Items.Select(item => item.ItemDefinitionId))
+                    .Concat(row.Quests.Keys))
                 .Distinct()
                 .ToList();
             return Task.FromResult(ids);
@@ -450,6 +495,18 @@ internal sealed class InMemoryGameStore : IGameStore
         }
     }
 
+    /// <summary>
+    ///     Stores <paramref name="quest" /> for character <paramref name="id" /> with <paramref name="progress" />, as an
+    ///     earlier checkpoint or turn-in would have left it.
+    /// </summary>
+    public void GiveQuest(long id, string quest, int progress, bool isCompleted = false)
+    {
+        lock (m_gate)
+        {
+            m_characters[id].Quests[quest] = new StoredQuest(quest, isCompleted, progress);
+        }
+    }
+
     public void Disable(string loginNormalized)
     {
         lock (m_gate)
@@ -472,14 +529,43 @@ internal sealed class InMemoryGameStore : IGameStore
         }
 
         Row row = m_characters[characterId];
+
+        // A turn-in's ledger row names no inventory row.
+        IEnumerable<long> named =
+            entry.Item == 0 ? rowIds : new[] { entry.Item }.Concat(rowIds.Where(id => id != entry.Item));
         return new InventoryResult(
             InventoryStatus.Committed,
             row.InventoryRevision,
             row.Coins,
-            new[] { entry.Item }
-                .Concat(rowIds.Where(id => id != entry.Item))
-                .Select(id => row.Read(id, id == entry.Item ? entry.ItemDefinition : string.Empty))
-                .ToList());
+            named.Select(id => row.Read(id, id == entry.Item ? entry.ItemDefinition : string.Empty)).ToList());
+    }
+
+    // As the PostgreSQL store checks it: the quest not completed, the carried progress, and the coin cap; the row is
+    // added when a failed checkpoint left it missing, and the level and experience never go down.
+    private InventoryResult Reward(QuestRewardCommit reward)
+    {
+        Row row = m_characters[reward.CharacterId];
+        bool isCompleted = row.Quests.TryGetValue(reward.QuestDefinitionId, out StoredQuest? quest)
+            && quest.IsCompleted;
+        if (isCompleted || reward.Progress < reward.Count || row.Coins > MaxCoins - reward.Coins)
+        {
+            return Unchanged(InventoryStatus.Refused, row);
+        }
+
+        row.Quests[reward.QuestDefinitionId] = new StoredQuest(
+            reward.QuestDefinitionId,
+            true,
+            Math.Max(quest?.Progress ?? 0, reward.Count));
+        row.Coins += reward.Coins;
+        if (reward.Level > row.Level || (reward.Level == row.Level && reward.Experience >= row.Experience))
+        {
+            row.Level = reward.Level;
+            row.Experience = reward.Experience;
+        }
+
+        row.InventoryRevision = unchecked(row.InventoryRevision + 1);
+        m_ledger.Add(reward.OperationId, new LedgerEntry(reward.CharacterId, 0));
+        return Unchanged(InventoryStatus.Committed, row);
     }
 
     private InventoryResult Consume(ConsumeCommit consume)
@@ -749,6 +835,9 @@ internal sealed class InMemoryGameStore : IGameStore
         /// <summary>The row each worn slot holds, by the database's slot name.</summary>
         public Dictionary<string, long> Equipment { get; } = new(StringComparer.Ordinal);
 
+        /// <summary>Each quest the character has accepted or completed, by quest ID.</summary>
+        public Dictionary<string, StoredQuest> Quests { get; } = new(StringComparer.Ordinal);
+
         // A row as it is now, with its slot; one that no longer exists at quantity 0.
         public StoredItem Read(long id)
         {
@@ -780,7 +869,8 @@ internal sealed class InMemoryGameStore : IGameStore
                 Position,
                 InventoryRevision,
                 Coins,
-                Items.Select(item => Read(item.Id)).ToList());
+                Items.Select(item => Read(item.Id)).ToList(),
+                Quests.Values.OrderBy(quest => quest.QuestDefinitionId, StringComparer.Ordinal).ToList());
         }
     }
 }

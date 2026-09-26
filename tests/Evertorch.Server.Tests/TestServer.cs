@@ -130,6 +130,16 @@ internal sealed class TestServer
             simulation,
             Audit,
             PickupLog);
+        Progression = new CharacterProgression(
+            Sessions,
+            Lifetime,
+            stats,
+            new RenewalProgressionRules(),
+            Content,
+            sender,
+            Instruments,
+            Options.Create(world),
+            ProgressionLog);
         Items = new ItemActionSystem(
             Persistence,
             sender,
@@ -140,17 +150,9 @@ internal sealed class TestServer
             simulation,
             Options.Create(world),
             Instruments,
+            Progression,
             Audit,
             ItemActionLog);
-        Progression = new CharacterProgression(
-            Sessions,
-            Lifetime,
-            stats,
-            new RenewalProgressionRules(),
-            Content,
-            sender,
-            Instruments,
-            ProgressionLog);
         var tokens = new DevelopmentTokenValidator(Options.Create(authentication), Time);
         var handshake = new HandshakeValidator(compatibility, tokens, Content);
         Drops = new ItemDropSystem(World, dropRandom ?? Random, Options.Create(world), simulation);
@@ -605,6 +607,22 @@ internal sealed class TestServer
     {
         byte[] payload = new byte[SellItem.EncodedLength];
         new SellItem(npc, inventoryItem, quantity, commandSequence).Write(payload);
+        Inbound.OnPayload(connection, ProtocolChannel.Control, payload);
+    }
+
+    public void SendAcceptQuest(ConnectionId connection, EntityId npc, string quest, uint commandSequence)
+    {
+        var message = new AcceptQuest(npc, new QuestDefinitionId(quest), commandSequence);
+        byte[] payload = new byte[message.GetEncodedLength()];
+        message.Write(payload);
+        Inbound.OnPayload(connection, ProtocolChannel.Control, payload);
+    }
+
+    public void SendCompleteQuest(ConnectionId connection, EntityId npc, string quest, uint commandSequence)
+    {
+        var message = new CompleteQuest(npc, new QuestDefinitionId(quest), commandSequence);
+        byte[] payload = new byte[message.GetEncodedLength()];
+        message.Write(payload);
         Inbound.OnPayload(connection, ProtocolChannel.Control, payload);
     }
 

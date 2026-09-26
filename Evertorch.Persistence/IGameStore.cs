@@ -43,12 +43,15 @@ public interface IGameStore
         CancellationToken cancellationToken);
 
     /// <summary>
-    ///     The character with its inventory, or null when the account owns no such character.
+    ///     The character with its inventory and its quests, or null when the account owns no such character.
     /// </summary>
     Task<StoredCharacter?> LoadCharacterAsync(AccountId account, long characterId, CancellationToken cancellationToken);
 
     /// <summary>
-    ///     Writes the checkpoint over the character's map, position, and HP, and records when it was last played.
+    ///     Writes the checkpoint over the character's map, position, HP, and SP, and its level and experience unless
+    ///     they would go down or a turn-in was in flight; raises each active quest's progress, adding the quest when it
+    ///     has no row, but never lowers it or touches a completed quest; and records when the character was last played.
+    ///     One transaction.
     /// </summary>
     Task SaveCheckpointAsync(CharacterCheckpoint checkpoint, CancellationToken cancellationToken);
 
@@ -98,6 +101,15 @@ public interface IGameStore
     Task<InventoryResult> CommitSellAsync(SellCommit sell, CancellationToken cancellationToken);
 
     /// <summary>
+    ///     Completes the quest and pays its reward in one transaction with a <c>quest_reward</c> ledger row, like
+    ///     <see cref="CommitEquipAsync" />: the coins go up, the carried level and experience replace the stored ones
+    ///     unless they would go down, and the quest's row, added when a failed checkpoint left it missing, becomes
+    ///     completed. <see cref="InventoryStatus.Refused" /> when the quest is completed already, the carried progress
+    ///     falls short of the count, or the coins would pass their cap. The answer carries no row.
+    /// </summary>
+    Task<InventoryResult> CommitQuestRewardAsync(QuestRewardCommit reward, CancellationToken cancellationToken);
+
+    /// <summary>
     ///     What became of an inventory operation whose commit may or may not have happened, looked up under the
     ///     character's lock: null when the ledger has no entry for <paramref name="operationId" />, else
     ///     <see cref="InventoryStatus.TakenByOther" /> when another character made it, or
@@ -111,8 +123,8 @@ public interface IGameStore
         CancellationToken cancellationToken);
 
     /// <summary>
-    ///     Every distinct job, map, and item definition ID stored for any character, for the startup comparison with
-    ///     the loaded content (Persistence §8).
+    ///     Every distinct job, map, item, and quest definition ID stored for any character, for the startup comparison
+    ///     with the loaded content (Persistence §8).
     /// </summary>
     Task<IReadOnlyList<string>> ListStoredDefinitionIdsAsync(CancellationToken cancellationToken);
 }

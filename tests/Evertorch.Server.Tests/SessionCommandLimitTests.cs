@@ -169,7 +169,9 @@ public sealed class SessionCommandLimitTests
             [InboundEventKind.Unequip] = ServerInstruments.ItemCommandLimit,
             [InboundEventKind.UseItem] = ServerInstruments.ItemCommandLimit,
             [InboundEventKind.Buy] = ServerInstruments.ItemCommandLimit,
-            [InboundEventKind.Sell] = ServerInstruments.ItemCommandLimit
+            [InboundEventKind.Sell] = ServerInstruments.ItemCommandLimit,
+            [InboundEventKind.AcceptQuest] = ServerInstruments.ItemCommandLimit,
+            [InboundEventKind.CompleteQuest] = ServerInstruments.ItemCommandLimit
         };
         var limits = new SessionCommandLimits(Defaults, TestServer.TickRate, 0);
 

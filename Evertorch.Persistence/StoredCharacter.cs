@@ -1,11 +1,12 @@
+using System;
 using System.Collections.Generic;
 using Evertorch.Game;
 
 namespace Evertorch.Persistence
 {
 /// <summary>
-///     A character as stored, with its inventory: what entering the world loads (Persistence §7). Definition IDs are
-///     the stored text, which the current content may no longer define (Persistence §8).
+///     A character as stored, with its inventory and its quests: what entering the world loads (Persistence §7).
+///     Definition IDs are the stored text, which the current content may no longer define (Persistence §8).
 /// </summary>
 public sealed class StoredCharacter
 {
@@ -23,7 +24,8 @@ public sealed class StoredCharacter
         WorldPosition position,
         uint inventoryRevision,
         long coins,
-        IReadOnlyList<StoredItem> items)
+        IReadOnlyList<StoredItem> items,
+        IReadOnlyList<StoredQuest>? quests = null)
     {
         Id = id;
         Account = account;
@@ -39,6 +41,7 @@ public sealed class StoredCharacter
         InventoryRevision = inventoryRevision;
         Coins = coins;
         Items = items;
+        Quests = quests ?? Array.Empty<StoredQuest>();
     }
 
     public long Id { get; }
@@ -77,5 +80,10 @@ public sealed class StoredCharacter
     public long Coins { get; }
 
     public IReadOnlyList<StoredItem> Items { get; }
+
+    /// <summary>
+    ///     The quests the character has accepted or completed, ordered by quest ID.
+    /// </summary>
+    public IReadOnlyList<StoredQuest> Quests { get; }
 }
 }

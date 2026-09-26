@@ -73,7 +73,8 @@ public sealed class CharacterLifetime
             stored.Account,
             player!,
             map!,
-            CharacterInventory.FromStored(stored))
+            CharacterInventory.FromStored(stored),
+            CharacterQuests.FromStored(stored.Quests))
         {
             Connection = owner,
             NextCheckpointTick = tick + m_checkpointIntervalTicks
@@ -83,9 +84,9 @@ public sealed class CharacterLifetime
     }
 
     /// <summary>
-    ///     Hands the character's current map, position, HP, SP, level, and experience to the writer, replacing any
-    ///     checkpoint of it still waiting. <paramref name="onComplete" /> runs on the tick thread when it is written or
-    ///     found unwritable.
+    ///     Hands the character's current map, position, HP, SP, level, experience, and active quests to the writer,
+    ///     replacing any checkpoint of it still waiting. <paramref name="onComplete" /> runs on the tick thread when it is
+    ///     written or found unwritable.
     /// </summary>
     public PersistenceJob QueueCheckpoint(CharacterSession character, Action<PersistenceOutcome>? onComplete = null)
     {
@@ -99,7 +100,9 @@ public sealed class CharacterLifetime
             player.CurrentSpirit,
             player.Level,
             player.Experience,
-            m_time.GetUtcNow().UtcDateTime);
+            m_time.GetUtcNow().UtcDateTime,
+            character.Quests.ToCheckpoint(),
+            character.Operation?.Kind == InventoryOperationKind.QuestReward);
         ConnectionId connection = character.Connection?.Connection ?? default;
         PersistenceJob<bool>? job = null;
         job = new PersistenceJob<bool>(

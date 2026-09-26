@@ -55,6 +55,8 @@ public sealed class ServerOutputTests
         ["NpcServiceEntry"] = new[] { "BuyPrice", "Item", "SellPrice" },
         ["NpcServices"] = new[] { "Entries", "Npc", "Offers" },
         ["QuestDefinitionId"] = new[] { "Value" },
+        ["QuestLog"] = new[] { "Entries" },
+        ["QuestLogEntry"] = new[] { "Count", "Progress", "Quest", "State" },
         ["ServerHello"] = new[]
         {
             "ProtocolVersion", "RequiredClientContentVersion", "ServerBuildVersion", "ServerTickRate",
