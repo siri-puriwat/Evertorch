@@ -486,6 +486,24 @@ public sealed class GameClient : MonoBehaviour
     }
 
     /// <summary>
+    ///     Asks the NPC for <paramref name="quest" /> (Gameplay Systems §2.2); the quest log shows it once the server
+    ///     accepts.
+    /// </summary>
+    public void AcceptQuestFrom(EntityId npc, QuestDefinitionId quest)
+    {
+        Connection?.SendAcceptQuest(npc, quest);
+    }
+
+    /// <summary>
+    ///     Turns <paramref name="quest" /> in to the NPC (Gameplay Systems §2.2); the reward shows only once the server's
+    ///     commit returns.
+    /// </summary>
+    public void TurnInQuestTo(EntityId npc, QuestDefinitionId quest)
+    {
+        Connection?.SendCompleteQuest(npc, quest);
+    }
+
+    /// <summary>
     ///     Uses the skill in a slot of the skill bar, numbered from 1 (Prototype Content §4): what the slot's key,
     ///     gamepad button, and button on the bar ask for. An enemy skill is for the confirmed target.
     /// </summary>

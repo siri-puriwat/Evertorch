@@ -592,6 +592,30 @@ public sealed class ClientConnectionTests
         Assert.That(harness.Connection.State, Is.EqualTo(ClientConnectionState.SelectingCharacter));
     }
 
+    // An NPC's services come only while it is in view, so the connection keeps each quest's offer for the session.
+    [Test]
+    public void NpcServices_TheirQuestOffers_AreKeptForTheSession()
+    {
+        var harness = new Harness();
+        harness.EnterWorld();
+        var quest = new QuestDefinitionId("quest.a");
+        var services = new NpcServices(
+            new EntityId(14),
+            new NpcServiceEntry[0],
+            new[] { new NpcQuestOffer(quest, new MonsterDefinitionId("monster.a"), 5, 150, 100) });
+        int before = harness.Connection.QuestOffersSeen;
+
+        harness.Deliver(ProtocolChannel.Control, Encode(services.GetEncodedLength(), services.Write));
+
+        Assert.That(before, Is.Zero);
+        Assert.That(harness.Connection.TryGetQuestOffer(quest, out NpcQuestOffer offer), Is.True);
+        Assert.That((offer.Monster.Value, offer.Count, offer.Coins), Is.EqualTo(("monster.a", (ushort)5, 100u)));
+        Assert.That(harness.Connection.QuestOffersSeen, Is.EqualTo(1));
+        Assert.That(
+            harness.Connection.TryGetQuestOffer(new QuestDefinitionId("quest.b"), out NpcQuestOffer _),
+            Is.False);
+    }
+
     [Test]
     public void Payload_OnTheWrongChannel_IsCountedAndIgnored()
     {

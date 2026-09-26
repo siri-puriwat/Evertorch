@@ -12,9 +12,9 @@ namespace Evertorch.Client
 {
 /// <summary>
 ///     The line along the top of the screen while in the world (Prototype Content §2): the character's name and level,
-///     its HP and SP, its status effects with their seconds left, the map, and the round-trip time, over a thin
-///     experience bar. Each part is rewritten only when its value changes. The name comes from the character list, the
-///     level from the world (owner decision 9).
+///     its HP and SP, its status effects with their seconds left, its active quests with their progress, the map, and
+///     the round-trip time, over a thin experience bar. Each part is rewritten only when its value changes. The name comes
+///     from the character list, the level from the world (owner decision 9).
 /// </summary>
 public sealed class StatusBar : MonoBehaviour
 {
@@ -36,6 +36,7 @@ public sealed class StatusBar : MonoBehaviour
     private TMP_Text? m_health;
     private TMP_Text? m_spirit;
     private TMP_Text? m_effects;
+    private TMP_Text? m_quests;
     private RectTransform? m_experienceFill;
     private TMP_Text? m_map;
     private TMP_Text? m_ping;
@@ -50,6 +51,9 @@ public sealed class StatusBar : MonoBehaviour
     private string? m_shownMapName;
     private MapDefinitionId m_shownMap;
     private int m_shownPing = -1;
+    private IReadOnlyList<QuestLogEntry>? m_shownQuests;
+    private int m_shownOffersSeen = -1;
+    private ClientContent? m_shownQuestContent;
 
     /// <summary>
     ///     How many times a label was rewritten, which only a changed value may cause.
@@ -62,6 +66,11 @@ public sealed class StatusBar : MonoBehaviour
     ///     The filled part of the experience bar, from 0 to 1.
     /// </summary>
     public float ShownExperienceRatio => m_experienceFill != null ? m_experienceFill.anchorMax.x : 0f;
+
+    /// <summary>
+    ///     The active quests as shown, "Forest Crawler 3/5" each; empty while none is active.
+    /// </summary>
+    public string QuestText => m_quests != null ? m_quests.text : string.Empty;
 
     private void Update()
     {
@@ -81,6 +90,7 @@ public sealed class StatusBar : MonoBehaviour
         ShowHealth(world.LocalHealth, world.LocalMaximumHealth, world.IsLocalDead);
         ShowSpirit(world.LocalSpirit, world.LocalMaximumSpirit);
         ShowEffects(world, m_client.Content);
+        ShowQuests(world.Quests, m_client.Connection, m_client.Content);
         ShowExperience(world.Experience, world.ExperienceToNextLevel);
         if (world.Map != m_shownMap)
         {
@@ -177,6 +187,47 @@ public sealed class StatusBar : MonoBehaviour
         Write(m_effects!, text.ToString());
     }
 
+    // Each active quest by its objective, "Forest Crawler 3/5" and "(ready)" at its count (Prototype Content §2): the
+    // monster comes from the offer this session saw, the quest's own name standing in until one comes. Rewritten only
+    // for a new quest log, a newly seen offer, or new names.
+    private void ShowQuests(IReadOnlyList<QuestLogEntry> quests, ClientConnection? connection, ClientContent? content)
+    {
+        int offersSeen = connection?.QuestOffersSeen ?? 0;
+        if (quests == m_shownQuests && offersSeen == m_shownOffersSeen && content == m_shownQuestContent)
+        {
+            return;
+        }
+
+        m_shownQuests = quests;
+        m_shownOffersSeen = offersSeen;
+        m_shownQuestContent = content;
+        var text = new StringBuilder();
+        foreach (QuestLogEntry entry in quests)
+        {
+            if (entry.State != QuestState.Active)
+            {
+                continue;
+            }
+
+            if (text.Length > 0)
+            {
+                text.Append("   ");
+            }
+
+            NpcQuestOffer? offer =
+                connection != null && connection.TryGetQuestOffer(entry.Quest, out NpcQuestOffer seen)
+                    ? seen
+                    : null;
+            text.Append(QuestMessages.Progress(entry, offer, content));
+        }
+
+        string shown = text.ToString();
+        if (!string.Equals(shown, m_quests!.text, StringComparison.Ordinal))
+        {
+            Write(m_quests!, shown);
+        }
+    }
+
     private bool IsShown(List<(StatusDefinitionId Status, int Seconds)> effects)
     {
         if (effects.Count != m_shownEffects.Count)
@@ -267,6 +318,13 @@ public sealed class StatusBar : MonoBehaviour
         m_health = CreatePart("Health", TextAlignmentOptions.Midline);
         m_spirit = CreatePart("Spirit", TextAlignmentOptions.Midline);
         m_effects = CreatePart("Effects", TextAlignmentOptions.Midline);
+        m_quests = CreatePart("Quests", TextAlignmentOptions.Midline);
+
+        // A quest's objective and progress take more room than the other parts, and shrink to fit on a narrow screen.
+        m_quests.gameObject.AddComponent<LayoutElement>().flexibleWidth = 2f;
+        m_quests.enableAutoSizing = true;
+        m_quests.fontSizeMin = 12f;
+        m_quests.fontSizeMax = m_quests.fontSize;
         m_map = CreatePart("Map", TextAlignmentOptions.Midline);
         m_ping = CreatePart("Ping", TextAlignmentOptions.MidlineRight);
 

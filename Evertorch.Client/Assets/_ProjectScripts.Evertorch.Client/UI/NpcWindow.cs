@@ -12,12 +12,13 @@ using EntityId = Evertorch.Game.EntityId;
 namespace Evertorch.Client
 {
 /// <summary>
-///     The window of the NPC the player walked up to (Gameplay Systems §6.1, §11.3; Prototype Content §2): the NPC's name
-///     and Close, and for an NPC that trades, the coins, a Buy list of what it sells at its price, and a Sell list of the
-///     character's rows it buys, not worn, at what one fetches. A Buy press buys one; a Sell press sells one, and a
-///     stack's All sells the row. The presses go through <see cref="GameClient" />, and only a committed change moves
-///     the lists. It closes once the NPC is drawn beyond its range, the player dies, the map changes, or the connection
-///     closes.
+///     The window of the NPC the player walked up to (Gameplay Systems §2.2, §6.1, §11.3; Prototype Content §2): the
+///     NPC's name and Close; for an NPC that trades, the coins, a Buy list of what it sells at its price, and a Sell list
+///     of the character's rows it buys, not worn, at what one fetches; and for each quest the NPC gives, its objective,
+///     its reward, and where the character stands with it. A Buy press buys one; a Sell press sells one, and a stack's
+///     All sells the row; Accept and Turn in ask for the quest. The presses go through <see cref="GameClient" />, and
+///     only what the server commits moves the lists. It closes once the NPC is drawn beyond its range, the player dies,
+///     the map changes, or the connection closes.
 /// </summary>
 public sealed class NpcWindow : MonoBehaviour
 {
@@ -48,7 +49,8 @@ public sealed class NpcWindow : MonoBehaviour
     private Transform? m_rows;
     private float m_listHeight = -1f;
     private ClientWorld? m_world;
-    private NpcServices? m_shownShop;
+    private NpcServices? m_shownServices;
+    private IReadOnlyList<QuestLogEntry>? m_shownQuests;
     private ClientInventory? m_shownInventory;
     private bool m_shownCurrent;
     private uint m_shownRevision;
@@ -69,7 +71,7 @@ public sealed class NpcWindow : MonoBehaviour
     public string CoinsText => m_coins != null ? m_coins.text : string.Empty;
 
     /// <summary>
-    ///     The Buy and Sell lists as shown, one line each; empty for an NPC that does not trade.
+    ///     The lists as shown, one line each; empty for an NPC that neither trades nor gives a quest.
     /// </summary>
     public string Text { get; private set; } = string.Empty;
 
@@ -198,17 +200,16 @@ public sealed class NpcWindow : MonoBehaviour
         label.fontSizeMax = label.fontSize;
     }
 
-    // Rebuilds the lists only when the NPC's services, the inventory, its revision, or the names to show have changed.
+    // Rebuilds the lists only when the NPC's services, the quest log, the inventory, its revision, or the names to show
+    // have changed.
     private void Show(ClientWorld world, ClientContent? content)
     {
-        NpcServices? shop = world.TryGetNpcServices(Npc, out NpcServices? services)
-            && services != null
-            && services.Entries.Count > 0
-                ? services
-                : null;
+        world.TryGetNpcServices(Npc, out NpcServices? services);
+        NpcServices? shop = services != null && services.Entries.Count > 0 ? services : null;
         ClientInventory inventory = world.Inventory;
         bool hasContent = content != null;
-        if (shop == m_shownShop
+        if (services == m_shownServices
+            && world.Quests == m_shownQuests
             && inventory == m_shownInventory
             && inventory.IsCurrent == m_shownCurrent
             && inventory.Revision == m_shownRevision
@@ -217,19 +218,26 @@ public sealed class NpcWindow : MonoBehaviour
             return;
         }
 
-        m_shownShop = shop;
+        m_shownServices = services;
+        m_shownQuests = world.Quests;
         m_shownInventory = inventory;
         m_shownCurrent = inventory.IsCurrent;
         m_shownRevision = inventory.Revision;
         m_hadContent = hasContent;
         ClearRows();
         m_text.Clear();
-        UiBuilder.SetActive(m_list!, shop != null);
+        bool hasQuests = services != null && services.Offers.Count > 0;
+        UiBuilder.SetActive(m_list!, shop != null || hasQuests);
         m_coins!.text = shop != null && inventory.IsCurrent ? $"Coins: {inventory.Coins}" : string.Empty;
         if (shop != null)
         {
             ListForSale(shop, content);
             ListSellable(shop, inventory, content);
+        }
+
+        if (hasQuests)
+        {
+            ListQuests(services!, world.Quests, content);
         }
 
         Text = m_text.ToString();
@@ -284,6 +292,52 @@ public sealed class NpcWindow : MonoBehaviour
         {
             AddLine("Nothing to sell");
         }
+    }
+
+    // For each quest the NPC gives: its name, objective, and reward, then where the character stands with it, and the
+    // one button that fits: Accept while it has no entry, and Turn in once it reaches its count.
+    private void ListQuests(NpcServices services, IReadOnlyList<QuestLogEntry> log, ClientContent? content)
+    {
+        GameClient client = m_client!;
+        EntityId npc = Npc;
+        foreach (NpcQuestOffer offer in services.Offers)
+        {
+            QuestDefinitionId quest = offer.Quest;
+            AddHeading(QuestMessages.QuestName(content, quest));
+            AddLine(QuestMessages.Objective(offer, content));
+            AddLine(QuestMessages.Reward(offer));
+            if (!TryFind(log, quest, out QuestLogEntry entry))
+            {
+                AddButton("Accept", () => client.AcceptQuestFrom(npc, quest));
+            }
+            else if (entry.State == QuestState.Completed)
+            {
+                AddLine("Completed");
+            }
+            else
+            {
+                AddLine($"Progress: {entry.Progress}/{entry.Count}");
+                if (entry.Progress >= entry.Count)
+                {
+                    AddButton("Turn in", () => client.TurnInQuestTo(npc, quest));
+                }
+            }
+        }
+    }
+
+    private static bool TryFind(IReadOnlyList<QuestLogEntry> log, QuestDefinitionId quest, out QuestLogEntry entry)
+    {
+        foreach (QuestLogEntry candidate in log)
+        {
+            if (candidate.Quest == quest)
+            {
+                entry = candidate;
+                return true;
+            }
+        }
+
+        entry = default;
+        return false;
     }
 
     // One press sells one; a stack also offers All, which sells the whole row.

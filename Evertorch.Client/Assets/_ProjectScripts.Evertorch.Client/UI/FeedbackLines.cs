@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
+using Evertorch.Game;
 using Evertorch.Protocol;
 using TMPro;
 using UnityEngine;
@@ -9,7 +10,8 @@ namespace Evertorch.Client
 {
 /// <summary>
 ///     Short-lived lines over the lower middle of the screen, clear of the skill bar (Prototype Content §2): a refused
-///     command in plain words, what the player picked up, bought, or sold, and a level-up.
+///     command in plain words, what the player picked up, bought, or sold, a quest accepted, advanced, ready, or
+///     completed, and a level-up.
 /// </summary>
 public sealed class FeedbackLines : MonoBehaviour
 {
@@ -33,6 +35,7 @@ public sealed class FeedbackLines : MonoBehaviour
     private readonly StringBuilder m_text = new();
     private GameClient? m_client;
     private ClientWorld? m_watched;
+    private IReadOnlyList<QuestLogEntry>? m_lastQuests;
     private GameObject? m_panel;
     private RectTransform? m_panelRect;
     private TMP_Text? m_label;
@@ -112,15 +115,20 @@ public sealed class FeedbackLines : MonoBehaviour
             m_watched.ItemPickedUpReceived -= OnPickedUp;
             m_watched.LeveledUp -= OnLeveledUp;
             m_watched.Inventory.ChangeApplied -= OnChangeApplied;
+            m_watched.QuestsChanged -= OnQuestsChanged;
         }
 
         m_watched = world;
+
+        // A world's first quest log is its baseline, which is no news; it may have come before this frame.
+        m_lastQuests = world != null && world.QuestLogsReceived > 0 ? world.Quests : null;
         if (world != null)
         {
             world.CommandRejectedReceived += OnRejected;
             world.ItemPickedUpReceived += OnPickedUp;
             world.LeveledUp += OnLeveledUp;
             world.Inventory.ChangeApplied += OnChangeApplied;
+            world.QuestsChanged += OnQuestsChanged;
         }
 
         if (m_lines.Count > 0)
@@ -147,6 +155,47 @@ public sealed class FeedbackLines : MonoBehaviour
     private void OnLeveledUp()
     {
         Add("Level up");
+    }
+
+    // Each quest the new log changed says so; the objective's monster and the reward come from the offer this session
+    // saw.
+    private void OnQuestsChanged()
+    {
+        IReadOnlyList<QuestLogEntry> quests = m_watched!.Quests;
+        IReadOnlyList<QuestLogEntry>? before = m_lastQuests;
+        m_lastQuests = quests;
+        if (before == null)
+        {
+            return;
+        }
+
+        ClientConnection? connection = m_client != null ? m_client.Connection : null;
+        ClientContent? content = m_client != null ? m_client.Content : null;
+        foreach (QuestLogEntry after in quests)
+        {
+            NpcQuestOffer? offer =
+                connection != null && connection.TryGetQuestOffer(after.Quest, out NpcQuestOffer seen)
+                    ? seen
+                    : null;
+            string? line = QuestMessages.Describe(Find(before, after.Quest), after, offer, content);
+            if (line != null)
+            {
+                Add(line);
+            }
+        }
+    }
+
+    private static QuestLogEntry? Find(IReadOnlyList<QuestLogEntry> log, QuestDefinitionId quest)
+    {
+        foreach (QuestLogEntry entry in log)
+        {
+            if (entry.Quest == quest)
+            {
+                return entry;
+            }
+        }
+
+        return null;
     }
 
     private void OnChangeApplied(InventoryDelta delta)

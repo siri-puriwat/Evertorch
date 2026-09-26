@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using Evertorch.Game;
 using Evertorch.Protocol;
 using NUnit.Framework;
+using TMPro;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.InputSystem.LowLevel;
@@ -31,6 +32,7 @@ public sealed class LiveServerTownLoopTests : InputTestFixture
     private const string NpcClientName = "LiveTownTwo";
     private const string CoinsClientName = "LiveTownThree";
     private const string ShopClientName = "LiveTownFour";
+    private const string QuestClientName = "LiveTownFive";
     private const long SeededCoins = 4321;
     private const string GelItem = "item.material.slime_gel";
     private const string SwordItem = "item.weapon.training_sword";
@@ -42,6 +44,9 @@ public sealed class LiveServerTownLoopTests : InputTestFixture
     private const float StepTimeoutSeconds = 15f;
     private const float DrawnDistance = 1e-3f;
     private const int TestTimeoutMs = 300_000;
+
+    // West of the Gate Warden at (20.5, 3.5), within a short walk of it.
+    private static readonly WorldPosition NearTheGateWarden = new(16f, 0f, 3.5f);
 
     private LiveDatabase? m_database;
     private LiveServer? m_server;
@@ -292,7 +297,7 @@ public sealed class LiveServerTownLoopTests : InputTestFixture
         ClientWorld town = client.World!;
         NpcWindow window = client.GetComponentsInChildren<NpcWindow>(true).Single();
         FeedbackLines lines = client.GetComponentsInChildren<FeedbackLines>(true).Single();
-        yield return WalkUpToTheQuartermaster(client, mouse, window);
+        yield return WalkUpTo(client, mouse, window, QuartermasterPrefab);
         yield return WaitUntil(() => window.CoinsText == "Coins: 100", StepTimeoutSeconds);
         Assert.That(window.CoinsText, Is.EqualTo("Coins: 100"), window.Text);
 
@@ -328,16 +333,92 @@ public sealed class LiveServerTownLoopTests : InputTestFixture
         Assert.That(client.Connection.MalformedMessages + client.Connection.UnexpectedMessages, Is.Zero);
     }
 
-    // A click on the Quartermaster walks the player up to it and opens its window.
-    private static IEnumerator WalkUpToTheQuartermaster(GameClient client, Mouse mouse, NpcWindow window)
+    // A click on the NPC drawn from the prefab walks the player up to it and opens its window.
+    private static IEnumerator WalkUpTo(GameClient client, Mouse mouse, NpcWindow window, string prefab)
     {
-        yield return WaitUntil(() => NpcView(client, QuartermasterPrefab)?.HasBody == true, StepTimeoutSeconds);
-        EntityView quartermaster = NpcView(client, QuartermasterPrefab)!;
-        ClickAt(
-            mouse,
-            Camera.main!.WorldToScreenPoint(quartermaster.transform.position + Vector3.up * EntityPicker.PickHeight));
+        yield return WaitUntil(() => NpcView(client, prefab)?.HasBody == true, StepTimeoutSeconds);
+        EntityView npc = NpcView(client, prefab)!;
+        ClickAt(mouse, Camera.main!.WorldToScreenPoint(npc.transform.position + Vector3.up * EntityPicker.PickHeight));
         yield return WaitUntil(() => window.IsOpen, StepTimeoutSeconds);
-        Assert.That(window.IsOpen, Is.True, "the Quartermaster's window opened");
+        Assert.That(window.IsOpen, Is.True, $"the window of {prefab} opened");
+    }
+
+    // The Gate Warden's window over the real server (Gameplay Systems §2.2; Prototype Content §2): Accept takes the
+    // quest, and the status bar names its objective. The five kills are written to the database while the character
+    // is logged out, as a hunt would have left them; back in the world, Turn in pays the reward, and the status bar,
+    // the inventory window, the feedback lines, and the console's players line show the level and the coins.
+    [UnityTest]
+    [Timeout(TestTimeoutMs)]
+    public IEnumerator Quest_AcceptedAndTurnedInThroughTheGateWardensWindow_ShowsTheLevelAndTheCoins()
+    {
+        string actionsPath = RequirePrerequisites();
+        yield return StartDatabaseAndServer();
+        LiveServer server = m_server!;
+        LiveDatabase database = m_database!;
+        Assert.That(server.TryReadListeningPort(out int port), Is.True, $"server output: {server.JoinOutput()}");
+        Mouse mouse = InputSystem.AddDevice<Mouse>();
+        GameClient client = CreateClient(port, actionsPath);
+        yield return EnterByName(client, QuestClientName);
+        NpcWindow window = client.GetComponentsInChildren<NpcWindow>(true).Single();
+        StatusBar bar = client.GetComponentsInChildren<StatusBar>(true).Single();
+        FeedbackLines lines = client.GetComponentsInChildren<FeedbackLines>(true).Single();
+        InventoryWindow inventory = client.GetComponentsInChildren<InventoryWindow>(true).Single();
+        yield return WalkNearTheGateWarden(client);
+        yield return WalkUpTo(client, mouse, window, GateWardenPrefab);
+
+        Assert.That(Press(window, "Accept"), Is.True, window.Text);
+        yield return WaitUntil(() => bar.QuestText == "Forest Crawler 0/5", StepTimeoutSeconds);
+        Assert.That(bar.QuestText, Is.EqualTo("Forest Crawler 0/5"), window.Text);
+        Assert.That(lines.Text, Does.Contain("Accepted Crawler Hunt."));
+        Assert.That(window.Text, Does.EndWith("\nProgress: 0/5"));
+
+        ClientConnection connection = client.Connection!;
+        client.Logout();
+        yield return WaitUntil(() => connection.State == ClientConnectionState.SelectingCharacter, StepTimeoutSeconds);
+        Assert.That(connection.State, Is.EqualTo(ClientConnectionState.SelectingCharacter), client.Status);
+        database.Execute(
+            "UPDATE character_quests SET progress = 5 WHERE character_id = "
+            + $"(SELECT id FROM characters WHERE name = '{QuestClientName}')");
+        client.EnterWorld(connection.Characters.Single(entry => entry.Name == QuestClientName).Character);
+        yield return WaitUntil(() => client.World?.Inventory.IsCurrent == true, StartTimeoutSeconds);
+        yield return WaitUntil(() => bar.QuestText == "Forest Crawler 5/5 (ready)", StepTimeoutSeconds);
+        Assert.That(bar.QuestText, Is.EqualTo("Forest Crawler 5/5 (ready)"), "the kills written while away");
+        yield return WalkUpTo(client, mouse, window, GateWardenPrefab);
+
+        Assert.That(Press(window, "Turn in"), Is.True, window.Text);
+        yield return WaitUntil(() => window.Text.EndsWith("\nCompleted"), StepTimeoutSeconds);
+        Assert.That(window.Text, Does.EndWith("\nCompleted"), $"turned in: {client.World!.LastRejection}");
+        yield return WaitUntil(() => inventory.CoinsText == "Coins: 100", StepTimeoutSeconds);
+        Assert.That(inventory.CoinsText, Is.EqualTo("Coins: 100"));
+        Assert.That(client.World.Level, Is.EqualTo(3), "150 base experience through two levels");
+        Assert.That(
+            bar.GetComponentsInChildren<TMP_Text>(true).Single(label => label.name == "Name").text,
+            Does.EndWith("Lv 3"));
+        Assert.That(bar.QuestText, Is.Empty, "no active quest");
+        Assert.That(lines.Text, Does.Contain("Completed Crawler Hunt: 150 base experience, 100 coins."));
+
+        // The console republishes what it reads once a second.
+        yield return new WaitForSecondsRealtime(1.5f);
+        long character = connection.Characters.Single(entry => entry.Name == QuestClientName).Character.Value;
+        server.ClearOutput();
+        server.SendCommand("players");
+        yield return WaitUntil(() => server.HasOutput(LiveServer.CharacterMarker(character)), StepTimeoutSeconds);
+        string line = server.Output().First(text => text.Contains(LiveServer.CharacterMarker(character)));
+        Assert.That(line, Does.Contain(" level 3 ").And.EndWith(" coins 100"));
+        Assert.That(connection.MalformedMessages + connection.UnexpectedMessages, Is.Zero);
+    }
+
+    // The Gate Warden stands by the east gate, too far from the spawn point for a click; the walk ends near it.
+    private static IEnumerator WalkNearTheGateWarden(GameClient client)
+    {
+        ClientWorld town = client.World!;
+        Assert.That(
+            client.Controller!.TryMoveTo(town.Predictor.Position, NearTheGateWarden),
+            Is.True,
+            "a way toward the Gate Warden");
+        yield return WaitUntil(
+            () => client.Controller != null && !client.Controller.HasPath && town.Predictor.PendingCount == 0,
+            StepTimeoutSeconds);
     }
 
     // Presses the window's button of that name, as a click on it does.

@@ -19,6 +19,7 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
     private readonly ClientConnectionSettings m_settings;
     private readonly IMapProvider m_maps;
     private readonly byte[] m_sendBuffer = new byte[ProtocolLimits.MaxClientPayloadBytes];
+    private readonly Dictionary<QuestDefinitionId, NpcQuestOffer> m_questOffers = new();
     private uint m_commandSequence;
 
     public ClientConnection(IClientTransport transport, ClientConnectionSettings settings, IMapProvider maps)
@@ -44,6 +45,12 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
     public CreateCharacterOutcome LastCreateOutcome { get; private set; }
 
     public uint ServerTickRate { get; private set; }
+
+    /// <summary>
+    ///     How many quests' offers this session has seen; it only grows, so a view can tell when to name a quest's
+    ///     objective anew.
+    /// </summary>
+    public int QuestOffersSeen => m_questOffers.Count;
 
     /// <summary>
     ///     The map epoch of the world last entered, which movement input echoes (Network Protocol §10).
@@ -233,6 +240,7 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
             case MessageOpcode.NpcServices:
                 if (NpcServices.TryRead(payload, out NpcServices? services) && services != null)
                 {
+                    RememberOffers(services);
                     WithWorld(world => world.OnNpcServices(services));
                 }
                 else
@@ -512,6 +520,15 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
         new SellItem(npc, inventoryItem, quantity, sequence).Write(m_sendBuffer);
         SendRouted(MessageOpcode.SellItem, SellItem.EncodedLength);
         return sequence;
+    }
+
+    /// <summary>
+    ///     What an NPC last offered for <paramref name="quest" /> this session, its objective and its reward, so the
+    ///     quest can be named after the NPC has left view (Prototype Content §2). The quest log itself carries neither.
+    /// </summary>
+    public bool TryGetQuestOffer(QuestDefinitionId quest, out NpcQuestOffer offer)
+    {
+        return m_questOffers.TryGetValue(quest, out offer);
     }
 
     /// <summary>
@@ -842,6 +859,15 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
         else
         {
             World.OnDespawn(despawn);
+        }
+    }
+
+    // Kept for the connection's life, across map changes, since an NPC's services come only while it is in view.
+    private void RememberOffers(NpcServices services)
+    {
+        foreach (NpcQuestOffer offer in services.Offers)
+        {
+            m_questOffers[offer.Quest] = offer;
         }
     }
 

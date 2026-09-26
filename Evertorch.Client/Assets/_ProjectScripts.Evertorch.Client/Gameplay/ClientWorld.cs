@@ -137,6 +137,11 @@ public sealed class ClientWorld
     public IReadOnlyList<QuestLogEntry> Quests { get; private set; } = Array.Empty<QuestLogEntry>();
 
     /// <summary>
+    ///     How many quest logs this world has taken; the first is the baseline.
+    /// </summary>
+    public int QuestLogsReceived { get; private set; }
+
+    /// <summary>
     ///     The estimated server time, in seconds, when the status effects arrived; their times count down from then.
     /// </summary>
     public double StatusEffectsReceivedAt { get; private set; }
@@ -351,6 +356,7 @@ public sealed class ClientWorld
         }
 
         Quests = log.Entries;
+        QuestLogsReceived++;
         QuestsChanged?.Invoke();
     }
 

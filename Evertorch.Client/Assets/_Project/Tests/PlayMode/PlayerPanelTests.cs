@@ -25,6 +25,8 @@ public sealed class PlayerPanelTests
     private const string Potion = "item.consumable.minor_health";
     private const string Quartermaster = "npc.quartermaster";
     private const string GateWarden = "npc.gate_warden";
+    private const string Hunt = "quest.crawler_hunt";
+    private const string Crawler = "monster.forest_crawler";
 
     private static readonly EntityId Local = new(100);
 
@@ -128,20 +130,50 @@ public sealed class PlayerPanelTests
             npcs);
     }
 
+    // The quest's content: the Gate Warden, the crawler it asks for, and the quest's name.
+    private static void GiveQuest(GameClient client)
+    {
+        var warden = new NpcDefinitionId(GateWarden);
+        var crawler = new MonsterDefinitionId(Crawler);
+        var hunt = new QuestDefinitionId(Hunt);
+        GiveContent(
+            client,
+            new ClientItem[0],
+            new Dictionary<NpcDefinitionId, ClientNpc> { [warden] = new(warden, "Gate Warden", "npc_gate_warden") },
+            new Dictionary<MonsterDefinitionId, ClientMonster>
+            {
+                [crawler] = new(crawler, "Forest Crawler", "monster_forest_crawler", "crawler")
+            },
+            new Dictionary<QuestDefinitionId, ClientQuest> { [hunt] = new(hunt, "Crawler Hunt") });
+    }
+
+    private static QuestLog HuntAt(QuestState state, ushort progress)
+    {
+        return new QuestLog(new[] { new QuestLogEntry(new QuestDefinitionId(Hunt), state, progress, 5) });
+    }
+
+    private static string[] ButtonsOf(Component panel)
+    {
+        return panel.GetComponentsInChildren<Button>().Select(button => button.name).ToArray();
+    }
+
     private static void GiveContent(
         GameClient client,
         IEnumerable<ClientItem> items,
-        IReadOnlyDictionary<NpcDefinitionId, ClientNpc>? npcs = null)
+        IReadOnlyDictionary<NpcDefinitionId, ClientNpc>? npcs = null,
+        IReadOnlyDictionary<MonsterDefinitionId, ClientMonster>? monsters = null,
+        IReadOnlyDictionary<QuestDefinitionId, ClientQuest>? quests = null)
     {
         var content = new ClientContent(
             "0000000000000000",
             new Dictionary<MapDefinitionId, ClientMap>(),
             new Dictionary<JobDefinitionId, ClientJob>(),
-            new Dictionary<MonsterDefinitionId, ClientMonster>(),
+            monsters ?? new Dictionary<MonsterDefinitionId, ClientMonster>(),
             items.ToDictionary(item => item.Id),
             new Dictionary<SkillDefinitionId, ClientSkill>(),
             new Dictionary<StatusDefinitionId, ClientStatusEffect>(),
-            npcs);
+            npcs,
+            quests);
         object loader = typeof(GameClient)
             .GetField("m_contentLoader", BindingFlags.NonPublic | BindingFlags.Instance)!
             .GetValue(client);
@@ -885,6 +917,110 @@ public sealed class PlayerPanelTests
             lines.Text,
             Is.EqualTo("Sold Slime Gel x 12 for 24 coins.\nBought Training Sword for 50 coins."),
             "putting the sword on says nothing");
+    }
+
+    // The Gate Warden's part (Prototype Content §2): the quest, its objective, and its reward, then Accept while the
+    // character has no entry, the progress while it runs, Turn in once it reaches its count, and Completed at the end.
+    [UnityTest]
+    public IEnumerator NpcWindow_ForTheGateWarden_OffersItsQuest_ThenShowsWhereTheCharacterStandsWithIt()
+    {
+        GameClient client = CreateIdleClient();
+        ClientWorld world = GiveWorld(client);
+        GiveQuest(client);
+        Spawn(world, 14, EntityKind.Npc, GateWarden, 1000);
+        DrawNpc(client, 14);
+        world.OnNpcServices(
+            new NpcServices(
+                new EntityId(14),
+                new NpcServiceEntry[0],
+                new[]
+                {
+                    new NpcQuestOffer(new QuestDefinitionId(Hunt), new MonsterDefinitionId(Crawler), 5, 150, 100)
+                }));
+        world.OnQuestLog(new QuestLog(new QuestLogEntry[0]));
+        var window = NpcWindow.Create(client);
+        m_created.Add(window.gameObject);
+
+        window.Open(new EntityId(14));
+        yield return null;
+        string offered = window.Text;
+        string[] offeredButtons = ButtonsOf(window);
+        world.OnQuestLog(HuntAt(QuestState.Active, 3));
+        yield return null;
+        string active = window.Text;
+        string[] activeButtons = ButtonsOf(window);
+        world.OnQuestLog(HuntAt(QuestState.Active, 5));
+        yield return null;
+        string ready = window.Text;
+        string[] readyButtons = ButtonsOf(window);
+        world.OnQuestLog(HuntAt(QuestState.Completed, 5));
+        yield return null;
+
+        Assert.That(
+            offered.Split('\n'),
+            Is.EqualTo(
+                new[]
+                {
+                    "Crawler Hunt", "Defeat: Forest Crawler × 5", "Reward: 150 base experience, 100 coins", "Accept"
+                }));
+        Assert.That(offeredButtons, Is.EqualTo(new[] { "Accept", "Close" }));
+        Assert.That(active, Does.EndWith("\nProgress: 3/5"));
+        Assert.That(activeButtons, Is.EqualTo(new[] { "Close" }), "no turn-in before the count");
+        Assert.That(ready, Does.EndWith("\nProgress: 5/5\nTurn in"));
+        Assert.That(readyButtons, Is.EqualTo(new[] { "Turn in", "Close" }));
+        Assert.That(window.Text, Does.EndWith("\nCompleted"));
+        Assert.That(ButtonsOf(window), Is.EqualTo(new[] { "Close" }));
+        Assert.That(window.CoinsText, Is.Empty, "the Gate Warden keeps no shop");
+    }
+
+    [UnityTest]
+    public IEnumerator StatusBar_ShowsAnActiveQuestsProgress_ReadyAtItsCount_AndNothingOnceCompleted()
+    {
+        GameClient client = CreateIdleClient();
+        ClientWorld world = GiveWorld(client);
+        GiveQuest(client);
+        var bar = StatusBar.Create(client);
+        m_created.Add(bar.gameObject);
+        yield return null;
+        string none = bar.QuestText;
+
+        world.OnQuestLog(HuntAt(QuestState.Active, 3));
+        yield return null;
+        string active = bar.QuestText;
+        world.OnQuestLog(HuntAt(QuestState.Active, 5));
+        yield return null;
+        string ready = bar.QuestText;
+        world.OnQuestLog(HuntAt(QuestState.Completed, 5));
+        yield return null;
+
+        Assert.That(none, Is.Empty);
+        Assert.That(active, Is.EqualTo("Crawler Hunt 3/5"), "no connection saw an offer, so the quest names itself");
+        Assert.That(ready, Is.EqualTo("Crawler Hunt 5/5 (ready)"));
+        Assert.That(bar.QuestText, Is.Empty);
+    }
+
+    // The first quest log of a world is its baseline, not news; each later one says what changed (Prototype Content §2).
+    [UnityTest]
+    public IEnumerator FeedbackLines_SayWhatEachQuestLogChanged_ButNotTheBaseline()
+    {
+        GameClient client = CreateIdleClient();
+        ClientWorld world = GiveWorld(client);
+        GiveQuest(client);
+        var lines = FeedbackLines.Create(client);
+        m_created.Add(lines.gameObject);
+        yield return null;
+
+        world.OnQuestLog(HuntAt(QuestState.Active, 1));
+        string afterTheBaseline = lines.Text;
+        world.OnQuestLog(HuntAt(QuestState.Active, 2));
+        world.OnQuestLog(HuntAt(QuestState.Active, 5));
+        world.OnQuestLog(HuntAt(QuestState.Completed, 5));
+
+        Assert.That(afterTheBaseline, Is.Empty, "a quest held since an earlier session is no news");
+        Assert.That(
+            lines.Text.Split('\n'),
+            Is.EqualTo(
+                new[] { "Crawler Hunt: 2/5.", "Crawler Hunt is ready to turn in.", "Completed Crawler Hunt." }));
     }
 }
 }
