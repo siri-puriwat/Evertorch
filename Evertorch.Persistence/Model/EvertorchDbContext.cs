@@ -16,10 +16,16 @@ internal sealed class EvertorchDbContext : DbContext
     public const int MaxQuantity = 1_000_000;
     public const long MaxInventoryRevision = uint.MaxValue;
 
+    /// <summary>
+    ///     The coin cap (Gameplay Systems §11.3).
+    /// </summary>
+    public const long MaxCurrency = 1_000_000_000;
+
     private const int MaxStatusLength = 16;
     private const int MaxSchemeLength = 32;
     private const int MaxSlotLength = 16;
     private const int MaxOperationTypeLength = 32;
+    private const int MaxQuestStateLength = 16;
 
     public EvertorchDbContext(DbContextOptions<EvertorchDbContext> options)
         : base(options)
@@ -36,6 +42,8 @@ internal sealed class EvertorchDbContext : DbContext
 
     public DbSet<LedgerRow> Ledger => Set<LedgerRow>();
 
+    public DbSet<CharacterQuestRow> CharacterQuests => Set<CharacterQuestRow>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         ConfigureAccounts(modelBuilder.Entity<AccountRow>());
@@ -43,6 +51,7 @@ internal sealed class EvertorchDbContext : DbContext
         ConfigureInventory(modelBuilder.Entity<InventoryItemRow>());
         ConfigureEquipment(modelBuilder.Entity<EquipmentRow>());
         ConfigureLedger(modelBuilder.Entity<LedgerRow>());
+        ConfigureQuests(modelBuilder.Entity<CharacterQuestRow>());
 
         foreach (IMutableEntityType entity in modelBuilder.Model.GetEntityTypes())
         {
@@ -81,7 +90,9 @@ internal sealed class EvertorchDbContext : DbContext
             table.HasCheckConstraint(
                 "ck_characters_stats",
                 "str >= 0 AND agi >= 0 AND vit >= 0 AND int >= 0 AND dex >= 0 AND luk >= 0");
-            table.HasCheckConstraint("ck_characters_resources", "hp >= 0 AND sp >= 0 AND currency >= 0");
+            table.HasCheckConstraint(
+                "ck_characters_resources",
+                $"hp >= 0 AND sp >= 0 AND currency BETWEEN 0 AND {MaxCurrency}");
             table.HasCheckConstraint(
                 "ck_characters_inventory_revision",
                 $"inventory_revision BETWEEN 0 AND {MaxInventoryRevision}");
@@ -158,7 +169,8 @@ internal sealed class EvertorchDbContext : DbContext
             table.HasCheckConstraint(
                 "ck_economy_ledger_operation_type",
                 $"operation_type IN ('{LedgerRow.PickupOperation}', '{LedgerRow.EquipOperation}', "
-                + $"'{LedgerRow.UnequipOperation}', '{LedgerRow.ConsumeOperation}')");
+                + $"'{LedgerRow.UnequipOperation}', '{LedgerRow.ConsumeOperation}', '{LedgerRow.BuyOperation}', "
+                + $"'{LedgerRow.SellOperation}', '{LedgerRow.QuestRewardOperation}')");
         });
         entry.HasKey(row => row.Id).HasName("pk_economy_ledger");
         entry.Property(row => row.Id).UseIdentityAlwaysColumn();
@@ -172,6 +184,26 @@ internal sealed class EvertorchDbContext : DbContext
             .HasForeignKey(row => row.ActorCharacterId)
             .OnDelete(DeleteBehavior.Restrict)
             .HasConstraintName("fk_economy_ledger_characters");
+    }
+
+    private static void ConfigureQuests(EntityTypeBuilder<CharacterQuestRow> quest)
+    {
+        quest.ToTable("character_quests", table =>
+        {
+            table.HasCheckConstraint(
+                "ck_character_quests_state",
+                $"state IN ('{CharacterQuestRow.ActiveState}', '{CharacterQuestRow.CompletedState}')");
+            table.HasCheckConstraint("ck_character_quests_progress", "progress >= 0");
+        });
+        quest.HasKey(row => new { row.CharacterId, row.QuestDefinitionId }).HasName("pk_character_quests");
+        quest.Property(row => row.QuestDefinitionId).HasMaxLength(MaxDefinitionIdLength).IsRequired();
+        quest.Property(row => row.State).HasMaxLength(MaxQuestStateLength).IsRequired();
+        quest.Property(row => row.Version).IsConcurrencyToken();
+        quest.HasOne<CharacterRow>()
+            .WithMany()
+            .HasForeignKey(row => row.CharacterId)
+            .OnDelete(DeleteBehavior.Restrict)
+            .HasConstraintName("fk_character_quests_characters");
     }
 
     private static string ToSnakeCase(string name)

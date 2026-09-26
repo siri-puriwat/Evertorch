@@ -28,6 +28,10 @@ public sealed class PickupSystem : ITickPhase
 
     private const int MillisecondsPerSecond = 1000;
 
+    // A lookup that failed for a reason other than an outage is asked again only after this long, not on every tick
+    // with an error each time (Persistence §9).
+    private const int FailedLookupDelayMs = 1000;
+
     private static readonly Action<ILogger, Guid, long, long, Exception?> LogUnsettled =
         LoggerMessage.Define<Guid, long, long>(
             LogLevel.Warning,
@@ -45,7 +49,9 @@ public sealed class PickupSystem : ITickPhase
     private readonly ILogger<PickupSystem> m_logger;
     private readonly float m_reach;
     private readonly uint m_priorityTicks;
-    private readonly List<CharacterSession> m_unsettled = new();
+    private readonly uint m_failedLookupDelayTicks;
+    private readonly List<(CharacterSession Character, uint NotBefore)> m_unsettled = new();
+    private uint m_tick;
 
     public PickupSystem(
         SessionRegistry sessions,
@@ -69,18 +75,23 @@ public sealed class PickupSystem : ITickPhase
         m_logger = logger;
         m_reach = worldOptions.Value.PickupRange + worldOptions.Value.AttackRangeTolerance;
         m_priorityTicks = (uint)((long)LootPriorityMs * simulation.Value.TickRate / MillisecondsPerSecond);
+        m_failedLookupDelayTicks =
+            (uint)((long)FailedLookupDelayMs * simulation.Value.TickRate / MillisecondsPerSecond);
     }
 
     public TickPhase Phase => TickPhase.SchedulePersistence;
 
     /// <summary>
-    ///     Asks the ledger again about every commit whose answer was lost, once the database takes work again.
+    ///     Asks the ledger again about every commit whose answer was lost, once the database takes work again and any
+    ///     wait after a failed lookup is over.
     /// </summary>
     public void Execute(in TickContext context)
     {
+        m_tick = context.Tick;
         for (int index = m_unsettled.Count - 1; index >= 0; index--)
         {
-            if (TryQueueLookup(m_unsettled[index]))
+            (CharacterSession character, uint notBefore) = m_unsettled[index];
+            if (unchecked((int)(m_tick - notBefore)) >= 0 && TryQueueLookup(character))
             {
                 m_unsettled.RemoveAt(index);
             }
@@ -183,7 +194,7 @@ public sealed class PickupSystem : ITickPhase
             null);
         if (!TryQueueLookup(character))
         {
-            m_unsettled.Add(character);
+            m_unsettled.Add((character, m_tick));
         }
     }
 
@@ -205,7 +216,8 @@ public sealed class PickupSystem : ITickPhase
     {
         if (outcome != PersistenceOutcome.Succeeded)
         {
-            m_unsettled.Add(character);
+            uint notBefore = outcome == PersistenceOutcome.Failed ? m_tick + m_failedLookupDelayTicks : m_tick;
+            m_unsettled.Add((character, notBefore));
             return;
         }
 

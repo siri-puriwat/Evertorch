@@ -6,6 +6,7 @@ using Evertorch.Game;
 using Evertorch.Persistence;
 using Evertorch.Protocol;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace Evertorch.Server
 {
@@ -23,6 +24,11 @@ public sealed class ItemActionSystem : ITickPhase
     private const string UnequipLookup = "unequip lookup";
     private const string ConsumeOperation = "consume";
     private const string ConsumeLookup = "consume lookup";
+    private const int MillisecondsPerSecond = 1000;
+
+    // A lookup that failed for a reason other than an outage is asked again only after this long, not on every tick
+    // with an error each time (Persistence §9).
+    private const int FailedLookupDelayMs = 1000;
 
     private static readonly Action<ILogger, InventoryOperationKind, Guid, long, long, Exception?> LogUnsettled =
         LoggerMessage.Define<InventoryOperationKind, Guid, long, long>(
@@ -39,7 +45,9 @@ public sealed class ItemActionSystem : ITickPhase
     private readonly TimeProvider m_time;
     private readonly AuditLog m_audit;
     private readonly ILogger<ItemActionSystem> m_logger;
-    private readonly List<CharacterSession> m_unsettled = new();
+    private readonly uint m_failedLookupDelayTicks;
+    private readonly List<(CharacterSession Character, uint NotBefore)> m_unsettled = new();
+    private uint m_tick;
 
     public ItemActionSystem(
         PersistenceWorker persistence,
@@ -48,6 +56,7 @@ public sealed class ItemActionSystem : ITickPhase
         CharacterStats stats,
         ServerContent content,
         TimeProvider time,
+        IOptions<SimulationOptions> simulation,
         AuditLog audit,
         ILogger<ItemActionSystem> logger)
     {
@@ -59,18 +68,23 @@ public sealed class ItemActionSystem : ITickPhase
         m_time = time;
         m_audit = audit;
         m_logger = logger;
+        m_failedLookupDelayTicks =
+            (uint)((long)FailedLookupDelayMs * simulation.Value.TickRate / MillisecondsPerSecond);
     }
 
     public TickPhase Phase => TickPhase.SchedulePersistence;
 
     /// <summary>
-    ///     Asks the ledger again about every commit whose answer was lost, once the database takes work again.
+    ///     Asks the ledger again about every commit whose answer was lost, once the database takes work again and any
+    ///     wait after a failed lookup is over.
     /// </summary>
     public void Execute(in TickContext context)
     {
+        m_tick = context.Tick;
         for (int index = m_unsettled.Count - 1; index >= 0; index--)
         {
-            if (TryQueueLookup(m_unsettled[index]))
+            (CharacterSession character, uint notBefore) = m_unsettled[index];
+            if (unchecked((int)(m_tick - notBefore)) >= 0 && TryQueueLookup(character))
             {
                 m_unsettled.RemoveAt(index);
             }
@@ -262,7 +276,7 @@ public sealed class ItemActionSystem : ITickPhase
             null);
         if (!TryQueueLookup(character))
         {
-            m_unsettled.Add(character);
+            m_unsettled.Add((character, m_tick));
         }
     }
 
@@ -285,7 +299,8 @@ public sealed class ItemActionSystem : ITickPhase
     {
         if (outcome != PersistenceOutcome.Succeeded)
         {
-            m_unsettled.Add(character);
+            uint notBefore = outcome == PersistenceOutcome.Failed ? m_tick + m_failedLookupDelayTicks : m_tick;
+            m_unsettled.Add((character, notBefore));
             return;
         }
 

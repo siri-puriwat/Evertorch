@@ -130,7 +130,16 @@ internal sealed class TestServer
             simulation,
             Audit,
             PickupLog);
-        Items = new ItemActionSystem(Persistence, sender, Lifetime, stats, Content, Time, Audit, ItemActionLog);
+        Items = new ItemActionSystem(
+            Persistence,
+            sender,
+            Lifetime,
+            stats,
+            Content,
+            Time,
+            simulation,
+            Audit,
+            ItemActionLog);
         Progression = new CharacterProgression(
             Sessions,
             Lifetime,

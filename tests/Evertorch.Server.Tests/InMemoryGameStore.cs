@@ -90,6 +90,16 @@ internal sealed class InMemoryGameStore : IGameStore
     /// </summary>
     public List<Guid> ConsumeCommits { get; } = new();
 
+    /// <summary>
+    ///     How many of the next operation lookups fail with an error of the store's own, not an outage.
+    /// </summary>
+    public int FailingLookups { get; set; }
+
+    /// <summary>
+    ///     Every operation lookup asked for, in order, by operation ID, including the ones that failed or met an outage.
+    /// </summary>
+    public List<Guid> Lookups { get; } = new();
+
     public int LedgerCount
     {
         get
@@ -290,9 +300,20 @@ internal sealed class InMemoryGameStore : IGameStore
         IReadOnlyCollection<long> rowIds,
         CancellationToken cancellationToken)
     {
+        lock (m_gate)
+        {
+            Lookups.Add(operationId);
+        }
+
         ThrowIfUnavailable();
         lock (m_gate)
         {
+            if (FailingLookups > 0)
+            {
+                FailingLookups--;
+                throw new InvalidOperationException("scripted failure of the lookup");
+            }
+
             return Task.FromResult(Find(operationId, characterId, rowIds));
         }
     }
@@ -345,7 +366,8 @@ internal sealed class InMemoryGameStore : IGameStore
         string? item = null,
         int? spirit = null,
         int? level = null,
-        long? experience = null)
+        long? experience = null,
+        long? coins = null)
     {
         lock (m_gate)
         {
@@ -357,6 +379,7 @@ internal sealed class InMemoryGameStore : IGameStore
             row.Spirit = spirit ?? row.Spirit;
             row.Level = level ?? row.Level;
             row.Experience = experience ?? row.Experience;
+            row.Coins = coins ?? row.Coins;
             if (item != null)
             {
                 row.Items.Add(new StoredItem(++m_lastItem, item, 1));
@@ -412,13 +435,14 @@ internal sealed class InMemoryGameStore : IGameStore
 
         if (entry.Character != characterId)
         {
-            return new InventoryResult(InventoryStatus.TakenByOther, 0, Array.Empty<StoredItem>());
+            return new InventoryResult(InventoryStatus.TakenByOther, 0, 0, Array.Empty<StoredItem>());
         }
 
         Row row = m_characters[characterId];
         return new InventoryResult(
             InventoryStatus.Committed,
             row.InventoryRevision,
+            row.Coins,
             new[] { entry.Item }
                 .Concat(rowIds.Where(id => id != entry.Item))
                 .Select(id => row.Read(id, id == entry.Item ? entry.ItemDefinition : string.Empty))
@@ -431,7 +455,7 @@ internal sealed class InMemoryGameStore : IGameStore
         int index = row.Items.FindIndex(item => item.Id == consume.InventoryItemId);
         if (index < 0)
         {
-            return new InventoryResult(InventoryStatus.Refused, row.InventoryRevision, Array.Empty<StoredItem>());
+            return Unchanged(InventoryStatus.Refused, row);
         }
 
         StoredItem used = row.Items[index];
@@ -449,6 +473,7 @@ internal sealed class InMemoryGameStore : IGameStore
         return new InventoryResult(
             InventoryStatus.Committed,
             row.InventoryRevision,
+            row.Coins,
             new[] { row.Read(used.Id, used.ItemDefinitionId) });
     }
 
@@ -469,14 +494,18 @@ internal sealed class InMemoryGameStore : IGameStore
         row.Equipment.TryGetValue(equip.Slot, out long worn);
         if (row.Items.All(item => item.Id != equip.InventoryItemId) || worn == equip.InventoryItemId)
         {
-            return new InventoryResult(InventoryStatus.Refused, row.InventoryRevision, Array.Empty<StoredItem>());
+            return Unchanged(InventoryStatus.Refused, row);
         }
 
         row.Equipment[equip.Slot] = equip.InventoryItemId;
         row.InventoryRevision = unchecked(row.InventoryRevision + 1);
         m_ledger.Add(equip.OperationId, new LedgerEntry(equip.CharacterId, equip.InventoryItemId));
         long[] changed = worn == 0 ? new[] { equip.InventoryItemId } : new[] { equip.InventoryItemId, worn };
-        return new InventoryResult(InventoryStatus.Committed, row.InventoryRevision, changed.Select(row.Read).ToList());
+        return new InventoryResult(
+            InventoryStatus.Committed,
+            row.InventoryRevision,
+            row.Coins,
+            changed.Select(row.Read).ToList());
     }
 
     private InventoryResult Unequip(UnequipCommit unequip)
@@ -484,13 +513,17 @@ internal sealed class InMemoryGameStore : IGameStore
         Row row = m_characters[unequip.CharacterId];
         if (!row.Equipment.TryGetValue(unequip.Slot, out long worn))
         {
-            return new InventoryResult(InventoryStatus.Refused, row.InventoryRevision, Array.Empty<StoredItem>());
+            return Unchanged(InventoryStatus.Refused, row);
         }
 
         row.Equipment.Remove(unequip.Slot);
         row.InventoryRevision = unchecked(row.InventoryRevision + 1);
         m_ledger.Add(unequip.OperationId, new LedgerEntry(unequip.CharacterId, worn));
-        return new InventoryResult(InventoryStatus.Committed, row.InventoryRevision, new[] { row.Read(worn) });
+        return new InventoryResult(
+            InventoryStatus.Committed,
+            row.InventoryRevision,
+            row.Coins,
+            new[] { row.Read(worn) });
     }
 
     private InventoryResult Commit(PickupCommit pickup)
@@ -500,7 +533,7 @@ internal sealed class InMemoryGameStore : IGameStore
         int held = index >= 0 ? row.Items[index].Quantity : 0;
         if (held > pickup.StackLimit - pickup.Amount || (index < 0 && row.Items.Count >= pickup.MaxRows))
         {
-            return new InventoryResult(InventoryStatus.InventoryFull, row.InventoryRevision, Array.Empty<StoredItem>());
+            return Unchanged(InventoryStatus.InventoryFull, row);
         }
 
         StoredItem stack = index >= 0 && pickup.StackLimit > 1
@@ -517,7 +550,12 @@ internal sealed class InMemoryGameStore : IGameStore
 
         row.InventoryRevision = unchecked(row.InventoryRevision + 1);
         m_ledger.Add(pickup.DropId, new LedgerEntry(pickup.CharacterId, stack.Id));
-        return new InventoryResult(InventoryStatus.Committed, row.InventoryRevision, new[] { stack });
+        return new InventoryResult(InventoryStatus.Committed, row.InventoryRevision, row.Coins, new[] { stack });
+    }
+
+    private static InventoryResult Unchanged(InventoryStatus status, Row row)
+    {
+        return new InventoryResult(status, row.InventoryRevision, row.Coins, Array.Empty<StoredItem>());
     }
 
     private IReadOnlyList<CharacterSummary> List(AccountId account)
@@ -592,6 +630,8 @@ internal sealed class InMemoryGameStore : IGameStore
 
         public uint InventoryRevision { get; set; }
 
+        public long Coins { get; set; }
+
         public List<StoredItem> Items { get; } = new();
 
         /// <summary>The row each worn slot holds, by the database's slot name.</summary>
@@ -627,6 +667,7 @@ internal sealed class InMemoryGameStore : IGameStore
                 Map,
                 Position,
                 InventoryRevision,
+                Coins,
                 Items.Select(item => Read(item.Id)).ToList());
         }
     }

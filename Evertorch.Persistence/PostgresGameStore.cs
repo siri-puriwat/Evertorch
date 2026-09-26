@@ -173,6 +173,7 @@ RETURNING id AS ""Id"", status AS ""Status""")
                     row.MapDefinitionId,
                     new WorldPosition(row.PositionX, row.PositionY, row.PositionZ),
                     (uint)row.InventoryRevision,
+                    row.Currency,
                     items);
             },
             cancellationToken);
@@ -260,6 +261,7 @@ RETURNING id AS ""Id"", status AS ""Status""")
                         return new InventoryResult(
                             InventoryStatus.InventoryFull,
                             (uint)character.InventoryRevision,
+                            character.Currency,
                             Array.Empty<StoredItem>());
                     }
 
@@ -319,6 +321,7 @@ RETURNING id AS ""Id"", status AS ""Status""")
                     return new InventoryResult(
                         InventoryStatus.Committed,
                         (uint)character.InventoryRevision,
+                        character.Currency,
                         new[] { new StoredItem(stack.Id, stack.ItemDefinitionId, stack.Quantity) });
                 }
             },
@@ -660,6 +663,7 @@ RETURNING id AS ""Id"", status AS ""Status""")
         return new InventoryResult(
             InventoryStatus.Refused,
             (uint)character.InventoryRevision,
+            character.Currency,
             Array.Empty<StoredItem>());
     }
 
@@ -700,7 +704,11 @@ RETURNING id AS ""Id"", status AS ""Status""")
                 entry.ItemDefinitionId ?? string.Empty,
                 cancellationToken)
             .ConfigureAwait(false);
-        return new InventoryResult(InventoryStatus.Committed, (uint)character.InventoryRevision, rows);
+        return new InventoryResult(
+            InventoryStatus.Committed,
+            (uint)character.InventoryRevision,
+            character.Currency,
+            rows);
     }
 
     private static async Task<InventoryResult?> FindAsync(
@@ -721,12 +729,12 @@ RETURNING id AS ""Id"", status AS ""Status""")
 
         if (entry.ActorCharacterId != characterId)
         {
-            return new InventoryResult(InventoryStatus.TakenByOther, 0, Array.Empty<StoredItem>());
+            return new InventoryResult(InventoryStatus.TakenByOther, 0, 0, Array.Empty<StoredItem>());
         }
 
-        long revision = await context.Characters
+        var now = await context.Characters
             .Where(row => row.Id == characterId)
-            .Select(row => row.InventoryRevision)
+            .Select(row => new { row.InventoryRevision, row.Currency })
             .SingleAsync(cancellationToken)
             .ConfigureAwait(false);
         var reported = new List<long>();
@@ -743,7 +751,7 @@ RETURNING id AS ""Id"", status AS ""Status""")
                 entry.ItemDefinitionId ?? string.Empty,
                 cancellationToken)
             .ConfigureAwait(false);
-        return new InventoryResult(InventoryStatus.Committed, (uint)revision, rows);
+        return new InventoryResult(InventoryStatus.Committed, (uint)now.InventoryRevision, now.Currency, rows);
     }
 
     // The rows as they are now, each with its equipped slot. A row that no longer exists was emptied, so it comes back

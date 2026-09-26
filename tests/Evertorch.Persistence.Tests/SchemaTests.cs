@@ -79,6 +79,37 @@ public sealed class SchemaTests
         AssertFailsWith(CheckViolation, Sql.ItemInsert(character, quantity));
     }
 
+    [TestCase(-1L)]
+    [TestCase(1_000_000_001L)]
+    public void Character_WithCoinsOutsideTheirBounds_IsRejected(long coins)
+    {
+        long account = m_sql.InsertAccount();
+        string name = Sql.UniqueName("Coi");
+
+        AssertFailsWith(CheckViolation, Sql.CharacterInsert(account, name, name.ToLowerInvariant(), 0, coins));
+    }
+
+    [TestCase(0L)]
+    [TestCase(1_000_000_000L)]
+    public void Character_AtTheCoinBounds_IsStored(long coins)
+    {
+        long account = m_sql.InsertAccount();
+        string name = Sql.UniqueName("Cap");
+
+        long id = m_sql.Scalar(Sql.CharacterInsert(account, name, name.ToLowerInvariant(), 0, coins));
+
+        Assert.That(m_sql.Scalar($"SELECT currency FROM characters WHERE id = {id}"), Is.EqualTo(coins));
+    }
+
+    [TestCase("failed", 0)]
+    [TestCase("active", -1)]
+    public void CharacterQuest_WithAnUnknownStateOrNegativeProgress_IsRejected(string state, int progress)
+    {
+        long character = NewCharacter();
+
+        AssertFailsWith(CheckViolation, Sql.QuestInsert(character, "quest.crawler_hunt", state, progress));
+    }
+
     [TestCase(1)]
     [TestCase(1_000_000)]
     public void InventoryItem_AtTheQuantityBounds_IsStored(int quantity)
@@ -122,6 +153,9 @@ public sealed class SchemaTests
     [TestCase("equip")]
     [TestCase("unequip")]
     [TestCase("consume")]
+    [TestCase("buy")]
+    [TestCase("sell")]
+    [TestCase("quest_reward")]
     public void Ledger_WithAKnownOperationType_IsStored(string operationType)
     {
         long character = NewCharacter();
@@ -140,6 +174,33 @@ public sealed class SchemaTests
         m_sql.Execute(insert);
 
         AssertFailsWith(UniqueViolation, insert);
+    }
+
+    [Test]
+    public void CharacterQuest_ActiveOrCompleted_IsStoredOncePerCharacterAndQuest()
+    {
+        long character = NewCharacter();
+        m_sql.Execute(Sql.QuestInsert(character, "quest.crawler_hunt", "active", 3));
+        m_sql.Execute(Sql.QuestInsert(character, "quest.other", "completed", 5));
+
+        AssertFailsWith(UniqueViolation, Sql.QuestInsert(character, "quest.crawler_hunt", "completed", 5));
+        Assert.That(
+            m_sql.Scalar($"SELECT count(*) FROM character_quests WHERE character_id = {character}"),
+            Is.EqualTo(2));
+    }
+
+    [Test]
+    public void CharacterQuest_OfAMissingCharacter_IsRejected()
+    {
+        AssertFailsWith(ForeignKeyViolation, Sql.QuestInsert(long.MaxValue, "quest.crawler_hunt", "active", 0));
+    }
+
+    [Test]
+    public void CharacterQuest_WithAQuestIdLongerThanSixtyFour_IsRejectedByTheColumn()
+    {
+        long character = NewCharacter();
+
+        AssertFailsWith(ValueTooLong, Sql.QuestInsert(character, $"quest.{new string('x', 59)}", "active", 0));
     }
 
     [Test]
@@ -297,8 +358,8 @@ public sealed class SchemaTests
         Assert.That(
             m_sql.Scalar(
                 "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name IN "
-                + "('accounts', 'characters', 'inventory_items', 'equipment', 'economy_ledger')"),
-            Is.EqualTo(5));
+                + "('accounts', 'characters', 'inventory_items', 'equipment', 'economy_ledger', 'character_quests')"),
+            Is.EqualTo(6));
     }
 }
 }

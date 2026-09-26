@@ -22,7 +22,7 @@ public sealed class CharacterInventoryTests
 
     private static InventoryResult Result(uint revision, params StoredItem[] rows)
     {
-        return new InventoryResult(InventoryStatus.Committed, revision, rows);
+        return new InventoryResult(InventoryStatus.Committed, revision, 0, rows);
     }
 
     private static CharacterInventory Loaded(params StoredItem[] items)
@@ -41,6 +41,7 @@ public sealed class CharacterInventoryTests
                 "map.training_ground",
                 new WorldPosition(0f, 0f, 0f),
                 1,
+                0,
                 items));
     }
 

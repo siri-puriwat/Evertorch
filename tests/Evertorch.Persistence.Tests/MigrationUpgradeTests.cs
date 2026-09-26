@@ -15,6 +15,7 @@ namespace Evertorch.Persistence.Tests
 public sealed class MigrationUpgradeTests
 {
     private const string InitialSchema = "20260923125025_InitialSchema";
+    private const string WidenLedgerOperationTypes = "20260926015421_WidenLedgerOperationTypes";
     private const string CheckViolation = "23514";
 
     private static readonly string[] Tables =
@@ -74,6 +75,49 @@ public sealed class MigrationUpgradeTests
             Is.All.Null,
             "the new operation types are accepted");
         Assert.That(SqlStateOf(sql, Sql.LedgerInsert(Guid.NewGuid(), character, "trade")), Is.EqualTo(CheckViolation));
+    }
+
+    [Test]
+    public void Upgrade_FromWidenLedgerOperationTypes_KeepsEveryRow_AddsQuestsTheShopsTypesAndTheCoinCap()
+    {
+        using var database = PostgresFixture.Start(targetMigration: WidenLedgerOperationTypes);
+        var sql = new Sql(database.ConnectionString);
+        long account = sql.InsertAccount();
+        long character = sql.InsertCharacter(account, Sql.UniqueName("Up"));
+        long gel = sql.InsertItem(character, 7);
+        long weapon = sql.InsertItem(character, 1);
+        sql.Execute(Sql.EquipmentInsert(character, "Weapon", weapon));
+        sql.Scalar(Sql.LedgerInsert(Guid.NewGuid(), character, "pickup"));
+        sql.Scalar(Sql.LedgerInsert(Guid.NewGuid(), character, "equip"));
+        sql.Scalar(Sql.LedgerInsert(Guid.NewGuid(), character, "consume"));
+        sql.Execute($"UPDATE characters SET currency = 250 WHERE id = {character}");
+        string? buyBefore = SqlStateOf(sql, Sql.LedgerInsert(Guid.NewGuid(), character, "buy"));
+        string before = Dump(sql);
+
+        EvertorchDatabase.ApplyMigrationsAsync(database.ConnectionString, CancellationToken.None)
+            .GetAwaiter()
+            .GetResult();
+
+        IReadOnlyList<string> pending = EvertorchDatabase
+            .GetPendingMigrationsAsync(database.ConnectionString, CancellationToken.None)
+            .GetAwaiter()
+            .GetResult();
+        Assert.That(buyBefore, Is.EqualTo(CheckViolation), "the ledger knew no buys before");
+        Assert.That(pending, Is.Empty);
+        Assert.That(Dump(sql), Is.EqualTo(before), "every row as it was");
+        Assert.That(sql.Scalar($"SELECT quantity FROM inventory_items WHERE id = {gel}"), Is.EqualTo(7));
+        Assert.That(
+            new[] { "buy", "sell", "quest_reward" }
+                .Select(type => SqlStateOf(sql, Sql.LedgerInsert(Guid.NewGuid(), character, type))),
+            Is.All.Null,
+            "the new operation types are accepted");
+        Assert.That(SqlStateOf(sql, Sql.LedgerInsert(Guid.NewGuid(), character, "trade")), Is.EqualTo(CheckViolation));
+        Assert.That(
+            SqlStateOf(sql, $"UPDATE characters SET currency = 1000000001 WHERE id = {character}"),
+            Is.EqualTo(CheckViolation),
+            "the coin cap holds");
+        Assert.That(SqlStateOf(sql, $"UPDATE characters SET currency = 1000000000 WHERE id = {character}"), Is.Null);
+        Assert.That(SqlStateOf(sql, Sql.QuestInsert(character, "quest.crawler_hunt", "active", 0)), Is.Null);
     }
 }
 }

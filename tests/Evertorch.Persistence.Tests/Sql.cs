@@ -60,13 +60,13 @@ internal sealed class Sql
         return Scalar(CharacterInsert(account, name, name.ToLowerInvariant(), 0));
     }
 
-    public static string CharacterInsert(long account, string name, string normalized, long revision)
+    public static string CharacterInsert(long account, string name, string normalized, long revision, long coins = 0)
     {
         return "INSERT INTO characters (account_id, name, name_normalized, job_definition_id, base_level, job_level, "
             + "base_exp, job_exp, str, agi, vit, \"int\", dex, luk, hp, sp, currency, map_definition_id, "
             + "position_x, position_y, position_z, inventory_revision, created_at, version) "
-            + $"VALUES ({account}, '{name}', '{normalized}', 'job.adventurer', 1, 1, 0, 0, 5, 5, 5, 5, 5, 5, 60, 20, 0, "
-            + $"'map.training_ground', 0, 0, 0, {revision}, now(), 0) RETURNING id";
+            + $"VALUES ({account}, '{name}', '{normalized}', 'job.adventurer', 1, 1, 0, 0, 5, 5, 5, 5, 5, 5, 60, 20, "
+            + $"{coins}, 'map.training_ground', 0, 0, 0, {revision}, now(), 0) RETURNING id";
     }
 
     public long InsertItem(long character, int quantity)
@@ -84,6 +84,14 @@ internal sealed class Sql
     {
         return "INSERT INTO equipment (character_id, slot, inventory_item_id, version) "
             + $"VALUES ({character}, '{slot}', {item}, 0)";
+    }
+
+    public static string QuestInsert(long character, string quest, string state, int progress)
+    {
+        string completedAt = state == "completed" ? "now()" : "NULL";
+        return "INSERT INTO character_quests (character_id, quest_definition_id, state, progress, started_at, "
+            + "completed_at, version) "
+            + $"VALUES ({character}, '{quest}', '{state}', {progress}, now(), {completedAt}, 0)";
     }
 
     public static string LedgerInsert(Guid operation, long? actor, string operationType)

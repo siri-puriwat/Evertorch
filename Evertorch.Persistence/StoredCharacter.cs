@@ -22,6 +22,7 @@ public sealed class StoredCharacter
         string mapDefinitionId,
         WorldPosition position,
         uint inventoryRevision,
+        long coins,
         IReadOnlyList<StoredItem> items)
     {
         Id = id;
@@ -36,6 +37,7 @@ public sealed class StoredCharacter
         MapDefinitionId = mapDefinitionId;
         Position = position;
         InventoryRevision = inventoryRevision;
+        Coins = coins;
         Items = items;
     }
 
@@ -68,6 +70,11 @@ public sealed class StoredCharacter
     public WorldPosition Position { get; }
 
     public uint InventoryRevision { get; }
+
+    /// <summary>
+    ///     The character's <c>currency</c>, from 0 to the cap (Gameplay Systems §11.3).
+    /// </summary>
+    public long Coins { get; }
 
     public IReadOnlyList<StoredItem> Items { get; }
 }
