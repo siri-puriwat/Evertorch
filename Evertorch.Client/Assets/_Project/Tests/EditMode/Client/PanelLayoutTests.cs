@@ -25,6 +25,21 @@ public sealed class PanelLayoutTests
         Assert.That(bottom + LinesHeight, Is.LessThan(canvasHeight * 0.6f), "the lines stay in the lower part");
     }
 
+    [TestCase(486f, TestName = "Landscape 20:9")]
+    [TestCase(607.5f, TestName = "Landscape 16:9")]
+    [TestCase(1920f, TestName = "Portrait 9:16")]
+    public void InventoryWindow_HangsBelowTheStatusBar_AndStopsAboveTheTouchButtonsWhileTheyShow(float canvasHeight)
+    {
+        Rect column = TouchControls.ButtonColumnBounds(ClientUI.CanvasWidth);
+        Rect withTouch = InventoryWindow.BoundsFor(canvasHeight, 60, true);
+        Rect withoutTouch = InventoryWindow.BoundsFor(canvasHeight, 60, false);
+
+        Assert.That(withTouch.yMax, Is.EqualTo(canvasHeight - 64f).Within(1e-3f), "below the status bar");
+        Assert.That(withTouch.Overlaps(column), Is.False, "no row under a touch button");
+        Assert.That(withTouch.Overlaps(TouchControls.StickBounds), Is.False, "nor under the stick");
+        Assert.That(withoutTouch.yMin, Is.EqualTo(8f).Within(1e-3f), "without them, down to the bottom margin");
+    }
+
     [TestCase(607.5f)]
     [TestCase(1920f)]
     public void SkillBarAndFeedbackLines_NeverCoverTheStickOrTheTouchButtons(float canvasHeight)
@@ -46,6 +61,14 @@ public sealed class PanelLayoutTests
         Assert.That(lines.Overlaps(column), Is.False, "the lines and the touch buttons");
         Assert.That(bar.xMin, Is.GreaterThan(stick.xMax));
         Assert.That(bar.xMax, Is.LessThan(column.xMin));
+    }
+
+    [Test]
+    public void InventoryWindow_WhileItsRowsFit_IsJustTallEnoughForThem()
+    {
+        Rect three = InventoryWindow.BoundsFor(1920f, 3, true);
+
+        Assert.That(three.height, Is.EqualTo(54f + 3 * 30f + 2 * 4f).Within(1e-3f));
     }
 }
 }

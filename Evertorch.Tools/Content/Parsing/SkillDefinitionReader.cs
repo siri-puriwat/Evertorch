@@ -58,6 +58,12 @@ internal static class SkillDefinitionReader
             root.ReportField("targetType", "must be self for a status effect");
         }
 
+        // Damage lands on an enemy; the server has no hit of a player on itself to resolve.
+        if (effect?.Kind == SkillEffectKind.Damage && targetType != SkillTargetType.Enemy)
+        {
+            root.ReportField("targetType", "must be enemy for a damage effect");
+        }
+
         YamlFieldReader client = root.RequiredMapping("client");
         string icon = client.RequiredAssetKey("icon");
 

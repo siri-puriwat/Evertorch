@@ -662,7 +662,8 @@ public sealed class SessionManager : ITickPhase
 
     /// <summary>
     ///     Moves every character that stands in a portal to its destination (Gameplay Systems §4.2). A dead,
-    ///     logging-out, or expelled character stays, and one with a pickup in flight waits for it to settle.
+    ///     logging-out, or expelled character stays, and one with an inventory operation in flight waits for it to
+    ///     settle.
     /// </summary>
     public void TransferThroughPortals(uint tick)
     {
@@ -713,6 +714,13 @@ public sealed class SessionManager : ITickPhase
             return;
         }
 
+        // Each crossing sends a whole baseline and queues a checkpoint, so one that just arrived crosses again only a
+        // second later, however it steps back and forth across the gate.
+        if (character.ArrivedThroughPortalTick is uint arrived && unchecked(tick - arrived) < m_tickRate)
+        {
+            return;
+        }
+
         WorldPosition arrival = portal.DestinationPosition;
         if (!m_world.TryGetMap(portal.DestinationMap, out MapInstance? destination)
             || destination == null
@@ -745,6 +753,7 @@ public sealed class SessionManager : ITickPhase
         player.StateFlags &= ~EntityStateFlags.Moving;
         destination.Add(player);
         character.Map = destination;
+        character.ArrivedThroughPortalTick = tick;
         session.MapEpoch = unchecked((byte)(session.MapEpoch + 1));
         SendBaseline(session, character, tick);
         m_lifetime.QueueCheckpoint(character);
@@ -932,9 +941,10 @@ public sealed class SessionManager : ITickPhase
         return CommandRejectionReason.None;
     }
 
-    // Logout stops new commands, waits for a pickup in flight, and writes the final checkpoint; only once it is
-    // written does the character leave (Persistence §7). Without the database the logout is refused and the player
-    // stays.
+    // Logout stops new commands, ends a cast in progress, waits for an inventory operation in flight, and writes the
+    // final checkpoint; only once it is written does the character leave (Persistence §7). A cast left to resolve
+    // after the checkpoint was taken would spend SP and heal or hurt without being saved. Without the database the
+    // logout is refused and the player stays.
     private CommandRejectionReason TryLogout(ClientSession session, uint commandSequence)
     {
         CharacterSession character = session.Character!;
@@ -946,6 +956,7 @@ public sealed class SessionManager : ITickPhase
         character.IsLoggingOut = true;
         character.LogoutSequence = commandSequence;
         character.Player.Combat.IsAutoAttacking = false;
+        m_combat.InterruptCast(character.Player);
         // Moves queued before the logout must not walk the character away from the checkpoint it is about to write.
         session.Input!.Halt();
         if (character.Operation == null)

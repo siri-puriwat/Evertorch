@@ -525,6 +525,45 @@ public sealed class PlayerPanelTests
         Assert.That(window.Text, Does.EndWith("Training Sword x 1"), "without a connection a press sends nothing");
     }
 
+    // A row under a touch button would take the taps meant for it, and a press of a row equips or drinks.
+    [UnityTest]
+    public IEnumerator InventoryWindow_WithTheTouchControlsShown_StopsAboveTheirButtons_AndKeepsEveryRow()
+    {
+        GameClient client = CreateIdleClient();
+        ClientWorld world = GiveWorld(client);
+        GiveItems(client);
+        var touch = TouchControls.Create();
+        m_created.Add(touch.gameObject);
+        touch.SetVisible(true);
+        typeof(GameClient).GetProperty(nameof(GameClient.Touch))!.SetValue(client, touch);
+        var window = InventoryWindow.Create(client);
+        m_created.Add(window.gameObject);
+
+        world.Inventory.OnSnapshot(
+            new InventorySnapshot(
+                4,
+                0,
+                1,
+                Enumerable.Range(1, InventorySnapshot.MaxEntries)
+                    .Select(row => new InventoryEntry(row, new ItemDefinitionId(Sword), 1))
+                    .ToArray()));
+        yield return null;
+        yield return null;
+        yield return null;
+        Rect shown = ScreenRect(window.transform.Find("Panel"));
+        Rect[] buttons = new[] { "Next", "Previous", "Clear" }
+            .Select(name => ScreenRect(
+                touch.GetComponentsInChildren<RectTransform>(true).Single(rect => rect.name == name)))
+            .ToArray();
+        Debug.Log($"Inventory at {Screen.width} x {Screen.height}: {shown}");
+
+        Assert.That(buttons.Where(rect => rect.Overlaps(shown)), Is.Empty, "no row lies under a touch button");
+        Assert.That(
+            window.GetComponentsInChildren<Button>(true),
+            Has.Length.EqualTo(InventorySnapshot.MaxEntries),
+            "the rows that do not fit scroll");
+    }
+
     [UnityTest]
     public IEnumerator InventoryWindow_ListsTheRows_AndRewritesOnlyForANewRevision()
     {

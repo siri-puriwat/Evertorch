@@ -126,6 +126,7 @@ public sealed class ContentValidationTests
         "server.effect.damage",
         "exactly one of damage, heal, or status")]
     [TestCase(Focus, "targetType: self", "targetType: enemy", "targetType", "must be self for a status effect")]
+    [TestCase(Strike, "targetType: enemy", "targetType: self", "targetType", "must be enemy for a damage effect")]
     [TestCase(
         Focus,
         "status: status.focus",
@@ -208,6 +209,8 @@ public sealed class ContentValidationTests
         "references unknown skill 'skill.none'")]
     [TestCase(Monster, "drops:", "skills:\n  - skill: skill.basic_attack\n    chance: 0.5\ndrops:",
         "skills[0].skill", "which has no effect")]
+    [TestCase(Monster, "drops:", "skills:\n  - skill: skill.focus\n    chance: 0.5\ndrops:", "skills[0].skill",
+        "which is not cast at an enemy")]
     [TestCase(
         Monster,
         "drops:",

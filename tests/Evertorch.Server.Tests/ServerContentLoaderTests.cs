@@ -115,6 +115,11 @@ public sealed class ServerContentLoaderTests
         "[\n        \"30\",",
         "experience.json: definitions[0].levels[0]: must be a whole number")]
     [TestCase(Monsters, "\"baseExperience\": 10", "\"baseExperience\": -1", "baseExperience: must be at least 0")]
+    [TestCase(
+        Monsters,
+        "\"maxAmount\": 2",
+        "\"maxAmount\": 1000",
+        "monster.training_slime: drops up to 1000 of 'item.material.slime_gel', more than its stack limit of 999")]
     [TestCase(Monsters, "\"keepDistance\": 0", "\"keepDistance\": 1.5", "keepDistance: must be below attackRange")]
     [TestCase(Monsters, "\"magicAttack\": 0", "\"magicAttack\": -1", "magicAttack: must be at least 0")]
     [TestCase(
@@ -449,6 +454,38 @@ public sealed class ServerContentLoaderTests
             problems,
             Is.EqualTo(new[]
                 { "jobs.json: definitions[0].skills: lists more than the 11 skills a skill list carries" }));
+    }
+
+    [Test]
+    public void Load_WhenASelfSkillDealsDamage_OrAMonsterCastsASkillMeantForItsCaster_Fails()
+    {
+        Dictionary<string, byte[]> selfDamage = PackageFixture.BuildFixturePackage();
+        PackageFixture.Replace(selfDamage, Skills, "\"targetType\": \"enemy\"", "\"targetType\": \"self\"");
+        PackageFixture.Replace(
+            selfDamage,
+            Skills,
+            "\"cooldownMs\": 0",
+            "\"cooldownMs\": 0, \"effect\": { \"damageRatio\": 100 }");
+        Dictionary<string, byte[]> castForItself = PackageFixture.BuildFixturePackage();
+        AddFocus(castForItself, "100");
+        MakeTheBasicAttackApply(castForItself, "status.focus", "self");
+        PackageFixture.Replace(
+            castForItself,
+            Monsters,
+            "\"skills\": []",
+            "\"skills\": [{ \"skill\": \"skill.basic_attack\", \"chance\": 0.5 }]");
+
+        Assert.That(
+            ProblemsOf(selfDamage),
+            Is.EqualTo(new[] { "skills.json: definitions[0].targetType: must be enemy for a damage effect" }));
+        Assert.That(
+            ProblemsOf(castForItself),
+            Is.EqualTo(
+                new[]
+                {
+                    "monsters.json: monster.training_slime: casts skill 'skill.basic_attack', which is not cast at an "
+                    + "enemy"
+                }));
     }
 
     [Test]

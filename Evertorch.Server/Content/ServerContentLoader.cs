@@ -136,6 +136,7 @@ public static class ServerContentLoader
             jobs.Values,
             maps.Values,
             skills,
+            items,
             declaredItems,
             declaredMonsters,
             declaredSkills,
@@ -538,6 +539,12 @@ public static class ServerContentLoader
             entry.Report("targetType", "must be self for a status effect");
         }
 
+        // A player's hit on itself has no hit context to resolve (CombatSystem).
+        if (effect?.Kind == SkillEffectKind.Damage && targetType != SkillTargetType.Enemy)
+        {
+            entry.Report("targetType", "must be enemy for a damage effect");
+        }
+
         entry.ReportUnexpectedProperties();
         return problems.Count == problemsBefore
             ? new SkillDefinition(
@@ -858,6 +865,7 @@ public static class ServerContentLoader
         IEnumerable<JobDefinition> jobs,
         IEnumerable<MapDefinition> maps,
         IReadOnlyDictionary<SkillDefinitionId, SkillDefinition> skills,
+        IReadOnlyDictionary<ItemDefinitionId, ItemDefinition> items,
         HashSet<ItemDefinitionId> declaredItems,
         HashSet<MonsterDefinitionId> declaredMonsters,
         HashSet<SkillDefinitionId> declaredSkills,
@@ -882,6 +890,13 @@ public static class ServerContentLoader
                 {
                     problems.Add($"{MonstersFile}: {monster.Id}: drops unknown item '{drop.Item}'");
                 }
+                else if (items.TryGetValue(drop.Item, out ItemDefinition? item) && drop.MaxAmount > item.StackLimit)
+                {
+                    // A pickup is all or nothing (Gameplay Systems §11), so a larger drop could never be picked up.
+                    problems.Add(
+                        $"{MonstersFile}: {monster.Id}: drops up to {drop.MaxAmount} of '{drop.Item}', more than its "
+                        + $"stack limit of {item.StackLimit}");
+                }
             }
 
             foreach (MonsterSkill tried in monster.Skills)
@@ -893,6 +908,12 @@ public static class ServerContentLoader
                 else if (skills.TryGetValue(tried.Skill, out SkillDefinition? known) && known.Effect == null)
                 {
                     problems.Add($"{MonstersFile}: {monster.Id}: casts skill '{tried.Skill}', which has no effect");
+                }
+                else if (known != null && known.TargetType != SkillTargetType.Enemy)
+                {
+                    // A monster casts at the player it fights, so a skill for its caster would land on that player.
+                    problems.Add(
+                        $"{MonstersFile}: {monster.Id}: casts skill '{tried.Skill}', which is not cast at an enemy");
                 }
             }
         }

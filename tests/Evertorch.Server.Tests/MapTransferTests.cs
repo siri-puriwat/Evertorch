@@ -48,6 +48,25 @@ public sealed class MapTransferTests
     }
 
     [Test]
+    public void Crossing_Back_WaitsASecondFromTheArrival()
+    {
+        var server = new TestServer(withEveryMap: true);
+        ConnectionId player = server.EnterWorld(1);
+        StandIn(server, player, PortalOf(server, Ground));
+        server.Tick();
+        Assert.That(CharacterOf(server, player).Map.Definition.Id, Is.EqualTo(Field), "crossed");
+
+        StandIn(server, player, PortalOf(server, Field));
+        server.Tick(TestServer.TickRate - 2);
+        MapDefinitionId held = CharacterOf(server, player).Map.Definition.Id;
+        server.Tick(2);
+
+        Assert.That(held, Is.EqualTo(Field), "within a second of its arrival it stays");
+        Assert.That(CharacterOf(server, player).Map.Definition.Id, Is.EqualTo(Ground), "then it crosses back");
+        Assert.That(server.SessionOf(player).MapEpoch, Is.EqualTo(2));
+    }
+
+    [Test]
     public void Crossing_KeepsTheCommandSequence_AndEndsTheTargetAttackAndCast()
     {
         var server = new TestServer(withEveryMap: true, withMonsters: true, withMonsterAi: false);

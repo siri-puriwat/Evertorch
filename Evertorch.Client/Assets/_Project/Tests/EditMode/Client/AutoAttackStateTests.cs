@@ -245,6 +245,33 @@ public sealed class AutoAttackStateTests
     }
 
     [Test]
+    public void InRangeDuringOwnCast_IsNoStall_AndASecondWithoutASwingAfterItClosesIn()
+    {
+        WorldPosition start = ClientTestGrids.Center(1, 8);
+        var rig = new Rig(new WorldPosition(start.X + 1.2f, start.Y, start.Z));
+        rig.AutoAttack.Attack(Slime);
+        rig.World.OnSkillCastStarted(
+            new SkillCastStarted(
+                ClientWorldFixture.LocalEntity,
+                new SkillDefinitionId("skill.first_aid"),
+                ClientWorldFixture.LocalEntity,
+                1,
+                1500));
+
+        // The cast holds the player for 30 ticks; then 21 free ticks are one short of closing in.
+        for (int index = 0; index < 30 + 21; index++)
+        {
+            rig.Tick();
+        }
+
+        bool wasChasing = rig.Controller.IsChasing;
+        rig.Tick();
+
+        Assert.That(wasChasing, Is.False, "the cast held the swing back, so it was no stall");
+        Assert.That(rig.Controller.IsChasing, Is.True, "a second in range without a swing after it closes in");
+    }
+
+    [Test]
     public void InRangeWithoutASwing_ForASecond_ClosesIn()
     {
         WorldPosition start = ClientTestGrids.Center(1, 8);

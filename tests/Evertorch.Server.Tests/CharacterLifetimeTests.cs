@@ -334,6 +334,34 @@ public sealed class CharacterLifetimeTests
             "the move is acknowledged, not applied");
     }
 
+    // A cast left to resolve after the logout checkpoint was taken would spend SP and heal without being saved.
+    [Test]
+    public void Logout_DuringACast_EndsTheCastUnpaid_SoTheCheckpointHoldsWhatTheWorldKept()
+    {
+        var server = new TestServer();
+        ConnectionId connection = server.EnterWorld(7);
+        PlayerEntity player = server.PlayerOf(connection);
+        int spirit = player.CurrentSpirit;
+        server.SendUseSkill(connection, "skill.first_aid", default, 1);
+        server.Tick();
+        Assert.That(player.Combat.IsCasting, Is.True, "First Aid takes over a second to cast");
+        server.RunsPersistence = false;
+
+        server.SendLogout(connection, 2);
+        server.Tick(2 * TestServer.TickRate);
+        bool isCasting = player.Combat.IsCasting;
+        int spiritBeforeLeaving = player.CurrentSpirit;
+        server.RunsPersistence = true;
+        server.Tick(2);
+
+        Assert.That(isCasting, Is.False);
+        Assert.That(spiritBeforeLeaving, Is.EqualTo(spirit), "the cast was never paid for");
+        Assert.That(
+            server.Transport.SentTo(connection).Select(message => message.Opcode),
+            Has.None.EqualTo(MessageOpcode.SkillResolved));
+        Assert.That(server.Store.Checkpoints.Last().Spirit, Is.EqualTo(spirit));
+    }
+
     [Test]
     public void Logout_QueuedBehindACheckpointThatMeetsAnOutage_IsCancelledAndTheCharacterPlaysOn()
     {

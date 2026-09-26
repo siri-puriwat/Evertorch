@@ -40,6 +40,11 @@ public sealed class CharacterSession
     /// </summary>
     public bool IsInDeadEndPortal { get; set; }
 
+    /// <summary>
+    ///     The tick it last arrived through a portal; null before its first crossing.
+    /// </summary>
+    public uint? ArrivedThroughPortalTick { get; set; }
+
     public CharacterInventory Inventory { get; }
 
     /// <summary>
@@ -68,8 +73,8 @@ public sealed class CharacterSession
     public bool IsLoggingOut { get; set; }
 
     /// <summary>
-    ///     Its connection was closed for violations: the character is checkpointed and removed, once a pickup in flight
-    ///     settles, and no connection may attach to it (Network Protocol §3).
+    ///     Its connection was closed for violations: the character is checkpointed and removed, once an inventory
+    ///     operation in flight settles, and no connection may attach to it (Network Protocol §3).
     /// </summary>
     public bool IsExpelled { get; set; }
 

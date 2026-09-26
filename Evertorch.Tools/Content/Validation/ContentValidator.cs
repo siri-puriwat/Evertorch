@@ -273,8 +273,8 @@ public static class ContentValidator
         }
     }
 
-    // A monster casts through the skill pipeline, so each skill it lists must resolve to something (Content
-    // Pipeline §7).
+    // A monster casts through the skill pipeline at the player it fights, so each skill it lists must resolve to
+    // something and be cast at an enemy (Content Pipeline §7).
     private static void RequireMonsterSkills(
         AuthoredMonster monster,
         HashSet<string> knownSkills,
@@ -286,9 +286,18 @@ public static class ContentValidator
             string fieldPath = string.Format(CultureInfo.InvariantCulture, "skills[{0}].skill", index);
             string skill = monster.Definition.Skills[index].Skill.Value;
             RequireReference(knownSkills, skill, "skill", monster.Source, fieldPath, diagnostics);
-            if (skillsById.TryGetValue(skill, out SkillDefinition? definition) && definition.Effect == null)
+            if (!skillsById.TryGetValue(skill, out SkillDefinition? definition))
+            {
+                continue;
+            }
+
+            if (definition.Effect == null)
             {
                 Report(monster.Source, fieldPath, $"names skill '{skill}', which has no effect", diagnostics);
+            }
+            else if (definition.TargetType != SkillTargetType.Enemy)
+            {
+                Report(monster.Source, fieldPath, $"names skill '{skill}', which is not cast at an enemy", diagnostics);
             }
         }
     }

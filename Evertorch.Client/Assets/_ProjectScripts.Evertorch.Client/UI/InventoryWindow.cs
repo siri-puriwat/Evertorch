@@ -1,9 +1,11 @@
+using System;
 using System.Collections.Generic;
 using System.Text;
 using Evertorch.Game;
 using Evertorch.Protocol;
 using TMPro;
 using UnityEngine;
+using UnityEngine.UI;
 
 namespace Evertorch.Client
 {
@@ -20,14 +22,21 @@ public sealed class InventoryWindow : MonoBehaviour
     private const float Margin = 8f;
     private const float StatusBarHeight = 56f;
     private const int Padding = 10;
+    private const float RowHeight = 30f;
+    private const float RowSpacing = 4f;
 
-    private static readonly UiBuilder Ui = new(22f, 30f, 0f, 4f);
+    // The padding, the heading, and the space below it.
+    private const float Chrome = 2 * Padding + RowHeight + RowSpacing;
+
+    private static readonly UiBuilder Ui = new(22f, RowHeight, 0f, RowSpacing);
 
     private readonly StringBuilder m_text = new();
     private readonly List<GameObject> m_rowObjects = new();
     private GameClient? m_client;
     private GameObject? m_panel;
     private Transform? m_rows;
+    private LayoutElement? m_list;
+    private float m_listHeight = -1f;
     private ClientInventory? m_shownInventory;
     private bool m_shownCurrent;
     private uint m_shownRevision;
@@ -49,6 +58,41 @@ public sealed class InventoryWindow : MonoBehaviour
         if (world != null)
         {
             Show(world.Inventory, m_client!.Content);
+            FitList();
+        }
+    }
+
+    /// <summary>
+    ///     Where the window sits on a canvas <paramref name="canvasHeight" /> units tall with <paramref name="rows" />
+    ///     rows, in canvas units from the bottom-left corner: below the status bar, down to the touch controls' buttons
+    ///     while they are shown and to the bottom margin otherwise. Rows beyond that scroll.
+    /// </summary>
+    public static Rect BoundsFor(float canvasHeight, int rows, bool isTouchShown)
+    {
+        float top = canvasHeight - (StatusBarHeight + Margin);
+        float height = Chrome + ListHeightFor(canvasHeight, rows, isTouchShown);
+        return new Rect(ClientUI.CanvasWidth - Margin - Width, top - height, Width, height);
+    }
+
+    // A row under a touch button would take the taps meant for it, and a press of a row equips or drinks.
+    private static float ListHeightFor(float canvasHeight, int rows, bool isTouchShown)
+    {
+        float needed = rows * RowHeight + Math.Max(0, rows - 1) * RowSpacing;
+        float floor = isTouchShown ? TouchControls.ButtonColumnBounds(ClientUI.CanvasWidth).yMax + Margin : Margin;
+        float room = canvasHeight - (StatusBarHeight + Margin) - Chrome - floor;
+        return Math.Max(0f, Math.Min(needed, room));
+    }
+
+    // The canvas height follows the screen's shape, and the touch controls come and go.
+    private void FitList()
+    {
+        float canvasHeight = ((RectTransform)transform).rect.height;
+        bool isTouchShown = m_client!.Touch != null && m_client.Touch.IsVisible;
+        float height = ListHeightFor(canvasHeight, m_rowObjects.Count, isTouchShown);
+        if (height != m_listHeight)
+        {
+            m_listHeight = height;
+            m_list!.preferredHeight = height;
         }
     }
 
@@ -135,6 +179,7 @@ public sealed class InventoryWindow : MonoBehaviour
     {
         TMP_Text label = Ui.CreateLabel("Row", m_rows!);
         label.text = text;
+        label.gameObject.AddComponent<LayoutElement>().preferredHeight = RowHeight;
         m_rowObjects.Add(label.gameObject);
         AppendText(text);
     }
@@ -177,8 +222,34 @@ public sealed class InventoryWindow : MonoBehaviour
         TMP_Text heading = Ui.CreateLabel("Heading", panel);
         heading.text = "Inventory";
         heading.fontStyle = FontStyles.Bold;
-        m_rows = Ui.CreateColumn("Rows", panel).transform;
+        heading.gameObject.AddComponent<LayoutElement>().preferredHeight = RowHeight;
+        m_rows = CreateList(panel);
         m_panel.SetActive(false);
+    }
+
+    // The rows scroll inside a list as tall as FitList allows.
+    private Transform CreateList(Transform panel)
+    {
+        var list = new GameObject("List", typeof(RectTransform));
+        list.transform.SetParent(panel, false);
+        list.AddComponent<RectMask2D>();
+
+        // Clear, so that a drag anywhere in the list scrolls it, between the rows too.
+        list.AddComponent<Image>().color = Color.clear;
+        m_list = list.AddComponent<LayoutElement>();
+        GameObject rows = Ui.CreateColumn("Rows", list.transform);
+        var content = (RectTransform)rows.transform;
+        content.anchorMin = new Vector2(0f, 1f);
+        content.anchorMax = Vector2.one;
+        content.pivot = new Vector2(0.5f, 1f);
+        content.sizeDelta = Vector2.zero;
+        rows.AddComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+        ScrollRect scroll = list.AddComponent<ScrollRect>();
+        scroll.content = content;
+        scroll.horizontal = false;
+        scroll.movementType = ScrollRect.MovementType.Clamped;
+        scroll.scrollSensitivity = RowHeight;
+        return rows.transform;
     }
 }
 }
