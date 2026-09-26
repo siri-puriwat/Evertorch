@@ -1,0 +1,14 @@
+id: item.weapon.training_staff
+displayName: Training Staff
+type: weapon
+stackLimit: 1
+server:
+  weight: 40
+  sellPrice: 25
+  equipment:
+    attack: 8
+    attackSpeedPenalty: 54
+    bonus: { int: 10 }
+client:
+  icon: item_training_staff
+  model: pickup_training_staff

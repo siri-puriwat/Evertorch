@@ -25,6 +25,10 @@ ai:
 skills:
   - skill: skill.spark_bolt
     chance: 0.10
+drops:
+  - item: item.weapon.training_staff
+    chance: 0.12
+    amount: { min: 1, max: 1 }
 rewards:
   baseExperience: 30
 client:

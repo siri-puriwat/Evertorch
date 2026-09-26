@@ -634,15 +634,15 @@ public sealed class CombatSystem : ITickPhase
 
     private DamageContext CreateDamageContext(WorldEntity attacker, WorldEntity target, bool isCritical)
     {
-        // Evertorch monsters have no primary statistics, so no soft defense, and players wear no armour yet, so no
-        // hard defense (research note, intentional differences).
+        // Evertorch monsters have no primary statistics, so no soft defense (research note, intentional differences). A
+        // player's weapon adds its attack, and its armor is its hard defense (equipment research note).
         switch (attacker)
         {
             case PlayerEntity player when target is MonsterEntity monster:
                 return new DamageContext(
                     AttackerKind.Character,
                     player.Stats.PhysicalAttack,
-                    0,
+                    player.Weapon?.Attack ?? 0,
                     monster.Definition.PhysicalDefense,
                     0,
                     isCritical,
@@ -652,7 +652,7 @@ public sealed class CombatSystem : ITickPhase
                     AttackerKind.Monster,
                     0,
                     monster.Definition.PhysicalAttack,
-                    0,
+                    player.Armor?.Defense ?? 0,
                     player.Stats.SoftDefense,
                     isCritical,
                     m_random);

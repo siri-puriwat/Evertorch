@@ -15,6 +15,11 @@ public enum InventoryStatus
     /// <summary>
     ///     Nothing changed: the operation was already committed to another character.
     /// </summary>
-    TakenByOther = 3
+    TakenByOther = 3,
+
+    /// <summary>
+    ///     Nothing changed: the row is not the character's, is already in the slot, or the slot is empty.
+    /// </summary>
+    Refused = 4
 }
 }

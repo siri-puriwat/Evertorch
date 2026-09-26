@@ -392,6 +392,25 @@ public sealed class ServerContentLoaderTests
     }
 
     [Test]
+    public void Load_ForRepositoryContent_ReadsEachItemsEquipmentAndSlot()
+    {
+        ServerContent content = ServerContentLoader.Load(PackageFixture.BuildRepositoryPackage());
+
+        ItemDefinition sword = content.Items[new ItemDefinitionId("item.weapon.training_sword")];
+        ItemDefinition staff = content.Items[new ItemDefinitionId("item.weapon.training_staff")];
+        ItemDefinition armor = content.Items[new ItemDefinitionId("item.armor.cloth")];
+        ItemDefinition gel = content.Items[new ItemDefinitionId("item.material.slime_gel")];
+
+        Assert.That(
+            (sword.Slot, sword.StackLimit, sword.Equipment!.Attack, sword.Equipment.AttackSpeedPenalty),
+            Is.EqualTo((EquipmentSlot.Weapon, 1, 20, 50)));
+        Assert.That((staff.Equipment!.Attack, staff.Equipment.Bonus.Int), Is.EqualTo((8, 10)));
+        Assert.That((armor.Slot, armor.Equipment!.Defense, armor.Equipment.Attack),
+            Is.EqualTo((EquipmentSlot.Armor, 8, 0)));
+        Assert.That((gel.Slot, gel.Equipment), Is.EqualTo((EquipmentSlot.None, (ItemEquipment?)null)));
+    }
+
+    [Test]
     public void Load_Result_CannotBeMutated()
     {
         ServerContent content = ServerContentLoader.Load(PackageFixture.BuildFixturePackage());
@@ -444,6 +463,24 @@ public sealed class ServerContentLoaderTests
         Assert.That(
             ProblemsOf(files),
             Is.EqualTo(new[] { "status-effects.json: definitions[0].statPercent.agi: must be at most 1000" }));
+    }
+
+    [Test]
+    public void Load_WhenAnItemsEquipmentDoesNotMatchItsType_Fails()
+    {
+        Dictionary<string, byte[]> material = PackageFixture.BuildFixturePackage();
+        PackageFixture.Replace(
+            material,
+            Items,
+            "\"weight\": 1",
+            "\"weight\": 1,\n      \"equipment\": { \"attack\": 1, \"attackSpeedPenalty\": 1, \"defense\": 0, "
+            + "\"bonus\": { \"str\": 0, \"agi\": 0, \"vit\": 0, \"int\": 0, \"dex\": 0, \"luk\": 0 } }");
+        Dictionary<string, byte[]> weapon = PackageFixture.BuildFixturePackage();
+        PackageFixture.Replace(weapon, Items, "\"type\": \"material\"", "\"type\": \"weapon\"");
+
+        Assert.That(ProblemsOf(material), Has.Some.Contains("equipment: is only for a weapon or armor"));
+        Assert.That(ProblemsOf(weapon), Has.Some.Contains("stackLimit: must be 1 for a weapon or armor"));
+        Assert.That(ProblemsOf(weapon), Has.Some.Contains("equipment: required property is missing"));
     }
 
     [Test]

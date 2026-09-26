@@ -409,6 +409,39 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
     }
 
     /// <summary>
+    ///     Asks the server to wear the inventory row <paramref name="inventoryItem" /> in the slot its item fills.
+    ///     Returns the command's sequence, or 0 outside the world.
+    /// </summary>
+    public uint SendEquip(long inventoryItem)
+    {
+        if (State != ClientConnectionState.InWorld)
+        {
+            return 0;
+        }
+
+        uint sequence = NextCommandSequence();
+        new EquipItem(inventoryItem, sequence).Write(m_sendBuffer);
+        SendRouted(MessageOpcode.EquipItem, EquipItem.EncodedLength);
+        return sequence;
+    }
+
+    /// <summary>
+    ///     Asks the server to empty <paramref name="slot" />. Returns the command's sequence, or 0 outside the world.
+    /// </summary>
+    public uint SendUnequip(EquipmentSlot slot)
+    {
+        if (State != ClientConnectionState.InWorld)
+        {
+            return 0;
+        }
+
+        uint sequence = NextCommandSequence();
+        new UnequipItem(slot, sequence).Write(m_sendBuffer);
+        SendRouted(MessageOpcode.UnequipItem, UnequipItem.EncodedLength);
+        return sequence;
+    }
+
+    /// <summary>
     ///     Asks the server to select <paramref name="target" />, or to clear the selection for entity 0. The world
     ///     shows a target only once the server confirms it.
     /// </summary>

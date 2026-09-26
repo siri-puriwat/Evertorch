@@ -1,0 +1,13 @@
+id: item.weapon.training_sword
+displayName: Training Sword
+type: weapon
+stackLimit: 1
+server:
+  weight: 50
+  sellPrice: 25
+  equipment:
+    attack: 20
+    attackSpeedPenalty: 50
+client:
+  icon: item_training_sword
+  model: pickup_training_sword

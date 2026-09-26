@@ -139,6 +139,7 @@ internal sealed class TestServer
             simulation,
             Audit,
             PickupLog);
+        Items = new ItemActionSystem(Persistence, sender, Lifetime, stats, Content, Time, Audit, ItemActionLog);
         Progression = new CharacterProgression(
             Sessions,
             Lifetime,
@@ -181,6 +182,7 @@ internal sealed class TestServer
             Progression,
             Combat,
             Pickups,
+            Items,
             Time,
             simulation,
             Options.Create(network),
@@ -223,7 +225,8 @@ internal sealed class TestServer
             new RecordingPhase(TickPhase.ApplyCommands, "test", new List<string>(), _ => RunAfterCommands()),
             new CheckpointScheduler(Sessions, Lifetime),
             AdminQueue,
-            Pickups
+            Pickups,
+            Items
         };
         if (withMonsterAi)
         {
@@ -251,6 +254,8 @@ internal sealed class TestServer
     public ItemDropSystem Drops { get; }
 
     public PickupSystem Pickups { get; }
+
+    public ItemActionSystem Items { get; }
 
     public InMemoryServerTransport Transport { get; }
 
@@ -297,6 +302,8 @@ internal sealed class TestServer
     public FakeClock Clock { get; } = new();
 
     public CapturingLogger<PickupSystem> PickupLog { get; } = new();
+
+    public CapturingLogger<ItemActionSystem> ItemActionLog { get; } = new();
 
     public CharacterProgression Progression { get; }
 
@@ -554,6 +561,20 @@ internal sealed class TestServer
     {
         byte[] payload = new byte[PickupItem.EncodedLength];
         new PickupItem(drop, commandSequence).Write(payload);
+        Inbound.OnPayload(connection, ProtocolChannel.Control, payload);
+    }
+
+    public void SendEquip(ConnectionId connection, long inventoryItem, uint commandSequence)
+    {
+        byte[] payload = new byte[EquipItem.EncodedLength];
+        new EquipItem(inventoryItem, commandSequence).Write(payload);
+        Inbound.OnPayload(connection, ProtocolChannel.Control, payload);
+    }
+
+    public void SendUnequip(ConnectionId connection, EquipmentSlot slot, uint commandSequence)
+    {
+        byte[] payload = new byte[UnequipItem.EncodedLength];
+        new UnequipItem(slot, commandSequence).Write(payload);
         Inbound.OnPayload(connection, ProtocolChannel.Control, payload);
     }
 

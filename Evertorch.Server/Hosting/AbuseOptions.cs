@@ -48,6 +48,13 @@ public sealed class AbuseOptions
     public int PickupCommandBurst { get; set; } = 20;
 
     /// <summary>
+    ///     <c>EquipItem</c> and <c>UnequipItem</c> per second, per connection.
+    /// </summary>
+    public int ItemCommandsPerSecond { get; set; } = 10;
+
+    public int ItemCommandBurst { get; set; } = 20;
+
+    /// <summary>
     ///     <c>CreateCharacter</c>, <c>EnterWorldRequest</c>, and <c>Logout</c> per second, per connection.
     /// </summary>
     public int SessionCommandsPerSecond { get; set; } = 2;
@@ -88,6 +95,8 @@ public sealed class AbuseOptionsValidator : IValidateOptions<AbuseOptions>
         AddRangeFailure(failures, "CombatCommandBurst", options.CombatCommandBurst, 1, 10000);
         AddRangeFailure(failures, "PickupCommandsPerSecond", options.PickupCommandsPerSecond, 1, 1000);
         AddRangeFailure(failures, "PickupCommandBurst", options.PickupCommandBurst, 1, 10000);
+        AddRangeFailure(failures, "ItemCommandsPerSecond", options.ItemCommandsPerSecond, 1, 1000);
+        AddRangeFailure(failures, "ItemCommandBurst", options.ItemCommandBurst, 1, 10000);
         AddRangeFailure(failures, "SessionCommandsPerSecond", options.SessionCommandsPerSecond, 1, 1000);
         AddRangeFailure(failures, "SessionCommandBurst", options.SessionCommandBurst, 1, 10000);
         AddRangeFailure(failures, "ResyncRequestsPerSecond", options.ResyncRequestsPerSecond, 1, 1000);

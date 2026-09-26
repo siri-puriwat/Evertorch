@@ -70,6 +70,16 @@ internal sealed class InMemoryGameStore : IGameStore
     /// </summary>
     public List<PickupCommit> PickupCommits { get; } = new();
 
+    /// <summary>
+    ///     How many of the next equip or unequip commits succeed and then throw as if the answer was lost.
+    /// </summary>
+    public int AmbiguousEquipmentFailures { get; set; }
+
+    /// <summary>
+    ///     Every equip and unequip commit attempted, in order, by operation ID.
+    /// </summary>
+    public List<Guid> EquipmentCommits { get; } = new();
+
     public int LedgerCount
     {
         get
@@ -223,6 +233,29 @@ internal sealed class InMemoryGameStore : IGameStore
         }
     }
 
+    public Task<InventoryResult> CommitEquipAsync(EquipCommit equip, CancellationToken cancellationToken)
+    {
+        ThrowIfUnavailable();
+        lock (m_gate)
+        {
+            EquipmentCommits.Add(equip.OperationId);
+            InventoryResult result = Find(equip.OperationId, equip.CharacterId, equip.ReportRows) ?? Equip(equip);
+            return AnswerEquipment(result);
+        }
+    }
+
+    public Task<InventoryResult> CommitUnequipAsync(UnequipCommit unequip, CancellationToken cancellationToken)
+    {
+        ThrowIfUnavailable();
+        lock (m_gate)
+        {
+            EquipmentCommits.Add(unequip.OperationId);
+            InventoryResult result = Find(unequip.OperationId, unequip.CharacterId, Array.Empty<long>())
+                ?? Unequip(unequip);
+            return AnswerEquipment(result);
+        }
+    }
+
     public Task<InventoryResult?> FindOperationAsync(
         Guid operationId,
         long characterId,
@@ -321,6 +354,18 @@ internal sealed class InMemoryGameStore : IGameStore
         }
     }
 
+    /// <summary>
+    ///     Wears row <paramref name="item" /> of character <paramref name="id" /> in <paramref name="slot" />, as an
+    ///     earlier equip would have left it.
+    /// </summary>
+    public void Wear(long id, long item, string slot)
+    {
+        lock (m_gate)
+        {
+            m_characters[id].Equipment[slot] = item;
+        }
+    }
+
     public void Disable(string loginNormalized)
     {
         lock (m_gate)
@@ -343,13 +388,51 @@ internal sealed class InMemoryGameStore : IGameStore
         }
 
         Row row = m_characters[characterId];
-        var rows = new List<StoredItem>();
-        foreach (long id in new[] { entry.Item }.Concat(rowIds.Where(id => id != entry.Item)))
+        return new InventoryResult(
+            InventoryStatus.Committed,
+            row.InventoryRevision,
+            new[] { entry.Item }.Concat(rowIds.Where(id => id != entry.Item)).Select(row.Read).ToList());
+    }
+
+    private Task<InventoryResult> AnswerEquipment(InventoryResult result)
+    {
+        if (AmbiguousEquipmentFailures > 0 && result.Status == InventoryStatus.Committed)
         {
-            rows.Add(row.Items.SingleOrDefault(item => item.Id == id) ?? new StoredItem(id, string.Empty, 0));
+            AmbiguousEquipmentFailures--;
+            throw new StoreUnavailableException(new TimeoutException("scripted loss of the commit's answer"));
         }
 
-        return new InventoryResult(InventoryStatus.Committed, row.InventoryRevision, rows);
+        return Task.FromResult(result);
+    }
+
+    private InventoryResult Equip(EquipCommit equip)
+    {
+        Row row = m_characters[equip.CharacterId];
+        row.Equipment.TryGetValue(equip.Slot, out long worn);
+        if (row.Items.All(item => item.Id != equip.InventoryItemId) || worn == equip.InventoryItemId)
+        {
+            return new InventoryResult(InventoryStatus.Refused, row.InventoryRevision, Array.Empty<StoredItem>());
+        }
+
+        row.Equipment[equip.Slot] = equip.InventoryItemId;
+        row.InventoryRevision = unchecked(row.InventoryRevision + 1);
+        m_ledger.Add(equip.OperationId, new LedgerEntry(equip.CharacterId, equip.InventoryItemId));
+        long[] changed = worn == 0 ? new[] { equip.InventoryItemId } : new[] { equip.InventoryItemId, worn };
+        return new InventoryResult(InventoryStatus.Committed, row.InventoryRevision, changed.Select(row.Read).ToList());
+    }
+
+    private InventoryResult Unequip(UnequipCommit unequip)
+    {
+        Row row = m_characters[unequip.CharacterId];
+        if (!row.Equipment.TryGetValue(unequip.Slot, out long worn))
+        {
+            return new InventoryResult(InventoryStatus.Refused, row.InventoryRevision, Array.Empty<StoredItem>());
+        }
+
+        row.Equipment.Remove(unequip.Slot);
+        row.InventoryRevision = unchecked(row.InventoryRevision + 1);
+        m_ledger.Add(unequip.OperationId, new LedgerEntry(unequip.CharacterId, worn));
+        return new InventoryResult(InventoryStatus.Committed, row.InventoryRevision, new[] { row.Read(worn) });
     }
 
     private InventoryResult Commit(PickupCommit pickup)
@@ -362,10 +445,10 @@ internal sealed class InMemoryGameStore : IGameStore
             return new InventoryResult(InventoryStatus.InventoryFull, row.InventoryRevision, Array.Empty<StoredItem>());
         }
 
-        StoredItem stack = index >= 0
+        StoredItem stack = index >= 0 && pickup.StackLimit > 1
             ? new StoredItem(row.Items[index].Id, pickup.ItemDefinitionId, held + pickup.Amount)
             : new StoredItem(++m_lastItem, pickup.ItemDefinitionId, pickup.Amount);
-        if (index >= 0)
+        if (index >= 0 && pickup.StackLimit > 1)
         {
             row.Items[index] = stack;
         }
@@ -447,6 +530,19 @@ internal sealed class InMemoryGameStore : IGameStore
 
         public List<StoredItem> Items { get; } = new();
 
+        /// <summary>The row each worn slot holds, by the database's slot name.</summary>
+        public Dictionary<string, long> Equipment { get; } = new(StringComparer.Ordinal);
+
+        // A row as it is now, with its slot; one that no longer exists at quantity 0.
+        public StoredItem Read(long id)
+        {
+            StoredItem? item = Items.SingleOrDefault(candidate => candidate.Id == id);
+            string? slot = Equipment.Where(pair => pair.Value == id).Select(pair => pair.Key).FirstOrDefault();
+            return item == null
+                ? new StoredItem(id, string.Empty, 0)
+                : new StoredItem(item.Id, item.ItemDefinitionId, item.Quantity, slot);
+        }
+
         public StoredCharacter ToStored(long id)
         {
             return new StoredCharacter(
@@ -462,7 +558,7 @@ internal sealed class InMemoryGameStore : IGameStore
                 Map,
                 Position,
                 InventoryRevision,
-                Items.ToList());
+                Items.Select(item => Read(item.Id)).ToList());
         }
     }
 }

@@ -168,6 +168,35 @@ public sealed class RenewalCharacterRulesTests
         Assert.That(create, Throws.InstanceOf<ArgumentOutOfRangeException>());
     }
 
+    // Equipment research note: a weapon's penalty replaces the job's unarmed 44, so with every statistic 5 the sword's
+    // 50 gives 147 and the staff's 54 gives 143 (unarmed 153); the staff's INT +10 is a primary statistic like any.
+    [TestCase(50, 5, 147, 24, 831, 7)]
+    [TestCase(54, 15, 143, 26, 782, 17)]
+    public void CalculateDerivedStats_WithAWeapon_TakesItsPenaltyAndBonus(
+        int penalty,
+        int @int,
+        int attackSpeed,
+        int maxSp,
+        int variableCastPermille,
+        int softMagicDefense)
+    {
+        var build = new CharacterBuild(
+            1,
+            new PrimaryStats(5, 5, 5, @int, 5, 5),
+            HealthBase,
+            HealthPerLevel,
+            SpiritBase,
+            SpiritPerLevel,
+            penalty,
+            5f);
+
+        DerivedStats derived = new RenewalCharacterRules().CalculateDerivedStats(build);
+
+        Assert.That(
+            (derived.AttackSpeed, derived.MaxSp, derived.VariableCastPermille, derived.SoftMagicDefense),
+            Is.EqualTo((attackSpeed, maxSp, variableCastPermille, softMagicDefense)));
+    }
+
     private static DerivedStats Calculate(int level, PrimaryStats stats)
     {
         var build = new CharacterBuild(

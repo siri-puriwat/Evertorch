@@ -44,7 +44,8 @@ public abstract class PersistenceJob
     public long Id { get; internal set; }
 
     /// <summary>
-    ///     What logs correlate the job by: a pickup's <c>DropId</c>, otherwise <see cref="Id" /> (Persistence §9).
+    ///     What logs correlate the job by: an inventory operation's ID (a pickup's <c>DropId</c>), otherwise
+    ///     <see cref="Id" /> (Persistence §9).
     /// </summary>
     public string OperationId => m_operationId ?? Id.ToString(CultureInfo.InvariantCulture);
 

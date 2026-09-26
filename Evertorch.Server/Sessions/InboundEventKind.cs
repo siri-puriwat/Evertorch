@@ -74,6 +74,16 @@ public enum InboundEventKind
     ///     A request to cast <see cref="InboundEvent.Skill" /> at <see cref="InboundEvent.Target" />, 0 for the caster,
     ///     carrying a command sequence.
     /// </summary>
-    UseSkill = 16
+    UseSkill = 16,
+
+    /// <summary>
+    ///     A request to wear the inventory row <see cref="InboundEvent.InventoryItem" />, carrying a command sequence.
+    /// </summary>
+    Equip = 17,
+
+    /// <summary>
+    ///     A request to empty the equipment slot <see cref="InboundEvent.Slot" />, carrying a command sequence.
+    /// </summary>
+    Unequip = 18
 }
 }

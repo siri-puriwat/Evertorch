@@ -28,6 +28,8 @@ public static class RejectionMessages
                 return "That drop is already being picked up. Try again in a moment.";
             case CommandRejectionReason.NotEnoughSp:
                 return "Not enough SP.";
+            case CommandRejectionReason.ItemActionInFlight:
+                return "Your last item action is still going through. Try again in a moment.";
             default:
                 return "The server refused that.";
         }

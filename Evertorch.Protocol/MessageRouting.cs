@@ -28,6 +28,8 @@ public static class MessageRouting
             case MessageOpcode.CreateCharacter:
             case MessageOpcode.Logout:
             case MessageOpcode.InventoryResyncRequest:
+            case MessageOpcode.EquipItem:
+            case MessageOpcode.UnequipItem:
             case MessageOpcode.ServerHello:
             case MessageOpcode.WorldEntered:
             case MessageOpcode.EntitySpawn:

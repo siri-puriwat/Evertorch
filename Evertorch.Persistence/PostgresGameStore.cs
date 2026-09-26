@@ -150,7 +150,14 @@ RETURNING id AS ""Id"", status AS ""Status""")
                     .AsNoTracking()
                     .Where(item => item.CharacterId == characterId)
                     .OrderBy(item => item.Id)
-                    .Select(item => new StoredItem(item.Id, item.ItemDefinitionId, item.Quantity, null))
+                    .Select(item => new StoredItem(
+                        item.Id,
+                        item.ItemDefinitionId,
+                        item.Quantity,
+                        context.Equipment
+                            .Where(worn => worn.InventoryItemId == item.Id)
+                            .Select(worn => worn.Slot)
+                            .FirstOrDefault()))
                     .ToListAsync(cancellationToken)
                     .ConfigureAwait(false);
                 return new StoredCharacter(
@@ -243,8 +250,10 @@ RETURNING id AS ""Id"", status AS ""Status""")
                         .Where(row => row.CharacterId == pickup.CharacterId)
                         .ToListAsync(cancellationToken)
                         .ConfigureAwait(false);
-                    InventoryItemRow? stack =
-                        rows.FirstOrDefault(row => row.ItemDefinitionId == pickup.ItemDefinitionId);
+                    // An item with a stack limit of 1 takes a row per unit; any other merges into its one row.
+                    InventoryItemRow? stack = pickup.StackLimit == 1
+                        ? null
+                        : rows.FirstOrDefault(row => row.ItemDefinitionId == pickup.ItemDefinitionId);
                     int held = stack?.Quantity ?? 0;
                     if (held > pickup.StackLimit - pickup.Amount || (stack == null && rows.Count >= pickup.MaxRows))
                     {
@@ -311,6 +320,138 @@ RETURNING id AS ""Id"", status AS ""Status""")
                         InventoryStatus.Committed,
                         (uint)character.InventoryRevision,
                         new[] { new StoredItem(stack.Id, stack.ItemDefinitionId, stack.Quantity) });
+                }
+            },
+            cancellationToken);
+    }
+
+    public Task<InventoryResult> CommitEquipAsync(EquipCommit equip, CancellationToken cancellationToken)
+    {
+        return RunAsync(
+            async context =>
+            {
+                await using (IDbContextTransaction transaction =
+                             await context.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false))
+                {
+                    CharacterRow character = await LockCharacterAsync(context, equip.CharacterId, cancellationToken)
+                        .ConfigureAwait(false);
+                    InventoryResult? earlier = await FindAsync(
+                            context,
+                            equip.OperationId,
+                            equip.CharacterId,
+                            equip.ReportRows,
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                    if (earlier != null)
+                    {
+                        return earlier;
+                    }
+
+                    InventoryItemRow? row = await context.InventoryItems
+                        .SingleOrDefaultAsync(
+                            item => item.Id == equip.InventoryItemId && item.CharacterId == equip.CharacterId,
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                    EquipmentRow? worn = await context.Equipment
+                        .SingleOrDefaultAsync(
+                            slot => slot.CharacterId == equip.CharacterId && slot.Slot == equip.Slot,
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                    if (row == null || row.Quantity < 1 || worn?.InventoryItemId == row.Id)
+                    {
+                        return Refused(character);
+                    }
+
+                    long? displaced = worn?.InventoryItemId;
+                    if (worn == null)
+                    {
+                        context.Equipment.Add(
+                            new EquipmentRow
+                                { CharacterId = equip.CharacterId, Slot = equip.Slot, InventoryItemId = row.Id });
+                    }
+                    else
+                    {
+                        worn.InventoryItemId = row.Id;
+                        worn.Version++;
+                    }
+
+                    return await CommitOperationAsync(
+                            context,
+                            transaction,
+                            character,
+                            new LedgerRow
+                            {
+                                OperationId = equip.OperationId,
+                                ActorCharacterId = equip.CharacterId,
+                                OperationType = LedgerRow.EquipOperation,
+                                ItemInstanceId = row.Id,
+                                ItemDefinitionId = row.ItemDefinitionId,
+                                CreatedAt = equip.At
+                            },
+                            displaced.HasValue ? new[] { row.Id, displaced.Value } : new[] { row.Id },
+                            equip.ReportRows,
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                }
+            },
+            cancellationToken);
+    }
+
+    public Task<InventoryResult> CommitUnequipAsync(UnequipCommit unequip, CancellationToken cancellationToken)
+    {
+        return RunAsync(
+            async context =>
+            {
+                await using (IDbContextTransaction transaction =
+                             await context.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false))
+                {
+                    CharacterRow character = await LockCharacterAsync(context, unequip.CharacterId, cancellationToken)
+                        .ConfigureAwait(false);
+                    InventoryResult? earlier = await FindAsync(
+                            context,
+                            unequip.OperationId,
+                            unequip.CharacterId,
+                            Array.Empty<long>(),
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                    if (earlier != null)
+                    {
+                        return earlier;
+                    }
+
+                    EquipmentRow? worn = await context.Equipment
+                        .SingleOrDefaultAsync(
+                            slot => slot.CharacterId == unequip.CharacterId && slot.Slot == unequip.Slot,
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                    if (worn == null)
+                    {
+                        return Refused(character);
+                    }
+
+                    string? item = await context.InventoryItems
+                        .Where(row => row.Id == worn.InventoryItemId)
+                        .Select(row => row.ItemDefinitionId)
+                        .SingleOrDefaultAsync(cancellationToken)
+                        .ConfigureAwait(false);
+                    context.Equipment.Remove(worn);
+                    return await CommitOperationAsync(
+                            context,
+                            transaction,
+                            character,
+                            new LedgerRow
+                            {
+                                OperationId = unequip.OperationId,
+                                ActorCharacterId = unequip.CharacterId,
+                                OperationType = LedgerRow.UnequipOperation,
+                                ItemInstanceId = worn.InventoryItemId,
+                                ItemDefinitionId = item,
+                                CreatedAt = unequip.At
+                            },
+                            new[] { worn.InventoryItemId },
+                            Array.Empty<long>(),
+                            cancellationToken)
+                        .ConfigureAwait(false);
                 }
             },
             cancellationToken);
@@ -446,6 +587,54 @@ RETURNING id AS ""Id"", status AS ""Status""")
         return locked.Count == 1
             ? locked[0]
             : throw new InvalidOperationException($"Character {characterId} does not exist.");
+    }
+
+    private static InventoryResult Refused(CharacterRow character)
+    {
+        return new InventoryResult(
+            InventoryStatus.Refused,
+            (uint)character.InventoryRevision,
+            Array.Empty<StoredItem>());
+    }
+
+    // The common end of an operation other than a pickup: the revision goes up by one, the ledger row goes in with
+    // zero deltas unless it says otherwise, and the answer reads the changed rows back. A clash on the operation ID
+    // means the same operation won elsewhere; the ledger answers then.
+    private static async Task<InventoryResult> CommitOperationAsync(
+        EvertorchDbContext context,
+        IDbContextTransaction transaction,
+        CharacterRow character,
+        LedgerRow entry,
+        IReadOnlyList<long> changedRows,
+        IReadOnlyCollection<long> reportRows,
+        CancellationToken cancellationToken)
+    {
+        character.InventoryRevision = (character.InventoryRevision + 1) % RevisionModulus;
+        character.Version++;
+        context.Ledger.Add(entry);
+        try
+        {
+            await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (DbUpdateException exception) when (IsUniqueViolation(exception, LedgerIndex))
+        {
+            await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
+            context.ChangeTracker.Clear();
+            return await FindAsync(context, entry.OperationId, character.Id, reportRows, cancellationToken)
+                    .ConfigureAwait(false)
+                ?? throw new InvalidOperationException(
+                    $"Operation {entry.OperationId} clashed but is not in the ledger.");
+        }
+
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        IReadOnlyList<StoredItem> rows = await ReadRowsAsync(
+                context,
+                character.Id,
+                changedRows,
+                entry.ItemDefinitionId ?? string.Empty,
+                cancellationToken)
+            .ConfigureAwait(false);
+        return new InventoryResult(InventoryStatus.Committed, (uint)character.InventoryRevision, rows);
     }
 
     private static async Task<InventoryResult?> FindAsync(

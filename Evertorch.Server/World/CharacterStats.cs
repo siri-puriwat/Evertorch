@@ -5,7 +5,8 @@ namespace Evertorch.Server
 {
 /// <summary>
 ///     The one path that derives a character's statistics (Gameplay Systems §2): its level, its primary statistics
-///     with its status effects' percentages, and its job's tuning, through the character rules.
+///     with its status effects' percentages and its equipment's bonuses, its weapon's attack-speed penalty, and its
+///     job's tuning, through the character rules.
 /// </summary>
 public sealed class CharacterStats
 {
@@ -16,7 +17,8 @@ public sealed class CharacterStats
         m_rules = rules;
     }
 
-    public DerivedStats Calculate(JobDefinition job, int level, PrimaryStats primary)
+    /// <param name="weapon">The worn weapon, whose penalty replaces the job's unarmed one; null when unarmed.</param>
+    public DerivedStats Calculate(JobDefinition job, int level, PrimaryStats primary, ItemEquipment? weapon = null)
     {
         var build = new CharacterBuild(
             level,
@@ -25,7 +27,7 @@ public sealed class CharacterStats
             job.HealthPerLevel,
             job.SpiritBase,
             job.SpiritPerLevel,
-            job.UnarmedAttackSpeedPenalty,
+            weapon?.AttackSpeedPenalty ?? job.UnarmedAttackSpeedPenalty,
             (float)job.BaseSpeed);
         return m_rules.CalculateDerivedStats(build);
     }
@@ -36,8 +38,8 @@ public sealed class CharacterStats
     }
 
     /// <summary>
-    ///     Derives <paramref name="player" />'s statistics again from its current level, primary statistics, and
-    ///     status effects.
+    ///     Derives <paramref name="player" />'s statistics again from its current level, primary statistics, status
+    ///     effects, and equipment.
     /// </summary>
     public void Recalculate(PlayerEntity player, JobDefinition job)
     {
@@ -47,9 +49,29 @@ public sealed class CharacterStats
             percent = percent.Plus(effect.StatPercent);
         }
 
-        PrimaryStats primary = m_rules.ApplyStatPercent(player.Primary, percent);
-        DerivedStats stats = Calculate(job, player.Level, primary);
+        // A status effect's percentage is of the statistic without the equipment's bonuses (equipment research note).
+        PrimaryStats primary = WithBonus(
+            WithBonus(m_rules.ApplyStatPercent(player.Primary, percent), player.Weapon),
+            player.Armor);
+        DerivedStats stats = Calculate(job, player.Level, primary, player.Weapon);
         player.ApplyStats(stats, m_rules.CalculateRegeneration(primary, stats));
+    }
+
+    private static PrimaryStats WithBonus(PrimaryStats stats, ItemEquipment? worn)
+    {
+        if (worn == null)
+        {
+            return stats;
+        }
+
+        PrimaryStats bonus = worn.Bonus;
+        return new PrimaryStats(
+            stats.Str + bonus.Str,
+            stats.Agi + bonus.Agi,
+            stats.Vit + bonus.Vit,
+            stats.Int + bonus.Int,
+            stats.Dex + bonus.Dex,
+            stats.Luk + bonus.Luk);
     }
 }
 }

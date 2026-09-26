@@ -43,6 +43,12 @@ public enum CommandRejectionReason : byte
     /// <summary>
     ///     The character has less SP than the skill costs.
     /// </summary>
-    NotEnoughSp = 8
+    NotEnoughSp = 8,
+
+    /// <summary>
+    ///     Another item action of the character is still being committed: a use, an equip, or an unequip, or a pickup
+    ///     while one of those is. Trying again later may work.
+    /// </summary>
+    ItemActionInFlight = 9
 }
 }

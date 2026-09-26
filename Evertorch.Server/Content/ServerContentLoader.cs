@@ -323,11 +323,56 @@ public static class ServerContentLoader
         int stackLimit = entry.RequiredInt("stackLimit", 1);
         int weight = entry.RequiredInt("weight", 0);
         int sellPrice = entry.RequiredInt("sellPrice", 0);
+        ItemEquipment? equipment = null;
+        bool isEquipment = type == ItemType.Weapon || type == ItemType.Armor;
+        if (isEquipment && stackLimit != 1)
+        {
+            entry.Report("stackLimit", "must be 1 for a weapon or armor");
+        }
+
+        if (entry.Has("equipment"))
+        {
+            equipment = ReadEquipment(entry.RequiredObject("equipment"));
+            if (!isEquipment)
+            {
+                entry.Report("equipment", "is only for a weapon or armor");
+            }
+        }
+        else if (isEquipment)
+        {
+            entry.Report("equipment", "required property is missing for a weapon or armor");
+        }
+
         entry.ReportUnexpectedProperties();
 
         return problems.Count == problemsBefore
-            ? new ItemDefinition(id, displayName, type, stackLimit, weight, sellPrice)
+            ? new ItemDefinition(id, displayName, type, stackLimit, weight, sellPrice, equipment)
             : null;
+    }
+
+    private static ItemEquipment? ReadEquipment(PackageObjectReader? values)
+    {
+        PackageObjectReader? bonus = values?.RequiredObject("bonus");
+        if (values == null || bonus == null)
+        {
+            return null;
+        }
+
+        var stats = new PrimaryStats(
+            bonus.RequiredInt("str", 0),
+            bonus.RequiredInt("agi", 0),
+            bonus.RequiredInt("vit", 0),
+            bonus.RequiredInt("int", 0),
+            bonus.RequiredInt("dex", 0),
+            bonus.RequiredInt("luk", 0));
+        bonus.ReportUnexpectedProperties();
+        var equipment = new ItemEquipment(
+            values.RequiredInt("attack", 0),
+            values.RequiredInt("attackSpeedPenalty", 0),
+            values.RequiredInt("defense", 0),
+            stats);
+        values.ReportUnexpectedProperties();
+        return equipment;
     }
 
     private static MonsterDefinition? ReadMonster(

@@ -69,6 +69,17 @@ public sealed class PlayerEntity : WorldEntity
     public int CurrentSpirit { get; set; }
 
     /// <summary>
+    ///     What the worn weapon adds (Gameplay Systems §11.1); null while the weapon slot is empty. It changes when an
+    ///     equip or unequip is committed, and with the character's load.
+    /// </summary>
+    public ItemEquipment? Weapon { get; set; }
+
+    /// <summary>
+    ///     What the worn armor adds; null while the armor slot is empty.
+    /// </summary>
+    public ItemEquipment? Armor { get; set; }
+
+    /// <summary>
     ///     When the next HP and SP regeneration steps fall due; <see cref="long.MinValue" /> until the regeneration
     ///     phase first sees the player.
     /// </summary>

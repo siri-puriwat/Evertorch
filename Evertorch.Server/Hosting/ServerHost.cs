@@ -95,6 +95,8 @@ public static class ServerHost
         builder.Services.AddSingleton<CharacterProgression>();
         builder.Services.AddSingleton<PickupSystem>();
         builder.Services.AddSingleton<ITickPhase>(services => services.GetRequiredService<PickupSystem>());
+        builder.Services.AddSingleton<ItemActionSystem>();
+        builder.Services.AddSingleton<ITickPhase>(services => services.GetRequiredService<ItemActionSystem>());
         builder.Services.AddSingleton<AddressThrottle>();
         builder.Services.AddSingleton<LiteNetLibServerTransport>();
         builder.Services.AddSingleton<IServerTransport>(services =>

@@ -43,6 +43,8 @@ public sealed class CommandRejectionTests
     [TestCase(InboundEventKind.Attack)]
     [TestCase(InboundEventKind.Cancel)]
     [TestCase(InboundEventKind.Logout)]
+    [TestCase(InboundEventKind.Equip)]
+    [TestCase(InboundEventKind.Unequip)]
     public void Command_WhileDead_IsRejectedAsNotAllowedNow(InboundEventKind kind)
     {
         (TestServer server, ConnectionId player, EntityId slime) = EnterNearSlimes();
@@ -55,6 +57,13 @@ public sealed class CommandRejectionTests
                 break;
             case InboundEventKind.Cancel:
                 server.SendCancel(player, 7);
+                break;
+            case InboundEventKind.Equip:
+                // A row it does not have would be reason 1; death is checked first.
+                server.SendEquip(player, 999999, 7);
+                break;
+            case InboundEventKind.Unequip:
+                server.SendUnequip(player, EquipmentSlot.Weapon, 7);
                 break;
             default:
                 server.SendLogout(player, 7);

@@ -20,6 +20,8 @@ public enum MessageOpcode : ushort
     CreateCharacter = 0x000D,
     Logout = 0x000E,
     InventoryResyncRequest = 0x000F,
+    EquipItem = 0x0010,
+    UnequipItem = 0x0011,
     ServerHello = 0x8001,
     WorldEntered = 0x8003,
     EntitySpawn = 0x8004,

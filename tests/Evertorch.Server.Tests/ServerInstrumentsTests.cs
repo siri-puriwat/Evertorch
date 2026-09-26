@@ -293,6 +293,43 @@ public sealed class ServerInstrumentsTests
     }
 
     [Test]
+    public void ItemActions_AreTimedByOperation_LookupsIncluded_AndThrottledAsSessionItem()
+    {
+        var server = new TestServer();
+        using var recorder = new MeterRecorder(server.Instruments.Meter);
+        ConnectionId player = server.Connect();
+        server.SignInWithCharacter(player, 1);
+        server.Store.GiveItems(1, "item.weapon.training_sword", 1, 1, 1);
+        server.SendEnterWorld(player, 1);
+        server.TickUntil(() => server.SessionOf(player).State == SessionState.InWorld);
+        long sword = server.Store.Stored(1).Items.Single().Id;
+        var defaults = new AbuseOptions();
+
+        server.Store.AmbiguousEquipmentFailures = 100;
+        server.SendEquip(player, sword, 1);
+        server.Tick(2);
+        server.Store.AmbiguousEquipmentFailures = 0;
+        server.TickUntil(() => server.SessionOf(player).Character!.Operation == null);
+        server.SendUnequip(player, EquipmentSlot.Weapon, 2);
+        server.TickUntil(() => server.SessionOf(player).Character!.Operation == null);
+        server.Tick(2 * TestServer.TickRate * defaults.ItemCommandBurst / defaults.ItemCommandsPerSecond);
+        uint sequence = 3;
+        for (int index = 0; index <= defaults.ItemCommandBurst; index++)
+        {
+            server.SendUnequip(player, EquipmentSlot.Weapon, sequence++);
+        }
+
+        server.Tick();
+
+        string[] operations = Named(recorder, "evertorch.persistence.job.duration")
+            .Select(measurement => (string)measurement.Tags.Single(tag => tag.Key == "operation").Value!)
+            .Distinct()
+            .ToArray();
+        Assert.That(operations, Is.SupersetOf(new[] { "equip", "equip lookup", "unequip" }));
+        Assert.That(SumTagged(recorder, "evertorch.abuse.rate_limited", "limit", "session_item"), Is.EqualTo(1));
+    }
+
+    [Test]
     public void MapTransfers_AreCountedByDestination_AndInputOfAnotherEpochToo()
     {
         var server = new TestServer(withEveryMap: true);

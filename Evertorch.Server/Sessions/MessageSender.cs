@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Evertorch.Protocol;
 
 namespace Evertorch.Server
@@ -140,6 +141,29 @@ public sealed class MessageSender
     public void Send(ConnectionId connection, InventorySnapshot message)
     {
         m_outbound.Send(connection, m_buffer.AsSpan(0, message.Write(m_buffer)));
+    }
+
+    /// <summary>
+    ///     A committed change of <paramref name="character" />'s inventory to its owner alone (Network Protocol §9): the
+    ///     rows it changed, from <paramref name="priorRevision" /> to the inventory's revision now. An answer that named
+    ///     no row leaves the owner a snapshot to fetch instead; nothing goes to a character no connection controls.
+    /// </summary>
+    public void SendInventoryChange(CharacterSession character, uint priorRevision, IReadOnlyList<InventoryEntry> rows)
+    {
+        ClientSession? owner = character.Connection;
+        if (owner == null)
+        {
+            return;
+        }
+
+        if (rows.Count == 0)
+        {
+            owner.NeedsInventorySnapshot = true;
+        }
+        else if (owner.State == SessionState.InWorld)
+        {
+            Send(owner.Connection, new InventoryChanged(priorRevision, character.Inventory.Revision, rows));
+        }
     }
 
     public void Send(ConnectionId connection, InventoryChanged message)

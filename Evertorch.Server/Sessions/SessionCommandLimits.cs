@@ -9,6 +9,7 @@ public sealed class SessionCommandLimits
 {
     private readonly TickBucket m_combat;
     private readonly TickBucket m_pickup;
+    private readonly TickBucket m_item;
     private readonly TickBucket m_session;
     private readonly TickBucket m_resync;
 
@@ -16,6 +17,7 @@ public sealed class SessionCommandLimits
     {
         m_combat = new TickBucket(options.CombatCommandsPerSecond, options.CombatCommandBurst, tickRate, tick);
         m_pickup = new TickBucket(options.PickupCommandsPerSecond, options.PickupCommandBurst, tickRate, tick);
+        m_item = new TickBucket(options.ItemCommandsPerSecond, options.ItemCommandBurst, tickRate, tick);
         m_session = new TickBucket(options.SessionCommandsPerSecond, options.SessionCommandBurst, tickRate, tick);
         m_resync = new TickBucket(options.ResyncRequestsPerSecond, options.ResyncRequestBurst, tickRate, tick);
     }
@@ -36,6 +38,10 @@ public sealed class SessionCommandLimits
             case InboundEventKind.Pickup:
                 limit = ServerInstruments.PickupCommandLimit;
                 return m_pickup.TryTake(tick);
+            case InboundEventKind.Equip:
+            case InboundEventKind.Unequip:
+                limit = ServerInstruments.ItemCommandLimit;
+                return m_item.TryTake(tick);
             case InboundEventKind.CreateCharacter:
             case InboundEventKind.EnterWorld:
             case InboundEventKind.Logout:

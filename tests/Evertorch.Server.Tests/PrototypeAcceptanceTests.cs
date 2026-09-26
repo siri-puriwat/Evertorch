@@ -10,6 +10,7 @@ using Evertorch.Protocol;
 using Evertorch.Rules;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Npgsql;
 using NUnit.Framework;
 
 namespace Evertorch.Server.Tests
@@ -34,6 +35,7 @@ public sealed class PrototypeAcceptanceTests
     private const string TrainingSlime = "monster.training_slime";
     private const string ForestCrawler = "monster.forest_crawler";
     private const string SparkWisp = "monster.spark_wisp";
+    private const string TrainingSword = "item.weapon.training_sword";
     private const float ConvergedDistance = 1e-3f;
     private const float WalkedDistance = 2f;
 
@@ -67,10 +69,10 @@ public sealed class PrototypeAcceptanceTests
 
     /// <summary>
     ///     Both players enter the training ground, see each other, walk, fight, and cross to the training field, where
-    ///     a crawler goes for one of them, a wisp answers from its range, and one reconnects; the server then stops.
-    ///     Returns each character as the server last showed it, by character name.
+    ///     a crawler goes for one of them and drops a sword one of them wears, a wisp answers from its range, and one
+    ///     reconnects; the server then stops. Returns each character as the server last showed it, by character name.
     /// </summary>
-    private static Dictionary<string, PlayerSummary> PlayTogether(IHost host)
+    private static Dictionary<string, PlayerSummary> PlayTogether(IHost host, string connectionString)
     {
         ServerContent content = host.Services.GetRequiredService<ServerContent>();
         IAdminCommandService admin = host.Services.GetRequiredService<IAdminCommandService>();
@@ -96,7 +98,7 @@ public sealed class PrototypeAcceptanceTests
         UseSkills(first, second);
         FocusQuickensTheSwing(first, second);
         CrossToTheField(content, admin, first, second);
-        FightACrawler(content, admin, first, second);
+        FightACrawler(content, admin, connectionString, first, second);
         ProvokeAWisp(content, first, second);
 
         EntityId firstEntity = first.World.LocalEntity;
@@ -587,6 +589,7 @@ public sealed class PrototypeAcceptanceTests
     private static void FightACrawler(
         ServerContent content,
         IAdminCommandService admin,
+        string connectionString,
         SocketClient first,
         SocketClient second)
     {
@@ -694,6 +697,7 @@ public sealed class PrototypeAcceptanceTests
             }),
             clients);
         Assert.That(isShared, Is.True, $"{step}: both players got a share of the crawler's experience");
+        EquipTheCrawlersSword(connectionString, first, second);
 
         var back = new Dictionary<SocketClient, WorldPosition>
         {
@@ -701,6 +705,49 @@ public sealed class PrototypeAcceptanceTests
             [second] = new(start.X, 0f, start.Z - 0.8f)
         };
         WalkTo(step, back, clients);
+    }
+
+    // Every drop is scripted in, so the crawler left a training sword. Once its loot priority window has passed, the
+    // first player picks the sword up and equips it, and PostgreSQL holds it in the weapon slot (Gameplay Systems
+    // §11.1, Persistence §5).
+    private static void EquipTheCrawlersSword(string connectionString, SocketClient first, SocketClient second)
+    {
+        const string step = "equip";
+        SocketClient[] clients = { first, second };
+        RemoteEntity? sword = first.World.Remotes.Values.FirstOrDefault(remote => remote.DefinitionId == TrainingSword);
+        Assert.That(sword, Is.Not.Null, $"{step}: the first player sees the crawler's sword");
+
+        SocketClients.PumpFor(TimeSpan.FromMilliseconds(PickupSystem.LootPriorityMs), clients);
+        first.Pickup.Pickup(sword!.Entity);
+        Assert.That(
+            SocketClients.PumpUntil(
+                () => first.World.Inventory.Rows.Any(row => row.Item.Value == TrainingSword),
+                clients),
+            Is.True,
+            $"{step}: the first player picked the sword up");
+        InventoryEntry row = first.World.Inventory.Rows.Single(entry => entry.Item.Value == TrainingSword);
+        uint revision = first.World.Inventory.Revision;
+
+        first.Connection.SendEquip(row.InventoryItem);
+
+        Assert.That(
+            SocketClients.PumpUntil(() => first.World.Inventory.Revision != revision, clients),
+            Is.True,
+            $"{step}: the equip was committed and told");
+        using (var connection = new NpgsqlConnection(connectionString))
+        using (var command = new NpgsqlCommand(
+                   "SELECT count(*) FROM equipment e JOIN characters c ON c.id = e.character_id "
+                   + "WHERE c.name = @name AND e.slot = 'Weapon' AND e.inventory_item_id = @row",
+                   connection))
+        {
+            connection.Open();
+            command.Parameters.AddWithValue("name", Players.FirstName);
+            command.Parameters.AddWithValue("row", row.InventoryItem);
+            Assert.That(
+                Convert.ToInt64(command.ExecuteScalar()),
+                Is.EqualTo(1),
+                $"{step}: PostgreSQL holds the sword in the weapon slot");
+        }
     }
 
     // A spark wisp keeps its range (Gameplay Systems §10). The first player hits the wisp nearest the staging point
@@ -920,7 +967,7 @@ public sealed class PrototypeAcceptanceTests
         Dictionary<string, PlayerSummary> stopped;
         using (IHost first = StartHost(root.Path))
         {
-            stopped = PlayTogether(first);
+            stopped = PlayTogether(first, m_database.ConnectionString);
         }
 
         using (IHost restarted = StartHost(root.Path))

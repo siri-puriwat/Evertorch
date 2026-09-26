@@ -79,6 +79,7 @@ public sealed class SessionManager : ITickPhase
     private readonly CharacterProgression m_progression;
     private readonly CombatSystem m_combat;
     private readonly PickupSystem m_pickups;
+    private readonly ItemActionSystem m_items;
     private readonly TimeProvider m_time;
     private readonly ServerInstruments m_instruments;
     private readonly AuditLog m_audit;
@@ -108,6 +109,7 @@ public sealed class SessionManager : ITickPhase
         CharacterProgression progression,
         CombatSystem combat,
         PickupSystem pickups,
+        ItemActionSystem items,
         TimeProvider time,
         IOptions<SimulationOptions> simulation,
         IOptions<NetworkOptions> network,
@@ -135,6 +137,8 @@ public sealed class SessionManager : ITickPhase
         m_combat = combat;
         m_pickups = pickups;
         m_pickups.Settled += OnOperationSettled;
+        m_items = items;
+        m_items.Settled += OnOperationSettled;
         m_time = time;
         m_instruments = instruments;
         m_logger = logger;
@@ -270,6 +274,8 @@ public sealed class SessionManager : ITickPhase
             case InboundEventKind.Respawn:
             case InboundEventKind.Logout:
             case InboundEventKind.Pickup:
+            case InboundEventKind.Equip:
+            case InboundEventKind.Unequip:
                 HandleCommand(session, inboundEvent, tick);
                 break;
             default:
@@ -892,6 +898,8 @@ public sealed class SessionManager : ITickPhase
                 m_combat.TryBeginCast(session.Map!, player, command.Skill, command.Target, tick)),
             InboundEventKind.Logout => TryLogout(session, command.CommandSequence),
             InboundEventKind.Pickup => m_pickups.TryStart(session, command.Target, command.CommandSequence, tick),
+            InboundEventKind.Equip => m_items.TryEquip(session, command.InventoryItem, command.CommandSequence),
+            InboundEventKind.Unequip => m_items.TryUnequip(session, command.Slot, command.CommandSequence),
             _ => CommandRejectionReason.NotAllowedNow
         };
     }

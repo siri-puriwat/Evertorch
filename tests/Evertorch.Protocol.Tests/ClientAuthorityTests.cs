@@ -45,7 +45,7 @@ public sealed class ClientAuthorityTests
                 {
                     "ClientHello", "EnterWorldRequest", "MoveInput", "StopMovement", "TargetEntity",
                     "AttackEntity", "CancelAction", "UseSkill", "PickupItem", "Respawn", "CreateCharacter", "Logout",
-                    "InventoryResyncRequest"
+                    "InventoryResyncRequest", "EquipItem", "UnequipItem"
                 }),
             "a new client message must be checked against the rules below before it joins this list");
     }

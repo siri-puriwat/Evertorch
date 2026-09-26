@@ -38,7 +38,7 @@ public sealed class ContentValidationTests
     [TestCase(Item, "stackLimit: 999", "stackLimit: 12.5", "stackLimit", "whole number")]
     [TestCase(Item, "stackLimit: 999", "stackLimit: \"999\"", "stackLimit", "whole number")]
     [TestCase(Item, "stackLimit: 999", "stackLimit: 0", "stackLimit", "between 1 and")]
-    [TestCase(Item, "type: material", "type: weapon", "type", "one of: material, consumable")]
+    [TestCase(Item, "type: material", "type: shield", "type", "one of: material, consumable, weapon, armor")]
     [TestCase(Item, "type: material", "type: material\nrarity: common", "rarity", "unknown field")]
     [TestCase(Item, "  weight: 3917", "  weight: 3917\n  secret: 1", "server.secret", "unknown field")]
     [TestCase(Item, "  sellPrice: 73219", "  sellPrice: -1", "server.sellPrice", "between 0 and")]

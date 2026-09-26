@@ -644,6 +644,42 @@ public sealed class ClientConnectionTests
     }
 
     [Test]
+    public void SendEquipAndUnequip_InTheWorld_ShareTheCommandSequence()
+    {
+        var harness = new Harness();
+        harness.EnterWorld(4);
+        harness.Connection.SendAttack(new EntityId(300));
+
+        uint equipSequence = harness.Connection.SendEquip(41);
+        FakeClientTransport.SentMessage equipSent = harness.Transport.Sent.Last();
+        uint unequipSequence = harness.Connection.SendUnequip(EquipmentSlot.Armor);
+        FakeClientTransport.SentMessage unequipSent = harness.Transport.Sent.Last();
+
+        Assert.That((equipSequence, unequipSequence), Is.EqualTo((6u, 7u)));
+        Assert.That(EquipItem.TryRead(equipSent.Payload, out EquipItem equip), Is.True);
+        Assert.That((equip.InventoryItem, equip.CommandSequence), Is.EqualTo((41L, 6u)));
+        Assert.That(UnequipItem.TryRead(unequipSent.Payload, out UnequipItem unequip), Is.True);
+        Assert.That((unequip.Slot, unequip.CommandSequence), Is.EqualTo((EquipmentSlot.Armor, 7u)));
+        Assert.That(
+            new[] { equipSent.Channel, unequipSent.Channel },
+            Is.All.EqualTo(ProtocolChannel.Control));
+    }
+
+    [Test]
+    public void SendEquipAndUnequip_OutsideTheWorld_SendNothing()
+    {
+        var harness = new Harness();
+        harness.ConnectAndReceiveHello();
+        int before = harness.Transport.Sent.Count;
+
+        uint equip = harness.Connection.SendEquip(41);
+        uint unequip = harness.Connection.SendUnequip(EquipmentSlot.Weapon);
+
+        Assert.That((equip, unequip), Is.EqualTo((0u, 0u)));
+        Assert.That(harness.Transport.Sent.Count, Is.EqualTo(before));
+    }
+
+    [Test]
     public void SendLogout_InTheWorld_UsesTheCommandSequenceAndKeepsTheWorldUntilConfirmed()
     {
         var harness = new Harness();

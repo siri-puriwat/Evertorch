@@ -65,7 +65,7 @@ public sealed class RenewalCombatRules : ICombatRules
     public DamageResult CalculateDamage(DamageContext context)
     {
         long raw = context.AttackerKind == AttackerKind.Character
-            ? 2L * context.StatusAttack + context.WeaponAttack
+            ? 2L * context.StatusAttack + RollWeaponAttack(context)
             : RollMonsterAttack(context) + context.StatusAttack;
         raw = raw * context.RatioPercent / 100;
 
@@ -93,6 +93,21 @@ public sealed class RenewalCombatRules : ICombatRules
             / (MagicDefenseScale + 10L * context.HardMagicDefense)
             - context.SoftMagicDefense;
         return new DamageResult((int)Math.Min(int.MaxValue, Math.Max(1, reduced)), false);
+    }
+
+    // An armed character's swing draws once more (equipment research note): every weapon is weapon level 1 and varies
+    // by 5 % of its attack either way, both bounds included; a critical takes the top without a draw. A fist draws
+    // nothing, so every unarmed vector holds.
+    private static long RollWeaponAttack(DamageContext context)
+    {
+        int attack = context.WeaponAttack;
+        if (attack == 0)
+        {
+            return 0;
+        }
+
+        int variance = attack * 5 / 100;
+        return context.IsCritical ? attack + variance : attack - variance + context.Random.Next(2 * variance + 1);
     }
 
     private static long RollMonsterAttack(DamageContext context)

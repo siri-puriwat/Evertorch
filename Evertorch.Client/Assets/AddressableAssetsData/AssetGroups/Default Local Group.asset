@@ -30,8 +30,18 @@ MonoBehaviour:
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 42ed3f3d476b9944bad4154918fd171c
+    m_Address: pickup_training_sword
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 8b1c0ef3f6492fd4cbc1a99eef0933e7
     m_Address: monster_training_slime
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: a3303732436a6fb4f8fffae27b100733
+    m_Address: pickup_cloth_armor
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
@@ -42,6 +52,11 @@ MonoBehaviour:
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: b63a229da46225548bf10fbb8b6b57d1
     m_Address: pickup_crawler_shell
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: c2001104896d7a74ca5ee1ba4cbecd1e
+    m_Address: pickup_training_staff
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0

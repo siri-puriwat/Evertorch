@@ -99,10 +99,13 @@ public sealed class PickupSystem : ITickPhase
     public CommandRejectionReason TryStart(ClientSession session, EntityId target, uint commandSequence, uint tick)
     {
         CharacterSession character = session.Character!;
-        // One inventory operation at a time per character keeps its inventory changes in commit order.
+        // One inventory operation at a time per character keeps its inventory changes in commit order. Reason 7 keeps
+        // its meaning for a pickup's own business; another operation in flight is reason 9 (Network Protocol §11).
         if (character.Operation != null)
         {
-            return CommandRejectionReason.Busy;
+            return character.Operation.Kind == InventoryOperationKind.Pickup
+                ? CommandRejectionReason.Busy
+                : CommandRejectionReason.ItemActionInFlight;
         }
 
         if (!character.Map.TryGetEntity(target, out WorldEntity? entity)
@@ -253,34 +256,8 @@ public sealed class PickupSystem : ITickPhase
 
         map.Remove(drop);
         uint prior = character.Inventory.Revision;
-        ClientSession? owner = character.Connection;
-        if (result.Rows.Count == 0)
-        {
-            character.Inventory.Revision = result.InventoryRevision;
-            if (owner != null)
-            {
-                owner.NeedsInventorySnapshot = true;
-            }
-        }
-        else
-        {
-            var rows = new InventoryEntry[result.Rows.Count];
-            for (int index = 0; index < rows.Length; index++)
-            {
-                StoredItem stored = result.Rows[index];
-                rows[index] = new InventoryEntry(
-                    stored.Id,
-                    new ItemDefinitionId(stored.ItemDefinitionId),
-                    (uint)stored.Quantity);
-                character.Inventory.Apply(result.InventoryRevision, rows[index]);
-            }
-
-            if (owner != null && owner.State == SessionState.InWorld)
-            {
-                m_sender.Send(owner.Connection, new InventoryChanged(prior, result.InventoryRevision, rows));
-            }
-        }
-
+        InventoryEntry[] rows = character.Inventory.Apply(result);
+        m_sender.SendInventoryChange(character, prior, rows);
         Finish(character);
     }
 

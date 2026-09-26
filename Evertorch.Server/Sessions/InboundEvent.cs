@@ -19,7 +19,9 @@ public readonly struct InboundEvent
         string? name = null,
         int count = 0,
         SkillDefinitionId skill = default,
-        byte mapEpoch = 0)
+        byte mapEpoch = 0,
+        long inventoryItem = 0,
+        EquipmentSlot slot = EquipmentSlot.None)
     {
         Kind = kind;
         Connection = connection;
@@ -32,6 +34,8 @@ public readonly struct InboundEvent
         Count = count;
         Skill = skill;
         MapEpoch = mapEpoch;
+        InventoryItem = inventoryItem;
+        Slot = slot;
     }
 
     public InboundEventKind Kind { get; }
@@ -64,6 +68,16 @@ public readonly struct InboundEvent
     ///     For <see cref="InboundEventKind.Move" />, the map epoch the input was made for.
     /// </summary>
     public byte MapEpoch { get; }
+
+    /// <summary>
+    ///     For <see cref="InboundEventKind.Equip" />, the inventory row to wear.
+    /// </summary>
+    public long InventoryItem { get; }
+
+    /// <summary>
+    ///     For <see cref="InboundEventKind.Unequip" />, the slot to empty.
+    /// </summary>
+    public EquipmentSlot Slot { get; }
 
     public static InboundEvent Connected(ConnectionId connection)
     {
@@ -135,6 +149,30 @@ public readonly struct InboundEvent
     public static InboundEvent ForPickup(ConnectionId connection, EntityId drop, uint commandSequence)
     {
         return new InboundEvent(InboundEventKind.Pickup, connection, null, default, default, drop, commandSequence);
+    }
+
+    public static InboundEvent ForEquip(ConnectionId connection, long inventoryItem, uint commandSequence)
+    {
+        return new InboundEvent(
+            InboundEventKind.Equip,
+            connection,
+            null,
+            default,
+            default,
+            commandSequence: commandSequence,
+            inventoryItem: inventoryItem);
+    }
+
+    public static InboundEvent ForUnequip(ConnectionId connection, EquipmentSlot slot, uint commandSequence)
+    {
+        return new InboundEvent(
+            InboundEventKind.Unequip,
+            connection,
+            null,
+            default,
+            default,
+            commandSequence: commandSequence,
+            slot: slot);
     }
 
     public static InboundEvent ForCreateCharacter(ConnectionId connection, string name)

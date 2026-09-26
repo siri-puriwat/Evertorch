@@ -123,13 +123,32 @@ public sealed class WorldSimulation
             return false;
         }
 
+        ItemEquipment? weapon = null;
+        ItemEquipment? armor = null;
         foreach (StoredItem item in stored.Items)
         {
             if (!ItemDefinitionId.TryCreate(item.ItemDefinitionId, out ItemDefinitionId itemId)
-                || !m_content.Items.ContainsKey(itemId))
+                || !m_content.Items.TryGetValue(itemId, out ItemDefinition? itemDefinition))
             {
                 problem = $"item '{item.ItemDefinitionId}'";
                 return false;
+            }
+
+            // A row worn in a slot its item no longer fills is a content change the character cannot load under.
+            EquipmentSlot slot = CharacterInventory.SlotOf(item);
+            if (slot != EquipmentSlot.None && slot != itemDefinition!.Slot)
+            {
+                problem = $"{(slot == EquipmentSlot.Weapon ? "weapon" : "armor")} '{item.ItemDefinitionId}'";
+                return false;
+            }
+
+            if (slot == EquipmentSlot.Weapon)
+            {
+                weapon = itemDefinition!.Equipment;
+            }
+            else if (slot == EquipmentSlot.Armor)
+            {
+                armor = itemDefinition!.Equipment;
             }
         }
 
@@ -142,8 +161,6 @@ public sealed class WorldSimulation
             && !definition.IsInPortal(stored.Position);
         bool wasDead = stored.Health <= 0;
         WorldPosition position = wasDead || !isStandable ? definition.SpawnPosition : stored.Position;
-        int health = wasDead ? stats.MaxHp : Math.Min(stored.Health, stats.MaxHp);
-        int spirit = wasDead ? stats.MaxSp : Math.Min(stored.Spirit, stats.MaxSp);
         float speed = m_movementRules.CalculateMovement(new MovementContext(stats.MovementSpeed)).Speed;
         player = new PlayerEntity(
             NextEntityId(),
@@ -158,8 +175,14 @@ public sealed class WorldSimulation
             stats,
             m_stats.CalculateRegeneration(stored.Stats, stats),
             (float)m_content.Skills[job.BasicAttack].Range);
-        player.CurrentHealth = health;
-        player.CurrentSpirit = spirit;
+
+        // Equipment loads with the character and counts from its first tick (Gameplay Systems §11.1), so the stored
+        // HP and SP are held to the maximums it gives.
+        player.Weapon = weapon;
+        player.Armor = armor;
+        m_stats.Recalculate(player, job);
+        player.CurrentHealth = wasDead ? player.MaxHealth : Math.Min(stored.Health, player.MaxHealth);
+        player.CurrentSpirit = wasDead ? player.MaxSpirit : Math.Min(stored.Spirit, player.MaxSpirit);
         player.Experience = stored.Experience;
         instance.Add(player);
         map = instance;

@@ -24,6 +24,7 @@ public sealed class ServerInstruments
     public const string AccountCooldownLimit = "account_cooldown";
     public const string CombatCommandLimit = "session_combat";
     public const string PickupCommandLimit = "session_pickup";
+    public const string ItemCommandLimit = "session_item";
     public const string SessionCommandLimit = "session_session";
     public const string ResyncRequestLimit = "session_resync";
     public const string AdmissionLimit = "admission";

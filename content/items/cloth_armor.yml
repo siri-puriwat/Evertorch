@@ -1,0 +1,12 @@
+id: item.armor.cloth
+displayName: Cloth Armor
+type: armor
+stackLimit: 1
+server:
+  weight: 60
+  sellPrice: 20
+  equipment:
+    defense: 8
+client:
+  icon: item_cloth_armor
+  model: pickup_cloth_armor

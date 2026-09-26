@@ -140,6 +140,31 @@ public sealed class SessionCommandLimitTests
     }
 
     [Test]
+    public void ItemCommands_OverTheItemBucket_AreRefusedAsNotAllowedNow_BothKindsFromOneBucket()
+    {
+        var server = new TestServer();
+        ConnectionId player = server.EnterWorld(7);
+
+        uint sequence = 1;
+        for (int index = 0; index < Defaults.ItemCommandBurst / 2; index++)
+        {
+            server.SendEquip(player, 999999, sequence++);
+            server.SendUnequip(player, EquipmentSlot.Weapon, sequence++);
+        }
+
+        server.SendEquip(player, 999999, sequence);
+        server.Tick();
+
+        CommandRejected[] rejections = Rejections(server, player);
+        Assert.That(
+            rejections.Take(Defaults.ItemCommandBurst).Select(rejection => rejection.Reason),
+            Is.All.EqualTo(CommandRejectionReason.InvalidTarget),
+            "no such row, and nothing worn");
+        Assert.That(rejections.Last().Reason, Is.EqualTo(CommandRejectionReason.NotAllowedNow));
+        Assert.That(server.SessionOf(player).ThrottledCommands, Is.EqualTo(1));
+    }
+
+    [Test]
     public void LimitsOff_NothingIsThrottled()
     {
         var server = new TestServer(isAbuseControlEnabled: false);

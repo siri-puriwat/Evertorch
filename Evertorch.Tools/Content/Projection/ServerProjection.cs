@@ -57,6 +57,24 @@ internal static class ServerProjection
             writer.WriteNumber("stackLimit", item.StackLimit);
             writer.WriteNumber("weight", item.Weight);
             writer.WriteNumber("sellPrice", item.SellPrice);
+            if (item.Equipment != null)
+            {
+                ItemEquipment equipment = item.Equipment;
+                writer.WriteStartObject("equipment");
+                writer.WriteNumber("attack", equipment.Attack);
+                writer.WriteNumber("attackSpeedPenalty", equipment.AttackSpeedPenalty);
+                writer.WriteNumber("defense", equipment.Defense);
+                writer.WriteStartObject("bonus");
+                writer.WriteNumber("str", equipment.Bonus.Str);
+                writer.WriteNumber("agi", equipment.Bonus.Agi);
+                writer.WriteNumber("vit", equipment.Bonus.Vit);
+                writer.WriteNumber("int", equipment.Bonus.Int);
+                writer.WriteNumber("dex", equipment.Bonus.Dex);
+                writer.WriteNumber("luk", equipment.Bonus.Luk);
+                writer.WriteEndObject();
+                writer.WriteEndObject();
+            }
+
             writer.WriteEndObject();
         }
 

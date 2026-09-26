@@ -34,7 +34,8 @@ public sealed class ContentProjectionTests
         "experienceTable", "rewards", "baseExperience", "levels", "skills", "spCost", "spPaidAt", "castTimeMs",
         "fixedCastMs", "variableCastMs", "afterCastDelayMs", "cooldownMs", "effect", "damage", "ratio", "heal",
         "damageRatio", "healHp", "statPercent", "status", "durationMs", "portals", "destination", "magicAttack",
-        "keepDistance", "skill"
+        "keepDistance", "skill", "equipment",
+        "attack", "attackSpeedPenalty", "defense", "bonus"
     };
 
     // Authoring sections that the projection flattens into their fields, so no package carries these names.
