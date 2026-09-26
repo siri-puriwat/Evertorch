@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using Evertorch.Client.Editor;
 using Evertorch.Game;
 using NUnit.Framework;
@@ -73,6 +74,35 @@ public sealed class AddressablesKeyCheckTests
 
         Assert.That(result.IsValid, Is.False);
         Assert.That(result.Missing[0], Does.Contain("is not a prefab"));
+    }
+
+    [Test]
+    public void Check_WhenAProjectileHasNoEntry_ListsItAsOptional_ForTheClientFliesASphere()
+    {
+        ClientContent original = CreateContent();
+        var monster = new ClientMonster(
+            new MonsterDefinitionId("monster.a"),
+            "A",
+            "monster_training_slime",
+            "monster_icon",
+            "projectile_absent");
+        var content = new ClientContent(
+            original.Version,
+            new Dictionary<MapDefinitionId, ClientMap> { { new MapDefinitionId("map.a"), original.Maps.Single() } },
+            new Dictionary<JobDefinitionId, ClientJob> { { new JobDefinitionId("job.a"), original.Jobs.Single() } },
+            new Dictionary<MonsterDefinitionId, ClientMonster> { { monster.Id, monster } },
+            new Dictionary<ItemDefinitionId, ClientItem>
+                { { new ItemDefinitionId("item.a"), original.Items.Single() } },
+            new Dictionary<SkillDefinitionId, ClientSkill>(),
+            new Dictionary<StatusDefinitionId, ClientStatusEffect>());
+
+        AddressablesKeyCheckResult result = AddressablesKeyCheck.Check(content, Prefabs(), EnabledScenes);
+
+        Assert.That(result.IsValid, Is.True);
+        Assert.That(
+            result.MissingOptional.Any(entry => entry.Contains("monster.a projectile 'projectile_absent'")),
+            Is.True,
+            string.Join(" | ", result.MissingOptional));
     }
 
     [Test]

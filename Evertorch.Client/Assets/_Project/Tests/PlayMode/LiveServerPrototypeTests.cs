@@ -209,6 +209,84 @@ public sealed class LiveServerPrototypeTests : InputTestFixture
         Assert.That(client.Connection.MalformedMessages + client.Connection.UnexpectedMessages, Is.Zero);
     }
 
+    // On the field the real client hits a spark wisp and steps back to 5 m, beyond its keep distance and within its
+    // reach (Gameplay Systems §8, §10): the wisp's attacks fly its projectile at the player, and its Spark Bolt shows a
+    // cast bar over it, within the time allowed.
+    [UnityTest]
+    [Timeout(TestTimeoutMs)]
+    public IEnumerator Wisp_TheRealClientDrawsItsProjectileAndItsCastBar()
+    {
+        string actionsPath = RequirePrerequisites(out ClientContent _);
+        yield return StartDatabaseAndServer();
+        LiveServer server = m_server!;
+        Assert.That(server.TryReadListeningPort(out int port), Is.True, $"server output: {server.JoinOutput()}");
+        GameClient client = CreateClient(port, actionsPath);
+        yield return EnterByName(client, ClientName);
+        ClientWorld ground = client.World!;
+        Assert.That(client.Controller!.TryMoveTo(ground.Predictor.Position, new WorldPosition(22.2f, 0f, 0f)), Is.True);
+        yield return WaitUntil(
+            () => client.World != null && client.World != ground && client.World.Inventory.IsCurrent,
+            StepTimeoutSeconds);
+        ClientWorld field = client.World!;
+        Assert.That(field.Map.Value, Is.EqualTo("map.training_field"), client.Status);
+
+        // Toward the wisps' home, (10, 0, -10), until the client draws one.
+        Assert.That(client.Controller!.TryMoveTo(field.Predictor.Position, new WorldPosition(2f, 0f, -8f)), Is.True);
+        yield return WaitUntil(() => client.Controller != null && !client.Controller.HasPath, StepTimeoutSeconds);
+        RemoteEntity? wisp = field.Remotes.Values
+            .Where(remote => remote.DefinitionId == "monster.spark_wisp" && !remote.IsDead)
+            .OrderBy(remote => DistanceTo(field, remote))
+            .FirstOrDefault();
+        Assert.That(wisp, Is.Not.Null, "the client draws a wisp");
+
+        bool isHit = false;
+        field.DamageReceived += damage => isHit |= damage.Source == field.LocalEntity && damage.Target == wisp!.Entity;
+        client.Connection!.SendAttack(wisp!.Entity);
+        float deadline = Time.realtimeSinceStartup + StepTimeoutSeconds * 2f;
+        while (!isHit && Time.realtimeSinceStartup < deadline)
+        {
+            Vector3 at = Drawn(field, wisp);
+            client.Controller!.TryMoveTo(field.Predictor.Position, new WorldPosition(at.x - 1f, 0f, at.z));
+            yield return new WaitForSecondsRealtime(0.5f);
+        }
+
+        Assert.That(isHit, Is.True, "the player hit the wisp");
+        client.Connection.SendCancel();
+        Vector3 wispAt = Drawn(field, wisp);
+        Assert.That(
+            client.Controller!.TryMoveTo(field.Predictor.Position, new WorldPosition(wispAt.x - 5f, 0f, wispAt.z)),
+            Is.True);
+
+        bool wasCastBarShown = false;
+        yield return WaitUntil(
+            () =>
+            {
+                wasCastBarShown |= client.Combat != null
+                    && client.Combat.TryGetCastBar(wisp.Entity, out CastBar? bar)
+                    && bar != null
+                    && bar.IsShown;
+                return wasCastBarShown && client.Projectiles?.Launched > 0;
+            },
+            StepTimeoutSeconds * 3f);
+        Assert.That(client.Projectiles?.Launched, Is.GreaterThan(0), "the wisp's projectile flew");
+        Assert.That(wasCastBarShown, Is.True, "a cast bar over the wisp");
+        Assert.That(client.Connection.MalformedMessages + client.Connection.UnexpectedMessages, Is.Zero);
+    }
+
+    private static float DistanceTo(ClientWorld world, RemoteEntity remote)
+    {
+        Vector3 at = Drawn(world, remote);
+        WorldPosition self = world.Predictor.Position;
+        return new Vector2(at.x - self.X, at.z - self.Z).magnitude;
+    }
+
+    private static Vector3 Drawn(ClientWorld world, RemoteEntity remote)
+    {
+        return remote.Buffer.TrySample(world.RemoteRenderTime, out WorldPosition position, out WorldDirection _)
+            ? new Vector3(position.X, position.Y, position.Z)
+            : Vector3.zero;
+    }
+
     private static bool Drawn(GameClient client, EntityId entity)
     {
         return client.RemoteViews.TryGetValue(entity, out EntityView? view) && view != null;

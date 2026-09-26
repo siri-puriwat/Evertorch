@@ -10,7 +10,8 @@ namespace Evertorch.Client.Editor
 {
 /// <summary>
 ///     Checks that every presentation key in the generated client package resolves in this Unity project: entity
-///     views as Addressables prefabs, map scenes as enabled build scenes. Icons are optional until a UI shows them.
+///     views as Addressables prefabs, map scenes as enabled build scenes. Icons are optional until a UI shows them, and
+///     projectiles, which fall back to a plain sphere.
 /// </summary>
 public static class AddressablesKeyCheck
 {
@@ -48,6 +49,11 @@ public static class AddressablesKeyCheck
         {
             RequirePrefab(addresses, monster.PrefabKey, $"{monster.Id.Value} prefab", missing);
             NoteOptional(addresses, monster.IconKey, $"{monster.Id.Value} icon", missingOptional);
+            if (monster.ProjectileKey.Length > 0)
+            {
+                // Without an entry the client flies a plain sphere.
+                NoteOptional(addresses, monster.ProjectileKey, $"{monster.Id.Value} projectile", missingOptional);
+            }
         }
 
         foreach (ClientItem item in content.Items)

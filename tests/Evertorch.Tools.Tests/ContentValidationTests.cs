@@ -196,6 +196,12 @@ public sealed class ContentValidationTests
     [TestCase(Monster, "scanIntervalMs: 139", "scanIntervalMs: 139\n  keepDistance: 1.5625", "ai.keepDistance",
         "must be below combat.attackRange")]
     [TestCase(Monster, "hit: 1553", "hit: 1553\n  magicAttack: -1", "stats.magicAttack", "between 0 and")]
+    [TestCase(
+        Monster,
+        "icon: monster_training_slime_icon",
+        "icon: monster_training_slime_icon\n  projectile: Projectiles/Spark.prefab",
+        "client.projectile",
+        "logical asset key")]
     [TestCase(Monster, "drops:", "skills:\n  - skill: skill.strike\n    chance: 1.5\ndrops:", "skills[0].chance",
         "between 0 and 1")]
     [TestCase(Monster, "drops:", "skills:\n  - skill: skill.none\n    chance: 0.5\ndrops:", "skills[0].skill",

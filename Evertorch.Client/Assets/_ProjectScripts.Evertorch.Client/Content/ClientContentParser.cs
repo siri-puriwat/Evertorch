@@ -265,9 +265,17 @@ public static class ClientContentParser
                 return null;
             }
 
+            // The projectile is optional; JsonUtility reads an absent one as empty.
+            string projectile = monster.projectile ?? string.Empty;
+            if (projectile.Length > 0 && !IsLogicalKey(projectile))
+            {
+                error = $"Monster '{monster.id}': projectile is not a logical key.";
+                return null;
+            }
+
             monsters.Add(
                 id,
-                new ClientMonster(id, monster.displayName ?? string.Empty, monster.prefab, monster.icon));
+                new ClientMonster(id, monster.displayName ?? string.Empty, monster.prefab, monster.icon, projectile));
         }
 
         return monsters;
@@ -663,6 +671,7 @@ public static class ClientContentParser
         public string? displayName = string.Empty;
         public string? prefab = string.Empty;
         public string? icon = string.Empty;
+        public string? projectile = string.Empty;
     }
 
     [Serializable]

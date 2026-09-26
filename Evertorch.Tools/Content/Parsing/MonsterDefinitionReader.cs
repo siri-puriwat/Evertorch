@@ -91,6 +91,7 @@ internal static class MonsterDefinitionReader
         YamlFieldReader client = root.RequiredMapping("client");
         string prefab = client.RequiredAssetKey("prefab");
         string icon = client.RequiredAssetKey("icon");
+        string? projectile = client.Has("projectile") ? client.RequiredAssetKey("projectile") : null;
 
         root.ReportUnknownFields();
         if (diagnostics.Count != errorsBefore)
@@ -122,7 +123,7 @@ internal static class MonsterDefinitionReader
             baseExperience,
             drops,
             skills);
-        return new AuthoredMonster(root.ToSource(), definition, prefab, icon);
+        return new AuthoredMonster(root.ToSource(), definition, prefab, icon, projectile);
     }
 
     private static MonsterDrop ReadDrop(YamlFieldReader drop)

@@ -93,6 +93,7 @@ public sealed class GameClient : MonoBehaviour
     private SkillBar? m_skillBar;
     private FeedbackLines? m_feedback;
     private CombatPresenter? m_combat;
+    private ProjectilePresenter? m_projectiles;
     private Material? m_runtimeMaterial;
     private string m_leaveReason = string.Empty;
     private CharacterId m_lastCharacter;
@@ -129,6 +130,8 @@ public sealed class GameClient : MonoBehaviour
     public bool IsInWorld => m_world != null || m_isChangingMap;
 
     public CombatPresenter? Combat => m_combat;
+
+    public ProjectilePresenter? Projectiles => m_projectiles;
 
     public IReadOnlyDictionary<EntityId, EntityView> RemoteViews => m_remoteViews;
 
@@ -313,6 +316,7 @@ public sealed class GameClient : MonoBehaviour
         }
 
         m_combat?.Present(m_localView, m_remoteViews, Camera.main);
+        m_projectiles?.Present(m_localView, m_remoteViews);
     }
 
     private void OnDestroy()
@@ -589,6 +593,12 @@ public sealed class GameClient : MonoBehaviour
         world.RemoteSpawned += AddRemoteView;
         world.RemoteDespawned += RemoveRemoteView;
         m_combat = new CombatPresenter(world, 1.0 / Connection.ServerTickRate, material);
+        m_projectiles = new ProjectilePresenter(
+            world,
+            m_contentLoader.Content,
+            m_viewCatalog,
+            1.0 / Connection.ServerTickRate,
+            material);
 
         Camera? mainCamera = Camera.main;
         if (mainCamera != null)
@@ -835,6 +845,8 @@ public sealed class GameClient : MonoBehaviour
 
         m_combat?.Dispose();
         m_combat = null;
+        m_projectiles?.Dispose();
+        m_projectiles = null;
         m_world = null;
         m_driver = null;
         m_autoAttack = null;

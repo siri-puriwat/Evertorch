@@ -30,3 +30,4 @@ rewards:
 client:
   prefab: monster_spark_wisp
   icon: monster_spark_wisp_icon
+  projectile: projectile_spark

@@ -108,6 +108,11 @@ internal static class ClientProjection
             writer.WriteNumber("level", monster.Level);
             writer.WriteString("prefab", authored.Prefab);
             writer.WriteString("icon", authored.Icon);
+            if (authored.Projectile != null)
+            {
+                writer.WriteString("projectile", authored.Projectile);
+            }
+
             writer.WriteEndObject();
         }
 

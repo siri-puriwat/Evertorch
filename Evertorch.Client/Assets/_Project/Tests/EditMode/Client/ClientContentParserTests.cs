@@ -152,6 +152,11 @@ public sealed class ClientContentParserTests
         "Monster 'monster.training_slime': icon is not a logical key")]
     [TestCase(
         ClientContentParser.MonstersFile,
+        "\"icon\":\"monster_training_slime_icon\"",
+        "\"icon\":\"monster_training_slime_icon\",\"projectile\":\"Projectiles/Spark.prefab\"",
+        "Monster 'monster.training_slime': projectile is not a logical key")]
+    [TestCase(
+        ClientContentParser.MonstersFile,
         "\"schemaVersion\":1",
         "\"schemaVersion\":2",
         "'monsters.json' is not readable or has an unsupported schema version")]
@@ -394,6 +399,7 @@ public sealed class ClientContentParserTests
         Assert.That(monster!.DisplayName, Is.EqualTo("Training Slime"));
         Assert.That(monster.PrefabKey, Is.EqualTo("monster_training_slime"));
         Assert.That(monster.IconKey, Is.EqualTo("monster_training_slime_icon"));
+        Assert.That(monster.ProjectileKey, Is.Empty, "no projectile when the package names none");
         Assert.That(content.TryGetItem(new ItemDefinitionId("item.material.slime_gel"), out ClientItem? item), Is.True);
         Assert.That(item!.DisplayName, Is.EqualTo("Slime Gel"));
         Assert.That(item.ModelKey, Is.EqualTo("pickup_slime_gel"));

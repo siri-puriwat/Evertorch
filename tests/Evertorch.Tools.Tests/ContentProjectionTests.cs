@@ -429,5 +429,27 @@ public sealed class ContentProjectionTests
             AssertSameBytes(before.Client, after.Client);
         }
     }
+
+    [Test]
+    public void Build_WithAProjectile_WritesItForTheClientMonster_AndNothingWithout()
+    {
+        using (var without = new ContentWorkspace())
+        using (var with = new ContentWorkspace())
+        {
+            with.Replace(
+                "monsters/training_slime.yml",
+                "icon: monster_training_slime_icon",
+                "icon: monster_training_slime_icon\n  projectile: projectile_spark");
+
+            JsonElement plain = FirstDefinition(BuildValid(without).Client, "monsters.json");
+            ContentPackages packages = BuildValid(with);
+            JsonElement flying = FirstDefinition(packages.Client, "monsters.json");
+
+            Assert.That(plain.TryGetProperty("projectile", out _), Is.False);
+            Assert.That(flying.GetProperty("projectile").GetString(), Is.EqualTo("projectile_spark"));
+            Assert.That(FirstDefinition(packages.Server, "monsters.json").TryGetProperty("projectile", out _),
+                Is.False);
+        }
+    }
 }
 }
