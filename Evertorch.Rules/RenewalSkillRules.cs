@@ -31,11 +31,31 @@ public sealed class RenewalSkillRules : ISkillRules
         {
             case SkillEffectKind.Heal:
                 return new SkillResolution(SkillResult.Healed, effect.HealHp);
+            case SkillEffectKind.Damage when context.Skill.DamageType == SkillDamageType.Magical:
+                return ResolveMagic(context, effect.DamageRatioPercent);
             case SkillEffectKind.Damage:
                 return ResolveDamage(context, effect.DamageRatioPercent);
             default:
                 throw new ArgumentException($"Skill {context.Skill.Id} has an unknown effect.", nameof(context));
         }
+    }
+
+    // Magic skips the hit roll, so it always lands, and never crits.
+    private static SkillResolution ResolveMagic(SkillContext context, int ratioPercent)
+    {
+        if (!context.Magic.HasValue)
+        {
+            throw new ArgumentException($"Magic skill {context.Skill.Id} needs magic damage inputs.", nameof(context));
+        }
+
+        MagicDamageContext inputs = context.Magic.Value;
+        var magic = new MagicDamageContext(
+            inputs.MagicAttack,
+            inputs.HardMagicDefense,
+            inputs.SoftMagicDefense,
+            inputs.Random,
+            ratioPercent);
+        return new SkillResolution(SkillResult.Hit, new RenewalCombatRules().CalculateMagicDamage(magic).Amount);
     }
 
     private static SkillResolution ResolveDamage(SkillContext context, int ratioPercent)

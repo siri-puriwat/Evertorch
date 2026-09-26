@@ -30,6 +30,7 @@ internal static class MonsterDefinitionReader
         int physicalDefense = stats.RequiredInt("physicalDefense", 0, ContentLimits.MaxStat);
         int hit = stats.RequiredInt("hit", 0, ContentLimits.MaxStat);
         int flee = stats.RequiredInt("flee", 0, ContentLimits.MaxStat);
+        int magicAttack = stats.Has("magicAttack") ? stats.RequiredInt("magicAttack", 0, ContentLimits.MaxStat) : 0;
 
         YamlFieldReader movement = root.RequiredMapping("movement");
         double baseSpeed = movement.RequiredDouble("baseSpeed", 0d, ContentLimits.MaxSpeed, false);
@@ -52,6 +53,13 @@ internal static class MonsterDefinitionReader
         }
 
         int scanIntervalMs = ai.RequiredInt("scanIntervalMs", 1, ContentLimits.MaxDurationMs);
+        double keepDistance = ai.Has("keepDistance")
+            ? ai.RequiredDouble("keepDistance", 0d, ContentLimits.MaxDistance, false)
+            : 0d;
+        if (keepDistance > 0d && keepDistance >= attackRange)
+        {
+            ai.ReportField("keepDistance", "must be below combat.attackRange");
+        }
 
         int baseExperience = root.Has("rewards")
             ? root.RequiredMapping("rewards").RequiredInt("baseExperience", 0, ContentLimits.MaxExperience)
@@ -61,6 +69,23 @@ internal static class MonsterDefinitionReader
         foreach (YamlFieldReader drop in root.OptionalMappingSequence("drops"))
         {
             drops.Add(ReadDrop(drop));
+        }
+
+        var skills = new List<MonsterSkill>();
+        var seenSkills = new HashSet<string>();
+        foreach (YamlFieldReader entry in root.OptionalMappingSequence("skills"))
+        {
+            SkillDefinitionId skill = entry.RequiredId<SkillDefinitionId>(
+                "skill",
+                SkillDefinitionId.TryCreate,
+                SkillDefinitionId.KindPrefix);
+            double chance = entry.RequiredDouble("chance", 0d, 1d, false);
+            if (skill != default && !seenSkills.Add(skill.Value))
+            {
+                entry.ReportField("skill", $"lists '{skill.Value}' more than once");
+            }
+
+            skills.Add(new MonsterSkill(skill, chance));
         }
 
         YamlFieldReader client = root.RequiredMapping("client");
@@ -82,6 +107,7 @@ internal static class MonsterDefinitionReader
             physicalDefense,
             hit,
             flee,
+            magicAttack,
             baseSpeed,
             attackRange,
             attackIntervalMs,
@@ -92,8 +118,10 @@ internal static class MonsterDefinitionReader
             idlePauseMinMs,
             idlePauseMaxMs,
             scanIntervalMs,
+            keepDistance,
             baseExperience,
-            drops);
+            drops,
+            skills);
         return new AuthoredMonster(root.ToSource(), definition, prefab, icon);
     }
 

@@ -155,18 +155,52 @@ public sealed class CombatSystem : ITickPhase
         }
 
         combat.BeginCast(skillId, resolvedOn.Id, now + timing.CastMs, isPaidNow);
-        foreach (ClientSession other in SessionsOn(map))
-        {
-            if (other.Knows(player.Id))
-            {
-                EntityId shownTarget = resolvedOn != player && other.Knows(resolvedOn.Id) ? resolvedOn.Id : default;
-                m_sender.Send(
-                    other.Connection,
-                    new SkillCastStarted(player.Id, skillId, shownTarget, tick, (uint)timing.CastMs));
-            }
-        }
-
+        AnnounceCastStarted(map, player, resolvedOn, skillId, tick, timing.CastMs);
         return CastRefusal.None;
+    }
+
+    /// <summary>
+    ///     Whether <paramref name="monster" /> could begin a cast of <paramref name="skillId" /> at
+    ///     <paramref name="target" /> now (Gameplay Systems §10): it is free, not swinging, casting, or in an after-cast
+    ///     delay, the skill's cooldown is over, and the target is alive within the skill's range with sight.
+    /// </summary>
+    public bool CanMonsterCast(
+        MapInstance map,
+        MonsterEntity monster,
+        SkillDefinitionId skillId,
+        WorldEntity target,
+        uint tick)
+    {
+        long now = TickMilliseconds(tick);
+        CombatState combat = monster.Combat;
+        return !monster.IsDead
+            && !target.IsDead
+            && m_content.Skills.TryGetValue(skillId, out SkillDefinition? skill)
+            && skill.Effect != null
+            && !combat.IsCasting
+            && !combat.IsSwinging
+            && now >= combat.DelayEndsMs
+            && now >= combat.CooldownEndMs(skillId)
+            && HorizontalDistance(monster.Position, target.Position) <= skill.Range
+            && map.Definition.Navigation.HasLineOfSight(monster.Position, target.Position);
+    }
+
+    /// <summary>
+    ///     Begins a cast <see cref="CanMonsterCast" /> allowed. A monster pays no SP, and its cast time is the skill's
+    ///     fixed and variable time together.
+    /// </summary>
+    public void BeginMonsterCast(
+        MapInstance map,
+        MonsterEntity monster,
+        SkillDefinitionId skillId,
+        WorldEntity target,
+        uint tick)
+    {
+        SkillDefinition skill = m_content.Skills[skillId];
+        CastTiming timing = m_skillRules.CalculateCastTiming(new SkillContext(skill, AttackerKind.Monster, 0));
+        Face(monster, target);
+        monster.Combat.BeginCast(skillId, target.Id, TickMilliseconds(tick) + timing.CastMs, true);
+        AnnounceCastStarted(map, monster, target, skillId, tick, timing.CastMs);
     }
 
     /// <summary>
@@ -182,10 +216,6 @@ public sealed class CombatSystem : ITickPhase
         }
     }
 
-    /// <summary>
-    ///     Ends <paramref name="entity" />'s life: its own and its attackers' auto-attacks end, swings and casts at it
-    ///     and its own cast are interrupted, and every client that knows it hears of the death.
-    /// </summary>
     /// <summary>
     ///     Ends what <paramref name="player" /> was doing on <paramref name="map" /> before it leaves for another map:
     ///     its target, auto-attack, swing, and cast, and every swing, cast, and target aimed at it there.
@@ -215,6 +245,10 @@ public sealed class CombatSystem : ITickPhase
         }
     }
 
+    /// <summary>
+    ///     Ends <paramref name="entity" />'s life: its own and its attackers' auto-attacks end, swings and casts at it
+    ///     and its own cast are interrupted, and every client that knows it hears of the death.
+    /// </summary>
     public void Kill(MapInstance map, WorldEntity entity, WorldEntity? source, uint tick)
     {
         if (entity.IsDead)
@@ -488,6 +522,27 @@ public sealed class CombatSystem : ITickPhase
         AfterDamage(map, caster, target, resolution.Amount, tick);
     }
 
+    // To every client that knows the caster; one that does not know the target is told 0 (Network Protocol §9).
+    private void AnnounceCastStarted(
+        MapInstance map,
+        WorldEntity caster,
+        WorldEntity target,
+        SkillDefinitionId skill,
+        uint tick,
+        int castMs)
+    {
+        foreach (ClientSession other in SessionsOn(map))
+        {
+            if (other.Knows(caster.Id))
+            {
+                EntityId shownTarget = target != caster && other.Knows(target.Id) ? target.Id : default;
+                m_sender.Send(
+                    other.Connection,
+                    new SkillCastStarted(caster.Id, skill, shownTarget, tick, (uint)castMs));
+            }
+        }
+    }
+
     // To every client that knows the target; one that knows no caster is told 0 (Network Protocol §9).
     private void AnnounceResolved(
         MapInstance map,
@@ -522,6 +577,11 @@ public sealed class CombatSystem : ITickPhase
     {
         AttackerKind kind = caster is PlayerEntity ? AttackerKind.Character : AttackerKind.Monster;
         int permille = caster is PlayerEntity player ? player.Stats.VariableCastPermille : 0;
+        if (isDamage && skill.DamageType == SkillDamageType.Magical)
+        {
+            return new SkillContext(skill, kind, permille, CreateMagicContext(caster, target));
+        }
+
         return isDamage
             ? new SkillContext(
                 skill,
@@ -530,6 +590,20 @@ public sealed class CombatSystem : ITickPhase
                 CreateHitContext(caster, target),
                 CreateDamageContext(caster, target, false))
             : new SkillContext(skill, kind, permille);
+    }
+
+    // A monster's magic attack is its definition's, a player's its derived one. Nothing gives hard magic defense yet,
+    // and monsters carry no statistics to derive a soft one from.
+    private MagicDamageContext CreateMagicContext(WorldEntity caster, WorldEntity target)
+    {
+        int magicAttack = caster switch
+        {
+            MonsterEntity monster => monster.Definition.MagicAttack,
+            PlayerEntity player => player.Stats.MagicalAttack,
+            _ => 0
+        };
+        int softMagicDefense = target is PlayerEntity defender ? defender.Stats.SoftMagicDefense : 0;
+        return new MagicDamageContext(magicAttack, 0, softMagicDefense, m_random);
     }
 
     private HitContext CreateHitContext(WorldEntity attacker, WorldEntity target)

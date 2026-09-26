@@ -36,6 +36,12 @@ public sealed class MonsterBrain
 
     public PathFollower Path { get; } = new();
 
+    /// <summary>
+    ///     Whether <see cref="Path" /> leads away from a target that came too close, which the monster walks although
+    ///     the target is in reach (Gameplay Systems §10).
+    /// </summary>
+    public bool IsRetreating { get; set; }
+
     public WorldPosition ChaseGoal { get; set; }
 
     /// <summary>

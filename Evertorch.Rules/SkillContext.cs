@@ -21,6 +21,7 @@ public readonly struct SkillContext
         VariableCastPermille = variableCastPermille;
         Hit = null;
         Damage = null;
+        Magic = null;
     }
 
     public SkillContext(
@@ -35,6 +36,12 @@ public readonly struct SkillContext
         Damage = damage;
     }
 
+    public SkillContext(SkillDefinition skill, AttackerKind caster, int variableCastPermille, MagicDamageContext magic)
+        : this(skill, caster, variableCastPermille)
+    {
+        Magic = magic;
+    }
+
     public SkillDefinition Skill { get; }
 
     public AttackerKind Caster { get; }
@@ -47,5 +54,8 @@ public readonly struct SkillContext
     public HitContext? Hit { get; }
 
     public DamageContext? Damage { get; }
+
+    /// <summary>A magical damage skill's inputs, in place of the hit and damage ones.</summary>
+    public MagicDamageContext? Magic { get; }
 }
 }

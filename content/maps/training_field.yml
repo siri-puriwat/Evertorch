@@ -11,6 +11,11 @@ server:
       radius: 4.0
       count: 3
       respawnMs: 12000
+    - monster: monster.spark_wisp
+      center: { x: 10.0, y: 0.0, z: -10.0 }
+      radius: 4.0
+      count: 3
+      respawnMs: 12000
   portals:
     # In front of the west gate; arrivals face east, 1.5 m inside it.
     - center: { x: -22.5, y: 0.0, z: 0.0 }

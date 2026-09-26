@@ -13,6 +13,7 @@ public sealed class MonsterDefinition
         int physicalDefense,
         int hit,
         int flee,
+        int magicAttack,
         double baseSpeed,
         double attackRange,
         int attackIntervalMs,
@@ -23,8 +24,10 @@ public sealed class MonsterDefinition
         int idlePauseMinMs,
         int idlePauseMaxMs,
         int scanIntervalMs,
+        double keepDistance,
         int baseExperience,
-        IReadOnlyList<MonsterDrop> drops)
+        IReadOnlyList<MonsterDrop> drops,
+        IReadOnlyList<MonsterSkill> skills)
     {
         Id = id;
         DisplayName = displayName;
@@ -34,6 +37,7 @@ public sealed class MonsterDefinition
         PhysicalDefense = physicalDefense;
         Hit = hit;
         Flee = flee;
+        MagicAttack = magicAttack;
         BaseSpeed = baseSpeed;
         AttackRange = attackRange;
         AttackIntervalMs = attackIntervalMs;
@@ -44,8 +48,10 @@ public sealed class MonsterDefinition
         IdlePauseMinMs = idlePauseMinMs;
         IdlePauseMaxMs = idlePauseMaxMs;
         ScanIntervalMs = scanIntervalMs;
+        KeepDistance = keepDistance;
         BaseExperience = baseExperience;
         Drops = drops;
+        Skills = skills;
     }
 
     public MonsterDefinitionId Id { get; }
@@ -63,6 +69,9 @@ public sealed class MonsterDefinition
     public int Hit { get; }
 
     public int Flee { get; }
+
+    /// <summary>What its casts roll between 80 % and 120 %; 0 when it casts nothing magical.</summary>
+    public int MagicAttack { get; }
 
     /// <summary>World units per second before any movement rule is applied.</summary>
     public double BaseSpeed { get; }
@@ -89,11 +98,20 @@ public sealed class MonsterDefinition
     public int ScanIntervalMs { get; }
 
     /// <summary>
+    ///     A target nearer than this makes the monster walk away at a decision (Gameplay Systems §10); 0 keeps no
+    ///     distance. Always below the attack range.
+    /// </summary>
+    public double KeepDistance { get; }
+
+    /// <summary>
     ///     The experience shared by the characters that damaged the monster when it dies (Gameplay Systems §2.1); 0
     ///     gives none.
     /// </summary>
     public int BaseExperience { get; }
 
     public IReadOnlyList<MonsterDrop> Drops { get; }
+
+    /// <summary>The skills it may cast, tried in this order at a decision.</summary>
+    public IReadOnlyList<MonsterSkill> Skills { get; }
 }
 }

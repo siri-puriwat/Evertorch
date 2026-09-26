@@ -193,6 +193,21 @@ public sealed class ContentValidationTests
         "server.spawnPoint.position",
         "lies inside a portal")]
     [TestCase(Map, "radius: 1.1875", "radius: 0", "server.portals[0].radius", "greater than 0")]
+    [TestCase(Monster, "scanIntervalMs: 139", "scanIntervalMs: 139\n  keepDistance: 1.5625", "ai.keepDistance",
+        "must be below combat.attackRange")]
+    [TestCase(Monster, "hit: 1553", "hit: 1553\n  magicAttack: -1", "stats.magicAttack", "between 0 and")]
+    [TestCase(Monster, "drops:", "skills:\n  - skill: skill.strike\n    chance: 1.5\ndrops:", "skills[0].chance",
+        "between 0 and 1")]
+    [TestCase(Monster, "drops:", "skills:\n  - skill: skill.none\n    chance: 0.5\ndrops:", "skills[0].skill",
+        "references unknown skill 'skill.none'")]
+    [TestCase(Monster, "drops:", "skills:\n  - skill: skill.basic_attack\n    chance: 0.5\ndrops:",
+        "skills[0].skill", "which has no effect")]
+    [TestCase(
+        Monster,
+        "drops:",
+        "skills:\n  - skill: skill.strike\n    chance: 0.5\n  - skill: skill.strike\n    chance: 0.5\ndrops:",
+        "skills[1].skill",
+        "more than once")]
     [TestCase(
         Map,
         "facing: { x: 0.0, z: -1.0 }",

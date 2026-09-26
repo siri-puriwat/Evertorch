@@ -9,5 +9,7 @@ public interface ICombatRules
     HitResult CalculateHit(HitContext context);
 
     DamageResult CalculateDamage(DamageContext context);
+
+    DamageResult CalculateMagicDamage(MagicDamageContext context);
 }
 }

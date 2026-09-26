@@ -17,6 +17,7 @@ public sealed class RenewalCombatRules : ICombatRules
     private const int PermilleRange = 1000;
     private const int PercentRange = 100;
     private const int DefenseScale = 4000;
+    private const int MagicDefenseScale = 1000;
 
     public AttackTiming CalculateAttackTiming(AttackContext context)
     {
@@ -77,6 +78,21 @@ public sealed class RenewalCombatRules : ICombatRules
         }
 
         return new DamageResult((int)Math.Min(int.MaxValue, amount), context.IsCritical);
+    }
+
+    /// <summary>
+    ///     Magic as the skills research note reads it: the magic attack rolled between 80 % and 120 %, the ratio, then
+    ///     hard magic defense as a ratio and soft magic defense subtracted, at least 1. Magic never misses or crits.
+    /// </summary>
+    public DamageResult CalculateMagicDamage(MagicDamageContext context)
+    {
+        int min = context.MagicAttack * 80 / 100;
+        int max = context.MagicAttack * 120 / 100;
+        long raw = (min + context.Random.Next(max - min + 1)) * (long)context.RatioPercent / 100;
+        long reduced = raw * (MagicDefenseScale + context.HardMagicDefense)
+            / (MagicDefenseScale + 10L * context.HardMagicDefense)
+            - context.SoftMagicDefense;
+        return new DamageResult((int)Math.Min(int.MaxValue, Math.Max(1, reduced)), false);
     }
 
     private static long RollMonsterAttack(DamageContext context)

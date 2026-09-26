@@ -359,6 +359,28 @@ public sealed class ServerInstrumentsTests
     }
 
     [Test]
+    public void Retreats_AreCountedByMonster_OncePerWalk()
+    {
+        var server = new TestServer(withEveryMap: true, withMonsters: true);
+        using var recorder = new MeterRecorder(server.Instruments.Meter);
+        ConnectionId player = server.EnterWorld(1);
+        server.World.TryGetMap(new MapDefinitionId("map.training_ground"), out MapInstance? ground);
+        server.World.TryGetMap(new MapDefinitionId("map.training_field"), out MapInstance? field);
+        PlayerEntity entity = server.PlayerOf(player);
+        entity.CurrentHealth = 1_000_000;
+        entity.Position = ground!.Definition.Portals.Single().Center;
+        server.Tick(2);
+        MonsterEntity wisp = field!.Monsters.First(monster => monster.Definition.Id.Value == "monster.spark_wisp");
+        wisp.Position = wisp.Home;
+
+        entity.Position = new WorldPosition(wisp.Home.X + 1f, 0f, wisp.Home.Z);
+        wisp.Brain.LastAttacker = entity.Id;
+        server.Tick(10);
+
+        Assert.That(SumTagged(recorder, "evertorch.ai.retreats", "monster", "monster.spark_wisp"), Is.EqualTo(1));
+    }
+
+    [Test]
     public void RunningHost_RecordsTheDurationOfItsTicks()
     {
         using var root = new TemporaryDirectory();

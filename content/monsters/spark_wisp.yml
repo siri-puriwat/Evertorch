@@ -1,0 +1,32 @@
+id: monster.spark_wisp
+displayName: Spark Wisp
+level: 4
+stats:
+  hp: 60
+  physicalAttack: 6
+  physicalDefense: 1
+  hit: 165
+  flee: 125
+  magicAttack: 20
+movement:
+  baseSpeed: 4.4
+combat:
+  # A ranged basic attack; it walks away from anyone nearer than ai.keepDistance.
+  attackRange: 6.0
+  attackIntervalMs: 1800
+ai:
+  behavior: passive
+  perceptionRadius: 6.0
+  leashRadius: 14.0
+  roamRadius: 4.0
+  idlePauseMs: { min: 4000, max: 5000 }
+  scanIntervalMs: 100
+  keepDistance: 3.5
+skills:
+  - skill: skill.spark_bolt
+    chance: 0.10
+rewards:
+  baseExperience: 30
+client:
+  prefab: monster_spark_wisp
+  icon: monster_spark_wisp_icon

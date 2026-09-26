@@ -25,6 +25,11 @@ MonoBehaviour:
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 308c299ec2bf2ed4487c6150502da4f0
+    m_Address: monster_spark_wisp
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 8b1c0ef3f6492fd4cbc1a99eef0933e7
     m_Address: monster_training_slime
     m_ReadOnly: 0

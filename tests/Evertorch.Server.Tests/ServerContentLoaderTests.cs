@@ -115,6 +115,13 @@ public sealed class ServerContentLoaderTests
         "[\n        \"30\",",
         "experience.json: definitions[0].levels[0]: must be a whole number")]
     [TestCase(Monsters, "\"baseExperience\": 10", "\"baseExperience\": -1", "baseExperience: must be at least 0")]
+    [TestCase(Monsters, "\"keepDistance\": 0", "\"keepDistance\": 1.5", "keepDistance: must be below attackRange")]
+    [TestCase(Monsters, "\"magicAttack\": 0", "\"magicAttack\": -1", "magicAttack: must be at least 0")]
+    [TestCase(
+        Monsters,
+        "\"skills\": []",
+        "\"skills\": [{ \"skill\": \"skill.basic_attack\", \"chance\": 1.5 }]",
+        "skills[0].chance: must be between 0 and 1")]
     [TestCase(Monsters, "\"baseExperience\": 10,\n", "", "definitions[0].baseExperience: required property is")]
     [TestCase(Jobs, "\"agi\": 5", "\"agi\": -1", "jobs.json: definitions[0].startingStats.agi: must be at least 0")]
     [TestCase(Jobs, "\"luk\": 5", "\"luk\": 5,\n        \"cha\": 5", "startingStats.cha: unknown property")]
@@ -148,6 +155,16 @@ public sealed class ServerContentLoaderTests
         "uses unknown experience table 'experience.none'")]
     [TestCase(Monsters, "\"item\": \"item.material.slime_gel\"", "\"item\": \"item.nothing\"", "unknown item")]
     [TestCase(Maps, "\"monster\": \"monster.training_slime\"", "\"monster\": \"monster.ghost\"", "unknown monster")]
+    [TestCase(
+        Monsters,
+        "\"skills\": []",
+        "\"skills\": [{ \"skill\": \"skill.none\", \"chance\": 0.5 }]",
+        "casts unknown skill 'skill.none'")]
+    [TestCase(
+        Monsters,
+        "\"skills\": []",
+        "\"skills\": [{ \"skill\": \"skill.basic_attack\", \"chance\": 0.5 }]",
+        "casts skill 'skill.basic_attack', which has no effect")]
     public void Load_WhenReferenceIsUnresolved_Fails(string file, string oldText, string newText, string expected)
     {
         Dictionary<string, byte[]> files = PackageFixture.BuildFixturePackage();

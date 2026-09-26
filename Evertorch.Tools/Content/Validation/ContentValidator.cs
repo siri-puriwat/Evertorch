@@ -88,6 +88,7 @@ public static class ContentValidator
 
         foreach (AuthoredMonster monster in content.Monsters)
         {
+            RequireMonsterSkills(monster, skills, skillsById, diagnostics);
             for (int index = 0; index < monster.Definition.Drops.Count; index++)
             {
                 string fieldPath = string.Format(CultureInfo.InvariantCulture, "drops[{0}].item", index);
@@ -268,6 +269,26 @@ public static class ContentValidator
             if (skillsById.TryGetValue(skill, out SkillDefinition? definition) && definition.Effect == null)
             {
                 Report(job.Source, fieldPath, $"names skill '{skill}', which has no effect", diagnostics);
+            }
+        }
+    }
+
+    // A monster casts through the skill pipeline, so each skill it lists must resolve to something (Content
+    // Pipeline §7).
+    private static void RequireMonsterSkills(
+        AuthoredMonster monster,
+        HashSet<string> knownSkills,
+        Dictionary<string, SkillDefinition> skillsById,
+        List<ContentDiagnostic> diagnostics)
+    {
+        for (int index = 0; index < monster.Definition.Skills.Count; index++)
+        {
+            string fieldPath = string.Format(CultureInfo.InvariantCulture, "skills[{0}].skill", index);
+            string skill = monster.Definition.Skills[index].Skill.Value;
+            RequireReference(knownSkills, skill, "skill", monster.Source, fieldPath, diagnostics);
+            if (skillsById.TryGetValue(skill, out SkillDefinition? definition) && definition.Effect == null)
+            {
+                Report(monster.Source, fieldPath, $"names skill '{skill}', which has no effect", diagnostics);
             }
         }
     }

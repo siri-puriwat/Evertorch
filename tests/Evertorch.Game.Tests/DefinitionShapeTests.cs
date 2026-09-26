@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using NUnit.Framework;
 
 namespace Evertorch.Game.Tests
@@ -127,6 +128,7 @@ public sealed class DefinitionShapeTests
             2,
             155,
             102,
+            20,
             4.0,
             1.5,
             1200,
@@ -137,8 +139,10 @@ public sealed class DefinitionShapeTests
             4000,
             5000,
             100,
+            0.75,
             10,
-            new[] { drop });
+            new[] { drop },
+            new[] { new MonsterSkill(new SkillDefinitionId("skill.spark_bolt"), 0.25) });
 
         Assert.That(monster.Id.Value, Is.EqualTo("monster.training_slime"));
         Assert.That(monster.DisplayName, Is.EqualTo("Training Slime"));
@@ -146,6 +150,9 @@ public sealed class DefinitionShapeTests
         Assert.That(monster.IdlePauseMinMs, Is.EqualTo(4000));
         Assert.That(monster.IdlePauseMaxMs, Is.EqualTo(5000));
         Assert.That(monster.ScanIntervalMs, Is.EqualTo(100));
+        Assert.That((monster.MagicAttack, monster.KeepDistance), Is.EqualTo((20, 0.75)));
+        Assert.That(monster.Skills.Single().Skill.Value, Is.EqualTo("skill.spark_bolt"));
+        Assert.That(monster.Skills.Single().Chance, Is.EqualTo(0.25));
         Assert.That(monster.Level, Is.EqualTo(1));
         Assert.That(monster.Hp, Is.EqualTo(50));
         Assert.That(monster.PhysicalAttack, Is.EqualTo(7));

@@ -124,6 +124,24 @@ public sealed class RenewalSkillRulesTests
     }
 
     [Test]
+    public void Resolve_ForAMagicSkill_SkipsTheHitRoll_AndRollsMagicDamage()
+    {
+        SkillDefinition sparkBolt = Skill(
+            SkillTargetType.Enemy,
+            SkillDamageType.Magical,
+            500,
+            1000,
+            SkillEffect.Damage(100));
+        var random = new ScriptedRandomSource(8);
+
+        SkillResolution resolution = m_rules.Resolve(
+            new SkillContext(sparkBolt, AttackerKind.Monster, 0, new MagicDamageContext(20, 0, 7, random)));
+
+        Assert.That((resolution.Result, resolution.Amount), Is.EqualTo((SkillResult.Hit, 17)));
+        Assert.That(random.RequestedBounds, Is.EqualTo(new[] { 9 }), "the roll alone: magic never misses");
+    }
+
+    [Test]
     public void Resolve_Strike_Deals130PercentOfTheRawDamageBeforeDefense()
     {
         SkillResolution resolution = m_rules.Resolve(StrikeOnTheSlime(new FixedRandom(0)));

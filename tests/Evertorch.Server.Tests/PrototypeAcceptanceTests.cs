@@ -33,6 +33,7 @@ public sealed class PrototypeAcceptanceTests
     private const string Adventurer = "job.adventurer";
     private const string TrainingSlime = "monster.training_slime";
     private const string ForestCrawler = "monster.forest_crawler";
+    private const string SparkWisp = "monster.spark_wisp";
     private const float ConvergedDistance = 1e-3f;
     private const float WalkedDistance = 2f;
 
@@ -66,8 +67,8 @@ public sealed class PrototypeAcceptanceTests
 
     /// <summary>
     ///     Both players enter the training ground, see each other, walk, fight, and cross to the training field, where
-    ///     a crawler goes for one of them and one reconnects; the server then stops. Returns each character as the
-    ///     server last showed it, by character name.
+    ///     a crawler goes for one of them, a wisp answers from its range, and one reconnects; the server then stops.
+    ///     Returns each character as the server last showed it, by character name.
     /// </summary>
     private static Dictionary<string, PlayerSummary> PlayTogether(IHost host)
     {
@@ -96,6 +97,7 @@ public sealed class PrototypeAcceptanceTests
         FocusQuickensTheSwing(first, second);
         CrossToTheField(content, admin, first, second);
         FightACrawler(content, admin, first, second);
+        ProvokeAWisp(content, first, second);
 
         EntityId firstEntity = first.World.LocalEntity;
         EntityId secondEntity = second.World.LocalEntity;
@@ -699,6 +701,110 @@ public sealed class PrototypeAcceptanceTests
             [second] = new(start.X, 0f, start.Z - 0.8f)
         };
         WalkTo(step, back, clients);
+    }
+
+    // A spark wisp keeps its range (Gameplay Systems §10). The first player hits the wisp nearest the staging point
+    // once and steps back to 5 m, beyond its keep distance and within its reach; the wisp answers from there with its
+    // basic attack and, within the time allowed, a Spark Bolt both clients see. Both players then walk back beyond
+    // its leash.
+    private static void ProvokeAWisp(ServerContent content, SocketClient first, SocketClient second)
+    {
+        const string step = "wisp";
+        SocketClient[] clients = { first, second };
+        var wispId = new MonsterDefinitionId(SparkWisp);
+        var sparkBolt = new SkillDefinitionId("skill.spark_bolt");
+        WorldPosition home = content.Maps[new MapDefinitionId(TrainingField)].MonsterSpawns
+            .Single(spawn => spawn.Monster == wispId)
+            .Center;
+        WorldPosition start = first.World.Predictor.Position;
+        float awayX = start.X - home.X;
+        float awayZ = start.Z - home.Z;
+        float away = (float)Math.Sqrt(awayX * awayX + awayZ * awayZ);
+        var staging = new WorldPosition(home.X + awayX / away * 10f, 0f, home.Z + awayZ / away * 10f);
+        WalkTo(
+            step,
+            new Dictionary<SocketClient, WorldPosition>
+            {
+                [first] = new(staging.X, 0f, staging.Z + 0.5f),
+                [second] = new(staging.X, 0f, staging.Z - 0.5f)
+            },
+            clients);
+
+        RemoteEntity? wisp = first.World.Remotes.Values
+            .Where(remote => remote.DefinitionId == SparkWisp && !remote.IsDead)
+            .OrderBy(remote => Horizontal(Drawn(first, remote), staging))
+            .FirstOrDefault();
+        Assert.That(wisp, Is.Not.Null, $"{step}: the first player sees a wisp");
+        EntityId target = wisp!.Entity;
+        bool isHit = false;
+        float farthestAttack = 0f;
+        var casts = new Dictionary<SocketClient, bool> { [first] = false, [second] = false };
+        bool isBoltResolved = false;
+        first.World.DamageReceived += damage =>
+            isHit |= damage.Source == first.World.LocalEntity && damage.Target == target;
+        first.World.AttackStartedReceived += started =>
+        {
+            if (started.Attacker == target && started.Target == first.World.LocalEntity)
+            {
+                farthestAttack = Math.Max(
+                    farthestAttack,
+                    Horizontal(first.World.Predictor.Position, Drawn(first, wisp)));
+            }
+        };
+        foreach (SocketClient client in clients)
+        {
+            client.World.SkillCastStartedReceived += cast =>
+                casts[client] |= cast.Caster == target && cast.Skill == sparkBolt;
+        }
+
+        first.World.SkillResolvedReceived += resolved =>
+            isBoltResolved |= resolved.Caster == target
+                && resolved.Skill == sparkBolt
+                && resolved.Target == first.World.LocalEntity
+                && resolved.Outcome == SkillOutcome.Hit;
+
+        first.Connection.SendTarget(target);
+        Assert.That(
+            SocketClients.PumpUntil(() => first.World.Target == target, clients),
+            Is.True,
+            $"{step}: the server confirmed the wisp as the target");
+        first.AttackTarget();
+        Assert.That(SocketClients.PumpUntil(() => isHit, FightLimit, clients), Is.True, $"{step}: the player hit it");
+        first.AutoAttack.OnWalkRequested();
+
+        WorldPosition drawn = Drawn(first, wisp);
+        float backX = staging.X - drawn.X;
+        float backZ = staging.Z - drawn.Z;
+        float back = (float)Math.Sqrt(backX * backX + backZ * backZ);
+        WalkTo(
+            step,
+            new Dictionary<SocketClient, WorldPosition>
+            {
+                [first] = new(drawn.X + backX / back * 5f, 0f, drawn.Z + backZ / back * 5f)
+            },
+            clients);
+        bool isAnswered = SocketClients.PumpUntil(
+            () => farthestAttack > 2f && casts.Values.All(isSeen => isSeen) && isBoltResolved,
+            FightLimit,
+            clients);
+        Assert.That(
+            isAnswered,
+            Is.True,
+            $"{step}: a ranged attack ({farthestAttack} m) and a Spark Bolt both clients saw ({casts[first]}, "
+            + $"{casts[second]}) that hit ({isBoltResolved})");
+        foreach (SocketClient client in clients)
+        {
+            Assert.That(client.World.IsLocalDead, Is.False, $"{step}: both players survived");
+        }
+
+        WalkTo(
+            step,
+            new Dictionary<SocketClient, WorldPosition>
+            {
+                [first] = new(start.X, 0f, start.Z),
+                [second] = new(start.X, 0f, start.Z - 0.8f)
+            },
+            clients);
     }
 
     // Starts each walk, then pumps until every walker has arrived within a step of its goal.

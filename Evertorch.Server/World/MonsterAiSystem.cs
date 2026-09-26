@@ -18,12 +18,19 @@ public sealed class MonsterAiSystem : ITickPhase
     public const float ChaseRepathDistance = 1f;
     public const int MinimumRespawnMs = 1000;
 
+    /// <summary>A skill's try draws below this; its chance is the share of it that casts.</summary>
+    public const int TryScale = 1_000_000;
+
     private const int MillisecondsPerSecond = 1000;
     private const int PathNodeBudget = 8192;
+
+    // Straight away from the target first, then turned counterclockwise and clockwise, seen from above.
+    private static readonly double[] RetreatTurnsDegrees = { 0d, 45d, -45d, 90d, -90d };
 
     private readonly WorldSimulation m_world;
     private readonly IRandomSource m_random;
     private readonly ServerInstruments m_instruments;
+    private readonly CombatSystem m_combat;
     private readonly int m_tickRate;
     private readonly int m_corpseMs;
     private readonly Dictionary<MapInstance, Navigator> m_navigators = new();
@@ -36,11 +43,13 @@ public sealed class MonsterAiSystem : ITickPhase
         IRandomSource random,
         IOptions<WorldOptions> worldOptions,
         IOptions<SimulationOptions> simulation,
-        ServerInstruments instruments)
+        ServerInstruments instruments,
+        CombatSystem combat)
     {
         m_world = world;
         m_random = random;
         m_instruments = instruments;
+        m_combat = combat;
         m_tickRate = simulation.Value.TickRate;
         m_corpseMs = worldOptions.Value.MonsterCorpseMs;
         foreach (MapInstance map in world.Maps)
@@ -61,7 +70,7 @@ public sealed class MonsterAiSystem : ITickPhase
             m_monsters.AddRange(map.Monsters);
             foreach (MonsterEntity monster in m_monsters)
             {
-                Update(map, monster, now, monster.MovementSpeed * stepDistance);
+                Update(map, monster, now, context.Tick, monster.MovementSpeed * stepDistance);
             }
         }
 
@@ -89,7 +98,16 @@ public sealed class MonsterAiSystem : ITickPhase
             && map.Definition.Navigation.HasLineOfSight(monster.Position, target.Position);
     }
 
-    private void Update(MapInstance map, MonsterEntity monster, long now, float stepDistance)
+    /// <summary>
+    ///     Whether a skill with <paramref name="chance" /> is cast on a try that drew <paramref name="draw" /> below
+    ///     <see cref="TryScale" /> (skills research note).
+    /// </summary>
+    public static bool IsTried(double chance, int draw)
+    {
+        return draw < chance * TryScale;
+    }
+
+    private void Update(MapInstance map, MonsterEntity monster, long now, uint tick, float stepDistance)
     {
         MonsterBrain brain = monster.Brain;
         if (monster.IsDead)
@@ -113,13 +131,13 @@ public sealed class MonsterAiSystem : ITickPhase
             }
 
             brain.Decisions++;
-            Decide(map, monster, now);
+            Decide(map, monster, now, tick);
         }
 
         Steer(map, monster, stepDistance);
     }
 
-    private void Decide(MapInstance map, MonsterEntity monster, long now)
+    private void Decide(MapInstance map, MonsterEntity monster, long now, uint tick)
     {
         MonsterBrain brain = monster.Brain;
         if (brain.State == MonsterAiState.ReturnHome)
@@ -158,6 +176,10 @@ public sealed class MonsterAiSystem : ITickPhase
             {
                 ReturnHome(map, monster, now);
             }
+            else if (TryRetreat(map, monster, target) || TryCast(map, monster, target, tick))
+            {
+                // A retreat replaces the decision's skill tries, and a cast holds the monster where it stands.
+            }
             else if (!IsInReach(map, monster, target)
                      && (!brain.Path.IsActive ||
                          HorizontalDistance(brain.ChaseGoal, target.Position) > ChaseRepathDistance))
@@ -187,6 +209,74 @@ public sealed class MonsterAiSystem : ITickPhase
         {
             BecomeIdle(monster, now);
         }
+    }
+
+    // A monster keeping its range walks away from a target that came nearer than its keep distance (Gameplay Systems
+    // §10): to the first candidate at (keepDistance + attackRange) ÷ 2 from the target that is standable, reachable,
+    // and within its leash, straight away or turned by ±45° or ±90°. With none it stays and attacks; a swing or a cast
+    // holds it anyway. The walk goes to that one goal, and the monster decides again once it stands.
+    private bool TryRetreat(MapInstance map, MonsterEntity monster, PlayerEntity target)
+    {
+        if (monster.Brain.IsRetreating)
+        {
+            return true;
+        }
+
+        MonsterDefinition definition = monster.Definition;
+        float distance = HorizontalDistance(monster.Position, target.Position);
+        if (definition.KeepDistance <= 0d
+            || distance >= definition.KeepDistance
+            || monster.Combat.IsSwinging
+            || monster.Combat.IsCasting)
+        {
+            return false;
+        }
+
+        // A target standing on the monster gives no direction; it backs away from its own facing.
+        double awayX = distance > 0f ? (monster.Position.X - target.Position.X) / distance : -monster.Facing.X;
+        double awayZ = distance > 0f ? (monster.Position.Z - target.Position.Z) / distance : -monster.Facing.Z;
+        double reach = (definition.KeepDistance + definition.AttackRange) / 2d;
+        NavigationGrid grid = map.Definition.Navigation;
+        foreach (double degrees in RetreatTurnsDegrees)
+        {
+            double radians = degrees * Math.PI / 180d;
+            float goalX = (float)(target.Position.X + reach * (awayX * Math.Cos(radians) - awayZ * Math.Sin(radians)));
+            float goalZ = (float)(target.Position.Z + reach * (awayX * Math.Sin(radians) + awayZ * Math.Cos(radians)));
+            if (!grid.CanOccupy(goalX, goalZ) || !grid.TrySampleHeight(goalX, goalZ, out float height))
+            {
+                continue;
+            }
+
+            var goal = new WorldPosition(goalX, height, goalZ);
+            if (HorizontalDistance(goal, monster.Home) <= definition.LeashRadius
+                && m_navigators[map].TryFollow(monster.Brain.Path, monster.Position, goal))
+            {
+                // Its swings wait until it stands again, or the first would hold it beside the target.
+                monster.Brain.IsRetreating = true;
+                monster.Combat.IsAutoAttacking = false;
+                m_instruments.RecordRetreat(definition.Id);
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    // Each skill the monster could cast now draws once from the AI's source, in content order; the first success
+    // casts (skills research note).
+    private bool TryCast(MapInstance map, MonsterEntity monster, PlayerEntity target, uint tick)
+    {
+        foreach (MonsterSkill entry in monster.Definition.Skills)
+        {
+            if (m_combat.CanMonsterCast(map, monster, entry.Skill, target, tick)
+                && IsTried(entry.Chance, m_random.Next(TryScale)))
+            {
+                m_combat.BeginMonsterCast(map, monster, entry.Skill, target, tick);
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private PlayerEntity? Acquire(MapInstance map, MonsterEntity monster)
@@ -227,7 +317,13 @@ public sealed class MonsterAiSystem : ITickPhase
             return;
         }
 
-        if (target != null && IsInReach(map, monster, target))
+        if (brain.IsRetreating && !brain.Path.IsActive)
+        {
+            EndRetreat(monster);
+        }
+
+        // A retreat walks on although the target is in reach: getting out of its keep distance is the point.
+        if (target != null && IsInReach(map, monster, target) && !brain.IsRetreating)
         {
             brain.Path.Cancel();
             brain.DesiredDirection = default;
@@ -237,12 +333,22 @@ public sealed class MonsterAiSystem : ITickPhase
         brain.DesiredDirection = brain.Path.Advance(monster.Position, stepDistance);
     }
 
+    private static void EndRetreat(MonsterEntity monster)
+    {
+        if (monster.Brain.IsRetreating)
+        {
+            monster.Brain.IsRetreating = false;
+            monster.Combat.IsAutoAttacking = monster.Target != default;
+        }
+    }
+
     private void ReturnHome(MapInstance map, MonsterEntity monster, long now)
     {
         MonsterBrain brain = monster.Brain;
         monster.Target = default;
         monster.Combat.IsAutoAttacking = false;
         brain.LastAttacker = default;
+        brain.IsRetreating = false;
         brain.State = MonsterAiState.ReturnHome;
         if (!m_navigators[map].TryFollow(brain.Path, monster.Position, monster.Home))
         {
@@ -254,6 +360,7 @@ public sealed class MonsterAiSystem : ITickPhase
     {
         MonsterBrain brain = monster.Brain;
         brain.State = MonsterAiState.Idle;
+        brain.IsRetreating = false;
         brain.Path.Cancel();
         brain.DesiredDirection = default;
         brain.IdleUntilMs = now + DrawPause(monster.Definition);

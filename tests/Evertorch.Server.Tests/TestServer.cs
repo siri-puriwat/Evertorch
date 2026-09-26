@@ -227,7 +227,7 @@ internal sealed class TestServer
         };
         if (withMonsterAi)
         {
-            phases.Add(new MonsterAiSystem(World, Random, Options.Create(world), simulation, Instruments));
+            phases.Add(new MonsterAiSystem(World, Random, Options.Create(world), simulation, Instruments, Combat));
         }
 
         Phases = phases;

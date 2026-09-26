@@ -86,6 +86,7 @@ public sealed class ServerInstruments
     private readonly Counter<long> m_mapTransfers;
     private readonly Counter<long> m_otherEpochInputs;
     private readonly Counter<long> m_acquisitions;
+    private readonly Counter<long> m_retreats;
 
     public ServerInstruments(IMeterFactory meters)
     {
@@ -162,6 +163,10 @@ public sealed class ServerInstruments
             "evertorch.ai.acquisitions",
             "{acquisition}",
             "Targets monsters took, whether a player hit them or an aggressive one perceived it, by monster.");
+        m_retreats = Meter.CreateCounter<long>(
+            "evertorch.ai.retreats",
+            "{retreat}",
+            "Walks away from a target that came nearer than the monster's keep distance, by monster.");
     }
 
     public Meter Meter { get; }
@@ -249,6 +254,11 @@ public sealed class ServerInstruments
     public void RecordAcquisition(MonsterDefinitionId monster)
     {
         m_acquisitions.Add(1, new KeyValuePair<string, object?>("monster", monster.Value));
+    }
+
+    public void RecordRetreat(MonsterDefinitionId monster)
+    {
+        m_retreats.Add(1, new KeyValuePair<string, object?>("monster", monster.Value));
     }
 
     public void RecordStatusEffects(StatusEffectChange change, int count)

@@ -171,6 +171,7 @@ internal static class ServerProjection
             writer.WriteNumber("physicalDefense", monster.PhysicalDefense);
             writer.WriteNumber("hit", monster.Hit);
             writer.WriteNumber("flee", monster.Flee);
+            writer.WriteNumber("magicAttack", monster.MagicAttack);
             writer.WriteNumber("baseSpeed", monster.BaseSpeed);
             writer.WriteNumber("attackRange", monster.AttackRange);
             writer.WriteNumber("attackIntervalMs", monster.AttackIntervalMs);
@@ -181,6 +182,7 @@ internal static class ServerProjection
             writer.WriteNumber("idlePauseMinMs", monster.IdlePauseMinMs);
             writer.WriteNumber("idlePauseMaxMs", monster.IdlePauseMaxMs);
             writer.WriteNumber("scanIntervalMs", monster.ScanIntervalMs);
+            writer.WriteNumber("keepDistance", monster.KeepDistance);
             writer.WriteNumber("baseExperience", monster.BaseExperience);
             writer.WriteStartArray("drops");
             foreach (MonsterDrop drop in monster.Drops)
@@ -190,6 +192,16 @@ internal static class ServerProjection
                 writer.WriteNumber("chance", drop.Chance);
                 writer.WriteNumber("minAmount", drop.MinAmount);
                 writer.WriteNumber("maxAmount", drop.MaxAmount);
+                writer.WriteEndObject();
+            }
+
+            writer.WriteEndArray();
+            writer.WriteStartArray("skills");
+            foreach (MonsterSkill skill in monster.Skills)
+            {
+                writer.WriteStartObject();
+                writer.WriteString("skill", skill.Skill.Value);
+                writer.WriteNumber("chance", skill.Chance);
                 writer.WriteEndObject();
             }
 

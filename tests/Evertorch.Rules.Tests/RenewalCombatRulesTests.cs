@@ -100,6 +100,31 @@ public sealed class RenewalCombatRulesTests
         Assert.That(random.RequestedBounds, Is.EqualTo(new[] { 1000, 1000, 100 }));
     }
 
+    // Skills research note: magic attack, hard and soft magic defense, and the draw of the roll => damage. The roll is
+    // 80 % of the magic attack plus the draw: 16 and 24 for 20, 20 with a draw of 4, and 5 for 5 with a draw of 1.
+    [TestCase(20, 0, 7, 0, 9)]
+    [TestCase(20, 0, 7, 8, 17)]
+    [TestCase(20, 10, 7, 4, 11)]
+    [TestCase(5, 0, 30, 1, 1)]
+    public void CalculateMagicDamage_RollsTheMagicAttack_ThenAppliesMagicDefense_NeverCritical(
+        int magicAttack,
+        int hardMagicDefense,
+        int softMagicDefense,
+        int draw,
+        int expected)
+    {
+        var random = new ScriptedRandomSource(draw);
+
+        DamageResult result = Rules.CalculateMagicDamage(
+            new MagicDamageContext(magicAttack, hardMagicDefense, softMagicDefense, random));
+
+        Assert.That((result.Amount, result.IsCritical), Is.EqualTo((expected, false)));
+        Assert.That(
+            random.RequestedBounds,
+            Is.EqualTo(new[] { magicAttack * 120 / 100 - magicAttack * 80 / 100 + 1 }),
+            "one draw between 80 % and 120 %, both included");
+    }
+
     // status attack, weapon attack, hard defense, soft defense => damage
     [TestCase(25, 0, 2, 0, 49)]
     [TestCase(1, 0, 2, 0, 1)]

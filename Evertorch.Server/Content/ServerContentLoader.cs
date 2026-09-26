@@ -343,6 +343,7 @@ public static class ServerContentLoader
         int physicalDefense = entry.RequiredInt("physicalDefense", 0);
         int hit = entry.RequiredInt("hit", 0);
         int flee = entry.RequiredInt("flee", 0);
+        int magicAttack = entry.RequiredInt("magicAttack", 0);
         double baseSpeed = RequiredNonNegative(entry, "baseSpeed");
         double attackRange = RequiredNonNegative(entry, "attackRange");
         int attackIntervalMs = entry.RequiredInt("attackIntervalMs", 1);
@@ -358,6 +359,12 @@ public static class ServerContentLoader
         }
 
         int scanIntervalMs = entry.RequiredInt("scanIntervalMs", 1);
+        double keepDistance = RequiredNonNegative(entry, "keepDistance");
+        if (keepDistance > 0d && keepDistance >= attackRange)
+        {
+            entry.Report("keepDistance", "must be below attackRange");
+        }
+
         int baseExperience = entry.RequiredInt("baseExperience", 0);
 
         var drops = new List<MonsterDrop>();
@@ -381,6 +388,20 @@ public static class ServerContentLoader
             drops.Add(new MonsterDrop(item, chance, minAmount, maxAmount));
         }
 
+        var skills = new List<MonsterSkill>();
+        foreach (PackageObjectReader tried in entry.RequiredObjectArray("skills"))
+        {
+            SkillDefinitionId skill = tried.RequiredId<SkillDefinitionId>("skill", SkillDefinitionId.TryCreate);
+            double chance = tried.RequiredDouble("chance");
+            if (chance < 0d || chance > 1d)
+            {
+                tried.Report("chance", "must be between 0 and 1");
+            }
+
+            tried.ReportUnexpectedProperties();
+            skills.Add(new MonsterSkill(skill, chance));
+        }
+
         entry.ReportUnexpectedProperties();
         if (problems.Count != problemsBefore)
         {
@@ -396,6 +417,7 @@ public static class ServerContentLoader
             physicalDefense,
             hit,
             flee,
+            magicAttack,
             baseSpeed,
             attackRange,
             attackIntervalMs,
@@ -406,8 +428,10 @@ public static class ServerContentLoader
             idlePauseMinMs,
             idlePauseMaxMs,
             scanIntervalMs,
+            keepDistance,
             baseExperience,
-            drops.AsReadOnly());
+            drops.AsReadOnly(),
+            skills.AsReadOnly());
     }
 
     private static SkillDefinition? ReadSkill(PackageObjectReader entry, SkillDefinitionId id, List<string> problems)
@@ -779,6 +803,18 @@ public static class ServerContentLoader
                 if (!declaredItems.Contains(drop.Item))
                 {
                     problems.Add($"{MonstersFile}: {monster.Id}: drops unknown item '{drop.Item}'");
+                }
+            }
+
+            foreach (MonsterSkill tried in monster.Skills)
+            {
+                if (!declaredSkills.Contains(tried.Skill))
+                {
+                    problems.Add($"{MonstersFile}: {monster.Id}: casts unknown skill '{tried.Skill}'");
+                }
+                else if (skills.TryGetValue(tried.Skill, out SkillDefinition? known) && known.Effect == null)
+                {
+                    problems.Add($"{MonstersFile}: {monster.Id}: casts skill '{tried.Skill}', which has no effect");
                 }
             }
         }
