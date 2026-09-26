@@ -332,6 +332,11 @@ internal sealed class TestServer
     /// </summary>
     public bool RunsPersistence { get; set; } = true;
 
+    /// <summary>
+    ///     Runs after every tick, the ticks of the helpers included.
+    /// </summary>
+    public Action? AfterEachTick { get; set; }
+
     public FakeTimeProvider Time { get; }
 
     public uint RequiredClientContentVersion { get; }
@@ -350,6 +355,7 @@ internal sealed class TestServer
             }
 
             m_pipeline.Execute(new TickContext(m_tick, 1f / TickRate));
+            AfterEachTick?.Invoke();
         }
 
         return m_tick;
