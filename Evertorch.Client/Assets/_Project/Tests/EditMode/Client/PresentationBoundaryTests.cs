@@ -15,21 +15,26 @@ namespace Evertorch.Client.Tests.EditMode
 public sealed class PresentationBoundaryTests
 {
     private static readonly Regex Forbidden = new(
-        @"ClientConnection|ICombatCommandSink|IMoveIntentSink|\bSend\w*\(|AutoAttackState|SkillState|MovementController"
-        + @"|LocalPlayerDriver|MovementPredictor|\.Predictor\b|\.IsLocked\b|RequestRespawn|\.ActionLock\b"
-        + @"|\.On(Spawn|Despawn|Snapshot|TargetChanged|AttackStarted|Damage|EntityDied|EntityRevived|ItemDropped"
-        + @"|CharacterHealth|SkillCastStarted|SkillResolved|SkillList|StatusEffects|LocalCancel)\("
-        + @"|\.(HealthPermille|StateFlags|CurrentHealth)\s*=[^=]");
+        @"ClientConnection|ICombatCommandSink|IMoveIntentSink|ISkillCommandSink|IItemCommandSink|\bSend\w*\("
+        + @"|AutoAttackState|PickupState|SkillState|InventoryActions\.Press\b|MovementController|LocalPlayerDriver"
+        + @"|MovementPredictor|\.Predictor\b|\.IsLocked\b|RequestRespawn|UseSkillSlot|PressInventoryRow|\.ActionLock\b"
+        + @"|\.On(Spawn|Despawn|Snapshot|TargetChanged|AttackStarted|Damage|EntityDied|EntityRevived|CommandRejected"
+        + @"|ItemDropped|ItemPickedUp|CharacterHealth|CharacterProgress|SkillCastStarted|SkillResolved|SkillList"
+        + @"|StatusEffects|LocalCancel|Changed)\("
+        + @"|\.(Advance|CollectTargetCandidates|CollectDropCandidates)\("
+        + @"|\.(HealthPermille|StateFlags|CurrentHealth|Target|LastRejection|LocalHealth|LocalMaximumHealth|IsDead"
+        + @"|LocalSpirit|LocalMaximumSpirit|Level|Experience|ExperienceToNextLevel)\s*=(?![=>])");
 
     // UI may ask GameClient for anything a player can do, and read what it likes; it may not send, build a message,
     // drive movement or the client's ticks, or change what the client believes (Coding Standards §3). A method whose
     // name only one client type has is matched on any receiver, so a local copy of the controller or the predictor
     // cannot hide the call.
     private static readonly Regex UiForbidden = new(
-        @"ICombatCommandSink|IMoveIntentSink|\.Send\w*\(|AutoAttackState|LocalPlayerDriver|PickupState|SkillState"
+        @"ICombatCommandSink|IMoveIntentSink|ISkillCommandSink|IItemCommandSink|\.Send\w*\(|AutoAttackState"
+        + @"|LocalPlayerDriver|PickupState|SkillState|InventoryActions\.Press\b"
         + @"|\.ActionLock\b|MoveIntentProducer|\bnew\s+(MoveIntent|ClientHello|EnterWorldRequest|MoveInput|StopMovement"
         + @"|TargetEntity|AttackEntity|CancelAction|UseSkill|Respawn|Logout|PickupItem|CreateCharacter"
-        + @"|InventoryResyncRequest)\s*\("
+        + @"|InventoryResyncRequest|EquipItem|UnequipItem|UseItem)\s*\("
         + @"|\.Connection\??\.(Connect|Disconnect|EnterWorld|CreateCharacter|Poll)\("
         + @"|\.Controller\??\.(Cancel\w*|Tick)\("
         + @"|\.(SetManualDirection|TryMoveTo|Chase\w*|StopChase|CancelPath|NextTick|Reconcile|Teleport"
@@ -81,11 +86,23 @@ public sealed class PresentationBoundaryTests
         {
             "connection.SendAttack(target);", "m_world.OnDamage(damage);", "remote.HealthPermille = 0;",
             "controller.IsLocked = true;", "new AutoAttackState(world, controller, sink, 0.05);",
-            "var skill = new SkillState(world, controller, sink);", "m_world.OnStatusEffects(effects);"
+            "var skill = new SkillState(world, controller, sink);", "m_world.OnStatusEffects(effects);",
+            "m_client.UseSkillSlot(1);", "client.PressInventoryRow(row);",
+            "InventoryActions.Press(sink, row, ItemType.Consumable);", "IItemCommandSink items = m_items;",
+            "ISkillCommandSink skills = m_skills;", "m_world.OnCharacterProgress(progress);",
+            "world.Inventory.OnChanged(change);", "m_world.OnItemPickedUp(pickedUp);",
+            "m_world.OnCommandRejected(rejected);", "m_world.Advance(0.05f);",
+            "var pickup = new PickupState(world, controller, sink);", "world.Level =", "m_world.Target = entity;"
+        };
+        string[] allowed =
+        {
+            "if (remote.HealthPermille == 0)", "m_world.SkillCastStartedReceived += OnSkillCastStarted;",
+            "EntityView? to = flight.Target == m_world.LocalEntity", "double now = m_world.RemoteRenderTime;",
+            "bool isLocal = resolved.Target == m_world.LocalEntity;"
         };
 
         Assert.That(probes.Where(probe => !Forbidden.IsMatch(probe)), Is.Empty);
-        Assert.That(Forbidden.IsMatch("if (remote.HealthPermille == 0)"), Is.False, "reading is allowed");
+        Assert.That(allowed.Where(line => Forbidden.IsMatch(line)), Is.Empty, "reading is allowed");
         Assert.That(UsesPresentation.IsMatch("m_presenter = new CombatPresenter(world);"), Is.True);
         Assert.That(UsesPresentation.IsMatch("CastBar bar = CastBar.Create(back, fill);"), Is.True);
     }
@@ -104,7 +121,10 @@ public sealed class PresentationBoundaryTests
             "controller.IsDead = true;", "world.Target =", "world.OnCharacterProgress(progress);",
             "world.Level = 3;", "world.LocalSpirit = 0;", "world.OnSkillResolved(resolved);",
             "m_world.OnLocalCancel();", "var use = new UseSkill(skill, target, 3);",
-            "SkillState? skill = m_client.Skill;", "world.OnStatusEffects(effects);"
+            "SkillState? skill = m_client.Skill;", "world.OnStatusEffects(effects);",
+            "InventoryActions.Press(commands, row, item.Type);", "var equip = new EquipItem(row, 3);",
+            "var off = new UnequipItem(EquipmentSlot.Weapon, 4);", "var drink = new UseItem(row, 5);",
+            "IItemCommandSink items = client;", "ISkillCommandSink skills = client;"
         };
         string[] allowed =
         {
@@ -114,7 +134,11 @@ public sealed class PresentationBoundaryTests
             "if (target.IsDead == wasDead)", "world.Inventory.Changed += Refresh;", "m_lines.Clear();",
             "world.LeveledUp += OnLeveledUp;", "ShowCharacter(played.Value.Name, world.Level);",
             "m_client.UseSkillSlot(number);", "Show(slot, world.CooldownRemaining(slot.Skill));",
-            "int seconds = (int)Math.Ceiling(world.StatusRemaining(effect.Status));"
+            "int seconds = (int)Math.Ceiling(world.StatusRemaining(effect.Status));",
+            "int held = world != null ? InventoryActions.CountOf(world.Inventory.Rows, slot.Item) : 0;",
+            "if (item != null && InventoryActions.HasAction(item.Type))",
+            "GameObject button = Ui.CreateButton(text, m_rows!, () => client.PressInventoryRow(row));",
+            "SkillSlots.TryGetItem(number, out ItemDefinitionId item);"
         };
         string[] lockProbes = { "world.ActionLock.LockForSwing(4);", "bool held = m_world.ActionLock.IsCastLocked;" };
 

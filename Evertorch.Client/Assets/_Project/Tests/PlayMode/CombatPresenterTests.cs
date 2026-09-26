@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Evertorch.Game;
 using Evertorch.Protocol;
 using NUnit.Framework;
@@ -17,6 +18,7 @@ public sealed class CombatPresenterTests
 {
     private static readonly EntityId Local = new(100);
     private static readonly EntityId Slime = new(300);
+    private static readonly EntityId Wisp = new(301);
     private static readonly SkillDefinitionId FirstAid = new("skill.first_aid");
     private static readonly SkillDefinitionId Strike = new("skill.strike");
 
@@ -237,41 +239,64 @@ public sealed class CombatPresenterTests
     [Test]
     public void Presentation_ChangesNoCommandIntentOrLock_WhateverTheFrameRate()
     {
-        List<string> without = RunFight(false, 0);
+        List<string> without = RunFight(false, 0, out int _);
 
-        List<string> everyFrame = RunFight(true, 1);
-        List<string> manyFrames = RunFight(true, 3);
-        List<string> skippedFrames = RunFight(true, -7);
+        List<string> everyFrame = RunFight(true, 1, out int launchedEveryFrame);
+        List<string> manyFrames = RunFight(true, 3, out int launchedManyFrames);
+        List<string> skippedFrames = RunFight(true, -7, out int _);
 
-        Assert.That(without.Count, Is.GreaterThan(60));
+        Assert.That(without.Count, Is.GreaterThan(100));
         Assert.That(without, Has.Some.Contains("locked=True"), "the fight included a lock");
         Assert.That(without, Has.Some.StartsWith("attack"));
+        Assert.That(without.Single(entry => entry.StartsWith("70 ")), Does.Contain("locked=True"), "the cast held");
+        Assert.That((launchedEveryFrame, launchedManyFrames), Is.EqualTo((1, 1)), "the wisp's projectile flew");
         Assert.That(everyFrame, Is.EqualTo(without));
         Assert.That(manyFrames, Is.EqualTo(without));
         Assert.That(skippedFrames, Is.EqualTo(without));
     }
 
     /// <summary>
-    ///     The local player attacks the slime and is hit back; <paramref name="framesPerTick" /> is how often the
-    ///     presenter draws per client tick, or with a negative value, once every that many ticks.
+    ///     The local player attacks the slime and is hit back; then a spark wisp shoots at it while it casts First
+    ///     Aid. <paramref name="framesPerTick" /> is how often the presenters draw per client tick, or with a negative
+    ///     value, once every that many ticks.
     /// </summary>
-    private List<string> RunFight(bool isPresented, int framesPerTick)
+    private List<string> RunFight(bool isPresented, int framesPerTick, out int projectilesLaunched)
     {
         ClientWorld world = CreateWorld();
+        world.OnSpawn(
+            new EntitySpawn(
+                Wisp,
+                EntityKind.Monster,
+                "monster.spark_wisp",
+                new WorldPosition(6.5f, 0f, 2.5f),
+                new WorldDirection(-1f, 0f),
+                EntityStateFlags.None,
+                1000));
         var log = new RecordingSink();
         var controller = new MovementController(world.Grid);
         var autoAttack = new AutoAttackState(world, controller, log, 0.05);
         var driver = new LocalPlayerDriver(controller, new MoveIntentProducer(), world, log, autoAttack);
         Dictionary<EntityId, EntityView> remotes = CreateViews(out EntityView local);
+        var wispObject = new GameObject("Wisp");
+        wispObject.transform.position = new Vector3(6.5f, 0f, 2.5f);
+        m_created.Add(wispObject);
+        remotes.Add(Wisp, wispObject.AddComponent<EntityView>());
         CombatPresenter? presenter = isPresented ? CreatePresenter(world) : null;
+        using var catalog = new EntityViewCatalog();
+        ProjectilePresenter? projectiles = isPresented ? CreateProjectilePresenter(world, catalog) : null;
         var swing = new AttackTiming(
             TimeSpan.FromMilliseconds(940),
             TimeSpan.FromMilliseconds(470),
             TimeSpan.FromMilliseconds(470),
             TimeSpan.FromMilliseconds(235));
+        var bolt = new AttackTiming(
+            TimeSpan.FromMilliseconds(1800),
+            TimeSpan.FromMilliseconds(600),
+            TimeSpan.FromMilliseconds(900),
+            TimeSpan.FromMilliseconds(900));
 
         autoAttack.Attack(Slime);
-        for (uint tick = 1; tick <= 80; tick++)
+        for (uint tick = 1; tick <= 110; tick++)
         {
             if (tick == 20)
             {
@@ -287,6 +312,24 @@ public sealed class CombatPresenterTests
             {
                 world.OnEntityDied(new EntityDied(Slime, Local, 50));
             }
+            else if (tick == 55)
+            {
+                world.OnAttackStarted(new AttackStarted(Wisp, Local, 55, bolt));
+            }
+            else if (tick == 60)
+            {
+                world.OnSkillCastStarted(new SkillCastStarted(Local, FirstAid, Local, 60, 1000));
+            }
+            else if (tick == 73)
+            {
+                world.OnDamage(new Damage(Wisp, Local, CombatResult.Hit, 5, 73, 0));
+                world.OnCharacterHealth(new CharacterHealth(59, 71, 21, 24));
+            }
+            else if (tick == 80)
+            {
+                world.OnSkillResolved(new SkillResolved(Local, Local, FirstAid, SkillOutcome.Healed, 12, 80, 0));
+                world.OnCharacterHealth(new CharacterHealth(71, 71, 21, 24));
+            }
 
             driver.Tick(tick);
             RemoteEntity slime = world.Remotes[Slime];
@@ -299,12 +342,37 @@ public sealed class CombatPresenterTests
             for (int frame = 0; frame < frames; frame++)
             {
                 presenter?.Present(local, remotes, null);
+                projectiles?.Present(local, remotes);
             }
         }
 
+        projectilesLaunched = projectiles?.Launched ?? 0;
+        projectiles?.Dispose();
         presenter?.Dispose();
         m_presenter = null;
         return log.Entries;
+    }
+
+    // The wisp names a projectile no Addressables entry has, so a plain sphere flies.
+    private ProjectilePresenter CreateProjectilePresenter(ClientWorld world, EntityViewCatalog catalog)
+    {
+        var wisp = new ClientMonster(
+            new MonsterDefinitionId("monster.spark_wisp"),
+            "Spark Wisp",
+            "monster_spark_wisp",
+            "monster_spark_wisp_icon",
+            "projectile_absent");
+        var content = new ClientContent(
+            "0000000000000000",
+            new Dictionary<MapDefinitionId, ClientMap>(),
+            new Dictionary<JobDefinitionId, ClientJob>(),
+            new Dictionary<MonsterDefinitionId, ClientMonster> { { wisp.Id, wisp } },
+            new Dictionary<ItemDefinitionId, ClientItem>(),
+            new Dictionary<SkillDefinitionId, ClientSkill>(),
+            new Dictionary<StatusDefinitionId, ClientStatusEffect>());
+        var material = new Material(Shader.Find("Universal Render Pipeline/Lit"));
+        m_created.Add(material);
+        return new ProjectilePresenter(world, content, catalog, 0.05, material);
     }
 
     [Test]
