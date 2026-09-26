@@ -76,6 +76,20 @@ public sealed class SkillStateTests
             return ticks;
         }
 
+        // As the frame loop runs: the world's time moves on by a tick, then the tick.
+        public int AdvanceUntilSent(int limit)
+        {
+            int ticks = 0;
+            while (Sent.Count == 0 && ticks < limit)
+            {
+                World.Advance(1f / ClientWorldFixture.TickRate);
+                Tick();
+                ticks++;
+            }
+
+            return ticks;
+        }
+
         private void Spawn(EntityId entity, float dx)
         {
             World.OnSpawn(
@@ -145,6 +159,49 @@ public sealed class SkillStateTests
 
         Assert.That(rig.Skill.IsActive, Is.False);
         Assert.That(rig.Sent, Is.Empty);
+    }
+
+    [Test]
+    public void Request_DuringTheAfterCastDelay_IsHeldUntilItEnds()
+    {
+        var rig = new Rig(1f);
+        rig.World.OnSkillResolved(
+            new SkillResolved(ClientWorldFixture.LocalEntity, Slime, Strike, SkillOutcome.Hit, 17, 12, 660));
+
+        rig.Skill.Use(FirstAid, SkillTargetType.Self);
+        int ticks = rig.AdvanceUntilSent(40);
+
+        Assert.That(ticks, Is.EqualTo(10), "Strike's after-cast delay of 500 ms");
+        Assert.That(rig.Sent, Is.EqualTo(new[] { (FirstAid, default(EntityId)) }));
+    }
+
+    [Test]
+    public void Request_DuringTheSkillsCooldown_IsSentOnce_WhenItIsReady()
+    {
+        var cooling = new SkillList(
+            new[]
+            {
+                new SkillListEntry(Strike, 1.5f, 8, 2000, 500, 1000),
+                new SkillListEntry(FirstAid, 0f, 3, 0, 0, 0)
+            });
+        var strike = new Rig(1f);
+        strike.World.OnSkillList(cooling);
+        var firstAid = new Rig(1f);
+        firstAid.World.OnSkillList(cooling);
+
+        strike.Skill.Use(Strike, SkillTargetType.Enemy);
+        firstAid.Skill.Use(FirstAid, SkillTargetType.Self);
+        int strikeTicks = strike.AdvanceUntilSent(40);
+        int firstAidTicks = firstAid.AdvanceUntilSent(40);
+        for (int tick = 0; tick < 5; tick++)
+        {
+            strike.World.Advance(1f / ClientWorldFixture.TickRate);
+            strike.Tick();
+        }
+
+        Assert.That(strikeTicks, Is.EqualTo(20), "the 1,000 ms left of Strike's cooldown");
+        Assert.That(strike.Sent, Is.EqualTo(new[] { (Strike, Slime) }), "sent once");
+        Assert.That(firstAidTicks, Is.EqualTo(1), "Strike's cooldown is not First Aid's");
     }
 
     [Test]

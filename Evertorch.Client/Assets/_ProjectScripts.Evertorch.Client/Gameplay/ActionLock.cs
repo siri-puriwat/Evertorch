@@ -10,10 +10,17 @@ namespace Evertorch.Client
 /// </summary>
 public sealed class ActionLock
 {
+    /// <summary>
+    ///     How many free ticks a request waits for once the hold here is over, so that the server's is over too (see
+    ///     <see cref="HasBeenFreeFor" />).
+    /// </summary>
+    public const int ClearTicks = 2;
+
     private int m_swingTicks;
     private int m_castTicks;
     private int m_nextSwingTicks;
     private int m_freeTicks = int.MaxValue;
+    private int m_castFreeTicks = int.MaxValue;
 
     /// <summary>
     ///     Whether the player's own swing still holds it; the auto-attack waits for this before it presses closer.
@@ -38,6 +45,15 @@ public sealed class ActionLock
     public bool HasBeenFreeFor(int ticks)
     {
         return !IsSwingLocked && !IsCastLocked && m_freeTicks >= ticks;
+    }
+
+    /// <summary>
+    ///     Whether the player's own cast has not held it for the last <paramref name="ticks" /> ticks, whatever its
+    ///     swing does.
+    /// </summary>
+    public bool HasBeenFreeOfCastFor(int ticks)
+    {
+        return !IsCastLocked && m_castFreeTicks >= ticks;
     }
 
     /// <summary>
@@ -67,7 +83,8 @@ public sealed class ActionLock
     /// </summary>
     public bool Advance()
     {
-        bool isLocked = m_swingTicks > 0 || m_castTicks > 0;
+        bool isCasting = m_castTicks > 0;
+        bool isLocked = m_swingTicks > 0 || isCasting;
         if (m_swingTicks > 0)
         {
             m_swingTicks--;
@@ -90,6 +107,15 @@ public sealed class ActionLock
         else if (m_freeTicks < int.MaxValue)
         {
             m_freeTicks++;
+        }
+
+        if (isCasting)
+        {
+            m_castFreeTicks = 0;
+        }
+        else if (m_castFreeTicks < int.MaxValue)
+        {
+            m_castFreeTicks++;
         }
 
         return isLocked;

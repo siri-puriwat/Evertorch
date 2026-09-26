@@ -20,6 +20,7 @@ public sealed class ClientWorld
     private readonly Dictionary<EntityId, uint> m_lifeChangeTicks = new();
     private readonly double m_tickSeconds;
     private EntityId m_localCastTarget;
+    private double m_afterCastDelayEndsAt;
 
     public ClientWorld(NavigationGrid grid, WorldEntered entered, uint serverTickRate)
     {
@@ -125,6 +126,13 @@ public sealed class ClientWorld
     ///     The estimated server time, in seconds, when the skill list arrived; its cooldowns count down from then.
     /// </summary>
     public double SkillsReceivedAt { get; private set; }
+
+    /// <summary>
+    ///     What is left of the local character's after-cast delay now, in seconds (Gameplay Systems §9): the skill
+    ///     list's delay for the skill, counted from when the client heard its own cast resolve, a little after the
+    ///     server started it.
+    /// </summary>
+    public double AfterCastDelayRemaining => Math.Max(0.0, m_afterCastDelayEndsAt - ServerTime.Now);
 
     /// <summary>
     ///     The status effects on the local character, with the time each had left when the server sent them.
@@ -307,12 +315,29 @@ public sealed class ClientWorld
             return;
         }
 
+        if (resolved.Caster == LocalEntity)
+        {
+            StartAfterCastDelay(resolved.Skill);
+        }
+
         if (m_remotes.TryGetValue(resolved.Target, out RemoteEntity? remote) && remote.Kind == EntityKind.Monster)
         {
             remote.HealthPermille = resolved.TargetHealthPermille;
         }
 
         SkillResolvedReceived?.Invoke(resolved);
+    }
+
+    private void StartAfterCastDelay(SkillDefinitionId skill)
+    {
+        foreach (SkillListEntry entry in Skills)
+        {
+            if (entry.Skill == skill)
+            {
+                m_afterCastDelayEndsAt = ServerTime.Now + entry.AfterCastDelayMs / 1000.0;
+                return;
+            }
+        }
     }
 
     public void OnSkillList(SkillList list)

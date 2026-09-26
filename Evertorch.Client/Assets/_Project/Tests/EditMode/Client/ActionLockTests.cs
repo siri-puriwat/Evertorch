@@ -67,6 +67,30 @@ public sealed class ActionLockTests
     }
 
     [Test]
+    public void HasBeenFreeOfCastFor_CountsTheTicksSinceTheCastLastHeld_WhateverTheSwingDoes()
+    {
+        var actionLock = new ActionLock();
+        bool freshWorld = actionLock.HasBeenFreeOfCastFor(ActionLock.ClearTicks);
+        actionLock.LockForSwing(3);
+        actionLock.Advance();
+        bool duringASwing = actionLock.HasBeenFreeOfCastFor(ActionLock.ClearTicks);
+        actionLock.LockForCast(1);
+        bool whileCasting = actionLock.HasBeenFreeOfCastFor(0);
+
+        bool[] free = new bool[3];
+        for (int tick = 0; tick < free.Length; tick++)
+        {
+            actionLock.Advance();
+            free[tick] = actionLock.HasBeenFreeOfCastFor(ActionLock.ClearTicks);
+        }
+
+        Assert.That(freshWorld, Is.True, "no cast has held a new world's player");
+        Assert.That(duringASwing, Is.True, "a swing is no cast");
+        Assert.That(whileCasting, Is.False);
+        Assert.That(free, Is.EqualTo(new[] { false, false, true }), "the held tick, then two free ones");
+    }
+
+    [Test]
     public void IsSwingDueWithin_CountsDownToTheNextSwing_WithoutHoldingThePlayer()
     {
         var actionLock = new ActionLock();

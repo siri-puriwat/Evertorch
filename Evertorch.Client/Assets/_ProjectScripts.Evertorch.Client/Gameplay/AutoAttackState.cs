@@ -28,6 +28,7 @@ public sealed class AutoAttackState
     private int m_ticksInRangeWithoutSwing;
     private bool m_isClosingIn;
     private bool m_isAwaitingConfirmation;
+    private bool m_isCancelDeferred;
     private uint m_attackSequence;
 
     public AutoAttackState(
@@ -57,6 +58,10 @@ public sealed class AutoAttackState
 
     public int CancelsSent { get; private set; }
 
+    // A CancelAction ends the player's own cast on the server as well as the auto-attack (Gameplay Systems §9), so
+    // none is sent while that cast may still be under way there.
+    private bool IsOwnCastOver => m_world.ActionLock.HasBeenFreeOfCastFor(ActionLock.ClearTicks);
+
     /// <summary>
     ///     Asks the server to attack <paramref name="target" /> and starts walking up to it.
     /// </summary>
@@ -76,6 +81,9 @@ public sealed class AutoAttackState
         m_isClosingIn = false;
         m_ticksInRangeWithoutSwing = 0;
 
+        // The attack turns the auto-attack on again, which a cancel still waiting for the cast would turn off.
+        m_isCancelDeferred = false;
+
         // An attack replaces a walk the player asked for: a walk in progress would keep every swing from starting.
         if (!m_controller.IsChasing)
         {
@@ -84,14 +92,24 @@ public sealed class AutoAttackState
     }
 
     /// <summary>
-    ///     The player asked for a walk of their own; approach steps never come through here.
+    ///     The player asked for a walk of their own; approach steps never come through here. The auto-attack ends at
+    ///     once, and so does the server's, or, during the player's own cast, once that cast is over.
     /// </summary>
     public void OnWalkRequested()
     {
-        if (IsActive)
+        if (!IsActive)
+        {
+            return;
+        }
+
+        if (IsOwnCastOver)
         {
             SendCancel();
+            return;
         }
+
+        m_isCancelDeferred = true;
+        End();
     }
 
     /// <summary>
@@ -99,6 +117,7 @@ public sealed class AutoAttackState
     /// </summary>
     public void Tick(WorldPosition position)
     {
+        SendDeferredCancel();
         if (!IsActive)
         {
             return;
@@ -110,9 +129,15 @@ public sealed class AutoAttackState
             return;
         }
 
+        // A direction held during the player's own cast waits for the cast, and stops the auto-attack only if it is
+        // still held then.
         if (m_controller.HasManualDirection)
         {
-            SendCancel();
+            if (IsOwnCastOver)
+            {
+                SendCancel();
+            }
+
             return;
         }
 
@@ -197,6 +222,26 @@ public sealed class AutoAttackState
         m_commands.SendCancel();
         CancelsSent++;
         End();
+    }
+
+    // Death ends the auto-attack on the server too, and a command from a dead character is refused.
+    private void SendDeferredCancel()
+    {
+        if (!m_isCancelDeferred)
+        {
+            return;
+        }
+
+        if (m_world.IsLocalDead)
+        {
+            m_isCancelDeferred = false;
+        }
+        else if (IsOwnCastOver)
+        {
+            m_isCancelDeferred = false;
+            m_commands.SendCancel();
+            CancelsSent++;
+        }
     }
 
     // The server refused the attack this chase is for (Network Protocol §11), so there is nothing to walk up to. A

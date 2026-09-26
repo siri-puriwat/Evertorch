@@ -37,6 +37,9 @@ public sealed class TownLoopAcceptanceTests
     private const string TrainingField = "map.training_field";
     private const string Adventurer = "job.adventurer";
     private const string ForestCrawler = "monster.forest_crawler";
+    private const string TrainingSlime = "monster.training_slime";
+    private const string FirstAid = "skill.first_aid";
+    private const string Strike = "skill.strike";
     private const string TrainingSword = "item.weapon.training_sword";
     private const string ClothArmor = "item.armor.cloth";
     private const string MinorHealth = "item.consumable.minor_health";
@@ -116,10 +119,11 @@ public sealed class TownLoopAcceptanceTests
     }
 
     /// <summary>
-    ///     The player enters the training ground, meets the NPCs, and with a partner who joins accepts the Gate Warden's
-    ///     quest; both cross to the training field, fight forest crawlers together until both quests are ready, cross
-    ///     back, and turn the quest in; the player then trades at the Quartermaster and stops in town, and the server
-    ///     stops. Returns what the server and the client last showed of the player's character.
+    ///     The player enters the training ground, meets the NPCs, and uses its skills on a training slime; with a
+    ///     partner who joins it accepts the Gate Warden's quest; both cross to the training field, fight forest
+    ///     crawlers together until both quests are ready, cross back, and turn the quest in; the player then trades at
+    ///     the Quartermaster and stops in town, and the server stops. Returns what the server and the client last
+    ///     showed of the player's character.
     /// </summary>
     private static Stopped PlayTheLoop(IHost host)
     {
@@ -137,6 +141,7 @@ public sealed class TownLoopAcceptanceTests
         Assert.That(client.World.Quests, Is.Empty, "enter: a new character has taken no quest");
 
         MeetTheNpcs(content, admin, client);
+        UseSkillsOnASlime(client);
         using var partner = new SocketClient(content, PartnerIdentity, PartnerName);
         partner.EnterWorld(port);
         AcceptTheHunt("accept", client);
@@ -251,6 +256,79 @@ public sealed class TownLoopAcceptanceTests
         Assert.That(SummaryOf(admin, world.LocalEntity).RefusedCommands, Is.Zero, $"{step}: nothing refused");
         Assert.That(world.SnapshotsApplied - snapshots, Is.Positive, $"{step}: snapshots came meanwhile");
         AssertNoNpcInASnapshot(world, step);
+    }
+
+    // Line 6's two combat findings (Gameplay Systems §5.1, §9). The player auto-attacks a training slime and casts
+    // First Aid while walking up to it. A direction held through the cast sends no CancelAction, which would end the
+    // cast on the server too: the cast resolves, and the cancel follows once it is over, the direction still held.
+    // Then Strike, pressed again as soon as it resolved, is held through its after-cast delay and cooldown and sent
+    // once, when ready, with nothing refused. Two Strikes leave the slime alive, so no experience or drop comes of it.
+    private static void UseSkillsOnASlime(SocketClient client)
+    {
+        const string step = "skills";
+        ClientWorld world = client.World;
+        var firstAid = new SkillDefinitionId(FirstAid);
+        var strike = new SkillDefinitionId(Strike);
+        var resolved = new List<SkillResolved>();
+        var refused = new List<CommandRejected>();
+        int castsEndedEarly = 0;
+        world.SkillResolvedReceived += result =>
+        {
+            if (result.Caster == world.LocalEntity)
+            {
+                resolved.Add(result);
+            }
+        };
+        world.CommandRejectedReceived += refused.Add;
+        world.LocalCastEnded += () => castsEndedEarly++;
+
+        EntityId slime = client.CycleTarget(true);
+        Assert.That(
+            client.PumpUntil(() => world.Target == slime
+                && world.Remotes.TryGetValue(slime, out RemoteEntity? remote)
+                && remote.DefinitionId == TrainingSlime),
+            Is.True,
+            $"{step}: the server confirmed a training slime as the target");
+        client.AttackTarget();
+        Assert.That(client.UseSkill(firstAid), Is.True, $"{step}: First Aid on the way to the slime");
+        Assert.That(
+            client.PumpUntil(() => world.ActionLock.IsCastLocked),
+            Is.True,
+            $"{step}: the cast holds the player");
+        Assert.That(client.AutoAttack.IsActive, Is.True, $"{step}: still auto-attacking");
+        client.Hold(0f, -1f);
+        Assert.That(
+            client.PumpUntil(() => resolved.Any(result => result.Skill == firstAid)),
+            Is.True,
+            $"{step}: First Aid resolved, a direction held through its cast");
+        Assert.That(castsEndedEarly, Is.Zero, $"{step}: no cancel ended the cast");
+        Assert.That(
+            client.PumpUntil(() => client.AutoAttack.CancelsSent == 1),
+            Is.True,
+            $"{step}: the direction still held stops the auto-attack once the cast is over");
+        client.Hold(0f, 0f);
+        Assert.That(client.AutoAttack.IsActive, Is.False, step);
+
+        int sent = client.Skill.SkillsSent;
+        Assert.That(client.UseSkill(strike), Is.True, $"{step}: Strike at the slime");
+        Assert.That(
+            client.PumpUntil(() => resolved.Any(result => result.Skill == strike)),
+            Is.True,
+            $"{step}: Strike resolved");
+        var sinceStrike = Stopwatch.StartNew();
+        Assert.That(client.UseSkill(strike), Is.True, $"{step}: Strike pressed again at once");
+        Assert.That(
+            client.PumpUntil(() => resolved.Count(result => result.Skill == strike) == 2),
+            Is.True,
+            $"{step}: the second Strike resolved");
+        Assert.That(
+            sinceStrike.Elapsed,
+            Is.GreaterThan(TimeSpan.FromSeconds(1.9)),
+            $"{step}: held through Strike's cooldown of 2 s");
+        Assert.That(client.Skill.SkillsSent, Is.EqualTo(sent + 2), $"{step}: each press sent once");
+        Assert.That(refused, Is.Empty, $"{step}: nothing refused");
+        Assert.That(client.AutoAttack.CancelsSent, Is.EqualTo(1), $"{step}: one cancel in all");
+        Assert.That(IsAlive(world, slime), Is.True, $"{step}: the slime lives");
     }
 
     // The player walks into the portal before the ground's east gate and follows its character to the field (Gameplay

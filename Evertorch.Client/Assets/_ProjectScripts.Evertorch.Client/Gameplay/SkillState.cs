@@ -20,8 +20,6 @@ public sealed class SkillState
     /// </summary>
     private const double NextSwingMarginSeconds = 0.2;
 
-    private const int ClearTicks = 2;
-
     private readonly ClientWorld m_world;
     private readonly MovementController m_controller;
     private readonly ISkillCommandSink m_commands;
@@ -132,7 +130,13 @@ public sealed class SkillState
         // The server refuses a cast while the player's own swing or cast is under way, so the request waits until
         // both are surely over there, and for the impact of a swing that would begin before the request arrived.
         ActionLock actionLock = m_world.ActionLock;
-        if (!actionLock.HasBeenFreeFor(ClearTicks) || actionLock.IsSwingDueWithin(m_nextSwingMarginTicks))
+        if (!actionLock.HasBeenFreeFor(ActionLock.ClearTicks) || actionLock.IsSwingDueWithin(m_nextSwingMarginTicks))
+        {
+            return;
+        }
+
+        // It refuses one during the after-cast delay or the skill's cooldown too, so the press is held through them.
+        if (m_world.AfterCastDelayRemaining > 0.0 || m_world.CooldownRemaining(Skill) > 0.0)
         {
             return;
         }

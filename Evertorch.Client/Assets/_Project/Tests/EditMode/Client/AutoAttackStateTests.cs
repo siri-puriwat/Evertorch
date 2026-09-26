@@ -12,6 +12,7 @@ public sealed class AutoAttackStateTests
     private const double TickSeconds = 0.05;
 
     private static readonly EntityId Slime = new(300);
+    private static readonly SkillDefinitionId FirstAid = new("skill.first_aid");
 
     private static AttackTiming SwingTiming()
     {
@@ -100,6 +101,17 @@ public sealed class AutoAttackStateTests
     private static void Confirm(Rig rig, EntityId target)
     {
         rig.World.OnTargetChanged(new TargetChanged(ClientWorldFixture.LocalEntity, target));
+    }
+
+    // Auto-attacking the slime from afar when the player's own cast begins, holding it for 5 ticks (250 ms).
+    private static Rig AttackingDuringOwnCast()
+    {
+        var rig = new Rig(ClientTestGrids.Center(6, 8));
+        rig.AutoAttack.Attack(Slime);
+        rig.Tick();
+        rig.World.OnSkillCastStarted(
+            new SkillCastStarted(ClientWorldFixture.LocalEntity, FirstAid, ClientWorldFixture.LocalEntity, 1, 250));
+        return rig;
     }
 
     [Test]
@@ -306,6 +318,46 @@ public sealed class AutoAttackStateTests
     }
 
     [Test]
+    public void ManualDirection_DuringTheOwnCast_CancelsOnlyOnceTheCastIsOver()
+    {
+        Rig rig = AttackingDuringOwnCast();
+
+        rig.Controller.SetManualDirection(0f, 1f);
+        var sentByTick = new List<int>();
+        for (int tick = 0; tick < 8; tick++)
+        {
+            rig.Tick();
+            sentByTick.Add(rig.Sent.Count);
+        }
+
+        Assert.That(
+            sentByTick,
+            Is.EqualTo(new[] { 1, 1, 1, 1, 1, 1, 2, 2 }),
+            "five ticks held by the cast, then two free ones, before the server's cast is surely over");
+        Assert.That(rig.Sent, Is.EqualTo(new[] { "attack 300", "cancel" }), "a cancel would end the cast there too");
+        Assert.That(rig.AutoAttack.IsActive, Is.False);
+    }
+
+    [Test]
+    public void ManualDirection_ReleasedBeforeTheOwnCastIsOver_LeavesTheAttackGoing()
+    {
+        Rig rig = AttackingDuringOwnCast();
+
+        rig.Controller.SetManualDirection(0f, 1f);
+        rig.Tick();
+        rig.Tick();
+        rig.Controller.SetManualDirection(0f, 0f);
+        for (int tick = 0; tick < 6; tick++)
+        {
+            rig.Tick();
+        }
+
+        Assert.That(rig.Sent, Is.EqualTo(new[] { "attack 300" }), "the player no longer asks to move");
+        Assert.That(rig.AutoAttack.IsActive, Is.True);
+        Assert.That(rig.Controller.IsChasing, Is.True, "the approach goes on");
+    }
+
+    [Test]
     public void ManualDirection_WhileAttacking_SendsOneCancelAndEndsTheChase()
     {
         var rig = new Rig(ClientTestGrids.Center(6, 8));
@@ -404,6 +456,43 @@ public sealed class AutoAttackStateTests
         rig.AutoAttack.OnWalkRequested();
 
         Assert.That(rig.Sent, Is.EqualTo(new[] { "attack 300", "cancel" }));
+    }
+
+    [Test]
+    public void WalkRequested_DuringTheOwnCast_EndsTheAttack_AndCancelsOnceTheCastIsOver_UnlessAttackingOrDead()
+    {
+        Rig[] rigs = { AttackingDuringOwnCast(), AttackingDuringOwnCast(), AttackingDuringOwnCast() };
+        foreach (Rig rig in rigs)
+        {
+            Assert.That(
+                rig.Controller.TryMoveTo(rig.World.Predictor.Position, ClientTestGrids.Center(1, 3)),
+                Is.True);
+            rig.AutoAttack.OnWalkRequested();
+        }
+
+        bool wasActive = rigs[0].AutoAttack.IsActive;
+        rigs[1].AutoAttack.Attack(Slime);
+        rigs[2].World.OnEntityDied(new EntityDied(ClientWorldFixture.LocalEntity, Slime, 5));
+        var sentByTick = new List<int>();
+        for (int tick = 0; tick < 8; tick++)
+        {
+            foreach (Rig rig in rigs)
+            {
+                rig.Tick();
+            }
+
+            sentByTick.Add(rigs[0].Sent.Count);
+        }
+
+        Assert.That(wasActive, Is.False, "the walk ends the auto-attack here at once");
+        Assert.That(sentByTick, Is.EqualTo(new[] { 1, 1, 1, 1, 1, 1, 2, 2 }), "and the server's once the cast is over");
+        Assert.That(rigs[0].Sent, Is.EqualTo(new[] { "attack 300", "cancel" }));
+        Assert.That(
+            (rigs[0].Controller.HasPath, rigs[0].Controller.IsChasing),
+            Is.EqualTo((true, false)),
+            "the walk goes on");
+        Assert.That(rigs[1].Sent, Is.EqualTo(new[] { "attack 300", "attack 300" }), "the new attack replaced the stop");
+        Assert.That(rigs[2].Sent, Is.EqualTo(new[] { "attack 300" }), "death ended the auto-attack there too");
     }
 }
 }

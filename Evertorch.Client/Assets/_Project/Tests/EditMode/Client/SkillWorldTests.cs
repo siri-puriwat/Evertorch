@@ -79,6 +79,28 @@ public sealed class SkillWorldTests
     }
 
     [Test]
+    public void OwnCastResolved_StartsTheAfterCastDelayTheSkillListGives_CountingDownFromThen()
+    {
+        ClientWorld world = CreateWorld();
+        world.Advance(3f);
+        world.OnSkillList(new SkillList(new[] { new SkillListEntry(Strike, 1.5f, 8, 2000, 500, 0) }));
+
+        world.OnSkillResolved(new SkillResolved(Other, Slime, Strike, SkillOutcome.Hit, 17, 12, 660));
+        double afterAnotherCaster = world.AfterCastDelayRemaining;
+        world.OnSkillResolved(
+            new SkillResolved(ClientWorldFixture.LocalEntity, Slime, Strike, SkillOutcome.Hit, 17, 13, 500));
+        double atResolution = world.AfterCastDelayRemaining;
+        world.Advance(0.2f);
+        double later = world.AfterCastDelayRemaining;
+        world.Advance(0.5f);
+
+        Assert.That(afterAnotherCaster, Is.Zero, "another caster's delay holds nothing here");
+        Assert.That(atResolution, Is.EqualTo(0.5).Within(1e-6));
+        Assert.That(later, Is.EqualTo(0.3).Within(1e-6));
+        Assert.That(world.AfterCastDelayRemaining, Is.Zero, "never below 0");
+    }
+
+    [Test]
     public void OwnCastStarted_HoldsTheLocalPlayerForTheCastTime()
     {
         ClientWorld world = CreateWorld();
