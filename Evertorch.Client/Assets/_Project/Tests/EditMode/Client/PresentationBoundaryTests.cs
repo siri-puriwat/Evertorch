@@ -18,7 +18,8 @@ public sealed class PresentationBoundaryTests
         @"ClientConnection|ICombatCommandSink|IMoveIntentSink|ISkillCommandSink|IItemCommandSink|\bSend\w*\("
         + @"|AutoAttackState|PickupState|SkillState|TalkState|InventoryActions\.Press\b|MovementController"
         + @"|LocalPlayerDriver"
-        + @"|MovementPredictor|\.Predictor\b|\.IsLocked\b|RequestRespawn|UseSkillSlot|PressInventoryRow|\.ActionLock\b"
+        + @"|MovementPredictor|\.Predictor\b|\.IsLocked\b|RequestRespawn|UseSkillSlot|PressInventoryRow|BuyFrom|SellTo"
+        + @"|\.ActionLock\b"
         + @"|\.On(Spawn|Despawn|Snapshot|TargetChanged|AttackStarted|Damage|EntityDied|EntityRevived|CommandRejected"
         + @"|ItemDropped|ItemPickedUp|CharacterHealth|CharacterProgress|SkillCastStarted|SkillResolved|SkillList"
         + @"|StatusEffects|NpcServices|LocalCancel|Changed)\("
@@ -35,7 +36,7 @@ public sealed class PresentationBoundaryTests
         + @"|LocalPlayerDriver|PickupState|SkillState|TalkState|InventoryActions\.Press\b"
         + @"|\.ActionLock\b|MoveIntentProducer|\bnew\s+(MoveIntent|ClientHello|EnterWorldRequest|MoveInput|StopMovement"
         + @"|TargetEntity|AttackEntity|CancelAction|UseSkill|Respawn|Logout|PickupItem|CreateCharacter"
-        + @"|InventoryResyncRequest|EquipItem|UnequipItem|UseItem)\s*\("
+        + @"|InventoryResyncRequest|EquipItem|UnequipItem|UseItem|BuyItem|SellItem)\s*\("
         + @"|\.Connection\??\.(Connect|Disconnect|EnterWorld|CreateCharacter|Poll)\("
         + @"|\.Controller\??\.(Cancel\w*|Tick)\("
         + @"|\.(SetManualDirection|TryMoveTo|Chase\w*|StopChase|CancelPath|NextTick|Reconcile|Teleport"
@@ -95,7 +96,8 @@ public sealed class PresentationBoundaryTests
             "m_world.OnCommandRejected(rejected);", "m_world.Advance(0.05f);",
             "var pickup = new PickupState(world, controller, sink);", "world.Level =", "m_world.Target = entity;",
             "var talk = new TalkState(world, controller);", "m_world.OnNpcServices(services);",
-            "m_world.CollectNpcCandidates(candidates);"
+            "m_world.CollectNpcCandidates(candidates);", "m_client.BuyFrom(npc, item, 1);",
+            "client.SellTo(npc, row.InventoryItem, 2);"
         };
         string[] allowed =
         {
@@ -129,7 +131,8 @@ public sealed class PresentationBoundaryTests
             "var off = new UnequipItem(EquipmentSlot.Weapon, 4);", "var drink = new UseItem(row, 5);",
             "IItemCommandSink items = client;", "ISkillCommandSink skills = client;",
             "var talk = new TalkState(world, controller);", "TalkState? talk = m_client.Talk;",
-            "world.OnNpcServices(services);", "world.CollectNpcCandidates(candidates);"
+            "world.OnNpcServices(services);", "world.CollectNpcCandidates(candidates);",
+            "var buy = new BuyItem(npc, item, 1, 6);", "var sell = new SellItem(npc, row, 1, 7);"
         };
         string[] allowed =
         {
@@ -143,7 +146,11 @@ public sealed class PresentationBoundaryTests
             "int held = world != null ? InventoryActions.CountOf(world.Inventory.Rows, slot.Item) : 0;",
             "if (item != null && InventoryActions.HasAction(item.Type))",
             "GameObject button = Ui.CreateButton(text, m_rows!, () => client.PressInventoryRow(row));",
-            "SkillSlots.TryGetItem(number, out ItemDefinitionId item);"
+            "SkillSlots.TryGetItem(number, out ItemDefinitionId item);",
+            "AddButton(text, () => client.BuyFrom(npc, item, 1));",
+            "GameObject one = CreateButton(text, line.transform, () => client.SellTo(npc, inventoryItem, 1));",
+            "world.Inventory.ChangeApplied += OnChangeApplied;",
+            "NpcServices? shop = world.TryGetNpcServices(Npc, out NpcServices? services)"
         };
         string[] lockProbes = { "world.ActionLock.LockForSwing(4);", "bool held = m_world.ActionLock.IsCastLocked;" };
 

@@ -12,6 +12,7 @@ using UnityEngine.InputSystem;
 using UnityEngine.InputSystem.LowLevel;
 using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
+using UnityEngine.UI;
 using EntityId = Evertorch.Game.EntityId;
 using Object = UnityEngine.Object;
 
@@ -29,7 +30,10 @@ public sealed class LiveServerTownLoopTests : InputTestFixture
     private const string ClientName = "LiveTownOne";
     private const string NpcClientName = "LiveTownTwo";
     private const string CoinsClientName = "LiveTownThree";
+    private const string ShopClientName = "LiveTownFour";
     private const long SeededCoins = 4321;
+    private const string GelItem = "item.material.slime_gel";
+    private const string SwordItem = "item.weapon.training_sword";
     private const string QuartermasterPrefab = "npc_quartermaster";
     private const string GateWardenPrefab = "npc_gate_warden";
     private const string GroundScene = "10_TrainingGround";
@@ -258,6 +262,90 @@ public sealed class LiveServerTownLoopTests : InputTestFixture
         yield return WaitUntil(() => server.HasOutput(LiveServer.CharacterMarker(character)), StepTimeoutSeconds);
         string line = server.Output().First(text => text.Contains(LiveServer.CharacterMarker(character)));
         Assert.That(line, Does.EndWith($" coins {SeededCoins}"));
+    }
+
+    // The Quartermaster's window over the real server (Gameplay Systems §11.3; Prototype Content §2), with coins and
+    // a stack of gel written to the database before the character enters: a Buy press buys one training sword, a Sell
+    // press sells one gel, and All sells the rest. Each committed change moves the coins and the lists and says what
+    // happened, and the console's players line ends with the coins left.
+    [UnityTest]
+    [Timeout(TestTimeoutMs)]
+    public IEnumerator Shop_BuysWithSeededCoins_AndSellsASeededStack_ThroughTheQuartermastersWindow()
+    {
+        string actionsPath = RequirePrerequisites();
+        yield return StartDatabaseAndServer();
+        LiveServer server = m_server!;
+        LiveDatabase database = m_database!;
+        Assert.That(server.TryReadListeningPort(out int port), Is.True, $"server output: {server.JoinOutput()}");
+        Mouse mouse = InputSystem.AddDevice<Mouse>();
+        GameClient client = CreateClient(port, actionsPath);
+        yield return EnterByName(
+            client,
+            ShopClientName,
+            () =>
+            {
+                database.Execute($"UPDATE characters SET currency = 100 WHERE name = '{ShopClientName}'");
+                database.Execute(
+                    "INSERT INTO inventory_items (character_id, item_definition_id, quantity, refine_level, version) "
+                    + $"SELECT id, '{GelItem}', 6, 0, 0 FROM characters WHERE name = '{ShopClientName}'");
+            });
+        ClientWorld town = client.World!;
+        NpcWindow window = client.GetComponentsInChildren<NpcWindow>(true).Single();
+        FeedbackLines lines = client.GetComponentsInChildren<FeedbackLines>(true).Single();
+        yield return WalkUpToTheQuartermaster(client, mouse, window);
+        yield return WaitUntil(() => window.CoinsText == "Coins: 100", StepTimeoutSeconds);
+        Assert.That(window.CoinsText, Is.EqualTo("Coins: 100"), window.Text);
+
+        Assert.That(Press(window, "Training Sword: 50 coins"), Is.True, window.Text);
+        yield return WaitUntil(() => town.Inventory.Coins == 50, StepTimeoutSeconds);
+        Assert.That(town.Inventory.Coins, Is.EqualTo(50u), $"bought: {town.LastRejection}");
+        Assert.That(lines.Text, Does.Contain("Bought Training Sword for 50 coins."));
+        Assert.That(town.Inventory.Rows.Select(row => row.Item.Value), Does.Contain(SwordItem));
+
+        yield return WaitUntil(() => window.Text.Contains("Slime Gel x 6"), StepTimeoutSeconds);
+        Assert.That(Press(window, "Slime Gel x 6: 2 coins each"), Is.True, window.Text);
+        yield return WaitUntil(() => town.Inventory.Coins == 52, StepTimeoutSeconds);
+        Assert.That(town.Inventory.Coins, Is.EqualTo(52u), $"sold one: {town.LastRejection}");
+        Assert.That(lines.Text, Does.Contain("Sold Slime Gel for 2 coins."));
+
+        yield return WaitUntil(() => window.Text.Contains("Slime Gel x 5"), StepTimeoutSeconds);
+        Assert.That(Press(window, "All: 10 coins"), Is.True, window.Text);
+        yield return WaitUntil(() => town.Inventory.Coins == 62, StepTimeoutSeconds);
+        Assert.That(town.Inventory.Coins, Is.EqualTo(62u), $"sold the rest: {town.LastRejection}");
+        Assert.That(lines.Text, Does.Contain("Sold Slime Gel x 5 for 10 coins."));
+        Assert.That(town.Inventory.Rows.Select(row => row.Item.Value), Has.No.Member(GelItem));
+        yield return WaitUntil(() => window.CoinsText == "Coins: 62", StepTimeoutSeconds);
+        Assert.That(window.Text, Does.EndWith("Sell\nTraining Sword x 1: 25 coins"), "the bought sword can be sold");
+
+        // The console republishes what it reads once a second.
+        yield return new WaitForSecondsRealtime(1.5f);
+        long character = client.Connection!.Characters.Single(entry => entry.Name == ShopClientName).Character.Value;
+        server.ClearOutput();
+        server.SendCommand("players");
+        yield return WaitUntil(() => server.HasOutput(LiveServer.CharacterMarker(character)), StepTimeoutSeconds);
+        string line = server.Output().First(text => text.Contains(LiveServer.CharacterMarker(character)));
+        Assert.That(line, Does.EndWith(" coins 62"));
+        Assert.That(client.Connection.MalformedMessages + client.Connection.UnexpectedMessages, Is.Zero);
+    }
+
+    // A click on the Quartermaster walks the player up to it and opens its window.
+    private static IEnumerator WalkUpToTheQuartermaster(GameClient client, Mouse mouse, NpcWindow window)
+    {
+        yield return WaitUntil(() => NpcView(client, QuartermasterPrefab)?.HasBody == true, StepTimeoutSeconds);
+        EntityView quartermaster = NpcView(client, QuartermasterPrefab)!;
+        ClickAt(
+            mouse,
+            Camera.main!.WorldToScreenPoint(quartermaster.transform.position + Vector3.up * EntityPicker.PickHeight));
+        yield return WaitUntil(() => window.IsOpen, StepTimeoutSeconds);
+        Assert.That(window.IsOpen, Is.True, "the Quartermaster's window opened");
+    }
+
+    // Presses the window's button of that name, as a click on it does.
+    private static bool Press(NpcWindow window, string name)
+    {
+        Button? button = window.GetComponentsInChildren<Button>().FirstOrDefault(candidate => candidate.name == name);
+        button?.onClick.Invoke();
+        return button != null;
     }
 
     private static EntityView? NpcView(GameClient client, string prefab)

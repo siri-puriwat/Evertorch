@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
-using Evertorch.Game;
 using Evertorch.Protocol;
 using TMPro;
 using UnityEngine;
@@ -10,7 +9,7 @@ namespace Evertorch.Client
 {
 /// <summary>
 ///     Short-lived lines over the lower middle of the screen, clear of the skill bar (Prototype Content §2): a refused
-///     command in plain words, what the player picked up, and a level-up.
+///     command in plain words, what the player picked up, bought, or sold, and a level-up.
 /// </summary>
 public sealed class FeedbackLines : MonoBehaviour
 {
@@ -112,6 +111,7 @@ public sealed class FeedbackLines : MonoBehaviour
             m_watched.CommandRejectedReceived -= OnRejected;
             m_watched.ItemPickedUpReceived -= OnPickedUp;
             m_watched.LeveledUp -= OnLeveledUp;
+            m_watched.Inventory.ChangeApplied -= OnChangeApplied;
         }
 
         m_watched = world;
@@ -120,6 +120,7 @@ public sealed class FeedbackLines : MonoBehaviour
             world.CommandRejectedReceived += OnRejected;
             world.ItemPickedUpReceived += OnPickedUp;
             world.LeveledUp += OnLeveledUp;
+            world.Inventory.ChangeApplied += OnChangeApplied;
         }
 
         if (m_lines.Count > 0)
@@ -138,7 +139,8 @@ public sealed class FeedbackLines : MonoBehaviour
     {
         if (m_watched != null && pickedUp.Recipient == m_watched.LocalEntity)
         {
-            Add($"Picked up {ItemName(m_client != null ? m_client.Content : null, pickedUp.Item)} x {pickedUp.Amount}");
+            ClientContent? content = m_client != null ? m_client.Content : null;
+            Add($"Picked up {TradeMessages.ItemName(content, pickedUp.Item)} x {pickedUp.Amount}");
         }
     }
 
@@ -147,11 +149,13 @@ public sealed class FeedbackLines : MonoBehaviour
         Add("Level up");
     }
 
-    private static string ItemName(ClientContent? content, ItemDefinitionId item)
+    private void OnChangeApplied(InventoryDelta delta)
     {
-        return content != null && content.TryGetItem(item, out ClientItem? found) && found != null
-            ? found.DisplayName
-            : item.Value;
+        string? line = TradeMessages.Describe(delta, m_client != null ? m_client.Content : null);
+        if (line != null)
+        {
+            Add(line);
+        }
     }
 
     private void Build(GameClient client)

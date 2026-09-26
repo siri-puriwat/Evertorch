@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Evertorch.Game;
 using Evertorch.Protocol;
 
 namespace Evertorch.Client
@@ -38,6 +39,12 @@ public sealed class ClientInventory
     public int IgnoredChanges { get; private set; }
 
     public event Action? Changed;
+
+    /// <summary>
+    ///     Raised after each committed change is applied, with what it did. A snapshot raises only
+    ///     <see cref="Changed" />: after a gap nobody can tell what was missed.
+    /// </summary>
+    public event Action<InventoryDelta>? ChangeApplied;
 
     /// <summary>
     ///     Takes one snapshot part. True when the parts arrived out of order, which means the client must ask for the
@@ -113,9 +120,17 @@ public sealed class ClientInventory
             return RequestResync();
         }
 
+        uint coinsBefore = Coins;
+        var units = new Dictionary<ItemDefinitionId, long>();
         foreach (InventoryEntry entry in change.Changes)
         {
             int index = m_rows.FindIndex(row => row.InventoryItem == entry.InventoryItem);
+            if (index >= 0)
+            {
+                Count(units, m_rows[index].Item, -m_rows[index].Quantity);
+            }
+
+            Count(units, entry.Item, entry.Quantity);
             if (entry.Quantity == 0)
             {
                 if (index >= 0)
@@ -136,7 +151,22 @@ public sealed class ClientInventory
         Revision = change.NewRevision;
         Coins = change.Coins;
         Changed?.Invoke();
+        ChangeApplied?.Invoke(new InventoryDelta(coinsBefore, Coins, units));
         return false;
+    }
+
+    private static void Count(Dictionary<ItemDefinitionId, long> units, ItemDefinitionId item, long added)
+    {
+        units.TryGetValue(item, out long held);
+        held += added;
+        if (held == 0)
+        {
+            units.Remove(item);
+        }
+        else
+        {
+            units[item] = held;
+        }
     }
 
     // One request per gap: the snapshot that answers it covers everything missed until then.

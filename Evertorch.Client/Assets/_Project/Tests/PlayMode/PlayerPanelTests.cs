@@ -22,6 +22,9 @@ public sealed class PlayerPanelTests
     private const string Slime = "monster.training_slime";
     private const string Gel = "item.material.slime_gel";
     private const string Sword = "item.weapon.training_sword";
+    private const string Potion = "item.consumable.minor_health";
+    private const string Quartermaster = "npc.quartermaster";
+    private const string GateWarden = "npc.gate_warden";
 
     private static readonly EntityId Local = new(100);
 
@@ -90,18 +93,106 @@ public sealed class PlayerPanelTests
             ItemType.Weapon,
             "pickup_training_sword",
             "sword");
+        GiveContent(client, new[] { gel, sword });
+    }
+
+    // The shop's content: the items the Quartermaster trades in these tests and the two NPCs.
+    private static void GiveShop(GameClient client)
+    {
+        var npcs = new Dictionary<NpcDefinitionId, ClientNpc>
+        {
+            [new NpcDefinitionId(Quartermaster)] = new(
+                new NpcDefinitionId(Quartermaster),
+                "Quartermaster",
+                "npc_quartermaster"),
+            [new NpcDefinitionId(GateWarden)] = new(new NpcDefinitionId(GateWarden), "Gate Warden", "npc_gate_warden")
+        };
+        GiveContent(
+            client,
+            new[]
+            {
+                new ClientItem(new ItemDefinitionId(Gel), "Slime Gel", ItemType.Material, "pickup_slime_gel", "gel"),
+                new ClientItem(
+                    new ItemDefinitionId(Sword),
+                    "Training Sword",
+                    ItemType.Weapon,
+                    "pickup_training_sword",
+                    "sword"),
+                new ClientItem(
+                    new ItemDefinitionId(Potion),
+                    "Minor Health Potion",
+                    ItemType.Consumable,
+                    "pickup_minor_health",
+                    "potion")
+            },
+            npcs);
+    }
+
+    private static void GiveContent(
+        GameClient client,
+        IEnumerable<ClientItem> items,
+        IReadOnlyDictionary<NpcDefinitionId, ClientNpc>? npcs = null)
+    {
         var content = new ClientContent(
             "0000000000000000",
             new Dictionary<MapDefinitionId, ClientMap>(),
             new Dictionary<JobDefinitionId, ClientJob>(),
             new Dictionary<MonsterDefinitionId, ClientMonster>(),
-            new Dictionary<ItemDefinitionId, ClientItem> { { gel.Id, gel }, { sword.Id, sword } },
+            items.ToDictionary(item => item.Id),
             new Dictionary<SkillDefinitionId, ClientSkill>(),
-            new Dictionary<StatusDefinitionId, ClientStatusEffect>());
+            new Dictionary<StatusDefinitionId, ClientStatusEffect>(),
+            npcs);
         object loader = typeof(GameClient)
             .GetField("m_contentLoader", BindingFlags.NonPublic | BindingFlags.Instance)!
             .GetValue(client);
         typeof(StreamingContentLoader).GetProperty(nameof(StreamingContentLoader.Content))!.SetValue(loader, content);
+    }
+
+    // The NPC as the client would draw it, so that the window measures its distance to something.
+    private void DrawNpc(GameClient client, long entity)
+    {
+        EntityView view = new GameObject($"Npc {entity}").AddComponent<EntityView>();
+        m_created.Add(view.gameObject);
+        view.transform.position = new Vector3(2.5f, 0f, 2.5f);
+        var views = (Dictionary<EntityId, EntityView>)typeof(GameClient)
+            .GetField("m_remoteViews", BindingFlags.NonPublic | BindingFlags.Instance)!
+            .GetValue(client);
+        views[new EntityId(entity)] = view;
+    }
+
+    // What the Quartermaster trades in these tests, sorted by item ID as the server sends it: the potion and the sword
+    // both ways, the gel only to the Quartermaster.
+    private static NpcServices QuartermasterServices(long npc)
+    {
+        return new NpcServices(
+            new EntityId(npc),
+            new[]
+            {
+                new NpcServiceEntry(new ItemDefinitionId(Potion), 20, 10),
+                new NpcServiceEntry(new ItemDefinitionId(Gel), 0, 2),
+                new NpcServiceEntry(new ItemDefinitionId(Sword), 50, 25)
+            },
+            new NpcQuestOffer[0]);
+    }
+
+    // A world with the Quartermaster beside the player and the given rows held with 250 coins, and its window.
+    private NpcWindow OpenShop(out ClientWorld world, params InventoryEntry[] rows)
+    {
+        GameClient client = CreateIdleClient();
+        world = GiveWorld(client);
+        GiveShop(client);
+        Spawn(world, 13, EntityKind.Npc, Quartermaster, 1000);
+        DrawNpc(client, 13);
+        world.OnNpcServices(QuartermasterServices(13));
+        foreach (InventorySnapshot part in InventorySnapshot.CreateParts(4, 250, rows))
+        {
+            world.Inventory.OnSnapshot(part);
+        }
+
+        var window = NpcWindow.Create(client);
+        m_created.Add(window.gameObject);
+        window.Open(new EntityId(13));
+        return window;
     }
 
     private static void Spawn(ClientWorld world, long entity, EntityKind kind, string definition, ushort healthPermille)
@@ -653,6 +744,147 @@ public sealed class PlayerPanelTests
         Assert.That(changesLater, Is.EqualTo(changes), "the same revision rewrites nothing");
         Assert.That(window.Text, Is.EqualTo("Empty"));
         Assert.That(window.IsVisible, Is.True);
+    }
+
+    // The Quartermaster's part (Prototype Content §2): the coins, what it sells at its price, and the rows it buys at
+    // what one fetches. A worn row and a row of an item it does not buy are left out, and only a stack offers All.
+    [UnityTest]
+    public IEnumerator NpcWindow_ForTheQuartermaster_ListsWhatItSellsAndTheRowsItBuys_WithTheCoins()
+    {
+        NpcWindow window = OpenShop(
+            out ClientWorld _,
+            new InventoryEntry(1, new ItemDefinitionId(Gel), 12),
+            new InventoryEntry(2, new ItemDefinitionId(Sword), 1, EquipmentSlot.Weapon),
+            new InventoryEntry(3, new ItemDefinitionId(Sword), 1),
+            new InventoryEntry(4, new ItemDefinitionId("item.material.crawler_shell"), 3));
+        yield return null;
+        Button[] buttons = window.GetComponentsInChildren<Button>(true);
+
+        Assert.That(window.IsOpen, Is.True);
+        Assert.That((window.ShownName, window.CoinsText), Is.EqualTo(("Quartermaster", "Coins: 250")));
+        Assert.That(
+            window.Text.Split('\n'),
+            Is.EqualTo(
+                new[]
+                {
+                    "Buy", "Minor Health Potion: 20 coins", "Training Sword: 50 coins", "Sell",
+                    "Slime Gel x 12: 2 coins each", "Training Sword x 1: 25 coins"
+                }));
+        Assert.That(
+            buttons.Select(button => button.name),
+            Is.EqualTo(
+                new[]
+                {
+                    "Minor Health Potion: 20 coins", "Training Sword: 50 coins", "Slime Gel x 12: 2 coins each",
+                    "All: 24 coins", "Training Sword x 1: 25 coins", "Close"
+                }));
+        Assert.That(buttons.Select(button => button.navigation.mode), Is.All.EqualTo(Navigation.Mode.None));
+        buttons[0].onClick.Invoke();
+        buttons[3].onClick.Invoke();
+        Assert.That(window.Text, Does.Contain("Slime Gel x 12"), "without a connection a press sends nothing");
+    }
+
+    [UnityTest]
+    public IEnumerator NpcWindow_ForAnNpcThatDoesNotTrade_ShowsItsNameAndCloseOnly()
+    {
+        GameClient client = CreateIdleClient();
+        ClientWorld world = GiveWorld(client);
+        GiveShop(client);
+        Spawn(world, 14, EntityKind.Npc, GateWarden, 1000);
+        DrawNpc(client, 14);
+        world.OnNpcServices(new NpcServices(new EntityId(14), new NpcServiceEntry[0], new NpcQuestOffer[0]));
+        world.Inventory.OnSnapshot(new InventorySnapshot(4, 250, 0, 1, new InventoryEntry[0]));
+        var window = NpcWindow.Create(client);
+        m_created.Add(window.gameObject);
+
+        window.Open(new EntityId(14));
+        yield return null;
+
+        Assert.That(window.IsOpen, Is.True);
+        Assert.That((window.ShownName, window.CoinsText, window.Text), Is.EqualTo(("Gate Warden", "", "")));
+        Assert.That(
+            window.GetComponentsInChildren<Button>().Select(button => button.name),
+            Is.EqualTo(new[] { "Close" }));
+    }
+
+    // Only a committed change moves the lists and the coins: a sold row leaves the Sell list.
+    [UnityTest]
+    public IEnumerator NpcWindow_RewritesItsListsOnlyForANewRevision()
+    {
+        NpcWindow window = OpenShop(
+            out ClientWorld world,
+            new InventoryEntry(1, new ItemDefinitionId(Gel), 12),
+            new InventoryEntry(3, new ItemDefinitionId(Sword), 1));
+        yield return null;
+        int changes = window.TextChanges;
+        yield return null;
+        int changesLater = window.TextChanges;
+
+        world.Inventory.OnChanged(
+            new InventoryChanged(4, 5, 274, new[] { new InventoryEntry(1, new ItemDefinitionId(Gel), 0) }));
+        yield return null;
+        string afterTheGel = window.Text;
+        string coins = window.CoinsText;
+        world.Inventory.OnChanged(
+            new InventoryChanged(5, 6, 299, new[] { new InventoryEntry(3, new ItemDefinitionId(Sword), 0) }));
+        yield return null;
+
+        Assert.That(changesLater, Is.EqualTo(changes), "the same revision rewrites nothing");
+        Assert.That(afterTheGel, Does.EndWith("Sell\nTraining Sword x 1: 25 coins"));
+        Assert.That(coins, Is.EqualTo("Coins: 274"));
+        Assert.That(window.Text, Does.EndWith("Sell\nNothing to sell"));
+        Assert.That(window.CoinsText, Is.EqualTo("Coins: 299"));
+    }
+
+    // A row over a skill slot would take the presses meant for it, and a press of a row buys or sells.
+    [UnityTest]
+    public IEnumerator NpcWindow_WithMoreRowsThanFit_StopsAboveTheSkillBar_AndKeepsEveryRow()
+    {
+        NpcWindow window = OpenShop(
+            out ClientWorld _,
+            Enumerable.Range(1, 100).Select(row => new InventoryEntry(row, new ItemDefinitionId(Gel), 1)).ToArray());
+        yield return null;
+        yield return null;
+        yield return null;
+        Rect shown = ScreenRect(window.transform.Find("Panel"));
+        float unitsToPixels = Screen.width / ClientUI.CanvasWidth;
+        Debug.Log($"NPC window at {Screen.width} x {Screen.height}: {shown}");
+
+        Assert.That(shown.yMin, Is.GreaterThanOrEqualTo((SkillBar.Top + 8f) * unitsToPixels - 0.5f), "above the bar");
+        Assert.That(
+            window.GetComponentsInChildren<Button>(true),
+            Has.Length.EqualTo(2 + 100 + 1),
+            "the rows that do not fit scroll");
+    }
+
+    // Purchases and sales come from each committed change's coins and rows (Prototype Content §2).
+    [UnityTest]
+    public IEnumerator FeedbackLines_SayWhatWasBoughtAndSold_FromTheCommittedChanges()
+    {
+        GameClient client = CreateIdleClient();
+        ClientWorld world = GiveWorld(client);
+        GiveShop(client);
+        var lines = FeedbackLines.Create(client);
+        m_created.Add(lines.gameObject);
+        world.Inventory.OnSnapshot(
+            new InventorySnapshot(4, 100, 0, 1, new[] { new InventoryEntry(1, new ItemDefinitionId(Gel), 12) }));
+        yield return null;
+
+        world.Inventory.OnChanged(
+            new InventoryChanged(4, 5, 124, new[] { new InventoryEntry(1, new ItemDefinitionId(Gel), 0) }));
+        world.Inventory.OnChanged(
+            new InventoryChanged(5, 6, 74, new[] { new InventoryEntry(2, new ItemDefinitionId(Sword), 1) }));
+        world.Inventory.OnChanged(
+            new InventoryChanged(
+                6,
+                7,
+                74,
+                new[] { new InventoryEntry(2, new ItemDefinitionId(Sword), 1, EquipmentSlot.Weapon) }));
+
+        Assert.That(
+            lines.Text,
+            Is.EqualTo("Sold Slime Gel x 12 for 24 coins.\nBought Training Sword for 50 coins."),
+            "putting the sword on says nothing");
     }
 }
 }

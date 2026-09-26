@@ -468,6 +468,24 @@ public sealed class GameClient : MonoBehaviour
     }
 
     /// <summary>
+    ///     Asks the NPC for <paramref name="quantity" /> of <paramref name="item" /> (Gameplay Systems §11.3). The server
+    ///     checks the catalogue, the coins, and the room, and only its committed change shows the purchase.
+    /// </summary>
+    public void BuyFrom(EntityId npc, ItemDefinitionId item, uint quantity)
+    {
+        Connection?.SendBuy(npc, item, quantity);
+    }
+
+    /// <summary>
+    ///     Offers the NPC <paramref name="quantity" /> of an inventory row (Gameplay Systems §11.3). The server checks
+    ///     the row, its price, and the coin cap, and only its committed change shows the sale.
+    /// </summary>
+    public void SellTo(EntityId npc, long inventoryItem, uint quantity)
+    {
+        Connection?.SendSell(npc, inventoryItem, quantity);
+    }
+
+    /// <summary>
     ///     Uses the skill in a slot of the skill bar, numbered from 1 (Prototype Content §4): what the slot's key,
     ///     gamepad button, and button on the bar ask for. An enemy skill is for the confirmed target.
     /// </summary>

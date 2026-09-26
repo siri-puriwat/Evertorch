@@ -5,8 +5,9 @@ using UnityEngine;
 namespace Evertorch.Client.Tests.EditMode
 {
 /// <summary>
-///     Where the skill bar and the feedback lines sit (Prototype Content §2, owner decision 10), in canvas units, which
-///     are 1,080 wide on every screen: the lines clear the bar, and neither covers the stick or the touch buttons.
+///     Where the skill bar, the feedback lines, and the windows sit (Prototype Content §2, owner decision 10), in canvas
+///     units, which are 1,080 wide on every screen: the lines clear the bar, neither covers the stick or the touch
+///     buttons, and no window row lies over a control.
 /// </summary>
 [TestFixture]
 public sealed class PanelLayoutTests
@@ -63,12 +64,37 @@ public sealed class PanelLayoutTests
         Assert.That(bar.xMax, Is.LessThan(column.xMin));
     }
 
+    // A row over a skill slot or the stick would take the presses meant for it, and a press of a row buys or sells.
+    [TestCase(486f)]
+    [TestCase(607.5f)]
+    [TestCase(1920f)]
+    public void NpcWindow_HangsBelowTheStatusBar_AndStopsAboveTheSkillBarAndTheStick(float canvasHeight)
+    {
+        Rect bar = SkillBar.BoundsFor(ClientUI.CanvasWidth, SkillSlots.Count);
+        Rect withTouch = NpcWindow.BoundsFor(canvasHeight, 100, true);
+        Rect withoutTouch = NpcWindow.BoundsFor(canvasHeight, 100, false);
+
+        Assert.That(withTouch.yMax, Is.EqualTo(canvasHeight - 64f).Within(1e-3f), "below the status bar");
+        Assert.That(withTouch.Overlaps(TouchControls.StickBounds), Is.False, "no row over the stick");
+        Assert.That(withTouch.Overlaps(bar), Is.False, "nor over the skill bar");
+        Assert.That(withoutTouch.yMin, Is.EqualTo(SkillBar.Top + 8f).Within(1e-3f), "without the stick, to the bar");
+        Assert.That(withTouch.height, Is.GreaterThan(92f + 2 * 30f + 6f), "two rows show on the shortest screen");
+    }
+
     [Test]
     public void InventoryWindow_WhileItsRowsFit_IsJustTallEnoughForThem()
     {
         Rect three = InventoryWindow.BoundsFor(1920f, 3, true);
 
         Assert.That(three.height, Is.EqualTo(54f + 3 * 30f + 2 * 4f).Within(1e-3f));
+    }
+
+    [Test]
+    public void NpcWindow_WhileItsRowsFit_IsJustTallEnoughForThem()
+    {
+        Rect three = NpcWindow.BoundsFor(1920f, 3, true);
+
+        Assert.That(three.height, Is.EqualTo(92f + 3 * 30f + 2 * 6f).Within(1e-3f));
     }
 }
 }

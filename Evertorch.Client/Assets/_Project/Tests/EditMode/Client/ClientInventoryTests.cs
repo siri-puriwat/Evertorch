@@ -28,6 +28,48 @@ public sealed class ClientInventoryTests
     }
 
     [Test]
+    public void ChangeApplied_IsNotRaisedForASnapshotOrAnIgnoredChange()
+    {
+        var inventory = new ClientInventory();
+        int applied = 0;
+        inventory.ChangeApplied += _ => applied++;
+
+        inventory.OnChanged(new InventoryChanged(0, 1, 50, new[] { Row(1, 1) }));
+        inventory.OnSnapshot(new InventorySnapshot(3, 100, 0, 1, new[] { Row(1, 12) }));
+        inventory.OnChanged(new InventoryChanged(4, 5, 124, new[] { Row(1, 0) }));
+
+        Assert.That(applied, Is.Zero);
+        Assert.That(inventory.Rows.Single().Quantity, Is.EqualTo(12u));
+    }
+
+    // What the feedback lines tell a purchase and a sale by (Prototype Content §2): the coins on either side of each
+    // applied change and the units each item gained or lost, nothing for a row only put on.
+    [Test]
+    public void ChangeApplied_TellsTheCoinsAndTheUnitsOfEachItemTheChangeMoved()
+    {
+        var sword = new ItemDefinitionId("item.weapon.training_sword");
+        var inventory = new ClientInventory();
+        inventory.OnSnapshot(new InventorySnapshot(3, 100, 0, 1, new[] { Row(1, 12), Row(2, 3) }));
+        var deltas = new List<InventoryDelta>();
+        inventory.ChangeApplied += deltas.Add;
+
+        inventory.OnChanged(new InventoryChanged(3, 4, 124, new[] { Row(1, 0), Row(2, 1) }));
+        inventory.OnChanged(new InventoryChanged(4, 5, 74, new[] { new InventoryEntry(3, sword, 1) }));
+        inventory.OnChanged(
+            new InventoryChanged(5, 6, 74, new[] { new InventoryEntry(3, sword, 1, EquipmentSlot.Weapon) }));
+
+        Assert.That(
+            deltas.Select(delta => (delta.CoinsBefore, delta.CoinsAfter)),
+            Is.EqualTo(new[] { (100u, 124u), (124u, 74u), (74u, 74u) }));
+        Assert.That(
+            deltas[0].Units.Select(pair => (pair.Key, pair.Value)),
+            Is.EqualTo(new[] { (Gel, -14L) }),
+            "two rows of one item");
+        Assert.That(deltas[1].Units.Select(pair => (pair.Key, pair.Value)), Is.EqualTo(new[] { (sword, 1L) }));
+        Assert.That(deltas[2].Units, Is.Empty, "putting a row on moves no units");
+    }
+
+    [Test]
     public void Change_BeforeTheFirstSnapshot_IsIgnoredWithoutAResync()
     {
         var inventory = new ClientInventory();
