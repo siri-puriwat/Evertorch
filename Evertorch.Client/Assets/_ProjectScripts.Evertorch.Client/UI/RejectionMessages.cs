@@ -30,6 +30,10 @@ public static class RejectionMessages
                 return "Not enough SP.";
             case CommandRejectionReason.ItemActionInFlight:
                 return "Your last item action is still going through. Try again in a moment.";
+            case CommandRejectionReason.NotEnoughCoins:
+                return "You do not have enough coins.";
+            case CommandRejectionReason.CoinCapReached:
+                return "You cannot hold any more coins.";
             default:
                 return "The server refused that.";
         }

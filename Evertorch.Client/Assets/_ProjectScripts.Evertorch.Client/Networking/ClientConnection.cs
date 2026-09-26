@@ -452,10 +452,6 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
         return sequence;
     }
 
-    /// <summary>
-    ///     Asks the server to cast <paramref name="skill" /> at <paramref name="target" />, the default value for the
-    ///     local character itself. Returns the command's sequence, or 0 outside the world.
-    /// </summary>
     public uint SendUseSkill(SkillDefinitionId skill, EntityId target)
     {
         if (State != ClientConnectionState.InWorld)
@@ -466,6 +462,44 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
         uint sequence = NextCommandSequence();
         var message = new UseSkill(skill, target, sequence);
         SendRouted(MessageOpcode.UseSkill, message.Write(m_sendBuffer));
+        return sequence;
+    }
+
+    /// <summary>
+    ///     Asks the server to cast <paramref name="skill" /> at <paramref name="target" />, the default value for the
+    ///     local character itself. Returns the command's sequence, or 0 outside the world.
+    /// </summary>
+    /// <summary>
+    ///     Asks to buy <paramref name="quantity" /> of <paramref name="item" /> from <paramref name="npc" />; 0 while not
+    ///     in the world, else the command's sequence.
+    /// </summary>
+    public uint SendBuy(EntityId npc, ItemDefinitionId item, uint quantity)
+    {
+        if (State != ClientConnectionState.InWorld)
+        {
+            return 0;
+        }
+
+        uint sequence = NextCommandSequence();
+        var message = new BuyItem(npc, item, quantity, sequence);
+        SendRouted(MessageOpcode.BuyItem, message.Write(m_sendBuffer));
+        return sequence;
+    }
+
+    /// <summary>
+    ///     Asks to sell <paramref name="quantity" /> of the row <paramref name="inventoryItem" /> to
+    ///     <paramref name="npc" />; 0 while not in the world, else the command's sequence.
+    /// </summary>
+    public uint SendSell(EntityId npc, long inventoryItem, uint quantity)
+    {
+        if (State != ClientConnectionState.InWorld)
+        {
+            return 0;
+        }
+
+        uint sequence = NextCommandSequence();
+        new SellItem(npc, inventoryItem, quantity, sequence).Write(m_sendBuffer);
+        SendRouted(MessageOpcode.SellItem, SellItem.EncodedLength);
         return sequence;
     }
 

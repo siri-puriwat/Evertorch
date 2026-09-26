@@ -14,6 +14,9 @@ namespace Evertorch.Server.Tests
 /// </summary>
 internal sealed class InMemoryGameStore : IGameStore
 {
+    // The coin cap, as the PostgreSQL schema holds it.
+    private const long MaxCoins = 1_000_000_000;
+
     private readonly object m_gate = new();
     private readonly Dictionary<string, long> m_accounts = new(StringComparer.Ordinal);
     private readonly HashSet<string> m_disabledLogins = new(StringComparer.Ordinal);
@@ -89,6 +92,16 @@ internal sealed class InMemoryGameStore : IGameStore
     ///     Every consume commit attempted, in order, by operation ID.
     /// </summary>
     public List<Guid> ConsumeCommits { get; } = new();
+
+    /// <summary>
+    ///     How many of the next buy or sell commits succeed and then throw as if the answer was lost.
+    /// </summary>
+    public int AmbiguousTradeFailures { get; set; }
+
+    /// <summary>
+    ///     Every buy and sell commit attempted, in order, by operation ID.
+    /// </summary>
+    public List<Guid> TradeCommits { get; } = new();
 
     /// <summary>
     ///     How many of the next operation lookups fail with an error of the store's own, not an outage.
@@ -294,6 +307,26 @@ internal sealed class InMemoryGameStore : IGameStore
         }
     }
 
+    public Task<InventoryResult> CommitBuyAsync(BuyCommit buy, CancellationToken cancellationToken)
+    {
+        ThrowIfUnavailable();
+        lock (m_gate)
+        {
+            TradeCommits.Add(buy.OperationId);
+            return AnswerTrade(Find(buy.OperationId, buy.CharacterId, Array.Empty<long>()) ?? Buy(buy));
+        }
+    }
+
+    public Task<InventoryResult> CommitSellAsync(SellCommit sell, CancellationToken cancellationToken)
+    {
+        ThrowIfUnavailable();
+        lock (m_gate)
+        {
+            TradeCommits.Add(sell.OperationId);
+            return AnswerTrade(Find(sell.OperationId, sell.CharacterId, Array.Empty<long>()) ?? Sell(sell));
+        }
+    }
+
     public Task<InventoryResult?> FindOperationAsync(
         Guid operationId,
         long characterId,
@@ -475,6 +508,85 @@ internal sealed class InMemoryGameStore : IGameStore
             row.InventoryRevision,
             row.Coins,
             new[] { row.Read(used.Id, used.ItemDefinitionId) });
+    }
+
+    private Task<InventoryResult> AnswerTrade(InventoryResult result)
+    {
+        if (AmbiguousTradeFailures > 0 && result.Status == InventoryStatus.Committed)
+        {
+            AmbiguousTradeFailures--;
+            throw new StoreUnavailableException(new TimeoutException("scripted loss of the commit's answer"));
+        }
+
+        return Task.FromResult(result);
+    }
+
+    // As the PostgreSQL store checks it: the coins, then the stack and the rows.
+    private InventoryResult Buy(BuyCommit buy)
+    {
+        Row row = m_characters[buy.CharacterId];
+        if (row.Coins < buy.Total)
+        {
+            return Unchanged(InventoryStatus.Refused, row);
+        }
+
+        int index = buy.StackLimit == 1
+            ? -1
+            : row.Items.FindIndex(item => item.ItemDefinitionId == buy.ItemDefinitionId);
+        int held = index >= 0 ? row.Items[index].Quantity : 0;
+        if (held > buy.StackLimit - buy.Quantity || (index < 0 && row.Items.Count >= buy.MaxRows))
+        {
+            return Unchanged(InventoryStatus.InventoryFull, row);
+        }
+
+        StoredItem stack = index >= 0
+            ? new StoredItem(row.Items[index].Id, buy.ItemDefinitionId, held + buy.Quantity)
+            : new StoredItem(++m_lastItem, buy.ItemDefinitionId, buy.Quantity);
+        if (index >= 0)
+        {
+            row.Items[index] = stack;
+        }
+        else
+        {
+            row.Items.Add(stack);
+        }
+
+        row.Coins -= buy.Total;
+        row.InventoryRevision = unchecked(row.InventoryRevision + 1);
+        m_ledger.Add(buy.OperationId, new LedgerEntry(buy.CharacterId, stack.Id, buy.ItemDefinitionId));
+        return new InventoryResult(InventoryStatus.Committed, row.InventoryRevision, row.Coins, new[] { stack });
+    }
+
+    private InventoryResult Sell(SellCommit sell)
+    {
+        Row row = m_characters[sell.CharacterId];
+        int index = row.Items.FindIndex(item => item.Id == sell.InventoryItemId);
+        if (index < 0
+            || row.Equipment.ContainsValue(sell.InventoryItemId)
+            || row.Items[index].Quantity < sell.Quantity
+            || row.Coins > MaxCoins - sell.Proceeds)
+        {
+            return Unchanged(InventoryStatus.Refused, row);
+        }
+
+        StoredItem sold = row.Items[index];
+        if (sold.Quantity == sell.Quantity)
+        {
+            row.Items.RemoveAt(index);
+        }
+        else
+        {
+            row.Items[index] = new StoredItem(sold.Id, sold.ItemDefinitionId, sold.Quantity - sell.Quantity);
+        }
+
+        row.Coins += sell.Proceeds;
+        row.InventoryRevision = unchecked(row.InventoryRevision + 1);
+        m_ledger.Add(sell.OperationId, new LedgerEntry(sell.CharacterId, sold.Id, sold.ItemDefinitionId));
+        return new InventoryResult(
+            InventoryStatus.Committed,
+            row.InventoryRevision,
+            row.Coins,
+            new[] { row.Read(sold.Id, sold.ItemDefinitionId) });
     }
 
     private Task<InventoryResult> AnswerEquipment(InventoryResult result)

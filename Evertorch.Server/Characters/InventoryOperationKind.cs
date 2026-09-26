@@ -8,6 +8,8 @@ public enum InventoryOperationKind
     Pickup = 1,
     Equip = 2,
     Unequip = 3,
-    Consume = 4
+    Consume = 4,
+    Buy = 5,
+    Sell = 6
 }
 }

@@ -49,6 +49,16 @@ public enum CommandRejectionReason : byte
     ///     Another item action of the character is still being committed: a use, an equip, or an unequip, or a pickup
     ///     while one of those is. Trying again later may work.
     /// </summary>
-    ItemActionInFlight = 9
+    ItemActionInFlight = 9,
+
+    /// <summary>
+    ///     The character has fewer coins than the purchase costs.
+    /// </summary>
+    NotEnoughCoins = 10,
+
+    /// <summary>
+    ///     The coins would pass their cap; a sale or a reward is refused rather than cut (Gameplay Systems §11.3).
+    /// </summary>
+    CoinCapReached = 11
 }
 }

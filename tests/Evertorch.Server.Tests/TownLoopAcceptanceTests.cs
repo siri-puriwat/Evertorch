@@ -12,6 +12,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Console;
+using Npgsql;
 using NUnit.Framework;
 
 namespace Evertorch.Server.Tests
@@ -126,6 +127,7 @@ public sealed class TownLoopAcceptanceTests
         CrossToTheField(content, admin, client);
         HuntCrawlers(content, admin, client);
         ReturnToTown(content, admin, client);
+        TradeAtTheQuartermaster(content, admin, client);
 
         var stopped = new Stopped(
             SummaryOf(admin, client.World.LocalEntity),
@@ -170,8 +172,11 @@ public sealed class TownLoopAcceptanceTests
             return now != null && now.Level == stopped.Summary.Level && now.Experience == stopped.Summary.Experience;
         });
         Assert.That(isKept, Is.True, "restart: the server kept the level and experience");
-        Assert.That(client.World.Inventory.Coins, Is.Zero, "restart: still no coins");
-        Assert.That(SummaryOf(admin, client.World.LocalEntity).Coins, Is.Zero, "restart: the server holds none either");
+        Assert.That(client.World.Inventory.Coins, Is.EqualTo((uint)stopped.Summary.Coins), "restart: the same coins");
+        Assert.That(
+            SummaryOf(admin, client.World.LocalEntity).Coins,
+            Is.EqualTo(stopped.Summary.Coins),
+            "restart: the server holds them too");
         Assert.That(RowsOf(client.World), Is.EqualTo(stopped.Rows), "restart: the same inventory, equipment included");
         Assert.That(
             client.World.Inventory.Rows.Where(row => row.Slot != EquipmentSlot.None)
@@ -397,6 +402,73 @@ public sealed class TownLoopAcceptanceTests
             $"{step}: picked up {drop.Amount} {drop.ItemId}");
     }
 
+    // Back in town the player walks up to the Quartermaster and sells what the hunt brought back but the potions and
+    // what it wears, then buys a new training sword and cloth armor and wears them (Gameplay Systems §11.3). Each
+    // trade answers with the coins, one operation at a time.
+    private static void TradeAtTheQuartermaster(ServerContent content, IAdminCommandService admin, SocketClient client)
+    {
+        const string step = "trade";
+        ClientWorld world = client.World;
+        RemoteEntity quartermaster = NpcInView(world, Quartermaster)!;
+        int windows = client.NpcWindows.Count;
+        client.TalkTo(quartermaster.Entity);
+        Assert.That(client.PumpUntil(() => client.NpcWindows.Count > windows), Is.True, $"{step}: walked up to it");
+
+        uint earned = 0;
+        foreach (InventoryEntry row in world.Inventory.Rows
+                     .Where(row => row.Slot == EquipmentSlot.None && row.Item.Value != MinorHealth)
+                     .ToList())
+        {
+            uint fetches = row.Quantity * (uint)content.Items[row.Item].SellPrice;
+            uint before = world.Inventory.Coins;
+            client.Connection.SendSell(quartermaster.Entity, row.InventoryItem, row.Quantity);
+            Assert.That(
+                client.PumpUntil(() => world.Inventory.Coins == before + fetches
+                    && world.Inventory.Rows.All(held => held.InventoryItem != row.InventoryItem)),
+                Is.True,
+                $"{step}: sold {row.Quantity} {row.Item.Value} for {fetches}; {world.LastRejection}");
+            earned += fetches;
+        }
+
+        Assert.That(earned, Is.GreaterThanOrEqualTo(90u), $"{step}: enough for a sword and armor");
+        long sword = Buy(step, content, client, quartermaster.Entity, TrainingSword);
+        long armor = Buy(step, content, client, quartermaster.Entity, ClothArmor);
+        EquipRow(step, client, sword, EquipmentSlot.Weapon);
+        EquipRow(step, client, armor, EquipmentSlot.Armor);
+
+        Assert.That(world.Inventory.Coins, Is.EqualTo(earned - 90u), $"{step}: 50 for the sword and 40 for the armor");
+        bool isAgreed = client.PumpUntil(() => SummaryOf(admin, world.LocalEntity).Coins == world.Inventory.Coins);
+        Assert.That(isAgreed, Is.True, $"{step}: the server holds the same coins");
+    }
+
+    // Buys one of the item and returns the row it came in.
+    private static long Buy(string step, ServerContent content, SocketClient client, EntityId npc, string item)
+    {
+        ClientWorld world = client.World;
+        uint price = (uint)content.Npcs[new NpcDefinitionId(Quartermaster)].Shop
+            .Single(stock => stock.Item.Value == item)
+            .Price;
+        uint before = world.Inventory.Coins;
+        var held = new HashSet<long>(world.Inventory.Rows.Select(row => row.InventoryItem));
+        client.Connection.SendBuy(npc, new ItemDefinitionId(item), 1);
+        Assert.That(
+            client.PumpUntil(() => world.Inventory.Coins == before - price
+                && world.Inventory.Rows.Any(row => !held.Contains(row.InventoryItem))),
+            Is.True,
+            $"{step}: bought {item} for {price}; {world.LastRejection}");
+        return world.Inventory.Rows.Single(row => !held.Contains(row.InventoryItem)).InventoryItem;
+    }
+
+    private static void EquipRow(string step, SocketClient client, long row, EquipmentSlot slot)
+    {
+        ClientWorld world = client.World;
+        client.Connection.SendEquip(row);
+        Assert.That(
+            client.PumpUntil(() => world.Inventory.Rows.Any(entry => entry.InventoryItem == row && entry.Slot == slot)),
+            Is.True,
+            $"{step}: row {row} worn");
+    }
+
     private static void Equip(string step, SocketClient client, string item, EquipmentSlot slot)
     {
         ClientWorld world = client.World;
@@ -589,6 +661,31 @@ public sealed class TownLoopAcceptanceTests
         Assert.That(client.Connection.UnexpectedMessages, Is.Zero, $"{step}: no unexpected message");
     }
 
+    // Every sale and purchase of the loop is one ledger row, and together they account for the coins the character
+    // holds (Persistence §5).
+    private void AssertTheTradesInTheLedger(Stopped stopped)
+    {
+        using var connection = new NpgsqlConnection(m_database.ConnectionString);
+        connection.Open();
+        using var command = new NpgsqlCommand(
+            "SELECT operation_type, currency_delta FROM economy_ledger "
+            + "WHERE actor_character_id = @character AND operation_type IN ('buy', 'sell') ORDER BY id",
+            connection);
+        command.Parameters.AddWithValue("character", stopped.Summary.Character.Value);
+        var trades = new List<(string Type, long Coins)>();
+        using (NpgsqlDataReader reader = command.ExecuteReader())
+        {
+            while (reader.Read())
+            {
+                trades.Add((reader.GetString(0), reader.GetInt64(1)));
+            }
+        }
+
+        Assert.That(trades.Count(trade => trade.Type == "buy"), Is.EqualTo(2), "ledger: the sword and the armor");
+        Assert.That(trades.Where(trade => trade.Type == "sell").Select(trade => trade.Coins), Is.All.Positive);
+        Assert.That(trades.Sum(trade => trade.Coins), Is.EqualTo(stopped.Summary.Coins), "ledger: the coins held");
+    }
+
     private sealed class Stopped
     {
         public Stopped(PlayerSummary summary, List<string> rows)
@@ -615,6 +712,7 @@ public sealed class TownLoopAcceptanceTests
         using (IHost first = StartHost(root.Path, logs))
         {
             stopped = PlayTheLoop(first);
+            AssertTheTradesInTheLedger(stopped);
         }
 
         using (IHost restarted = StartHost(root.Path, logs))

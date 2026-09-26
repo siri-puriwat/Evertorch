@@ -82,6 +82,22 @@ public interface IGameStore
     Task<InventoryResult> CommitConsumeAsync(ConsumeCommit consume, CancellationToken cancellationToken);
 
     /// <summary>
+    ///     Adds the quantity of the item to the character's inventory and takes its cost from the coins in one
+    ///     transaction with a <c>buy</c> ledger row, like <see cref="CommitEquipAsync" />; the item merges into its row
+    ///     unless its stack limit is 1. <see cref="InventoryStatus.Refused" /> when the coins are short, and
+    ///     <see cref="InventoryStatus.InventoryFull" /> when the stack limit or the row limit would be passed.
+    /// </summary>
+    Task<InventoryResult> CommitBuyAsync(BuyCommit buy, CancellationToken cancellationToken);
+
+    /// <summary>
+    ///     Takes the quantity from the character's row and adds what it fetches to the coins in one transaction with a
+    ///     <c>sell</c> ledger row, like <see cref="CommitEquipAsync" />; a row sold whole is deleted, and then reports a
+    ///     quantity of 0. <see cref="InventoryStatus.Refused" /> when the row is not the character's, is worn, holds
+    ///     less, or the coins would pass their cap.
+    /// </summary>
+    Task<InventoryResult> CommitSellAsync(SellCommit sell, CancellationToken cancellationToken);
+
+    /// <summary>
     ///     What became of an inventory operation whose commit may or may not have happened, looked up under the
     ///     character's lock: null when the ledger has no entry for <paramref name="operationId" />, else
     ///     <see cref="InventoryStatus.TakenByOther" /> when another character made it, or

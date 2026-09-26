@@ -277,6 +277,8 @@ public sealed class SessionManager : ITickPhase
             case InboundEventKind.Equip:
             case InboundEventKind.Unequip:
             case InboundEventKind.UseItem:
+            case InboundEventKind.Buy:
+            case InboundEventKind.Sell:
                 HandleCommand(session, inboundEvent, tick);
                 break;
             default:
@@ -911,6 +913,18 @@ public sealed class SessionManager : ITickPhase
             InboundEventKind.Equip => m_items.TryEquip(session, command.InventoryItem, command.CommandSequence),
             InboundEventKind.Unequip => m_items.TryUnequip(session, command.Slot, command.CommandSequence),
             InboundEventKind.UseItem => m_items.TryUse(session, command.InventoryItem, command.CommandSequence),
+            InboundEventKind.Buy => m_items.TryBuy(
+                session,
+                command.Target,
+                command.Item,
+                command.Quantity,
+                command.CommandSequence),
+            InboundEventKind.Sell => m_items.TrySell(
+                session,
+                command.Target,
+                command.InventoryItem,
+                command.Quantity,
+                command.CommandSequence),
             _ => CommandRejectionReason.NotAllowedNow
         };
     }

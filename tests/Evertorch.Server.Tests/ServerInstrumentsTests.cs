@@ -205,6 +205,33 @@ public sealed class ServerInstrumentsTests
     }
 
     [Test]
+    public void Coins_AreCountedByOperation_ForEachCommittedTrade()
+    {
+        var server = new TestServer(withNpcs: true);
+        using var recorder = new MeterRecorder(server.Instruments.Meter);
+        ConnectionId player = server.Connect();
+        server.SignInWithCharacter(player, 1);
+        server.Store.GiveItems(1, "item.material.slime_gel", 1, 12, 5);
+        server.Store.Edit(1, coins: 100);
+        server.SendEnterWorld(player, 1);
+        server.TickUntil(() => server.SessionOf(player).State == SessionState.InWorld);
+        NpcEntity quartermaster = server.NpcOf("npc.quartermaster");
+        server.Place(player, quartermaster.Position.X + 2f, quartermaster.Position.Z);
+        server.Tick(2);
+        long gel = server.Store.Stored(1).Items.Single().Id;
+
+        server.SendBuy(player, quartermaster.Id, "item.consumable.minor_health", 1, 1);
+        server.Tick(3);
+        server.SendSell(player, quartermaster.Id, gel, 10, 2);
+        server.Tick(3);
+
+        Assert.That(
+            Named(recorder, "evertorch.economy.coins")
+                .Select(measurement => (measurement.Value, measurement.Tags.Single().Value)),
+            Is.EqualTo(new[] { (20d, "buy"), (20d, (object?)"sell") }));
+    }
+
+    [Test]
     public void Gauges_ReadThePublishedStatus()
     {
         var server = new TestServer();

@@ -21,7 +21,9 @@ public readonly struct InboundEvent
         SkillDefinitionId skill = default,
         byte mapEpoch = 0,
         long inventoryItem = 0,
-        EquipmentSlot slot = EquipmentSlot.None)
+        EquipmentSlot slot = EquipmentSlot.None,
+        ItemDefinitionId item = default,
+        uint quantity = 0)
     {
         Kind = kind;
         Connection = connection;
@@ -36,6 +38,8 @@ public readonly struct InboundEvent
         MapEpoch = mapEpoch;
         InventoryItem = inventoryItem;
         Slot = slot;
+        Item = item;
+        Quantity = quantity;
     }
 
     public InboundEventKind Kind { get; }
@@ -71,7 +75,7 @@ public readonly struct InboundEvent
 
     /// <summary>
     ///     For <see cref="InboundEventKind.Equip" />, the inventory row to wear; for <see cref="InboundEventKind.UseItem" />,
-    ///     the row to use.
+    ///     the row to use; for <see cref="InboundEventKind.Sell" />, the row to sell from.
     /// </summary>
     public long InventoryItem { get; }
 
@@ -79,6 +83,16 @@ public readonly struct InboundEvent
     ///     For <see cref="InboundEventKind.Unequip" />, the slot to empty.
     /// </summary>
     public EquipmentSlot Slot { get; }
+
+    /// <summary>
+    ///     For <see cref="InboundEventKind.Buy" />, the item to buy.
+    /// </summary>
+    public ItemDefinitionId Item { get; }
+
+    /// <summary>
+    ///     For <see cref="InboundEventKind.Buy" /> and <see cref="InboundEventKind.Sell" />, how many.
+    /// </summary>
+    public uint Quantity { get; }
 
     public static InboundEvent Connected(ConnectionId connection)
     {
@@ -174,6 +188,44 @@ public readonly struct InboundEvent
             default,
             commandSequence: commandSequence,
             inventoryItem: inventoryItem);
+    }
+
+    public static InboundEvent ForBuy(
+        ConnectionId connection,
+        EntityId npc,
+        ItemDefinitionId item,
+        uint quantity,
+        uint commandSequence)
+    {
+        return new InboundEvent(
+            InboundEventKind.Buy,
+            connection,
+            null,
+            default,
+            default,
+            npc,
+            commandSequence,
+            item: item,
+            quantity: quantity);
+    }
+
+    public static InboundEvent ForSell(
+        ConnectionId connection,
+        EntityId npc,
+        long inventoryItem,
+        uint quantity,
+        uint commandSequence)
+    {
+        return new InboundEvent(
+            InboundEventKind.Sell,
+            connection,
+            null,
+            default,
+            default,
+            npc,
+            commandSequence,
+            inventoryItem: inventoryItem,
+            quantity: quantity);
     }
 
     public static InboundEvent ForUnequip(ConnectionId connection, EquipmentSlot slot, uint commandSequence)

@@ -138,6 +138,8 @@ internal sealed class TestServer
             Content,
             Time,
             simulation,
+            Options.Create(world),
+            Instruments,
             Audit,
             ItemActionLog);
         Progression = new CharacterProgression(
@@ -589,6 +591,29 @@ internal sealed class TestServer
         byte[] payload = new byte[UseItem.EncodedLength];
         new UseItem(inventoryItem, commandSequence).Write(payload);
         Inbound.OnPayload(connection, ProtocolChannel.Control, payload);
+    }
+
+    public void SendBuy(ConnectionId connection, EntityId npc, string item, uint quantity, uint commandSequence)
+    {
+        var message = new BuyItem(npc, new ItemDefinitionId(item), quantity, commandSequence);
+        byte[] payload = new byte[message.GetEncodedLength()];
+        message.Write(payload);
+        Inbound.OnPayload(connection, ProtocolChannel.Control, payload);
+    }
+
+    public void SendSell(ConnectionId connection, EntityId npc, long inventoryItem, uint quantity, uint commandSequence)
+    {
+        byte[] payload = new byte[SellItem.EncodedLength];
+        new SellItem(npc, inventoryItem, quantity, commandSequence).Write(payload);
+        Inbound.OnPayload(connection, ProtocolChannel.Control, payload);
+    }
+
+    /// <summary>
+    ///     The placed NPC whose definition is <paramref name="npc" />; the server must have been built with NPCs.
+    /// </summary>
+    public NpcEntity NpcOf(string npc)
+    {
+        return World.Maps.SelectMany(map => map.Npcs).Single(entity => entity.DefinitionId == npc);
     }
 
     public void SendLogout(ConnectionId connection, uint commandSequence)

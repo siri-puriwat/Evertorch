@@ -645,6 +645,37 @@ public sealed class ClientConnectionTests
     }
 
     [Test]
+    public void SendBuyAndSell_InTheWorld_ShareTheCommandSequence_AndOutsideSendNothing()
+    {
+        var outside = new Harness();
+        outside.ConnectAndReceiveHello();
+        int before = outside.Transport.Sent.Count;
+        var harness = new Harness();
+        harness.EnterWorld(4);
+        var npc = new EntityId(13);
+
+        uint[] none =
+        {
+            outside.Connection.SendBuy(npc, new ItemDefinitionId("item.a"), 2),
+            outside.Connection.SendSell(npc, 41, 3)
+        };
+        uint buySequence = harness.Connection.SendBuy(npc, new ItemDefinitionId("item.a"), 2);
+        FakeClientTransport.SentMessage buySent = harness.Transport.Sent.Last();
+        uint sellSequence = harness.Connection.SendSell(npc, 41, 3);
+        FakeClientTransport.SentMessage sellSent = harness.Transport.Sent.Last();
+
+        Assert.That((none[0], none[1], outside.Transport.Sent.Count), Is.EqualTo((0u, 0u, before)));
+        Assert.That((buySequence, sellSequence), Is.EqualTo((5u, 6u)));
+        Assert.That(BuyItem.TryRead(buySent.Payload, out BuyItem? buy), Is.True);
+        Assert.That((buy!.Npc, buy.Item.Value, buy.Quantity, buy.CommandSequence), Is.EqualTo((npc, "item.a", 2u, 5u)));
+        Assert.That(SellItem.TryRead(sellSent.Payload, out SellItem sell), Is.True);
+        Assert.That(
+            (sell.Npc, sell.InventoryItem, sell.Quantity, sell.CommandSequence),
+            Is.EqualTo((npc, 41L, 3u, 6u)));
+        Assert.That(new[] { buySent.Channel, sellSent.Channel }, Is.All.EqualTo(ProtocolChannel.Control));
+    }
+
+    [Test]
     public void SendEquipAndUnequip_InTheWorld_ShareTheCommandSequence()
     {
         var harness = new Harness();

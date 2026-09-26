@@ -41,6 +41,8 @@ public sealed class SessionCommandLimits
             case InboundEventKind.Equip:
             case InboundEventKind.Unequip:
             case InboundEventKind.UseItem:
+            case InboundEventKind.Buy:
+            case InboundEventKind.Sell:
                 limit = ServerInstruments.ItemCommandLimit;
                 return m_item.TryTake(tick);
             case InboundEventKind.CreateCharacter:

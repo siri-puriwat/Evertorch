@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using System.Linq;
 using Evertorch.Game;
 using Evertorch.Protocol;
@@ -137,6 +139,46 @@ public sealed class SessionCommandLimitTests
             rejections.Count(rejection => rejection.Reason == CommandRejectionReason.NotAllowedNow),
             Is.EqualTo(1),
             "one second of ticks gave back one second of commands");
+    }
+
+    // Each kind of inbound event and the class whose bucket it takes a token from, empty for none, so a new command
+    // cannot fall through to no bucket unnoticed (Network Protocol §11).
+    [Test]
+    public void EveryInboundKind_TakesFromTheClassPinnedHere()
+    {
+        var classes = new Dictionary<InboundEventKind, string>
+        {
+            [InboundEventKind.Connected] = string.Empty,
+            [InboundEventKind.Disconnected] = string.Empty,
+            [InboundEventKind.Hello] = string.Empty,
+            [InboundEventKind.EnterWorld] = ServerInstruments.SessionCommandLimit,
+            [InboundEventKind.Malformed] = string.Empty,
+            [InboundEventKind.Move] = string.Empty,
+            [InboundEventKind.Target] = ServerInstruments.CombatCommandLimit,
+            [InboundEventKind.Attack] = ServerInstruments.CombatCommandLimit,
+            [InboundEventKind.Cancel] = string.Empty,
+            [InboundEventKind.Respawn] = ServerInstruments.CombatCommandLimit,
+            [InboundEventKind.CreateCharacter] = ServerInstruments.SessionCommandLimit,
+            [InboundEventKind.Logout] = ServerInstruments.SessionCommandLimit,
+            [InboundEventKind.InventoryResync] = ServerInstruments.ResyncRequestLimit,
+            [InboundEventKind.Pickup] = ServerInstruments.PickupCommandLimit,
+            [InboundEventKind.RateLimited] = string.Empty,
+            [InboundEventKind.InputDropped] = string.Empty,
+            [InboundEventKind.UseSkill] = ServerInstruments.CombatCommandLimit,
+            [InboundEventKind.Equip] = ServerInstruments.ItemCommandLimit,
+            [InboundEventKind.Unequip] = ServerInstruments.ItemCommandLimit,
+            [InboundEventKind.UseItem] = ServerInstruments.ItemCommandLimit,
+            [InboundEventKind.Buy] = ServerInstruments.ItemCommandLimit,
+            [InboundEventKind.Sell] = ServerInstruments.ItemCommandLimit
+        };
+        var limits = new SessionCommandLimits(Defaults, TestServer.TickRate, 0);
+
+        Assert.That(classes.Keys, Is.EquivalentTo(Enum.GetValues(typeof(InboundEventKind))));
+        foreach (KeyValuePair<InboundEventKind, string> expected in classes)
+        {
+            limits.TryTake(expected.Key, 0, out string limit);
+            Assert.That(limit, Is.EqualTo(expected.Value), expected.Key.ToString());
+        }
     }
 
     [Test]

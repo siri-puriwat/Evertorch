@@ -11,6 +11,13 @@ namespace Evertorch.Client.Tests.EditMode
 [TestFixture]
 public sealed class RejectionMessagesTests
 {
+    [TestCase(CommandRejectionReason.NotEnoughCoins, "You do not have enough coins.")]
+    [TestCase(CommandRejectionReason.CoinCapReached, "You cannot hold any more coins.")]
+    public void Describe_TheShopsRefusals_InTheClientsWords(CommandRejectionReason reason, string expected)
+    {
+        Assert.That(RejectionMessages.Describe(reason), Is.EqualTo(expected));
+    }
+
     [Test]
     public void Describe_AReasonThisClientDoesNotKnow_StillSaysTheServerRefused()
     {

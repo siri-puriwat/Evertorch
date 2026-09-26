@@ -88,6 +88,7 @@ public sealed class ServerInstruments
     private readonly Counter<long> m_otherEpochInputs;
     private readonly Counter<long> m_acquisitions;
     private readonly Counter<long> m_retreats;
+    private readonly Counter<long> m_coins;
 
     public ServerInstruments(IMeterFactory meters)
     {
@@ -168,6 +169,10 @@ public sealed class ServerInstruments
             "evertorch.ai.retreats",
             "{retreat}",
             "Walks away from a target that came nearer than the monster's keep distance, by monster.");
+        m_coins = Meter.CreateCounter<long>(
+            "evertorch.economy.coins",
+            "{coin}",
+            "Coins characters spent or earned in committed operations, by operation.");
     }
 
     public Meter Meter { get; }
@@ -260,6 +265,13 @@ public sealed class ServerInstruments
     public void RecordRetreat(MonsterDefinitionId monster)
     {
         m_retreats.Add(1, new KeyValuePair<string, object?>("monster", monster.Value));
+    }
+
+    /// <param name="operation">What moved them: <c>buy</c>, <c>sell</c>, or <c>quest reward</c>.</param>
+    /// <param name="coins">How many coins moved, whichever way.</param>
+    public void RecordCoins(string operation, long coins)
+    {
+        m_coins.Add(coins, new KeyValuePair<string, object?>("operation", operation));
     }
 
     public void RecordStatusEffects(StatusEffectChange change, int count)

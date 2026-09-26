@@ -77,6 +77,21 @@ public sealed class InboundQueueTests
         return payload;
     }
 
+    private static byte[] BuyPayload()
+    {
+        var message = new BuyItem(new EntityId(13), new ItemDefinitionId("item.a"), 2, 9);
+        byte[] payload = new byte[message.GetEncodedLength()];
+        message.Write(payload);
+        return payload;
+    }
+
+    private static byte[] SellPayload()
+    {
+        byte[] payload = new byte[SellItem.EncodedLength];
+        new SellItem(new EntityId(13), 41, 2, 9).Write(payload);
+        return payload;
+    }
+
     private static byte[] With(byte[] payload, int start, int count, byte value)
     {
         byte[] changed = (byte[])payload.Clone();
@@ -92,9 +107,12 @@ public sealed class InboundQueueTests
         byte[] equip = EquipPayload();
         byte[] unequip = UnequipPayload();
         byte[] useItem = UseItemPayload();
+        byte[] buy = BuyPayload();
+        byte[] sell = SellPayload();
         foreach ((string name, byte[] payload) in new[]
                  {
-                     ("UseSkill", useSkill), ("EquipItem", equip), ("UnequipItem", unequip), ("UseItem", useItem)
+                     ("UseSkill", useSkill), ("EquipItem", equip), ("UnequipItem", unequip), ("UseItem", useItem),
+                     ("BuyItem", buy), ("SellItem", sell)
                  })
         {
             yield return new TestCaseData(payload.Take(payload.Length - 1).ToArray()).SetName($"{name} cut short");
@@ -111,6 +129,10 @@ public sealed class InboundQueueTests
         yield return new TestCaseData(With(unequip, 2, 1, 3)).SetName("UnequipItem of slot 3");
         yield return new TestCaseData(With(useItem, 2, 8, 0x00)).SetName("UseItem of row 0");
         yield return new TestCaseData(With(useItem, 2, 8, 0xFF)).SetName("UseItem of row -1");
+        yield return new TestCaseData(With(buy, 2, 8, 0x00)).SetName("BuyItem from NPC 0");
+        yield return new TestCaseData(With(buy, 18, 4, 0x00)).SetName("BuyItem of none");
+        yield return new TestCaseData(With(sell, 10, 8, 0x00)).SetName("SellItem of row 0");
+        yield return new TestCaseData(With(sell, 18, 4, 0x00)).SetName("SellItem of none");
     }
 
     [TestCaseSource(nameof(MalformedItemAndSkillCommands))]
@@ -243,7 +265,10 @@ public sealed class InboundQueueTests
     {
         InboundQueue queue = CreateQueue(16);
 
-        foreach (byte[] payload in new[] { UseSkillPayload(), EquipPayload(), UnequipPayload(), UseItemPayload() })
+        foreach (byte[] payload in new[]
+                 {
+                     UseSkillPayload(), EquipPayload(), UnequipPayload(), UseItemPayload(), BuyPayload(), SellPayload()
+                 })
         {
             queue.OnPayload(Peer, ProtocolChannel.Control, payload);
         }
@@ -261,7 +286,7 @@ public sealed class InboundQueueTests
                 new[]
                 {
                     InboundEventKind.UseSkill, InboundEventKind.Equip, InboundEventKind.Unequip,
-                    InboundEventKind.UseItem
+                    InboundEventKind.UseItem, InboundEventKind.Buy, InboundEventKind.Sell
                 }));
         Assert.That(UseSkillPayload().Skip(4).Take(12), Is.EqualTo(Encoding.ASCII.GetBytes("skill.strike")));
     }

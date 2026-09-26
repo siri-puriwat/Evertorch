@@ -14,11 +14,20 @@ public sealed class CommandRejectedTests
     }
 
     [TestCase((byte)0)]
-    [TestCase((byte)10)]
+    [TestCase((byte)12)]
     [TestCase((byte)255)]
     public void CommandRejected_WithAnUnknownReason_IsRefused(byte reason)
     {
         Assert.That(Read(WireMatrix.With(GoldenBytes, 6, reason)), Is.False);
+    }
+
+    [TestCase(CommandRejectionReason.NotEnoughCoins)]
+    [TestCase(CommandRejectionReason.CoinCapReached)]
+    public void CommandRejected_WithAShopReason_IsRead(CommandRejectionReason reason)
+    {
+        bool isRead = CommandRejected.TryRead(WireMatrix.With(GoldenBytes, 6, (byte)reason), out CommandRejected read);
+
+        Assert.That((isRead, read.Reason), Is.EqualTo((true, reason)));
     }
 
     [Test]
@@ -51,7 +60,7 @@ public sealed class CommandRejectedTests
             Array.ConvertAll(
                 (CommandRejectionReason[])Enum.GetValues(typeof(CommandRejectionReason)),
                 reason => (byte)reason),
-            Is.EqualTo(new byte[] { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 }));
+            Is.EqualTo(new byte[] { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11 }));
         Assert.That(CommandRejectionReason.InvalidTarget, Is.EqualTo((CommandRejectionReason)1));
         Assert.That(CommandRejectionReason.OutOfRange, Is.EqualTo((CommandRejectionReason)2));
         Assert.That(CommandRejectionReason.NotAllowedNow, Is.EqualTo((CommandRejectionReason)3));
@@ -61,6 +70,8 @@ public sealed class CommandRejectedTests
         Assert.That(CommandRejectionReason.Busy, Is.EqualTo((CommandRejectionReason)7));
         Assert.That(CommandRejectionReason.NotEnoughSp, Is.EqualTo((CommandRejectionReason)8));
         Assert.That(CommandRejectionReason.ItemActionInFlight, Is.EqualTo((CommandRejectionReason)9));
+        Assert.That(CommandRejectionReason.NotEnoughCoins, Is.EqualTo((CommandRejectionReason)10));
+        Assert.That(CommandRejectionReason.CoinCapReached, Is.EqualTo((CommandRejectionReason)11));
     }
 }
 }

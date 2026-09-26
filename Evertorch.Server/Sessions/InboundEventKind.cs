@@ -90,6 +90,19 @@ public enum InboundEventKind
     ///     A request to use one unit of the inventory row <see cref="InboundEvent.InventoryItem" />, carrying a command
     ///     sequence.
     /// </summary>
-    UseItem = 19
+    UseItem = 19,
+
+    /// <summary>
+    ///     A request to buy <see cref="InboundEvent.Quantity" /> of <see cref="InboundEvent.Item" /> from the NPC
+    ///     <see cref="InboundEvent.Target" />, carrying a command sequence.
+    /// </summary>
+    Buy = 20,
+
+    /// <summary>
+    ///     A request to sell <see cref="InboundEvent.Quantity" /> of the inventory row
+    ///     <see cref="InboundEvent.InventoryItem" /> to the NPC <see cref="InboundEvent.Target" />, carrying a command
+    ///     sequence.
+    /// </summary>
+    Sell = 21
 }
 }

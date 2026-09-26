@@ -31,6 +31,8 @@ public static class MessageRouting
             case MessageOpcode.EquipItem:
             case MessageOpcode.UnequipItem:
             case MessageOpcode.UseItem:
+            case MessageOpcode.BuyItem:
+            case MessageOpcode.SellItem:
             case MessageOpcode.ServerHello:
             case MessageOpcode.WorldEntered:
             case MessageOpcode.EntitySpawn:

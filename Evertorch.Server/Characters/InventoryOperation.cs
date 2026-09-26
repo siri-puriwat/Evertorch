@@ -6,7 +6,7 @@ namespace Evertorch.Server
 /// <summary>
 ///     A character's one inventory change whose commit has not settled (Persistence §5, §7): its kind, the command that
 ///     asked for it, and its operation ID, with what the answer needs besides: a pickup's reserved drop, the row a swap
-///     takes out of its slot, which the ledger does not name, or the item a use restores with.
+///     takes out of its slot, which the ledger does not name, the item a use restores with, or what a trade moves.
 /// </summary>
 public sealed class InventoryOperation
 {
@@ -16,7 +16,9 @@ public sealed class InventoryOperation
         Guid operationId,
         ItemDropEntity? drop = null,
         long displacedRow = 0,
-        ItemDefinitionId item = default)
+        ItemDefinitionId item = default,
+        int quantity = 0,
+        long coins = 0)
     {
         Kind = kind;
         CommandSequence = commandSequence;
@@ -24,6 +26,8 @@ public sealed class InventoryOperation
         Drop = drop;
         DisplacedRow = displacedRow;
         Item = item;
+        Quantity = quantity;
+        Coins = coins;
     }
 
     public InventoryOperationKind Kind { get; }
@@ -38,8 +42,14 @@ public sealed class InventoryOperation
     /// <summary>The row a swap takes out of its slot, or 0.</summary>
     public long DisplacedRow { get; }
 
-    /// <summary>The item a use consumes; default for every other kind.</summary>
+    /// <summary>The item a use consumes, or a trade buys or sells; default for every other kind.</summary>
     public ItemDefinitionId Item { get; }
+
+    /// <summary>How many a trade buys or sells; 0 for every other kind.</summary>
+    public int Quantity { get; }
+
+    /// <summary>The coins a purchase costs or a sale fetches; 0 for every other kind.</summary>
+    public long Coins { get; }
 
     /// <summary>
     ///     A pickup of <paramref name="drop" />, whose drop ID is the operation ID.

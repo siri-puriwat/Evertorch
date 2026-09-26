@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Evertorch.Game;
@@ -11,10 +12,10 @@ using Microsoft.Extensions.Options;
 namespace Evertorch.Server
 {
 /// <summary>
-///     Equips, unequips, and uses items (Gameplay Systems §11.1, §11.2; Persistence §5). The checks happen on the tick
-///     thread; the inventory changes only through the commit, and the server's copy of it, the statistics, HP and SP,
-///     and the owner learn of it once its result is back. A commit whose answer was lost is settled from the ledger
-///     before the character may start another inventory operation.
+///     Equips, unequips, uses, buys, and sells items (Gameplay Systems §6.1, §11.1–§11.3; Persistence §5). The checks
+///     happen on the tick thread; the inventory and the coins change only through the commit, and the server's copy of
+///     them, the statistics, HP and SP, and the owner learn of it once its result is back. A commit whose answer was
+///     lost is settled from the ledger before the character may start another inventory operation.
 /// </summary>
 public sealed class ItemActionSystem : ITickPhase
 {
@@ -24,6 +25,10 @@ public sealed class ItemActionSystem : ITickPhase
     private const string UnequipLookup = "unequip lookup";
     private const string ConsumeOperation = "consume";
     private const string ConsumeLookup = "consume lookup";
+    private const string BuyOperation = "buy";
+    private const string BuyLookup = "buy lookup";
+    private const string SellOperation = "sell";
+    private const string SellLookup = "sell lookup";
     private const int MillisecondsPerSecond = 1000;
 
     // A lookup that failed for a reason other than an outage is asked again only after this long, not on every tick
@@ -37,6 +42,20 @@ public sealed class ItemActionSystem : ITickPhase
             "The {Kind} commit {OperationId} of character {Character} on connection {Connection} gave no answer; the "
             + "character starts no other inventory operation until the ledger says what happened.");
 
+    private static readonly Action<ILogger, long, long, int, string, long, Guid, Exception?> LogBought =
+        LoggerMessage.Define<long, long, int, string, long, Guid>(
+            LogLevel.Information,
+            new EventId(1007, "ItemBought"),
+            "Character {Character} on connection {Connection} bought {Quantity} {Item} for {Coins} coins (operation "
+            + "{OperationId}).");
+
+    private static readonly Action<ILogger, long, long, int, string, long, Guid, Exception?> LogSold =
+        LoggerMessage.Define<long, long, int, string, long, Guid>(
+            LogLevel.Information,
+            new EventId(1008, "ItemSold"),
+            "Character {Character} on connection {Connection} sold {Quantity} {Item} for {Coins} coins (operation "
+            + "{OperationId}).");
+
     private readonly PersistenceWorker m_persistence;
     private readonly MessageSender m_sender;
     private readonly CharacterLifetime m_lifetime;
@@ -45,6 +64,8 @@ public sealed class ItemActionSystem : ITickPhase
     private readonly TimeProvider m_time;
     private readonly AuditLog m_audit;
     private readonly ILogger<ItemActionSystem> m_logger;
+    private readonly ServerInstruments m_instruments;
+    private readonly float m_npcReach;
     private readonly uint m_failedLookupDelayTicks;
     private readonly List<(CharacterSession Character, uint NotBefore)> m_unsettled = new();
     private uint m_tick;
@@ -57,6 +78,8 @@ public sealed class ItemActionSystem : ITickPhase
         ServerContent content,
         TimeProvider time,
         IOptions<SimulationOptions> simulation,
+        IOptions<WorldOptions> world,
+        ServerInstruments instruments,
         AuditLog audit,
         ILogger<ItemActionSystem> logger)
     {
@@ -68,6 +91,8 @@ public sealed class ItemActionSystem : ITickPhase
         m_time = time;
         m_audit = audit;
         m_logger = logger;
+        m_instruments = instruments;
+        m_npcReach = NpcInteraction.Range + world.Value.AttackRangeTolerance;
         m_failedLookupDelayTicks =
             (uint)((long)FailedLookupDelayMs * simulation.Value.TickRate / MillisecondsPerSecond);
     }
@@ -199,6 +224,173 @@ public sealed class ItemActionSystem : ITickPhase
         return TryCommit(session, operation, (store, cancellation) => store.CommitConsumeAsync(commit, cancellation));
     }
 
+    /// <summary>
+    ///     Checks a purchase (Gameplay Systems §6.1, then §11.3, in order) and, when it passes, queues its commit. The
+    ///     caller has already refused a dead or leaving character.
+    /// </summary>
+    public CommandRejectionReason TryBuy(
+        ClientSession session,
+        EntityId npc,
+        ItemDefinitionId item,
+        uint quantity,
+        uint commandSequence)
+    {
+        CharacterSession character = session.Character!;
+        if (character.Operation != null)
+        {
+            return CommandRejectionReason.ItemActionInFlight;
+        }
+
+        CommandRejectionReason reach = CheckNpc(session, npc, out NpcEntity? trader);
+        if (reach != CommandRejectionReason.None)
+        {
+            return reach;
+        }
+
+        ShopEntry? stock = trader!.Definition.Shop.FirstOrDefault(entry => entry.Item == item);
+        if (stock == null)
+        {
+            return CommandRejectionReason.InvalidTarget;
+        }
+
+        // Up to the stack limit, so an item with a stack limit of 1 is bought one at a time and a purchase adds at
+        // most one row, the one the ledger names when an answer is lost.
+        ItemDefinition definition = m_content.Items[item];
+        if (quantity > definition.StackLimit)
+        {
+            return CommandRejectionReason.NotAllowedNow;
+        }
+
+        long total = stock.Price * quantity;
+        if (character.Inventory.Coins < total)
+        {
+            return CommandRejectionReason.NotEnoughCoins;
+        }
+
+        if (!HasRoomFor(character.Inventory, definition, quantity))
+        {
+            return CommandRejectionReason.InventoryFull;
+        }
+
+        var operation = new InventoryOperation(
+            InventoryOperationKind.Buy,
+            commandSequence,
+            Guid.NewGuid(),
+            item: item,
+            quantity: (int)quantity,
+            coins: total);
+        var commit = new BuyCommit(
+            operation.OperationId,
+            character.Character.Value,
+            item.Value,
+            (int)quantity,
+            stock.Price,
+            definition.StackLimit,
+            PickupSystem.MaxInventoryRows,
+            m_time.GetUtcNow().UtcDateTime);
+        return TryCommit(session, operation, (store, cancellation) => store.CommitBuyAsync(commit, cancellation));
+    }
+
+    /// <summary>
+    ///     Checks a sale (Gameplay Systems §6.1, then §11.3, in order) and, when it passes, queues its commit. The caller
+    ///     has already refused a dead or leaving character.
+    /// </summary>
+    public CommandRejectionReason TrySell(
+        ClientSession session,
+        EntityId npc,
+        long inventoryItem,
+        uint quantity,
+        uint commandSequence)
+    {
+        CharacterSession character = session.Character!;
+        if (character.Operation != null)
+        {
+            return CommandRejectionReason.ItemActionInFlight;
+        }
+
+        CommandRejectionReason reach = CheckNpc(session, npc, out NpcEntity? trader);
+        if (reach != CommandRejectionReason.None)
+        {
+            return reach;
+        }
+
+        if (!trader!.Definition.HasShop || !character.Inventory.TryGetRow(inventoryItem, out InventoryEntry row))
+        {
+            return CommandRejectionReason.InvalidTarget;
+        }
+
+        ItemDefinition definition = m_content.Items[row.Item];
+        if (row.Slot != EquipmentSlot.None
+            || definition.SellPrice <= 0
+            || quantity > row.Quantity
+            || quantity > definition.StackLimit)
+        {
+            return CommandRejectionReason.NotAllowedNow;
+        }
+
+        // Refused rather than cut at the cap (Gameplay Systems §11.3).
+        long proceeds = definition.SellPrice * quantity;
+        if (character.Inventory.Coins > ContentLimits.MaxCurrency - proceeds)
+        {
+            return CommandRejectionReason.CoinCapReached;
+        }
+
+        var operation = new InventoryOperation(
+            InventoryOperationKind.Sell,
+            commandSequence,
+            Guid.NewGuid(),
+            item: row.Item,
+            quantity: (int)quantity,
+            coins: proceeds);
+        var commit = new SellCommit(
+            operation.OperationId,
+            character.Character.Value,
+            inventoryItem,
+            (int)quantity,
+            definition.SellPrice,
+            m_time.GetUtcNow().UtcDateTime);
+        return TryCommit(session, operation, (store, cancellation) => store.CommitSellAsync(commit, cancellation));
+    }
+
+    private static float HorizontalDistance(WorldPosition a, WorldPosition b)
+    {
+        float dx = a.X - b.X;
+        float dz = a.Z - b.Z;
+        return (float)Math.Sqrt(dx * dx + dz * dz);
+    }
+
+    // A stackable item merges into its one row; any other takes a new row.
+    private static bool HasRoomFor(CharacterInventory inventory, ItemDefinition item, uint quantity)
+    {
+        if (item.StackLimit > 1)
+        {
+            foreach (InventoryEntry row in inventory.Rows)
+            {
+                if (row.Item == item.Id)
+                {
+                    return row.Quantity <= item.StackLimit - quantity;
+                }
+            }
+        }
+
+        return inventory.Rows.Count < PickupSystem.MaxInventoryRows;
+    }
+
+    // An NPC the session knows on its own map (1), within its reach plus the tolerance (2): an NPC's commands are
+    // checked alone, since no dialogue state is kept (Gameplay Systems §6.1).
+    private CommandRejectionReason CheckNpc(ClientSession session, EntityId npc, out NpcEntity? trader)
+    {
+        trader = null;
+        if (!session.KnownEntities.Contains(npc) || session.Map == null || !session.Map.TryGetNpc(npc, out trader))
+        {
+            return CommandRejectionReason.InvalidTarget;
+        }
+
+        return HorizontalDistance(session.Player!.Position, trader!.Position) > m_npcReach
+            ? CommandRejectionReason.OutOfRange
+            : CommandRejectionReason.None;
+    }
+
     // The ledger names the row an operation acted on; the row a swap took out of its slot is named here.
     private static long[] ReportRows(InventoryOperation operation)
     {
@@ -211,7 +403,10 @@ public sealed class ItemActionSystem : ITickPhase
         {
             InventoryOperationKind.Equip => InboundEventKind.Equip,
             InventoryOperationKind.Unequip => InboundEventKind.Unequip,
-            _ => InboundEventKind.UseItem
+            InventoryOperationKind.Consume => InboundEventKind.UseItem,
+            InventoryOperationKind.Buy => InboundEventKind.Buy,
+            InventoryOperationKind.Sell => InboundEventKind.Sell,
+            _ => throw NotAnItemAction(operation)
         };
     }
 
@@ -221,7 +416,10 @@ public sealed class ItemActionSystem : ITickPhase
         {
             InventoryOperationKind.Equip => EquipOperation,
             InventoryOperationKind.Unequip => UnequipOperation,
-            _ => ConsumeOperation
+            InventoryOperationKind.Consume => ConsumeOperation,
+            InventoryOperationKind.Buy => BuyOperation,
+            InventoryOperationKind.Sell => SellOperation,
+            _ => throw NotAnItemAction(operation)
         };
     }
 
@@ -231,8 +429,17 @@ public sealed class ItemActionSystem : ITickPhase
         {
             InventoryOperationKind.Equip => EquipLookup,
             InventoryOperationKind.Unequip => UnequipLookup,
-            _ => ConsumeLookup
+            InventoryOperationKind.Consume => ConsumeLookup,
+            InventoryOperationKind.Buy => BuyLookup,
+            InventoryOperationKind.Sell => SellLookup,
+            _ => throw NotAnItemAction(operation)
         };
+    }
+
+    // A pickup is the pickup system's; an operation of any other kind reaching here is a server bug.
+    private static InvalidOperationException NotAnItemAction(InventoryOperation operation)
+    {
+        return new InvalidOperationException($"A {operation.Kind} operation is not an item action.");
     }
 
     private CommandRejectionReason TryCommit(
@@ -327,13 +534,42 @@ public sealed class ItemActionSystem : ITickPhase
         InventoryEntry[] rows = character.Inventory.Apply(result);
         m_sender.SendInventoryChange(character, prior, rows);
         InventoryOperation operation = character.Operation!;
-        if (operation.Kind == InventoryOperationKind.Consume)
+        long connection = character.Connection?.Connection.Value ?? 0;
+        switch (operation.Kind)
         {
-            Restore(character.Player, m_content.Items[operation.Item].Effect!);
-        }
-        else
-        {
-            Wear(character);
+            case InventoryOperationKind.Equip:
+            case InventoryOperationKind.Unequip:
+                Wear(character);
+                break;
+            case InventoryOperationKind.Consume:
+                Restore(character.Player, m_content.Items[operation.Item].Effect!);
+                break;
+            case InventoryOperationKind.Buy:
+                LogBought(
+                    m_logger,
+                    character.Character.Value,
+                    connection,
+                    operation.Quantity,
+                    operation.Item.Value,
+                    operation.Coins,
+                    operation.OperationId,
+                    null);
+                m_instruments.RecordCoins(BuyOperation, operation.Coins);
+                break;
+            case InventoryOperationKind.Sell:
+                LogSold(
+                    m_logger,
+                    character.Character.Value,
+                    connection,
+                    operation.Quantity,
+                    operation.Item.Value,
+                    operation.Coins,
+                    operation.OperationId,
+                    null);
+                m_instruments.RecordCoins(SellOperation, operation.Coins);
+                break;
+            default:
+                throw NotAnItemAction(operation);
         }
 
         Finish(character);

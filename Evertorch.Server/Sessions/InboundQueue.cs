@@ -285,6 +285,27 @@ public sealed class InboundQueue
 
                 decoded = InboundEvent.ForUseItem(connection, use.InventoryItem, use.CommandSequence);
                 return true;
+            case MessageOpcode.BuyItem:
+                if (!BuyItem.TryRead(payload, out BuyItem? buy))
+                {
+                    return false;
+                }
+
+                decoded = InboundEvent.ForBuy(connection, buy!.Npc, buy.Item, buy.Quantity, buy.CommandSequence);
+                return true;
+            case MessageOpcode.SellItem:
+                if (!SellItem.TryRead(payload, out SellItem sell))
+                {
+                    return false;
+                }
+
+                decoded = InboundEvent.ForSell(
+                    connection,
+                    sell.Npc,
+                    sell.InventoryItem,
+                    sell.Quantity,
+                    sell.CommandSequence);
+                return true;
             case MessageOpcode.CancelAction:
                 if (!CancelAction.TryRead(payload, out CancelAction cancel))
                 {

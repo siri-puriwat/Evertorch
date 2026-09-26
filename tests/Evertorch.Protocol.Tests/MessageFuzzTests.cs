@@ -157,6 +157,14 @@ public sealed class MessageFuzzTests
             Encode(new StatusEffects(new[] { new StatusEffectEntry(new StatusDefinitionId("status.focus"), 42_000) })),
             payload => StatusEffects.TryRead(payload, out StatusEffects? message) ? Encode(message!) : null);
         yield return Case(
+            "BuyItem",
+            Encode(new BuyItem(new EntityId(13), new ItemDefinitionId("item.weapon.training_sword"), 1, 7)),
+            payload => BuyItem.TryRead(payload, out BuyItem? message) ? Encode(message!) : null);
+        yield return Case(
+            "SellItem",
+            Encode(new SellItem(new EntityId(13), 41, 10, 7)),
+            payload => SellItem.TryRead(payload, out SellItem message) ? Encode(message) : null);
+        yield return Case(
             "NpcServices",
             Encode(
                 new NpcServices(
@@ -590,6 +598,20 @@ public sealed class MessageFuzzTests
     private static byte[] Encode(SkillResolved message)
     {
         byte[] buffer = new byte[message.GetEncodedLength()];
+        message.Write(buffer);
+        return buffer;
+    }
+
+    private static byte[] Encode(BuyItem message)
+    {
+        byte[] buffer = new byte[message.GetEncodedLength()];
+        message.Write(buffer);
+        return buffer;
+    }
+
+    private static byte[] Encode(SellItem message)
+    {
+        byte[] buffer = new byte[SellItem.EncodedLength];
         message.Write(buffer);
         return buffer;
     }

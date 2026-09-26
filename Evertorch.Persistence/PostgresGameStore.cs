@@ -526,6 +526,167 @@ RETURNING id AS ""Id"", status AS ""Status""")
             cancellationToken);
     }
 
+    public Task<InventoryResult> CommitBuyAsync(BuyCommit buy, CancellationToken cancellationToken)
+    {
+        return RunAsync(
+            async context =>
+            {
+                await using (IDbContextTransaction transaction =
+                             await context.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false))
+                {
+                    CharacterRow character = await LockCharacterAsync(context, buy.CharacterId, cancellationToken)
+                        .ConfigureAwait(false);
+                    InventoryResult? earlier = await FindAsync(
+                            context,
+                            buy.OperationId,
+                            buy.CharacterId,
+                            Array.Empty<long>(),
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                    if (earlier != null)
+                    {
+                        return earlier;
+                    }
+
+                    if (character.Currency < buy.Total)
+                    {
+                        return Refused(character);
+                    }
+
+                    List<InventoryItemRow> rows = await context.InventoryItems
+                        .Where(row => row.CharacterId == buy.CharacterId)
+                        .ToListAsync(cancellationToken)
+                        .ConfigureAwait(false);
+                    InventoryItemRow? stack = buy.StackLimit == 1
+                        ? null
+                        : rows.FirstOrDefault(row => row.ItemDefinitionId == buy.ItemDefinitionId);
+                    int held = stack?.Quantity ?? 0;
+                    if (held > buy.StackLimit - buy.Quantity || (stack == null && rows.Count >= buy.MaxRows))
+                    {
+                        return new InventoryResult(
+                            InventoryStatus.InventoryFull,
+                            (uint)character.InventoryRevision,
+                            character.Currency,
+                            Array.Empty<StoredItem>());
+                    }
+
+                    if (stack == null)
+                    {
+                        // Saved at once, so the ledger row can name it.
+                        stack = new InventoryItemRow
+                        {
+                            CharacterId = buy.CharacterId,
+                            ItemDefinitionId = buy.ItemDefinitionId,
+                            Quantity = buy.Quantity
+                        };
+                        context.InventoryItems.Add(stack);
+                        await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+                    }
+                    else
+                    {
+                        stack.Quantity += buy.Quantity;
+                        stack.Version++;
+                    }
+
+                    character.Currency -= buy.Total;
+                    return await CommitOperationAsync(
+                            context,
+                            transaction,
+                            character,
+                            new LedgerRow
+                            {
+                                OperationId = buy.OperationId,
+                                ActorCharacterId = buy.CharacterId,
+                                OperationType = LedgerRow.BuyOperation,
+                                ItemInstanceId = stack.Id,
+                                ItemDefinitionId = buy.ItemDefinitionId,
+                                QuantityDelta = buy.Quantity,
+                                CurrencyDelta = -buy.Total,
+                                CreatedAt = buy.At
+                            },
+                            new[] { stack.Id },
+                            Array.Empty<long>(),
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                }
+            },
+            cancellationToken);
+    }
+
+    public Task<InventoryResult> CommitSellAsync(SellCommit sell, CancellationToken cancellationToken)
+    {
+        return RunAsync(
+            async context =>
+            {
+                await using (IDbContextTransaction transaction =
+                             await context.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false))
+                {
+                    CharacterRow character = await LockCharacterAsync(context, sell.CharacterId, cancellationToken)
+                        .ConfigureAwait(false);
+                    InventoryResult? earlier = await FindAsync(
+                            context,
+                            sell.OperationId,
+                            sell.CharacterId,
+                            Array.Empty<long>(),
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                    if (earlier != null)
+                    {
+                        return earlier;
+                    }
+
+                    InventoryItemRow? row = await context.InventoryItems
+                        .SingleOrDefaultAsync(
+                            item => item.Id == sell.InventoryItemId && item.CharacterId == sell.CharacterId,
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                    bool isWorn = await context.Equipment
+                        .AnyAsync(slot => slot.InventoryItemId == sell.InventoryItemId, cancellationToken)
+                        .ConfigureAwait(false);
+                    if (row == null
+                        || isWorn
+                        || row.Quantity < sell.Quantity
+                        || character.Currency > EvertorchDbContext.MaxCurrency - sell.Proceeds)
+                    {
+                        return Refused(character);
+                    }
+
+                    // A row sold whole is deleted, which the quantity check would refuse to keep at 0.
+                    if (row.Quantity == sell.Quantity)
+                    {
+                        context.InventoryItems.Remove(row);
+                    }
+                    else
+                    {
+                        row.Quantity -= sell.Quantity;
+                        row.Version++;
+                    }
+
+                    character.Currency += sell.Proceeds;
+                    return await CommitOperationAsync(
+                            context,
+                            transaction,
+                            character,
+                            new LedgerRow
+                            {
+                                OperationId = sell.OperationId,
+                                ActorCharacterId = sell.CharacterId,
+                                OperationType = LedgerRow.SellOperation,
+                                ItemInstanceId = row.Id,
+                                ItemDefinitionId = row.ItemDefinitionId,
+                                QuantityDelta = -sell.Quantity,
+                                CurrencyDelta = sell.Proceeds,
+                                CreatedAt = sell.At
+                            },
+                            new[] { row.Id },
+                            Array.Empty<long>(),
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                }
+            },
+            cancellationToken);
+    }
+
     public Task<InventoryResult?> FindOperationAsync(
         Guid operationId,
         long characterId,
