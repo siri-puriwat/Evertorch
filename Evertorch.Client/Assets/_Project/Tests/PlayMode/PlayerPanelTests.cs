@@ -525,6 +525,35 @@ public sealed class PlayerPanelTests
         Assert.That(window.Text, Does.EndWith("Training Sword x 1"), "without a connection a press sends nothing");
     }
 
+    // Wrapped onto a second line, the worn sword's row spilled out of its row, and the list's mask cut off its top.
+    [UnityTest]
+    public IEnumerator InventoryWindow_ShowsALongRowOnOneLine_InsideItsRow()
+    {
+        GameClient client = CreateIdleClient();
+        ClientWorld world = GiveWorld(client);
+        GiveItems(client);
+        var window = InventoryWindow.Create(client);
+        m_created.Add(window.gameObject);
+
+        world.Inventory.OnSnapshot(
+            new InventorySnapshot(
+                4,
+                0,
+                1,
+                new[] { new InventoryEntry(2, new ItemDefinitionId(Sword), 1, EquipmentSlot.Weapon) }));
+        yield return null;
+        yield return null;
+        TMP_Text label = window.GetComponentsInChildren<Button>(true).Single().GetComponentInChildren<TMP_Text>();
+        label.ForceMeshUpdate();
+
+        Assert.That(label.text, Is.EqualTo("Training Sword x 1 (equipped)"));
+        Assert.That(label.textInfo.lineCount, Is.EqualTo(1), "a long row stays on one line");
+        Assert.That(
+            label.textBounds.size.y,
+            Is.LessThanOrEqualTo(((RectTransform)label.transform).rect.height + 0.5f),
+            "inside its row");
+    }
+
     // A row under a touch button would take the taps meant for it, and a press of a row equips or drinks.
     [UnityTest]
     public IEnumerator InventoryWindow_WithTheTouchControlsShown_StopsAboveTheirButtons_AndKeepsEveryRow()

@@ -165,7 +165,9 @@ public sealed class InventoryWindow : MonoBehaviour
         {
             GameClient client = m_client!;
             GameObject button = Ui.CreateButton(text, m_rows!, () => client.PressInventoryRow(row));
-            button.GetComponentInChildren<TMP_Text>().alignment = TextAlignmentOptions.MidlineLeft;
+            TMP_Text label = button.GetComponentInChildren<TMP_Text>();
+            label.alignment = TextAlignmentOptions.MidlineLeft;
+            FitOnOneLine(label);
             m_rowObjects.Add(button);
             AppendText(text);
         }
@@ -179,9 +181,20 @@ public sealed class InventoryWindow : MonoBehaviour
     {
         TMP_Text label = Ui.CreateLabel("Row", m_rows!);
         label.text = text;
+        FitOnOneLine(label);
         label.gameObject.AddComponent<LayoutElement>().preferredHeight = RowHeight;
         m_rowObjects.Add(label.gameObject);
         AppendText(text);
+    }
+
+    // A long row shrinks to fit its one line: wrapped, it would spill out of its row, and the list's mask cuts off what
+    // spills past the list's edge.
+    private static void FitOnOneLine(TMP_Text label)
+    {
+        label.textWrappingMode = TextWrappingModes.NoWrap;
+        label.enableAutoSizing = true;
+        label.fontSizeMin = 12f;
+        label.fontSizeMax = label.fontSize;
     }
 
     private void AppendText(string text)
