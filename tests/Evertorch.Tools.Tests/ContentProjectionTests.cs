@@ -38,6 +38,27 @@ public sealed class ContentProjectionTests
         "attack", "attackSpeedPenalty", "defense", "bonus", "sp"
     };
 
+    // The client package's allow-list (Content Pipeline §5), by file: a name not reviewed here fails.
+    private static readonly Dictionary<string, string[]> ReviewedClientFieldNames = new()
+    {
+        ["items.json"] = new[]
+            { "schemaVersion", "definitions", "id", "displayName", "type", "stackLimit", "icon", "model" },
+        ["jobs.json"] = new[] { "schemaVersion", "definitions", "id", "displayName", "prefab" },
+        ["manifest.json"] = new[] { "schemaVersion", "clientContentVersion", "files", "path", "sha256" },
+        ["maps.json"] = new[]
+        {
+            "schemaVersion", "definitions", "id", "displayName", "scene", "navigation", "cellSize", "originX",
+            "originZ", "agentRadius", "maxStepHeight", "columns", "rows", "legend", "symbol", "surface", "axis",
+            "heightAtMin", "heightAtMax", "cellRows"
+        },
+        ["monsters.json"] = new[]
+        {
+            "schemaVersion", "definitions", "id", "displayName", "level", "prefab", "icon", "projectile"
+        },
+        ["skills.json"] = new[] { "schemaVersion", "definitions", "id", "displayName", "targetType", "icon" },
+        ["status-effects.json"] = new[] { "schemaVersion", "definitions", "id", "displayName", "icon" }
+    };
+
     // Authoring sections that the projection flattens into their fields, so no package carries these names.
     private static readonly string[] FlattenedAuthoringSections =
     {
@@ -136,6 +157,32 @@ public sealed class ContentProjectionTests
         return names;
     }
 
+    // Builds the real content with the tool's own command and returns the client files of the package and its copy.
+    private static string[] BuildRepositoryClientFiles(ContentWorkspace workspace)
+    {
+        using (var output = new StringWriter())
+        using (var error = new StringWriter())
+        {
+            string content = Path.Combine(ContentValidationTests.RepositoryRoot(), "content");
+            string[] args =
+            {
+                "content", "build", "--content", content, "--out", workspace.OutputDirectory, "--client-out",
+                workspace.ClientDirectory
+            };
+
+            int exitCode = Program.Run(args, output, error);
+
+            Assert.That(exitCode, Is.EqualTo(0), error.ToString());
+            Assert.That(error.ToString(), Is.Empty);
+        }
+
+        string[] clientFiles = Directory.GetFiles(Path.Combine(workspace.OutputDirectory, "client"), "*.json")
+            .Concat(Directory.GetFiles(workspace.ClientDirectory, "*.json"))
+            .ToArray();
+        Assert.That(clientFiles, Has.Length.EqualTo(14), "seven files in the package and seven in its copy");
+        return clientFiles;
+    }
+
     [Test]
     public void Build_ForIdenticalInput_ProducesIdenticalBytes()
     {
@@ -154,25 +201,8 @@ public sealed class ContentProjectionTests
     public void Build_ForRepositoryContent_KeepsServerOnlyFieldNamesOutOfEveryClientFile()
     {
         using (var workspace = new ContentWorkspace())
-        using (var output = new StringWriter())
-        using (var error = new StringWriter())
         {
-            string content = Path.Combine(ContentValidationTests.RepositoryRoot(), "content");
-            string[] args =
-            {
-                "content", "build", "--content", content, "--out", workspace.OutputDirectory, "--client-out",
-                workspace.ClientDirectory
-            };
-
-            int exitCode = Program.Run(args, output, error);
-
-            Assert.That(exitCode, Is.EqualTo(0), error.ToString());
-            Assert.That(error.ToString(), Is.Empty);
-            string[] clientFiles = Directory.GetFiles(Path.Combine(workspace.OutputDirectory, "client"), "*.json")
-                .Concat(Directory.GetFiles(workspace.ClientDirectory, "*.json"))
-                .ToArray();
-            Assert.That(clientFiles, Has.Length.EqualTo(14), "seven files in the package and seven in its copy");
-            foreach (string file in clientFiles)
+            foreach (string file in BuildRepositoryClientFiles(workspace))
             {
                 Assert.That(PropertyNamesOf(file).Intersect(ServerOnlyFieldNames), Is.Empty, file);
             }
@@ -185,6 +215,22 @@ public sealed class ContentProjectionTests
 
             // A name the real content no longer authors would make the check above prove nothing.
             Assert.That(serverNames, Is.SupersetOf(ServerOnlyFieldNames.Except(FlattenedAuthoringSections)));
+        }
+    }
+
+    [Test]
+    public void Build_ForRepositoryContent_WritesOnlyTheReviewedFieldNamesIntoEachClientFile()
+    {
+        using (var workspace = new ContentWorkspace())
+        {
+            foreach (string file in BuildRepositoryClientFiles(workspace))
+            {
+                Assert.That(
+                    PropertyNamesOf(file).OrderBy(name => name, StringComparer.Ordinal),
+                    Is.EqualTo(ReviewedClientFieldNames[Path.GetFileName(file)]
+                        .OrderBy(name => name, StringComparer.Ordinal)),
+                    file);
+            }
         }
     }
 
