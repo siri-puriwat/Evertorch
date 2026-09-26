@@ -65,6 +65,15 @@ public sealed class WorldSimulation
                 }
             }
         }
+
+        // After every map's monsters, so that NPCs leave the monsters' entity IDs at load as they were.
+        foreach (MapInstance instance in m_maps.Values.OrderBy(map => map.Definition.Id.Value, StringComparer.Ordinal))
+        {
+            foreach (NpcPlacement placement in instance.Definition.Npcs)
+            {
+                SpawnNpc(instance, placement);
+            }
+        }
     }
 
     public IReadOnlyCollection<MapInstance> Maps => m_maps.Values;
@@ -211,6 +220,13 @@ public sealed class WorldSimulation
             speed);
         map.Add(monster);
         return monster;
+    }
+
+    private void SpawnNpc(MapInstance map, NpcPlacement placement)
+    {
+        NpcDefinition definition = m_content.Npcs[placement.Npc];
+        EntityId id = NextEntityId();
+        map.Add(new NpcEntity(id, definition, placement, NpcServicesBuilder.Build(id, definition, m_content)));
     }
 
     public ItemDropEntity SpawnItemDrop(

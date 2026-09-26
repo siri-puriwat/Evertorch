@@ -62,8 +62,11 @@ public sealed class SnapshotPhase : ITickPhase
         m_states.Add(ToState(own));
         foreach (EntityId known in session.KnownEntities)
         {
-            // A drop never moves; its spawn said everything about it.
-            if (map.TryGetEntity(known, out WorldEntity? other) && other != null && other.Kind != EntityKind.ItemDrop)
+            // A drop or an NPC never moves; its spawn said everything about it.
+            if (map.TryGetEntity(known, out WorldEntity? other)
+                && other != null
+                && other.Kind != EntityKind.ItemDrop
+                && other.Kind != EntityKind.Npc)
             {
                 m_states.Add(ToState(other));
             }

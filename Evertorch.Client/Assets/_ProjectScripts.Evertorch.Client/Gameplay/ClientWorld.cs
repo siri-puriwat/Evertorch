@@ -12,6 +12,7 @@ namespace Evertorch.Client
 public sealed class ClientWorld
 {
     private readonly Dictionary<EntityId, RemoteEntity> m_remotes = new();
+    private readonly Dictionary<EntityId, NpcServices> m_npcServices = new();
 
     // The tick of each entity's latest death or revival. Snapshots are unreliable and the events reliable, so a
     // snapshot from before either can still arrive afterwards; it must neither raise a corpse nor put a revived body
@@ -216,6 +217,11 @@ public sealed class ClientWorld
     /// </summary>
     public event Action<CommandRejected>? CommandRejectedReceived;
 
+    /// <summary>
+    ///     What an NPC this client sees offers; each spawn of an NPC is followed by its services.
+    /// </summary>
+    public event Action<NpcServices>? NpcServicesReceived;
+
     public void OnSpawn(EntitySpawn spawn)
     {
         if (spawn == null)
@@ -231,6 +237,7 @@ public sealed class ClientWorld
         if (m_remotes.TryGetValue(spawn.Entity, out RemoteEntity? replaced))
         {
             m_remotes.Remove(spawn.Entity);
+            m_npcServices.Remove(spawn.Entity);
             RemoteDespawned?.Invoke(replaced);
         }
 
@@ -250,6 +257,7 @@ public sealed class ClientWorld
         if (m_remotes.TryGetValue(despawn.Entity, out RemoteEntity? remote))
         {
             m_remotes.Remove(despawn.Entity);
+            m_npcServices.Remove(despawn.Entity);
             EndLocalCastAt(despawn.Entity);
             RemoteDespawned?.Invoke(remote);
         }
@@ -297,6 +305,32 @@ public sealed class ClientWorld
         Skills = list.Skills;
         SkillsReceivedAt = ServerTime.Now;
         SkillsChanged?.Invoke();
+    }
+
+    /// <summary>
+    ///     Keeps what an NPC offers until it despawns. Services for an entity this client has no NPC spawn for are
+    ///     counted and ignored.
+    /// </summary>
+    public void OnNpcServices(NpcServices services)
+    {
+        if (services == null)
+        {
+            throw new ArgumentNullException(nameof(services));
+        }
+
+        if (!m_remotes.TryGetValue(services.Npc, out RemoteEntity? remote) || remote.Kind != EntityKind.Npc)
+        {
+            UnknownEntityEvents++;
+            return;
+        }
+
+        m_npcServices[services.Npc] = services;
+        NpcServicesReceived?.Invoke(services);
+    }
+
+    public bool TryGetNpcServices(EntityId npc, out NpcServices? services)
+    {
+        return m_npcServices.TryGetValue(npc, out services);
     }
 
     public void OnStatusEffects(StatusEffects effects)
@@ -545,6 +579,52 @@ public sealed class ClientWorld
                 candidates.Add(new PickCandidate(remote.Entity, position));
             }
         }
+    }
+
+    /// <summary>
+    ///     Appends the NPCs this client knows, at their drawn positions: what a click or tap talks to.
+    /// </summary>
+    public void CollectNpcCandidates(List<PickCandidate> candidates)
+    {
+        double renderTime = RemoteRenderTime;
+        foreach (RemoteEntity remote in m_remotes.Values)
+        {
+            if (remote.Kind == EntityKind.Npc
+                && remote.Buffer.TrySample(renderTime, out WorldPosition position, out WorldDirection _))
+            {
+                candidates.Add(new PickCandidate(remote.Entity, position));
+            }
+        }
+    }
+
+    /// <summary>
+    ///     The drawn NPC nearest to <paramref name="position" />, or default when this client sees none: what the talk
+    ///     control talks to (Prototype Content §4).
+    /// </summary>
+    public EntityId NearestNpc(WorldPosition position)
+    {
+        EntityId nearest = default;
+        float best = float.MaxValue;
+        double renderTime = RemoteRenderTime;
+        foreach (RemoteEntity remote in m_remotes.Values)
+        {
+            if (remote.Kind != EntityKind.Npc
+                || !remote.Buffer.TrySample(renderTime, out WorldPosition at, out WorldDirection _))
+            {
+                continue;
+            }
+
+            float dx = at.X - position.X;
+            float dz = at.Z - position.Z;
+            float distance = (float)Math.Sqrt(dx * dx + dz * dz);
+            if (distance < best || (distance == best && remote.Entity.Value < nearest.Value))
+            {
+                best = distance;
+                nearest = remote.Entity;
+            }
+        }
+
+        return nearest;
     }
 
     /// <summary>

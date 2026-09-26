@@ -14,7 +14,7 @@ public static class GrayboxMeshBuilder
 {
     public const float WallHeight = 2f;
     public const float ObstacleHeight = 1f;
-    public const float NpcMarkerHeight = 1.8f;
+    public const float NpcMarkerHeight = 0.2f;
     public const float GateHeight = 2.6f;
 
     private const float NpcMarkerInset = 0.3f;

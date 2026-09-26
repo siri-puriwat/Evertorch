@@ -19,11 +19,12 @@ public sealed class ServerLifetimeService : IHostedService, IDisposable
             new EventId(1002, "SimulationFaulted"),
             "The simulation loop faulted; the server is stopping.");
 
-    private static readonly Action<ILogger, string, string, int, Exception?> LogContentLoaded =
-        LoggerMessage.Define<string, string, int>(
+    private static readonly Action<ILogger, string, string, int, int, int, Exception?> LogContentLoaded =
+        LoggerMessage.Define<string, string, int, int, int>(
             LogLevel.Information,
             new EventId(1003, "ContentLoaded"),
-            "Content loaded: server {ServerContentVersion}, client {ClientContentVersion}, {Maps} maps.");
+            "Content loaded: server {ServerContentVersion}, client {ClientContentVersion}, {Maps} maps, {Npcs} NPCs, "
+            + "{Quests} quests.");
 
     private static readonly Action<ILogger, ulong, string, Exception?> LogRandomSeed =
         LoggerMessage.Define<ulong, string>(
@@ -126,6 +127,8 @@ public sealed class ServerLifetimeService : IHostedService, IDisposable
             m_content.ServerContentVersion,
             m_content.ClientContentVersion,
             m_content.Maps.Count,
+            m_content.Npcs.Count,
+            m_content.Quests.Count,
             null);
         LogRandomSeed(m_logger, m_random.Seed, m_random.IsConfigured ? "configured" : "drawn at startup", null);
         m_persistence.Start();

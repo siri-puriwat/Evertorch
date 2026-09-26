@@ -16,12 +16,13 @@ public sealed class PresentationBoundaryTests
 {
     private static readonly Regex Forbidden = new(
         @"ClientConnection|ICombatCommandSink|IMoveIntentSink|ISkillCommandSink|IItemCommandSink|\bSend\w*\("
-        + @"|AutoAttackState|PickupState|SkillState|InventoryActions\.Press\b|MovementController|LocalPlayerDriver"
+        + @"|AutoAttackState|PickupState|SkillState|TalkState|InventoryActions\.Press\b|MovementController"
+        + @"|LocalPlayerDriver"
         + @"|MovementPredictor|\.Predictor\b|\.IsLocked\b|RequestRespawn|UseSkillSlot|PressInventoryRow|\.ActionLock\b"
         + @"|\.On(Spawn|Despawn|Snapshot|TargetChanged|AttackStarted|Damage|EntityDied|EntityRevived|CommandRejected"
         + @"|ItemDropped|ItemPickedUp|CharacterHealth|CharacterProgress|SkillCastStarted|SkillResolved|SkillList"
-        + @"|StatusEffects|LocalCancel|Changed)\("
-        + @"|\.(Advance|CollectTargetCandidates|CollectDropCandidates)\("
+        + @"|StatusEffects|NpcServices|LocalCancel|Changed)\("
+        + @"|\.(Advance|CollectTargetCandidates|CollectDropCandidates|CollectNpcCandidates)\("
         + @"|\.(HealthPermille|StateFlags|CurrentHealth|Target|LastRejection|LocalHealth|LocalMaximumHealth|IsDead"
         + @"|LocalSpirit|LocalMaximumSpirit|Level|Experience|ExperienceToNextLevel)\s*=(?![=>])");
 
@@ -31,7 +32,7 @@ public sealed class PresentationBoundaryTests
     // cannot hide the call.
     private static readonly Regex UiForbidden = new(
         @"ICombatCommandSink|IMoveIntentSink|ISkillCommandSink|IItemCommandSink|\.Send\w*\(|AutoAttackState"
-        + @"|LocalPlayerDriver|PickupState|SkillState|InventoryActions\.Press\b"
+        + @"|LocalPlayerDriver|PickupState|SkillState|TalkState|InventoryActions\.Press\b"
         + @"|\.ActionLock\b|MoveIntentProducer|\bnew\s+(MoveIntent|ClientHello|EnterWorldRequest|MoveInput|StopMovement"
         + @"|TargetEntity|AttackEntity|CancelAction|UseSkill|Respawn|Logout|PickupItem|CreateCharacter"
         + @"|InventoryResyncRequest|EquipItem|UnequipItem|UseItem)\s*\("
@@ -42,8 +43,8 @@ public sealed class PresentationBoundaryTests
         + @"|[Pp]redictor\??\.Apply\(|\.Buffer\.(Add|Clear)\("
         + @"|\.On(Spawn|Despawn|Snapshot|TargetChanged|AttackStarted|Damage|EntityDied|EntityRevived|CommandRejected"
         + @"|ItemDropped|ItemPickedUp|CharacterHealth|CharacterProgress|SkillCastStarted|SkillResolved|SkillList"
-        + @"|StatusEffects|LocalCancel|Changed)\("
-        + @"|\.(Advance|CollectTargetCandidates|CollectDropCandidates)\("
+        + @"|StatusEffects|NpcServices|LocalCancel|Changed)\("
+        + @"|\.(Advance|CollectTargetCandidates|CollectDropCandidates|CollectNpcCandidates)\("
         + @"|\.(Target|LastRejection|LocalHealth|LocalMaximumHealth|HealthPermille|StateFlags|CurrentHealth|IsLocked"
         + @"|IsDead|LocalSpirit|LocalMaximumSpirit|Level|Experience|ExperienceToNextLevel)\s*=(?![=>])");
 
@@ -92,7 +93,9 @@ public sealed class PresentationBoundaryTests
             "ISkillCommandSink skills = m_skills;", "m_world.OnCharacterProgress(progress);",
             "world.Inventory.OnChanged(change);", "m_world.OnItemPickedUp(pickedUp);",
             "m_world.OnCommandRejected(rejected);", "m_world.Advance(0.05f);",
-            "var pickup = new PickupState(world, controller, sink);", "world.Level =", "m_world.Target = entity;"
+            "var pickup = new PickupState(world, controller, sink);", "world.Level =", "m_world.Target = entity;",
+            "var talk = new TalkState(world, controller);", "m_world.OnNpcServices(services);",
+            "m_world.CollectNpcCandidates(candidates);"
         };
         string[] allowed =
         {
@@ -124,7 +127,9 @@ public sealed class PresentationBoundaryTests
             "SkillState? skill = m_client.Skill;", "world.OnStatusEffects(effects);",
             "InventoryActions.Press(commands, row, item.Type);", "var equip = new EquipItem(row, 3);",
             "var off = new UnequipItem(EquipmentSlot.Weapon, 4);", "var drink = new UseItem(row, 5);",
-            "IItemCommandSink items = client;", "ISkillCommandSink skills = client;"
+            "IItemCommandSink items = client;", "ISkillCommandSink skills = client;",
+            "var talk = new TalkState(world, controller);", "TalkState? talk = m_client.Talk;",
+            "world.OnNpcServices(services);", "world.CollectNpcCandidates(candidates);"
         };
         string[] allowed =
         {

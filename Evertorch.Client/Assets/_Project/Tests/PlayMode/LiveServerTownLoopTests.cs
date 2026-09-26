@@ -5,11 +5,14 @@ using System.Linq;
 using System.Reflection;
 using System.Threading.Tasks;
 using Evertorch.Game;
+using Evertorch.Protocol;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.InputSystem.LowLevel;
 using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
+using EntityId = Evertorch.Game.EntityId;
 using Object = UnityEngine.Object;
 
 namespace Evertorch.Client.Tests.PlayMode
@@ -24,6 +27,9 @@ public sealed class LiveServerTownLoopTests : InputTestFixture
 {
     private const string ActionsAsset = "_Project/Settings/InputSystem_Actions.inputactions";
     private const string ClientName = "LiveTownOne";
+    private const string NpcClientName = "LiveTownTwo";
+    private const string QuartermasterPrefab = "npc_quartermaster";
+    private const string GateWardenPrefab = "npc_gate_warden";
     private const string GroundScene = "10_TrainingGround";
     private const string LocalViewName = "LocalPlayer";
     private const float StartTimeoutSeconds = 30f;
@@ -147,6 +153,102 @@ public sealed class LiveServerTownLoopTests : InputTestFixture
         Assert.That(drawn.x, Is.EqualTo(serverX).Within(DrawnDistance), server.JoinOutput());
         Assert.That(drawn.z, Is.EqualTo(serverZ).Within(DrawnDistance), server.JoinOutput());
         Assert.That(client.Connection.MalformedMessages + client.Connection.UnexpectedMessages, Is.Zero);
+    }
+
+    // Both NPCs are drawn from their prefabs, each standing on the plinth over its marker (Prototype Content §5). A
+    // click on the Quartermaster walks the player up to it and opens its window, which closes once the Quartermaster is
+    // drawn beyond 3 m. The click talks and never attacks: the server refuses nothing (Gameplay Systems §6.1).
+    [UnityTest]
+    [Timeout(TestTimeoutMs)]
+    public IEnumerator Npcs_DrawnOnTheirPlinths_AndAClickOnTheQuartermasterWalksUpAndOpensItsWindow()
+    {
+        string actionsPath = RequirePrerequisites();
+        yield return StartDatabaseAndServer();
+        LiveServer server = m_server!;
+        Assert.That(server.TryReadListeningPort(out int port), Is.True, $"server output: {server.JoinOutput()}");
+        Mouse mouse = InputSystem.AddDevice<Mouse>();
+        GameClient client = CreateClient(port, actionsPath);
+        yield return EnterByName(client, NpcClientName);
+        ClientWorld town = client.World!;
+        NpcWindow window = client.GetComponentsInChildren<NpcWindow>(true).Single();
+
+        yield return WaitUntil(
+            () => NpcView(client, QuartermasterPrefab)?.HasBody == true
+                && NpcView(client, GateWardenPrefab)?.HasBody == true,
+            StepTimeoutSeconds);
+        foreach (string prefab in new[] { QuartermasterPrefab, GateWardenPrefab })
+        {
+            EntityView? view = NpcView(client, prefab);
+            Assert.That(view, Is.Not.Null, $"{prefab}: drawn");
+            Assert.That(view!.IsPlaceholder, Is.False, $"{prefab}: the body is its prefab, not the placeholder");
+            Assert.That(
+                view.transform.position.y,
+                Is.EqualTo(GrayboxMeshBuilder.NpcMarkerHeight).Within(1e-4f),
+                $"{prefab}: on its plinth");
+        }
+
+        EntityView quartermaster = NpcView(client, QuartermasterPrefab)!;
+        EntityId npc = client.RemoteViews.Single(pair => pair.Value == quartermaster).Key;
+        Vector3 onScreen = Camera.main!.WorldToScreenPoint(
+            quartermaster.transform.position + Vector3.up * EntityPicker.PickHeight);
+        Assert.That(
+            onScreen.z > 0f && onScreen.x > 0f && onScreen.x < Screen.width && onScreen.y > 0f
+            && onScreen.y < Screen.height,
+            Is.True,
+            $"the Quartermaster is on screen at {onScreen}");
+        ClickAt(mouse, onScreen);
+        yield return WaitUntil(() => window.IsOpen, StepTimeoutSeconds);
+        Assert.That(window.IsOpen, Is.True, $"the window opened; the player at {town.Predictor.Position}");
+        Assert.That(window.Npc, Is.EqualTo(npc));
+        Assert.That(window.ShownName, Is.EqualTo("Quartermaster"));
+        Assert.That(town.Target, Is.EqualTo(default(EntityId)), "the click selected nothing");
+        Assert.That(DistanceToDrawn(town, quartermaster), Is.LessThanOrEqualTo(TalkState.OpenDistance), "beside it");
+
+        // The console republishes what it reads once a second.
+        yield return new WaitForSecondsRealtime(1.5f);
+        long character = client.Connection!.Characters.Single(entry => entry.Name == NpcClientName).Character.Value;
+        server.ClearOutput();
+        server.SendCommand("players");
+        yield return WaitUntil(() => server.HasOutput(LiveServer.CharacterMarker(character)), StepTimeoutSeconds);
+        string line = server.Output().First(text => text.Contains(LiveServer.CharacterMarker(character)));
+        Assert.That(line, Does.Contain(" refused 0 level "), "no AttackEntity was sent: the server refused nothing");
+
+        Assert.That(
+            client.Controller!.TryMoveTo(town.Predictor.Position, new WorldPosition(0f, 0f, 0f)),
+            Is.True,
+            "a way back to the spawn point");
+        yield return WaitUntil(() => !window.IsOpen, StepTimeoutSeconds);
+        Assert.That(window.IsOpen, Is.False, "the window closed on the walk away");
+        Assert.That(DistanceToDrawn(town, quartermaster), Is.GreaterThan(NpcInteraction.Range), "past 3 m");
+        Assert.That(client.Connection.MalformedMessages + client.Connection.UnexpectedMessages, Is.Zero);
+    }
+
+    private static EntityView? NpcView(GameClient client, string prefab)
+    {
+        ClientWorld? world = client.World;
+        return world == null
+            ? null
+            : client.RemoteViews
+                .Where(pair => world.Remotes.TryGetValue(pair.Key, out RemoteEntity? remote)
+                    && remote.Kind == EntityKind.Npc
+                    && pair.Value.Key == prefab)
+                .Select(pair => pair.Value)
+                .SingleOrDefault();
+    }
+
+    // From the predicted player to where the view is drawn, as the NPC window measures.
+    private static float DistanceToDrawn(ClientWorld world, EntityView view)
+    {
+        Vector3 at = view.transform.position;
+        return new Vector2(at.x - world.Predictor.Position.X, at.z - world.Predictor.Position.Z).magnitude;
+    }
+
+    private static void ClickAt(Mouse mouse, Vector2 screenPosition)
+    {
+        InputSystem.QueueStateEvent(mouse, new MouseState { position = screenPosition }.WithButton(MouseButton.Left));
+        InputSystem.Update();
+        InputSystem.QueueStateEvent(mouse, new MouseState { position = screenPosition });
+        InputSystem.Update();
     }
 
     private static string RequirePrerequisites()

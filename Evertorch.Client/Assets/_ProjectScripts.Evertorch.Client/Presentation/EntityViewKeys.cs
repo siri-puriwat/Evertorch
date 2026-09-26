@@ -34,6 +34,12 @@ public static class EntityViewKeys
                 && content.TryGetItem(itemId, out ClientItem? item)
                 && item != null:
                 return item.ModelKey;
+            case EntityKind.Npc
+                when content != null
+                && NpcDefinitionId.TryCreate(definitionId, out NpcDefinitionId npcId)
+                && content.TryGetNpc(npcId, out ClientNpc? npc)
+                && npc != null:
+                return npc.PrefabKey;
             default:
                 return string.Empty;
         }

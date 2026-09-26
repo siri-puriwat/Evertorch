@@ -12,6 +12,7 @@ public sealed class MapInstance
     private readonly Dictionary<EntityId, PlayerEntity> m_players = new();
     private readonly Dictionary<EntityId, MonsterEntity> m_monsters = new();
     private readonly Dictionary<EntityId, ItemDropEntity> m_itemDrops = new();
+    private readonly Dictionary<EntityId, NpcEntity> m_npcs = new();
 
     public MapInstance(MapDefinition definition, uint instanceNumber, InterestGrid interest)
     {
@@ -34,6 +35,8 @@ public sealed class MapInstance
 
     public IReadOnlyCollection<ItemDropEntity> ItemDrops => m_itemDrops.Values;
 
+    public IReadOnlyCollection<NpcEntity> Npcs => m_npcs.Values;
+
     public void Add(WorldEntity entity)
     {
         m_entities.Add(entity.Id, entity);
@@ -48,6 +51,9 @@ public sealed class MapInstance
             case ItemDropEntity drop:
                 m_itemDrops.Add(drop.Id, drop);
                 break;
+            case NpcEntity npc:
+                m_npcs.Add(npc.Id, npc);
+                break;
         }
 
         Interest.Update(entity);
@@ -59,6 +65,7 @@ public sealed class MapInstance
         m_players.Remove(entity.Id);
         m_monsters.Remove(entity.Id);
         m_itemDrops.Remove(entity.Id);
+        m_npcs.Remove(entity.Id);
         return m_entities.Remove(entity.Id);
     }
 
@@ -75,6 +82,11 @@ public sealed class MapInstance
     public bool TryGetMonster(EntityId entity, out MonsterEntity? monster)
     {
         return m_monsters.TryGetValue(entity, out monster);
+    }
+
+    public bool TryGetNpc(EntityId entity, out NpcEntity? npc)
+    {
+        return m_npcs.TryGetValue(entity, out npc);
     }
 
     public bool Contains(EntityId entity)

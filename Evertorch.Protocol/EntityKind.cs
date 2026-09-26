@@ -14,6 +14,9 @@ public enum EntityKind : byte
     Monster = 2,
 
     /// <summary>An item lying on the ground; carries an item definition ID.</summary>
-    ItemDrop = 3
+    ItemDrop = 3,
+
+    /// <summary>A character the world places, such as a shopkeeper; carries an NPC definition ID.</summary>
+    Npc = 4
 }
 }

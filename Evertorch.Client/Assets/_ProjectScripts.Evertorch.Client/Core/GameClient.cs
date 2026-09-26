@@ -61,6 +61,7 @@ public sealed class GameClient : MonoBehaviour
     private readonly EntityViewCatalog m_viewCatalog = new();
     private readonly List<PickCandidate> m_targetCandidates = new();
     private readonly List<PickCandidate> m_pointerCandidates = new();
+    private readonly List<PickCandidate> m_npcCandidates = new();
     private readonly TargetCycler m_targetCycler = new();
     private readonly UiHitTest m_uiHitTest = new();
     private LiteNetLibClientTransport? m_socket;
@@ -74,6 +75,7 @@ public sealed class GameClient : MonoBehaviour
     private AutoAttackState? m_autoAttack;
     private PickupState? m_pickup;
     private SkillState? m_skill;
+    private TalkState? m_talk;
     private MovementController? m_controller;
     private LocalPlayerDriver? m_driver;
     private MoveIntentProducer? m_producer;
@@ -90,6 +92,7 @@ public sealed class GameClient : MonoBehaviour
     private StatusBar? m_statusBar;
     private TargetFrame? m_targetFrame;
     private InventoryWindow? m_inventoryWindow;
+    private NpcWindow? m_npcWindow;
     private SkillBar? m_skillBar;
     private FeedbackLines? m_feedback;
     private CombatPresenter? m_combat;
@@ -212,6 +215,8 @@ public sealed class GameClient : MonoBehaviour
         m_targetFrame.transform.SetParent(transform, false);
         m_inventoryWindow = InventoryWindow.Create(this);
         m_inventoryWindow.transform.SetParent(transform, false);
+        m_npcWindow = NpcWindow.Create(this);
+        m_npcWindow.transform.SetParent(transform, false);
         m_skillBar = SkillBar.Create(this);
         m_skillBar.transform.SetParent(transform, false);
         m_feedback = FeedbackLines.Create(this);
@@ -258,6 +263,13 @@ public sealed class GameClient : MonoBehaviour
         m_pointerCandidates.Clear();
         m_pointerCandidates.AddRange(m_targetCandidates);
         m_world.CollectDropCandidates(m_pointerCandidates);
+        m_npcCandidates.Clear();
+        m_world.CollectNpcCandidates(m_npcCandidates);
+        foreach (PickCandidate npc in m_npcCandidates)
+        {
+            m_pointerCandidates.Add(new PickCandidate(npc.Entity, OnPlinth(npc.Position)));
+        }
+
         HandlePointerRequest();
         HandleCombatRequest();
         int slot = m_skillSource?.TakeSlot() ?? 0;
@@ -293,7 +305,7 @@ public sealed class GameClient : MonoBehaviour
             if (m_world.Remotes.TryGetValue(pair.Key, out RemoteEntity? remote)
                 && remote.Buffer.TrySample(renderTime, out WorldPosition position, out WorldDirection facing))
             {
-                pair.Value.SetPose(position, facing);
+                pair.Value.SetPose(remote.Kind == EntityKind.Npc ? OnPlinth(position) : position, facing);
             }
         }
 
@@ -491,6 +503,7 @@ public sealed class GameClient : MonoBehaviour
         }
 
         m_pickup?.Cancel();
+        m_talk?.Cancel();
         m_skill.Use(skill, definition.TargetType);
     }
 
@@ -647,6 +660,8 @@ public sealed class GameClient : MonoBehaviour
         m_autoAttack = new AutoAttackState(world, m_controller, Connection, 1.0 / Connection.ServerTickRate);
         m_pickup = new PickupState(world, m_controller, Connection);
         m_skill = new SkillState(world, m_controller, Connection, 1.0 / Connection.ServerTickRate);
+        m_talk = new TalkState(world, m_controller);
+        m_talk.Arrived += OnTalkArrived;
         m_driver = new LocalPlayerDriver(
             m_controller,
             m_producer,
@@ -654,7 +669,8 @@ public sealed class GameClient : MonoBehaviour
             Connection,
             m_autoAttack,
             m_pickup,
-            m_skill);
+            m_skill,
+            m_talk);
         Status = $"In {map.DisplayName}";
     }
 
@@ -696,9 +712,16 @@ public sealed class GameClient : MonoBehaviour
         InputAction? attack = actions?.FindAction("Player/Attack");
         InputAction? respawn = actions?.FindAction("Player/Respawn");
         InputAction? pickup = actions?.FindAction("Player/Pickup");
-        if (next != null && previous != null && clear != null && attack != null && respawn != null && pickup != null)
+        InputAction? talk = actions?.FindAction("Player/Talk");
+        if (next != null
+            && previous != null
+            && clear != null
+            && attack != null
+            && respawn != null
+            && pickup != null
+            && talk != null)
         {
-            m_combatSource = new CombatInputSource(next, previous, clear, attack, respawn, pickup);
+            m_combatSource = new CombatInputSource(next, previous, clear, attack, respawn, pickup, talk);
         }
 
         var slots = new List<InputAction>();
@@ -738,6 +761,7 @@ public sealed class GameClient : MonoBehaviour
             m_autoAttack?.OnWalkRequested();
             m_pickup?.Cancel();
             m_skill?.Cancel();
+            m_talk?.Cancel();
             m_marker?.ShowAccepted(m_controller.Path[m_controller.Path.Count - 1]);
         }
         else if (result == PointerMoveResult.Refused)
@@ -746,11 +770,18 @@ public sealed class GameClient : MonoBehaviour
         }
         else if (result == PointerMoveResult.Entity)
         {
-            // A click or tap on a monster attacks it and one on a drop picks it up, as in the reference game
-            // (Prototype Content §4).
-            if (m_world.Remotes.TryGetValue(entity, out RemoteEntity? remote) && remote.Kind == EntityKind.ItemDrop)
+            // A click or tap on a monster attacks it, one on a drop picks it up, as in the reference game, and one on
+            // an NPC talks to it, never attacks it (Prototype Content §4).
+            EntityKind kind = m_world.Remotes.TryGetValue(entity, out RemoteEntity? remote)
+                ? remote.Kind
+                : EntityKind.None;
+            if (kind == EntityKind.ItemDrop)
             {
                 StartPickup(entity);
+            }
+            else if (kind == EntityKind.Npc)
+            {
+                StartTalk(entity);
             }
             else
             {
@@ -783,6 +814,14 @@ public sealed class GameClient : MonoBehaviour
                 StartPickup(drop);
             }
         }
+        else if (request == CombatRequest.Talk)
+        {
+            EntityId npc = m_world.NearestNpc(m_world.Predictor.Position);
+            if (npc != default)
+            {
+                StartTalk(npc);
+            }
+        }
         else if (request == CombatRequest.Respawn)
         {
             RequestRespawn();
@@ -805,6 +844,7 @@ public sealed class GameClient : MonoBehaviour
     {
         m_pickup?.Cancel();
         m_skill?.Cancel();
+        m_talk?.Cancel();
         m_autoAttack?.Attack(target);
     }
 
@@ -813,7 +853,28 @@ public sealed class GameClient : MonoBehaviour
     {
         m_autoAttack?.OnWalkRequested();
         m_skill?.Cancel();
+        m_talk?.Cancel();
         m_pickup?.Pickup(drop);
+    }
+
+    // Talking replaces whatever else the character was doing; it only walks.
+    private void StartTalk(EntityId npc)
+    {
+        m_autoAttack?.OnWalkRequested();
+        m_pickup?.Cancel();
+        m_skill?.Cancel();
+        m_talk?.Talk(npc);
+    }
+
+    private void OnTalkArrived(EntityId npc)
+    {
+        m_npcWindow?.Open(npc);
+    }
+
+    // An NPC stands on the plinth drawn over its marker cell (Prototype Content §5).
+    private static WorldPosition OnPlinth(WorldPosition position)
+    {
+        return new WorldPosition(position.X, position.Y + GrayboxMeshBuilder.NpcMarkerHeight, position.Z);
     }
 
     private void OnClosed()
@@ -880,6 +941,19 @@ public sealed class GameClient : MonoBehaviour
         m_autoAttack = null;
         m_pickup = null;
         m_skill = null;
+        if (m_talk != null)
+        {
+            m_talk.Arrived -= OnTalkArrived;
+        }
+
+        m_talk = null;
+
+        // A Unity comparison: when the client itself is destroyed, the window may already be gone.
+        if (m_npcWindow != null)
+        {
+            m_npcWindow.Close();
+        }
+
         m_controller = null;
         foreach (EntityView view in m_remoteViews.Values)
         {

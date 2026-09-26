@@ -39,6 +39,9 @@ public sealed class TownLoopAcceptanceTests
     private const string TrainingSword = "item.weapon.training_sword";
     private const string ClothArmor = "item.armor.cloth";
     private const string MinorHealth = "item.consumable.minor_health";
+    private const string Quartermaster = "npc.quartermaster";
+    private const string GateWarden = "npc.gate_warden";
+    private const string CrawlerHunt = "quest.crawler_hunt";
     private const string Identity = "townloop";
     private const string CharacterName = "TownLoop1";
     private const int HuntedCrawlers = 5;
@@ -61,6 +64,10 @@ public sealed class TownLoopAcceptanceTests
 
     // Where the player stops in town, away from the spawn point, so a restart that forgot the place would show.
     private static readonly WorldPosition TownSpot = new(10f, 0f, -3f);
+
+    // The western edge of the interest cell the field's portal lands a player in: the Quartermaster's cell, west of
+    // it, is only in view from this side (interest cells of 16 m, the neighbours in view).
+    private const float QuartermasterInViewWestOf = 16f;
 
     private PostgresFixture m_database = null!;
 
@@ -114,6 +121,7 @@ public sealed class TownLoopAcceptanceTests
         Assert.That(client.World.Inventory.Rows, Is.Empty, "enter: a new character carries nothing");
         Assert.That((client.World.Level, client.World.Experience), Is.EqualTo(((ushort)1, 0ul)), "enter: level 1");
 
+        MeetTheNpcs(content, admin, client);
         CrossToTheField(content, admin, client);
         HuntCrawlers(content, admin, client);
         ReturnToTown(content, admin, client);
@@ -168,6 +176,47 @@ public sealed class TownLoopAcceptanceTests
             Is.EquivalentTo(new[] { (TrainingSword, EquipmentSlot.Weapon), (ClothArmor, EquipmentSlot.Armor) }),
             "restart: the sword and the armor are still worn");
         AssertCleanTraffic(client, "restart");
+    }
+
+    // At the spawn point both NPCs are in view, each with what it offers (Network Protocol §6, §9). The talk key walks
+    // the player up to the nearer one, the Quartermaster, and its window opens; talking sends nothing (Gameplay Systems
+    // §6.1). No snapshot ever carries an NPC: each keeps the one position its spawn gave it.
+    private static void MeetTheNpcs(ServerContent content, IAdminCommandService admin, SocketClient client)
+    {
+        const string step = "meet";
+        ClientWorld world = client.World;
+        int snapshots = world.SnapshotsApplied;
+        Assert.That(
+            client.PumpUntil(() =>
+                IsInViewWithServices(world, Quartermaster) && IsInViewWithServices(world, GateWarden)),
+            Is.True,
+            $"{step}: both NPCs and their services on entering at the spawn");
+        world.TryGetNpcServices(NpcInView(world, Quartermaster)!.Entity, out NpcServices? shop);
+        world.TryGetNpcServices(NpcInView(world, GateWarden)!.Entity, out NpcServices? warden);
+        string[] traded = content.Npcs[new NpcDefinitionId(Quartermaster)].Shop.Select(stock => stock.Item.Value)
+            .Union(content.Items.Values.Where(item => item.SellPrice > 0).Select(item => item.Id.Value))
+            .OrderBy(item => item, StringComparer.Ordinal)
+            .ToArray();
+        Assert.That(shop!.Entries.Select(entry => entry.Item.Value), Is.EqualTo(traded), $"{step}: the shop");
+        Assert.That(
+            warden!.Offers.Select(offer => offer.Quest.Value),
+            Is.EqualTo(new[] { CrawlerHunt }),
+            $"{step}: the quest");
+
+        RemoteEntity quartermaster = NpcInView(world, Quartermaster)!;
+        Assert.That(client.TalkToNearest(), Is.EqualTo(quartermaster.Entity), $"{step}: the nearer NPC");
+        Assert.That(
+            client.PumpUntil(() => client.NpcWindows.Contains(quartermaster.Entity)),
+            Is.True,
+            $"{step}: walked up to the Quartermaster, at {world.Predictor.Position}");
+        WorldPosition standing = content.Maps[new MapDefinitionId(TrainingGround)].Npcs
+            .Single(placement => placement.Npc.Value == Quartermaster)
+            .Position;
+        Assert.That(client.DistanceTo(standing), Is.LessThanOrEqualTo(TalkState.OpenDistance), $"{step}: beside it");
+        Assert.That(world.Target, Is.EqualTo(default(EntityId)), $"{step}: nothing targeted");
+        Assert.That(SummaryOf(admin, world.LocalEntity).RefusedCommands, Is.Zero, $"{step}: nothing refused");
+        Assert.That(world.SnapshotsApplied - snapshots, Is.Positive, $"{step}: snapshots came meanwhile");
+        AssertNoNpcInASnapshot(world, step);
     }
 
     // The player walks into the portal before the ground's east gate and follows its character to the field (Gameplay
@@ -398,9 +447,32 @@ public sealed class TownLoopAcceptanceTests
             $"{step}: the client followed its character back to the ground");
         Assert.That(client.Connection.MapEpoch, Is.EqualTo(2), $"{step}: two crossings");
 
+        // The Quartermaster's interest cell is out of view from the arrival, and comes into view on the walk into
+        // town.
+        ClientWorld town = client.World;
+        Assert.That(
+            client.PumpUntil(() => IsInViewWithServices(town, GateWarden)),
+            Is.True,
+            $"{step}: the Gate Warden and its services on arrival");
+        Assert.That(NpcInView(town, Quartermaster), Is.Null, $"{step}: the Quartermaster out of view at the arrival");
+        float? seenFrom = null;
+        town.RemoteSpawned += remote =>
+        {
+            if (remote.DefinitionId == Quartermaster)
+            {
+                seenFrom ??= town.Predictor.Position.X;
+            }
+        };
+
         WalkTo(step, client, TownSpot);
         AwaitConvergence(admin, step, client);
         Assert.That(SummaryOf(admin, client.World.LocalEntity).Map, Is.EqualTo(ground), $"{step}: in town");
+        Assert.That(IsInViewWithServices(town, Quartermaster), Is.True, $"{step}: the Quartermaster in town");
+        Assert.That(
+            seenFrom,
+            Is.LessThan(QuartermasterInViewWestOf),
+            $"{step}: the Quartermaster came into view once the player walked west of x = 16");
+        AssertNoNpcInASnapshot(town, step);
     }
 
     // Starts the walk, then pumps until the walker has arrived within a step of its goal.
@@ -442,6 +514,27 @@ public sealed class TownLoopAcceptanceTests
             from.X + (toward.X - from.X) / length * distance,
             0f,
             from.Z + (toward.Z - from.Z) / length * distance);
+    }
+
+    private static RemoteEntity? NpcInView(ClientWorld world, string npc)
+    {
+        return world.Remotes.Values.SingleOrDefault(remote =>
+            remote.Kind == EntityKind.Npc && remote.DefinitionId == npc);
+    }
+
+    private static bool IsInViewWithServices(ClientWorld world, string npc)
+    {
+        RemoteEntity? remote = NpcInView(world, npc);
+        return remote != null && world.TryGetNpcServices(remote.Entity, out NpcServices? _);
+    }
+
+    // A snapshot that carried an NPC would add a sample after the one its spawn gave it.
+    private static void AssertNoNpcInASnapshot(ClientWorld world, string step)
+    {
+        Assert.That(
+            world.Remotes.Values.Where(remote => remote.Kind == EntityKind.Npc).Select(remote => remote.Buffer.Count),
+            Is.Not.Empty.And.All.EqualTo(1),
+            $"{step}: no NPC in a snapshot");
     }
 
     private static bool IsCrawler(ClientWorld world, EntityId entity)

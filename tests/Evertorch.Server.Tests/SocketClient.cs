@@ -11,8 +11,8 @@ namespace Evertorch.Server.Tests
 {
 /// <summary>
 ///     A client over a real UDP socket, composed the way <c>GameClient</c> composes it: the LiteNetLib transport behind
-///     the simulated link, the connection, and for each map the controller, auto-attack, pickup, skill, and driver,
-///     with the movement sequence and the client tick carried across a map change. The test's own thread plays the
+///     the simulated link, the connection, and for each map the controller, auto-attack, pickup, skill, talk, and
+///     driver, with the movement sequence and the client tick carried across a map change. The test's own thread plays the
 ///     Unity frame loop: it polls, runs whole ticks at the server's rate from a real clock, and makes the requests the
 ///     player's keys would make.
 /// </summary>
@@ -28,11 +28,13 @@ internal sealed class SocketClient : IDisposable
     private readonly Stopwatch m_clock = Stopwatch.StartNew();
     private readonly TargetCycler m_targetCycler = new();
     private readonly List<PickCandidate> m_targetCandidates = new();
+    private readonly List<EntityId> m_npcWindows = new();
     private ClientWorld? m_world;
     private MovementController? m_controller;
     private AutoAttackState? m_autoAttack;
     private PickupState? m_pickup;
     private SkillState? m_skill;
+    private TalkState? m_talk;
     private LocalPlayerDriver? m_driver;
     private MoveIntentProducer? m_producer;
     private FixedTickClock? m_ticks;
@@ -68,6 +70,13 @@ internal sealed class SocketClient : IDisposable
     public PickupState Pickup => m_pickup ?? throw new InvalidOperationException("Not in the world.");
 
     public SkillState Skill => m_skill ?? throw new InvalidOperationException("Not in the world.");
+
+    public TalkState Talk => m_talk ?? throw new InvalidOperationException("Not in the world.");
+
+    /// <summary>
+    ///     Each NPC whose window opened, in order: where <c>GameClient</c> opens its NPC window.
+    /// </summary>
+    public IReadOnlyList<EntityId> NpcWindows => m_npcWindows;
 
     public void Dispose()
     {
@@ -192,6 +201,7 @@ internal sealed class SocketClient : IDisposable
     public void AttackTarget()
     {
         Pickup.Cancel();
+        Talk.Cancel();
         AutoAttack.Attack(World.Target);
     }
 
@@ -205,10 +215,37 @@ internal sealed class SocketClient : IDisposable
         if (drop != default)
         {
             AutoAttack.OnWalkRequested();
+            Talk.Cancel();
             Pickup.Pickup(drop);
         }
 
         return drop;
+    }
+
+    /// <summary>
+    ///     A click or tap on an NPC: walks up to it, and its window opens on arrival. Talking replaces whatever else
+    ///     the character was doing.
+    /// </summary>
+    public void TalkTo(EntityId npc)
+    {
+        AutoAttack.OnWalkRequested();
+        Pickup.Cancel();
+        Skill.Cancel();
+        Talk.Talk(npc);
+    }
+
+    /// <summary>
+    ///     E or the D-pad right: talks to the nearest drawn NPC. Returns it, or default when none is in view.
+    /// </summary>
+    public EntityId TalkToNearest()
+    {
+        EntityId npc = World.NearestNpc(World.Predictor.Position);
+        if (npc != default)
+        {
+            TalkTo(npc);
+        }
+
+        return npc;
     }
 
     /// <summary>
@@ -218,6 +255,7 @@ internal sealed class SocketClient : IDisposable
     public bool UseSkill(SkillDefinitionId skill)
     {
         Pickup.Cancel();
+        Talk.Cancel();
         return Skill.Use(skill, m_content.Skills[skill].TargetType);
     }
 
@@ -240,6 +278,8 @@ internal sealed class SocketClient : IDisposable
         m_autoAttack = new AutoAttackState(world, m_controller, Connection, 1.0 / Connection.ServerTickRate);
         m_pickup = new PickupState(world, m_controller, Connection);
         m_skill = new SkillState(world, m_controller, Connection, 1.0 / Connection.ServerTickRate);
+        m_talk = new TalkState(world, m_controller);
+        m_talk.Arrived += m_npcWindows.Add;
         m_producer ??= new MoveIntentProducer();
         m_driver = new LocalPlayerDriver(
             m_controller,
@@ -248,7 +288,8 @@ internal sealed class SocketClient : IDisposable
             Connection,
             m_autoAttack,
             m_pickup,
-            m_skill);
+            m_skill,
+            m_talk);
         m_ticks ??= new FixedTickClock(1f / Connection.ServerTickRate);
         m_lastSeconds = m_clock.Elapsed.TotalSeconds;
     }

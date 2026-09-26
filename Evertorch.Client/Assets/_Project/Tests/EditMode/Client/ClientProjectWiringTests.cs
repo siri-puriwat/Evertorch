@@ -44,6 +44,7 @@ public sealed class ClientProjectWiringTests
     [TestCase("Player/Slot3")]
     [TestCase("Player/Slot4")]
     [TestCase("Player/Slot5")]
+    [TestCase("Player/Talk")]
     public void InputActions_HaveTheActionsTheClientBinds(string actionPath)
     {
         Assert.That(LoadActions().FindAction(actionPath), Is.Not.Null);
@@ -166,6 +167,10 @@ public sealed class ClientProjectWiringTests
             Paths(actions, "Player/Pickup"),
             Is.EquivalentTo(new[] { "<Keyboard>/f", "<Gamepad>/buttonNorth" }));
         Assert.That(actions.FindAction("Player/Pickup", true).interactions, Is.Empty, "a press, not a hold");
+        Assert.That(
+            Paths(actions, "Player/Talk"),
+            Is.EquivalentTo(new[] { "<Keyboard>/e", "<Gamepad>/dpad/right" }));
+        Assert.That(actions.FindAction("Player/Talk", true).interactions, Is.Empty, "a press, not a hold");
         Assert.That(actions.FindAction("Player/Interact"), Is.Null, "the template's Interact is replaced");
     }
 

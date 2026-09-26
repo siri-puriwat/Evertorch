@@ -4,7 +4,7 @@ using UnityEngine.InputSystem;
 namespace Evertorch.Client
 {
 /// <summary>
-///     Target cycling and clearing, attacking, respawning, and picking up from the keyboard and the gamepad
+///     Target cycling and clearing, attacking, respawning, picking up, and talking from the keyboard and the gamepad
 ///     (Prototype Content §4). It only reports what was asked for; the request goes to the server, which decides.
 /// </summary>
 public sealed class CombatInputSource : IDisposable
@@ -15,6 +15,7 @@ public sealed class CombatInputSource : IDisposable
     private readonly InputAction m_attack;
     private readonly InputAction m_respawn;
     private readonly InputAction m_pickup;
+    private readonly InputAction m_talk;
     private CombatRequest m_request;
 
     public CombatInputSource(
@@ -23,7 +24,8 @@ public sealed class CombatInputSource : IDisposable
         InputAction clear,
         InputAction attack,
         InputAction respawn,
-        InputAction pickup)
+        InputAction pickup,
+        InputAction talk)
     {
         m_next = next ?? throw new ArgumentNullException(nameof(next));
         m_previous = previous ?? throw new ArgumentNullException(nameof(previous));
@@ -31,18 +33,21 @@ public sealed class CombatInputSource : IDisposable
         m_attack = attack ?? throw new ArgumentNullException(nameof(attack));
         m_respawn = respawn ?? throw new ArgumentNullException(nameof(respawn));
         m_pickup = pickup ?? throw new ArgumentNullException(nameof(pickup));
+        m_talk = talk ?? throw new ArgumentNullException(nameof(talk));
         m_next.performed += OnNext;
         m_previous.performed += OnPrevious;
         m_clear.performed += OnClear;
         m_attack.performed += OnAttack;
         m_respawn.performed += OnRespawn;
         m_pickup.performed += OnPickup;
+        m_talk.performed += OnTalk;
         m_next.Enable();
         m_previous.Enable();
         m_clear.Enable();
         m_attack.Enable();
         m_respawn.Enable();
         m_pickup.Enable();
+        m_talk.Enable();
     }
 
     public void Dispose()
@@ -53,6 +58,7 @@ public sealed class CombatInputSource : IDisposable
         m_attack.performed -= OnAttack;
         m_respawn.performed -= OnRespawn;
         m_pickup.performed -= OnPickup;
+        m_talk.performed -= OnTalk;
     }
 
     public CombatRequest TakeRequest()
@@ -96,6 +102,11 @@ public sealed class CombatInputSource : IDisposable
     private void OnPickup(InputAction.CallbackContext context)
     {
         m_request = CombatRequest.Pickup;
+    }
+
+    private void OnTalk(InputAction.CallbackContext context)
+    {
+        m_request = CombatRequest.Talk;
     }
 }
 }

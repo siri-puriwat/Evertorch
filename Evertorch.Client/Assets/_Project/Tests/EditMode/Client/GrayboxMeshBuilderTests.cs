@@ -104,5 +104,12 @@ public sealed class GrayboxMeshBuilderTests
         Assert.That(mesh.GetTriangles((int)GrayboxSurface.Floor).Length, Is.EqualTo(0));
         Object.DestroyImmediate(mesh);
     }
+
+    // Each NPC stands on its marker, drawn as a low plinth instead of a pillar (Prototype Content §5).
+    [Test]
+    public void NpcMarker_IsALowPlinth()
+    {
+        Assert.That(GrayboxMeshBuilder.NpcMarkerHeight, Is.EqualTo(0.2f));
+    }
 }
 }

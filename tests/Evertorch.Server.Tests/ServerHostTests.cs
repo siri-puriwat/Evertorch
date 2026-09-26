@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using NUnit.Framework;
 
@@ -226,6 +227,24 @@ public sealed class ServerHostTests
 
         Assert.That(start, Throws.InstanceOf<OptionsValidationException>());
         Assert.That(log, Is.Empty);
+    }
+
+    [Test]
+    public void Start_WithTheRepositoryContent_LogsItsMapsNpcsAndQuests()
+    {
+        using var root = new TemporaryDirectory();
+        WriteValidContent(root);
+        var logs = new CapturingLoggerProvider();
+        HostApplicationBuilder builder = TestHosts.CreateBuilder(EphemeralPort, root.Path);
+        builder.Logging.AddProvider(logs);
+        using IHost host = builder.Build();
+
+        host.Start();
+        host.StopAsync().GetAwaiter().GetResult();
+
+        string loaded = logs.Lines.Single(line => line.Contains(" ContentLoaded: "));
+        Assert.That(loaded, Does.Contain(", 2 maps, 2 NPCs, 1 quests."));
+        Assert.That(loaded, Does.Contain("Npcs=2").And.Contain("Quests=1"));
     }
 
     [Test]

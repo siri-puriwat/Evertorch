@@ -70,7 +70,13 @@ public sealed class VisibilityPhase : ITickPhase
                         entity.Facing,
                         entity.StateFlags,
                         entity.SharedHealthPermille));
-                if (entity is ItemDropEntity drop && drop.DroppedTick == tick)
+                if (entity is NpcEntity npc)
+                {
+                    // Each spawn, on entering, an attach, a map change, or coming into range, is followed by what the
+                    // NPC offers (Network Protocol §9).
+                    m_sender.Send(session.Connection, npc.Services);
+                }
+                else if (entity is ItemDropEntity drop && drop.DroppedTick == tick)
                 {
                     // Only a client that sees the drop land is told what fell; one that walks up later sees the item.
                     m_sender.Send(

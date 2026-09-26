@@ -35,6 +35,11 @@ public sealed class MessageSender
         m_outbound.Send(connection, m_buffer.AsSpan(0, message.Write(m_buffer)));
     }
 
+    public void Send(ConnectionId connection, NpcServices message)
+    {
+        m_outbound.Send(connection, m_buffer.AsSpan(0, message.Write(m_buffer)));
+    }
+
     public void Send(ConnectionId connection, EntityDespawn message)
     {
         m_outbound.Send(connection, m_buffer.AsSpan(0, message.Write(m_buffer)));

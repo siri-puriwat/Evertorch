@@ -219,6 +219,17 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
                 }
 
                 break;
+            case MessageOpcode.NpcServices:
+                if (NpcServices.TryRead(payload, out NpcServices? services) && services != null)
+                {
+                    WithWorld(world => world.OnNpcServices(services));
+                }
+                else
+                {
+                    MalformedMessages++;
+                }
+
+                break;
             case MessageOpcode.EntityDied:
                 if (EntityDied.TryRead(payload, out EntityDied died))
                 {

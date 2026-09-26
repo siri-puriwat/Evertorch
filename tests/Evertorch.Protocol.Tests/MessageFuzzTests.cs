@@ -157,6 +157,22 @@ public sealed class MessageFuzzTests
             Encode(new StatusEffects(new[] { new StatusEffectEntry(new StatusDefinitionId("status.focus"), 42_000) })),
             payload => StatusEffects.TryRead(payload, out StatusEffects? message) ? Encode(message!) : null);
         yield return Case(
+            "NpcServices",
+            Encode(
+                new NpcServices(
+                    new EntityId(13),
+                    new[] { new NpcServiceEntry(new ItemDefinitionId("item.consumable.minor_health"), 20, 10) },
+                    new[]
+                    {
+                        new NpcQuestOffer(
+                            new QuestDefinitionId("quest.crawler_hunt"),
+                            new MonsterDefinitionId("monster.forest_crawler"),
+                            5,
+                            150,
+                            100)
+                    })),
+            payload => NpcServices.TryRead(payload, out NpcServices? message) ? Encode(message!) : null);
+        yield return Case(
             "CharacterProgress",
             Encode(new CharacterProgress(2, 45, 50)),
             payload => CharacterProgress.TryRead(payload, out CharacterProgress message) ? Encode(message) : null);
@@ -570,6 +586,13 @@ public sealed class MessageFuzzTests
     }
 
     private static byte[] Encode(SkillResolved message)
+    {
+        byte[] buffer = new byte[message.GetEncodedLength()];
+        message.Write(buffer);
+        return buffer;
+    }
+
+    private static byte[] Encode(NpcServices message)
     {
         byte[] buffer = new byte[message.GetEncodedLength()];
         message.Write(buffer);

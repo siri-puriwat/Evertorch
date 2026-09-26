@@ -14,6 +14,9 @@ public enum CombatRequest
     Respawn = 5,
 
     /// <summary>Pick up the nearest drop (F, gamepad North).</summary>
-    Pickup = 6
+    Pickup = 6,
+
+    /// <summary>Walk up to the nearest NPC in view and open its window (Prototype Content §4).</summary>
+    Talk = 7
 }
 }

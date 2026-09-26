@@ -14,7 +14,7 @@ internal static class WireEnums
 
     public static bool IsDefined(EntityKind value)
     {
-        return value >= EntityKind.Player && value <= EntityKind.ItemDrop;
+        return value >= EntityKind.Player && value <= EntityKind.Npc;
     }
 
     public static bool IsDefined(CombatResult value)

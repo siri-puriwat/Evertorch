@@ -47,6 +47,7 @@ public static class MessageRouting
             case MessageOpcode.CharacterProgress:
             case MessageOpcode.SkillList:
             case MessageOpcode.StatusEffects:
+            case MessageOpcode.NpcServices:
             case MessageOpcode.EntityRevived:
             case MessageOpcode.DisconnectNotice:
             case MessageOpcode.CharacterList:

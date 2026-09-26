@@ -127,6 +127,8 @@ public sealed class EntitySpawn
                 return MonsterDefinitionId.TryCreate(definitionId, out MonsterDefinitionId _);
             case EntityKind.ItemDrop:
                 return ItemDefinitionId.TryCreate(definitionId, out ItemDefinitionId _);
+            case EntityKind.Npc:
+                return NpcDefinitionId.TryCreate(definitionId, out NpcDefinitionId _);
             default:
                 return false;
         }

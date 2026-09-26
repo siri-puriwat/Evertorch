@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using Evertorch.Game;
@@ -24,16 +25,10 @@ internal sealed class TestServer
     private static readonly Lazy<ServerContent> RepositoryContent =
         new(() => ServerContentLoader.Load(PackageFixture.BuildRepositoryPackage()));
 
-    // Most server tests are about players on the starting map; without the other maps and without monsters their
-    // message counts stay exact.
-    private static readonly Lazy<ServerContent> StartingMapContent =
-        new(() => Copy(RepositoryContent.Value, IsStartingMap, true));
-
-    private static readonly Lazy<ServerContent> StartingMapContentWithoutMonsters =
-        new(() => Copy(RepositoryContent.Value, IsStartingMap, false));
-
-    private static readonly Lazy<ServerContent> EveryMapContentWithoutMonsters =
-        new(() => Copy(RepositoryContent.Value, _ => true, false));
+    // Most server tests are about players on the starting map; without the other maps, monsters, and NPCs their
+    // message counts and entity IDs stay exact. Each combination is built once.
+    private static readonly ConcurrentDictionary<(bool EveryMap, bool Monsters, bool Npcs), ServerContent> Contents =
+        new();
 
     private readonly TickPipeline m_pipeline;
     private readonly List<Action> m_afterCommands = new();
@@ -60,16 +55,12 @@ internal sealed class TestServer
         int reconnectGraceMs = 0,
         bool isAbuseControlEnabled = true,
         AbuseOptions? abuseOptions = null,
-        bool withEveryMap = false)
+        bool withEveryMap = false,
+        bool withNpcs = false)
     {
-        if (withEveryMap)
-        {
-            Content = withMonsters ? RepositoryContent.Value : EveryMapContentWithoutMonsters.Value;
-        }
-        else
-        {
-            Content = withMonsters ? StartingMapContent.Value : StartingMapContentWithoutMonsters.Value;
-        }
+        Content = Contents.GetOrAdd(
+            (withEveryMap, withMonsters, withNpcs),
+            key => Copy(RepositoryContent.Value, key.EveryMap ? _ => true : IsStartingMap, key.Monsters, key.Npcs));
 
         var network = new NetworkOptions
         {
@@ -674,7 +665,11 @@ internal sealed class TestServer
     }
 
     // A portal whose destination is left out stays: a test that asks for every map gets the transfers too.
-    private static ServerContent Copy(ServerContent content, Func<MapDefinition, bool> keep, bool withMonsters)
+    private static ServerContent Copy(
+        ServerContent content,
+        Func<MapDefinition, bool> keep,
+        bool withMonsters,
+        bool withNpcs)
     {
         var maps = new Dictionary<MapDefinitionId, MapDefinition>();
         foreach (MapDefinition map in content.Maps.Values.Where(keep))
@@ -689,7 +684,7 @@ internal sealed class TestServer
                     withMonsters ? map.MonsterSpawns : Array.Empty<MonsterSpawn>(),
                     map.Navigation,
                     map.Portals,
-                    map.Npcs));
+                    withNpcs ? map.Npcs : Array.Empty<NpcPlacement>()));
         }
 
         return new ServerContent(

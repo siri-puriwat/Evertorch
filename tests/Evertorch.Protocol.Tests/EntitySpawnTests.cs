@@ -57,7 +57,7 @@ public sealed class EntitySpawnTests
         0);
 
     [TestCase(0)]
-    [TestCase(4)]
+    [TestCase(5)]
     [TestCase(255)]
     public void TryRead_WhenKindIsUnknown_ReturnsFalse(byte kind)
     {
@@ -93,6 +93,29 @@ public sealed class EntitySpawnTests
         Assert.That(read.DefinitionId, Is.EqualTo("item.material.slime_gel"));
         Assert.That(EntitySpawn.TryRead(withHealth, out _), Is.False);
         Assert.That(EntitySpawn.TryRead(monsterAsDrop, out _), Is.False);
+    }
+
+    [Test]
+    public void Npc_WithAnNpcId_RoundTripsAndRefusesOtherIdsAndHealth()
+    {
+        var npc = new EntitySpawn(
+            new EntityId(13),
+            EntityKind.Npc,
+            "npc.quartermaster",
+            new WorldPosition(-3.5f, 0f, 4.5f),
+            new WorldDirection(0.6f, -0.8f),
+            EntityStateFlags.None,
+            0);
+        byte[] bytes = new byte[npc.GetEncodedLength()];
+        npc.Write(bytes);
+        byte[] withHealth = WireMatrix.With(bytes, bytes.Length - 2, 0x01, 0x00);
+        byte[] monsterAsNpc = WireMatrix.With(WireMatrix.With(MonsterBytes, KindOffset, 0x04), 44, 0x00, 0x00);
+
+        Assert.That(EntitySpawn.TryRead(bytes, out EntitySpawn? read), Is.True);
+        Assert.That(read!.Kind, Is.EqualTo(EntityKind.Npc));
+        Assert.That(read.DefinitionId, Is.EqualTo("npc.quartermaster"));
+        Assert.That(EntitySpawn.TryRead(withHealth, out _), Is.False, "an NPC shares no HP");
+        Assert.That(EntitySpawn.TryRead(monsterAsNpc, out _), Is.False, "a monster ID is not an NPC's");
     }
 
     [Test]

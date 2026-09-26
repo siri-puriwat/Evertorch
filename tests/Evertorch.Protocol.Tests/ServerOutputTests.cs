@@ -50,6 +50,11 @@ public sealed class ServerOutputTests
         ["JobDefinitionId"] = new[] { "Value" },
         ["LogoutComplete"] = Array.Empty<string>(),
         ["MapDefinitionId"] = new[] { "Value" },
+        ["MonsterDefinitionId"] = new[] { "Value" },
+        ["NpcQuestOffer"] = new[] { "BaseExperience", "Coins", "Count", "Monster", "Quest" },
+        ["NpcServiceEntry"] = new[] { "BuyPrice", "Item", "SellPrice" },
+        ["NpcServices"] = new[] { "Entries", "Npc", "Offers" },
+        ["QuestDefinitionId"] = new[] { "Value" },
         ["ServerHello"] = new[]
         {
             "ProtocolVersion", "RequiredClientContentVersion", "ServerBuildVersion", "ServerTickRate",
@@ -78,6 +83,13 @@ public sealed class ServerOutputTests
             "MaximumHealth", "MaximumSpirit", "MovementSpeed", "Position", "ServerTick"
         },
         ["WorldPosition"] = new[] { "X", "Y", "Z" }
+    };
+
+    // An NPC's prices and a quest's terms travel on purpose, because the player must see them (Content Pipeline §5):
+    // exactly these fields may carry a server-only word.
+    private static readonly string[] SentOnPurpose =
+    {
+        "NpcServiceEntry.BuyPrice", "NpcServiceEntry.SellPrice", "NpcQuestOffer.BaseExperience"
     };
 
     // Words of the content's server-only fields (Content Pipeline §5).
@@ -167,11 +179,12 @@ public sealed class ServerOutputTests
     [Test]
     public void ServerMessages_NameNoServerOnlyValueOfTheContent()
     {
-        string[] offenders = Sent()
+        string[] named = Sent()
             .SelectMany(type => type.Value.Where(IsServerOnlyName).Select(field => $"{type.Key}.{field}"))
             .ToArray();
 
-        Assert.That(offenders, Is.Empty);
+        Assert.That(named.Except(SentOnPurpose), Is.Empty);
+        Assert.That(named, Is.SupersetOf(SentOnPurpose), "each field allowed on purpose is still sent");
     }
 
     [Test]

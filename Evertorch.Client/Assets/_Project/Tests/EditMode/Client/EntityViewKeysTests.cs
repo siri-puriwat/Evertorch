@@ -14,6 +14,7 @@ public sealed class EntityViewKeysTests
         var monster = new ClientMonster(new MonsterDefinitionId("monster.a"), "A", "monster_a", "monster_a_icon");
         var item = new ClientItem(new ItemDefinitionId("item.material.a"), "A", ItemType.Material, "pickup_a",
             "item_a_icon");
+        var npc = new ClientNpc(new NpcDefinitionId("npc.a"), "A", "npc_a");
         return new ClientContent(
             "0000000000000000",
             new Dictionary<MapDefinitionId, ClientMap>(),
@@ -21,7 +22,8 @@ public sealed class EntityViewKeysTests
             new Dictionary<MonsterDefinitionId, ClientMonster> { { monster.Id, monster } },
             new Dictionary<ItemDefinitionId, ClientItem> { { item.Id, item } },
             new Dictionary<SkillDefinitionId, ClientSkill>(),
-            new Dictionary<StatusDefinitionId, ClientStatusEffect>());
+            new Dictionary<StatusDefinitionId, ClientStatusEffect>(),
+            new Dictionary<NpcDefinitionId, ClientNpc> { { npc.Id, npc } });
     }
 
     [TestCase(EntityKind.Monster, "monster.unknown")]
@@ -30,6 +32,8 @@ public sealed class EntityViewKeysTests
     [TestCase(EntityKind.Monster, "job.a")]
     [TestCase(EntityKind.Player, "monster.a")]
     [TestCase(EntityKind.None, "job.a")]
+    [TestCase(EntityKind.Npc, "npc.unknown")]
+    [TestCase(EntityKind.Npc, "monster.a")]
     public void ForEntity_WhenTheContentDoesNotKnowIt_IsEmpty(EntityKind kind, string definitionId)
     {
         Assert.That(EntityViewKeys.ForEntity(CreateContent(), kind, definitionId), Is.Empty);
@@ -49,6 +53,12 @@ public sealed class EntityViewKeysTests
         string key = EntityViewKeys.ForEntity(CreateContent(), EntityKind.Monster, "monster.a");
 
         Assert.That(key, Is.EqualTo("monster_a"));
+    }
+
+    [Test]
+    public void ForEntity_ForAKnownNpc_UsesItsPrefabKey()
+    {
+        Assert.That(EntityViewKeys.ForEntity(CreateContent(), EntityKind.Npc, "npc.a"), Is.EqualTo("npc_a"));
     }
 
     [Test]

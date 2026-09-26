@@ -47,6 +47,7 @@ public enum MessageOpcode : ushort
     LogoutComplete = 0x8019,
     CharacterProgress = 0x801A,
     SkillList = 0x801B,
-    StatusEffects = 0x801C
+    StatusEffects = 0x801C,
+    NpcServices = 0x801D
 }
 }
