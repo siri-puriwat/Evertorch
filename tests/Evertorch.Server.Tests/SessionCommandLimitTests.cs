@@ -306,5 +306,33 @@ public sealed class SessionCommandLimitTests
         Assert.That(server.SessionOf(player).ThrottledCommands, Is.EqualTo(5));
         Assert.That(server.SessionManager.ThrottledCommands, Is.EqualTo(5));
     }
+
+    [Test]
+    public void TownCommands_OverTheItemBucket_AreRefusedAsNotAllowedNow_FromTheSameBucket()
+    {
+        var server = new TestServer();
+        ConnectionId player = server.EnterWorld(7);
+        var nobody = new EntityId(999999);
+
+        uint sequence = 1;
+        for (int index = 0; index < Defaults.ItemCommandBurst / 4; index++)
+        {
+            server.SendBuy(player, nobody, "item.consumable.minor_health", 1, sequence++);
+            server.SendSell(player, nobody, 999999, 1, sequence++);
+            server.SendAcceptQuest(player, nobody, "quest.crawler_hunt", sequence++);
+            server.SendCompleteQuest(player, nobody, "quest.crawler_hunt", sequence++);
+        }
+
+        server.SendCompleteQuest(player, nobody, "quest.crawler_hunt", sequence);
+        server.Tick();
+
+        CommandRejected[] rejections = Rejections(server, player);
+        Assert.That(
+            rejections.Take(Defaults.ItemCommandBurst).Select(rejection => rejection.Reason),
+            Is.All.EqualTo(CommandRejectionReason.InvalidTarget),
+            "no such NPC");
+        Assert.That(rejections.Last().Reason, Is.EqualTo(CommandRejectionReason.NotAllowedNow));
+        Assert.That(server.SessionOf(player).ThrottledCommands, Is.EqualTo(1));
+    }
 }
 }

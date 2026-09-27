@@ -254,6 +254,13 @@ public sealed class TownLoopAcceptanceTests
             .Position;
         Assert.That(client.DistanceTo(standing), Is.LessThanOrEqualTo(TalkState.OpenDistance), $"{step}: beside it");
         Assert.That(world.Target, Is.EqualTo(default(EntityId)), $"{step}: nothing targeted");
+
+        // The console's view is republished once a second, so a player who has just entered may not be in it yet.
+        Assert.That(
+            client.PumpUntil(() => admin.GetPlayers(AdminActor.LocalConsole)
+                .Any(player => player.Entity == world.LocalEntity)),
+            Is.True,
+            $"{step}: the console lists the player");
         Assert.That(SummaryOf(admin, world.LocalEntity).RefusedCommands, Is.Zero, $"{step}: nothing refused");
         Assert.That(world.SnapshotsApplied - snapshots, Is.Positive, $"{step}: snapshots came meanwhile");
         AssertNoNpcInASnapshot(world, step);
@@ -360,7 +367,8 @@ public sealed class TownLoopAcceptanceTests
     // beside the staging point and joins every fight, so both damage each crawler and each kill counts for both quests
     // (Gameplay Systems §2.2), however the damage splits. Crawlers die one at a time, the later ones after their respawn
     // (Gameplay Systems §10), until both quests are ready. Whoever lands the killing blow picks up everything the crawler
-    // drops, the player wears the first sword and armor it holds, and each drinks a potion when below half its HP.
+    // drops, the player wears the first sword and armor it holds, and each drinks a potion when below half its HP; then
+    // the partner walks back beside the staging point, where no crawler at home can see it.
     private static void HuntCrawlers(
         ServerContent content,
         IAdminCommandService admin,
@@ -402,6 +410,12 @@ public sealed class TownLoopAcceptanceTests
             kills++;
             Assert.That(kills, Is.LessThanOrEqualTo(MaxKills), $"{step}: both quests ready within {MaxKills} kills");
             string killStep = $"{step} {kills}";
+
+            // Only the player is pumped while it lures a crawler, so the partner could not answer a crawler of its own.
+            Assert.That(
+                partner.DistanceTo(beside),
+                Is.LessThan(0.5f),
+                $"{killStep}: the partner beside the staging point");
             EntityId target = CurrentAttacker(world, attacks) ?? Lure(killStep, client, staging, attacks);
             WalkTo(killStep, client, staging);
             int dropsBefore = drops.Count;
@@ -412,7 +426,8 @@ public sealed class TownLoopAcceptanceTests
             Assert.That(
                 SocketClients.PumpUntil(() => world.Target == target && partnerWorld.Target == target, client, partner),
                 Is.True,
-                $"{killStep}: the server confirmed the crawler as the target of both");
+                $"{killStep}: the server confirmed the crawler as the target of both; player: "
+                + $"{TargetingOf(admin, world, target)}; partner: {TargetingOf(admin, partnerWorld, target)}");
             partner.AttackTarget();
             client.AttackTarget();
             Assert.That(
@@ -449,6 +464,10 @@ public sealed class TownLoopAcceptanceTests
             WearWhatIsHeld(killStep, client, ClothArmor, EquipmentSlot.Armor);
             DrinkWhenHurt(killStep, client);
             DrinkWhenHurt(killStep, partner);
+
+            // The partner's chases and pickups draw it toward the crawlers' ground, where a roaming one once saw it and
+            // killed it unwatched.
+            WalkTo(killStep, partner, beside);
         }
 
         Assert.That(shared, Is.Positive, $"{step}: kills counted for both players");
@@ -896,6 +915,18 @@ public sealed class TownLoopAcceptanceTests
         return world.Remotes.TryGetValue(entity, out RemoteEntity? remote) && remote.DefinitionId == ForestCrawler;
     }
 
+    private static string TargetingOf(IAdminCommandService admin, ClientWorld world, EntityId target)
+    {
+        string crawler = world.Remotes.TryGetValue(target, out RemoteEntity? remote)
+            ? $"{(remote.IsDead ? "dead" : "alive")} at {Drawn(world, remote)}"
+            : "out of view";
+        PlayerSummary? summary = admin.GetPlayers(AdminActor.LocalConsole)
+            .FirstOrDefault(player => player.Entity == world.LocalEntity);
+        return $"target {world.Target.Value}, {world.LocalHealth}/{world.LocalMaximumHealth} HP"
+            + $"{(world.IsLocalDead ? " dead" : string.Empty)} at {world.Predictor.Position}, crawler {target.Value} "
+            + $"{crawler}, {summary?.RefusedCommands} refused";
+    }
+
     private static bool IsAlive(ClientWorld world, EntityId entity)
     {
         return world.Remotes.TryGetValue(entity, out RemoteEntity? remote) && !remote.IsDead;
@@ -1007,6 +1038,11 @@ public sealed class TownLoopAcceptanceTests
         // Nothing the whole loop logged names the database's connection string or password or the player's identity.
         IReadOnlyList<string> lines = logs.Lines;
         Assert.That(lines.Any(line => line.Contains("MapTransferred")), Is.True, "logs: the loop was captured");
+        Assert.That(
+            new[] { "ItemBought", "ItemSold", "QuestAccepted", "QuestCompleted" }
+                .Where(name => !lines.Any(line => line.Contains(name))),
+            Is.Empty,
+            "logs: the town's events were captured, so the scan below covers them");
         Assert.That(
             lines.Where(line => line.Contains(m_database.ConnectionString)
                 || line.Contains("Password", StringComparison.OrdinalIgnoreCase)

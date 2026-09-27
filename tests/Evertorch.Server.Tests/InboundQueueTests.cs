@@ -115,8 +115,9 @@ public sealed class InboundQueueTests
         return changed;
     }
 
-    // Milestone 6's commands cut short, one byte too long, or carrying a value no client may send (Network Protocol
-    // §11). The item row sits after the opcode, the slot too, and the skill ID's text after its two-byte length.
+    // Milestone 6's and 7's commands cut short, one byte too long, or carrying a value no client may send (Network
+    // Protocol §11). The item row sits after the opcode, the slot and the NPC too, the skill ID's text after its
+    // two-byte length, and the quest ID's after the NPC and its length.
     private static IEnumerable<TestCaseData> MalformedItemAndSkillCommands()
     {
         byte[] useSkill = UseSkillPayload();
@@ -125,10 +126,12 @@ public sealed class InboundQueueTests
         byte[] useItem = UseItemPayload();
         byte[] buy = BuyPayload();
         byte[] sell = SellPayload();
+        byte[] accept = AcceptQuestPayload();
+        byte[] complete = CompleteQuestPayload();
         foreach ((string name, byte[] payload) in new[]
                  {
                      ("UseSkill", useSkill), ("EquipItem", equip), ("UnequipItem", unequip), ("UseItem", useItem),
-                     ("BuyItem", buy), ("SellItem", sell)
+                     ("BuyItem", buy), ("SellItem", sell), ("AcceptQuest", accept), ("CompleteQuest", complete)
                  })
         {
             yield return new TestCaseData(payload.Take(payload.Length - 1).ToArray()).SetName($"{name} cut short");
@@ -149,6 +152,12 @@ public sealed class InboundQueueTests
         yield return new TestCaseData(With(buy, 18, 4, 0x00)).SetName("BuyItem of none");
         yield return new TestCaseData(With(sell, 10, 8, 0x00)).SetName("SellItem of row 0");
         yield return new TestCaseData(With(sell, 18, 4, 0x00)).SetName("SellItem of none");
+        const int quest = 12;
+        yield return new TestCaseData(With(accept, 2, 8, 0x00)).SetName("AcceptQuest from NPC 0");
+        yield return new TestCaseData(With(accept, quest + 5, 1, 0x20)).SetName("AcceptQuest naming no quest");
+        yield return new TestCaseData(With(complete, 2, 8, 0x00)).SetName("CompleteQuest at NPC 0");
+        yield return new TestCaseData(With(complete, quest, 1, 0xFF)).SetName("CompleteQuest of broken UTF-8");
+        yield return new TestCaseData(With(complete, quest - 2, 2, 0xFF)).SetName("CompleteQuest longer than any ID");
     }
 
     [TestCaseSource(nameof(MalformedItemAndSkillCommands))]

@@ -914,7 +914,7 @@ public sealed class PrototypeAcceptanceTests
         first.AutoAttack.OnWalkRequested();
 
         // Within its range of 6 m and beyond its keep distance of 3.5 m, toward the staging point; the wisp roams, so
-        // the first choice can fall on an obstacle.
+        // every distance on that line can fall on an obstacle, and the line then turns a little either way.
         WalkTo(
             step,
             new Dictionary<SocketClient, WorldPosition>
@@ -1027,7 +1027,8 @@ public sealed class PrototypeAcceptanceTests
         return admin.GetPlayers(AdminActor.LocalConsole).Single(player => player.Entity == entity);
     }
 
-    // The first point at one of the distances from `from` toward `toward` on which a player can stand.
+    // The first point at one of the distances from `from` toward `toward` on which a player can stand in sight of
+    // `from`, the line turned up to 80 degrees either way when none on it will do.
     private static WorldPosition StandableToward(
         NavigationGrid grid,
         WorldPosition from,
@@ -1035,15 +1036,22 @@ public sealed class PrototypeAcceptanceTests
         params float[] distances)
     {
         float length = Horizontal(from, toward);
-        foreach (float distance in distances)
+        float alongX = (toward.X - from.X) / length;
+        float alongZ = (toward.Z - from.Z) / length;
+        foreach (int degrees in new[] { 0, 20, -20, 40, -40, 60, -60, 80, -80 })
         {
-            var point = new WorldPosition(
-                from.X + (toward.X - from.X) / length * distance,
-                0f,
-                from.Z + (toward.Z - from.Z) / length * distance);
-            if (grid.CanOccupy(point.X, point.Z))
+            double angle = degrees * Math.PI / 180.0;
+            float directionX = (float)(alongX * Math.Cos(angle) - alongZ * Math.Sin(angle));
+            float directionZ = (float)(alongX * Math.Sin(angle) + alongZ * Math.Cos(angle));
+            foreach (float distance in distances)
             {
-                return point;
+                var point = new WorldPosition(from.X + directionX * distance, 0f, from.Z + directionZ * distance);
+                if (grid.CanOccupy(point.X, point.Z)
+                    && grid.TrySampleHeight(point.X, point.Z, out float height)
+                    && grid.HasLineOfSight(new WorldPosition(point.X, height, point.Z), from))
+                {
+                    return point;
+                }
             }
         }
 
@@ -1070,6 +1078,21 @@ public sealed class PrototypeAcceptanceTests
         public const string FirstName = "ProtoFirst";
         public const string SecondIdentity = "prototype-second";
         public const string SecondName = "ProtoSecond";
+    }
+
+    // The soak of Milestone 7 met a wisp standing where every distance toward the staging point fell on an obstacle.
+    [Test]
+    public void StandableToward_WhereItsLineHasNoPlaceToStand_TurnsUntilOneIsInSight()
+    {
+        ServerContent content = ServerContentLoader.Load(PackageFixture.BuildRepositoryPackage());
+        NavigationGrid field = content.Maps[new MapDefinitionId("map.training_field")].Navigation;
+        var wisp = new WorldPosition(9.19346f, 0f, -7.222365f);
+        var staging = new WorldPosition(0.67014027f, 0f, -6.400872f);
+
+        WorldPosition place = StandableToward(field, wisp, staging, 5f, 4.5f, 5.5f, 4f);
+
+        Assert.That(field.CanOccupy(place.X, place.Z), Is.True);
+        Assert.That(Horizontal(wisp, place), Is.InRange(3.99f, 5.51f), "within its range, beyond its keep distance");
     }
 
     [Test]
