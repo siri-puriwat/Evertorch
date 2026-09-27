@@ -10,7 +10,7 @@ namespace Evertorch.Client.Tests.PlayMode
 {
 /// <summary>
 ///     What keeps the live tests from leaving a server process or a database container behind when the editor dies in
-///     the middle of one (Coding Standards §10).
+///     the middle of one, and what manual play on this machine needs (Coding Standards §10).
 /// </summary>
 public sealed class LiveInfrastructureTests
 {
@@ -63,6 +63,25 @@ public sealed class LiveInfrastructureTests
 
         Assert.That(isInJob, Is.True);
         Assert.That(hasEnded, Is.True, "closing the job's last handle ended the process");
+    }
+
+    // The live tests pin the gateway's certificate and need only that it exists; a player's client signing in from
+    // the editor, a player build, or a browser needs the machine to trust it (Network Protocol §4).
+    [Test]
+    public void TheDevelopmentCertificate_IsTrusted()
+    {
+        m_process = Process.Start(
+            new ProcessStartInfo("dotnet", "dev-certs https --check --trust")
+            {
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true
+            })!;
+        string output = m_process.StandardOutput.ReadToEnd();
+        bool hasEnded = m_process.WaitForExit(30_000);
+
+        Assert.That(hasEnded, Is.True, "dotnet dev-certs answered");
+        Assert.That(m_process.ExitCode, Is.Zero, $"run `dotnet dev-certs https --trust` once: {output}");
     }
 
     [UnityTest]

@@ -128,7 +128,7 @@ public sealed class LiveServerCombatTests : InputTestFixture
         Keyboard keyboard = InputSystem.AddDevice<Keyboard>();
         Mouse mouse = InputSystem.AddDevice<Mouse>();
         Touchscreen touchscreen = InputSystem.AddDevice<Touchscreen>();
-        GameClient client = CreateClient(port, actionsPath);
+        GameClient client = CreateClient(actionsPath);
         yield return CreateAndEnterThroughTheLoginPanel(client, "LiveBoth");
         yield return WaitUntil(() => client.World?.Inventory.IsCurrent == true, StartTimeoutSeconds);
         Assert.That(client.World, Is.Not.Null, $"{client.Status} server output: {m_server.JoinOutput()}");
@@ -199,7 +199,7 @@ public sealed class LiveServerCombatTests : InputTestFixture
 
         Keyboard keyboard = InputSystem.AddDevice<Keyboard>();
         Gamepad gamepad = InputSystem.AddDevice<Gamepad>();
-        GameClient client = CreateClient(port, actionsPath);
+        GameClient client = CreateClient(actionsPath);
         yield return CreateAndEnterThroughTheLoginPanel(
             client,
             "LiveArmed",
@@ -251,7 +251,7 @@ public sealed class LiveServerCombatTests : InputTestFixture
         Assert.That(m_server!.TryReadListeningPort(out int port), Is.True, $"server output: {m_server.JoinOutput()}");
 
         Keyboard keyboard = InputSystem.AddDevice<Keyboard>();
-        GameClient client = CreateClient(port, actionsPath);
+        GameClient client = CreateClient(actionsPath);
         yield return CreateAndEnterThroughTheLoginPanel(
             client,
             "LiveThirsty",
@@ -294,7 +294,7 @@ public sealed class LiveServerCombatTests : InputTestFixture
 
         Keyboard keyboard = InputSystem.AddDevice<Keyboard>();
         Gamepad gamepad = InputSystem.AddDevice<Gamepad>();
-        GameClient client = CreateClient(port, actionsPath);
+        GameClient client = CreateClient(actionsPath);
         yield return CreateAndEnterThroughTheLoginPanel(client, "LiveFighter");
         yield return WaitUntil(() => client.World != null && client.Combat != null, StartTimeoutSeconds);
         Assert.That(client.World, Is.Not.Null, $"{client.Status} server output: {m_server.JoinOutput()}");
@@ -331,7 +331,7 @@ public sealed class LiveServerCombatTests : InputTestFixture
         Keyboard keyboard = InputSystem.AddDevice<Keyboard>();
         Gamepad gamepad = InputSystem.AddDevice<Gamepad>();
         Mouse mouse = InputSystem.AddDevice<Mouse>();
-        GameClient client = CreateClient(port, actionsPath);
+        GameClient client = CreateClient(actionsPath);
         yield return CreateAndEnterThroughTheLoginPanel(client, "LivePicker");
         yield return WaitUntil(() => client.World?.Inventory.IsCurrent == true, StartTimeoutSeconds);
         Assert.That(client.World, Is.Not.Null, $"{client.Status} server output: {m_server.JoinOutput()}");
@@ -357,7 +357,8 @@ public sealed class LiveServerCombatTests : InputTestFixture
 
         client.Disconnect();
         yield return WaitUntil(() => client.World == null, StartTimeoutSeconds);
-        yield return ReconnectThroughTheLoginPanel(client, port);
+        Assert.That(m_server.TryReadGateway(out int gatewayPort, out string _), Is.True, m_server.JoinOutput());
+        yield return ReconnectThroughTheLoginPanel(client, gatewayPort);
         Assert.That(HeldGel(client.World!), Is.EqualTo(held), "the retained character still holds the gel");
         Assert.That(client.World!.Inventory.Revision, Is.EqualTo(revision));
 
@@ -369,7 +370,7 @@ public sealed class LiveServerCombatTests : InputTestFixture
         m_server.Start(m_database!, "--World:RandomSeed=11");
         LiveServer restarted = m_server;
         yield return WaitUntil(() => restarted.TryReadListeningPort(out int _), StartTimeoutSeconds);
-        Assert.That(restarted.TryReadListeningPort(out int restartedPort), Is.True, restarted.JoinOutput());
+        Assert.That(restarted.TryReadGateway(out int restartedPort, out string _), Is.True, restarted.JoinOutput());
         yield return ReconnectThroughTheLoginPanel(client, restartedPort);
         Assert.That(HeldGel(client.World!), Is.EqualTo(held), "the gel was loaded from the database");
         Assert.That(client.World!.Inventory.Revision, Is.EqualTo(revision));
@@ -444,6 +445,7 @@ public sealed class LiveServerCombatTests : InputTestFixture
         string name,
         Action? beforeEntering = null)
     {
+        yield return LiveSignIn.PressConnect(client);
         yield return WaitUntil(() => client.Connection != null, StartTimeoutSeconds);
         ClientConnection connection = client.Connection!;
         bool hasList = false;
@@ -480,8 +482,8 @@ public sealed class LiveServerCombatTests : InputTestFixture
     }
 
     // After a close the client leaves the map for the main menu and says why in its own words. Nothing reconnects by
-    // itself: the login panel's Reconnect, pressed on the port the player typed, connects and enters the last
-    // character.
+    // itself: the login panel's Reconnect, pressed on the gateway port the player typed, connects and enters the last
+    // character, with the kept token while the gateway is the same, or signing in again once it moved.
     private static IEnumerator ReconnectThroughTheLoginPanel(GameClient client, int port)
     {
         yield return WaitUntil(
@@ -885,7 +887,7 @@ public sealed class LiveServerCombatTests : InputTestFixture
         Assert.That(detail.text, Does.EndWith(" m"), "the frame gives the distance to the target");
     }
 
-    private GameClient CreateClient(int port, string actionsPath)
+    private GameClient CreateClient(string actionsPath)
     {
         m_actions = InputActionAsset.FromJson(File.ReadAllText(actionsPath));
         m_client = new GameObject("TestGameClient");
@@ -896,8 +898,7 @@ public sealed class LiveServerCombatTests : InputTestFixture
         typeof(GameClient)
             .GetField("m_inputActions", BindingFlags.NonPublic | BindingFlags.Instance)!
             .SetValue(client, m_actions);
-        client.Host = "127.0.0.1";
-        client.Port = port;
+        LiveSignIn.Prepare(client, m_server!);
         m_client.SetActive(true);
         return client;
     }

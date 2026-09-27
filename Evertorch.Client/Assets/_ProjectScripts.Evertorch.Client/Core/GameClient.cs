@@ -21,7 +21,6 @@ public sealed class GameClient : MonoBehaviour
 {
     private const string ConnectionKey = "evertorch";
     private const int DisconnectTimeoutMilliseconds = 10000;
-    private const string DevelopmentTokenPrefix = "dev:";
 
     private static readonly Color LocalColor = new(0.25f, 0.65f, 0.95f);
     private static readonly Color RemoteColor = new(0.9f, 0.55f, 0.2f);
@@ -35,11 +34,9 @@ public sealed class GameClient : MonoBehaviour
     [SerializeField]
     private string m_host = "127.0.0.1";
 
+    // The gateway's port (Network Protocol §4); the game's own port comes with the sign-in's answer.
     [SerializeField]
-    private int m_port = 7777;
-
-    [SerializeField]
-    private bool m_connectOnStart = true;
+    private int m_port = 7443;
 
     [SerializeField]
     private float m_cameraMaxYawDegrees = 90f;
@@ -101,6 +98,10 @@ public sealed class GameClient : MonoBehaviour
     private string m_leaveReason = string.Empty;
     private CharacterId m_lastCharacter;
     private CharacterId m_reconnectCharacter;
+    private SignInAnswer? m_session;
+    private string m_signedInHost = string.Empty;
+    private int m_signedInPort;
+    private bool m_isReusingSession;
 
     public string Host
     {
@@ -114,7 +115,21 @@ public sealed class GameClient : MonoBehaviour
         set => m_port = value;
     }
 
-    public string Identity { get; set; } = string.Empty;
+    /// <summary>
+    ///     The login and the password, held in memory only, so Reconnect can sign in again after the token expires.
+    ///     Nothing stores or shows the password.
+    /// </summary>
+    public string Login { get; set; } = string.Empty;
+
+    public string Password { get; set; } = string.Empty;
+
+    /// <summary>
+    ///     The SHA-1 thumbprint of the one gateway certificate to trust, for live tests that must not depend on what the
+    ///     machine trusts; null, the operating system decides. Never serialized.
+    /// </summary>
+    public string? PinnedThumbprint { get; set; }
+
+    public bool IsSigningIn { get; private set; }
 
     public string Status { get; private set; } = "Loading content";
 
@@ -193,13 +208,6 @@ public sealed class GameClient : MonoBehaviour
             m_cameraMinDistance,
             m_cameraMaxDistance);
 
-        // Each identity is its own account. Every client on the machine, including each Multiplayer Play Mode
-        // window, starts with its own, so windows started together never share characters. A GUID is random per
-        // process, unlike a seeded draw two editors started together could share. Type an identity in the login
-        // panel to come back to the same account.
-        int suffix = 100000 + Math.Abs(Guid.NewGuid().GetHashCode() % 900000);
-        Identity = $"player{suffix}";
-
         m_overlay = DevelopmentOverlay.Create(this);
         m_overlay.transform.SetParent(transform, false);
         // The Dev button is for a device without a keyboard; everywhere else F1 shows the overlay.
@@ -232,11 +240,8 @@ public sealed class GameClient : MonoBehaviour
             yield break;
         }
 
+        // Nothing connects by itself: the player signs in from the login panel (Network Protocol §4).
         Status = $"Content {m_contentLoader.Content.Version}";
-        if (m_connectOnStart)
-        {
-            Connect();
-        }
     }
 
     private void Update()
@@ -346,14 +351,97 @@ public sealed class GameClient : MonoBehaviour
         }
     }
 
+    /// <summary>
+    ///     Signs in at the gateway with the login and the password, then connects with the token it gives.
+    /// </summary>
     public void Connect()
     {
-        bool isOpen = Connection != null && Connection.State != ClientConnectionState.Disconnected;
-        if (m_contentLoader.Content == null || isOpen)
+        m_reconnectCharacter = default;
+        SignIn();
+    }
+
+    public void Disconnect()
+    {
+        Connection?.Disconnect();
+    }
+
+    /// <summary>
+    ///     One press (Network Protocol §4): connects again with the kept token while the host and port are those of the
+    ///     last sign-in, else signs in again first; if the kept token has expired or the server is no longer where it
+    ///     was, signs in again once. Once the character list arrives, it enters the character last played. Only ever
+    ///     on the player's request, never by itself.
+    /// </summary>
+    public void Reconnect()
+    {
+        if (!CanReconnect || !IsIdle())
         {
             return;
         }
 
+        m_reconnectCharacter = m_lastCharacter;
+        if (m_session != null
+            && string.Equals(m_host, m_signedInHost, StringComparison.Ordinal)
+            && m_port == m_signedInPort)
+        {
+            Open(m_session, true);
+        }
+        else
+        {
+            SignIn();
+        }
+    }
+
+    private bool IsIdle()
+    {
+        bool isOpen = Connection != null && Connection.State != ClientConnectionState.Disconnected;
+        return m_contentLoader.Content != null && !isOpen && !IsSigningIn;
+    }
+
+    private void SignIn()
+    {
+        if (!IsIdle())
+        {
+            return;
+        }
+
+        if (Login.Length == 0 || Password.Length == 0)
+        {
+            Status = SignInMessages.MissingCredentials;
+            return;
+        }
+
+        IsSigningIn = true;
+        CanReconnect = false;
+        Status = SignInMessages.SigningIn;
+        StartCoroutine(SignInThenOpen(new GatewaySignIn(m_host, m_port, Login, Password, PinnedThumbprint)));
+    }
+
+    private IEnumerator SignInThenOpen(GatewaySignIn signIn)
+    {
+        string host = m_host;
+        int port = m_port;
+        yield return signIn.Run();
+        IsSigningIn = false;
+        if (signIn.Answer == null)
+        {
+            Status = signIn.Error;
+            yield break;
+        }
+
+        m_session = signIn.Answer;
+        m_signedInHost = host;
+        m_signedInPort = port;
+        Open(m_session, false);
+    }
+
+    private void Open(SignInAnswer session, bool isReusingSession)
+    {
+        if (!IsIdle())
+        {
+            return;
+        }
+
+        m_isReusingSession = isReusingSession;
         if (Connection != null)
         {
             Connection.CharactersChanged -= OnCharactersChanged;
@@ -377,36 +465,16 @@ public sealed class GameClient : MonoBehaviour
 
         var settings = new ClientConnectionSettings(
             ProtocolConstants.BuildVersion,
-            m_contentLoader.Content.Version,
-            DevelopmentTokenPrefix + Identity);
+            m_contentLoader.Content!.Version,
+            session.Token);
         Connection = new ClientConnection(Link, settings, m_contentLoader.Content);
         Connection.CharactersChanged += OnCharactersChanged;
         Connection.EnteredWorld += OnEnteredWorld;
         Connection.ChangedMap += OnChangedMap;
         Connection.LeftWorld += OnLeftWorld;
         Connection.Closed += OnClosed;
-        Status = $"Connecting to {m_host}:{m_port}";
-        Connection.Connect(m_host, m_port);
-    }
-
-    public void Disconnect()
-    {
-        Connection?.Disconnect();
-    }
-
-    /// <summary>
-    ///     Connects again and, once the character list arrives, enters the character last played. Only ever on the
-    ///     player's request, never by itself.
-    /// </summary>
-    public void Reconnect()
-    {
-        if (!CanReconnect)
-        {
-            return;
-        }
-
-        m_reconnectCharacter = m_lastCharacter;
-        Connect();
+        Status = $"Connecting to {session.Host}:{session.Port}";
+        Connection.Connect(session.Host, session.Port);
     }
 
     /// <summary>
@@ -916,8 +984,18 @@ public sealed class GameClient : MonoBehaviour
     private void OnClosed()
     {
         LeaveWorld();
-        m_reconnectCharacter = default;
         ClientConnection? connection = Connection;
+        if (connection != null && IsStaleSession(connection))
+        {
+            // Still the one press of Reconnect: its kept token expired, or the server moved, so sign in again once.
+            m_isReusingSession = false;
+            m_session = null;
+            SignIn();
+            return;
+        }
+
+        m_reconnectCharacter = default;
+        m_isReusingSession = false;
         if (connection == null)
         {
             return;
@@ -939,6 +1017,14 @@ public sealed class GameClient : MonoBehaviour
             Status = DisconnectMessages.Describe(connection.Notice, connection.DisconnectCause);
             CanReconnect = DisconnectMessages.CanReconnect(connection.Notice);
         }
+    }
+
+    private bool IsStaleSession(ClientConnection connection)
+    {
+        return m_isReusingSession
+            && (connection.Notice?.Reason == DisconnectReason.SessionExpired
+                || (connection.Notice == null &&
+                    connection.DisconnectCause == TransportDisconnectCause.ConnectionFailed));
     }
 
     // Only a new entry starts the movement sequence and the client tick again, as the server starts its input state.

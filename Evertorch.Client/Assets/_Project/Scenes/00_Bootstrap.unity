@@ -151,8 +151,12 @@ MonoBehaviour:
   m_grayboxMaterial: {fileID: 2100000, guid: 31c075cb980c0c4458b3c58dc9d209ee, type: 2}
   m_inputActions: {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b, type: 3}
   m_host: 127.0.0.1
-  m_port: 7777
-  m_connectOnStart: 1
+  m_port: 7443
+  m_cameraMaxYawDegrees: 90
+  m_cameraMinPitchDegrees: 30
+  m_cameraMaxPitchDegrees: 60
+  m_cameraMinDistance: 6
+  m_cameraMaxDistance: 20
 --- !u!4 &514232
 Transform:
   m_ObjectHideFlags: 0

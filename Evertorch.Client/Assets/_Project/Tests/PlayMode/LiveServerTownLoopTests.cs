@@ -94,7 +94,7 @@ public sealed class LiveServerTownLoopTests : InputTestFixture
         yield return StartDatabaseAndServer();
         LiveServer server = m_server!;
         Assert.That(server.TryReadListeningPort(out int port), Is.True, $"server output: {server.JoinOutput()}");
-        GameClient client = CreateClient(port, actionsPath);
+        GameClient client = CreateClient(actionsPath);
         yield return EnterByName(client, ClientName);
         ClientWorld town = client.World!;
         LoginPanel login = client.GetComponentInChildren<LoginPanel>();
@@ -178,7 +178,7 @@ public sealed class LiveServerTownLoopTests : InputTestFixture
         LiveServer server = m_server!;
         Assert.That(server.TryReadListeningPort(out int port), Is.True, $"server output: {server.JoinOutput()}");
         Mouse mouse = InputSystem.AddDevice<Mouse>();
-        GameClient client = CreateClient(port, actionsPath);
+        GameClient client = CreateClient(actionsPath);
         yield return EnterByName(client, NpcClientName);
         ClientWorld town = client.World!;
         NpcWindow window = client.GetComponentsInChildren<NpcWindow>(true).Single();
@@ -246,7 +246,7 @@ public sealed class LiveServerTownLoopTests : InputTestFixture
         LiveServer server = m_server!;
         LiveDatabase database = m_database!;
         Assert.That(server.TryReadListeningPort(out int port), Is.True, $"server output: {server.JoinOutput()}");
-        GameClient client = CreateClient(port, actionsPath);
+        GameClient client = CreateClient(actionsPath);
 
         yield return EnterByName(
             client,
@@ -284,7 +284,7 @@ public sealed class LiveServerTownLoopTests : InputTestFixture
         LiveDatabase database = m_database!;
         Assert.That(server.TryReadListeningPort(out int port), Is.True, $"server output: {server.JoinOutput()}");
         Mouse mouse = InputSystem.AddDevice<Mouse>();
-        GameClient client = CreateClient(port, actionsPath);
+        GameClient client = CreateClient(actionsPath);
         yield return EnterByName(
             client,
             ShopClientName,
@@ -367,7 +367,7 @@ public sealed class LiveServerTownLoopTests : InputTestFixture
         LiveDatabase database = m_database!;
         Assert.That(server.TryReadListeningPort(out int port), Is.True, $"server output: {server.JoinOutput()}");
         Mouse mouse = InputSystem.AddDevice<Mouse>();
-        GameClient client = CreateClient(port, actionsPath);
+        GameClient client = CreateClient(actionsPath);
         yield return EnterByName(client, QuestClientName);
         NpcWindow window = client.GetComponentsInChildren<NpcWindow>(true).Single();
         StatusBar bar = client.GetComponentsInChildren<StatusBar>(true).Single();
@@ -512,6 +512,7 @@ public sealed class LiveServerTownLoopTests : InputTestFixture
     // Creates the named character, runs beforeEntering, and enters the world with it.
     private static IEnumerator EnterByName(GameClient client, string name, Action? beforeEntering = null)
     {
+        yield return LiveSignIn.PressConnect(client);
         yield return WaitUntil(() => client.Connection != null, StartTimeoutSeconds);
         ClientConnection connection = client.Connection!;
         bool hasList = false;
@@ -548,7 +549,7 @@ public sealed class LiveServerTownLoopTests : InputTestFixture
         yield return WaitUntil(() => server.TryReadListeningPort(out int _), StartTimeoutSeconds);
     }
 
-    private GameClient CreateClient(int port, string actionsPath)
+    private GameClient CreateClient(string actionsPath)
     {
         m_actions = InputActionAsset.FromJson(File.ReadAllText(actionsPath));
         m_client = new GameObject("TestGameClient");
@@ -559,8 +560,7 @@ public sealed class LiveServerTownLoopTests : InputTestFixture
         typeof(GameClient)
             .GetField("m_inputActions", BindingFlags.NonPublic | BindingFlags.Instance)!
             .SetValue(client, m_actions);
-        client.Host = "127.0.0.1";
-        client.Port = port;
+        LiveSignIn.Prepare(client, m_server!);
         m_client.SetActive(true);
         return client;
     }

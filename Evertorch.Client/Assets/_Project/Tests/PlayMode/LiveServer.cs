@@ -5,6 +5,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
+using System.Threading;
 using UnityEngine;
 
 namespace Evertorch.Client.Tests.PlayMode
@@ -16,11 +17,28 @@ namespace Evertorch.Client.Tests.PlayMode
 /// </summary>
 internal sealed class LiveServer : IDisposable
 {
+    /// <summary>
+    ///     The password of every account a test makes (<see cref="CreateAccount" />).
+    /// </summary>
+    public const string AccountPassword = "Live-Password-1";
+
     private const string ServerDll = "artifacts/bin/Evertorch.Server/release/Evertorch.Server.dll";
+    private const float AccountTimeoutSeconds = 15f;
+
+    private static readonly Regex GatewayListening =
+        new(@"Gateway listening on https://[^:]+:(\d+) with the certificate ([0-9A-F]+)\.");
+
+    private static readonly Regex AccountCreated = new(@"^Account \d+ created\.$");
 
     private readonly List<string> m_output = new();
     private Process? m_process;
     private KillOnCloseJob? m_job;
+    private int m_accounts;
+
+    // Kept apart from the output, which a test may clear before it reads a command's answer.
+    private int m_createdAccounts;
+    private int m_gatewayPort;
+    private string m_thumbprint = string.Empty;
 
     public static string MissingPrerequisites =>
         "Needs the built server, its content package, and the client package. "
@@ -107,8 +125,10 @@ internal sealed class LiveServer : IDisposable
         var start = new ProcessStartInfo
         {
             FileName = "dotnet",
-            Arguments = $"\"{DllPath}\" --Network:Port=0 --Health:Port=0 --DevelopmentAuthentication:Enabled=true"
-                + " --Gateway:Enabled=false"
+            // The gateway serves the current user's development certificate, which the tests pin by its logged
+            // thumbprint rather than trust. Development sign-in stays on for the bare connections of some tests.
+            Arguments = $"\"{DllPath}\" --Network:Port=0 --Health:Port=0 --Gateway:Port=0"
+                + " --Accounts:PasswordIterations=1000 --DevelopmentAuthentication:Enabled=true"
                 + $" --Content:ServerPackagePath=\"{ContentPath}\" {extraArguments}",
             WorkingDirectory = Path.GetDirectoryName(DllPath),
             UseShellExecute = false,
@@ -197,6 +217,42 @@ internal sealed class LiveServer : IDisposable
         return $"character {character.ToString(CultureInfo.InvariantCulture)} ";
     }
 
+    /// <summary>
+    ///     Makes an account at the server's console, as the operator does (Network Protocol §4), and waits for its
+    ///     answer. Each call makes the next of <c>live1</c>, <c>live2</c>, and so on, with <see cref="AccountPassword" />.
+    /// </summary>
+    public string CreateAccount()
+    {
+        m_accounts++;
+        string login = $"live{m_accounts.ToString(CultureInfo.InvariantCulture)}";
+        SendCommand($"account create {login} {AccountPassword}");
+        var waited = Stopwatch.StartNew();
+        while (Volatile.Read(ref m_createdAccounts) < m_accounts)
+        {
+            if (waited.Elapsed.TotalSeconds > AccountTimeoutSeconds)
+            {
+                throw new TimeoutException($"The account {login} was not made: {JoinOutput()}");
+            }
+
+            Thread.Sleep(20);
+        }
+
+        return login;
+    }
+
+    /// <summary>
+    ///     The gateway's port and its certificate's thumbprint, from its listening line.
+    /// </summary>
+    public bool TryReadGateway(out int port, out string thumbprint)
+    {
+        lock (m_output)
+        {
+            port = m_gatewayPort;
+            thumbprint = m_thumbprint;
+            return port != 0;
+        }
+    }
+
     public bool TryReadListeningPort(out int port)
     {
         port = 0;
@@ -221,6 +277,17 @@ internal sealed class LiveServer : IDisposable
             lock (m_output)
             {
                 m_output.Add(line);
+                Match gateway = GatewayListening.Match(line);
+                if (gateway.Success)
+                {
+                    m_gatewayPort = int.Parse(gateway.Groups[1].Value, CultureInfo.InvariantCulture);
+                    m_thumbprint = gateway.Groups[2].Value;
+                }
+            }
+
+            if (AccountCreated.IsMatch(line))
+            {
+                Interlocked.Increment(ref m_createdAccounts);
             }
         }
     }

@@ -9,7 +9,7 @@
     },
     "Development (LAN)": {
       "commandName": "Project",
-      "commandLineArgs": "--Network:BindAddress=0.0.0.0",
+      "commandLineArgs": "--Network:BindAddress=0.0.0.0 --Gateway:BindAddress=0.0.0.0",
       "environmentVariables": {
         "DOTNET_ENVIRONMENT": "Development"
       }

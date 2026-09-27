@@ -247,7 +247,7 @@ public sealed class GatewayTests
     [Test]
     public void SignIn_ThenAHelloWithItsToken_EntersTheWorld()
     {
-        GatewaySignIn answer = SocketClient.SignIn(m_certificate, GatewayPort(m_shared), "alice", Password);
+        GatewaySignInResult answer = SocketClient.SignIn(m_certificate, GatewayPort(m_shared), "alice", Password);
         ServerContent content = m_shared.Services.GetRequiredService<ServerContent>();
 
         using var client = SocketClient.WithToken(content, answer.Token, "Gateway1");
@@ -307,7 +307,7 @@ public sealed class GatewayTests
     [Test]
     public void SignIn_WithTheRightPassword_AnswersTheUdpEndpointAndAStoredToken()
     {
-        GatewaySignIn answer = SocketClient.SignIn(m_certificate, GatewayPort(m_shared), "ALICE", Password);
+        GatewaySignInResult answer = SocketClient.SignIn(m_certificate, GatewayPort(m_shared), "ALICE", Password);
 
         Assert.That(answer.Host, Is.EqualTo("127.0.0.1"), "the UDP bind address");
         Assert.That(answer.Port, Is.EqualTo(m_shared.Services.GetRequiredService<IServerTransport>().LocalPort));
@@ -350,7 +350,7 @@ public sealed class GatewayTests
         CreateAccount(host, "secret-login");
         ServerContent content = host.Services.GetRequiredService<ServerContent>();
 
-        GatewaySignIn answer = SocketClient.SignIn(m_certificate, GatewayPort(host), "secret-login", Password);
+        GatewaySignInResult answer = SocketClient.SignIn(m_certificate, GatewayPort(host), "secret-login", Password);
         Post(host, TestCertificate.SignInJson("secret-login", WrongPassword));
         Post(host, TestCertificate.SignInJson("secret-ghost", Password));
         Post(host, "{\"login\":\"secret-malformed\"}");

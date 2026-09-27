@@ -274,7 +274,7 @@ public sealed class PlayerPanelTests
     }
 
     [UnityTest]
-    public IEnumerator LoginPanel_WhileDisconnected_ShowsTheConnectFormOnly_AndKeepsTheIdentityInTheClient()
+    public IEnumerator LoginPanel_WhileDisconnected_ShowsTheConnectFormOnly_AndKeepsTheLoginAndPasswordInTheClient()
     {
         GameClient client = CreateIdleClient();
         var login = LoginPanel.Create(client);
@@ -285,14 +285,24 @@ public sealed class PlayerPanelTests
             .Select(child => child.gameObject)
             .Where(child => child.name == "Connect" || child.name == "Characters" || child.name == "Reconnect")
             .ToArray();
-        TMP_InputField identity = login.GetComponentsInChildren<TMP_InputField>(true)
-            .Single(field => field.transform.parent.name == "Identity");
-        identity.text = "someone";
+        TMP_InputField[] fields = login.GetComponentsInChildren<TMP_InputField>(true);
+        TMP_InputField loginField = fields.Single(field => field.transform.parent.name == "Login");
+        TMP_InputField password = fields.Single(field => field.transform.parent.name == "Password");
+        TMP_InputField port = fields.Single(field => field.transform.parent.name == "Port");
+        loginField.text = "someone";
+        password.text = "Secret-Word-1";
 
         Assert.That(login.IsVisible, Is.True);
         Assert.That(shown.Select(child => child.name), Is.EquivalentTo(new[] { "Connect", "Connect" }),
             "the connect form and its Connect button; no characters and no Reconnect before any close");
-        Assert.That(client.Identity, Is.EqualTo("someone"), "the identity lives in the client, in memory");
+        Assert.That(
+            fields.Select(field => field.transform.parent.name).Take(4),
+            Is.EqualTo(new[] { "Login", "Password", "Host", "Port" }));
+        Assert.That(client.Login, Is.EqualTo("someone"), "the login lives in the client, in memory");
+        Assert.That(client.Password, Is.EqualTo("Secret-Word-1"), "and so does the password");
+        Assert.That(password.contentType, Is.EqualTo(TMP_InputField.ContentType.Password), "the password is masked");
+        Assert.That(port.text, Is.EqualTo("7443"), "the gateway's port");
+        Assert.That(client.Connection, Is.Null, "nothing connects by itself");
     }
 
     [UnityTest]

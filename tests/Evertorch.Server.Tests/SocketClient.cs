@@ -111,7 +111,8 @@ internal sealed class SocketClient : IDisposable
     ///     Signs in at the gateway as a native client does (Network Protocol §4), through a client that pins the test's
     ///     certificate, and checks the request's and the answer's JSON byte for byte.
     /// </summary>
-    public static GatewaySignIn SignIn(TestCertificate certificate, int gatewayPort, string login, string password)
+    public static GatewaySignInResult SignIn(TestCertificate certificate, int gatewayPort, string login,
+        string password)
     {
         using HttpClient http = certificate.CreateClient();
         string request = TestCertificate.SignInJson(login, password);
@@ -127,10 +128,15 @@ internal sealed class SocketClient : IDisposable
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK), "signed in at the gateway");
         Assert.That(answer.Success, Is.True, $"the answer's JSON: {body}");
         Assert.That(response.Headers.CacheControl?.NoStore, Is.True);
-        return new GatewaySignIn(
+        var signIn = new GatewaySignInResult(
             answer.Groups["host"].Value,
             int.Parse(answer.Groups["port"].Value, CultureInfo.InvariantCulture),
             answer.Groups["token"].Value);
+        Assert.That(
+            SignInAnswer.TryCreate(SignInAnswer.UdpTransport, signIn.Host, signIn.Port, signIn.Token, out _),
+            Is.True,
+            "the client's own check takes the answer");
+        return signIn;
     }
 
     public void Connect(int port)
@@ -365,9 +371,9 @@ internal sealed class SocketClient : IDisposable
 /// <summary>
 ///     What the gateway answered a sign-in: where to connect, and the token for the hello.
 /// </summary>
-internal sealed class GatewaySignIn
+internal sealed class GatewaySignInResult
 {
-    public GatewaySignIn(string host, int port, string token)
+    public GatewaySignInResult(string host, int port, string token)
     {
         Host = host;
         Port = port;

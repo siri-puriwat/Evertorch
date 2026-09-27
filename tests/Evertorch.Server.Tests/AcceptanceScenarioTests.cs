@@ -86,7 +86,7 @@ public sealed class AcceptanceScenarioTests
         return host;
     }
 
-    private GatewaySignIn SignIn(IHost host)
+    private GatewaySignInResult SignIn(IHost host)
     {
         int gatewayPort = host.Services.GetRequiredService<GatewayEndpoint>().Port;
         return SocketClient.SignIn(m_certificate, gatewayPort, Login, Password);
@@ -109,7 +109,7 @@ public sealed class AcceptanceScenarioTests
             .GetAwaiter()
             .GetResult();
         Assert.That(made.Outcome, Is.EqualTo(AccountCommandOutcome.Created), "step 1: the operator made the account");
-        GatewaySignIn signIn = SignIn(host);
+        GatewaySignInResult signIn = SignIn(host);
         Assert.That(signIn.Port, Is.EqualTo(port), "step 1: the gateway named the UDP port");
 
         using (var client = SocketClient.WithToken(content, signIn.Token, CharacterName))
@@ -173,7 +173,7 @@ public sealed class AcceptanceScenarioTests
 
         EntityId entity;
         EntityId inFlight;
-        GatewaySignIn signIn = SignIn(host);
+        GatewaySignInResult signIn = SignIn(host);
         using (var client = SocketClient.WithToken(content, signIn.Token, CharacterName))
         {
             client.EnterWorld(port);

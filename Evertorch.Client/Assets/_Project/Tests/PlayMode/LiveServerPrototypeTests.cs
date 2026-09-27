@@ -80,7 +80,7 @@ public sealed class LiveServerPrototypeTests : InputTestFixture
         LiveServer server = m_server!;
         Assert.That(server.TryReadListeningPort(out int port), Is.True, $"server output: {server.JoinOutput()}");
 
-        GameClient client = CreateClient(port, actionsPath);
+        GameClient client = CreateClient(actionsPath);
         yield return EnterByName(client, ClientName);
         ClientWorld world = client.World!;
 
@@ -154,7 +154,7 @@ public sealed class LiveServerPrototypeTests : InputTestFixture
         yield return StartDatabaseAndServer();
         LiveServer server = m_server!;
         Assert.That(server.TryReadListeningPort(out int port), Is.True, $"server output: {server.JoinOutput()}");
-        GameClient client = CreateClient(port, actionsPath);
+        GameClient client = CreateClient(actionsPath);
         yield return EnterByName(client, ClientName);
         ClientWorld ground = client.World!;
         LoginPanel login = client.GetComponentInChildren<LoginPanel>();
@@ -220,7 +220,7 @@ public sealed class LiveServerPrototypeTests : InputTestFixture
         yield return StartDatabaseAndServer();
         LiveServer server = m_server!;
         Assert.That(server.TryReadListeningPort(out int port), Is.True, $"server output: {server.JoinOutput()}");
-        GameClient client = CreateClient(port, actionsPath);
+        GameClient client = CreateClient(actionsPath);
         yield return EnterByName(client, ClientName);
         ClientWorld ground = client.World!;
         Assert.That(client.Controller!.TryMoveTo(ground.Predictor.Position, new WorldPosition(22.2f, 0f, 0f)), Is.True);
@@ -315,6 +315,7 @@ public sealed class LiveServerPrototypeTests : InputTestFixture
 
     private static IEnumerator EnterByName(GameClient client, string name)
     {
+        yield return LiveSignIn.PressConnect(client);
         yield return WaitUntil(() => client.Connection != null, StartTimeoutSeconds);
         ClientConnection connection = client.Connection!;
         bool hasList = false;
@@ -373,7 +374,7 @@ public sealed class LiveServerPrototypeTests : InputTestFixture
         yield return WaitUntil(() => server.TryReadListeningPort(out int _), StartTimeoutSeconds);
     }
 
-    private GameClient CreateClient(int port, string actionsPath)
+    private GameClient CreateClient(string actionsPath)
     {
         m_actions = InputActionAsset.FromJson(File.ReadAllText(actionsPath));
         m_client = new GameObject("TestGameClient");
@@ -384,8 +385,7 @@ public sealed class LiveServerPrototypeTests : InputTestFixture
         typeof(GameClient)
             .GetField("m_inputActions", BindingFlags.NonPublic | BindingFlags.Instance)!
             .SetValue(client, m_actions);
-        client.Host = "127.0.0.1";
-        client.Port = port;
+        LiveSignIn.Prepare(client, m_server!);
         m_client.SetActive(true);
         return client;
     }

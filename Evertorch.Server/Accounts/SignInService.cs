@@ -83,16 +83,16 @@ public sealed class SignInService
     /// <summary>
     ///     Answers a sign-in whose body could not be read as one: too long, or not JSON by its content type.
     /// </summary>
-    public SignInAnswer Malformed()
+    public GatewayAnswer Malformed()
     {
         m_instruments.RecordSignIn(MalformedOutcome);
-        return SignInAnswer.Status(400);
+        return GatewayAnswer.Status(400);
     }
 
     /// <param name="body">The request's JSON, at most <see cref="MaxBodyBytes" />.</param>
     /// <param name="remote">The caller's address, for its limit only.</param>
     /// <param name="requestHost">The host the request named, answered when nothing more specific is known.</param>
-    public async Task<SignInAnswer> SignInAsync(ReadOnlyMemory<byte> body, IPAddress remote, string requestHost)
+    public async Task<GatewayAnswer> SignInAsync(ReadOnlyMemory<byte> body, IPAddress remote, string requestHost)
     {
         if (!m_throttle.TryAdmitAddress(remote))
         {
@@ -102,7 +102,7 @@ public sealed class SignInService
         if (!m_health.Evaluate().IsReady || !m_signIns.Wait(0))
         {
             m_instruments.RecordSignIn(UnavailableOutcome);
-            return SignInAnswer.Status(503);
+            return GatewayAnswer.Status(503);
         }
 
         try
@@ -229,7 +229,7 @@ public sealed class SignInService
         return buffer.WrittenSpan.ToArray();
     }
 
-    private async Task<SignInAnswer> CheckAsync(string login, string password, string requestHost)
+    private async Task<GatewayAnswer> CheckAsync(string login, string password, string requestHost)
     {
         bool isLogin = AccountCredentialRules.TryNormalizeLogin(login, out string normalized);
         string limited = isLogin ? normalized : login.ToLowerInvariant();
@@ -250,7 +250,7 @@ public sealed class SignInService
             catch (StoreUnavailableException)
             {
                 m_instruments.RecordSignIn(UnavailableOutcome);
-                return SignInAnswer.Status(503);
+                return GatewayAnswer.Status(503);
             }
         }
 
@@ -261,7 +261,7 @@ public sealed class SignInService
             m_throttle.RecordFailure(limited);
             m_instruments.RecordSignIn(RefusedOutcome);
             m_audit.SignInRefused(CredentialsReason, credentials?.Account);
-            return SignInAnswer.Status(401);
+            return GatewayAnswer.Status(401);
         }
 
         var token = SessionToken.Create();
@@ -276,29 +276,29 @@ public sealed class SignInService
         catch (StoreUnavailableException)
         {
             m_instruments.RecordSignIn(UnavailableOutcome);
-            return SignInAnswer.Status(503);
+            return GatewayAnswer.Status(503);
         }
 
         m_instruments.RecordSignIn(IssuedOutcome);
         LogSignedIn(m_logger, credentials.Account.Value, (int)m_tokenLifetime.TotalSeconds, null);
-        return SignInAnswer.Json(Answer(m_answeredHost ?? requestHost, m_transport.LocalPort, token.Text));
+        return GatewayAnswer.Json(Answer(m_answeredHost ?? requestHost, m_transport.LocalPort, token.Text));
     }
 
-    private SignInAnswer Throttled(string limit, AccountId? account)
+    private GatewayAnswer Throttled(string limit, AccountId? account)
     {
         m_instruments.RecordRateLimited(limit);
         m_instruments.RecordSignIn(ThrottledOutcome);
         m_audit.SignInRefused(limit, account);
-        return SignInAnswer.Status(429);
+        return GatewayAnswer.Status(429);
     }
 }
 
 /// <summary>
 ///     A sign-in's HTTP answer: its status, and the JSON body of a token, empty for every refusal.
 /// </summary>
-public sealed class SignInAnswer
+public sealed class GatewayAnswer
 {
-    private SignInAnswer(int statusCode, byte[] body)
+    private GatewayAnswer(int statusCode, byte[] body)
     {
         StatusCode = statusCode;
         Body = body;
@@ -308,14 +308,14 @@ public sealed class SignInAnswer
 
     public byte[] Body { get; }
 
-    public static SignInAnswer Status(int statusCode)
+    public static GatewayAnswer Status(int statusCode)
     {
-        return new SignInAnswer(statusCode, Array.Empty<byte>());
+        return new GatewayAnswer(statusCode, Array.Empty<byte>());
     }
 
-    public static SignInAnswer Json(byte[] body)
+    public static GatewayAnswer Json(byte[] body)
     {
-        return new SignInAnswer(200, body);
+        return new GatewayAnswer(200, body);
     }
 }
 }

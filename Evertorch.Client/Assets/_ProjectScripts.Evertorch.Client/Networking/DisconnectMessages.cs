@@ -56,7 +56,7 @@ public static class DisconnectMessages
             case DisconnectReason.ContentUpdateRequired:
                 return "The game's data is out of date for this server. Update the game to play here.";
             case DisconnectReason.AuthenticationFailed:
-                return "Sign-in failed. Check the identity and sign in again.";
+                return "Sign-in failed. Check the login and password and sign in again.";
             case DisconnectReason.SessionExpired:
                 return "The sign-in expired. Sign in again.";
             case DisconnectReason.SessionReplaced:

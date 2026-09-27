@@ -163,7 +163,7 @@ public sealed class GatewayEndpoint : IHostedService, IDisposable
         }
 
         byte[]? body = IsJson(request.ContentType) ? await ReadBodyAsync(request).ConfigureAwait(false) : null;
-        SignInAnswer answer = body == null
+        GatewayAnswer answer = body == null
             ? m_signIn.Malformed()
             : await m_signIn.SignInAsync(
                     body,

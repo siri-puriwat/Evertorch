@@ -7,9 +7,10 @@ using UnityEngine;
 namespace Evertorch.Client
 {
 /// <summary>
-///     What a player sees while not in the world (Prototype Content §2): the identity, host, and port with Connect; the
-///     text of the last disconnect, with Reconnect when it can help; and the character selection once signed in
-///     (§4). The identity stays in memory, because PlayerPrefs would be shared by the Multiplayer Play Mode clones.
+///     What a player sees while not in the world (Prototype Content §2): the login, the password (masked), and the
+///     gateway's host and port with Connect; the text of the last sign-in or disconnect, with Reconnect when it can
+///     help; and the character selection once signed in (§4). The login and password stay in memory only: PlayerPrefs
+///     would be shared by the Multiplayer Play Mode clones, and a password is never stored.
 /// </summary>
 public sealed class LoginPanel : MonoBehaviour
 {
@@ -36,7 +37,7 @@ public sealed class LoginPanel : MonoBehaviour
     private GameObject? m_characters;
     private TMP_Text? m_heading;
     private TMP_InputField? m_name;
-    private string? m_shownIdentity;
+    private string? m_shownLogin;
     private int m_shownCount = -1;
 
     public bool IsVisible => m_panel != null && m_panel.activeSelf;
@@ -74,8 +75,10 @@ public sealed class LoginPanel : MonoBehaviour
 
         m_connectForm = Ui.CreateColumn("Connect", panel);
         Transform form = m_connectForm.transform;
-        Ui.CreateField(form, "Identity", client.Identity, TMP_InputField.ContentType.Standard)
-            .onValueChanged.AddListener(value => client.Identity = value);
+        Ui.CreateField(form, "Login", client.Login, TMP_InputField.ContentType.Standard)
+            .onValueChanged.AddListener(value => client.Login = value);
+        Ui.CreateField(form, "Password", string.Empty, TMP_InputField.ContentType.Password)
+            .onValueChanged.AddListener(value => client.Password = value);
         Ui.CreateField(form, "Host", client.Host, TMP_InputField.ContentType.Standard)
             .onValueChanged.AddListener(value => client.Host = value);
         m_port = Ui.CreateField(form, "Port", client.Port.ToString(), TMP_InputField.ContentType.IntegerNumber);
@@ -112,7 +115,7 @@ public sealed class LoginPanel : MonoBehaviour
         ClientConnection? connection = client.Connection;
         bool isOpen = connection != null && connection.State != ClientConnectionState.Disconnected;
         UiBuilder.SetText(m_message!, client.Status);
-        UiBuilder.SetActive(m_connectForm!, !isOpen);
+        UiBuilder.SetActive(m_connectForm!, !isOpen && !client.IsSigningIn);
         UiBuilder.SetActive(m_reconnect!, client.CanReconnect);
         RefreshCharacters(client, connection);
     }
@@ -127,11 +130,11 @@ public sealed class LoginPanel : MonoBehaviour
         }
 
         IReadOnlyList<CharacterListEntry> characters = connection!.Characters;
-        if (!ReferenceEquals(m_shownIdentity, client.Identity) || m_shownCount != characters.Count)
+        if (!ReferenceEquals(m_shownLogin, client.Login) || m_shownCount != characters.Count)
         {
-            m_shownIdentity = client.Identity;
+            m_shownLogin = client.Login;
             m_shownCount = characters.Count;
-            m_heading!.text = $"Characters of {client.Identity} ({characters.Count}/{CharacterList.MaxEntries})";
+            m_heading!.text = $"Characters of {client.Login} ({characters.Count}/{CharacterList.MaxEntries})";
         }
 
         for (int slot = 0; slot < m_enterButtons.Length; slot++)
