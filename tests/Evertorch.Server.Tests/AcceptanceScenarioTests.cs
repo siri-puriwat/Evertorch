@@ -18,7 +18,9 @@ namespace Evertorch.Server.Tests
 /// <summary>
 ///     The Milestone 5 acceptance path (ROADMAP §7) end to end: the composed server host on a real PostgreSQL 18, real
 ///     UDP sockets on loopback, and the client's production networking and gameplay code. The nine exit steps, then a
-///     server restart and sign-in, then a reconnect while a pickup's answer is still on its way.
+///     server restart and sign-in, then a reconnect while a pickup's answer is still on its way. Every sign-in is a
+///     login and a password at the HTTPS gateway (Network Protocol §4), whose certificate the test pins, and the
+///     server takes no development token.
 /// </summary>
 /// <remarks>
 ///     Combat and drops draw from scripted sources (<see cref="TestHosts.ScriptOutcomes" />): every attack hits
@@ -29,7 +31,8 @@ namespace Evertorch.Server.Tests
 [NonParallelizable]
 public sealed class AcceptanceScenarioTests
 {
-    private const string Identity = "acceptance";
+    private const string Login = "acceptance";
+    private const string Password = "Accept-Password-1";
     private const string CharacterName = "Accept1";
     private const string TrainingGround = "map.training_ground";
     private const string TrainingSlime = "monster.training_slime";
@@ -41,6 +44,7 @@ public sealed class AcceptanceScenarioTests
     private static readonly TimeSpan StoreCheckInterval = TimeSpan.FromMilliseconds(100);
 
     private PostgresFixture m_database = null!;
+    private TestCertificate m_certificate = null!;
     private PostgresGameStore m_store = null!;
     private AccountId m_account;
     private long m_character;
@@ -52,24 +56,40 @@ public sealed class AcceptanceScenarioTests
     {
         m_database = PostgresFixture.Start();
         m_store = new PostgresGameStore(m_database.ConnectionString);
+        m_certificate = new TestCertificate();
     }
 
     [OneTimeTearDown]
     public void StopDatabase()
     {
         m_database.Dispose();
+        m_certificate.Dispose();
     }
 
     private IHost StartHost(string contentRootPath)
     {
-        HostApplicationBuilder builder = TestHosts.CreateBuilderWithDatabase(
-            new[] { "--Network:Port=0", "--DevelopmentAuthentication:Enabled=true", "--World:RandomSeed=5" },
+        HostApplicationBuilder builder = TestHosts.CreateBuilderWithGateway(
+            new[] { "--Network:Port=0", "--World:RandomSeed=5" },
             contentRootPath,
-            m_database.ConnectionString);
+            m_database.ConnectionString,
+            m_certificate);
         TestHosts.ScriptOutcomes(builder, new SureHitRandom(), new ScriptedRandom(0));
         IHost host = builder.Build();
         host.Start();
+        HealthProbe health = host.Services.GetRequiredService<HealthProbe>();
+        var elapsed = Stopwatch.StartNew();
+        while (!health.Evaluate().IsReady && elapsed.Elapsed < WalkLimit)
+        {
+            Thread.Sleep(20);
+        }
+
         return host;
+    }
+
+    private GatewaySignIn SignIn(IHost host)
+    {
+        int gatewayPort = host.Services.GetRequiredService<GatewayEndpoint>().Port;
+        return SocketClient.SignIn(m_certificate, gatewayPort, Login, Password);
     }
 
     private static int PortOf(IHost host)
@@ -85,12 +105,18 @@ public sealed class AcceptanceScenarioTests
         int port = PortOf(host);
         ServerContent content = host.Services.GetRequiredService<ServerContent>();
         IAdminCommandService admin = host.Services.GetRequiredService<IAdminCommandService>();
+        AccountCommandResult made = admin.CreateAccountAsync(AdminActor.LocalConsole, Login, Password)
+            .GetAwaiter()
+            .GetResult();
+        Assert.That(made.Outcome, Is.EqualTo(AccountCommandOutcome.Created), "step 1: the operator made the account");
+        GatewaySignIn signIn = SignIn(host);
+        Assert.That(signIn.Port, Is.EqualTo(port), "step 1: the gateway named the UDP port");
 
-        using (var client = new SocketClient(content, Identity, CharacterName))
+        using (var client = SocketClient.WithToken(content, signIn.Token, CharacterName))
         {
             var listSizes = new List<int>();
             client.Connection.CharactersChanged += () => listSizes.Add(client.Connection.Characters.Count);
-            client.EnterWorld(port);
+            client.EnterWorld(signIn.Port);
 
             Assert.That(listSizes, Is.Not.Empty,
                 "step 1: the token signed in and the account's characters were listed");
@@ -113,7 +139,7 @@ public sealed class AcceptanceScenarioTests
             client.Disconnect();
         }
 
-        using (var again = new SocketClient(content, Identity, CharacterName))
+        using (var again = SocketClient.WithToken(content, signIn.Token, CharacterName))
         {
             again.EnterWorld(port);
             Assert.That(again.World.LocalEntity, Is.EqualTo(m_entity), "step 8: reattached to the retained character");
@@ -147,7 +173,8 @@ public sealed class AcceptanceScenarioTests
 
         EntityId entity;
         EntityId inFlight;
-        using (var client = new SocketClient(content, Identity, CharacterName))
+        GatewaySignIn signIn = SignIn(host);
+        using (var client = SocketClient.WithToken(content, signIn.Token, CharacterName))
         {
             client.EnterWorld(port);
             CharacterListEntry listed = client.Connection.Characters.Single();
@@ -177,7 +204,7 @@ public sealed class AcceptanceScenarioTests
             client.Disconnect();
         }
 
-        using (var again = new SocketClient(content, Identity, CharacterName))
+        using (var again = SocketClient.WithToken(content, signIn.Token, CharacterName))
         {
             again.EnterWorld(port);
             ClientWorld world = again.World;
@@ -393,16 +420,13 @@ public sealed class AcceptanceScenarioTests
 
     private AccountId LookUpAccount()
     {
-        // The development validator provisions by the normalized login; provisioning again returns the same account.
-        AccountId? account = m_store
-            .ProvisionAccountAsync(
-                DevelopmentTokenValidator.NormalizedLogin($"dev:{Identity}"),
-                DateTime.UtcNow,
-                CancellationToken.None)
+        AccountCredentials? account = m_store
+            .FindAccountCredentialsAsync(Login, CancellationToken.None)
             .GetAwaiter()
             .GetResult();
-        Assert.That(account, Is.Not.Null, "the account exists and is active");
-        return account!.Value;
+        Assert.That(account, Is.Not.Null, "the account exists");
+        Assert.That(account!.IsDisabled, Is.False, "the account is active");
+        return account.Account;
     }
 
     private long StoredGel()

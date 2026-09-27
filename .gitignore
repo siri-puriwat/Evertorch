@@ -15,8 +15,10 @@
 **/[Oo]bj/
 /artifacts/
 
-# Local infrastructure secrets.
+# Local infrastructure secrets, and certificates with their keys.
 /docker/.env
+*.pfx
+*.p12
 
 # Unity-generated data for the nested client project.
 /Evertorch.Client/.utmp/

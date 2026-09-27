@@ -55,11 +55,20 @@ public sealed class DevelopmentTokenValidator : ISessionTokenValidator
         return true;
     }
 
-    public Task<AccountId?> ValidateAsync(string token, IGameStore store, CancellationToken cancellationToken)
+    public async Task<SessionTokenCheck> ValidateAsync(
+        string token,
+        IGameStore store,
+        CancellationToken cancellationToken)
     {
-        return IsWellFormed(token)
-            ? store.ProvisionAccountAsync(NormalizedLogin(token), m_time.GetUtcNow().UtcDateTime, cancellationToken)
-            : Task.FromResult<AccountId?>(null);
+        if (!IsWellFormed(token))
+        {
+            return SessionTokenCheck.Refused;
+        }
+
+        AccountId? account = await store
+            .ProvisionAccountAsync(NormalizedLogin(token), m_time.GetUtcNow().UtcDateTime, cancellationToken)
+            .ConfigureAwait(false);
+        return account is AccountId found ? SessionTokenCheck.Accepted(found) : SessionTokenCheck.Refused;
     }
 
     /// <summary>

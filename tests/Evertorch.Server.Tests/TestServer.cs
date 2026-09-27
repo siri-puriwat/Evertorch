@@ -158,7 +158,9 @@ internal sealed class TestServer
             Progression,
             Audit,
             ItemActionLog);
-        var tokens = new DevelopmentTokenValidator(Options.Create(authentication), Time);
+        var tokens = new SessionTokenValidator(
+            new DevelopmentTokenValidator(Options.Create(authentication), Time),
+            new ProductionTokenValidator(Time));
         var handshake = new HandshakeValidator(compatibility, tokens, Content);
         Drops = new ItemDropSystem(World, dropRandom ?? Random, Options.Create(world), simulation);
         StatusEffects = new StatusEffectSystem(World, Sessions, Content, stats, sender, Instruments, simulation);

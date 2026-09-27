@@ -42,6 +42,16 @@ public sealed class AbuseOptionsValidatorTests
     [TestCase("ViolationDecayPerSecond", 1000001)]
     [TestCase("KickCooldownMs", -1)]
     [TestCase("KickCooldownMs", 86400001)]
+    [TestCase("SignInsPerSecond", 0)]
+    [TestCase("SignInsPerSecond", 1001)]
+    [TestCase("SignInBurst", 0)]
+    [TestCase("SignInBurst", 10001)]
+    [TestCase("SignInFailuresPerMinute", 0)]
+    [TestCase("SignInFailuresPerMinute", 1001)]
+    [TestCase("SignInFailureBurst", 0)]
+    [TestCase("SignInFailureBurst", 1001)]
+    [TestCase("MaxTrackedLogins", 15)]
+    [TestCase("MaxTrackedLogins", 1000001)]
     public void Validate_WithAValueOutOfRange_FailsNamingTheKey(string key, int value)
     {
         var options = new AbuseOptions();

@@ -1,6 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
+using System.Net;
+using System.Net.Http;
+using System.Text.RegularExpressions;
 using System.Threading;
 using Evertorch.Client;
 using Evertorch.Game;
@@ -22,6 +26,12 @@ internal sealed class SocketClient : IDisposable
     private const int DisconnectTimeoutMilliseconds = 5000;
     public static readonly TimeSpan Limit = TimeSpan.FromSeconds(15);
 
+    // The whole answer, its members in their order: nothing more may appear in it.
+    private static readonly Regex AnswerShape = new(
+        @"^\{""transport"":""udp"",""host"":""(?<host>[^""]+)"",""port"":(?<port>[0-9]+),"
+        + @"""token"":""(?<token>[A-Za-z0-9_-]{43})""\}$",
+        RegexOptions.CultureInvariant);
+
     private readonly LiteNetLibClientTransport m_socket;
     private readonly ServerContent m_content;
     private readonly AutoEnter m_selection;
@@ -42,6 +52,12 @@ internal sealed class SocketClient : IDisposable
     private double m_lastSeconds;
 
     public SocketClient(ServerContent content, string identity, string characterName)
+        : this(content, characterName, $"dev:{identity}", 0)
+    {
+    }
+
+    // The last parameter only tells this constructor from the public one.
+    private SocketClient(ServerContent content, string characterName, string token, int _)
     {
         m_content = content;
         m_socket = new LiteNetLibClientTransport(ConnectionKey, DisconnectTimeoutMilliseconds);
@@ -51,7 +67,7 @@ internal sealed class SocketClient : IDisposable
             new ClientConnectionSettings(
                 ProtocolConstants.BuildVersion,
                 content.ClientContentVersion,
-                $"dev:{identity}"),
+                token),
             new ContentMaps(content));
         m_selection = new AutoEnter(Connection, characterName);
     }
@@ -81,6 +97,40 @@ internal sealed class SocketClient : IDisposable
     public void Dispose()
     {
         m_socket.Dispose();
+    }
+
+    /// <summary>
+    ///     A client whose hello carries a session token the gateway issued.
+    /// </summary>
+    public static SocketClient WithToken(ServerContent content, string token, string characterName)
+    {
+        return new SocketClient(content, characterName, token, 0);
+    }
+
+    /// <summary>
+    ///     Signs in at the gateway as a native client does (Network Protocol §4), through a client that pins the test's
+    ///     certificate, and checks the request's and the answer's JSON byte for byte.
+    /// </summary>
+    public static GatewaySignIn SignIn(TestCertificate certificate, int gatewayPort, string login, string password)
+    {
+        using HttpClient http = certificate.CreateClient();
+        string request = TestCertificate.SignInJson(login, password);
+        Assert.That(
+            request,
+            Is.EqualTo($"{{\"login\":\"{login}\",\"password\":\"{password}\",\"transports\":[\"udp\"]}}"));
+        using HttpResponseMessage response = http
+            .PostAsync($"https://127.0.0.1:{gatewayPort}/session", TestCertificate.JsonContent(request))
+            .GetAwaiter()
+            .GetResult();
+        string body = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+        Match answer = AnswerShape.Match(body);
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK), "signed in at the gateway");
+        Assert.That(answer.Success, Is.True, $"the answer's JSON: {body}");
+        Assert.That(response.Headers.CacheControl?.NoStore, Is.True);
+        return new GatewaySignIn(
+            answer.Groups["host"].Value,
+            int.Parse(answer.Groups["port"].Value, CultureInfo.InvariantCulture),
+            answer.Groups["token"].Value);
     }
 
     public void Connect(int port)
@@ -310,5 +360,24 @@ internal sealed class SocketClient : IDisposable
             return found;
         }
     }
+}
+
+/// <summary>
+///     What the gateway answered a sign-in: where to connect, and the token for the hello.
+/// </summary>
+internal sealed class GatewaySignIn
+{
+    public GatewaySignIn(string host, int port, string token)
+    {
+        Host = host;
+        Port = port;
+        Token = token;
+    }
+
+    public string Host { get; }
+
+    public int Port { get; }
+
+    public string Token { get; }
 }
 }

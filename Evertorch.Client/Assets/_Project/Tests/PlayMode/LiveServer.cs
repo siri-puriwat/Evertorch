@@ -108,6 +108,7 @@ internal sealed class LiveServer : IDisposable
         {
             FileName = "dotnet",
             Arguments = $"\"{DllPath}\" --Network:Port=0 --Health:Port=0 --DevelopmentAuthentication:Enabled=true"
+                + " --Gateway:Enabled=false"
                 + $" --Content:ServerPackagePath=\"{ContentPath}\" {extraArguments}",
             WorkingDirectory = Path.GetDirectoryName(DllPath),
             UseShellExecute = false,

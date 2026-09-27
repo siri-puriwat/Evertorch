@@ -40,6 +40,36 @@ internal static class TestHosts
     }
 
     /// <summary>
+    ///     The server composition against a real database with the HTTPS gateway on an ephemeral port, serving
+    ///     <paramref name="certificate" />, which the test's own client pins (Coding Standards §10).
+    /// </summary>
+    public static HostApplicationBuilder CreateBuilderWithGateway(
+        string[] args,
+        string contentRootPath,
+        string connectionString,
+        TestCertificate certificate)
+    {
+        return ServerHost.CreateBuilder(WithGateway(WithDatabase(args, connectionString), certificate),
+            contentRootPath);
+    }
+
+    /// <summary>
+    ///     The same with an in-memory store in place of PostgreSQL.
+    /// </summary>
+    public static HostApplicationBuilder CreateBuilderWithGateway(
+        string[] args,
+        string contentRootPath,
+        IGameStore store,
+        TestCertificate certificate)
+    {
+        HostApplicationBuilder builder = ServerHost.CreateBuilder(
+            WithGateway(WithDatabase(args, UnreachableDatabase), certificate),
+            contentRootPath);
+        builder.Services.AddSingleton(store);
+        return builder;
+    }
+
+    /// <summary>
     ///     Gives combat and drops their own random sources. The host draws every outcome from one source, and over
     ///     real sockets the network's timing decides which draw each roll gets, so a seed alone cannot script a fight.
     ///     Monster placement and AI keep the server's own source.
@@ -50,12 +80,25 @@ internal static class TestHosts
         builder.Services.AddSingleton(services => ActivatorUtilities.CreateInstance<CombatSystem>(services, combat));
     }
 
-    // The test output carries the server's appsettings.json, which names a fixed health port.
+    // Appended after the harness's own switches, so they win; the tests' hash cost goes first, so a test may raise it.
+    private static string[] WithGateway(string[] args, TestCertificate certificate)
+    {
+        return new[] { $"--Accounts:PasswordIterations={TestServer.TestPasswordIterations}" }
+            .Concat(args)
+            .Append("--Gateway:Enabled=true")
+            .Append("--Gateway:Port=0")
+            .Append($"--Gateway:CertificatePath={certificate.Path}")
+            .ToArray();
+    }
+
+    // The test output carries the server's appsettings.json, which names a fixed health port and turns the gateway
+    // on at a fixed port.
     private static string[] WithDatabase(string[] args, string connectionString)
     {
         return args
             .Append($"--ConnectionStrings:{DatabaseOptions.ConnectionName}={connectionString}")
             .Append("--Health:Port=0")
+            .Append("--Gateway:Enabled=false")
             .ToArray();
     }
 }

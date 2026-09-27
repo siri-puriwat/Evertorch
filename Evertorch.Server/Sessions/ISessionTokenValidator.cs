@@ -9,9 +9,8 @@ namespace Evertorch.Server
 ///     here and dropped: no session keeps it and no log names it.
 /// </summary>
 /// <remarks>
-///     Milestone 4 has only <see cref="DevelopmentTokenValidator" />. A production validator for the short-lived
-///     tokens of the HTTPS endpoint (an opaque 256-bit value stored hashed with its account and expiry) implements the
-///     same interface when that endpoint exists.
+///     <see cref="SessionTokenValidator" /> sends each token to <see cref="DevelopmentTokenValidator" /> or
+///     <see cref="ProductionTokenValidator" /> by its form.
 /// </remarks>
 public interface ISessionTokenValidator
 {
@@ -22,8 +21,8 @@ public interface ISessionTokenValidator
     bool IsWellFormed(string token);
 
     /// <summary>
-    ///     Persistence writer: the account the token belongs to, or null when it is refused.
+    ///     Persistence writer: the account the token belongs to, or why it has none.
     /// </summary>
-    Task<AccountId?> ValidateAsync(string token, IGameStore store, CancellationToken cancellationToken);
+    Task<SessionTokenCheck> ValidateAsync(string token, IGameStore store, CancellationToken cancellationToken);
 }
 }

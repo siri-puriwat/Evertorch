@@ -1,8 +1,8 @@
 namespace Evertorch.Server
 {
 /// <summary>
-///     Stand-in for real session tokens until accounts exist. It is off unless configuration turns it on, and the
-///     shipped default configuration does not.
+///     The development sign-in, kept for the automated tests' bare connections (Network Protocol §4). It is off unless
+///     configuration turns it on, and no shipped configuration does.
 /// </summary>
 public sealed class DevelopmentAuthenticationOptions
 {

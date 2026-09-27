@@ -28,6 +28,8 @@ public sealed class ServerInstruments
     public const string SessionCommandLimit = "session_session";
     public const string ResyncRequestLimit = "session_resync";
     public const string AdmissionLimit = "admission";
+    public const string SignInAddressLimit = "sign_in_address";
+    public const string SignInLoginLimit = "sign_in_login";
 
     private const string OperationTag = "operation";
     private const string OutcomeTag = "outcome";
@@ -69,6 +71,11 @@ public sealed class ServerInstruments
     private static readonly KeyValuePair<string, object?> RateLimitedReason = new("reason", "rate_limited");
     private static readonly KeyValuePair<string, object?> KickedReason = new("reason", "kicked");
 
+    private static readonly KeyValuePair<string, object?> AuthenticationFailedReason =
+        new("reason", "authentication_failed");
+
+    private static readonly KeyValuePair<string, object?> SessionExpiredReason = new("reason", "session_expired");
+
     private readonly Histogram<double> m_tickDuration;
     private readonly Counter<long> m_tickOverruns;
     private readonly Counter<long> m_skippedSteps;
@@ -90,6 +97,7 @@ public sealed class ServerInstruments
     private readonly Counter<long> m_retreats;
     private readonly Counter<long> m_coins;
     private readonly Counter<long> m_quests;
+    private readonly Counter<long> m_signIns;
 
     public ServerInstruments(IMeterFactory meters)
     {
@@ -109,7 +117,11 @@ public sealed class ServerInstruments
         m_authenticationFailures = Meter.CreateCounter<long>(
             "evertorch.sessions.authentication_failures",
             "{connection}",
-            "Connections refused because they did not sign in.");
+            "Connections refused because they did not sign in, tagged by reason.");
+        m_signIns = Meter.CreateCounter<long>(
+            "evertorch.gateway.sign_ins",
+            "{request}",
+            "Sign-ins at the gateway, tagged by outcome.");
         m_jobDuration = Meter.CreateHistogram<double>(
             "evertorch.persistence.job.duration",
             "ms",
@@ -193,9 +205,21 @@ public sealed class ServerInstruments
         m_skippedSteps.Add(skippedSteps);
     }
 
-    public void RecordAuthenticationFailure()
+    /// <param name="reason"><c>AuthenticationFailed</c> or <c>SessionExpired</c>.</param>
+    public void RecordAuthenticationFailure(DisconnectReason reason)
     {
-        m_authenticationFailures.Add(1);
+        m_authenticationFailures.Add(
+            1,
+            reason == DisconnectReason.SessionExpired ? SessionExpiredReason : AuthenticationFailedReason);
+    }
+
+    /// <param name="outcome">
+    ///     What became of a sign-in at the gateway: <c>issued</c>, <c>refused</c>, <c>throttled</c>,
+    ///     <c>unavailable</c>, or <c>malformed</c>.
+    /// </param>
+    public void RecordSignIn(string outcome)
+    {
+        m_signIns.Add(1, new KeyValuePair<string, object?>(OutcomeTag, outcome));
     }
 
     /// <param name="operation">One of the fixed operation names of the persistence jobs.</param>

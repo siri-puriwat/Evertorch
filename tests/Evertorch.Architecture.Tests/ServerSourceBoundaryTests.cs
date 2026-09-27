@@ -17,6 +17,7 @@ public sealed class ServerSourceBoundaryTests
     private const string TransportLibrary = "LiteNetLib";
     private const string AdapterFolder = "Transport";
     private const string HealthFolder = "Health";
+    private const string GatewayFolder = "Gateway";
 
     // The namespace in a using directive or a qualified name. The adapter's own type name may appear anywhere.
     private static readonly Regex NamespaceUse = new(@"\bLiteNetLib\s*[;.]", RegexOptions.CultureInvariant);
@@ -29,10 +30,16 @@ public sealed class ServerSourceBoundaryTests
         return Directory.EnumerateFiles(serverRoot, "*.cs", SearchOption.AllDirectories);
     }
 
-    private static bool IsInHealth(string serverRoot, string path)
+    private static bool IsIn(string folder, string serverRoot, string path)
     {
         string relative = Path.GetRelativePath(serverRoot, path).Replace('\\', '/');
-        return relative.StartsWith($"{HealthFolder}/", StringComparison.Ordinal);
+        return relative.StartsWith($"{folder}/", StringComparison.Ordinal);
+    }
+
+    // The two folders that host Kestrel (System Architecture §4).
+    private static bool IsInAspNetCoreFolder(string serverRoot, string path)
+    {
+        return IsIn(HealthFolder, serverRoot, path) || IsIn(GatewayFolder, serverRoot, path);
     }
 
     private static bool IsAdapter(string serverRoot, string path)
@@ -41,13 +48,14 @@ public sealed class ServerSourceBoundaryTests
         return relative.StartsWith($"{AdapterFolder}/{TransportLibrary}", StringComparison.Ordinal);
     }
 
-    [Test]
-    public void ServerSources_InTheHealthFolder_UseAspNetCore()
+    [TestCase(HealthFolder)]
+    [TestCase(GatewayFolder)]
+    public void ServerSources_InTheHealthAndGatewayFolders_UseAspNetCore(string folder)
     {
         IEnumerable<string> sources = ServerSources(out string serverRoot);
 
         bool isUsed = sources
-            .Where(path => IsInHealth(serverRoot, path))
+            .Where(path => IsIn(folder, serverRoot, path))
             .Any(path => AspNetCoreUse.IsMatch(File.ReadAllText(path)));
 
         Assert.That(isUsed, Is.True, "the guard above would pass vacuously if the endpoint moved");
@@ -66,12 +74,12 @@ public sealed class ServerSourceBoundaryTests
     }
 
     [Test]
-    public void ServerSources_OutsideTheHealthFolder_DoNotUseAspNetCore()
+    public void ServerSources_OutsideTheHealthAndGatewayFolders_DoNotUseAspNetCore()
     {
         IEnumerable<string> sources = ServerSources(out string serverRoot);
 
         var offenders = sources
-            .Where(path => !IsInHealth(serverRoot, path))
+            .Where(path => !IsInAspNetCoreFolder(serverRoot, path))
             .Where(path => AspNetCoreUse.IsMatch(File.ReadAllText(path)))
             .Select(path => Path.GetRelativePath(serverRoot, path))
             .ToList();

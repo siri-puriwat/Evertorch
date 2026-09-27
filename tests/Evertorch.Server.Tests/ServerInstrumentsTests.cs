@@ -6,6 +6,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Evertorch.Game;
+using Evertorch.Persistence;
 using Evertorch.Protocol;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -136,6 +137,21 @@ public sealed class ServerInstrumentsTests
         }
     }
 
+    [TestCase("issued")]
+    [TestCase("refused")]
+    [TestCase("throttled")]
+    [TestCase("unavailable")]
+    [TestCase("malformed")]
+    public void SignIn_IsCountedByItsOutcome(string outcome)
+    {
+        var server = new TestServer();
+        using var recorder = new MeterRecorder(server.Instruments.Meter);
+
+        server.Instruments.RecordSignIn(outcome);
+
+        Assert.That(Tagged(recorder, "evertorch.gateway.sign_ins", "outcome", outcome), Is.EqualTo(1));
+    }
+
     [Test]
     public void Acquisitions_AreCountedByMonster_OncePerTargetTaken()
     {
@@ -174,7 +190,37 @@ public sealed class ServerInstrumentsTests
         server.TickUntilPublished();
 
         Assert.That(server.Transport.Disconnects[connection], Is.EqualTo(DisconnectReason.AuthenticationFailed));
-        Assert.That(Single(recorder, "evertorch.sessions.authentication_failures"), Is.EqualTo(1));
+        Assert.That(
+            Tagged(recorder, "evertorch.sessions.authentication_failures", "reason", "authentication_failed"),
+            Is.EqualTo(1));
+        Assert.That(server.Status.Current.AuthenticationFailures, Is.EqualTo(1));
+    }
+
+    [Test]
+    public void AuthenticationFailure_OfAnExpiredToken_IsCountedAsExpired()
+    {
+        var server = new TestServer(false);
+        using var recorder = new MeterRecorder(server.Instruments.Meter);
+        AccountId account = server.GameStore
+                .CreateAccountAsync("alice", PasswordHasher.Scheme, "1000$c2FsdA==$a2V5", DateTime.UtcNow,
+                    CancellationToken.None)
+                .GetAwaiter()
+                .GetResult()
+            ?? throw new InvalidOperationException("taken");
+        var token = SessionToken.Create();
+        DateTime issuedAt = server.Time.GetUtcNow().UtcDateTime.AddHours(-1);
+        server.GameStore.IssueSessionTokenAsync(account, token.Hash, issuedAt, issuedAt.AddMinutes(15),
+                CancellationToken.None)
+            .GetAwaiter()
+            .GetResult();
+        ConnectionId connection = server.Connect();
+
+        server.SignIn(connection, token.Text);
+        server.TickUntilPublished();
+
+        Assert.That(
+            Tagged(recorder, "evertorch.sessions.authentication_failures", "reason", "session_expired"),
+            Is.EqualTo(1));
         Assert.That(server.Status.Current.AuthenticationFailures, Is.EqualTo(1));
     }
 

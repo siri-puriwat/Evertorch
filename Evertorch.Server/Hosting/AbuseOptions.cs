@@ -79,6 +79,28 @@ public sealed class AbuseOptions
     ///     How long an account, or an address that had not signed in, is refused after a disconnect for violations.
     /// </summary>
     public int KickCooldownMs { get; set; } = 60000;
+
+    /// <summary>
+    ///     Sign-ins per second from one remote address, at the gateway.
+    /// </summary>
+    public int SignInsPerSecond { get; set; } = 2;
+
+    public int SignInBurst { get; set; } = 20;
+
+    /// <summary>
+    ///     Failed sign-ins forgiven per minute for one login, whether or not an account has it.
+    /// </summary>
+    public int SignInFailuresPerMinute { get; set; } = 2;
+
+    /// <summary>
+    ///     Failed sign-ins a login may have before it is answered 429.
+    /// </summary>
+    public int SignInFailureBurst { get; set; } = 5;
+
+    /// <summary>
+    ///     Bound of the table of logins the failure limit remembers.
+    /// </summary>
+    public int MaxTrackedLogins { get; set; } = 10000;
 }
 
 public sealed class AbuseOptionsValidator : IValidateOptions<AbuseOptions>
@@ -104,6 +126,11 @@ public sealed class AbuseOptionsValidator : IValidateOptions<AbuseOptions>
         AddRangeFailure(failures, "ViolationThreshold", options.ViolationThreshold, 1, 1000000);
         AddRangeFailure(failures, "ViolationDecayPerSecond", options.ViolationDecayPerSecond, 0, 1000000);
         AddRangeFailure(failures, "KickCooldownMs", options.KickCooldownMs, 0, 86400000);
+        AddRangeFailure(failures, "SignInsPerSecond", options.SignInsPerSecond, 1, 1000);
+        AddRangeFailure(failures, "SignInBurst", options.SignInBurst, 1, 10000);
+        AddRangeFailure(failures, "SignInFailuresPerMinute", options.SignInFailuresPerMinute, 1, 1000);
+        AddRangeFailure(failures, "SignInFailureBurst", options.SignInFailureBurst, 1, 1000);
+        AddRangeFailure(failures, "MaxTrackedLogins", options.MaxTrackedLogins, 16, 1000000);
         return failures.Count == 0 ? ValidateOptionsResult.Success : ValidateOptionsResult.Fail(failures);
     }
 

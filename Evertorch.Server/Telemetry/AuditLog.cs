@@ -54,6 +54,12 @@ public sealed class AuditLog
             new EventId(5005, "ConnectionRefused"),
             "Connection {Connection} (account {Account}) was refused by the {Limit} limit ({Suppressed} held back).");
 
+    private static readonly Action<ILogger, string, long, int, Exception?> LogSignInRefused =
+        LoggerMessage.Define<string, long, int>(
+            LogLevel.Debug,
+            new EventId(5006, "SignInRefused"),
+            "A sign-in was refused by {Reason} (account {Account}; {Suppressed} held back).");
+
     private static readonly Action<ILogger, string, string, int, Exception?> LogOperatorSaved =
         LoggerMessage.Define<string, string, int>(
             LogLevel.Information,
@@ -85,6 +91,7 @@ public sealed class AuditLog
     private readonly RateLimitedLog m_violations;
     private readonly RateLimitedLog m_disconnects;
     private readonly RateLimitedLog m_connectionsRefused;
+    private readonly RateLimitedLog m_signInsRefused;
 
     /// <param name="logger">A logger of the <see cref="LogCategories.Audit" /> category.</param>
     public AuditLog(ILogger logger, IMonotonicClock clock)
@@ -96,6 +103,7 @@ public sealed class AuditLog
         m_violations = new RateLimitedLog(clock, Interval, EventsPerKind);
         m_disconnects = new RateLimitedLog(clock, Interval, EventsPerKind);
         m_connectionsRefused = new RateLimitedLog(clock, Interval, EventsPerKind);
+        m_signInsRefused = new RateLimitedLog(clock, Interval, EventsPerKind);
     }
 
     public void CommandRefused(ClientSession session, InboundEventKind command, CommandRejectionReason reason)
@@ -179,6 +187,18 @@ public sealed class AuditLog
         if (m_logger.IsEnabled(LogLevel.Debug) && m_connectionsRefused.TryEnter(out int suppressed))
         {
             LogConnectionRefused(m_logger, connection.Value, account?.Value ?? 0, limit, suppressed, null);
+        }
+    }
+
+    /// <summary>
+    ///     A sign-in refused for its credentials or by a sign-in limit, with the account when the login named one. Safe
+    ///     on any thread.
+    /// </summary>
+    public void SignInRefused(string reason, AccountId? account)
+    {
+        if (m_logger.IsEnabled(LogLevel.Debug) && m_signInsRefused.TryEnter(out int suppressed))
+        {
+            LogSignInRefused(m_logger, reason, account?.Value ?? 0, suppressed, null);
         }
     }
 

@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
@@ -21,7 +22,13 @@ public sealed class ProgramTests
 {
     private static Task<int> StartMain(string[] args)
     {
-        return Task.Run(() => Program.Main(args));
+        return Task.Run(() => Program.Main(WithoutGateway(args)));
+    }
+
+    // The test output holds the server's appsettings.json, whose gateway would take the fixed port 7443.
+    private static string[] WithoutGateway(string[] args)
+    {
+        return args.Append("--Gateway:Enabled=false").ToArray();
     }
 
     // A server that started after all would run until stopped; the test fails instead of waiting for it.
@@ -260,7 +267,8 @@ public sealed class ProgramTests
                 $"--Content:ServerPackagePath={package.Path}",
                 $"--ConnectionStrings:Evertorch={database.ConnectionString}",
                 "--Network:Port=0",
-                "--Health:Port=0"
+                "--Health:Port=0",
+                "--Gateway:Enabled=false"
             });
 
         Assert.That(exitCode, Is.EqualTo(1));
@@ -290,7 +298,8 @@ public sealed class ProgramTests
                 {
                     $"--Content:ServerPackagePath={missing}",
                     $"--ConnectionStrings:Evertorch={TestHosts.UnreachableDatabase}",
-                    "--Health:Port=0"
+                    "--Health:Port=0",
+                    "--Gateway:Enabled=false"
                 });
         }
         finally

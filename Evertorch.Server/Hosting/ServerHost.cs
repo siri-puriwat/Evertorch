@@ -68,6 +68,7 @@ public static class ServerHost
 
         AddOptions<NetworkOptions, NetworkOptionsValidator>(builder, NetworkOptions.SectionName);
         AddOptions<HealthOptions, HealthOptionsValidator>(builder, HealthOptions.SectionName);
+        AddOptions<GatewayOptions, GatewayOptionsValidator>(builder, GatewayOptions.SectionName);
         AddOptions<AbuseOptions, AbuseOptionsValidator>(builder, AbuseOptions.SectionName);
         AddOptions<CompatibilityOptions, CompatibilityOptionsValidator>(builder, CompatibilityOptions.SectionName);
         AddOptions<WorldOptions, WorldOptionsValidator>(builder, WorldOptions.SectionName);
@@ -87,7 +88,9 @@ public static class ServerHost
 
         builder.Services.AddSingleton<InboundQueue>();
         builder.Services.AddSingleton<SessionRegistry>();
-        builder.Services.AddSingleton<ISessionTokenValidator, DevelopmentTokenValidator>();
+        builder.Services.AddSingleton<DevelopmentTokenValidator>();
+        builder.Services.AddSingleton<ProductionTokenValidator>();
+        builder.Services.AddSingleton<ISessionTokenValidator, SessionTokenValidator>();
         builder.Services.AddSingleton<HandshakeValidator>();
         builder.Services.AddSingleton<CharacterStats>();
         builder.Services.AddSingleton<WorldSimulation>();
@@ -145,8 +148,13 @@ public static class ServerHost
         builder.Services.AddSingleton<TickPipeline>();
         builder.Services.AddSingleton<FixedStepLoop>();
         // Before the lifetime service, so the endpoints start before the transport and stop after everything else.
+        builder.Services.AddSingleton<HealthProbe>();
         builder.Services.AddSingleton<HealthEndpoint>();
         builder.Services.AddHostedService(services => services.GetRequiredService<HealthEndpoint>());
+        builder.Services.AddSingleton<SignInThrottle>();
+        builder.Services.AddSingleton<SignInService>();
+        builder.Services.AddSingleton<GatewayEndpoint>();
+        builder.Services.AddHostedService(services => services.GetRequiredService<GatewayEndpoint>());
         builder.Services.AddSingleton<ServerLifetimeService>();
         builder.Services
             .AddOptions<HostOptions>()

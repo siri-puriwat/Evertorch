@@ -315,12 +315,12 @@ public sealed class SessionManager : ITickPhase
         // Admission needs the database (Persistence §9): without it the connection is refused as not ready.
         string token = hello.SessionToken;
         ConnectionId connection = session.Connection;
-        var authentication = new PersistenceJob<AccountId?>(
+        var authentication = new PersistenceJob<SessionTokenCheck>(
             "authenticate",
             connection,
             0,
             (store, cancellation) => m_tokens.ValidateAsync(token, store, cancellation),
-            (outcome, account) => CompleteAuthentication(connection, outcome, account));
+            (outcome, check) => CompleteAuthentication(connection, outcome, check));
         if (!m_persistence.TryEnqueueAdmission(authentication))
         {
             Refuse(session, DisconnectReason.ServerNotReady);
@@ -330,7 +330,10 @@ public sealed class SessionManager : ITickPhase
         session.State = SessionState.Authenticating;
     }
 
-    private void CompleteAuthentication(ConnectionId connection, PersistenceOutcome outcome, AccountId? account)
+    private void CompleteAuthentication(
+        ConnectionId connection,
+        PersistenceOutcome outcome,
+        SessionTokenCheck? check)
     {
         // Connection numbers are never reused, so a session found here is the one that asked.
         if (!m_sessions.TryGet(connection, out ClientSession? session)
@@ -340,7 +343,9 @@ public sealed class SessionManager : ITickPhase
             return;
         }
 
+        AccountId? account = check?.Account;
         DisconnectReason refusal = outcome != PersistenceOutcome.Succeeded ? DisconnectReason.ServerNotReady
+            : check?.Verdict == SessionTokenVerdict.Expired ? DisconnectReason.SessionExpired
             : account == null ? DisconnectReason.AuthenticationFailed
             : DisconnectReason.None;
         if (refusal != DisconnectReason.None)
@@ -1174,10 +1179,10 @@ public sealed class SessionManager : ITickPhase
 
     private void Refuse(ClientSession session, DisconnectReason reason)
     {
-        if (reason == DisconnectReason.AuthenticationFailed)
+        if (reason == DisconnectReason.AuthenticationFailed || reason == DisconnectReason.SessionExpired)
         {
             AuthenticationFailures++;
-            m_instruments.RecordAuthenticationFailure();
+            m_instruments.RecordAuthenticationFailure(reason);
         }
 
         LogHandshakeRejected(m_logger, session.Connection.Value, AccountOf(session), reason, null);
