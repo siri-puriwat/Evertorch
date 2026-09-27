@@ -647,7 +647,8 @@ public sealed class PlayerPanelTests
             "the gel has no action, so its row is text");
         Assert.That(buttons.Select(button => button.navigation.mode), Is.All.EqualTo(Navigation.Mode.None));
         buttons[1].onClick.Invoke();
-        Assert.That(window.Text, Does.EndWith("Training Sword x 1"), "without a connection a press sends nothing");
+        yield return null;
+        Assert.That(window.Text, Does.EndWith("Training Sword x 1"), "a press shows nothing until the server answers");
     }
 
     // Wrapped onto a second line, the worn sword's row spilled out of its row, and the list's mask cut off its top.
@@ -813,7 +814,8 @@ public sealed class PlayerPanelTests
         Assert.That(buttons.Select(button => button.navigation.mode), Is.All.EqualTo(Navigation.Mode.None));
         buttons[0].onClick.Invoke();
         buttons[3].onClick.Invoke();
-        Assert.That(window.Text, Does.Contain("Slime Gel x 12"), "without a connection a press sends nothing");
+        yield return null;
+        Assert.That(window.Text, Does.Contain("Slime Gel x 12"), "a press shows nothing until the server answers");
     }
 
     [UnityTest]

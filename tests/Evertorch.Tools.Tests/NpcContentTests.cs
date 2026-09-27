@@ -298,5 +298,31 @@ public sealed class NpcContentTests
                 Describe(result));
         }
     }
+
+    // A character keeps every quest it takes, and one quest log carries them all: the fifteenth by ID is refused.
+    [Test]
+    public void Run_WithMoreQuestsThanAQuestLogCarries_ReportsEachBeyondIt()
+    {
+        using (var workspace = new ContentWorkspace())
+        {
+            for (int index = 0; index < 14; index++)
+            {
+                workspace.Write(
+                    $"quests/extra_{index:D2}.yml",
+                    $"id: quest.extra_{index:D2}\ndisplayName: Extra\nserver:\n  giver: npc.quartermaster\n"
+                    + "  objective:\n    kill: { monster: monster.training_slime, count: 1 }\n"
+                    + "  rewards:\n    baseExperience: 1\n    currency: 0\n");
+            }
+
+            ContentPipelineResult result = ContentPipeline.Run(workspace.ContentRoot);
+
+            Assert.That(
+                result.Diagnostics
+                    .Where(diagnostic => diagnostic.Message.Contains("quests a quest log carries"))
+                    .Select(diagnostic => (diagnostic.File, diagnostic.FieldPath, diagnostic.Message)),
+                Is.EqualTo(new[] { (Quest, "id", "is one more than the 14 quests a quest log carries") }),
+                Describe(result));
+        }
+    }
 }
 }

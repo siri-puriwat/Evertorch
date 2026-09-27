@@ -22,6 +22,7 @@ public sealed class TalkState
     private readonly MovementController m_controller;
     private readonly List<WorldPosition> m_places = new();
     private bool m_isWalking;
+    private WorldPosition m_place;
 
     public TalkState(ClientWorld world, MovementController controller)
     {
@@ -135,6 +136,7 @@ public sealed class TalkState
             if (m_controller.TryMoveTo(position, place))
             {
                 m_isWalking = true;
+                m_place = place;
                 return true;
             }
         }
@@ -165,9 +167,22 @@ public sealed class TalkState
         }
     }
 
+    // A path ends where it was asked to go, so one ending elsewhere is a walk the player asked for since.
+    private bool IsWalkingUp()
+    {
+        if (!m_controller.HasPath || m_controller.IsChasing)
+        {
+            return false;
+        }
+
+        WorldPosition goal = m_controller.Path[m_controller.Path.Count - 1];
+        return GroundDistanceSquared(goal, m_place) < 1e-6f;
+    }
+
     private void End()
     {
-        if (IsActive && m_isWalking)
+        // A ground click installs its walk before the talk is told to end, and that walk must stay.
+        if (IsActive && m_isWalking && IsWalkingUp())
         {
             m_controller.CancelPath();
         }

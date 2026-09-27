@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
+using System.Text.Json.Nodes;
 using Evertorch.Game;
 using Evertorch.Tools;
 using NUnit.Framework;
@@ -228,6 +230,27 @@ public sealed class ServerContentNpcTests
                     "maps.json: map.training_ground: NPC 'npc.quartermaster' stands on a marker cell another NPC "
                     + "stands on"
                 }));
+    }
+
+    // A character keeps every quest it takes, and one quest log carries them all.
+    [Test]
+    public void Load_WithMoreQuestsThanAQuestLogCarries_Fails()
+    {
+        Dictionary<string, byte[]> files = PackageFixture.BuildFixturePackage();
+        JsonArray definitions = JsonNode.Parse(files[Quests])!["definitions"]!.AsArray();
+        JsonNode quest = definitions[0]!;
+        definitions.Clear();
+        for (int index = 1; index <= 15; index++)
+        {
+            JsonNode copy = quest.DeepClone();
+            copy["id"] = $"quest.hunt_{index:D2}";
+            definitions.Add(copy);
+        }
+
+        files[Quests] = Encoding.UTF8.GetBytes(definitions.Root.ToJsonString());
+        PackageFixture.RewriteManifest(files);
+
+        Assert.That(ProblemsOf(files), Does.Contain("quests.json: lists more than the 14 quests a quest log carries"));
     }
 }
 }

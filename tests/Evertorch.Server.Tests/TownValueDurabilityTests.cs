@@ -442,7 +442,7 @@ public sealed class TownValueDurabilityTests
         Assert.That(
             Scalar($"SELECT base_level * 1000 + base_exp FROM characters WHERE id = {character}"),
             Is.EqualTo(3070),
-            "the stop's checkpoint left the reward's level and experience alone");
+            "the stop's checkpoint wrote nothing below the reward's level and experience");
 
         using (IHost second = StartHost(root.Path))
         using (SocketClient again = EnterWorld(second))

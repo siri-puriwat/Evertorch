@@ -377,7 +377,11 @@ public sealed class LiveServerTownLoopTests : InputTestFixture
         yield return WalkUpTo(client, mouse, window, GateWardenPrefab);
 
         Assert.That(Press(window, "Accept"), Is.True, window.Text);
-        yield return WaitUntil(() => bar.QuestText == "Forest Crawler 0/5", StepTimeoutSeconds);
+        yield return WaitUntil(
+            () => bar.QuestText == "Forest Crawler 0/5"
+                && lines.Text.Contains("Accepted Crawler Hunt.")
+                && window.Text.EndsWith("\nProgress: 0/5"),
+            StepTimeoutSeconds);
         Assert.That(bar.QuestText, Is.EqualTo("Forest Crawler 0/5"), window.Text);
         Assert.That(lines.Text, Does.Contain("Accepted Crawler Hunt."));
         Assert.That(window.Text, Does.EndWith("\nProgress: 0/5"));
@@ -401,9 +405,13 @@ public sealed class LiveServerTownLoopTests : InputTestFixture
         yield return WaitUntil(() => inventory.CoinsText == "Coins: 100", StepTimeoutSeconds);
         Assert.That(inventory.CoinsText, Is.EqualTo("Coins: 100"));
         Assert.That(client.World.Level, Is.EqualTo(3), "150 base experience through two levels");
-        Assert.That(
-            bar.GetComponentsInChildren<TMP_Text>(true).Single(label => label.name == "Name").text,
-            Does.EndWith("Lv 3"));
+        TMP_Text name = bar.GetComponentsInChildren<TMP_Text>(true).Single(label => label.name == "Name");
+        yield return WaitUntil(
+            () => name.text.EndsWith("Lv 3")
+                && bar.QuestText.Length == 0
+                && lines.Text.Contains("Completed Crawler Hunt: 150 base experience, 100 coins."),
+            StepTimeoutSeconds);
+        Assert.That(name.text, Does.EndWith("Lv 3"));
         Assert.That(bar.QuestText, Is.Empty, "no active quest");
         Assert.That(lines.Text, Does.Contain("Completed Crawler Hunt: 150 base experience, 100 coins."));
 

@@ -216,7 +216,10 @@ public sealed class ObserverOutputTests
             "the actor was told of its trades, its quest, and its reward");
         Assert.That(server.SessionOf(actor).Character!.Inventory.Coins, Is.EqualTo(186L), "all three went through");
         Assert.That(observerHeard.Distinct(), Is.SubsetOf(WhatAnyoneNearSees));
-        Assert.That(observerHeard, Does.Contain(MessageOpcode.EntitySnapshot), "the observer watched the actor");
+        Assert.That(
+            server.Transport.SnapshotsSentTo(observer).Last().Entities.Select(state => state.Entity),
+            Does.Contain(server.PlayerOf(actor).Id),
+            "the observer still saw the actor at the Gate Warden");
     }
 }
 }

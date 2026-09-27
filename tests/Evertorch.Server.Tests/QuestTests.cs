@@ -290,7 +290,7 @@ public sealed class QuestTests
 
     // The vector "A later checkpoint": taken while the turn-in is in flight, a checkpoint leaves the level and
     // experience to the turn-in, which commits the reward's pair; memory then holds the reward on top of what came
-    // meanwhile, for the next checkpoint to write.
+    // meanwhile, for the checkpoint queued once the turn-in is over to write.
     [Test]
     public void Checkpoint_WhileATurnInIsInFlight_LeavesTheLevelAndExperienceToTheReward()
     {
@@ -562,6 +562,30 @@ public sealed class QuestTests
             hunter.Server.ItemActionLog.Entries.Single(entry => entry.EventId.Name == "InventoryOperationUnsettled")
                 .Fields["Kind"],
             Is.EqualTo(InventoryOperationKind.QuestReward));
+    }
+
+    // A kill while a turn-in is in flight adds experience its commit cannot carry, and the checkpoints of the flight
+    // leave the level and experience to the turn-in; once it is over, what the character holds is saved at once.
+    [Test]
+    public void TurnIn_WithExperienceEarnedInFlight_SavesWhatTheCharacterHolds_OnceItIsOver()
+    {
+        Hunter hunter = AtThe(GateWarden, progress: 5);
+        hunter.Server.RunsPersistence = false;
+        hunter.Server.SendCompleteQuest(hunter.Player, hunter.Npc, Hunt, 1);
+        hunter.Server.Tick();
+
+        // As a kill during the flight would.
+        hunter.Character.Player.Experience += 25;
+        hunter.Server.RunsPersistence = true;
+        hunter.Server.TickUntil(() => hunter.Character.Operation == null);
+        hunter.Server.Tick(3);
+
+        StoredCharacter stored = hunter.Server.Store.Stored(1);
+        Assert.That(
+            (hunter.Character.Player.Level, hunter.Character.Player.Experience),
+            Is.EqualTo((4, 15L)),
+            "25 + 150 = 175 in memory");
+        Assert.That((stored.BaseLevel, stored.Experience), Is.EqualTo((4, 15L)), "saved once the turn-in was over");
     }
 }
 }

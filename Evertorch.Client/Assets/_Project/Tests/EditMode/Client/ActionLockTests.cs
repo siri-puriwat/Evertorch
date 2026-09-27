@@ -32,6 +32,37 @@ public sealed class ActionLockTests
     }
 
     [Test]
+    public void AwaitCast_HoldsBothFreeChecks_UntilItsCastIsHeard_Refused_OrItsTicksPass()
+    {
+        var heard = new ActionLock();
+        var refused = new ActionLock();
+        var lost = new ActionLock();
+        foreach (ActionLock actionLock in new[] { heard, refused, lost })
+        {
+            actionLock.AwaitCast(3);
+        }
+
+        bool[] whileAwaited = { heard.HasBeenFreeFor(0), heard.HasBeenFreeOfCastFor(0) };
+        heard.LockForCast(0);
+        refused.StopAwaitingCast();
+        bool[] lostEarly = new bool[3];
+        for (int tick = 0; tick < lostEarly.Length; tick++)
+        {
+            lostEarly[tick] = lost.HasBeenFreeOfCastFor(0);
+            lost.Advance();
+        }
+
+        Assert.That(whileAwaited, Is.EqualTo(new[] { false, false }), "a cast asked for may be under way");
+        Assert.That(
+            (heard.HasBeenFreeFor(ActionLock.ClearTicks), heard.HasBeenFreeOfCastFor(ActionLock.ClearTicks)),
+            Is.EqualTo((true, true)),
+            "a cast of 0 ms was heard");
+        Assert.That(refused.HasBeenFreeOfCastFor(ActionLock.ClearTicks), Is.True, "refused");
+        Assert.That(lostEarly, Is.EqualTo(new[] { false, false, false }));
+        Assert.That(lost.HasBeenFreeOfCastFor(ActionLock.ClearTicks), Is.True, "no word within its ticks");
+    }
+
+    [Test]
     public void EndCast_FreesTheCastAtOnce_ButNotASwing()
     {
         var actionLock = new ActionLock();

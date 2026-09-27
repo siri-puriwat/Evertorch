@@ -13,6 +13,7 @@ public static class ContentValidator
 {
     // One StatusEffects message carries at most this many (Network Protocol §9).
     private const int MaxStatusEffects = 14;
+    private const int MaxQuests = 14;
 
     // One NpcServices message (Network Protocol §6): its header, then each item the NPC trades and each quest it gives
     // at their largest, with every ID at the 64-byte limit; one datagram carries 1,020 bytes.
@@ -162,6 +163,19 @@ public static class ContentValidator
         {
             RequireShop(npc, items, itemsById, diagnostics);
             RequireServicesFit(npc, content, diagnostics);
+        }
+
+        // A character keeps every quest it takes, and one quest log carries them all.
+        for (int index = MaxQuests; index < content.Quests.Count; index++)
+        {
+            Report(
+                content.Quests[index].Source,
+                "id",
+                string.Format(
+                    CultureInfo.InvariantCulture,
+                    "is one more than the {0} quests a quest log carries",
+                    MaxQuests),
+                diagnostics);
         }
 
         foreach (AuthoredQuest quest in content.Quests)

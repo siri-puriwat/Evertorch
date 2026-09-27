@@ -21,6 +21,7 @@ public sealed class ActionLock
     private int m_nextSwingTicks;
     private int m_freeTicks = int.MaxValue;
     private int m_castFreeTicks = int.MaxValue;
+    private int m_castAwaitedTicks;
 
     /// <summary>
     ///     Whether the player's own swing still holds it; the auto-attack waits for this before it presses closer.
@@ -28,6 +29,12 @@ public sealed class ActionLock
     public bool IsSwingLocked => m_swingTicks > 0;
 
     public bool IsCastLocked => m_castTicks > 0;
+
+    /// <summary>
+    ///     Whether a cast the player asked for may already be under way on the server, which the client has yet to
+    ///     hear of: from the request until its <c>SkillCastStarted</c> or its refusal arrives, or its ticks pass.
+    /// </summary>
+    public bool IsCastAwaited => m_castAwaitedTicks > 0;
 
     /// <param name="ticks">How long the swing holds the player.</param>
     /// <param name="nextSwingTicks">When the auto-attack's next swing is expected; 0 for none.</param>
@@ -44,7 +51,7 @@ public sealed class ActionLock
     /// </summary>
     public bool HasBeenFreeFor(int ticks)
     {
-        return !IsSwingLocked && !IsCastLocked && m_freeTicks >= ticks;
+        return !IsSwingLocked && !IsCastLocked && !IsCastAwaited && m_freeTicks >= ticks;
     }
 
     /// <summary>
@@ -53,7 +60,7 @@ public sealed class ActionLock
     /// </summary>
     public bool HasBeenFreeOfCastFor(int ticks)
     {
-        return !IsCastLocked && m_castFreeTicks >= ticks;
+        return !IsCastLocked && !IsCastAwaited && m_castFreeTicks >= ticks;
     }
 
     /// <summary>
@@ -68,6 +75,18 @@ public sealed class ActionLock
     public void LockForCast(int ticks)
     {
         m_castTicks = Math.Max(0, ticks);
+        m_castAwaitedTicks = 0;
+    }
+
+    /// <param name="ticks">How long to wait for word of the cast at most, should neither it nor a refusal come.</param>
+    public void AwaitCast(int ticks)
+    {
+        m_castAwaitedTicks = Math.Max(0, ticks);
+    }
+
+    public void StopAwaitingCast()
+    {
+        m_castAwaitedTicks = 0;
     }
 
     /// <summary>
@@ -98,6 +117,11 @@ public sealed class ActionLock
         if (m_nextSwingTicks > 0)
         {
             m_nextSwingTicks--;
+        }
+
+        if (m_castAwaitedTicks > 0)
+        {
+            m_castAwaitedTicks--;
         }
 
         if (isLocked)

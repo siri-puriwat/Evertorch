@@ -155,8 +155,8 @@ public sealed class MessageSender
 
     /// <summary>
     ///     A committed change of <paramref name="character" />'s inventory to its owner alone (Network Protocol §9): the
-    ///     rows it changed, from <paramref name="priorRevision" /> to the inventory's revision now. An answer that named
-    ///     no row leaves the owner a snapshot to fetch instead; nothing goes to a character no connection controls.
+    ///     rows it changed, from <paramref name="priorRevision" /> to the inventory's revision now, and its coins; a
+    ///     change that moved only coins carries no row. Nothing goes to a character no connection controls.
     /// </summary>
     public void SendInventoryChange(CharacterSession character, uint priorRevision, IReadOnlyList<InventoryEntry> rows)
     {

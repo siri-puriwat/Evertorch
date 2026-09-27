@@ -81,6 +81,27 @@ public sealed class TalkStateTests
     }
 
     [Test]
+    public void Cancel_AfterAWalkOfThePlayersOwn_LeavesThatWalk_ButEndsItsOwn()
+    {
+        var clicked = new Rig(ClientTestGrids.Center(1, 1));
+        clicked.Talk.Talk(Warden);
+        clicked.Tick();
+        WorldPosition elsewhere = ClientTestGrids.Center(1, 6);
+        Assert.That(clicked.Controller.TryMoveTo(clicked.World.Predictor.Position, elsewhere), Is.True);
+        var cancelled = new Rig(ClientTestGrids.Center(1, 1));
+        cancelled.Talk.Talk(Warden);
+        cancelled.Tick();
+
+        clicked.Talk.Cancel();
+        cancelled.Talk.Cancel();
+
+        Assert.That(clicked.Controller.HasPath, Is.True, "a ground click installs its walk before the talk ends");
+        WorldPosition goal = clicked.Controller.Path[clicked.Controller.Path.Count - 1];
+        Assert.That((goal.X, goal.Z), Is.EqualTo((elsewhere.X, elsewhere.Z)));
+        Assert.That(cancelled.Controller.HasPath, Is.False, "the walk up itself ends with the talk");
+    }
+
+    [Test]
     public void Death_EndsTheWalkUp()
     {
         var rig = new Rig(ClientTestGrids.Center(1, 1));

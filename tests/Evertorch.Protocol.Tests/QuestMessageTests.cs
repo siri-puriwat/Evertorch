@@ -47,6 +47,21 @@ public sealed class QuestMessageTests
         return QuestLog.TryRead(bytes, out _);
     }
 
+    // The first fourteen entries as a log, the fifteenth written after them, and the count raised to fifteen: all a
+    // writer without the limit would send.
+    private static byte[] FifteenEntries(QuestLogEntry[] fifteen)
+    {
+        var head = new QuestLog(fifteen.Take(QuestLog.MaxEntries).ToArray());
+        var tail = new QuestLog(new[] { fifteen[QuestLog.MaxEntries] });
+        byte[] headBytes = new byte[head.GetEncodedLength()];
+        byte[] tailBytes = new byte[tail.GetEncodedLength()];
+        head.Write(headBytes);
+        tail.Write(tailBytes);
+        byte[] bytes = headBytes.Concat(tailBytes.Skip(3)).ToArray();
+        bytes[2] = QuestLog.MaxEntries + 1;
+        return bytes;
+    }
+
     [TestCase(2, new byte[] { 0, 0, 0, 0, 0, 0, 0, 0 }, "NPC 0")]
     [TestCase(9, new byte[] { 0xFF }, "a negative NPC")]
     [TestCase(12, new byte[] { 0x6A }, "'juest.a' for a quest")]
@@ -143,13 +158,17 @@ public sealed class QuestMessageTests
                 ushort.MaxValue))
             .ToArray();
         var largest = new QuestLog(entries);
-        byte[] bytes = new byte[largest.GetEncodedLength()];
-        largest.Write(bytes);
-        bytes[2] = QuestLog.MaxEntries + 1;
+        QuestLogEntry[] fifteen = Enumerable.Range(0, QuestLog.MaxEntries + 1)
+            .Select(index => new QuestLogEntry(
+                new QuestDefinitionId($"quest.{(char)('a' + index)}"),
+                QuestState.Active,
+                0,
+                1))
+            .ToArray();
         Action tooMany = () => _ = new QuestLog(entries.Append(entries[0]).ToArray());
 
         Assert.That(largest.GetEncodedLength(), Is.EqualTo(997));
-        Assert.That(ReadLog(bytes), Is.False, "fifteen entries");
+        Assert.That(ReadLog(FifteenEntries(fifteen)), Is.False, "fifteen entries");
         Assert.That(tooMany, Throws.ArgumentException);
     }
 

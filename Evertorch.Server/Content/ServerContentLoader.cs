@@ -157,6 +157,12 @@ public static class ServerContentLoader
                 + "carries");
         }
 
+        // A character keeps every quest it takes, and one quest log carries them all.
+        if (quests.Count > QuestLog.MaxEntries)
+        {
+            problems.Add($"{QuestsFile}: lists more than the {QuestLog.MaxEntries} quests a quest log carries");
+        }
+
         CheckReferences(
             monsters.Values,
             jobs.Values,

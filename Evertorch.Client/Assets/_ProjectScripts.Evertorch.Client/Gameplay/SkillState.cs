@@ -20,11 +20,20 @@ public sealed class SkillState
     /// </summary>
     private const double NextSwingMarginSeconds = 0.2;
 
+    /// <summary>
+    ///     How long a sent request is waited on at most: past any round trip the game plays over, for a word lost with
+    ///     its connection.
+    /// </summary>
+    private const double CastAwaitSeconds = 2.0;
+
     private readonly ClientWorld m_world;
     private readonly MovementController m_controller;
+
     private readonly ISkillCommandSink m_commands;
     private readonly int m_nextSwingMarginTicks;
+    private readonly int m_castAwaitTicks;
     private float m_range;
+    private uint m_sentSequence;
 
     public SkillState(ClientWorld world, MovementController controller, ISkillCommandSink commands, double tickSeconds)
     {
@@ -37,7 +46,9 @@ public sealed class SkillState
         }
 
         m_nextSwingMarginTicks = (int)Math.Ceiling(NextSwingMarginSeconds / tickSeconds);
+        m_castAwaitTicks = (int)Math.Ceiling(CastAwaitSeconds / tickSeconds);
         m_world.TargetChanged += OnTargetChanged;
+        m_world.CommandRejectedReceived += OnCommandRejected;
     }
 
     public bool IsActive { get; private set; }
@@ -141,7 +152,9 @@ public sealed class SkillState
             return;
         }
 
-        m_commands.SendUseSkill(Skill, Target);
+        // The server may begin the cast before the client hears of it, and a cancel meanwhile would end it there.
+        m_sentSequence = m_commands.SendUseSkill(Skill, Target);
+        actionLock.AwaitCast(m_castAwaitTicks);
         SkillsSent++;
         IsActive = false;
         Skill = default;
@@ -168,6 +181,16 @@ public sealed class SkillState
 
         range = 0f;
         return false;
+    }
+
+    // A refused request begins no cast.
+    private void OnCommandRejected(CommandRejected rejected)
+    {
+        if (m_sentSequence != 0 && rejected.CommandSequence == m_sentSequence)
+        {
+            m_sentSequence = 0;
+            m_world.ActionLock.StopAwaitingCast();
+        }
     }
 
     // The player cleared the target or chose another: the approach was for the one before.

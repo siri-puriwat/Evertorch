@@ -242,6 +242,31 @@ public sealed class SkillStateTests
     }
 
     [Test]
+    public void Request_OnceSent_HoldsTheNextPressUntilItsCastIsHeard_OrItIsRefused()
+    {
+        var heard = new Rig(1f);
+        var refused = new Rig(1f);
+        foreach (Rig rig in new[] { heard, refused })
+        {
+            rig.Skill.Use(FirstAid, SkillTargetType.Self);
+            rig.Tick();
+            rig.Skill.Use(FirstAid, SkillTargetType.Self);
+            rig.Tick();
+            rig.Tick();
+        }
+
+        int[] sentWhileAwaited = { heard.Sent.Count, refused.Sent.Count };
+        heard.World.OnSkillCastStarted(
+            new SkillCastStarted(ClientWorldFixture.LocalEntity, FirstAid, ClientWorldFixture.LocalEntity, 1, 0));
+        refused.World.OnCommandRejected(new CommandRejected(1, CommandRejectionReason.NotEnoughSp));
+        heard.Tick();
+        refused.Tick();
+
+        Assert.That(sentWhileAwaited, Is.EqualTo(new[] { 1, 1 }), "the second press waits for word of the first");
+        Assert.That((heard.Sent.Count, refused.Sent.Count), Is.EqualTo((2, 2)), "then goes");
+    }
+
+    [Test]
     public void Request_WhenTheExpectedSwingNeverCame_IsSentOnceItsTimePassed()
     {
         var rig = new Rig(1f);

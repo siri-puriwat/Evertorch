@@ -685,7 +685,17 @@ public sealed class ItemActionSystem : ITickPhase
 
     private void Finish(CharacterSession character)
     {
+        bool wasTurnIn = character.Operation?.Kind == InventoryOperationKind.QuestReward;
         character.Operation = null;
+
+        // Checkpoints taken while a turn-in was in flight left the level and experience to it (Persistence §6), the
+        // reward's own level-up among them; once it is over, what the character holds is saved at once. A logout or
+        // a removal waiting for it writes its own final checkpoint.
+        if (wasTurnIn && !character.IsLoggingOut && !character.IsExpelled && !character.IsRemovalDeferred)
+        {
+            m_lifetime.QueueCheckpoint(character);
+        }
+
         Settled?.Invoke(character);
         m_lifetime.OnOperationSettled(character);
     }

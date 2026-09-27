@@ -115,6 +115,10 @@ public sealed class ShopTests
         shop.Server.SendBuy(shop.Player, shop.Npc, Potion, 1, 1);
 
         Assert.That(shop.Answer(), Is.EqualTo(expected));
+        Assert.That(
+            shop.Character.Inventory.Coins,
+            Is.EqualTo(expected == CommandRejectionReason.None ? 80L : 100L),
+            "bought in reach, and only there");
         AssertNotScored(shop);
     }
 

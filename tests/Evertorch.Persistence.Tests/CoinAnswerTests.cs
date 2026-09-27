@@ -8,7 +8,7 @@ namespace Evertorch.Persistence.Tests
 {
 /// <summary>
 ///     Loading reads a character's coins, and every inventory commit and lookup answers with them (Persistence §5,
-///     §7). Nothing writes coins yet, so they are set here with plain SQL.
+///     §7). The coins are set here with plain SQL, as trades and rewards would have left them.
 /// </summary>
 [TestFixture]
 public sealed class CoinAnswerTests

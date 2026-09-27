@@ -318,6 +318,31 @@ public sealed class AutoAttackStateTests
     }
 
     [Test]
+    public void ManualDirection_AfterASkillWasAskedFor_WaitsUntilItsCastIsHeardAndOver()
+    {
+        var rig = new Rig(ClientTestGrids.Center(6, 8));
+        rig.AutoAttack.Attack(Slime);
+        rig.Tick();
+        rig.World.ActionLock.AwaitCast(40);
+
+        rig.Controller.SetManualDirection(0f, 1f);
+        rig.Tick();
+        rig.Tick();
+        int sentBeforeTheCastIsHeard = rig.Sent.Count;
+        rig.World.OnSkillCastStarted(
+            new SkillCastStarted(ClientWorldFixture.LocalEntity, FirstAid, ClientWorldFixture.LocalEntity, 1, 250));
+        var sentByTick = new List<int>();
+        for (int tick = 0; tick < 8; tick++)
+        {
+            rig.Tick();
+            sentByTick.Add(rig.Sent.Count);
+        }
+
+        Assert.That(sentBeforeTheCastIsHeard, Is.EqualTo(1), "the cast asked for may already be under way");
+        Assert.That(sentByTick, Is.EqualTo(new[] { 1, 1, 1, 1, 1, 1, 2, 2 }), "then its hold and two free ticks");
+    }
+
+    [Test]
     public void ManualDirection_DuringTheOwnCast_CancelsOnlyOnceTheCastIsOver()
     {
         Rig rig = AttackingDuringOwnCast();
