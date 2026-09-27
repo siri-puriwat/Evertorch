@@ -12,7 +12,8 @@ namespace Evertorch.Server.Tests
 ///     an actor strikes and kills a slime, picks up its drop, casts First Aid and Focus, equips a sword, drinks a
 ///     potion, has a command refused, and crosses to the field, while an observer beside it at full HP and SP does
 ///     nothing. The observer hears what anyone near sees, and nothing of the actor's own target, health, progress,
-///     skills, status effects, inventory, refusals, or new map.
+///     skills, status effects, inventory, refusals, or new map. Milestone 7 adds the town: the actor's trades,
+///     quest, and reward reach the observer as nothing more.
 /// </summary>
 [TestFixture]
 public sealed class ObserverOutputTests
@@ -24,6 +25,10 @@ public sealed class ObserverOutputTests
     private const string Focus = "skill.focus";
     private const string Sword = "item.weapon.training_sword";
     private const string Potion = "item.consumable.minor_health";
+    private const string Gel = "item.material.slime_gel";
+    private const string Quartermaster = "npc.quartermaster";
+    private const string GateWarden = "npc.gate_warden";
+    private const string Hunt = "quest.crawler_hunt";
 
     private static readonly MessageOpcode[] WhatAnyoneNearSees =
     {
@@ -167,6 +172,51 @@ public sealed class ObserverOutputTests
                     SkillCastStarted.TryRead(payload, out SkillCastStarted? read) ? read : null)
                 .Select(cast => cast.Skill.Value),
             Is.EqualTo(new[] { Strike, FirstAid, Focus }));
+    }
+
+    // The town's play (Milestone 7 verification line V4): the actor buys from the Quartermaster, sells to it, and
+    // accepts and turns in the Gate Warden's quest while the observer stands at the spawn point, from where both NPCs
+    // are in view. The prices, the catalogue, and the reward went to both with each NPC's services when it came into
+    // view; the actor's coins, rows, quest, and reward reach the observer as nothing.
+    [Test]
+    public void AnotherPlayersTradesAndQuest_ReachAnObserverOnlyAsWhatAnyoneNearSees()
+    {
+        var server = new TestServer(withNpcs: true);
+        ConnectionId actor = server.Connect();
+        server.SignInWithCharacter(actor, Actor);
+        server.Store.Edit(Actor, coins: 100);
+        server.Store.GiveItems(Actor, Gel, 1, 3, 1);
+        server.SendEnterWorld(actor, Actor);
+        server.TickUntil(() => server.SessionOf(actor).State == SessionState.InWorld);
+        ConnectionId observer = server.EnterWorld(Observer);
+        NpcEntity quartermaster = server.NpcOf(Quartermaster);
+        NpcEntity warden = server.NpcOf(GateWarden);
+        server.Place(actor, quartermaster.Position.X + 2f, quartermaster.Position.Z);
+        server.Tick(2);
+        server.Transport.ClearSent();
+
+        server.SendBuy(actor, quartermaster.Id, Potion, 1, 1);
+        Settle(server, actor);
+        server.SendSell(actor, quartermaster.Id, RowOf(server, actor, Gel), 3, 2);
+        Settle(server, actor);
+        server.Place(actor, warden.Position.X + 2f, warden.Position.Z);
+        server.Tick(2);
+        server.SendAcceptQuest(actor, warden.Id, Hunt, 3);
+        server.Tick(2);
+        server.SessionOf(actor).Character!.Quests.Entries.Single().Progress = 5;
+        server.SendCompleteQuest(actor, warden.Id, Hunt, 4);
+        Settle(server, actor);
+
+        MessageOpcode[] actorHeard = server.Transport.SentTo(actor).Select(message => message.Opcode).ToArray();
+        MessageOpcode[] observerHeard = server.Transport.SentTo(observer).Select(message => message.Opcode).ToArray();
+        Assert.That(
+            actorHeard,
+            Is.SupersetOf(
+                new[] { MessageOpcode.InventoryChanged, MessageOpcode.QuestLog, MessageOpcode.CharacterProgress }),
+            "the actor was told of its trades, its quest, and its reward");
+        Assert.That(server.SessionOf(actor).Character!.Inventory.Coins, Is.EqualTo(186L), "all three went through");
+        Assert.That(observerHeard.Distinct(), Is.SubsetOf(WhatAnyoneNearSees));
+        Assert.That(observerHeard, Does.Contain(MessageOpcode.EntitySnapshot), "the observer watched the actor");
     }
 }
 }
