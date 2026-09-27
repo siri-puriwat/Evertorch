@@ -71,6 +71,172 @@ RETURNING id AS ""Id"", status AS ""Status""")
             cancellationToken);
     }
 
+    public Task<AccountId?> CreateAccountAsync(
+        string loginNormalized,
+        string passwordScheme,
+        string passwordHash,
+        DateTime now,
+        CancellationToken cancellationToken)
+    {
+        return RunAsync(
+            async context =>
+            {
+                List<long> created = await context.Database
+                    .SqlQuery<long>(
+                        $@"INSERT INTO accounts (login_normalized, password_hash, password_scheme, status, created_at)
+VALUES ({loginNormalized}, {passwordHash}, {passwordScheme}, {AccountStatus.Active}, {now})
+ON CONFLICT (login_normalized) DO NOTHING
+RETURNING id AS ""Value""")
+                    .ToListAsync(cancellationToken)
+                    .ConfigureAwait(false);
+                AccountId? account = null;
+                if (created.Count == 1)
+                {
+                    account = new AccountId(created[0]);
+                }
+
+                return account;
+            },
+            cancellationToken);
+    }
+
+    public Task<AccountId?> SetAccountPasswordAsync(
+        string loginNormalized,
+        string passwordScheme,
+        string passwordHash,
+        CancellationToken cancellationToken)
+    {
+        return RunAsync(
+            async context =>
+            {
+                await using (IDbContextTransaction transaction =
+                             await context.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false))
+                {
+                    List<long> changed = await context.Database
+                        .SqlQuery<long>(
+                            $@"UPDATE accounts SET password_hash = {passwordHash}, password_scheme = {passwordScheme}
+WHERE login_normalized = {loginNormalized}
+RETURNING id AS ""Value""")
+                        .ToListAsync(cancellationToken)
+                        .ConfigureAwait(false);
+                    AccountId? account = null;
+                    if (changed.Count == 1)
+                    {
+                        account = new AccountId(changed[0]);
+                        await context.Database
+                            .ExecuteSqlAsync(
+                                $"DELETE FROM session_tokens WHERE account_id = {changed[0]}",
+                                cancellationToken)
+                            .ConfigureAwait(false);
+                    }
+
+                    await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+                    return account;
+                }
+            },
+            cancellationToken);
+    }
+
+    public Task<AccountCredentials?> FindAccountCredentialsAsync(
+        string loginNormalized,
+        CancellationToken cancellationToken)
+    {
+        return RunAsync(
+            async context =>
+            {
+                AccountRow? row = await context.Accounts
+                    .AsNoTracking()
+                    .SingleOrDefaultAsync(account => account.LoginNormalized == loginNormalized, cancellationToken)
+                    .ConfigureAwait(false);
+                return row == null
+                    ? null
+                    : new AccountCredentials(
+                        new AccountId(row.Id),
+                        row.PasswordScheme,
+                        row.PasswordHash,
+                        row.Status != AccountStatus.Active);
+            },
+            cancellationToken);
+    }
+
+    public Task IssueSessionTokenAsync(
+        AccountId account,
+        byte[] tokenHash,
+        DateTime issuedAt,
+        DateTime expiresAt,
+        CancellationToken cancellationToken)
+    {
+        RequireTokenHash(tokenHash);
+        return RunAsync(
+            async context =>
+            {
+                await using (IDbContextTransaction transaction =
+                             await context.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false))
+                {
+                    // Sign-ins of one account take turns, so none sees the other's token while keeping the newest.
+                    await LockAccountAsync(context, account, cancellationToken).ConfigureAwait(false);
+                    context.SessionTokens.Add(
+                        new SessionTokenRow
+                        {
+                            TokenHash = tokenHash,
+                            AccountId = account.Value,
+                            IssuedAt = issuedAt,
+                            ExpiresAt = expiresAt
+                        });
+                    await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+                    await context.Database
+                        .ExecuteSqlAsync(
+                            $"UPDATE accounts SET last_login_at = {issuedAt} WHERE id = {account.Value}",
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                    DateTime forgotten = issuedAt - SessionTokenLimits.ExpiredRetention;
+                    await context.Database
+                        .ExecuteSqlAsync($"DELETE FROM session_tokens WHERE expires_at < {forgotten}",
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                    await context.Database
+                        .ExecuteSqlAsync(
+                            $@"DELETE FROM session_tokens
+WHERE account_id = {account.Value} AND expires_at > {issuedAt} AND token_hash NOT IN (
+    SELECT token_hash FROM session_tokens
+    WHERE account_id = {account.Value} AND expires_at > {issuedAt}
+    ORDER BY issued_at DESC, token_hash DESC
+    LIMIT {SessionTokenLimits.MaxLiveTokensPerAccount})",
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                    await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+                    return true;
+                }
+            },
+            cancellationToken);
+    }
+
+    public Task<StoredSessionToken?> FindSessionTokenAsync(byte[] tokenHash, CancellationToken cancellationToken)
+    {
+        RequireTokenHash(tokenHash);
+        return RunAsync(
+            async context =>
+            {
+                var found = await context.SessionTokens
+                    .AsNoTracking()
+                    .Where(token => token.TokenHash == tokenHash)
+                    .Join(
+                        context.Accounts,
+                        token => token.AccountId,
+                        account => account.Id,
+                        (token, account) => new { token.AccountId, token.ExpiresAt, account.Status })
+                    .SingleOrDefaultAsync(cancellationToken)
+                    .ConfigureAwait(false);
+                return found == null
+                    ? null
+                    : new StoredSessionToken(
+                        new AccountId(found.AccountId),
+                        found.ExpiresAt,
+                        found.Status != AccountStatus.Active);
+            },
+            cancellationToken);
+    }
+
     public Task<IReadOnlyList<CharacterSummary>> ListCharactersAsync(
         AccountId account,
         CancellationToken cancellationToken)
@@ -1074,6 +1240,16 @@ WHERE character_quests.state = {CharacterQuestRow.ActiveState} AND character_que
         }
 
         return rows;
+    }
+
+    private static void RequireTokenHash(byte[] tokenHash)
+    {
+        if (tokenHash == null || tokenHash.Length != SessionTokenLimits.HashLength)
+        {
+            throw new ArgumentException(
+                $"A token hash is {SessionTokenLimits.HashLength} bytes.",
+                nameof(tokenHash));
+        }
     }
 
     private static bool IsUniqueViolation(DbUpdateException exception, string index)

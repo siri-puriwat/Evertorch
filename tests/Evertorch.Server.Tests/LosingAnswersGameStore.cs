@@ -40,6 +40,47 @@ internal sealed class LosingAnswersGameStore : IGameStore
         return m_inner.ProvisionAccountAsync(loginNormalized, now, cancellationToken);
     }
 
+    public Task<AccountId?> CreateAccountAsync(
+        string loginNormalized,
+        string passwordScheme,
+        string passwordHash,
+        DateTime now,
+        CancellationToken cancellationToken)
+    {
+        return m_inner.CreateAccountAsync(loginNormalized, passwordScheme, passwordHash, now, cancellationToken);
+    }
+
+    public Task<AccountId?> SetAccountPasswordAsync(
+        string loginNormalized,
+        string passwordScheme,
+        string passwordHash,
+        CancellationToken cancellationToken)
+    {
+        return m_inner.SetAccountPasswordAsync(loginNormalized, passwordScheme, passwordHash, cancellationToken);
+    }
+
+    public Task<AccountCredentials?> FindAccountCredentialsAsync(
+        string loginNormalized,
+        CancellationToken cancellationToken)
+    {
+        return m_inner.FindAccountCredentialsAsync(loginNormalized, cancellationToken);
+    }
+
+    public Task IssueSessionTokenAsync(
+        AccountId account,
+        byte[] tokenHash,
+        DateTime issuedAt,
+        DateTime expiresAt,
+        CancellationToken cancellationToken)
+    {
+        return m_inner.IssueSessionTokenAsync(account, tokenHash, issuedAt, expiresAt, cancellationToken);
+    }
+
+    public Task<StoredSessionToken?> FindSessionTokenAsync(byte[] tokenHash, CancellationToken cancellationToken)
+    {
+        return m_inner.FindSessionTokenAsync(tokenHash, cancellationToken);
+    }
+
     public Task<IReadOnlyList<CharacterSummary>> ListCharactersAsync(
         AccountId account,
         CancellationToken cancellationToken)

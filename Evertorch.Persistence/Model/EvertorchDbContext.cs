@@ -44,6 +44,8 @@ internal sealed class EvertorchDbContext : DbContext
 
     public DbSet<CharacterQuestRow> CharacterQuests => Set<CharacterQuestRow>();
 
+    public DbSet<SessionTokenRow> SessionTokens => Set<SessionTokenRow>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         ConfigureAccounts(modelBuilder.Entity<AccountRow>());
@@ -52,6 +54,7 @@ internal sealed class EvertorchDbContext : DbContext
         ConfigureEquipment(modelBuilder.Entity<EquipmentRow>());
         ConfigureLedger(modelBuilder.Entity<LedgerRow>());
         ConfigureQuests(modelBuilder.Entity<CharacterQuestRow>());
+        ConfigureSessionTokens(modelBuilder.Entity<SessionTokenRow>());
 
         foreach (IMutableEntityType entity in modelBuilder.Model.GetEntityTypes())
         {
@@ -69,6 +72,9 @@ internal sealed class EvertorchDbContext : DbContext
             table.HasCheckConstraint(
                 "ck_accounts_status",
                 $"status IN ('{AccountStatus.Active}', '{AccountStatus.Disabled}')");
+            table.HasCheckConstraint(
+                "ck_accounts_password",
+                "(password_hash IS NULL) = (password_scheme IS NULL)");
         });
         account.HasKey(row => row.Id).HasName("pk_accounts");
         account.Property(row => row.Id).UseIdentityAlwaysColumn();
@@ -204,6 +210,25 @@ internal sealed class EvertorchDbContext : DbContext
             .HasForeignKey(row => row.CharacterId)
             .OnDelete(DeleteBehavior.Restrict)
             .HasConstraintName("fk_character_quests_characters");
+    }
+
+    private static void ConfigureSessionTokens(EntityTypeBuilder<SessionTokenRow> token)
+    {
+        token.ToTable("session_tokens", table =>
+        {
+            table.HasCheckConstraint(
+                "ck_session_tokens_token_hash",
+                $"octet_length(token_hash) = {SessionTokenLimits.HashLength}");
+            table.HasCheckConstraint("ck_session_tokens_expiry", "expires_at > issued_at");
+        });
+        token.HasKey(row => row.TokenHash).HasName("pk_session_tokens");
+        token.HasIndex(row => row.AccountId).HasDatabaseName("ix_session_tokens_account_id");
+        token.HasIndex(row => row.ExpiresAt).HasDatabaseName("ix_session_tokens_expires_at");
+        token.HasOne<AccountRow>()
+            .WithMany()
+            .HasForeignKey(row => row.AccountId)
+            .OnDelete(DeleteBehavior.Restrict)
+            .HasConstraintName("fk_session_tokens_accounts");
     }
 
     private static string ToSnakeCase(string name)

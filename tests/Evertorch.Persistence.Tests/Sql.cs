@@ -55,6 +55,17 @@ internal sealed class Sql
             + $"VALUES ('dev:{Guid.NewGuid():N}', 'active', now()) RETURNING id");
     }
 
+    /// <summary>
+    ///     A session token row of <paramref name="hashLength" /> random bytes (at most 48), <paramref name="lifetime" />
+    ///     long from now.
+    /// </summary>
+    public static string SessionTokenInsert(long account, int hashLength = 32, string lifetime = "15 minutes")
+    {
+        return "INSERT INTO session_tokens (token_hash, account_id, issued_at, expires_at) "
+            + "VALUES (substring(decode(md5(random()::text) || md5(random()::text) || md5(random()::text), 'hex') "
+            + $"FROM 1 FOR {hashLength}), {account}, now(), now() + interval '{lifetime}')";
+    }
+
     public long InsertCharacter(long account, string name)
     {
         return Scalar(CharacterInsert(account, name, name.ToLowerInvariant(), 0));

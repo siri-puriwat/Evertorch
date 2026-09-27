@@ -25,7 +25,8 @@ public sealed class TelemetryTests
 
         Assert.That(
             output.ToString().Trim(),
-            Is.EqualTo("Unknown command. Commands: status, players, save, shutdown [reason], help"));
+            Is.EqualTo(
+                "Unknown command. Commands: status, players, save, account create|password <login> <password>, shutdown [reason], help"));
     }
 
     [TestCase("")]
@@ -51,7 +52,7 @@ public sealed class TelemetryTests
     }
 
     // The console thread reads only the published status; what acts on the world waits in the queue for the tick
-    // thread, and a shutdown goes to the host.
+    // thread, a shutdown goes to the host, and an account command goes to the store without touching a character.
     [Test]
     public void AdminCommandService_DependsOnNothingThatTouchesTheWorldFromItsCaller()
     {
@@ -71,7 +72,8 @@ public sealed class TelemetryTests
                     typeof(AdminQueue),
                     typeof(ShutdownRequest),
                     typeof(IHostApplicationLifetime),
-                    typeof(AuditLog)
+                    typeof(AuditLog),
+                    typeof(AccountService)
                 }));
     }
 
@@ -205,7 +207,9 @@ public sealed class TelemetryTests
 
         CreateConsole(new TestServer()).Run(input, output, CancellationToken.None);
 
-        Assert.That(output.ToString().Trim(), Is.EqualTo("Commands: status, players, save, shutdown [reason], help"));
+        Assert.That(output.ToString().Trim(),
+            Is.EqualTo(
+                "Commands: status, players, save, account create|password <login> <password>, shutdown [reason], help"));
     }
 
     [Test]

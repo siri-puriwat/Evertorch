@@ -58,7 +58,10 @@ public static class ServerHost
                     .CommandTimeoutMs)));
         AddOptions<PersistenceOptions, PersistenceOptionsValidator>(builder, PersistenceOptions.SectionName);
         AddOptions<SessionOptions, SessionOptionsValidator>(builder, SessionOptions.SectionName);
+        AddOptions<AccountOptions, AccountOptionsValidator>(builder, AccountOptions.SectionName);
         builder.Services.AddSingleton<PersistenceWorker>();
+        builder.Services.AddSingleton<PasswordHasher>();
+        builder.Services.AddSingleton<AccountService>();
 
         // Registered before every other hosted service, so it runs before the simulation starts.
         builder.Services.AddHostedService<DatabaseStartupCheck>();

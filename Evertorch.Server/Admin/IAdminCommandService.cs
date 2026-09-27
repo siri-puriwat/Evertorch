@@ -21,6 +21,18 @@ public interface IAdminCommandService
     Task<int> SaveAsync(AdminActor actor);
 
     /// <summary>
+    ///     Makes an account with a login and a password (Network Protocol §4). The task ends when the store answers; a
+    ///     login or password the rules refuse ends it at once, and nothing is stored.
+    /// </summary>
+    Task<AccountCommandResult> CreateAccountAsync(AdminActor actor, string login, string password);
+
+    /// <summary>
+    ///     Replaces an account's password and ends its session tokens, answered like
+    ///     <see cref="CreateAccountAsync" />.
+    /// </summary>
+    Task<AccountCommandResult> SetAccountPasswordAsync(AdminActor actor, string login, string password);
+
+    /// <summary>
     ///     Stops the server the way Ctrl+C does. Every client is told <c>Maintenance</c>, with
     ///     <paramref name="reason" />, cut to what a notice carries, as its text.
     /// </summary>

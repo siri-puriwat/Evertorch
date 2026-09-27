@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Threading;
+using System.Threading.Tasks;
 
 namespace Evertorch.Server
 {
@@ -11,8 +12,12 @@ namespace Evertorch.Server
 /// </summary>
 public sealed class AdminConsole
 {
-    private const string Help = "Commands: status, players, save, shutdown [reason], help";
+    private const string Help =
+        "Commands: status, players, save, account create|password <login> <password>, shutdown [reason], help";
+
     private const string ShutdownCommand = "shutdown";
+    private const string AccountCommand = "account";
+    private const string AccountUsage = "Usage: account create|password <login> <password>";
 
     private readonly IAdminCommandService m_commands;
     private readonly AdminActor m_actor = AdminActor.LocalConsole;
@@ -36,16 +41,26 @@ public sealed class AdminConsole
                 return;
             }
 
-            Execute(line, output);
+            _ = Execute(line, output);
         }
     }
 
-    public void Execute(string line, TextWriter output)
+    /// <summary>
+    ///     Runs one line. The task ends once its answer is written: at once for most commands, and when the store
+    ///     answers for an account command, so the console reads the next line meanwhile.
+    /// </summary>
+    public Task Execute(string line, TextWriter output)
     {
         string command = line.Trim();
         if (command.Length == 0)
         {
-            return;
+            return Task.CompletedTask;
+        }
+
+        string[] words = command.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+        if (string.Equals(words[0], AccountCommand, StringComparison.OrdinalIgnoreCase))
+        {
+            return ExecuteAccount(words, output);
         }
 
         if (string.Equals(command, "status", StringComparison.OrdinalIgnoreCase))
@@ -75,6 +90,58 @@ public sealed class AdminConsole
         {
             output.WriteLine($"Unknown command. {Help}");
         }
+
+        return Task.CompletedTask;
+    }
+
+    private static string Describe(AccountCommandResult result)
+    {
+        switch (result.Outcome)
+        {
+            case AccountCommandOutcome.Created:
+                return Format("Account {0} created.", result.Account?.Value ?? 0);
+            case AccountCommandOutcome.PasswordChanged:
+                return Format("Password of account {0} changed; its sessions ended.", result.Account?.Value ?? 0);
+            case AccountCommandOutcome.InvalidLogin:
+                return "Not changed: a login is 1 to 64 letters, digits, '_', '-', or '.'.";
+            case AccountCommandOutcome.InvalidPassword:
+                return "Not changed: a password is 8 to 128 printable characters without spaces.";
+            case AccountCommandOutcome.LoginTaken:
+                return "Not created: an account already has that login.";
+            case AccountCommandOutcome.NoSuchAccount:
+                return "Not changed: no account has that login.";
+            default:
+                return "Not changed: the database is unavailable.";
+        }
+    }
+
+    // The words are never echoed: the password stays on the operator's own screen, where it was typed.
+    private Task ExecuteAccount(string[] words, TextWriter output)
+    {
+        Task<AccountCommandResult>? command = null;
+        if (words.Length == 4 && string.Equals(words[1], "create", StringComparison.OrdinalIgnoreCase))
+        {
+            command = m_commands.CreateAccountAsync(m_actor, words[2], words[3]);
+        }
+        else if (words.Length == 4 && string.Equals(words[1], "password", StringComparison.OrdinalIgnoreCase))
+        {
+            command = m_commands.SetAccountPasswordAsync(m_actor, words[2], words[3]);
+        }
+
+        if (command == null)
+        {
+            output.WriteLine(AccountUsage);
+            return Task.CompletedTask;
+        }
+
+        return command.ContinueWith(
+            finished => output.WriteLine(
+                finished.IsCompletedSuccessfully
+                    ? Describe(finished.Result)
+                    : $"Not changed: the account command failed ({finished.Exception?.GetBaseException().GetType().Name})."),
+            CancellationToken.None,
+            TaskContinuationOptions.None,
+            TaskScheduler.Default);
     }
 
     // "shutdown" alone, or followed by white space and the reason.

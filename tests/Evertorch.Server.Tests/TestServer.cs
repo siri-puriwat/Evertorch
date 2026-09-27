@@ -22,6 +22,11 @@ internal sealed class TestServer
     public const string DevelopmentToken = "dev:tester";
     public const int TickRate = 20;
 
+    /// <summary>
+    ///     PBKDF2 iterations of the tests' password hashes, the smallest the options allow (System Architecture §12).
+    /// </summary>
+    public const int TestPasswordIterations = 1000;
+
     private static readonly Lazy<ServerContent> RepositoryContent =
         new(() => ServerContentLoader.Load(PackageFixture.BuildRepositoryPackage()));
 
@@ -211,7 +216,13 @@ internal sealed class TestServer
             Clock,
             Instruments,
             simulation);
-        Admin = new AdminCommandService(Status, AdminQueue, Shutdown, ApplicationLifetime, Audit);
+        Accounts = new AccountService(
+            GameStore,
+            new PasswordHasher(Options.Create(new AccountOptions { PasswordIterations = TestPasswordIterations })),
+            Time,
+            Options.Create(persistence ?? new PersistenceOptions()),
+            Audit);
+        Admin = new AdminCommandService(Status, AdminQueue, Shutdown, ApplicationLifetime, Audit, Accounts);
         var phases = new List<ITickPhase>
         {
             Status,
@@ -281,6 +292,8 @@ internal sealed class TestServer
     ///     The store the server writes to: in memory unless a test supplied another, such as PostgreSQL.
     /// </summary>
     public IGameStore GameStore { get; }
+
+    public AccountService Accounts { get; }
 
     public InMemoryGameStore Store => GameStore as InMemoryGameStore
         ?? throw new InvalidOperationException("This server runs on a real database, not the in-memory store.");

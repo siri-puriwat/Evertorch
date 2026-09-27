@@ -16,17 +16,19 @@ public sealed class MigrationUpgradeTests
 {
     private const string InitialSchema = "20260923125025_InitialSchema";
     private const string WidenLedgerOperationTypes = "20260926015421_WidenLedgerOperationTypes";
+    private const string AddQuestsAndCoins = "20260926193354_AddQuestsAndCoins";
     private const string CheckViolation = "23514";
+    private const string UndefinedTable = "42P01";
 
     private static readonly string[] Tables =
         { "accounts", "characters", "inventory_items", "equipment", "economy_ledger" };
 
     // Every row of every table, in a fixed order, as its JSON.
-    private static string Dump(Sql sql)
+    private static string Dump(Sql sql, params string[] moreTables)
     {
         return string.Join(
             "\n",
-            Tables.Select(table => sql.Text(
+            Tables.Concat(moreTables).Select(table => sql.Text(
                 "SELECT coalesce(string_agg(row_to_json(t)::text, '|' ORDER BY row_to_json(t)::text), '') "
                 + $"FROM {table} t")));
     }
@@ -42,6 +44,46 @@ public sealed class MigrationUpgradeTests
         {
             return exception.SqlState;
         }
+    }
+
+    [Test]
+    public void Upgrade_FromAddQuestsAndCoins_KeepsEveryRow_AddsSessionTokensAndThePasswordCheck()
+    {
+        using var database = PostgresFixture.Start(targetMigration: AddQuestsAndCoins);
+        var sql = new Sql(database.ConnectionString);
+        long account = sql.InsertAccount();
+        long character = sql.InsertCharacter(account, Sql.UniqueName("Up"));
+        long weapon = sql.InsertItem(character, 1);
+        sql.Execute(Sql.EquipmentInsert(character, "Weapon", weapon));
+        sql.Scalar(Sql.LedgerInsert(Guid.NewGuid(), character, "buy"));
+        sql.Execute(Sql.QuestInsert(character, "quest.crawler_hunt", "active", 3));
+        sql.Execute($"UPDATE characters SET currency = 250 WHERE id = {character}");
+        string? tokenBefore = SqlStateOf(sql, Sql.SessionTokenInsert(account));
+        string before = Dump(sql, "character_quests");
+
+        EvertorchDatabase.ApplyMigrationsAsync(database.ConnectionString, CancellationToken.None)
+            .GetAwaiter()
+            .GetResult();
+
+        IReadOnlyList<string> pending = EvertorchDatabase
+            .GetPendingMigrationsAsync(database.ConnectionString, CancellationToken.None)
+            .GetAwaiter()
+            .GetResult();
+        Assert.That(tokenBefore, Is.EqualTo(UndefinedTable), "no session tokens before");
+        Assert.That(pending, Is.Empty);
+        Assert.That(Dump(sql, "character_quests"), Is.EqualTo(before), "every row as it was");
+        Assert.That(SqlStateOf(sql, Sql.SessionTokenInsert(account)), Is.Null, "an existing account takes tokens");
+        Assert.That(SqlStateOf(sql, Sql.SessionTokenInsert(account, 31)), Is.EqualTo(CheckViolation));
+        Assert.That(
+            SqlStateOf(sql, $"UPDATE accounts SET password_hash = '1000$c2FsdA==$a2V5' WHERE id = {account}"),
+            Is.EqualTo(CheckViolation),
+            "a hash needs its scheme");
+        Assert.That(
+            SqlStateOf(
+                sql,
+                "UPDATE accounts SET password_hash = '1000$c2FsdA==$a2V5', password_scheme = 'pbkdf2-sha256' "
+                + $"WHERE id = {account}"),
+            Is.Null);
     }
 
     [Test]

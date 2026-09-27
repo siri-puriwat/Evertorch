@@ -165,6 +165,45 @@ public sealed class SchemaTests
         Assert.That(m_sql.Scalar($"SELECT count(*) FROM economy_ledger WHERE id = {entry}"), Is.EqualTo(1));
     }
 
+    [TestCase("'1000$c2FsdA==$a2V5'", "NULL")]
+    [TestCase("NULL", "'pbkdf2-sha256'")]
+    public void Account_WithOnlyOneOfItsPasswordHashAndScheme_IsRejected(string hash, string scheme)
+    {
+        AssertFailsWith(
+            CheckViolation,
+            "INSERT INTO accounts (login_normalized, password_hash, password_scheme, status, created_at) "
+            + $"VALUES ('user{Guid.NewGuid():N}', {hash}, {scheme}, 'active', now())");
+    }
+
+    [TestCase(0)]
+    [TestCase(31)]
+    [TestCase(33)]
+    public void SessionToken_WithAHashNotThirtyTwoBytes_IsRejected(int length)
+    {
+        long account = m_sql.InsertAccount();
+
+        AssertFailsWith(CheckViolation, Sql.SessionTokenInsert(account, length));
+    }
+
+    [TestCase("0 minutes")]
+    [TestCase("-1 minute")]
+    public void SessionToken_ExpiringNoLaterThanItWasIssued_IsRejected(string lifetime)
+    {
+        long account = m_sql.InsertAccount();
+
+        AssertFailsWith(CheckViolation, Sql.SessionTokenInsert(account, lifetime: lifetime));
+    }
+
+    [Test]
+    public void Account_WithAPasswordHashAndScheme_IsStored()
+    {
+        long id = m_sql.Scalar(
+            "INSERT INTO accounts (login_normalized, password_hash, password_scheme, status, created_at) "
+            + $"VALUES ('user{Guid.NewGuid():N}', '1000$c2FsdA==$a2V5', 'pbkdf2-sha256', 'active', now()) RETURNING id");
+
+        Assert.That(id, Is.Positive);
+    }
+
     [Test]
     public void Account_WithARepeatedLogin_IsRejected()
     {
@@ -174,6 +213,15 @@ public sealed class SchemaTests
         m_sql.Execute(insert);
 
         AssertFailsWith(UniqueViolation, insert);
+    }
+
+    [Test]
+    public void Account_WithASessionToken_CannotBeDeleted()
+    {
+        long account = m_sql.InsertAccount();
+        m_sql.Execute(Sql.SessionTokenInsert(account));
+
+        AssertFailsWith(RestrictViolation, $"DELETE FROM accounts WHERE id = {account}");
     }
 
     [Test]
@@ -358,8 +406,26 @@ public sealed class SchemaTests
         Assert.That(
             m_sql.Scalar(
                 "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name IN "
-                + "('accounts', 'characters', 'inventory_items', 'equipment', 'economy_ledger', 'character_quests')"),
-            Is.EqualTo(6));
+                + "('accounts', 'characters', 'inventory_items', 'equipment', 'economy_ledger', 'character_quests', "
+                + "'session_tokens')"),
+            Is.EqualTo(7));
+    }
+
+    [Test]
+    public void SessionToken_OfAMissingAccount_IsRejected()
+    {
+        AssertFailsWith(ForeignKeyViolation, Sql.SessionTokenInsert(long.MaxValue));
+    }
+
+    [Test]
+    public void SessionToken_WithARepeatedHash_IsRejected()
+    {
+        long account = m_sql.InsertAccount();
+        string insert = "INSERT INTO session_tokens (token_hash, account_id, issued_at, expires_at) "
+            + $"VALUES (decode(repeat('ab', 32), 'hex'), {account}, now(), now() + interval '1 minute')";
+        m_sql.Execute(insert);
+
+        AssertFailsWith(UniqueViolation, insert);
     }
 }
 }

@@ -20,6 +20,8 @@ internal sealed class InMemoryGameStore : IGameStore
     private readonly object m_gate = new();
     private readonly Dictionary<string, long> m_accounts = new(StringComparer.Ordinal);
     private readonly HashSet<string> m_disabledLogins = new(StringComparer.Ordinal);
+    private readonly Dictionary<long, Password> m_passwords = new();
+    private readonly Dictionary<string, TokenEntry> m_tokens = new(StringComparer.Ordinal);
     private readonly Dictionary<long, Row> m_characters = new();
     private readonly Dictionary<Guid, LedgerEntry> m_ledger = new();
     private long m_lastAccount;
@@ -41,6 +43,12 @@ internal sealed class InMemoryGameStore : IGameStore
     ///     probe while it queues work.
     /// </summary>
     public Action? BeforeMigrationQuery { get; set; }
+
+    /// <summary>
+    ///     When set, runs at the start of each account creation and password change, before the store answers, so a
+    ///     test can hold the console's command while it types another.
+    /// </summary>
+    public Action? BeforeAccountWrite { get; set; }
 
     /// <summary>
     ///     When set, the next character created gets this ID instead of the next free one, so a test can name it.
@@ -174,6 +182,130 @@ internal sealed class InMemoryGameStore : IGameStore
 
             AccountId? account = m_disabledLogins.Contains(loginNormalized) ? null : new AccountId(id);
             return Task.FromResult(account);
+        }
+    }
+
+    public Task<AccountId?> CreateAccountAsync(
+        string loginNormalized,
+        string passwordScheme,
+        string passwordHash,
+        DateTime now,
+        CancellationToken cancellationToken)
+    {
+        BeforeAccountWrite?.Invoke();
+        ThrowIfUnavailable();
+        lock (m_gate)
+        {
+            AccountId? account = null;
+            if (!m_accounts.ContainsKey(loginNormalized))
+            {
+                long id = ++m_lastAccount;
+                m_accounts.Add(loginNormalized, id);
+                m_passwords.Add(id, new Password(passwordScheme, passwordHash));
+                account = new AccountId(id);
+            }
+
+            return Task.FromResult(account);
+        }
+    }
+
+    public Task<AccountId?> SetAccountPasswordAsync(
+        string loginNormalized,
+        string passwordScheme,
+        string passwordHash,
+        CancellationToken cancellationToken)
+    {
+        BeforeAccountWrite?.Invoke();
+        ThrowIfUnavailable();
+        lock (m_gate)
+        {
+            AccountId? account = null;
+            if (m_accounts.TryGetValue(loginNormalized, out long id))
+            {
+                m_passwords[id] = new Password(passwordScheme, passwordHash);
+                foreach (string key in m_tokens.Where(pair => pair.Value.Account == id).Select(pair => pair.Key)
+                             .ToList())
+                {
+                    m_tokens.Remove(key);
+                }
+
+                account = new AccountId(id);
+            }
+
+            return Task.FromResult(account);
+        }
+    }
+
+    public Task<AccountCredentials?> FindAccountCredentialsAsync(
+        string loginNormalized,
+        CancellationToken cancellationToken)
+    {
+        ThrowIfUnavailable();
+        lock (m_gate)
+        {
+            AccountCredentials? credentials = null;
+            if (m_accounts.TryGetValue(loginNormalized, out long id))
+            {
+                m_passwords.TryGetValue(id, out Password? password);
+                credentials = new AccountCredentials(
+                    new AccountId(id),
+                    password?.Scheme,
+                    password?.Hash,
+                    m_disabledLogins.Contains(loginNormalized));
+            }
+
+            return Task.FromResult(credentials);
+        }
+    }
+
+    public Task IssueSessionTokenAsync(
+        AccountId account,
+        byte[] tokenHash,
+        DateTime issuedAt,
+        DateTime expiresAt,
+        CancellationToken cancellationToken)
+    {
+        ThrowIfUnavailable();
+        lock (m_gate)
+        {
+            m_tokens.Add(Convert.ToHexString(tokenHash), new TokenEntry(account.Value, issuedAt, expiresAt));
+            DateTime forgotten = issuedAt - SessionTokenLimits.ExpiredRetention;
+            var removed = m_tokens
+                .Where(pair => pair.Value.ExpiresAt < forgotten)
+                .Select(pair => pair.Key)
+                .Concat(
+                    m_tokens
+                        .Where(pair => pair.Value.Account == account.Value && pair.Value.ExpiresAt > issuedAt)
+                        .OrderByDescending(pair => pair.Value.IssuedAt)
+                        .ThenByDescending(pair => pair.Key, StringComparer.Ordinal)
+                        .Skip(SessionTokenLimits.MaxLiveTokensPerAccount)
+                        .Select(pair => pair.Key))
+                .ToList();
+            foreach (string key in removed)
+            {
+                m_tokens.Remove(key);
+            }
+
+            return Task.CompletedTask;
+        }
+    }
+
+    public Task<StoredSessionToken?> FindSessionTokenAsync(byte[] tokenHash, CancellationToken cancellationToken)
+    {
+        ThrowIfUnavailable();
+        lock (m_gate)
+        {
+            StoredSessionToken? token = null;
+            if (m_tokens.TryGetValue(Convert.ToHexString(tokenHash), out TokenEntry? entry))
+            {
+                string login = m_accounts.Single(pair => pair.Value == entry.Account).Key;
+                token = new StoredSessionToken(
+                    new AccountId(entry.Account),
+                    entry.ExpiresAt,
+                    m_disabledLogins.Contains(login));
+            }
+
+            return Task.FromResult(token);
         }
     }
 
@@ -406,6 +538,17 @@ internal sealed class InMemoryGameStore : IGameStore
                 .Distinct()
                 .ToList();
             return Task.FromResult(ids);
+        }
+    }
+
+    /// <summary>
+    ///     How many session tokens are stored for account <paramref name="account" />.
+    /// </summary>
+    public int SessionTokenCount(AccountId account)
+    {
+        lock (m_gate)
+        {
+            return m_tokens.Values.Count(entry => entry.Account == account.Value);
         }
     }
 
@@ -771,6 +914,35 @@ internal sealed class InMemoryGameStore : IGameStore
         {
             throw new StoreUnavailableException(new TimeoutException("scripted outage"));
         }
+    }
+
+    private sealed class Password
+    {
+        public Password(string scheme, string hash)
+        {
+            Scheme = scheme;
+            Hash = hash;
+        }
+
+        public string Scheme { get; }
+
+        public string Hash { get; }
+    }
+
+    private sealed class TokenEntry
+    {
+        public TokenEntry(long account, DateTime issuedAt, DateTime expiresAt)
+        {
+            Account = account;
+            IssuedAt = issuedAt;
+            ExpiresAt = expiresAt;
+        }
+
+        public long Account { get; }
+
+        public DateTime IssuedAt { get; }
+
+        public DateTime ExpiresAt { get; }
     }
 
     private sealed class LedgerEntry

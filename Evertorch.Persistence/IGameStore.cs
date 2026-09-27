@@ -27,6 +27,51 @@ public interface IGameStore
     Task<AccountId?> ProvisionAccountAsync(string loginNormalized, DateTime now, CancellationToken cancellationToken);
 
     /// <summary>
+    ///     Creates an account with a password (Persistence §4). Null when <paramref name="loginNormalized" /> is taken.
+    /// </summary>
+    Task<AccountId?> CreateAccountAsync(
+        string loginNormalized,
+        string passwordScheme,
+        string passwordHash,
+        DateTime now,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    ///     Replaces the account's password and deletes its session tokens, in one transaction. Null when no account has
+    ///     <paramref name="loginNormalized" />.
+    /// </summary>
+    Task<AccountId?> SetAccountPasswordAsync(
+        string loginNormalized,
+        string passwordScheme,
+        string passwordHash,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    ///     The account of <paramref name="loginNormalized" /> with its stored password, or null when there is none.
+    /// </summary>
+    Task<AccountCredentials?> FindAccountCredentialsAsync(
+        string loginNormalized,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    ///     Stores a new session token of the account and records the sign-in as its last login, under the account's
+    ///     lock; deletes every token that expired more than <see cref="SessionTokenLimits.ExpiredRetention" /> before
+    ///     <paramref name="issuedAt" />, and the account's live tokens beyond its newest
+    ///     <see cref="SessionTokenLimits.MaxLiveTokensPerAccount" />.
+    /// </summary>
+    Task IssueSessionTokenAsync(
+        AccountId account,
+        byte[] tokenHash,
+        DateTime issuedAt,
+        DateTime expiresAt,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    ///     The stored token whose hash is <paramref name="tokenHash" />, with its account's status, or null.
+    /// </summary>
+    Task<StoredSessionToken?> FindSessionTokenAsync(byte[] tokenHash, CancellationToken cancellationToken);
+
+    /// <summary>
     ///     The account's characters, oldest first.
     /// </summary>
     Task<IReadOnlyList<CharacterSummary>> ListCharactersAsync(AccountId account, CancellationToken cancellationToken);

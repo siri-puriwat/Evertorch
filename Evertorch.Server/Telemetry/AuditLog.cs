@@ -66,6 +66,18 @@ public sealed class AuditLog
             new EventId(6002, "OperatorShutdown"),
             "Operator {Actor} ({User}) shut the server down: \"{Reason}\".");
 
+    private static readonly Action<ILogger, string, string, long, Exception?> LogOperatorAccountCreated =
+        LoggerMessage.Define<string, string, long>(
+            LogLevel.Information,
+            new EventId(6005, "OperatorAccountCreated"),
+            "Operator {Actor} ({User}) created account {Account}.");
+
+    private static readonly Action<ILogger, string, string, long, Exception?> LogOperatorPasswordChanged =
+        LoggerMessage.Define<string, string, long>(
+            LogLevel.Information,
+            new EventId(6006, "OperatorPasswordChanged"),
+            "Operator {Actor} ({User}) changed the password of account {Account}, ending its session tokens.");
+
     private readonly ILogger m_logger;
     private readonly IMonotonicClock m_clock;
     private readonly RateLimitedLog m_commandsRefused;
@@ -178,6 +190,19 @@ public sealed class AuditLog
     public void OperatorShutdown(AdminActor actor, string reason)
     {
         LogOperatorShutdown(m_logger, actor.Name, actor.User, reason, null);
+    }
+
+    /// <summary>
+    ///     An account made at the console. The event names the account by its number only, never its login or password.
+    /// </summary>
+    public void OperatorAccountCreated(AdminActor actor, AccountId account)
+    {
+        LogOperatorAccountCreated(m_logger, actor.Name, actor.User, account.Value, null);
+    }
+
+    public void OperatorPasswordChanged(AdminActor actor, AccountId account)
+    {
+        LogOperatorPasswordChanged(m_logger, actor.Name, actor.User, account.Value, null);
     }
 
     private static long AccountOf(ClientSession session)
