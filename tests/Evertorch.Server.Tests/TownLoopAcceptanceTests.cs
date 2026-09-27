@@ -122,8 +122,8 @@ public sealed class TownLoopAcceptanceTests
     ///     The player enters the training ground, meets the NPCs, and uses its skills on a training slime; with a
     ///     partner who joins it accepts the Gate Warden's quest; both cross to the training field, fight forest
     ///     crawlers together until both quests are ready, cross back, and turn the quest in; the player then trades at
-    ///     the Quartermaster and stops in town, and the server stops. Returns what the server and the client last
-    ///     showed of the player's character.
+    ///     the Quartermaster, tries the bought sword on a slime, and stops in town, and the server stops. Returns what
+    ///     the server and the client last showed of the player's character.
     /// </summary>
     private static Stopped PlayTheLoop(IHost host)
     {
@@ -154,6 +154,7 @@ public sealed class TownLoopAcceptanceTests
         TurnInTheHunt("turn in", content, admin, client);
         TurnInTheHunt("partner turns in", content, admin, partner);
         TradeAtTheQuartermaster(content, admin, client);
+        SwingTheBoughtSword(admin, client);
 
         var stopped = new Stopped(
             SummaryOf(admin, client.World.LocalEntity),
@@ -663,6 +664,38 @@ public sealed class TownLoopAcceptanceTests
             $"{step}: 50 for the sword and 40 for the armor");
         bool isAgreed = client.PumpUntil(() => SummaryOf(admin, world.LocalEntity).Coins == world.Inventory.Coins);
         Assert.That(isAgreed, Is.True, $"{step}: the server holds the same coins");
+    }
+
+    // The bought sword, worn, sets the swing (Gameplay Systems §7): the player auto-attacks a training slime until its
+    // first swing, which comes with the sword's 1,060 ms interval where a fist's is 940 ms, then walks off and stands
+    // still until the server agrees where.
+    private static void SwingTheBoughtSword(IAdminCommandService admin, SocketClient client)
+    {
+        const string step = "sword";
+        ClientWorld world = client.World;
+        var swings = new List<AttackStarted>();
+        world.AttackStartedReceived += started =>
+        {
+            if (started.Attacker == world.LocalEntity)
+            {
+                swings.Add(started);
+            }
+        };
+
+        EntityId slime = client.CycleTarget(true);
+        Assert.That(
+            client.PumpUntil(() => slime != default && world.Target == slime),
+            Is.True,
+            $"{step}: the server confirmed a slime as the target");
+        client.AttackTarget();
+        Assert.That(client.PumpUntil(() => swings.Count > 0), Is.True, $"{step}: the first swing began");
+        client.AutoAttack.OnWalkRequested();
+        AwaitConvergence(admin, step, client);
+
+        Assert.That(
+            swings[0].Timing.Interval,
+            Is.EqualTo(TimeSpan.FromMilliseconds(1060)),
+            $"{step}: the bought sword's interval");
     }
 
     // Buys one of the item and returns the row it came in.

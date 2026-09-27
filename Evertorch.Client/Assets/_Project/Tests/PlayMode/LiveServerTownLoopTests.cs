@@ -272,7 +272,8 @@ public sealed class LiveServerTownLoopTests : InputTestFixture
     // The Quartermaster's window over the real server (Gameplay Systems §11.3; Prototype Content §2), with coins and
     // a stack of gel written to the database before the character enters: a Buy press buys one training sword, a Sell
     // press sells one gel, and All sells the rest. Each committed change moves the coins and the lists and says what
-    // happened, and the console's players line ends with the coins left.
+    // happened. The bought sword, worn from the inventory window, leaves the Sell list, and the console's players line
+    // ends with the coins left.
     [UnityTest]
     [Timeout(TestTimeoutMs)]
     public IEnumerator Shop_BuysWithSeededCoins_AndSellsASeededStack_ThroughTheQuartermastersWindow()
@@ -322,6 +323,13 @@ public sealed class LiveServerTownLoopTests : InputTestFixture
         yield return WaitUntil(() => window.CoinsText == "Coins: 62", StepTimeoutSeconds);
         Assert.That(window.Text, Does.EndWith("Sell\nTraining Sword x 1: 25 coins"), "the bought sword can be sold");
 
+        InventoryWindow inventory = client.GetComponentsInChildren<InventoryWindow>(true).Single();
+        inventory.GetComponentsInChildren<Button>().Single(row => row.name == "Training Sword x 1").onClick.Invoke();
+        yield return WaitUntil(() => inventory.Text.Contains("Training Sword x 1 (equipped)"), StepTimeoutSeconds);
+        Assert.That(inventory.Text, Does.Contain("Training Sword x 1 (equipped)"), $"worn: {town.LastRejection}");
+        yield return WaitUntil(() => window.Text.EndsWith("Sell\nNothing to sell"), StepTimeoutSeconds);
+        Assert.That(window.Text, Does.EndWith("Sell\nNothing to sell"), "a worn sword is not for sale");
+
         // The console republishes what it reads once a second.
         yield return new WaitForSecondsRealtime(1.5f);
         long character = client.Connection!.Characters.Single(entry => entry.Name == ShopClientName).Character.Value;
@@ -346,7 +354,9 @@ public sealed class LiveServerTownLoopTests : InputTestFixture
     // The Gate Warden's window over the real server (Gameplay Systems §2.2; Prototype Content §2): Accept takes the
     // quest, and the status bar names its objective. The five kills are written to the database while the character
     // is logged out, as a hunt would have left them; back in the world, Turn in pays the reward, and the status bar,
-    // the inventory window, the feedback lines, and the console's players line show the level and the coins.
+    // the inventory window, the feedback lines, and the console's players line show the level and the coins. After
+    // logging out and in again the level and the coins are kept, and the Gate Warden's window says the quest is
+    // completed.
     [UnityTest]
     [Timeout(TestTimeoutMs)]
     public IEnumerator Quest_AcceptedAndTurnedInThroughTheGateWardensWindow_ShowsTheLevelAndTheCoins()
@@ -405,6 +415,22 @@ public sealed class LiveServerTownLoopTests : InputTestFixture
         yield return WaitUntil(() => server.HasOutput(LiveServer.CharacterMarker(character)), StepTimeoutSeconds);
         string line = server.Output().First(text => text.Contains(LiveServer.CharacterMarker(character)));
         Assert.That(line, Does.Contain(" level 3 ").And.EndWith(" coins 100"));
+
+        client.Logout();
+        yield return WaitUntil(() => connection.State == ClientConnectionState.SelectingCharacter, StepTimeoutSeconds);
+        Assert.That(connection.State, Is.EqualTo(ClientConnectionState.SelectingCharacter), client.Status);
+        client.EnterWorld(connection.Characters.Single(entry => entry.Name == QuestClientName).Character);
+        yield return WaitUntil(() => client.World?.Inventory.IsCurrent == true, StartTimeoutSeconds);
+        Assert.That(client.World, Is.Not.Null, client.Status);
+        Assert.That(
+            (client.World!.Level, client.World.Inventory.Coins),
+            Is.EqualTo(((ushort)3, 100u)),
+            "the level and the coins kept");
+        yield return WaitUntil(() => inventory.CoinsText == "Coins: 100", StepTimeoutSeconds);
+        Assert.That(inventory.CoinsText, Is.EqualTo("Coins: 100"));
+        yield return WalkUpTo(client, mouse, window, GateWardenPrefab);
+        yield return WaitUntil(() => window.Text.EndsWith("\nCompleted"), StepTimeoutSeconds);
+        Assert.That(window.Text, Does.EndWith("\nCompleted"), "the quest kept completed");
         Assert.That(connection.MalformedMessages + connection.UnexpectedMessages, Is.Zero);
     }
 
