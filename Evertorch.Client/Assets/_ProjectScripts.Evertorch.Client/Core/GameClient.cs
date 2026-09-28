@@ -397,10 +397,25 @@ public sealed class GameClient : MonoBehaviour
         return m_contentLoader.Content != null && !isOpen && !IsSigningIn;
     }
 
+    /// <summary>
+    ///     Whether a build for <paramref name="platform" /> can play: not yet in a browser, which has no UDP, so a web
+    ///     build never makes the UDP transport.
+    /// </summary>
+    public static bool CanConnectFrom(RuntimePlatform platform)
+    {
+        return platform != RuntimePlatform.WebGLPlayer;
+    }
+
     private void SignIn()
     {
         if (!IsIdle())
         {
+            return;
+        }
+
+        if (!CanConnectFrom(Application.platform))
+        {
+            Status = SignInMessages.CannotConnectYet;
             return;
         }
 

@@ -1,5 +1,6 @@
 using Evertorch.Protocol;
 using NUnit.Framework;
+using UnityEngine;
 
 namespace Evertorch.Client.Tests.EditMode
 {
@@ -36,6 +37,16 @@ public sealed class SignInTests
     public void Messages_SayWhatEachAnswerMeans(long status, string expected)
     {
         Assert.That(SignInMessages.ForStatus(status), Does.Contain(expected));
+    }
+
+    [TestCase(RuntimePlatform.WebGLPlayer, false)]
+    [TestCase(RuntimePlatform.WindowsPlayer, true)]
+    [TestCase(RuntimePlatform.WindowsEditor, true)]
+    [TestCase(RuntimePlatform.Android, true)]
+    [TestCase(RuntimePlatform.IPhonePlayer, true)]
+    public void CanConnectFrom_EveryPlatformButTheWeb_UntilItPlaysOverWebSocket(RuntimePlatform platform, bool expected)
+    {
+        Assert.That(GameClient.CanConnectFrom(platform), Is.EqualTo(expected));
     }
 
     [Test]
