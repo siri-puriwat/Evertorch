@@ -198,7 +198,7 @@ public sealed class NpcTests
             warden.Offers.Select(offer =>
                 (offer.Quest.Value, offer.Monster.Value, offer.Count, offer.BaseExperience, offer.Coins)),
             Is.EqualTo(new[] { ("quest.crawler_hunt", "monster.forest_crawler", (ushort)5, 150ul, 100u) }));
-        Assert.That((shop.GetEncodedLength(), warden.GetEncodedLength()), Is.EqualTo((254, 70)));
+        Assert.That((shop.GetEncodedLength(), warden.GetEncodedLength()), Is.EqualTo((254, 78)));
     }
 
     [Test]

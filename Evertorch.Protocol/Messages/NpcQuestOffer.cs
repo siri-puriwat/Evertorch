@@ -12,12 +12,14 @@ public readonly struct NpcQuestOffer
         MonsterDefinitionId monster,
         ushort count,
         ulong baseExperience,
+        ulong jobExperience,
         uint coins)
     {
         Quest = quest;
         Monster = monster;
         Count = count;
         BaseExperience = baseExperience;
+        JobExperience = jobExperience;
         Coins = coins;
     }
 
@@ -28,6 +30,8 @@ public readonly struct NpcQuestOffer
     public ushort Count { get; }
 
     public ulong BaseExperience { get; }
+
+    public ulong JobExperience { get; }
 
     public uint Coins { get; }
 }

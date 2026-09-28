@@ -271,6 +271,17 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
                 }
 
                 break;
+            case MessageOpcode.CharacterSheet:
+                if (CharacterSheet.TryRead(payload, out CharacterSheet? sheet))
+                {
+                    WithWorld(world => world.OnCharacterSheet(sheet!));
+                }
+                else
+                {
+                    MalformedMessages++;
+                }
+
+                break;
             case MessageOpcode.CharacterProgress:
                 if (CharacterProgress.TryRead(payload, out CharacterProgress progress))
                 {

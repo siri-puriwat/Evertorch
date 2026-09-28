@@ -89,6 +89,8 @@ public sealed class ServerInstruments
     private readonly Counter<long> m_violationDisconnects;
     private readonly Counter<long> m_experience;
     private readonly Counter<long> m_levelUps;
+    private readonly Counter<long> m_jobExperience;
+    private readonly Counter<long> m_jobLevelUps;
     private readonly Counter<long> m_casts;
     private readonly Counter<long> m_statusEffects;
     private readonly Counter<long> m_mapTransfers;
@@ -158,6 +160,14 @@ public sealed class ServerInstruments
             "evertorch.progression.level_ups",
             "{level}",
             "Levels characters gained.");
+        m_jobExperience = Meter.CreateCounter<long>(
+            "evertorch.progression.job_experience",
+            "{experience}",
+            "Job experience awarded to characters for monsters and quests.");
+        m_jobLevelUps = Meter.CreateCounter<long>(
+            "evertorch.progression.job_level_ups",
+            "{level}",
+            "Job levels characters gained.");
         m_casts = Meter.CreateCounter<long>(
             "evertorch.combat.casts",
             "{cast}",
@@ -269,6 +279,16 @@ public sealed class ServerInstruments
     public void RecordLevelUps(int levels)
     {
         m_levelUps.Add(levels);
+    }
+
+    public void RecordJobExperience(long experience)
+    {
+        m_jobExperience.Add(experience);
+    }
+
+    public void RecordJobLevelUps(int levels)
+    {
+        m_jobLevelUps.Add(levels);
     }
 
     public void RecordCast(bool isResolved)

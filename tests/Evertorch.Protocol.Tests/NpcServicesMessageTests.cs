@@ -9,7 +9,8 @@ namespace Evertorch.Protocol.Tests
 [TestFixture]
 public sealed class NpcServicesMessageTests
 {
-    // NPC 7; item.a sold for 20 and bought for 10; quest.a asks for 5 of monster.a for 150 experience and 100 coins.
+    // NPC 7; item.a sold for 20 and bought for 10; quest.a asks for 5 of monster.a for 150 experience, 160 job
+    // experience, and 100 coins.
     private static readonly byte[] ServicesBytes =
     {
         0x1D, 0x80, 0x07, 0, 0, 0, 0, 0, 0, 0, 0x01,
@@ -17,7 +18,7 @@ public sealed class NpcServicesMessageTests
         0x01,
         0x07, 0x00, 0x71, 0x75, 0x65, 0x73, 0x74, 0x2E, 0x61,
         0x09, 0x00, 0x6D, 0x6F, 0x6E, 0x73, 0x74, 0x65, 0x72, 0x2E, 0x61,
-        0x05, 0x00, 0x96, 0, 0, 0, 0, 0, 0, 0, 0x64, 0, 0, 0
+        0x05, 0x00, 0x96, 0, 0, 0, 0, 0, 0, 0, 0xA0, 0, 0, 0, 0, 0, 0, 0, 0x64, 0, 0, 0
     };
 
     // Offsets into the golden bytes.
@@ -29,7 +30,8 @@ public sealed class NpcServicesMessageTests
     private const int MonsterId = 39;
     private const int Count = 48;
     private const int Experience = 50;
-    private const int Coins = 58;
+    private const int JobExperience = 58;
+    private const int Coins = 66;
 
     private static NpcServices Golden =>
         new(
@@ -37,7 +39,13 @@ public sealed class NpcServicesMessageTests
             new[] { new NpcServiceEntry(new ItemDefinitionId("item.a"), 20, 10) },
             new[]
             {
-                new NpcQuestOffer(new QuestDefinitionId("quest.a"), new MonsterDefinitionId("monster.a"), 5, 150, 100)
+                new NpcQuestOffer(
+                    new QuestDefinitionId("quest.a"),
+                    new MonsterDefinitionId("monster.a"),
+                    5,
+                    150,
+                    160,
+                    100)
             });
 
     private static string LongestId(string kind, int index)
@@ -68,6 +76,7 @@ public sealed class NpcServicesMessageTests
             .Concat(Text(monster))
             .Concat(BitConverter.GetBytes((ushort)5))
             .Concat(BitConverter.GetBytes(150ul))
+            .Concat(BitConverter.GetBytes(160ul))
             .Concat(BitConverter.GetBytes(100u))
             .ToArray();
     }
@@ -83,7 +92,10 @@ public sealed class NpcServicesMessageTests
 
     [TestCase(BuyPrice, new byte[] { 0, 0, 0, 0, 0, 0, 0, 0 }, "an entry with neither price")]
     [TestCase(Count, new byte[] { 0, 0 }, "a count of 0")]
-    [TestCase(Experience, new byte[] { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, "an offer rewarding nothing")]
+    [TestCase(
+        Experience,
+        new byte[] { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
+        "an offer rewarding nothing")]
     [TestCase(13, new byte[] { 0x71, 0x75, 0x65, 0x73 }, "'ques.a' for an item")]
     [TestCase(QuestId, new byte[] { 0x69, 0x74, 0x65, 0x6D, 0x73 }, "'items.a' for a quest")]
     [TestCase(MonsterId, new byte[] { 0x71, 0x75, 0x65, 0x73, 0x74, 0x2E }, "'quest.r.a' for a monster")]
@@ -106,6 +118,7 @@ public sealed class NpcServicesMessageTests
                 new MonsterDefinitionId(LongestId("monster", index)),
                 ushort.MaxValue,
                 ulong.MaxValue,
+                ulong.MaxValue,
                 uint.MaxValue))
             .ToArray();
         var shop = new NpcServices(new EntityId(long.MaxValue), entries, new NpcQuestOffer[0]);
@@ -115,8 +128,8 @@ public sealed class NpcServicesMessageTests
         Assert.That(entries[0].Item.Value.Length, Is.EqualTo(64));
         Assert.That(offers[0].Monster.Value.Length, Is.EqualTo(64));
         Assert.That(shop.GetEncodedLength(), Is.EqualTo(12 + 13 * 74), "974 bytes");
-        Assert.That(giver.GetEncodedLength(), Is.EqualTo(12 + 6 * 146), "888 bytes");
-        Assert.That(tooLarge, Throws.ArgumentException, "1,120 bytes do not fit the 1,020 a reliable message carries");
+        Assert.That(giver.GetEncodedLength(), Is.EqualTo(12 + 6 * 154), "936 bytes");
+        Assert.That(tooLarge, Throws.ArgumentException, "1,128 bytes do not fit the 1,020 a reliable message carries");
         foreach (NpcServices message in new[] { shop, giver })
         {
             byte[] buffer = new byte[message.GetEncodedLength()];
@@ -147,8 +160,8 @@ public sealed class NpcServicesMessageTests
         Assert.That(NpcServices.TryRead(Services(none, seven.Take(6).ToArray(), "monster.a"), out _), Is.True);
         Assert.That(NpcServices.TryRead(Services(fourteen, none, "monster.a"), out _), Is.False, "14 entries");
         Assert.That(NpcServices.TryRead(Services(none, seven, "monster.a"), out _), Is.False, "7 offers");
-        Assert.That(tooLarge.Length, Is.EqualTo(1120));
-        Assert.That(NpcServices.TryRead(tooLarge, out _), Is.False, "1,120 bytes");
+        Assert.That(tooLarge.Length, Is.EqualTo(1128));
+        Assert.That(NpcServices.TryRead(tooLarge, out _), Is.False, "1,128 bytes");
     }
 
     [Test]
@@ -166,8 +179,9 @@ public sealed class NpcServicesMessageTests
         Assert.That((entry.Item.Value, entry.BuyPrice, entry.SellPrice), Is.EqualTo(("item.a", 20u, 10u)));
         NpcQuestOffer offer = read.Offers.Single();
         Assert.That(
-            (offer.Quest.Value, offer.Monster.Value, offer.Count, offer.BaseExperience, offer.Coins),
-            Is.EqualTo(("quest.a", "monster.a", (ushort)5, 150ul, 100u)));
+            (offer.Quest.Value, offer.Monster.Value, offer.Count, offer.BaseExperience, offer.JobExperience,
+                offer.Coins),
+            Is.EqualTo(("quest.a", "monster.a", (ushort)5, 150ul, 160ul, 100u)));
         WireMatrix.AssertRejectsEveryTruncation(ServicesBytes, bytes => NpcServices.TryRead(bytes, out _));
         WireMatrix.AssertRejectsTrailingData(ServicesBytes, bytes => NpcServices.TryRead(bytes, out _));
         WireMatrix.AssertRejectsOtherOpcodes(ServicesBytes, bytes => NpcServices.TryRead(bytes, out _));
@@ -182,6 +196,7 @@ public sealed class NpcServicesMessageTests
         Assert.That(ServicesBytes[OfferCount], Is.EqualTo(1));
         Assert.That(BitConverter.ToUInt16(ServicesBytes, Count), Is.EqualTo(5));
         Assert.That(BitConverter.ToUInt64(ServicesBytes, Experience), Is.EqualTo(150ul));
+        Assert.That(BitConverter.ToUInt64(ServicesBytes, JobExperience), Is.EqualTo(160ul));
         Assert.That(BitConverter.ToUInt32(ServicesBytes, Coins), Is.EqualTo(100u));
     }
 
@@ -223,6 +238,7 @@ public sealed class NpcServicesMessageTests
             .Select(index => new NpcQuestOffer(
                 new QuestDefinitionId($"quest.{(char)('a' + index)}"),
                 new MonsterDefinitionId("monster.a"),
+                1,
                 1,
                 1,
                 1))

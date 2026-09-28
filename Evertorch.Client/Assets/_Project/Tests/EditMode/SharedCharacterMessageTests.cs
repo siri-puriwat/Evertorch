@@ -34,6 +34,19 @@ public sealed class SharedCharacterMessageTests
         0x18, 0x17, 0x16, 0x15, 0x14, 0x13, 0x12, 0x11
     };
 
+    // Job level 3 with 20 of 80 job experience; 7 stat points and 2 skill points; STR 5, AGI 11, VIT 99 (the cap),
+    // INT 5, DEX 21, LUK 1 with their next costs; attack 46, magic attack 12, defense 5, magic defense 6, hit 188, flee
+    // 125, critical 13, attack speed 154.
+    private static readonly byte[] SheetBytes =
+    {
+        0x1F, 0x80, 0x03,
+        0x14, 0, 0, 0, 0, 0, 0, 0,
+        0x50, 0, 0, 0, 0, 0, 0, 0,
+        0x07, 0x00, 0x02,
+        0x05, 0x02, 0x0B, 0x03, 0x63, 0x00, 0x05, 0x02, 0x15, 0x04, 0x01, 0x02,
+        0x2E, 0x00, 0x0C, 0x00, 0x05, 0x00, 0x06, 0x00, 0xBC, 0x00, 0x7D, 0x00, 0x0D, 0x00, 0x9A, 0x00
+    };
+
     private static byte[] BuildList()
     {
         var bytes = new List<byte> { 0x16, 0x80, 0x02 };
@@ -84,6 +97,41 @@ public sealed class SharedCharacterMessageTests
         Assert.That(read.Level, Is.EqualTo(2));
         Assert.That(read.Experience, Is.EqualTo(0x0102030405060708UL));
         Assert.That(read.ExperienceToNextLevel, Is.EqualTo(0x1112131415161718UL));
+    }
+
+    [Test]
+    public void CharacterSheet_WriteAndRead_MatchGoldenBytes()
+    {
+        var sheet = new CharacterSheet(
+            3,
+            20,
+            80,
+            7,
+            2,
+            new[]
+            {
+                new CharacterSheetStat(5, 2), new CharacterSheetStat(11, 3), new CharacterSheetStat(99, 0),
+                new CharacterSheetStat(5, 2), new CharacterSheetStat(21, 4), new CharacterSheetStat(1, 2)
+            },
+            46,
+            12,
+            5,
+            6,
+            188,
+            125,
+            13,
+            154);
+        byte[] buffer = new byte[CharacterSheet.EncodedLength];
+        sheet.Write(buffer);
+
+        bool isRead = CharacterSheet.TryRead(SheetBytes, out CharacterSheet? read);
+
+        Assert.That(buffer, Is.EqualTo(SheetBytes));
+        Assert.That(isRead, Is.True);
+        Assert.That(read, Is.EqualTo(sheet));
+        Assert.That(read!.Stats[2].Value, Is.EqualTo((byte)99));
+        Assert.That(read.Stats[2].NextCost, Is.EqualTo((byte)0));
+        Assert.That(read.AttackSpeed, Is.EqualTo((ushort)154));
     }
 
     [Test]

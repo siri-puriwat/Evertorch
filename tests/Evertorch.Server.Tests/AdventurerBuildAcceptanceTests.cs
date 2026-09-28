@@ -81,6 +81,15 @@ public sealed class AdventurerBuildAcceptanceTests
         Assert.That(client.World.Map, Is.EqualTo(new MapDefinitionId(TrainingGround)), "enter: in town");
         Assert.That((client.World.Level, client.World.Experience), Is.EqualTo(((ushort)1, 0ul)), "enter: level 1");
         Assert.That(StoredJobProgress(), Is.EqualTo((1, 0L)), "enter: a new character is at job level 1");
+        Assert.That(
+            client.PumpUntil(() => client.World.Sheet != null),
+            Is.True,
+            "enter: the sheet arrived with the baseline");
+        Assert.That(
+            (client.World.Sheet!.JobLevel, client.World.Sheet.JobExperience,
+                client.World.Sheet.JobExperienceToNextLevel),
+            Is.EqualTo(((byte)1, 0ul, 30ul)),
+            "enter: job level 1, 30 to the next");
 
         // A new character has learned nothing, so it lists no skill and cannot use Strike (Gameplay Systems §9).
         Assert.That(
@@ -105,6 +114,14 @@ public sealed class AdventurerBuildAcceptanceTests
             "fight: the console shows the level the client shows");
         PlayerSummary stopped = admin.GetPlayers(AdminActor.LocalConsole)
             .Single(player => player.Entity == client.World.LocalEntity);
+
+        // Every kill gave as much job experience as base experience, so the job level kept pace (Gameplay Systems §2.1).
+        CharacterSheet sheet = client.World.Sheet!;
+        Assert.That(
+            ((ushort)sheet.JobLevel, sheet.JobExperience),
+            Is.EqualTo((client.World.Level, client.World.Experience)),
+            "fight: the job level keeps pace with the base level");
+        Assert.That(stopped.JobLevel, Is.EqualTo(sheet.JobLevel), "fight: the console shows the job level");
 
         host.StopAsync().GetAwaiter().GetResult();
         Assert.That(
@@ -165,7 +182,18 @@ public sealed class AdventurerBuildAcceptanceTests
                 && player.Experience == stopped.Experience)),
             Is.True,
             "restart: the server kept them");
-        Assert.That(StoredJobProgress(), Is.EqualTo((1, 0L)), "restart: still job level 1");
+        Assert.That(
+            StoredJobProgress(),
+            Is.EqualTo((stopped.JobLevel, stopped.Experience)),
+            "restart: the job level and job experience the fight gave, stored");
+        Assert.That(
+            client.PumpUntil(() => client.World.Sheet != null),
+            Is.True,
+            "restart: the sheet arrived with the baseline");
+        Assert.That(
+            ((int)client.World.Sheet!.JobLevel, (long)client.World.Sheet.JobExperience),
+            Is.EqualTo((stopped.JobLevel, stopped.Experience)),
+            "restart: the client shows them");
         AssertCleanTraffic(client, "restart");
     }
 

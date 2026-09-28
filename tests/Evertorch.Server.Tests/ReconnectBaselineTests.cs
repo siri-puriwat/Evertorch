@@ -113,7 +113,8 @@ public sealed class ReconnectBaselineTests
             .SkipWhile(opcode => opcode != MessageOpcode.WorldEntered)
             .ToArray();
         Assert.That(baseline.First(), Is.EqualTo(MessageOpcode.WorldEntered));
-        Assert.That(baseline.Skip(1).TakeWhile(opcode => opcode == MessageOpcode.EntitySpawn).Count(),
+        Assert.That(baseline[1], Is.EqualTo(MessageOpcode.CharacterSheet), "the sheet right after WorldEntered");
+        Assert.That(baseline.Skip(2).TakeWhile(opcode => opcode == MessageOpcode.EntitySpawn).Count(),
             Is.GreaterThanOrEqualTo(1), "the observer is spawned afresh");
         Assert.That(
             baseline.TakeLast(4),

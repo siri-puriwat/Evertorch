@@ -77,6 +77,7 @@ public sealed class SessionManager : ITickPhase
     private readonly PlayerLife m_life;
     private readonly CharacterLifetime m_lifetime;
     private readonly CharacterProgression m_progression;
+    private readonly CharacterBuilds m_builds;
     private readonly CombatSystem m_combat;
     private readonly PickupSystem m_pickups;
     private readonly ItemActionSystem m_items;
@@ -107,6 +108,7 @@ public sealed class SessionManager : ITickPhase
         PlayerLife life,
         CharacterLifetime lifetime,
         CharacterProgression progression,
+        CharacterBuilds builds,
         CombatSystem combat,
         PickupSystem pickups,
         ItemActionSystem items,
@@ -134,6 +136,7 @@ public sealed class SessionManager : ITickPhase
         m_life = life;
         m_lifetime = lifetime;
         m_progression = progression;
+        m_builds = builds;
         m_combat = combat;
         m_pickups = pickups;
         m_pickups.Settled += OnOperationSettled;
@@ -668,6 +671,11 @@ public sealed class SessionManager : ITickPhase
                 (uint)player.CurrentSpirit,
                 (uint)player.MaxSpirit,
                 session.MapEpoch));
+
+        // The owner's sheet comes right after WorldEntered in every baseline (Network Protocol §9).
+        CharacterSheet sheet = m_builds.SheetOf(player);
+        session.LastSheet = sheet;
+        m_sender.Send(session.Connection, sheet);
     }
 
     /// <summary>

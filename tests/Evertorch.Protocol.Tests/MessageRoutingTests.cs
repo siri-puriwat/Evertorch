@@ -53,6 +53,7 @@ public sealed class MessageRoutingTests
     [TestCase(MessageOpcode.StatusEffects)]
     [TestCase(MessageOpcode.NpcServices)]
     [TestCase(MessageOpcode.QuestLog)]
+    [TestCase(MessageOpcode.CharacterSheet)]
     [TestCase(MessageOpcode.EntityRevived)]
     [TestCase(MessageOpcode.DisconnectNotice)]
     [TestCase(MessageOpcode.CharacterList)]
@@ -155,7 +156,7 @@ public sealed class MessageRoutingTests
             "CharacterHealth=0x8014", "EntityRevived=0x8015", "CharacterList=0x8016",
             "CreateCharacterResult=0x8017", "CommandRejected=0x8018",
             "LogoutComplete=0x8019", "CharacterProgress=0x801A", "SkillList=0x801B",
-            "StatusEffects=0x801C", "NpcServices=0x801D", "QuestLog=0x801E"
+            "StatusEffects=0x801C", "NpcServices=0x801D", "QuestLog=0x801E", "CharacterSheet=0x801F"
         };
 
         string[] actual = ((MessageOpcode[])Enum.GetValues(typeof(MessageOpcode)))
@@ -176,9 +177,9 @@ public sealed class MessageRoutingTests
     }
 
     [Test]
-    public void ProtocolVersion_IsTwentyFour()
+    public void ProtocolVersion_IsTwentyFive()
     {
-        Assert.That(ProtocolConstants.ProtocolVersion, Is.EqualTo(24));
+        Assert.That(ProtocolConstants.ProtocolVersion, Is.EqualTo(25));
     }
 
     [Test]

@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using Evertorch.Game;
 using Evertorch.Persistence;
+using Evertorch.Protocol;
 
 namespace Evertorch.Server
 {
@@ -101,6 +102,12 @@ public sealed class ClientSession
     ///     quest was accepted, advanced, or completed.
     /// </summary>
     public bool NeedsQuestLog { get; set; }
+
+    /// <summary>
+    ///     The last <see cref="CharacterSheet" /> the owner was sent, which the next is compared with; null until the
+    ///     baseline sends one.
+    /// </summary>
+    public CharacterSheet? LastSheet { get; set; }
 
     /// <summary>
     ///     This connection's map changes, counted from 0 and wrapping; <c>WorldEntered</c> carries it, and movement input

@@ -53,6 +53,7 @@ public static class MessageRouting
             case MessageOpcode.StatusEffects:
             case MessageOpcode.NpcServices:
             case MessageOpcode.QuestLog:
+            case MessageOpcode.CharacterSheet:
             case MessageOpcode.EntityRevived:
             case MessageOpcode.DisconnectNotice:
             case MessageOpcode.CharacterList:

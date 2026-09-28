@@ -761,6 +761,13 @@ internal sealed class InMemoryGameStore : IGameStore
             row.Experience = reward.Experience;
         }
 
+        if (reward.JobLevel > row.JobLevel
+            || (reward.JobLevel == row.JobLevel && reward.JobExperience >= row.JobExperience))
+        {
+            row.JobLevel = reward.JobLevel;
+            row.JobExperience = reward.JobExperience;
+        }
+
         row.InventoryRevision = unchecked(row.InventoryRevision + 1);
         m_ledger.Add(reward.OperationId, new LedgerEntry(reward.CharacterId, 0));
         return Unchanged(InventoryStatus.Committed, row);

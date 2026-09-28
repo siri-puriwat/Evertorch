@@ -126,13 +126,14 @@ public sealed class ServerEndToEndTests
             Spawns(second, EntityKind.Monster).Select(spawn => spawn.DefinitionId),
             Is.EqualTo(Enumerable.Repeat("monster.training_slime", 4)),
             "the training ground's four slimes are in view of its spawn point");
-        Assert.That(Opcodes(Control(second)).Take(6), Is.EqualTo(new[]
+        Assert.That(Opcodes(Control(second)).Take(7), Is.EqualTo(new[]
         {
             MessageOpcode.ServerHello,
             MessageOpcode.CharacterList,
             MessageOpcode.CreateCharacterResult,
             MessageOpcode.CharacterList,
             MessageOpcode.WorldEntered,
+            MessageOpcode.CharacterSheet,
             MessageOpcode.EntitySpawn
         }));
         Assert.That(Opcodes(Control(first)).Last(), Is.EqualTo(MessageOpcode.EntitySpawn));

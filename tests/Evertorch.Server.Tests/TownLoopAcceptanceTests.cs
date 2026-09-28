@@ -1034,12 +1034,15 @@ public sealed class TownLoopAcceptanceTests
             }
         }
 
-        int level = BuildSeed.Adventurer.JobLevel;
-        long skills = BuildSeed.Adventurer.Skills.Count;
+        Assert.That(seeded.Select(row => row.Name), Is.EqualTo(new[] { CharacterName, PartnerName }), "seed: both");
         Assert.That(
-            seeded,
-            Is.EqualTo(new[] { (CharacterName, level, skills), (PartnerName, level, skills) }),
-            "seed: both characters");
+            seeded.Select(row => row.JobLevel),
+            Is.All.GreaterThanOrEqualTo(BuildSeed.Adventurer.JobLevel),
+            "seed: the job levels, raised by the hunt's job experience");
+        Assert.That(
+            seeded.Select(row => row.Skills),
+            Is.All.EqualTo((long)BuildSeed.Adventurer.Skills.Count),
+            "seed: the learned skills");
     }
 
     private sealed class Stopped

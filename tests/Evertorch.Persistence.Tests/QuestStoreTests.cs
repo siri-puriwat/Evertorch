@@ -135,6 +135,44 @@ public sealed class QuestStoreTests
         Assert.That(Ledger(character), Is.Empty, reason);
     }
 
+    // The reward's job experience commits with it, the job pair compared and written like the base pair (Persistence
+    // §5, §6).
+    [TestCase(1, 0, 3, 70, "3 70")]
+    [TestCase(4, 10, 3, 70, "4 10")]
+    public void TurnIn_WritesTheRewardsJobLevelAndJobExperience_NeverLower(
+        int storedLevel,
+        long storedExperience,
+        int jobLevel,
+        long jobExperience,
+        string expected)
+    {
+        long character = NewCharacter();
+        m_sql.Execute(
+            $"UPDATE characters SET job_level = {storedLevel}, job_exp = {storedExperience} WHERE id = {character}");
+
+        InventoryResult paid = m_store.CommitQuestRewardAsync(
+                new QuestRewardCommit(
+                    Guid.NewGuid(),
+                    character,
+                    Hunt,
+                    Count,
+                    Count,
+                    Reward,
+                    3,
+                    70,
+                    Now,
+                    jobLevel,
+                    jobExperience),
+                CancellationToken.None)
+            .GetAwaiter()
+            .GetResult();
+
+        Assert.That(paid.Status, Is.EqualTo(InventoryStatus.Committed));
+        Assert.That(
+            m_sql.Text($"SELECT job_level || ' ' || job_exp FROM characters WHERE id = {character}"),
+            Is.EqualTo(expected));
+    }
+
     [Test]
     public void Checkpoint_AddsAnAcceptedQuest_AndOnlyEverRaisesItsProgress()
     {

@@ -947,7 +947,7 @@ public sealed class PlayerPanelTests
                 new NpcServiceEntry[0],
                 new[]
                 {
-                    new NpcQuestOffer(new QuestDefinitionId(Hunt), new MonsterDefinitionId(Crawler), 5, 150, 100)
+                    new NpcQuestOffer(new QuestDefinitionId(Hunt), new MonsterDefinitionId(Crawler), 5, 150, 0, 100)
                 }));
         world.OnQuestLog(new QuestLog(new QuestLogEntry[0]));
         var window = NpcWindow.Create(client);

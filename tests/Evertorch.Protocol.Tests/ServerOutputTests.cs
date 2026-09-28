@@ -29,6 +29,12 @@ public sealed class ServerOutputTests
         ["CharacterList"] = new[] { "Characters" },
         ["CharacterListEntry"] = new[] { "BaseLevel", "Character", "Job", "Name" },
         ["CharacterProgress"] = new[] { "Experience", "ExperienceToNextLevel", "Level" },
+        ["CharacterSheet"] = new[]
+        {
+            "Attack", "AttackSpeed", "Critical", "Defense", "Flee", "Hit", "JobExperience", "JobExperienceToNextLevel",
+            "JobLevel", "MagicAttack", "MagicDefense", "SkillPoints", "StatPoints", "Stats"
+        },
+        ["CharacterSheetStat"] = new[] { "NextCost", "Value" },
         ["CommandRejected"] = new[] { "CommandSequence", "Reason" },
         ["CreateCharacterResult"] = new[] { "Character", "Outcome" },
         ["Damage"] = new[] { "Amount", "Result", "ServerTick", "Source", "Target", "TargetHealthPermille" },
@@ -51,7 +57,7 @@ public sealed class ServerOutputTests
         ["LogoutComplete"] = Array.Empty<string>(),
         ["MapDefinitionId"] = new[] { "Value" },
         ["MonsterDefinitionId"] = new[] { "Value" },
-        ["NpcQuestOffer"] = new[] { "BaseExperience", "Coins", "Count", "Monster", "Quest" },
+        ["NpcQuestOffer"] = new[] { "BaseExperience", "Coins", "Count", "JobExperience", "Monster", "Quest" },
         ["NpcServiceEntry"] = new[] { "BuyPrice", "Item", "SellPrice" },
         ["NpcServices"] = new[] { "Entries", "Npc", "Offers" },
         ["QuestDefinitionId"] = new[] { "Value" },
@@ -87,11 +93,13 @@ public sealed class ServerOutputTests
         ["WorldPosition"] = new[] { "X", "Y", "Z" }
     };
 
-    // An NPC's prices and a quest's terms travel on purpose, because the player must see them (Content Pipeline §5):
-    // exactly these fields may carry a server-only word.
+    // An NPC's prices and a quest's terms travel on purpose, because the player must see them (Content Pipeline §5),
+    // and so do the derived statistics of the owner's Stats window (Network Protocol §9): exactly these fields may
+    // carry a server-only word.
     private static readonly string[] SentOnPurpose =
     {
-        "NpcServiceEntry.BuyPrice", "NpcServiceEntry.SellPrice", "NpcQuestOffer.BaseExperience"
+        "NpcServiceEntry.BuyPrice", "NpcServiceEntry.SellPrice", "NpcQuestOffer.BaseExperience",
+        "CharacterSheet.Defense", "CharacterSheet.Flee", "CharacterSheet.MagicAttack", "CharacterSheet.MagicDefense"
     };
 
     // Words of the content's server-only fields (Content Pipeline §5).

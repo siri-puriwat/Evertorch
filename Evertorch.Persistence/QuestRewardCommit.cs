@@ -3,8 +3,9 @@ using System;
 namespace Evertorch.Persistence
 {
 /// <summary>
-///     One quest's turn-in to commit (Persistence §5): the reward's coins, and the level and experience the tick thread
-///     held with the reward's experience added, under a new operation ID. The progress is the one the tick thread
+///     One quest's turn-in to commit (Persistence §5): the reward's coins, and the level and experience and the job
+///     level and job experience the tick thread held with the reward's added, under a new operation ID. The progress is
+///     the one the tick thread
 ///     held, which the last checkpoint may not have reached yet.
 /// </summary>
 public sealed class QuestRewardCommit
@@ -18,9 +19,11 @@ public sealed class QuestRewardCommit
         int coins,
         int level,
         long experience,
-        DateTime at)
+        DateTime at,
+        int jobLevel = 1,
+        long jobExperience = 0)
     {
-        if (count < 1 || coins < 0 || level < 1 || experience < 0)
+        if (count < 1 || coins < 0 || level < 1 || experience < 0 || jobLevel < 1 || jobExperience < 0)
         {
             throw new ArgumentOutOfRangeException(
                 nameof(count),
@@ -36,6 +39,8 @@ public sealed class QuestRewardCommit
         Level = level;
         Experience = experience;
         At = at;
+        JobLevel = jobLevel;
+        JobExperience = jobExperience;
     }
 
     public Guid OperationId { get; }
@@ -70,5 +75,15 @@ public sealed class QuestRewardCommit
     public long Experience { get; }
 
     public DateTime At { get; }
+
+    /// <summary>
+    ///     The job level with the reward's job experience added.
+    /// </summary>
+    public int JobLevel { get; }
+
+    /// <summary>
+    ///     The job experience toward the next job level with the reward's added.
+    /// </summary>
+    public long JobExperience { get; }
 }
 }

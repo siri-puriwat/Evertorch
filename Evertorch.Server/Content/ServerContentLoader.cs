@@ -34,7 +34,7 @@ public static class ServerContentLoader
     // at their largest, with every ID at the 64-byte limit; one datagram carries 1,020 bytes. The tools check the same.
     private const int ServicesHeaderBytes = 12;
     private const int ServicesEntryBytes = 74;
-    private const int ServicesOfferBytes = 146;
+    private const int ServicesOfferBytes = 154;
     private const int MaxServicesBytes = 1020;
 
     private static readonly string[] DataFiles =

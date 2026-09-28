@@ -53,6 +53,7 @@ public enum MessageOpcode : ushort
     SkillList = 0x801B,
     StatusEffects = 0x801C,
     NpcServices = 0x801D,
-    QuestLog = 0x801E
+    QuestLog = 0x801E,
+    CharacterSheet = 0x801F
 }
 }

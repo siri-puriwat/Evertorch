@@ -185,7 +185,8 @@ public sealed class ReconnectTests
         int entered = Array.IndexOf(opcodes, MessageOpcode.WorldEntered);
         EntitySpawn[] spawns = Spawns(server, second);
         Assert.That(entered, Is.GreaterThanOrEqualTo(0));
-        Assert.That(opcodes.Skip(entered + 1).First(), Is.EqualTo(MessageOpcode.EntitySpawn));
+        Assert.That(opcodes.Skip(entered + 1).First(), Is.EqualTo(MessageOpcode.CharacterSheet));
+        Assert.That(opcodes.Skip(entered + 2).First(), Is.EqualTo(MessageOpcode.EntitySpawn));
         Assert.That(spawns.Length, Is.EqualTo(seenBefore));
         Assert.That(spawns.Select(spawn => spawn.Entity), Does.Contain(server.PlayerOf(other).Id));
         Assert.That(spawns.Count(spawn => spawn.Kind == EntityKind.Monster), Is.GreaterThan(0));

@@ -46,6 +46,7 @@ public static class NpcServicesBuilder
                 quest.Monster,
                 (ushort)quest.Count,
                 (ulong)quest.BaseExperience,
+                (ulong)quest.JobExperience,
                 (uint)quest.Currency))
             .ToArray();
         return new NpcServices(entity, entries, offers);

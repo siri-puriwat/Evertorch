@@ -196,6 +196,26 @@ public sealed class ClientConnectionTests
     }
 
     [Test]
+    public void CharacterSheet_InTheWorld_ReachesTheWorld_WithTheOneItReplaces()
+    {
+        var harness = new Harness();
+        harness.EnterWorld();
+        CharacterSheetStat[] stats = Enumerable.Repeat(new CharacterSheetStat(5, 2), 6).ToArray();
+        var first = new CharacterSheet(1, 0, 30, 0, 0, stats, 10, 5, 2, 3, 182, 105, 11, 153);
+        var second = new CharacterSheet(2, 5, 50, 0, 1, stats, 10, 5, 2, 3, 182, 105, 11, 153);
+        var replaced = new List<CharacterSheet?>();
+        harness.Connection.World!.SheetChanged += replaced.Add;
+
+        harness.Deliver(ProtocolChannel.Control, Encode(CharacterSheet.EncodedLength, first.Write));
+        harness.Deliver(ProtocolChannel.Control, Encode(CharacterSheet.EncodedLength, second.Write));
+        harness.Deliver(ProtocolChannel.Control, new byte[] { 0x1F, 0x80, 0x00 });
+
+        Assert.That(harness.Connection.World.Sheet, Is.EqualTo(second));
+        Assert.That(replaced, Is.EqualTo(new[] { null, first }));
+        Assert.That(harness.Connection.MalformedMessages, Is.EqualTo(1), "a truncated sheet");
+    }
+
+    [Test]
     public void CommandRejected_InTheWorld_ReachesTheWorldWithItsSequence()
     {
         var harness = new Harness();
@@ -602,7 +622,7 @@ public sealed class ClientConnectionTests
         var services = new NpcServices(
             new EntityId(14),
             new NpcServiceEntry[0],
-            new[] { new NpcQuestOffer(quest, new MonsterDefinitionId("monster.a"), 5, 150, 100) });
+            new[] { new NpcQuestOffer(quest, new MonsterDefinitionId("monster.a"), 5, 150, 0, 100) });
         int before = harness.Connection.QuestOffersSeen;
 
         harness.Deliver(ProtocolChannel.Control, Encode(services.GetEncodedLength(), services.Write));

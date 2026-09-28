@@ -450,6 +450,26 @@ public sealed class QuestTests
         Assert.That(ProgressOf(restarted, again), Is.EqualTo("active 1"));
     }
 
+    // The reward's 150 job experience from job level 1: 30 and 50 reach job level 3, and 70 of the 80 job level 4
+    // needs are left. The turn-in's commit carries the job pair, and the award after it gives it once in memory
+    // (Gameplay Systems §2.2).
+    [Test]
+    public void TurnIn_CommitsTheRewardsJobExperienceWithIt_AndAwardsItOnce()
+    {
+        Hunter hunter = AtThe(
+            GateWarden,
+            progress: 5,
+            prepare: store => store.Edit(1, jobLevel: 1, skills: new Dictionary<string, int>()));
+
+        hunter.Server.SendCompleteQuest(hunter.Player, hunter.Npc, Hunt, 1);
+
+        Assert.That(hunter.Answer(), Is.EqualTo(CommandRejectionReason.None));
+        StoredCharacter stored = hunter.Server.Store.Stored(1);
+        PlayerEntity player = hunter.Server.PlayerOf(hunter.Player);
+        Assert.That((stored.JobLevel, stored.JobExperience), Is.EqualTo((3, 70L)), "committed with the reward");
+        Assert.That((player.JobLevel, player.JobExperience), Is.EqualTo((3, 70L)), "awarded once, in memory");
+    }
+
     // The vector "Death before the answer": the reward keeps its coins and levels, and a level-up never revives.
     [Test]
     public void TurnIn_OfACharacterThatDiesBeforeTheAnswer_KeepsTheReward_AndStaysDead()

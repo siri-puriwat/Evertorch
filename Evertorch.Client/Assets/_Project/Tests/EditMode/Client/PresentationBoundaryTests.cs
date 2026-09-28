@@ -22,7 +22,7 @@ public sealed class PresentationBoundaryTests
         + @"|AcceptQuestFrom|TurnInQuestTo|\.ActionLock\b"
         + @"|\.On(Spawn|Despawn|Snapshot|TargetChanged|AttackStarted|Damage|EntityDied|EntityRevived|CommandRejected"
         + @"|ItemDropped|ItemPickedUp|CharacterHealth|CharacterProgress|SkillCastStarted|SkillResolved|SkillList"
-        + @"|StatusEffects|NpcServices|QuestLog|LocalCancel|Changed)\("
+        + @"|StatusEffects|NpcServices|QuestLog|CharacterSheet|LocalCancel|Changed)\("
         + @"|\.(Advance|CollectTargetCandidates|CollectDropCandidates|CollectNpcCandidates)\("
         + @"|\.(HealthPermille|StateFlags|CurrentHealth|Target|LastRejection|LocalHealth|LocalMaximumHealth|IsDead"
         + @"|LocalSpirit|LocalMaximumSpirit|Level|Experience|ExperienceToNextLevel)\s*=(?![=>])");
@@ -44,7 +44,7 @@ public sealed class PresentationBoundaryTests
         + @"|[Pp]redictor\??\.Apply\(|\.Buffer\.(Add|Clear)\("
         + @"|\.On(Spawn|Despawn|Snapshot|TargetChanged|AttackStarted|Damage|EntityDied|EntityRevived|CommandRejected"
         + @"|ItemDropped|ItemPickedUp|CharacterHealth|CharacterProgress|SkillCastStarted|SkillResolved|SkillList"
-        + @"|StatusEffects|NpcServices|QuestLog|LocalCancel|Changed)\("
+        + @"|StatusEffects|NpcServices|QuestLog|CharacterSheet|LocalCancel|Changed)\("
         + @"|\.(Advance|CollectTargetCandidates|CollectDropCandidates|CollectNpcCandidates)\("
         + @"|\.(Target|LastRejection|LocalHealth|LocalMaximumHealth|HealthPermille|StateFlags|CurrentHealth|IsLocked"
         + @"|IsDead|LocalSpirit|LocalMaximumSpirit|Level|Experience|ExperienceToNextLevel)\s*=(?![=>])");

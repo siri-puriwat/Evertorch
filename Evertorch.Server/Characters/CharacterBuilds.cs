@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Evertorch.Game;
+using Evertorch.Protocol;
 using Evertorch.Rules;
 using Microsoft.Extensions.Logging;
 
@@ -61,6 +62,43 @@ public sealed class CharacterBuilds
     }
 
     /// <summary>
+    ///     What the owner's Stats window shows of <paramref name="player" /> (Network Protocol §9): its job progress,
+    ///     both pools, each statistic with its next cost (0 at the cap), and the derived statistics, each held to what
+    ///     its field carries.
+    /// </summary>
+    public CharacterSheet SheetOf(PlayerEntity player)
+    {
+        JobDefinition job = m_content.Jobs[player.Job];
+        ExperienceTableDefinition table = m_content.ExperienceTables[job.JobExperienceTable];
+        PrimaryStats primary = player.Primary;
+        int[] values = { primary.Str, primary.Agi, primary.Vit, primary.Int, primary.Dex, primary.Luk };
+        var stats = new CharacterSheetStat[CharacterSheet.StatCount];
+        for (int index = 0; index < stats.Length; index++)
+        {
+            int value = Math.Min(Math.Max(values[index], 0), m_rules.StatCap);
+            int cost = value >= m_rules.StatCap ? 0 : m_rules.StatRaiseCost(value);
+            stats[index] = new CharacterSheetStat((byte)value, (byte)Math.Min(byte.MaxValue, cost));
+        }
+
+        DerivedStats derived = player.Stats;
+        return new CharacterSheet(
+            (byte)Math.Min(byte.MaxValue, player.JobLevel),
+            (ulong)Math.Max(0, player.JobExperience),
+            (ulong)m_rules.ExperienceToNextLevel(table, player.JobLevel),
+            (ushort)Math.Min(ushort.MaxValue, StatPointsLeft(player)),
+            (byte)Math.Min(byte.MaxValue, SkillPointsLeft(player)),
+            stats,
+            Clamp(derived.PhysicalAttack),
+            Clamp(derived.MagicalAttack),
+            Clamp(derived.SoftDefense),
+            Clamp(derived.SoftMagicDefense),
+            Clamp(derived.Hit),
+            Clamp(derived.Flee),
+            Clamp(derived.Critical),
+            Clamp(derived.AttackSpeed));
+    }
+
+    /// <summary>
     ///     Whether <paramref name="player" />'s build spends more than its levels grant, holds a statistic below its job's
     ///     start, or has learned a skill its job's tree lacks or above the skill's maximum: what only a hand-edited row
     ///     or changed content leaves.
@@ -110,6 +148,11 @@ public sealed class CharacterBuilds
         player.SetPrimary(job.StartingStats);
         player.ForgetSkills();
         m_stats.Recalculate(player, job);
+    }
+
+    private static ushort Clamp(int value)
+    {
+        return (ushort)Math.Min(ushort.MaxValue, Math.Max(0, value));
     }
 
     private static bool Contains(IReadOnlyList<SkillDefinitionId> skills, SkillDefinitionId skill)

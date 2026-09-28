@@ -1004,6 +1004,13 @@ WHERE character_quests.state = {CharacterQuestRow.ActiveState} AND character_que
                         character.BaseExp = reward.Experience;
                     }
 
+                    if (reward.JobLevel > character.JobLevel
+                        || (reward.JobLevel == character.JobLevel && reward.JobExperience >= character.JobExp))
+                    {
+                        character.JobLevel = reward.JobLevel;
+                        character.JobExp = reward.JobExperience;
+                    }
+
                     return await CommitOperationAsync(
                             context,
                             transaction,

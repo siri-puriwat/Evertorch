@@ -101,6 +101,12 @@ public sealed class ClientWorld
     /// </summary>
     public ulong ExperienceToNextLevel { get; private set; }
 
+    /// <summary>
+    ///     The local character's build as the server last sent it (Network Protocol §9): job progress, points, each
+    ///     statistic with its next cost, and the derived statistics; null until the baseline's arrives.
+    /// </summary>
+    public CharacterSheet? Sheet { get; private set; }
+
     public bool IsLocalDead { get; private set; }
 
     /// <summary>
@@ -229,6 +235,11 @@ public sealed class ClientWorld
     ///     The local character reached a higher level.
     /// </summary>
     public event Action? LeveledUp;
+
+    /// <summary>
+    ///     A new sheet arrived; its predecessor, null for the baseline's, is passed along.
+    /// </summary>
+    public event Action<CharacterSheet?>? SheetChanged;
 
     /// <summary>
     ///     A drop this client knows was picked up; its despawn follows.
@@ -585,6 +596,13 @@ public sealed class ClientWorld
         LocalMaximumHealth = health.Maximum;
         LocalSpirit = health.CurrentSpirit;
         LocalMaximumSpirit = health.MaximumSpirit;
+    }
+
+    public void OnCharacterSheet(CharacterSheet sheet)
+    {
+        CharacterSheet? previous = Sheet;
+        Sheet = sheet;
+        SheetChanged?.Invoke(previous);
     }
 
     public void OnCharacterProgress(CharacterProgress progress)

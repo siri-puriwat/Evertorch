@@ -11,7 +11,8 @@ namespace Evertorch.Client.Tests.EditMode
 [TestFixture]
 public sealed class SharedNpcMessageTests
 {
-    // NPC 7; item.a sold for 20 and bought for 10; quest.a asks for 5 of monster.a for 150 experience and 100 coins.
+    // NPC 7; item.a sold for 20 and bought for 10; quest.a asks for 5 of monster.a for 150 experience, 160 job
+    // experience, and 100 coins.
     private static readonly byte[] ServicesBytes =
     {
         0x1D, 0x80, 0x07, 0, 0, 0, 0, 0, 0, 0, 0x01,
@@ -19,7 +20,7 @@ public sealed class SharedNpcMessageTests
         0x01,
         0x07, 0x00, 0x71, 0x75, 0x65, 0x73, 0x74, 0x2E, 0x61,
         0x09, 0x00, 0x6D, 0x6F, 0x6E, 0x73, 0x74, 0x65, 0x72, 0x2E, 0x61,
-        0x05, 0x00, 0x96, 0, 0, 0, 0, 0, 0, 0, 0x64, 0, 0, 0
+        0x05, 0x00, 0x96, 0, 0, 0, 0, 0, 0, 0, 0xA0, 0, 0, 0, 0, 0, 0, 0, 0x64, 0, 0, 0
     };
 
     [Test]
@@ -62,7 +63,13 @@ public sealed class SharedNpcMessageTests
             new[] { new NpcServiceEntry(new ItemDefinitionId("item.a"), 20, 10) },
             new[]
             {
-                new NpcQuestOffer(new QuestDefinitionId("quest.a"), new MonsterDefinitionId("monster.a"), 5, 150, 100)
+                new NpcQuestOffer(
+                    new QuestDefinitionId("quest.a"),
+                    new MonsterDefinitionId("monster.a"),
+                    5,
+                    150,
+                    160,
+                    100)
             });
         byte[] buffer = new byte[message.GetEncodedLength()];
         message.Write(buffer);
@@ -81,6 +88,7 @@ public sealed class SharedNpcMessageTests
         Assert.That(offer.Monster.Value, Is.EqualTo("monster.a"));
         Assert.That(offer.Count, Is.EqualTo((ushort)5));
         Assert.That(offer.BaseExperience, Is.EqualTo(150ul));
+        Assert.That(offer.JobExperience, Is.EqualTo(160ul));
         Assert.That(offer.Coins, Is.EqualTo(100u));
     }
 }

@@ -14,7 +14,7 @@ public sealed class QuestMessagesTests
 {
     private static readonly QuestDefinitionId Hunt = new("quest.crawler_hunt");
     private static readonly MonsterDefinitionId Crawler = new("monster.forest_crawler");
-    private static readonly NpcQuestOffer Offer = new(Hunt, Crawler, 5, 150, 100);
+    private static readonly NpcQuestOffer Offer = new(Hunt, Crawler, 5, 150, 0, 100);
 
     private static ClientContent Content()
     {
@@ -78,7 +78,7 @@ public sealed class QuestMessagesTests
         Assert.That(QuestMessages.QuestName(content, Hunt), Is.EqualTo("Crawler Hunt"));
         Assert.That(QuestMessages.Objective(Offer, content), Is.EqualTo("Defeat: Forest Crawler × 5"));
         Assert.That(QuestMessages.Reward(Offer), Is.EqualTo("Reward: 150 base experience, 100 coins"));
-        Assert.That(QuestMessages.Reward(new NpcQuestOffer(Hunt, Crawler, 5, 0, 1)), Is.EqualTo("Reward: 1 coin"));
+        Assert.That(QuestMessages.Reward(new NpcQuestOffer(Hunt, Crawler, 5, 0, 0, 1)), Is.EqualTo("Reward: 1 coin"));
         Assert.That(QuestMessages.Objective(Offer, null), Is.EqualTo("Defeat: monster.forest_crawler × 5"));
     }
 }

@@ -361,7 +361,8 @@ public sealed class ItemActionSystem : ITickPhase
 
     /// <summary>
     ///     Checks a turn-in (Gameplay Systems §2.2, after the checks of §6.1, in order) and, when it passes, queues its
-    ///     commit, which carries the level and experience the reward leaves. The caller has already refused a dead or
+    ///     commit, which carries the level and experience and the job level and job experience the reward leaves. The caller
+    ///     has already refused a dead or
     ///     leaving character.
     /// </summary>
     public CommandRejectionReason TryCompleteQuest(
@@ -402,6 +403,7 @@ public sealed class ItemActionSystem : ITickPhase
         }
 
         LevelProgress carried = m_progression.WithExperience(character.Player, definition.BaseExperience);
+        LevelProgress carriedJob = m_progression.WithJobExperience(character.Player, definition.JobExperience);
         var operation = new InventoryOperation(
             InventoryOperationKind.QuestReward,
             commandSequence,
@@ -417,7 +419,9 @@ public sealed class ItemActionSystem : ITickPhase
             definition.Currency,
             carried.Level,
             carried.Experience,
-            m_time.GetUtcNow().UtcDateTime);
+            m_time.GetUtcNow().UtcDateTime,
+            carriedJob.Level,
+            carriedJob.Experience);
         return TryCommit(
             session,
             operation,

@@ -9,8 +9,9 @@ using Microsoft.Extensions.Options;
 namespace Evertorch.Server
 {
 /// <summary>
-///     Shares a dead monster's experience among the characters that damaged it and levels them up (Gameplay Systems
-///     §2.1), and keeps their quests: acceptance, the kills that count, and the reward once a turn-in has committed
+///     Shares a dead monster's base and job experience among the characters that damaged it and levels them up
+///     (Gameplay Systems §2.1), and keeps their quests: acceptance, the kills that count, and the reward once a turn-in
+///     has committed
 ///     (Gameplay Systems §2.2). Tick thread only.
 /// </summary>
 public sealed class CharacterProgression
@@ -36,6 +37,13 @@ public sealed class CharacterProgression
             new EventId(1010, "QuestCompleted"),
             "Character {Character} on connection {Connection} completed {Quest} for {Experience} base experience and "
             + "{Coins} coins (operation {OperationId}).");
+
+    private static readonly Action<ILogger, long, long, int, int, Exception?> LogJobLeveledUp =
+        LoggerMessage.Define<long, long, int, int>(
+            LogLevel.Information,
+            new EventId(1011, "JobLeveledUp"),
+            "Character {Character} on connection {Connection} reached job level {JobLevel} from job level "
+            + "{PreviousJobLevel}.");
 
     private readonly SessionRegistry m_sessions;
     private readonly CharacterLifetime m_lifetime;
@@ -87,14 +95,36 @@ public sealed class CharacterProgression
     }
 
     /// <summary>
-    ///     Awards <paramref name="monster" />'s base experience, which has just died on <paramref name="map" />: each
-    ///     character in its damage log that may share it gets its share of the whole log.
+    ///     What <paramref name="player" />'s next job level needs in all; 0 at its job's cap.
+    /// </summary>
+    public long JobExperienceToNextLevel(PlayerEntity player)
+    {
+        return m_rules.ExperienceToNextLevel(JobTableOf(player), player.JobLevel);
+    }
+
+    /// <summary>
+    ///     The job level and job experience <paramref name="player" /> would reach with <paramref name="experience" />
+    ///     more, as an award would leave them.
+    /// </summary>
+    public LevelProgress WithJobExperience(PlayerEntity player, long experience)
+    {
+        return m_rules.AddExperience(
+            JobTableOf(player),
+            new LevelProgress(player.JobLevel, player.JobExperience),
+            experience);
+    }
+
+    /// <summary>
+    ///     Awards <paramref name="monster" />'s base and job experience, which has just died on <paramref name="map" />:
+    ///     each character in its damage log that may share them gets its share of the whole log of each (Gameplay
+    ///     Systems §2.1).
     /// </summary>
     public void AwardKill(MapInstance map, MonsterEntity monster)
     {
         IReadOnlyList<DamageLogEntry> log = monster.DamageLog;
         long baseExperience = monster.Definition.BaseExperience;
-        if (baseExperience <= 0 || log.Count == 0)
+        long jobExperience = monster.Definition.JobExperience;
+        if ((baseExperience <= 0 && jobExperience <= 0) || log.Count == 0)
         {
             return;
         }
@@ -109,7 +139,15 @@ public sealed class CharacterProgression
         {
             if (TryGetSharer(entry.Character, map, out CharacterSession? character))
             {
-                Award(character!, m_rules.ShareExperience(baseExperience, entry.Damage, total));
+                if (baseExperience > 0)
+                {
+                    Award(character!, m_rules.ShareExperience(baseExperience, entry.Damage, total));
+                }
+
+                if (jobExperience > 0)
+                {
+                    AwardJob(character!, m_rules.ShareExperience(jobExperience, entry.Damage, total));
+                }
             }
         }
     }
@@ -204,7 +242,16 @@ public sealed class CharacterProgression
             entry.Progress = definition.Count;
         }
 
-        Award(character, definition.BaseExperience);
+        if (definition.BaseExperience > 0)
+        {
+            Award(character, definition.BaseExperience);
+        }
+
+        if (definition.JobExperience > 0)
+        {
+            AwardJob(character, definition.JobExperience);
+        }
+
         if (character.Connection != null)
         {
             character.Connection.NeedsQuestLog = true;
@@ -260,6 +307,35 @@ public sealed class CharacterProgression
         }
     }
 
+    // Job experience carries through job levels as base experience does, and is lost at the job's cap. A job level
+    // grants a skill point and restores nothing; the sheet the owner sees follows (Gameplay Systems §2.1).
+    private void AwardJob(CharacterSession character, long experience)
+    {
+        PlayerEntity player = character.Player;
+        int previousLevel = player.JobLevel;
+        LevelProgress progress = WithJobExperience(player, experience);
+        player.JobLevel = progress.Level;
+        player.JobExperience = progress.Experience;
+        m_instruments.RecordJobExperience(experience);
+        if (progress.Level == previousLevel)
+        {
+            return;
+        }
+
+        m_instruments.RecordJobLevelUps(progress.Level - previousLevel);
+        LogJobLeveledUp(
+            m_logger,
+            character.Character.Value,
+            character.Connection?.Connection.Value ?? 0,
+            progress.Level,
+            previousLevel,
+            null);
+        if (!character.IsLoggingOut && !character.IsExpelled)
+        {
+            m_lifetime.QueueCheckpoint(character);
+        }
+    }
+
     private void LevelUp(CharacterSession character, int level, int previousLevel)
     {
         PlayerEntity player = character.Player;
@@ -295,6 +371,11 @@ public sealed class CharacterProgression
     private ExperienceTableDefinition TableOf(PlayerEntity player)
     {
         return m_content.ExperienceTables[m_content.Jobs[player.Job].ExperienceTable];
+    }
+
+    private ExperienceTableDefinition JobTableOf(PlayerEntity player)
+    {
+        return m_content.ExperienceTables[m_content.Jobs[player.Job].JobExperienceTable];
     }
 }
 }

@@ -21,7 +21,8 @@ public sealed class PlayerSummary
         int level,
         long experience,
         long otherEpochInputs,
-        long coins)
+        long coins,
+        int jobLevel = 1)
     {
         Connection = connection;
         Character = character;
@@ -37,6 +38,7 @@ public sealed class PlayerSummary
         Experience = experience;
         OtherEpochInputs = otherEpochInputs;
         Coins = coins;
+        JobLevel = jobLevel;
     }
 
     public ConnectionId Connection { get; }
@@ -81,5 +83,7 @@ public sealed class PlayerSummary
     ///     The character's coins as last committed.
     /// </summary>
     public long Coins { get; }
+
+    public int JobLevel { get; }
 }
 }

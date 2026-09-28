@@ -451,7 +451,7 @@ public sealed class ServerInstrumentsTests
     }
 
     [Test]
-    public void Progression_CountsTheExperienceAwardedAndTheLevelsGained()
+    public void Progression_CountsTheExperienceAwardedAndTheLevelsGained_BaseAndJob()
     {
         var server = new TestServer(withMonsters: true, withMonsterAi: false);
         using var recorder = new MeterRecorder(server.Instruments.Meter);
@@ -460,6 +460,7 @@ public sealed class ServerInstrumentsTests
         MapInstance map = server.World.Maps.Single();
         MonsterEntity slime = server.MonstersNear(map.Definition.SpawnPosition).First();
         server.PlayerOf(first).Experience = 25;
+        server.PlayerOf(first).JobExperience = 225;
         slime.LogDamage(server.PlayerOf(first).Character, 30);
         slime.LogDamage(server.PlayerOf(second).Character, 20);
 
@@ -469,7 +470,16 @@ public sealed class ServerInstrumentsTests
             Named(recorder, "evertorch.progression.experience").Select(measurement => measurement.Value),
             Is.EqualTo(new[] { 6d, 4d }));
         Assert.That(Single(recorder, "evertorch.progression.level_ups"), Is.EqualTo(1));
-        string[] progression = { "evertorch.progression.experience", "evertorch.progression.level_ups" };
+        Assert.That(
+            Named(recorder, "evertorch.progression.job_experience").Select(measurement => measurement.Value),
+            Is.EqualTo(new[] { 6d, 4d }),
+            "the job's share, as the base's");
+        Assert.That(Single(recorder, "evertorch.progression.job_level_ups"), Is.EqualTo(1), "job level 6 to 7 at 230");
+        string[] progression =
+        {
+            "evertorch.progression.experience", "evertorch.progression.level_ups",
+            "evertorch.progression.job_experience", "evertorch.progression.job_level_ups"
+        };
         Assert.That(
             recorder.Measurements
                 .Where(measurement => progression.Contains(measurement.Instrument))

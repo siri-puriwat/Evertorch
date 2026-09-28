@@ -11,7 +11,8 @@ namespace Evertorch.Server
 ///     list, with what is left of each cooldown, after the inventory in every baseline and whenever one of its casts
 ///     resolves; then its status effects, with what is left of each, in every baseline and whenever one starts, is
 ///     renewed, or ends; and last its quests, in every baseline and whenever one is accepted, advances, or is
-///     completed. Registered after <see cref="InventorySyncPhase" /> in the same phase.
+///     completed; and its <see cref="CharacterSheet" /> in the tick anything on it changes. Registered after
+///     <see cref="InventorySyncPhase" /> in the same phase.
 /// </summary>
 public sealed class CharacterSyncPhase : ITickPhase
 {
@@ -20,6 +21,7 @@ public sealed class CharacterSyncPhase : ITickPhase
     private readonly SessionRegistry m_sessions;
     private readonly ServerContent m_content;
     private readonly MessageSender m_sender;
+    private readonly CharacterBuilds m_builds;
     private readonly int m_tickRate;
     private readonly List<SkillListEntry> m_entries = new();
     private readonly List<StatusEffectEntry> m_effects = new();
@@ -29,11 +31,13 @@ public sealed class CharacterSyncPhase : ITickPhase
         SessionRegistry sessions,
         ServerContent content,
         MessageSender sender,
+        CharacterBuilds builds,
         IOptions<SimulationOptions> simulation)
     {
         m_sessions = sessions;
         m_content = content;
         m_sender = sender;
+        m_builds = builds;
         m_tickRate = simulation.Value.TickRate;
     }
 
@@ -65,6 +69,15 @@ public sealed class CharacterSyncPhase : ITickPhase
             {
                 session.NeedsQuestLog = false;
                 m_sender.Send(session.Connection, CreateQuestLog(session.Character.Quests));
+            }
+
+            // Anything that moves the build, the points, or a derived statistic changes the sheet, so the owner hears it
+            // in the tick it changed.
+            CharacterSheet sheet = m_builds.SheetOf(session.Player);
+            if (!sheet.Equals(session.LastSheet))
+            {
+                session.LastSheet = sheet;
+                m_sender.Send(session.Connection, sheet);
             }
         }
     }

@@ -177,6 +177,7 @@ public sealed class MessageFuzzTests
                             new MonsterDefinitionId("monster.forest_crawler"),
                             5,
                             150,
+                            150,
                             100)
                     })),
             payload => NpcServices.TryRead(payload, out NpcServices? message) ? Encode(message!) : null);
@@ -198,6 +199,10 @@ public sealed class MessageFuzzTests
                         new QuestLogEntry(new QuestDefinitionId("quest.first_steps"), QuestState.Completed, 1, 1)
                     })),
             payload => QuestLog.TryRead(payload, out QuestLog? message) ? Encode(message!) : null);
+        yield return Case(
+            "CharacterSheet",
+            Encode(CharacterSheetTests.Golden),
+            payload => CharacterSheet.TryRead(payload, out CharacterSheet? message) ? Encode(message!) : null);
         yield return Case(
             "CharacterProgress",
             Encode(new CharacterProgress(2, 45, 50)),
@@ -672,6 +677,13 @@ public sealed class MessageFuzzTests
     private static byte[] Encode(SkillList message)
     {
         byte[] buffer = new byte[message.GetEncodedLength()];
+        message.Write(buffer);
+        return buffer;
+    }
+
+    private static byte[] Encode(CharacterSheet message)
+    {
+        byte[] buffer = new byte[CharacterSheet.EncodedLength];
         message.Write(buffer);
         return buffer;
     }

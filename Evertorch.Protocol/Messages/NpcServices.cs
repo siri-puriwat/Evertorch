@@ -17,7 +17,7 @@ public sealed class NpcServices
     public const int MaxEntries = 13;
 
     /// <summary>
-    ///     The most quests one message holds: 146 bytes each with the longest IDs.
+    ///     The most quests one message holds: 154 bytes each with the longest IDs.
     /// </summary>
     public const int MaxOffers = 6;
 
@@ -113,9 +113,10 @@ public sealed class NpcServices
                 || !reader.TryReadString(ProtocolLimits.MaxDefinitionIdBytes, out string monsterText)
                 || !reader.TryReadUInt16(out ushort count)
                 || !reader.TryReadUInt64(out ulong baseExperience)
+                || !reader.TryReadUInt64(out ulong jobExperience)
                 || !reader.TryReadUInt32(out uint coins)
                 || count == 0
-                || (baseExperience == 0 && coins == 0)
+                || (baseExperience == 0 && jobExperience == 0 && coins == 0)
                 || !QuestDefinitionId.TryCreate(questText, out QuestDefinitionId quest)
                 || !MonsterDefinitionId.TryCreate(monsterText, out MonsterDefinitionId monster)
                 || ContainsQuest(offers, index, quest))
@@ -123,7 +124,7 @@ public sealed class NpcServices
                 return false;
             }
 
-            offers[index] = new NpcQuestOffer(quest, monster, count, baseExperience, coins);
+            offers[index] = new NpcQuestOffer(quest, monster, count, baseExperience, jobExperience, coins);
         }
 
         if (!reader.IsAtEnd)
@@ -149,7 +150,7 @@ public sealed class NpcServices
             length += WireText.GetEncodedLength(offer.Quest.Value, ProtocolLimits.MaxDefinitionIdBytes)
                 + WireText.GetEncodedLength(offer.Monster.Value, ProtocolLimits.MaxDefinitionIdBytes)
                 + sizeof(ushort)
-                + sizeof(ulong)
+                + 2 * sizeof(ulong)
                 + sizeof(uint);
         }
 
@@ -176,6 +177,7 @@ public sealed class NpcServices
             writer.WriteString(offer.Monster.Value, ProtocolLimits.MaxDefinitionIdBytes);
             writer.WriteUInt16(offer.Count);
             writer.WriteUInt64(offer.BaseExperience);
+            writer.WriteUInt64(offer.JobExperience);
             writer.WriteUInt32(offer.Coins);
         }
 
