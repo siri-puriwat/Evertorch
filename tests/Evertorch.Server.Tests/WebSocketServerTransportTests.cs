@@ -493,6 +493,49 @@ public sealed class WebSocketServerTransportTests
     }
 
     [Test]
+    public void Message_InFragmentsOverTheLimit_ClosesTheConnection()
+    {
+        using var harness = new Harness();
+        using TestWebSocketPeer peer = harness.Connect(out ConnectionId _);
+        byte[] half = new byte[WebSocketServerTransport.MaxMessageBytes / 2 + 1];
+
+        peer.SendFragments(half, half);
+
+        Assert.That(harness.WaitForEvent(InboundEventKind.Disconnected), Is.True);
+        Assert.That(peer.WaitForClose(), Is.True);
+        Assert.That(peer.CloseStatus, Is.EqualTo(WebSocketCloseStatus.MessageTooBig));
+    }
+
+    [Test]
+    public void Message_InFragments_ReachesTheQueueWhole()
+    {
+        using var harness = new Harness();
+        using TestWebSocketPeer peer = harness.Connect(out ConnectionId _);
+        byte[] move = new byte[MoveInput.EncodedLength];
+        new MoveInput(new MoveIntent(1, 1, 1f, 0f)).Write(move);
+        byte[] message = TestWebSocketPeer.Frame((byte)ProtocolChannel.Input, move);
+
+        peer.SendFragments(message[..3], message[3..]);
+
+        Assert.That(harness.WaitForEvent(InboundEventKind.Move), Is.True);
+    }
+
+    [Test]
+    public void Messages_OverThePeersBudget_AreRateLimited()
+    {
+        using var harness = new Harness(abuse: new AbuseOptions { PeerMessageBurst = 5 });
+        using TestWebSocketPeer peer = harness.Connect(out ConnectionId connection);
+
+        for (int index = 0; index < 20; index++)
+        {
+            peer.Send(ProtocolChannel.Control, Hello());
+        }
+
+        Assert.That(harness.WaitForEvent(InboundEventKind.RateLimited, out InboundEvent limited), Is.True);
+        Assert.That(limited.Connection, Is.EqualTo(connection));
+    }
+
+    [Test]
     public void Payload_FromAPeerTheServerClosed_IsIgnored()
     {
         using var harness = new Harness();

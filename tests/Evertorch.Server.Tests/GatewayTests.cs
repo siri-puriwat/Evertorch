@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Net.WebSockets;
 using System.Text;
 using System.Threading;
@@ -162,6 +163,19 @@ public sealed class GatewayTests
         return Send(host, HttpMethod.Post, GatewayEndpoint.SessionPath, TestCertificate.JsonContent(json));
     }
 
+    private HttpStatusCode PostBytes(byte[] body, bool isChunked)
+    {
+        using HttpClient http = m_certificate.CreateClient();
+        var content = new ByteArrayContent(body);
+        content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
+        using var request = new HttpRequestMessage(
+            HttpMethod.Post,
+            $"https://127.0.0.1:{GatewayPort(m_shared)}{GatewayEndpoint.SessionPath}") { Content = content };
+        request.Headers.TransferEncodingChunked = isChunked;
+        using HttpResponseMessage response = http.SendAsync(request).GetAwaiter().GetResult();
+        return response.StatusCode;
+    }
+
     [TestCase("alice", WrongPassword)]
     [TestCase("nobody", Password)]
     [TestCase("dev:tester", Password)]
@@ -192,6 +206,7 @@ public sealed class GatewayTests
     [TestCase("{\"login\":\"alice\",\"login\":\"bob\",\"password\":\"Correct-Horse-9\",\"transports\":[\"udp\"]}")]
     [TestCase("{\"login\":\"alice\",\"password\":\"Correct-Horse-9\",\"transports\":[\"udp\"]} {}")]
     [TestCase("{\"login\":\"alice\",\"password\":\"Correct-Horse-9\",\"transports\":[\"udp\"]")]
+    [TestCase("{\"login\":\"alice\",\"password\":\"Correct-Horse-9\",\"transports\":[\"udp\"],\"pad\":[[[[[1]]]]]}")]
     public void SignIn_WithAMalformedBody_Answers400(string json)
     {
         (HttpStatusCode status, string body, _) = Post(m_shared, json);
@@ -440,6 +455,32 @@ public sealed class GatewayTests
     }
 
     [Test]
+    public void SignIn_WithAChunkedBodyOverOneKibibyte_Answers400()
+    {
+        // The JSON after the padding is valid, so only its length can refuse it.
+        byte[] body = Encoding.UTF8.GetBytes(new string(' ', 1024) + TestCertificate.SignInJson("alice", Password));
+
+        Assert.That(PostBytes(body, true), Is.EqualTo(HttpStatusCode.BadRequest));
+    }
+
+    [Test]
+    public void SignIn_WithAChunkedBodyWithinTheLimit_IsRead()
+    {
+        byte[] body = Encoding.UTF8.GetBytes(TestCertificate.SignInJson("alice", Password));
+
+        Assert.That(PostBytes(body, true), Is.EqualTo(HttpStatusCode.OK));
+    }
+
+    [Test]
+    public void SignIn_WithALoginThatIsNotUtf8_Answers400()
+    {
+        byte[] body = Encoding.UTF8.GetBytes(TestCertificate.SignInJson("al?ce", Password));
+        body[Array.IndexOf(body, (byte)'?')] = 0xFF;
+
+        Assert.That(PostBytes(body, false), Is.EqualTo(HttpStatusCode.BadRequest));
+    }
+
+    [Test]
     public void SignIn_WithAnotherContentType_Answers400()
     {
         var content = new StringContent(TestCertificate.SignInJson("alice", Password), Encoding.UTF8, "text/plain");
@@ -496,44 +537,6 @@ public sealed class GatewayTests
     }
 
     [Test]
-    public void SignIns_LogTheAccountAndTheCertificate_AndNeverALoginPasswordOrToken()
-    {
-        using var root = new TemporaryDirectory();
-        var logs = new CapturingLoggerProvider();
-        var store = new InMemoryGameStore();
-        using IHost host = StartHost(root, store, logs, "--Logging:LogLevel:Evertorch.Audit=Debug");
-        CreateAccount(host, "secret-login");
-        ServerContent content = host.Services.GetRequiredService<ServerContent>();
-
-        GatewaySignInResult answer = SocketClient.SignIn(m_certificate, GatewayPort(host), "secret-login", Password);
-        Post(host, TestCertificate.SignInJson("secret-login", WrongPassword));
-        Post(host, TestCertificate.SignInJson("secret-ghost", Password));
-        Post(host, "{\"login\":\"secret-malformed\"}");
-        using (var player = SocketClient.WithToken(content, answer.Token, "Logged1"))
-        {
-            player.EnterWorld(answer.Port);
-        }
-
-        string forgedToken = SessionToken.Create().Text;
-        using (var forged = SocketClient.WithToken(content, forgedToken, "Forged1"))
-        {
-            forged.Connect(answer.Port);
-            forged.PumpUntil(() => forged.Connection.State == ClientConnectionState.Disconnected);
-            Assert.That(forged.Connection.Notice?.Reason, Is.EqualTo(DisconnectReason.AuthenticationFailed));
-        }
-
-        host.StopAsync().GetAwaiter().GetResult();
-
-        IReadOnlyList<string> lines = logs.Lines;
-        Assert.That(lines, Has.Some.Contains("GatewayListening").And.Contains(m_certificate.Thumbprint));
-        Assert.That(lines, Has.Some.Contains("SignedIn").And.Contains("900"));
-        Assert.That(lines.Count(line => line.Contains("SignInRefused")), Is.EqualTo(2), "the two refused credentials");
-        Assert.That(lines.Where(line => line.Contains("secret", StringComparison.OrdinalIgnoreCase)), Is.Empty);
-        Assert.That(lines.Where(line => line.Contains(Password) || line.Contains(WrongPassword)), Is.Empty);
-        Assert.That(lines.Where(line => line.Contains(answer.Token) || line.Contains(forgedToken)), Is.Empty);
-    }
-
-    [Test]
     public void SignIns_OfOneLoginOverItsFailures_Are429_EvenWithTheRightPassword_AndNoOtherLoginIs()
     {
         using var root = new TemporaryDirectory();
@@ -567,26 +570,91 @@ public sealed class GatewayTests
     }
 
     [Test]
+    public void SignIns_OverEitherTransport_LogTheAccountAndTheCertificate_AndNeverALoginPasswordOrToken()
+    {
+        using var root = new TemporaryDirectory();
+        var logs = new CapturingLoggerProvider();
+        var store = new InMemoryGameStore();
+        using IHost host = StartHost(root, store, logs, "--Logging:LogLevel:Evertorch.Audit=Debug");
+        CreateAccount(host, "secret-login");
+        ServerContent content = host.Services.GetRequiredService<ServerContent>();
+
+        GatewaySignInResult answer = SocketClient.SignIn(m_certificate, GatewayPort(host), "secret-login", Password);
+        Post(host, TestCertificate.SignInJson("secret-login", WrongPassword));
+        Post(host, TestCertificate.SignInJson("secret-ghost", Password));
+        Post(host, "{\"login\":\"secret-malformed\"}");
+        using (var player = SocketClient.WithToken(content, answer.Token, "Logged1"))
+        {
+            player.EnterWorld(answer.Port);
+        }
+
+        GatewaySignInResult browser = SocketClient.SignIn(
+            m_certificate,
+            GatewayPort(host),
+            "secret-login",
+            Password,
+            SignInAnswer.WebSocketTransport);
+        using (var player = SocketClient.OverWebSocket(content, browser.Token, "Logged2", m_certificate))
+        {
+            player.EnterWorld(browser.Port);
+        }
+
+        string forgedToken = SessionToken.Create().Text;
+        using (var forged = SocketClient.WithToken(content, forgedToken, "Forged1"))
+        {
+            forged.Connect(answer.Port);
+            forged.PumpUntil(() => forged.Connection.State == ClientConnectionState.Disconnected);
+            Assert.That(forged.Connection.Notice?.Reason, Is.EqualTo(DisconnectReason.AuthenticationFailed));
+        }
+
+        host.StopAsync().GetAwaiter().GetResult();
+
+        IReadOnlyList<string> lines = logs.Lines;
+        Assert.That(lines, Has.Some.Contains("GatewayListening").And.Contains(m_certificate.Thumbprint));
+        Assert.That(lines, Has.Some.Contains(GatewayEndpoint.PlayPath), "the web server's own request lines are read");
+        Assert.That(lines, Has.Some.Contains("SignedIn").And.Contains("900"));
+        Assert.That(lines.Count(line => line.Contains("SignInRefused")), Is.EqualTo(2), "the two refused credentials");
+        Assert.That(lines.Where(line => line.Contains("secret", StringComparison.OrdinalIgnoreCase)), Is.Empty);
+        Assert.That(lines.Where(line => line.Contains(Password) || line.Contains(WrongPassword)), Is.Empty);
+        Assert.That(
+            lines.Where(line =>
+                line.Contains(answer.Token) || line.Contains(browser.Token) || line.Contains(forgedToken)),
+            Is.Empty);
+    }
+
+    [Test]
     public void Start_WithACertificatePasswordThatDoesNotOpenIt_FailsWithoutRepeatingIt()
     {
         using var root = new TemporaryDirectory();
         PackageFixture.WriteTo(
             Path.Combine(root.Path, "content", "server"),
             PackageFixture.BuildRepositoryPackage());
-        using IHost host = TestHosts.CreateBuilderWithGateway(
-                new[] { "--Network:Port=0", "--Gateway:CertificatePassword=hunter2-pfx" },
-                root.Path,
-                new InMemoryGameStore(),
-                m_certificate)
-            .Build();
+        var logs = new CapturingLoggerProvider();
+        HostApplicationBuilder builder = TestHosts.CreateBuilderWithGateway(
+            new[]
+            {
+                "--Network:Port=0", "--Gateway:CertificatePassword=hunter2-pfx", "--Logging:LogLevel:Default=Debug"
+            },
+            root.Path,
+            new InMemoryGameStore(),
+            m_certificate);
+        builder.Logging.AddProvider(logs);
+        using IHost host = builder.Build();
+        InvalidOperationException? failure = null;
 
-        Action start = () => host.Start();
+        try
+        {
+            host.Start();
+        }
+        catch (InvalidOperationException exception)
+        {
+            failure = exception;
+        }
 
-        Assert.That(
-            start,
-            Throws.InvalidOperationException
-                .With.Message.Contains("Gateway:CertificatePath")
-                .And.Message.Not.Contains("hunter2"));
+        Assert.That(failure?.Message, Does.Contain("Gateway:CertificatePath"));
+        Assert.That(failure!.ToString(), Does.Not.Contain("hunter2"), "nor in an inner exception");
+        Assert.That(logs.Lines, Has.Some.Contains("Gateway:CertificatePath"), "the failed start is logged");
+        Assert.That(logs.Lines.Where(line => line.Contains("hunter2")), Is.Empty);
     }
 }
 }

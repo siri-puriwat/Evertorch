@@ -127,6 +127,28 @@ internal sealed class TestWebSocketPeer : IDisposable
     }
 
     /// <summary>
+    ///     Sends one binary message in <paramref name="parts" />, each part a frame of its own.
+    /// </summary>
+    public void SendFragments(params byte[][] parts)
+    {
+        m_sending.Wait();
+        try
+        {
+            for (int index = 0; index < parts.Length; index++)
+            {
+                Socket.SendAsync(parts[index], WebSocketMessageType.Binary, index == parts.Length - 1,
+                        CancellationToken.None)
+                    .GetAwaiter()
+                    .GetResult();
+            }
+        }
+        finally
+        {
+            m_sending.Release();
+        }
+    }
+
+    /// <summary>
     ///     The next message the server sent that is not a heartbeat, or null when none came in time.
     /// </summary>
     public byte[]? Receive(TimeSpan? limit = null)

@@ -531,6 +531,12 @@ public sealed class LiveServerCombatTests : InputTestFixture
             yield return WaitUntil(() => !world.IsLocalDead, 5f);
         }
 
+        // The fight can leave the auto-attack swinging at another slime, and a heal pressed as the server begins a
+        // swing is refused NotAllowedNow, so the heals come after the attack has ended.
+        yield return Tap(keyboard.escapeKey);
+        yield return WaitUntil(() => world.Target == default && !world.ActionLock.IsSwingLocked, 5f);
+        Assert.That(world.ActionLock.IsSwingLocked, Is.False, $"the attack ended; target {world.Target.Value}");
+
         Button firstAid = client.GetComponentsInChildren<SkillBar>(true)
             .Single()
             .GetComponentsInChildren<Button>(true)
