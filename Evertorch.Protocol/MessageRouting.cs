@@ -35,6 +35,7 @@ public static class MessageRouting
             case MessageOpcode.SellItem:
             case MessageOpcode.AcceptQuest:
             case MessageOpcode.CompleteQuest:
+            case MessageOpcode.AllocateStat:
             case MessageOpcode.ServerHello:
             case MessageOpcode.WorldEntered:
             case MessageOpcode.EntitySpawn:

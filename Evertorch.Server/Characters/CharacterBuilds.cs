@@ -20,6 +20,12 @@ public sealed class CharacterBuilds
     /// </summary>
     public const string OverspentReason = "overspent";
 
+    private static readonly Action<ILogger, long, long, PrimaryStat, int, int, Exception?> LogStatRaised =
+        LoggerMessage.Define<long, long, PrimaryStat, int, int>(
+            LogLevel.Information,
+            new EventId(1012, "StatRaised"),
+            "Character {Character} on connection {Connection} raised {Stat} from {Previous} to {Value}.");
+
     private static readonly Action<ILogger, long, long, string, Exception?> LogBuildReset =
         LoggerMessage.Define<long, long, string>(
             LogLevel.Information,
@@ -30,17 +36,23 @@ public sealed class CharacterBuilds
     private readonly ServerContent m_content;
     private readonly IProgressionRules m_rules;
     private readonly CharacterStats m_stats;
+    private readonly MessageSender m_sender;
+    private readonly ServerInstruments m_instruments;
     private readonly ILogger<CharacterBuilds> m_logger;
 
     public CharacterBuilds(
         ServerContent content,
         IProgressionRules rules,
         CharacterStats stats,
+        MessageSender sender,
+        ServerInstruments instruments,
         ILogger<CharacterBuilds> logger)
     {
         m_content = content;
         m_rules = rules;
         m_stats = stats;
+        m_sender = sender;
+        m_instruments = instruments;
         m_logger = logger;
     }
 
@@ -59,6 +71,46 @@ public sealed class CharacterBuilds
     public int SkillPointsLeft(PlayerEntity player)
     {
         return Math.Max(0, m_rules.SkillPointsGranted(player.JobLevel) - SkillPointsSpent(player));
+    }
+
+    /// <summary>
+    ///     Raises <paramref name="stat" /> by <paramref name="steps" /> with stat points, whole or not at all (Gameplay
+    ///     Systems §2): refused with <see cref="CommandRejectionReason.RequirementNotMet" /> when a raise would pass the
+    ///     cap, then with <see cref="CommandRejectionReason.NotEnoughPoints" /> when the points left do not cover them.
+    ///     The statistics are derived once; the owner hears of new maximums at once, and of the rest through its
+    ///     sheet.
+    /// </summary>
+    public CommandRejectionReason TryRaise(PlayerEntity player, ConnectionId connection, PrimaryStat stat, int steps)
+    {
+        int value = ValueOf(player.Primary, stat);
+        if (steps < 1 || value + steps > m_rules.StatCap)
+        {
+            return CommandRejectionReason.RequirementNotMet;
+        }
+
+        int cost = 0;
+        for (int raised = value; raised < value + steps; raised++)
+        {
+            cost += m_rules.StatRaiseCost(raised);
+        }
+
+        if (cost > StatPointsLeft(player))
+        {
+            return CommandRejectionReason.NotEnoughPoints;
+        }
+
+        int maxHealth = player.MaxHealth;
+        int maxSpirit = player.MaxSpirit;
+        player.SetPrimary(With(player.Primary, stat, value + steps));
+        m_stats.Recalculate(player, m_content.Jobs[player.Job]);
+        if (player.MaxHealth != maxHealth || player.MaxSpirit != maxSpirit)
+        {
+            m_sender.SendHealth(player);
+        }
+
+        LogStatRaised(m_logger, player.Character.Value, connection.Value, stat, value, value + steps, null);
+        m_instruments.RecordBuildChange(BuildChange.Stat);
+        return CommandRejectionReason.None;
     }
 
     /// <summary>
@@ -148,6 +200,31 @@ public sealed class CharacterBuilds
         player.SetPrimary(job.StartingStats);
         player.ForgetSkills();
         m_stats.Recalculate(player, job);
+    }
+
+    private static int ValueOf(PrimaryStats primary, PrimaryStat stat)
+    {
+        return stat switch
+        {
+            PrimaryStat.Str => primary.Str,
+            PrimaryStat.Agi => primary.Agi,
+            PrimaryStat.Vit => primary.Vit,
+            PrimaryStat.Int => primary.Int,
+            PrimaryStat.Dex => primary.Dex,
+            PrimaryStat.Luk => primary.Luk,
+            _ => throw new ArgumentOutOfRangeException(nameof(stat), stat, "Not a primary statistic.")
+        };
+    }
+
+    private static PrimaryStats With(PrimaryStats primary, PrimaryStat stat, int value)
+    {
+        return new PrimaryStats(
+            stat == PrimaryStat.Str ? value : primary.Str,
+            stat == PrimaryStat.Agi ? value : primary.Agi,
+            stat == PrimaryStat.Vit ? value : primary.Vit,
+            stat == PrimaryStat.Int ? value : primary.Int,
+            stat == PrimaryStat.Dex ? value : primary.Dex,
+            stat == PrimaryStat.Luk ? value : primary.Luk);
     }
 
     private static ushort Clamp(int value)

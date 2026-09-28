@@ -115,6 +115,12 @@ public enum InboundEventKind
     ///     A request to turn in <see cref="InboundEvent.Quest" /> to the NPC <see cref="InboundEvent.Target" />,
     ///     carrying a command sequence.
     /// </summary>
-    CompleteQuest = 23
+    CompleteQuest = 23,
+
+    /// <summary>
+    ///     A request to raise <see cref="InboundEvent.Stat" /> by <see cref="InboundEvent.Quantity" /> steps with stat
+    ///     points, carrying a command sequence.
+    /// </summary>
+    AllocateStat = 24
 }
 }

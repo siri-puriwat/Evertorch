@@ -24,7 +24,8 @@ public readonly struct InboundEvent
         EquipmentSlot slot = EquipmentSlot.None,
         ItemDefinitionId item = default,
         uint quantity = 0,
-        QuestDefinitionId quest = default)
+        QuestDefinitionId quest = default,
+        PrimaryStat stat = PrimaryStat.None)
     {
         Kind = kind;
         Connection = connection;
@@ -42,6 +43,7 @@ public readonly struct InboundEvent
         Item = item;
         Quantity = quantity;
         Quest = quest;
+        Stat = stat;
     }
 
     public InboundEventKind Kind { get; }
@@ -92,7 +94,8 @@ public readonly struct InboundEvent
     public ItemDefinitionId Item { get; }
 
     /// <summary>
-    ///     For <see cref="InboundEventKind.Buy" /> and <see cref="InboundEventKind.Sell" />, how many.
+    ///     For <see cref="InboundEventKind.Buy" /> and <see cref="InboundEventKind.Sell" />, how many; for
+    ///     <see cref="InboundEventKind.AllocateStat" />, the raises to make.
     /// </summary>
     public uint Quantity { get; }
 
@@ -100,6 +103,11 @@ public readonly struct InboundEvent
     ///     For <see cref="InboundEventKind.AcceptQuest" /> and <see cref="InboundEventKind.CompleteQuest" />, the quest.
     /// </summary>
     public QuestDefinitionId Quest { get; }
+
+    /// <summary>
+    ///     For <see cref="InboundEventKind.AllocateStat" />, the statistic to raise.
+    /// </summary>
+    public PrimaryStat Stat { get; }
 
     public static InboundEvent Connected(ConnectionId connection)
     {
@@ -267,6 +275,23 @@ public readonly struct InboundEvent
             npc,
             commandSequence,
             quest: quest);
+    }
+
+    public static InboundEvent ForAllocateStat(
+        ConnectionId connection,
+        PrimaryStat stat,
+        byte steps,
+        uint commandSequence)
+    {
+        return new InboundEvent(
+            InboundEventKind.AllocateStat,
+            connection,
+            null,
+            default,
+            default,
+            commandSequence: commandSequence,
+            quantity: steps,
+            stat: stat);
     }
 
     public static InboundEvent ForUnequip(ConnectionId connection, EquipmentSlot slot, uint commandSequence)

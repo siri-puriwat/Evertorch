@@ -67,6 +67,9 @@ public sealed class ServerInstruments
     private static readonly KeyValuePair<string, object?> StatusStarted = new("change", "started");
     private static readonly KeyValuePair<string, object?> StatusRenewed = new("change", "renewed");
     private static readonly KeyValuePair<string, object?> StatusEnded = new("change", "ended");
+    private static readonly KeyValuePair<string, object?> StatChange = new("change", "stat");
+    private static readonly KeyValuePair<string, object?> SkillChange = new("change", "skill");
+    private static readonly KeyValuePair<string, object?> ResetChange = new("change", "reset");
 
     private static readonly KeyValuePair<string, object?> RateLimitedReason = new("reason", "rate_limited");
     private static readonly KeyValuePair<string, object?> KickedReason = new("reason", "kicked");
@@ -93,6 +96,7 @@ public sealed class ServerInstruments
     private readonly Counter<long> m_jobLevelUps;
     private readonly Counter<long> m_casts;
     private readonly Counter<long> m_statusEffects;
+    private readonly Counter<long> m_buildChanges;
     private readonly Counter<long> m_mapTransfers;
     private readonly Counter<long> m_otherEpochInputs;
     private readonly Counter<long> m_acquisitions;
@@ -176,6 +180,10 @@ public sealed class ServerInstruments
             "evertorch.combat.status_effects",
             "{effect}",
             "Status effects started, renewed, or ended, by change.");
+        m_buildChanges = Meter.CreateCounter<long>(
+            "evertorch.build.changes",
+            "{change}",
+            "Stat raises, learned skill levels, and resets of characters' builds, by change.");
         m_mapTransfers = Meter.CreateCounter<long>(
             "evertorch.world.map_transfers",
             "{transfer}",
@@ -327,6 +335,17 @@ public sealed class ServerInstruments
     public void RecordQuest(string change)
     {
         m_quests.Add(1, new KeyValuePair<string, object?>("change", change));
+    }
+
+    public void RecordBuildChange(BuildChange change)
+    {
+        KeyValuePair<string, object?> tag = change switch
+        {
+            BuildChange.Stat => StatChange,
+            BuildChange.Skill => SkillChange,
+            _ => ResetChange
+        };
+        m_buildChanges.Add(1, tag);
     }
 
     public void RecordStatusEffects(StatusEffectChange change, int count)

@@ -284,6 +284,7 @@ public sealed class SessionManager : ITickPhase
             case InboundEventKind.Sell:
             case InboundEventKind.AcceptQuest:
             case InboundEventKind.CompleteQuest:
+            case InboundEventKind.AllocateStat:
                 HandleCommand(session, inboundEvent, tick);
                 break;
             default:
@@ -947,6 +948,11 @@ public sealed class SessionManager : ITickPhase
                 command.Target,
                 command.Quest,
                 command.CommandSequence),
+            InboundEventKind.AllocateStat => m_builds.TryRaise(
+                player,
+                session.Connection,
+                command.Stat,
+                (int)command.Quantity),
             _ => CommandRejectionReason.NotAllowedNow
         };
     }

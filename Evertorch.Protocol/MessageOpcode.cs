@@ -27,6 +27,7 @@ public enum MessageOpcode : ushort
     SellItem = 0x0014,
     AcceptQuest = 0x0015,
     CompleteQuest = 0x0016,
+    AllocateStat = 0x0017,
     ServerHello = 0x8001,
     WorldEntered = 0x8003,
     EntitySpawn = 0x8004,

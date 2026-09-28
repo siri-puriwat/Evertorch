@@ -225,6 +225,23 @@ public sealed class ServerInstrumentsTests
     }
 
     [Test]
+    public void BuildChanges_CountEachAcceptedRaise_TaggedStat_AndNoRefusal()
+    {
+        var server = new TestServer();
+        using var recorder = new MeterRecorder(server.Instruments.Meter);
+        ConnectionId player = server.EnterWorld(1);
+        server.PlayerOf(player).Level = 10;
+
+        server.SendAllocateStat(player, PrimaryStat.Str, 2, 1);
+        server.SendAllocateStat(player, PrimaryStat.Str, 99, 2);
+        server.Tick();
+
+        Assert.That(Tagged(recorder, "evertorch.build.changes", "change", "stat"), Is.EqualTo(1));
+        Assert.That(Named(recorder, "evertorch.build.changes"), Has.Count.EqualTo(1),
+            "the raise past 99 counts nothing");
+    }
+
+    [Test]
     public void Casts_AreCountedByOutcome()
     {
         var rig = new CombatRig(combatRandom: new SureHitRandom());

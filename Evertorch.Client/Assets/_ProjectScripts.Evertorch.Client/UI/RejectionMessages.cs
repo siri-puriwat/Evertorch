@@ -34,6 +34,10 @@ public static class RejectionMessages
                 return "You do not have enough coins.";
             case CommandRejectionReason.CoinCapReached:
                 return "You cannot hold any more coins.";
+            case CommandRejectionReason.NotEnoughPoints:
+                return "You do not have enough points.";
+            case CommandRejectionReason.RequirementNotMet:
+                return "That cannot be done.";
             default:
                 return "The server refused that.";
         }

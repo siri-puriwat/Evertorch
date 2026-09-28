@@ -14,7 +14,7 @@ public sealed class CommandRejectedTests
     }
 
     [TestCase((byte)0)]
-    [TestCase((byte)12)]
+    [TestCase((byte)14)]
     [TestCase((byte)255)]
     public void CommandRejected_WithAnUnknownReason_IsRefused(byte reason)
     {
@@ -23,7 +23,9 @@ public sealed class CommandRejectedTests
 
     [TestCase(CommandRejectionReason.NotEnoughCoins)]
     [TestCase(CommandRejectionReason.CoinCapReached)]
-    public void CommandRejected_WithAShopReason_IsRead(CommandRejectionReason reason)
+    [TestCase(CommandRejectionReason.NotEnoughPoints)]
+    [TestCase(CommandRejectionReason.RequirementNotMet)]
+    public void CommandRejected_WithAShopOrABuildReason_IsRead(CommandRejectionReason reason)
     {
         bool isRead = CommandRejected.TryRead(WireMatrix.With(GoldenBytes, 6, (byte)reason), out CommandRejected read);
 
@@ -60,7 +62,7 @@ public sealed class CommandRejectedTests
             Array.ConvertAll(
                 (CommandRejectionReason[])Enum.GetValues(typeof(CommandRejectionReason)),
                 reason => (byte)reason),
-            Is.EqualTo(new byte[] { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11 }));
+            Is.EqualTo(new byte[] { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13 }));
         Assert.That(CommandRejectionReason.InvalidTarget, Is.EqualTo((CommandRejectionReason)1));
         Assert.That(CommandRejectionReason.OutOfRange, Is.EqualTo((CommandRejectionReason)2));
         Assert.That(CommandRejectionReason.NotAllowedNow, Is.EqualTo((CommandRejectionReason)3));
@@ -72,6 +74,8 @@ public sealed class CommandRejectedTests
         Assert.That(CommandRejectionReason.ItemActionInFlight, Is.EqualTo((CommandRejectionReason)9));
         Assert.That(CommandRejectionReason.NotEnoughCoins, Is.EqualTo((CommandRejectionReason)10));
         Assert.That(CommandRejectionReason.CoinCapReached, Is.EqualTo((CommandRejectionReason)11));
+        Assert.That(CommandRejectionReason.NotEnoughPoints, Is.EqualTo((CommandRejectionReason)12));
+        Assert.That(CommandRejectionReason.RequirementNotMet, Is.EqualTo((CommandRejectionReason)13));
     }
 }
 }

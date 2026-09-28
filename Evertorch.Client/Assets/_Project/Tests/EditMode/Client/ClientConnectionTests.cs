@@ -740,6 +740,26 @@ public sealed class ClientConnectionTests
     }
 
     [Test]
+    public void SendAllocateStat_InTheWorld_TakesTheNextCommandSequence_AndOutsideSendsNothing()
+    {
+        var outside = new Harness();
+        outside.ConnectAndReceiveHello();
+        int before = outside.Transport.Sent.Count;
+        var harness = new Harness();
+        harness.EnterWorld(4);
+
+        uint none = outside.Connection.SendAllocateStat(PrimaryStat.Vit, 1);
+        uint sequence = harness.Connection.SendAllocateStat(PrimaryStat.Vit, 2);
+        FakeClientTransport.SentMessage sent = harness.Transport.Sent.Last();
+
+        Assert.That((none, outside.Transport.Sent.Count), Is.EqualTo((0u, before)));
+        Assert.That(sequence, Is.EqualTo(5u));
+        Assert.That(AllocateStat.TryRead(sent.Payload, out AllocateStat read), Is.True);
+        Assert.That((read.Stat, read.Steps, read.CommandSequence), Is.EqualTo((PrimaryStat.Vit, (byte)2, 5u)));
+        Assert.That(sent.Channel, Is.EqualTo(ProtocolChannel.Control));
+    }
+
+    [Test]
     public void SendBuyAndSell_InTheWorld_ShareTheCommandSequence_AndOutsideSendNothing()
     {
         var outside = new Harness();

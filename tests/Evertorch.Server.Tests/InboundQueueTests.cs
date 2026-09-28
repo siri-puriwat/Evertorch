@@ -108,6 +108,13 @@ public sealed class InboundQueueTests
         return payload;
     }
 
+    private static byte[] AllocateStatPayload()
+    {
+        byte[] payload = new byte[AllocateStat.EncodedLength];
+        new AllocateStat(PrimaryStat.Agi, 2, 9).Write(payload);
+        return payload;
+    }
+
     private static byte[] With(byte[] payload, int start, int count, byte value)
     {
         byte[] changed = (byte[])payload.Clone();
@@ -115,9 +122,9 @@ public sealed class InboundQueueTests
         return changed;
     }
 
-    // Milestone 6's and 7's commands cut short, one byte too long, or carrying a value no client may send (Network
-    // Protocol §11). The item row sits after the opcode, the slot and the NPC too, the skill ID's text after its
-    // two-byte length, and the quest ID's after the NPC and its length.
+    // Milestone 6's, 7's, and 9's commands cut short, one byte too long, or carrying a value no client may send
+    // (Network Protocol §11). The item row sits after the opcode, the slot, the NPC, and the statistic too, the skill
+    // ID's text after its two-byte length, and the quest ID's after the NPC and its length.
     private static IEnumerable<TestCaseData> MalformedItemAndSkillCommands()
     {
         byte[] useSkill = UseSkillPayload();
@@ -128,10 +135,12 @@ public sealed class InboundQueueTests
         byte[] sell = SellPayload();
         byte[] accept = AcceptQuestPayload();
         byte[] complete = CompleteQuestPayload();
+        byte[] allocate = AllocateStatPayload();
         foreach ((string name, byte[] payload) in new[]
                  {
                      ("UseSkill", useSkill), ("EquipItem", equip), ("UnequipItem", unequip), ("UseItem", useItem),
-                     ("BuyItem", buy), ("SellItem", sell), ("AcceptQuest", accept), ("CompleteQuest", complete)
+                     ("BuyItem", buy), ("SellItem", sell), ("AcceptQuest", accept), ("CompleteQuest", complete),
+                     ("AllocateStat", allocate)
                  })
         {
             yield return new TestCaseData(payload.Take(payload.Length - 1).ToArray()).SetName($"{name} cut short");
@@ -158,6 +167,9 @@ public sealed class InboundQueueTests
         yield return new TestCaseData(With(complete, 2, 8, 0x00)).SetName("CompleteQuest at NPC 0");
         yield return new TestCaseData(With(complete, quest, 1, 0xFF)).SetName("CompleteQuest of broken UTF-8");
         yield return new TestCaseData(With(complete, quest - 2, 2, 0xFF)).SetName("CompleteQuest longer than any ID");
+        yield return new TestCaseData(With(allocate, 2, 1, 0)).SetName("AllocateStat of statistic 0");
+        yield return new TestCaseData(With(allocate, 2, 1, 7)).SetName("AllocateStat of statistic 7");
+        yield return new TestCaseData(With(allocate, 3, 1, 0)).SetName("AllocateStat of no steps");
     }
 
     [TestCaseSource(nameof(MalformedItemAndSkillCommands))]
@@ -293,16 +305,18 @@ public sealed class InboundQueueTests
         foreach (byte[] payload in new[]
                  {
                      UseSkillPayload(), EquipPayload(), UnequipPayload(), UseItemPayload(), BuyPayload(), SellPayload(),
-                     AcceptQuestPayload(), CompleteQuestPayload()
+                     AcceptQuestPayload(), CompleteQuestPayload(), AllocateStatPayload()
                  })
         {
             queue.OnPayload(Peer, ProtocolChannel.Control, payload);
         }
 
         var kinds = new List<InboundEventKind>();
+        InboundEvent allocate = default;
         while (queue.TryDequeue(out InboundEvent inboundEvent))
         {
             kinds.Add(inboundEvent.Kind);
+            allocate = inboundEvent;
         }
 
         Assert.That(queue.Malformed, Is.Zero);
@@ -313,8 +327,12 @@ public sealed class InboundQueueTests
                 {
                     InboundEventKind.UseSkill, InboundEventKind.Equip, InboundEventKind.Unequip,
                     InboundEventKind.UseItem, InboundEventKind.Buy, InboundEventKind.Sell, InboundEventKind.AcceptQuest,
-                    InboundEventKind.CompleteQuest
+                    InboundEventKind.CompleteQuest, InboundEventKind.AllocateStat
                 }));
+        Assert.That(
+            (allocate.Stat, allocate.Quantity, allocate.CommandSequence),
+            Is.EqualTo((PrimaryStat.Agi, 2u, 9u)),
+            "the statistic and its steps");
         Assert.That(UseSkillPayload().Skip(4).Take(12), Is.EqualTo(Encoding.ASCII.GetBytes("skill.strike")));
     }
 

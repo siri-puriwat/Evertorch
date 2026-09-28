@@ -124,7 +124,7 @@ internal sealed class TestServer
 
         var sender = new MessageSender(Transport);
         var targeting = new Targeting(sender);
-        Builds = new CharacterBuilds(Content, new RenewalProgressionRules(), stats, BuildsLog);
+        Builds = new CharacterBuilds(Content, new RenewalProgressionRules(), stats, sender, Instruments, BuildsLog);
         Lifetime = new CharacterLifetime(
             World,
             Builds,
@@ -646,6 +646,13 @@ internal sealed class TestServer
         var message = new AcceptQuest(npc, new QuestDefinitionId(quest), commandSequence);
         byte[] payload = new byte[message.GetEncodedLength()];
         message.Write(payload);
+        Inbound.OnPayload(connection, ProtocolChannel.Control, payload);
+    }
+
+    public void SendAllocateStat(ConnectionId connection, PrimaryStat stat, byte steps, uint commandSequence)
+    {
+        byte[] payload = new byte[AllocateStat.EncodedLength];
+        new AllocateStat(stat, steps, commandSequence).Write(payload);
         Inbound.OnPayload(connection, ProtocolChannel.Control, payload);
     }
 

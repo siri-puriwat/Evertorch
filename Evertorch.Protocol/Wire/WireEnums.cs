@@ -34,7 +34,7 @@ internal static class WireEnums
 
     public static bool IsDefined(CommandRejectionReason value)
     {
-        return value >= CommandRejectionReason.InvalidTarget && value <= CommandRejectionReason.CoinCapReached;
+        return value >= CommandRejectionReason.InvalidTarget && value <= CommandRejectionReason.RequirementNotMet;
     }
 
     public static bool IsDefined(SkillOutcome value)
@@ -45,6 +45,11 @@ internal static class WireEnums
     public static bool IsDefined(QuestState value)
     {
         return value == QuestState.Active || value == QuestState.Completed;
+    }
+
+    public static bool IsDefined(PrimaryStat value)
+    {
+        return value >= PrimaryStat.Str && value <= PrimaryStat.Luk;
     }
 
     public static bool IsDefined(EntityStateFlags value)

@@ -16,8 +16,9 @@ namespace Evertorch.Server.Tests
 /// <summary>
 ///     The Milestone 9 Adventurer build (ROADMAP §8) end to end: the composed server host on a real PostgreSQL 18, real
 ///     UDP sockets on loopback, and a client built from the client's production networking and gameplay code, pumped on
-///     the test's thread. A new Adventurer starts at job level 1, fights until its base level rises, and keeps what it
-///     earned through a restart. Each later line of Milestone 9 adds its steps here: the job levels, the raised
+///     the test's thread. A new Adventurer starts at job level 1, fights until its base level rises, spends its stat
+///     points, and keeps what it earned and spent through a restart. Each later line of Milestone 9 adds its steps here:
+///     the job levels, the raised
 ///     statistics, the learned skill levels and their measured effects, and the Guildmaster's reset.
 /// </summary>
 /// <remarks>
@@ -122,6 +123,7 @@ public sealed class AdventurerBuildAcceptanceTests
             Is.EqualTo((client.World.Level, client.World.Experience)),
             "fight: the job level keeps pace with the base level");
         Assert.That(stopped.JobLevel, Is.EqualTo(sheet.JobLevel), "fight: the console shows the job level");
+        SpendStatPoints(client);
 
         host.StopAsync().GetAwaiter().GetResult();
         Assert.That(
@@ -157,8 +159,30 @@ public sealed class AdventurerBuildAcceptanceTests
         Assert.That(world.Level, Is.EqualTo((ushort)2), $"{step}: the base level rose");
     }
 
-    // After a clean stop and a second server on the same database, the character keeps its level and experience, and
-    // its job level is still 1.
+    // Base level 2 grants 3 stat points (Gameplay Systems §2): a raise of AGI costs 2, and one of DEX, 2 more, is
+    // refused whole.
+    private static void SpendStatPoints(SocketClient client)
+    {
+        const string step = "stats";
+        ClientWorld world = client.World;
+        Assert.That(world.Sheet!.StatPoints, Is.EqualTo((ushort)3), $"{step}: base level 2 grants 3 points");
+        client.Connection.SendAllocateStat(PrimaryStat.Agi, 1);
+        Assert.That(client.PumpUntil(() => world.Sheet!.Stats[1].Value == 6), Is.True, $"{step}: AGI raised");
+        Assert.That(world.Sheet!.StatPoints, Is.EqualTo((ushort)1), $"{step}: 2 points spent");
+
+        var refused = new List<CommandRejected>();
+        world.CommandRejectedReceived += refused.Add;
+        uint sequence = client.Connection.SendAllocateStat(PrimaryStat.Dex, 1);
+        Assert.That(client.PumpUntil(() => refused.Count > 0), Is.True, $"{step}: DEX answered");
+        Assert.That(
+            (refused.Single().CommandSequence, refused.Single().Reason),
+            Is.EqualTo((sequence, CommandRejectionReason.NotEnoughPoints)),
+            $"{step}: DEX needs 2 points");
+        Assert.That(world.Sheet!.Stats[4].Value, Is.EqualTo((byte)5), $"{step}: DEX unchanged");
+    }
+
+    // After a clean stop and a second server on the same database, the character keeps its level and experience, its
+    // job level and job experience, and the statistic it raised.
     private void PlayAfterTheRestart(IHost host, PlayerSummary stopped)
     {
         IAdminCommandService admin = host.Services.GetRequiredService<IAdminCommandService>();
@@ -194,6 +218,11 @@ public sealed class AdventurerBuildAcceptanceTests
             ((int)client.World.Sheet!.JobLevel, (long)client.World.Sheet.JobExperience),
             Is.EqualTo((stopped.JobLevel, stopped.Experience)),
             "restart: the client shows them");
+        Assert.That(
+            (client.World.Sheet.Stats[1].Value, client.World.Sheet.StatPoints),
+            Is.EqualTo(((byte)6, (ushort)1)),
+            "restart: the raised AGI and the point left");
+        Assert.That(StoredAgility(), Is.EqualTo(6), "restart: the raised AGI, stored");
         AssertCleanTraffic(client, "restart");
     }
 
@@ -211,6 +240,15 @@ public sealed class AdventurerBuildAcceptanceTests
         Assert.That(reader.Read(), Is.True, "the character is stored");
         Assert.That(reader.GetInt64(2), Is.Zero, "no learned skill stored");
         return (reader.GetInt32(0), reader.GetInt64(1));
+    }
+
+    private int StoredAgility()
+    {
+        using var connection = new NpgsqlConnection(m_database.ConnectionString);
+        connection.Open();
+        using var command = new NpgsqlCommand("SELECT agi FROM characters WHERE name = @name", connection);
+        command.Parameters.AddWithValue("name", CharacterName);
+        return Convert.ToInt32(command.ExecuteScalar());
     }
 
     private static void AssertCleanTraffic(SocketClient client, string step)

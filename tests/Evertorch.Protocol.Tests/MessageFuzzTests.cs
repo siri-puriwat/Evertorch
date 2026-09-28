@@ -190,6 +190,10 @@ public sealed class MessageFuzzTests
             Encode(new CompleteQuest(new EntityId(14), new QuestDefinitionId("quest.crawler_hunt"), 7)),
             payload => CompleteQuest.TryRead(payload, out CompleteQuest? message) ? Encode(message!) : null);
         yield return Case(
+            "AllocateStat",
+            Encode(new AllocateStat(PrimaryStat.Dex, 2, 7)),
+            payload => AllocateStat.TryRead(payload, out AllocateStat message) ? Encode(message) : null);
+        yield return Case(
             "QuestLog",
             Encode(
                 new QuestLog(
@@ -649,6 +653,13 @@ public sealed class MessageFuzzTests
     private static byte[] Encode(AcceptQuest message)
     {
         byte[] buffer = new byte[message.GetEncodedLength()];
+        message.Write(buffer);
+        return buffer;
+    }
+
+    private static byte[] Encode(AllocateStat message)
+    {
+        byte[] buffer = new byte[AllocateStat.EncodedLength];
         message.Write(buffer);
         return buffer;
     }

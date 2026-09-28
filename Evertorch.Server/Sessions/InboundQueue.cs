@@ -326,6 +326,18 @@ public sealed class InboundQueue
                     complete.Quest,
                     complete.CommandSequence);
                 return true;
+            case MessageOpcode.AllocateStat:
+                if (!AllocateStat.TryRead(payload, out AllocateStat allocate))
+                {
+                    return false;
+                }
+
+                decoded = InboundEvent.ForAllocateStat(
+                    connection,
+                    allocate.Stat,
+                    allocate.Steps,
+                    allocate.CommandSequence);
+                return true;
             case MessageOpcode.CancelAction:
                 if (!CancelAction.TryRead(payload, out CancelAction cancel))
                 {

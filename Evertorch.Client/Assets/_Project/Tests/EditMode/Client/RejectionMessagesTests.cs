@@ -13,7 +13,9 @@ public sealed class RejectionMessagesTests
 {
     [TestCase(CommandRejectionReason.NotEnoughCoins, "You do not have enough coins.")]
     [TestCase(CommandRejectionReason.CoinCapReached, "You cannot hold any more coins.")]
-    public void Describe_TheShopsRefusals_InTheClientsWords(CommandRejectionReason reason, string expected)
+    [TestCase(CommandRejectionReason.NotEnoughPoints, "You do not have enough points.")]
+    [TestCase(CommandRejectionReason.RequirementNotMet, "That cannot be done.")]
+    public void Describe_TheShopsAndTheBuildsRefusals_InTheClientsWords(CommandRejectionReason reason, string expected)
     {
         Assert.That(RejectionMessages.Describe(reason), Is.EqualTo(expected));
     }

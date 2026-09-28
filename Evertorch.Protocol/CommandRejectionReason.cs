@@ -59,6 +59,17 @@ public enum CommandRejectionReason : byte
     /// <summary>
     ///     The coins would pass their cap; a sale or a reward is refused rather than cut (Gameplay Systems §11.3).
     /// </summary>
-    CoinCapReached = 11
+    CoinCapReached = 11,
+
+    /// <summary>
+    ///     The character has fewer stat or skill points than the command spends (Gameplay Systems §2, §9).
+    /// </summary>
+    NotEnoughPoints = 12,
+
+    /// <summary>
+    ///     What the command asks for is not open to the character: a statistic would pass its cap, or a skill is
+    ///     outside the job's tree, at its maximum, or without its prerequisite. Checked before the points.
+    /// </summary>
+    RequirementNotMet = 13
 }
 }

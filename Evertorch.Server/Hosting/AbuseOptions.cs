@@ -48,7 +48,8 @@ public sealed class AbuseOptions
     public int PickupCommandBurst { get; set; } = 20;
 
     /// <summary>
-    ///     <c>EquipItem</c>, <c>UnequipItem</c>, and <c>UseItem</c> per second, per connection.
+    ///     Commands of the item class per second, per connection: <c>EquipItem</c>, <c>UnequipItem</c>, <c>UseItem</c>,
+    ///     <c>BuyItem</c>, <c>SellItem</c>, <c>AcceptQuest</c>, <c>CompleteQuest</c>, and <c>AllocateStat</c>.
     /// </summary>
     public int ItemCommandsPerSecond { get; set; } = 10;
 

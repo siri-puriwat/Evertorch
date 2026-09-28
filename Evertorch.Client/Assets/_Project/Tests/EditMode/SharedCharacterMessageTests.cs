@@ -24,6 +24,9 @@ public sealed class SharedCharacterMessageTests
 
     private static readonly byte[] LogoutBytes = { 0x0E, 0x00, 0x78, 0x56, 0x34, 0x12 };
 
+    // AGI raised 3 times, command sequence 0x0A0B0C0D.
+    private static readonly byte[] AllocateBytes = { 0x17, 0x00, 0x02, 0x03, 0x0D, 0x0C, 0x0B, 0x0A };
+
     private static readonly byte[] LogoutCompleteBytes = { 0x19, 0x80 };
 
     private static readonly byte[] ProgressBytes =
@@ -61,6 +64,19 @@ public sealed class SharedCharacterMessageTests
         bytes.AddRange(Encoding.ASCII.GetBytes("job.adventurer"));
         bytes.AddRange(new byte[] { 0x0C, 0x00 });
         return bytes.ToArray();
+    }
+
+    [Test]
+    public void AllocateStat_WriteAndRead_MatchGoldenBytes()
+    {
+        byte[] buffer = new byte[AllocateStat.EncodedLength];
+        new AllocateStat(PrimaryStat.Agi, 3, 0x0A0B0C0D).Write(buffer);
+
+        bool isRead = AllocateStat.TryRead(AllocateBytes, out AllocateStat read);
+
+        Assert.That(buffer, Is.EqualTo(AllocateBytes));
+        Assert.That(isRead, Is.True);
+        Assert.That((read.Stat, read.Steps, read.CommandSequence), Is.EqualTo((PrimaryStat.Agi, (byte)3, 0x0A0B0C0Du)));
     }
 
     [Test]
@@ -182,7 +198,8 @@ public sealed class SharedCharacterMessageTests
         foreach (MessageOpcode opcode in new[]
                  {
                      MessageOpcode.CreateCharacter, MessageOpcode.CharacterList, MessageOpcode.CreateCharacterResult,
-                     MessageOpcode.Logout, MessageOpcode.LogoutComplete, MessageOpcode.CharacterProgress
+                     MessageOpcode.Logout, MessageOpcode.LogoutComplete, MessageOpcode.CharacterProgress,
+                     MessageOpcode.CharacterSheet, MessageOpcode.AllocateStat
                  })
         {
             Assert.That(MessageRouting.TryGetRoute(opcode, out ProtocolChannel channel, out MessageDelivery delivery));

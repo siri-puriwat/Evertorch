@@ -577,6 +577,22 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
     }
 
     /// <summary>
+    ///     Asks to raise <paramref name="stat" /> by <paramref name="steps" /> with stat points; 0 while not in the world,
+    ///     else the command's sequence. The server answers with the sheet or a refusal.
+    /// </summary>
+    public uint SendAllocateStat(PrimaryStat stat, byte steps)
+    {
+        if (State != ClientConnectionState.InWorld)
+        {
+            return 0;
+        }
+
+        uint sequence = NextCommandSequence();
+        SendRouted(MessageOpcode.AllocateStat, new AllocateStat(stat, steps, sequence).Write(m_sendBuffer));
+        return sequence;
+    }
+
+    /// <summary>
     ///     Asks the server to select <paramref name="target" />, or to clear the selection for entity 0. The world
     ///     shows a target only once the server confirms it.
     /// </summary>

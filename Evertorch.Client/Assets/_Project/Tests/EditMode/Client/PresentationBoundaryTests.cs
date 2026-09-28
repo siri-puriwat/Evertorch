@@ -36,7 +36,8 @@ public sealed class PresentationBoundaryTests
         + @"|LocalPlayerDriver|PickupState|SkillState|TalkState|InventoryActions\.Press\b"
         + @"|\.ActionLock\b|MoveIntentProducer|\bnew\s+(MoveIntent|ClientHello|EnterWorldRequest|MoveInput|StopMovement"
         + @"|TargetEntity|AttackEntity|CancelAction|UseSkill|Respawn|Logout|PickupItem|CreateCharacter"
-        + @"|InventoryResyncRequest|EquipItem|UnequipItem|UseItem|BuyItem|SellItem|AcceptQuest|CompleteQuest)\s*\("
+        + @"|InventoryResyncRequest|EquipItem|UnequipItem|UseItem|BuyItem|SellItem|AcceptQuest|CompleteQuest"
+        + @"|AllocateStat)\s*\("
         + @"|\.Connection\??\.(Connect|Disconnect|EnterWorld|CreateCharacter|Poll)\("
         + @"|\.Controller\??\.(Cancel\w*|Tick)\("
         + @"|\.(SetManualDirection|TryMoveTo|Chase\w*|StopChase|CancelPath|NextTick|Reconcile|Teleport"
@@ -135,7 +136,7 @@ public sealed class PresentationBoundaryTests
             "world.OnNpcServices(services);", "world.CollectNpcCandidates(candidates);",
             "var buy = new BuyItem(npc, item, 1, 6);", "var sell = new SellItem(npc, row, 1, 7);",
             "world.OnQuestLog(log);", "var accept = new AcceptQuest(npc, quest, 8);",
-            "var turnIn = new CompleteQuest(npc, quest, 9);"
+            "var turnIn = new CompleteQuest(npc, quest, 9);", "var raise = new AllocateStat(PrimaryStat.Agi, 1, 10);"
         };
         string[] allowed =
         {
