@@ -24,18 +24,15 @@ public static class WebBuild
     [MenuItem("Evertorch/Build Web")]
     public static void BuildFromMenu()
     {
-        BuildReport report = Build(BuildOptions.Development | BuildOptions.AutoRunPlayer);
-        Debug.Log($"Web build {report.summary.result} in {OutputPath} ({report.summary.totalErrors} errors).");
+        Build(BuildOptions.Development | BuildOptions.AutoRunPlayer);
     }
 
     public static void BuildFromCommandLine()
     {
-        BuildReport report = Build(BuildOptions.Development);
-        Debug.Log($"Web build {report.summary.result} in {OutputPath} ({report.summary.totalErrors} errors).");
-        EditorApplication.Exit(report.summary.result == BuildResult.Succeeded ? 0 : 1);
+        EditorApplication.Exit(Build(BuildOptions.Development) ? 0 : 1);
     }
 
-    private static BuildReport Build(BuildOptions options)
+    private static bool Build(BuildOptions options)
     {
         BuildTarget previousTarget = EditorUserBuildSettings.activeBuildTarget;
         BuildTargetGroup previousGroup = BuildPipeline.GetBuildTargetGroup(previousTarget);
@@ -45,7 +42,17 @@ public static class WebBuild
         {
             PlayerSettings.insecureHttpOption = InsecureHttpOption.DevelopmentOnly;
             PlayerSettings.WebGL.decompressionFallback = true;
-            return BuildPipeline.BuildPlayer(
+
+            // Addressables, built with the player, places its bundles by the active target, not the player's: built
+            // from another target, the page's catalog would point at bundles the build never copied.
+            if (EditorUserBuildSettings.activeBuildTarget != BuildTarget.WebGL
+                && !EditorUserBuildSettings.SwitchActiveBuildTarget(BuildTargetGroup.WebGL, BuildTarget.WebGL))
+            {
+                Debug.LogError("Web build not started: the project could not switch to WebGL.");
+                return false;
+            }
+
+            BuildReport report = BuildPipeline.BuildPlayer(
                 new BuildPlayerOptions
                 {
                     scenes = EditorBuildSettings.scenes.Where(scene => scene.enabled).Select(scene => scene.path)
@@ -55,6 +62,8 @@ public static class WebBuild
                     targetGroup = BuildTargetGroup.WebGL,
                     options = options
                 });
+            Debug.Log($"Web build {report.summary.result} in {OutputPath} ({report.summary.totalErrors} errors).");
+            return report.summary.result == BuildResult.Succeeded;
         }
         finally
         {

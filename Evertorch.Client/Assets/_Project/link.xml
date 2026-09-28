@@ -1,0 +1,10 @@
+<!-- GameObject.CreatePrimitive adds a collider that no code names, so engine code stripping would remove the class
+     from a web build and the add would fail with "Can't add component because class ... doesn't exist!". -->
+<linker>
+  <assembly fullname="UnityEngine.PhysicsModule">
+    <type fullname="UnityEngine.BoxCollider" preserve="all" />
+    <type fullname="UnityEngine.CapsuleCollider" preserve="all" />
+    <type fullname="UnityEngine.MeshCollider" preserve="all" />
+    <type fullname="UnityEngine.SphereCollider" preserve="all" />
+  </assembly>
+</linker>

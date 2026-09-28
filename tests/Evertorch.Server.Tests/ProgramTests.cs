@@ -335,6 +335,7 @@ public sealed class ProgramTests
         start.ArgumentList.Add($"--ConnectionStrings:Evertorch={TestHosts.UnreachableDatabase}");
         start.ArgumentList.Add("--Network:Port=0");
         start.ArgumentList.Add("--Health:Port=0");
+        start.ArgumentList.Add("--Gateway:Port=0");
         start.Environment["DOTNET_ENVIRONMENT"] = "Production";
         using var process = new Process { StartInfo = start };
         process.OutputDataReceived += (_, line) => output.WriteLine(line.Data);
