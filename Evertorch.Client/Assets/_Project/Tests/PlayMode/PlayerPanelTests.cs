@@ -380,6 +380,16 @@ public sealed class PlayerPanelTests
         Assert.That(bar.ShownJobExperienceRatio, Is.EqualTo(1f), "full at the job's cap");
     }
 
+    // STR 5, AGI 11, VIT 99 (the cap), INT 5, DEX 21, and LUK 1, with their next costs, and the given points.
+    private static CharacterSheet StatSheet(ushort statPoints)
+    {
+        CharacterSheetStat[] stats =
+        {
+            new(5, 2), new(11, 3), new(99, 0), new(5, 2), new(21, 4), new(1, 2)
+        };
+        return new CharacterSheet(3, 20, 80, statPoints, 2, stats, 46, 12, 5, 6, 188, 125, 13, 154);
+    }
+
     private static CharacterSheet Sheet(byte jobLevel, ulong jobExperience, ulong toNext)
     {
         CharacterSheetStat[] stats = Enumerable.Repeat(new CharacterSheetStat(5, 2), 6).ToArray();
@@ -434,6 +444,137 @@ public sealed class PlayerPanelTests
 
         Assert.That(afterAward, Is.Empty);
         Assert.That(lines.Text, Is.EqualTo("Level up"));
+    }
+
+    // Each statistic with its value, its next cost, and "+" while the points cover it; then the derived statistics
+    // (Prototype Content §2). Only a new sheet rewrites the rows.
+    [UnityTest]
+    public IEnumerator StatsWindow_ShowsTheSheet_WithARaiseWhereThePointsCoverIt()
+    {
+        GameClient client = CreateIdleClient();
+        ClientWorld world = GiveWorld(client);
+        var window = StatsWindow.Create(client);
+        m_created.Add(window.gameObject);
+        window.Open();
+        yield return null;
+        string before = window.Text;
+
+        world.OnCharacterSheet(StatSheet(3));
+        yield return null;
+        yield return null;
+        int changes = window.TextChanges;
+
+        Assert.That(window.IsOpen, Is.True);
+        Assert.That(before, Is.EqualTo("Waiting for the server"));
+        Assert.That(
+            window.Text,
+            Is.EqualTo(
+                "Points: 3\nSTR 5, next 2, +\nAGI 11, next 3, +\nVIT 99, max\nINT 5, next 2, +\nDEX 21, next 4"
+                + "\nLUK 1, next 2, +\nAttack 46\nMagic attack 12\nDefense 5\nMagic defense 6\nHit 188\nFlee 125"
+                + "\nCritical 1.3%\nAttack speed 154"));
+        Assert.That(
+            Enumerable.Range(1, 6).Select(stat => window.IsRaiseShown((PrimaryStat)stat)),
+            Is.EqualTo(new[] { true, true, false, true, false, true }),
+            "3 points cover 2 and 3, not 4, and nothing raises past 99");
+        Assert.That(changes, Is.EqualTo(2), "once for the wait, once for the sheet");
+    }
+
+    // The Stats and NPC windows share one place, so opening either closes the other (Prototype Content §2).
+    [UnityTest]
+    public IEnumerator StatsAndNpcWindows_OpenOneAtATime()
+    {
+        GameClient client = CreateIdleClient();
+        ClientWorld world = GiveWorld(client);
+        GiveShop(client);
+        Spawn(world, 13, EntityKind.Npc, Quartermaster, 1000);
+        DrawNpc(client, 13);
+        world.OnNpcServices(QuartermasterServices(13));
+        var npcWindow = NpcWindow.Create(client);
+        var statsWindow = StatsWindow.Create(client);
+        m_created.Add(npcWindow.gameObject);
+        m_created.Add(statsWindow.gameObject);
+        const BindingFlags field = BindingFlags.NonPublic | BindingFlags.Instance;
+        typeof(GameClient).GetField("m_npcWindow", field)!.SetValue(client, npcWindow);
+        typeof(GameClient).GetField("m_statsWindow", field)!.SetValue(client, statsWindow);
+        MethodInfo talkArrived = typeof(GameClient).GetMethod("OnTalkArrived", field)!;
+        npcWindow.Open(new EntityId(13));
+        yield return null;
+
+        client.ToggleStats();
+        (bool Npc, bool Stats) afterStats = (npcWindow.IsOpen, statsWindow.IsOpen);
+        talkArrived.Invoke(client, new object[] { new EntityId(13) });
+        (bool Npc, bool Stats) afterTalk = (npcWindow.IsOpen, statsWindow.IsOpen);
+        client.ToggleStats();
+        client.ToggleStats();
+
+        Assert.That(afterStats, Is.EqualTo((false, true)), "the Stats window replaces the NPC window");
+        Assert.That(afterTalk, Is.EqualTo((true, false)), "reaching an NPC replaces the Stats window");
+        Assert.That((npcWindow.IsOpen, statsWindow.IsOpen), Is.EqualTo((false, false)), "a second toggle closes it");
+    }
+
+    [UnityTest]
+    public IEnumerator StatsWindow_ClosesWhenTheWorldChanges()
+    {
+        GameClient client = CreateIdleClient();
+        GiveWorld(client);
+        var window = StatsWindow.Create(client);
+        m_created.Add(window.gameObject);
+        window.Open();
+        yield return null;
+        bool wasOpen = window.IsOpen;
+
+        GiveWorld(client);
+        yield return null;
+
+        Assert.That(wasOpen, Is.True);
+        Assert.That(window.IsOpen, Is.False);
+    }
+
+    // Stopped above the feedback lines on this screen, the rows that do not fit scroll (Prototype Content §2).
+    [UnityTest]
+    public IEnumerator StatsWindow_StopsAboveTheFeedbackLines_AndKeepsEveryRow()
+    {
+        GameClient client = CreateIdleClient();
+        ClientWorld world = GiveWorld(client);
+        var window = StatsWindow.Create(client);
+        m_created.Add(window.gameObject);
+        world.OnCharacterSheet(StatSheet(3));
+        window.Open();
+        yield return null;
+        yield return null;
+        yield return null;
+        Rect shown = ScreenRect(window.transform.Find("Panel"));
+        float unitsToPixels = Screen.width / ClientUI.CanvasWidth;
+        float canvasHeight = Screen.height / unitsToPixels;
+        Debug.Log($"Stats window at {Screen.width} x {Screen.height}: {shown}");
+
+        Assert.That(
+            shown.yMin,
+            Is.GreaterThanOrEqualTo((FeedbackLines.TopFor(canvasHeight) + 8f) * unitsToPixels - 0.5f),
+            "above the feedback lines");
+        Assert.That(
+            window.GetComponentsInChildren<Button>(true),
+            Has.Length.EqualTo(6 + 1),
+            "a raise for each statistic and Close");
+    }
+
+    [UnityTest]
+    public IEnumerator FeedbackLines_SayARaisedStatistic_WithItsNewValue()
+    {
+        GameClient client = CreateIdleClient();
+        ClientWorld world = GiveWorld(client);
+        var lines = FeedbackLines.Create(client);
+        m_created.Add(lines.gameObject);
+        yield return null;
+
+        world.OnCharacterSheet(Sheet(1, 0, 30));
+        CharacterSheet before = world.Sheet!;
+        CharacterSheetStat[] raised = before.Stats.ToArray();
+        raised[1] = new CharacterSheetStat(6, 2);
+        world.OnCharacterSheet(
+            new CharacterSheet(1, 0, 30, 0, 0, raised, 10, 5, 2, 3, 182, 106, 11, 153));
+
+        Assert.That(lines.Text, Is.EqualTo("AGI 6."));
     }
 
     [UnityTest]

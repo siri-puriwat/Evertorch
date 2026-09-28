@@ -11,6 +11,7 @@ using UnityEngine.InputSystem;
 using UnityEngine.InputSystem.Controls;
 using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
+using UnityEngine.UI;
 using Object = UnityEngine.Object;
 
 namespace Evertorch.Client.Tests.PlayMode
@@ -25,6 +26,7 @@ public sealed class LiveServerBuildTests : InputTestFixture
 {
     private const string ActionsAsset = "_Project/Settings/InputSystem_Actions.inputactions";
     private const string LevelClientName = "LiveBuildOne";
+    private const string StatsClientName = "LiveBuildTwo";
     private const float StartTimeoutSeconds = 30f;
     private const float FightTimeoutSeconds = 60f;
     private const int TestTimeoutMs = 300_000;
@@ -122,6 +124,47 @@ public sealed class LiveServerBuildTests : InputTestFixture
         Assert.That(shownName.text, Is.EqualTo(after), "the status bar shows both new levels");
         Assert.That(bar.ShownExperienceRatio, Is.EqualTo(ExperienceAfterTheKill).Within(0.001f), "the left over");
         Assert.That(bar.ShownJobExperienceRatio, Is.EqualTo(ExperienceAfterTheKill).Within(0.001f), "the job's too");
+    }
+
+    // A character stored at base level 3, with 6 stat points, opens the Stats window with C and presses AGI's "+": the
+    // server's sheet moves the row and the points, the feedback lines say so, and C closes the window (Gameplay
+    // Systems §2; Prototype Content §2, §4).
+    [UnityTest]
+    [Timeout(TestTimeoutMs)]
+    public IEnumerator Stats_RaisedThroughTheWindow_MoveWithTheServersSheet()
+    {
+        string actionsPath = RequirePrerequisites();
+        yield return StartDatabaseAndServer();
+        LiveServer server = m_server!;
+        LiveDatabase database = m_database!;
+        Keyboard keyboard = InputSystem.AddDevice<Keyboard>();
+        GameClient client = CreateClient(actionsPath);
+
+        yield return EnterByName(
+            client,
+            StatsClientName,
+            () => database.Execute($"UPDATE characters SET base_level = 3 WHERE name = '{StatsClientName}'"));
+        ClientWorld world = client.World!;
+        StatsWindow window = client.GetComponentsInChildren<StatsWindow>(true).Single();
+        FeedbackLines lines = client.GetComponentsInChildren<FeedbackLines>(true).Single();
+        yield return WaitUntil(() => world.Sheet != null, StartTimeoutSeconds);
+        Assert.That(world.Sheet?.StatPoints, Is.EqualTo((ushort)6), $"base level 3: {server.JoinOutput()}");
+
+        yield return Tap(keyboard.cKey);
+        yield return WaitUntil(() => window.IsOpen, 2f);
+        Assert.That(window.IsOpen, Is.True, "C opens the window");
+        Assert.That(window.Text, Does.Contain("AGI 5, next 2, +"));
+        Button raise = window.GetComponentsInChildren<Button>().Single(button => button.name == "Raise AGI");
+        raise.onClick.Invoke();
+        yield return WaitUntil(() => window.Text.Contains("AGI 6, next 2, +"), StartTimeoutSeconds);
+
+        Assert.That(world.Sheet!.Stats[1].Value, Is.EqualTo((byte)6), $"{client.Status} {server.JoinOutput()}");
+        Assert.That(window.Text, Does.StartWith("Points: 4\n"), "2 points spent");
+        Assert.That(window.Text, Does.Contain("AGI 6, next 2, +"));
+        Assert.That(lines.Text, Does.Contain("AGI 6."));
+        yield return Tap(keyboard.cKey);
+        yield return WaitUntil(() => !window.IsOpen, 2f);
+        Assert.That(window.IsOpen, Is.False, "C closes it again");
     }
 
     private static string RequirePrerequisites()

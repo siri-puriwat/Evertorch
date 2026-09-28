@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.Text;
 using Evertorch.Game;
 using Evertorch.Protocol;
@@ -12,7 +11,7 @@ namespace Evertorch.Client
 /// <summary>
 ///     Short-lived lines over the lower middle of the screen, clear of the skill bar (Prototype Content §2): a refused
 ///     command in plain words, what the player picked up, bought, or sold, a quest accepted, advanced, ready, or
-///     completed, and a level-up.
+///     completed, a level-up, a job level-up, and a raised statistic.
 /// </summary>
 public sealed class FeedbackLines : MonoBehaviour
 {
@@ -24,13 +23,21 @@ public sealed class FeedbackLines : MonoBehaviour
     /// </summary>
     public const float Width = 600f;
 
+    /// <summary>
+    ///     The panel's height with all its lines, in canvas units: three lines of 24-point text with the padding and the
+    ///     spacing.
+    /// </summary>
+    public const float MaxHeight = 2 * Padding + MaxLines * LineHeight + (MaxLines - 1) * LineSpacing;
+
     // Over the other in-world panels, under the login panel.
     private const int SortingOrder = 7;
     private const int Padding = 10;
     private const float HeightShare = 0.2f;
     private const float BarClearance = 16f;
+    private const float LineHeight = 32f;
+    private const float LineSpacing = 4f;
 
-    private static readonly UiBuilder Ui = new(24f, 32f, 0f, 4f);
+    private static readonly UiBuilder Ui = new(24f, LineHeight, 0f, LineSpacing);
 
     private readonly List<Line> m_lines = new();
     private readonly StringBuilder m_text = new();
@@ -94,6 +101,14 @@ public sealed class FeedbackLines : MonoBehaviour
     public static float BottomFor(float canvasHeight)
     {
         return Math.Max(HeightShare * canvasHeight, SkillBar.Top + BarClearance);
+    }
+
+    /// <summary>
+    ///     How high the top of all three lines reaches, which the windows beside them stop above.
+    /// </summary>
+    public static float TopFor(float canvasHeight)
+    {
+        return BottomFor(canvasHeight) + MaxHeight;
     }
 
     public void Add(string line)
@@ -160,13 +175,17 @@ public sealed class FeedbackLines : MonoBehaviour
         Add("Level up");
     }
 
-    // A world's first sheet is its baseline, which is no news.
     private void OnSheetChanged(CharacterSheet? before)
     {
         CharacterSheet? after = m_watched?.Sheet;
-        if (before != null && after != null && after.JobLevel > before.JobLevel)
+        if (after == null)
         {
-            Add($"Job level {after.JobLevel.ToString(CultureInfo.InvariantCulture)}.");
+            return;
+        }
+
+        foreach (string line in BuildMessages.Describe(before, after))
+        {
+            Add(line);
         }
     }
 

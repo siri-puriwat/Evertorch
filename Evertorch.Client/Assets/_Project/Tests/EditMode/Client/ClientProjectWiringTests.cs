@@ -45,6 +45,7 @@ public sealed class ClientProjectWiringTests
     [TestCase("Player/Slot4")]
     [TestCase("Player/Slot5")]
     [TestCase("Player/Talk")]
+    [TestCase("Player/Stats")]
     public void InputActions_HaveTheActionsTheClientBinds(string actionPath)
     {
         Assert.That(LoadActions().FindAction(actionPath), Is.Not.Null);
@@ -172,6 +173,19 @@ public sealed class ClientProjectWiringTests
             Is.EquivalentTo(new[] { "<Keyboard>/e", "<Gamepad>/dpad/right" }));
         Assert.That(actions.FindAction("Player/Talk", true).interactions, Is.Empty, "a press, not a hold");
         Assert.That(actions.FindAction("Player/Interact"), Is.Null, "the template's Interact is replaced");
+    }
+
+    [Test]
+    public void InputActions_TheWindowsFollowThePrototypeControls()
+    {
+        InputActionAsset actions = LoadActions();
+
+        Assert.That(
+            Paths(actions, "Player/Stats"),
+            Is.EquivalentTo(new[] { "<Keyboard>/c", TouchControls.StatsControlPath }),
+            "the Stats touch button drives the gamepad's Select");
+        Assert.That(TouchControls.StatsControlPath, Is.EqualTo("<Gamepad>/select"));
+        Assert.That(actions.FindAction("Player/Stats", true).interactions, Is.Empty, "a press, not a hold");
     }
 
     [Test]

@@ -368,6 +368,36 @@ public sealed class SharedIntentPathTests : InputTestFixture
         Assert.That(requests, Is.EqualTo(new[] { CombatRequest.Next, CombatRequest.Previous, CombatRequest.Clear }));
     }
 
+    // The Stats touch button drives the gamepad's Select, so the one action serves C, Select, and the button (Prototype
+    // Content §4).
+    [UnityTest]
+    public IEnumerator StatsTouchButton_AsksForTheStatsWindow_AsSelectDoes()
+    {
+        InputSystem.settings.backgroundBehavior = InputSettings.BackgroundBehavior.IgnoreFocus;
+#if UNITY_EDITOR
+        InputSystem.settings.editorInputBehaviorInPlayMode =
+            InputSettings.EditorInputBehaviorInPlayMode.AllDeviceInputAlwaysGoesToGameView;
+#endif
+        Touchscreen touchscreen = InputSystem.AddDevice<Touchscreen>();
+        Rig rig = CreateRig();
+        TouchControls controls = rig.CreateTouchControls();
+        WindowInputSource source = rig.CreateWindowSource();
+        yield return null;
+
+        Vector2 onButton = CenterOf(Child(controls, "Stats"));
+        BeginTouch(1, onButton, screen: touchscreen);
+        yield return null;
+        yield return null;
+        bool pressed = source.TakeStatsToggle();
+        EndTouch(1, onButton, screen: touchscreen);
+        yield return null;
+        yield return null;
+        bool again = source.TakeStatsToggle();
+
+        Assert.That(pressed, Is.True, "the button asks for the window");
+        Assert.That(again, Is.False, "once per press");
+    }
+
     [UnityTest]
     public IEnumerator DevButton_ShowsTheDevelopmentOverlay_AndTheOverlaysHideButtonHidesIt()
     {
@@ -614,6 +644,7 @@ public sealed class SharedIntentPathTests : InputTestFixture
         private readonly GrayboxMap m_map;
         private readonly InputActionAsset m_actions;
         private CombatInputSource? m_combat;
+        private WindowInputSource? m_windows;
         private PointerMoveHandler m_handler;
         private uint m_tick;
 
@@ -707,6 +738,12 @@ public sealed class SharedIntentPathTests : InputTestFixture
             return m_combat;
         }
 
+        public WindowInputSource CreateWindowSource()
+        {
+            m_windows = new WindowInputSource(m_actions.FindAction("Player/Stats", true));
+            return m_windows;
+        }
+
         public DevelopmentOverlay CreateOverlay()
         {
             var overlay = DevelopmentOverlay.Create(CreateIdleClient());
@@ -761,6 +798,7 @@ public sealed class SharedIntentPathTests : InputTestFixture
         {
             m_pointer.Dispose();
             m_combat?.Dispose();
+            m_windows?.Dispose();
         }
 
         private static NavigationGrid CreateGrid()

@@ -13,7 +13,7 @@ namespace Evertorch.Client.Tests.EditMode
 public sealed class PanelLayoutTests
 {
     // Three lines of 24-point text with the panel's padding and spacing.
-    private const float LinesHeight = 124f;
+    private const float LinesHeight = FeedbackLines.MaxHeight;
 
     [TestCase(607.5f, TestName = "Landscape 1920 x 1080")]
     [TestCase(1920f, TestName = "Portrait 1080 x 1920")]
@@ -81,6 +81,47 @@ public sealed class PanelLayoutTests
         Assert.That(withTouch.height, Is.GreaterThan(92f + 2 * 30f + 6f), "two rows show on the shortest screen");
     }
 
+    // The Stats window shares the NPC window's place and stops above the feedback lines, which it would otherwise
+    // hide (Prototype Content §2; Milestone 7 review finding 1).
+    [TestCase(486f)]
+    [TestCase(607.5f)]
+    [TestCase(1920f)]
+    public void StatsWindow_HangsBelowTheStatusBar_AndStopsAboveTheFeedbackLinesAndTheStick(float canvasHeight)
+    {
+        const float width = ClientUI.CanvasWidth;
+        var lines = new Rect(
+            (width - FeedbackLines.Width) / 2f,
+            FeedbackLines.BottomFor(canvasHeight),
+            FeedbackLines.Width,
+            LinesHeight);
+        Rect withTouch = StatsWindow.BoundsFor(canvasHeight, true);
+        Rect withoutTouch = StatsWindow.BoundsFor(canvasHeight, false);
+
+        Assert.That(LinesHeight, Is.EqualTo(124f), "three lines of 32 with 4 between and 10 around");
+        Assert.That(withTouch.yMax, Is.EqualTo(canvasHeight - 64f).Within(1e-3f), "below the status bar");
+        Assert.That(withTouch.Overlaps(lines), Is.False, "clear of the feedback lines");
+        Assert.That(withTouch.Overlaps(TouchControls.StickBounds), Is.False, "clear of the stick");
+        Assert.That(withoutTouch.Overlaps(lines), Is.False);
+        Assert.That(withTouch.yMin, Is.GreaterThanOrEqualTo(FeedbackLines.TopFor(canvasHeight) + 8f - 1e-3f));
+        Assert.That(withTouch.height, Is.GreaterThanOrEqualTo(92f + 30f), "a row shows on the shortest screen");
+    }
+
+    // The Stats button stands above the Dev button's place on the left edge, clear of the stick and the Dev button.
+    [TestCase(486f)]
+    [TestCase(607.5f)]
+    [TestCase(1920f)]
+    public void StatsButton_StandsAboveTheDevButton_ClearOfTheStick(float canvasHeight)
+    {
+        Rect stats = TouchControls.StatsButtonBounds(canvasHeight);
+        Rect dev = TouchControls.OverlayToggleBounds(canvasHeight);
+
+        Assert.That(stats.Overlaps(TouchControls.StickBounds), Is.False, "the stick");
+        Assert.That(dev.Overlaps(TouchControls.StickBounds), Is.False, "the Dev button and the stick");
+        Assert.That(stats.Overlaps(dev), Is.False, "the Dev button");
+        Assert.That(stats.yMin, Is.GreaterThan(dev.yMax));
+        Assert.That(stats.xMin, Is.Zero, "on the left edge");
+    }
+
     [Test]
     public void InventoryWindow_WhileItsRowsFit_IsJustTallEnoughForThem()
     {
@@ -95,6 +136,14 @@ public sealed class PanelLayoutTests
         Rect three = NpcWindow.BoundsFor(1920f, 3, true);
 
         Assert.That(three.height, Is.EqualTo(92f + 3 * 30f + 2 * 6f).Within(1e-3f));
+    }
+
+    [Test]
+    public void StatsWindow_OnATallScreen_ShowsEveryRow()
+    {
+        Rect bounds = StatsWindow.BoundsFor(1920f, true);
+
+        Assert.That(bounds.height, Is.EqualTo(92f + 10 * 30f + 9 * 6f).Within(1e-3f));
     }
 }
 }

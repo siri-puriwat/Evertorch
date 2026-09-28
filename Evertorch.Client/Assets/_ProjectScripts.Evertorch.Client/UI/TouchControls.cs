@@ -7,9 +7,10 @@ using UnityEngine.UI;
 namespace Evertorch.Client
 {
 /// <summary>
-///     The on-screen stick, the Next, Previous, and Clear target buttons, and the development overlay's toggle. The
-///     stick and the target buttons drive a virtual gamepad, so the actions read them through the same bindings as a
-///     real gamepad and no touch-specific movement or targeting code exists (Prototype Content §4).
+///     The on-screen stick, the Next, Previous, and Clear target buttons, the Stats button, and the development overlay's
+///     toggle. The stick and the target and Stats buttons drive a virtual gamepad, so the actions read them through the
+///     same bindings as a real gamepad and no touch-specific movement, targeting, or window code exists (Prototype
+///     Content §4).
 /// </summary>
 public sealed class TouchControls : MonoBehaviour
 {
@@ -17,6 +18,7 @@ public sealed class TouchControls : MonoBehaviour
     public const string NextControlPath = "<Gamepad>/rightShoulder";
     public const string PreviousControlPath = "<Gamepad>/leftShoulder";
     public const string ClearControlPath = "<Gamepad>/buttonEast";
+    public const string StatsControlPath = "<Gamepad>/select";
 
     private const float StickRange = 51f;
     private const float StickSize = 146f;
@@ -34,6 +36,7 @@ public sealed class TouchControls : MonoBehaviour
 
     private GameObject? m_stickRoot;
     private GameObject? m_targetButtons;
+    private GameObject? m_windowButtons;
 
     public bool IsVisible => m_stickRoot != null && m_stickRoot.activeSelf;
 
@@ -63,6 +66,24 @@ public sealed class TouchControls : MonoBehaviour
         return new Rect(canvasWidth - ButtonInset - ButtonSize.x, ButtonInset, ButtonSize.x, height);
     }
 
+    /// <summary>
+    ///     The Stats button on the left edge of a canvas <paramref name="canvasHeight" /> units tall, just above the Dev
+    ///     button's place, from its bottom-left corner.
+    /// </summary>
+    public static Rect StatsButtonBounds(float canvasHeight)
+    {
+        return new Rect(0f, canvasHeight / 2f + ToggleSize.y / 2f + ButtonGap, ToggleSize.x, ToggleSize.y);
+    }
+
+    /// <summary>
+    ///     The Dev button on the left edge of a canvas <paramref name="canvasHeight" /> units tall, from its bottom-left
+    ///     corner.
+    /// </summary>
+    public static Rect OverlayToggleBounds(float canvasHeight)
+    {
+        return new Rect(0f, canvasHeight / 2f - ToggleSize.y / 2f, ToggleSize.x, ToggleSize.y);
+    }
+
     /// <param name="toggleOverlay">What the Dev button does; without it there is no Dev button.</param>
     public static TouchControls Create(UnityAction? toggleOverlay = null)
     {
@@ -73,8 +94,8 @@ public sealed class TouchControls : MonoBehaviour
     }
 
     /// <summary>
-    ///     Shows or hides the stick and the target buttons. The Dev button stays: on a device without a keyboard it is
-    ///     the only way back to the overlay, whose toggle calls this.
+    ///     Shows or hides the stick, the target buttons, and the Stats button. The Dev button stays: on a device without
+    ///     a keyboard it is the only way back to the overlay, whose toggle calls this.
     /// </summary>
     public void SetVisible(bool isVisible)
     {
@@ -86,6 +107,11 @@ public sealed class TouchControls : MonoBehaviour
         if (m_targetButtons != null)
         {
             m_targetButtons.SetActive(isVisible);
+        }
+
+        if (m_windowButtons != null)
+        {
+            m_windowButtons.SetActive(isVisible);
         }
     }
 
@@ -118,6 +144,10 @@ public sealed class TouchControls : MonoBehaviour
         CreateTargetButton("Previous", PreviousControlPath, 1);
         CreateTargetButton("Next", NextControlPath, 2);
 
+        m_windowButtons = UiBuilder.CreateUiObject("Window buttons", canvasObject.transform);
+        UiBuilder.Stretch(m_windowButtons, 0f, 0f);
+        CreateWindowButton("Stats", StatsControlPath);
+
         if (toggleOverlay != null)
         {
             CreateOverlayToggle(canvasObject.transform, toggleOverlay);
@@ -133,6 +163,22 @@ public sealed class TouchControls : MonoBehaviour
         rect.anchorMax = new Vector2(1f, 0f);
         rect.pivot = new Vector2(1f, 0f);
         rect.anchoredPosition = new Vector2(-ButtonInset, ButtonInset + row * (ButtonSize.y + ButtonGap));
+        AddLabel(label, button.transform);
+
+        button.SetActive(false);
+        button.AddComponent<OnScreenButton>().controlPath = controlPath;
+        button.SetActive(true);
+    }
+
+    // On the left edge above the Dev button's place, clear of the stick.
+    private void CreateWindowButton(string label, string controlPath)
+    {
+        GameObject button = CreateImage(label, m_windowButtons!.transform, ToggleSize, AreaColor);
+        var rect = (RectTransform)button.transform;
+        rect.anchorMin = new Vector2(0f, 0.5f);
+        rect.anchorMax = new Vector2(0f, 0.5f);
+        rect.pivot = new Vector2(0f, 0f);
+        rect.anchoredPosition = new Vector2(0f, ToggleSize.y / 2f + ButtonGap);
         AddLabel(label, button.transform);
 
         button.SetActive(false);

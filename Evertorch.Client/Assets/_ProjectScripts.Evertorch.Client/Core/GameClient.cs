@@ -66,6 +66,7 @@ public sealed class GameClient : MonoBehaviour
     private PointerMoveSource? m_pointerSource;
     private PointerMoveHandler? m_pointerHandler;
     private CombatInputSource? m_combatSource;
+    private WindowInputSource? m_windowSource;
     private SkillInputSource? m_skillSource;
     private CameraInputSource? m_cameraSource;
     private TargetMarker? m_targetMarker;
@@ -90,6 +91,7 @@ public sealed class GameClient : MonoBehaviour
     private TargetFrame? m_targetFrame;
     private InventoryWindow? m_inventoryWindow;
     private NpcWindow? m_npcWindow;
+    private StatsWindow? m_statsWindow;
     private SkillBar? m_skillBar;
     private FeedbackLines? m_feedback;
     private CombatPresenter? m_combat;
@@ -236,6 +238,8 @@ public sealed class GameClient : MonoBehaviour
         m_inventoryWindow.transform.SetParent(transform, false);
         m_npcWindow = NpcWindow.Create(this);
         m_npcWindow.transform.SetParent(transform, false);
+        m_statsWindow = StatsWindow.Create(this);
+        m_statsWindow.transform.SetParent(transform, false);
         m_skillBar = SkillBar.Create(this);
         m_skillBar.transform.SetParent(transform, false);
         m_feedback = FeedbackLines.Create(this);
@@ -264,6 +268,7 @@ public sealed class GameClient : MonoBehaviour
             m_pointerSource?.TryTakeRequest(out Vector2 _);
             m_combatSource?.TakeRequest();
             m_skillSource?.TakeSlot();
+            m_windowSource?.TakeStatsToggle();
             return;
         }
 
@@ -288,6 +293,11 @@ public sealed class GameClient : MonoBehaviour
 
         HandlePointerRequest();
         HandleCombatRequest();
+        if (m_windowSource != null && m_windowSource.TakeStatsToggle())
+        {
+            ToggleStats();
+        }
+
         int slot = m_skillSource?.TakeSlot() ?? 0;
         if (slot != 0)
         {
@@ -352,6 +362,7 @@ public sealed class GameClient : MonoBehaviour
         TearDownWorld();
         m_pointerSource?.Dispose();
         m_combatSource?.Dispose();
+        m_windowSource?.Dispose();
         m_skillSource?.Dispose();
         m_cameraSource?.Dispose();
         m_socket?.Dispose();
@@ -602,6 +613,35 @@ public sealed class GameClient : MonoBehaviour
     public void TurnInQuestTo(EntityId npc, QuestDefinitionId quest)
     {
         Connection?.SendCompleteQuest(npc, quest);
+    }
+
+    /// <summary>
+    ///     Asks to raise <paramref name="stat" /> once with stat points (Gameplay Systems §2); the Stats window moves only
+    ///     with the sheet the server sends back.
+    /// </summary>
+    public void RaiseStat(PrimaryStat stat)
+    {
+        Connection?.SendAllocateStat(stat, 1);
+    }
+
+    /// <summary>
+    ///     Opens the Stats window in place of the NPC window, or closes it (Prototype Content §2, §4).
+    /// </summary>
+    public void ToggleStats()
+    {
+        if (m_statsWindow == null)
+        {
+            return;
+        }
+
+        if (m_statsWindow.IsOpen)
+        {
+            m_statsWindow.Close();
+            return;
+        }
+
+        m_npcWindow?.Close();
+        m_statsWindow.Open();
     }
 
     /// <summary>
@@ -875,6 +915,12 @@ public sealed class GameClient : MonoBehaviour
         {
             m_skillSource = new SkillInputSource(slots);
         }
+
+        InputAction? stats = actions?.FindAction("Player/Stats");
+        if (stats != null)
+        {
+            m_windowSource = new WindowInputSource(stats);
+        }
     }
 
     private void HandlePointerRequest()
@@ -1005,6 +1051,7 @@ public sealed class GameClient : MonoBehaviour
 
     private void OnTalkArrived(EntityId npc)
     {
+        m_statsWindow?.Close();
         m_npcWindow?.Open(npc);
     }
 
@@ -1107,6 +1154,11 @@ public sealed class GameClient : MonoBehaviour
         if (m_npcWindow != null)
         {
             m_npcWindow.Close();
+        }
+
+        if (m_statsWindow != null)
+        {
+            m_statsWindow.Close();
         }
 
         m_controller = null;
