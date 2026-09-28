@@ -3,7 +3,6 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Net;
 using System.Net.Sockets;
-using System.Threading;
 using Evertorch.Protocol;
 using LiteNetLib;
 using Microsoft.Extensions.Logging;
@@ -37,6 +36,7 @@ public sealed class LiteNetLibServerTransport : IServerTransport, INetEventListe
     private readonly AuditLog m_audit;
     private readonly ILogger<LiteNetLibServerTransport> m_logger;
     private readonly NetManager m_manager;
+    private readonly ConnectionRegistry m_connections;
 
     private readonly ConcurrentDictionary<ConnectionId, NetPeer> m_peers = new();
 
@@ -45,7 +45,6 @@ public sealed class LiteNetLibServerTransport : IServerTransport, INetEventListe
     private readonly ConcurrentDictionary<ConnectionId, IPAddress> m_departed = new();
     private readonly ConcurrentQueue<ConnectionId> m_departures = new();
 
-    private long m_lastConnection;
     private volatile bool m_isAdmissionClosed;
 
     public LiteNetLibServerTransport(
@@ -54,9 +53,11 @@ public sealed class LiteNetLibServerTransport : IServerTransport, INetEventListe
         AddressThrottle throttle,
         ServerInstruments instruments,
         AuditLog audit,
+        ConnectionRegistry connections,
         ILogger<LiteNetLibServerTransport> logger)
     {
         m_inbound = inbound;
+        m_connections = connections;
         m_options = options.Value;
         m_throttle = throttle;
         m_instruments = instruments;
@@ -133,7 +134,7 @@ public sealed class LiteNetLibServerTransport : IServerTransport, INetEventListe
 
     void INetEventListener.OnPeerConnected(NetPeer peer)
     {
-        var connection = new ConnectionId(Interlocked.Increment(ref m_lastConnection));
+        ConnectionId connection = m_connections.Allocate();
         peer.Tag = new PeerState(connection);
         m_peers[connection] = peer;
         m_throttle.OnConnected(peer.Address);

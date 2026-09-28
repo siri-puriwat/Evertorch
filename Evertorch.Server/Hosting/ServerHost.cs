@@ -104,6 +104,7 @@ public static class ServerHost
         builder.Services.AddSingleton<ItemActionSystem>();
         builder.Services.AddSingleton<ITickPhase>(services => services.GetRequiredService<ItemActionSystem>());
         builder.Services.AddSingleton<AddressThrottle>();
+        builder.Services.AddSingleton<ConnectionRegistry>();
         builder.Services.AddSingleton<LiteNetLibServerTransport>();
         builder.Services.AddSingleton<IServerTransport>(services =>
             services.GetRequiredService<LiteNetLibServerTransport>());

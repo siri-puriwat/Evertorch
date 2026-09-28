@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using System.Net;
 using System.Threading;
 using Evertorch.Game;
@@ -75,9 +76,9 @@ public sealed class LiteNetLibServerTransportTests
 
     private sealed class Harness : IDisposable
     {
-        public Harness(int maxConnections = 8, AbuseOptions? abuse = null)
+        public Harness(int maxConnections = 8, AbuseOptions? abuse = null, ConnectionRegistry? connections = null)
         {
-            Transport = CreateTransport(0, maxConnections, out InboundQueue inbound, abuse);
+            Transport = CreateTransport(0, maxConnections, out InboundQueue inbound, abuse, connections);
             Inbound = inbound;
             Transport.Start();
         }
@@ -97,7 +98,8 @@ public sealed class LiteNetLibServerTransportTests
             int port,
             int maxConnections,
             out InboundQueue inbound,
-            AbuseOptions? abuse = null)
+            AbuseOptions? abuse = null,
+            ConnectionRegistry? connections = null)
         {
             var options = new NetworkOptions { Port = port, MaxConnections = maxConnections };
             IOptions<AbuseOptions> limits = Options.Create(abuse ?? new AbuseOptions { Enabled = false });
@@ -115,6 +117,7 @@ public sealed class LiteNetLibServerTransportTests
                 new AddressThrottle(limits, clock),
                 instruments,
                 new AuditLog(new CapturingLogger<AuditLog>(), clock),
+                connections ?? new ConnectionRegistry(),
                 new CapturingLogger<LiteNetLibServerTransport>());
         }
 
@@ -195,6 +198,22 @@ public sealed class LiteNetLibServerTransportTests
 
         Assert.That(isAdmitted, Is.False, "refused without a word: no connection and no rejection");
         Assert.That(second.WaitFor(() => second.IsConnected), Is.True, "a retry succeeds once the address has room");
+    }
+
+    // System Architecture §8: every transport draws from one source, so an ID another transport took is never
+    // handed out again.
+    [Test]
+    public void Connect_TakesItsIdFromTheSharedRegistry()
+    {
+        var connections = new ConnectionRegistry();
+        ConnectionId[] taken = { connections.Allocate(), connections.Allocate(), connections.Allocate() };
+        using var harness = new Harness(connections: connections);
+
+        using TestNetClient client = ConnectedClient(harness, out ConnectionId connection);
+
+        Assert.That(taken.Select(id => id.Value), Is.EqualTo(new[] { 1L, 2L, 3L }));
+        Assert.That(connection.Value, Is.EqualTo(4));
+        Assert.That(connections.Allocate().Value, Is.EqualTo(5));
     }
 
     [Test]
