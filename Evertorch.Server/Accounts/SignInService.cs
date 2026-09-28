@@ -41,7 +41,7 @@ public sealed class SignInService
     private readonly TimeProvider m_time;
     private readonly HealthProbe m_health;
     private readonly SignInThrottle m_throttle;
-    private readonly IServerTransport m_transport;
+    private readonly LiteNetLibServerTransport m_udp;
     private readonly ServerInstruments m_instruments;
     private readonly AuditLog m_audit;
     private readonly ILogger<SignInService> m_logger;
@@ -56,7 +56,7 @@ public sealed class SignInService
         TimeProvider time,
         HealthProbe health,
         SignInThrottle throttle,
-        IServerTransport transport,
+        LiteNetLibServerTransport udp,
         ServerInstruments instruments,
         AuditLog audit,
         IOptions<GatewayOptions> gateway,
@@ -70,7 +70,7 @@ public sealed class SignInService
         m_time = time;
         m_health = health;
         m_throttle = throttle;
-        m_transport = transport;
+        m_udp = udp;
         m_instruments = instruments;
         m_audit = audit;
         m_logger = logger;
@@ -281,7 +281,7 @@ public sealed class SignInService
 
         m_instruments.RecordSignIn(IssuedOutcome);
         LogSignedIn(m_logger, credentials.Account.Value, (int)m_tokenLifetime.TotalSeconds, null);
-        return GatewayAnswer.Json(Answer(m_answeredHost ?? requestHost, m_transport.LocalPort, token.Text));
+        return GatewayAnswer.Json(Answer(m_answeredHost ?? requestHost, m_udp.LocalPort, token.Text));
     }
 
     private GatewayAnswer Throttled(string limit, AccountId? account)

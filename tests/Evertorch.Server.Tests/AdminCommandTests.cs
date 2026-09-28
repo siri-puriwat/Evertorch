@@ -151,7 +151,7 @@ public sealed class AdminCommandTests
             host.Services.GetRequiredService<ServerContent>(),
             "console-shutdown",
             "Console1");
-        client.EnterWorld(host.Services.GetRequiredService<IServerTransport>().LocalPort);
+        client.EnterWorld(host.Services.GetRequiredService<LiteNetLibServerTransport>().LocalPort);
 
         host.Services.GetRequiredService<AdminConsole>().Execute("shutdown Back soon", new StringWriter());
         bool isStopping = host.Services.GetRequiredService<IHostApplicationLifetime>()

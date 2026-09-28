@@ -48,7 +48,7 @@ public sealed class ShutdownTests
     private static SocketClient EnterWorld(IHost host, string identity)
     {
         var client = new SocketClient(host.Services.GetRequiredService<ServerContent>(), identity, "Shutdown1");
-        client.EnterWorld(host.Services.GetRequiredService<IServerTransport>().LocalPort);
+        client.EnterWorld(host.Services.GetRequiredService<LiteNetLibServerTransport>().LocalPort);
         return client;
     }
 

@@ -129,7 +129,7 @@ public sealed class TownLoopAcceptanceTests
     {
         ServerContent content = host.Services.GetRequiredService<ServerContent>();
         IAdminCommandService admin = host.Services.GetRequiredService<IAdminCommandService>();
-        int port = host.Services.GetRequiredService<IServerTransport>().LocalPort;
+        int port = host.Services.GetRequiredService<LiteNetLibServerTransport>().LocalPort;
 
         using var client = new SocketClient(content, Identity, CharacterName);
         client.EnterWorld(port);
@@ -179,7 +179,7 @@ public sealed class TownLoopAcceptanceTests
     {
         ServerContent content = host.Services.GetRequiredService<ServerContent>();
         IAdminCommandService admin = host.Services.GetRequiredService<IAdminCommandService>();
-        int port = host.Services.GetRequiredService<IServerTransport>().LocalPort;
+        int port = host.Services.GetRequiredService<LiteNetLibServerTransport>().LocalPort;
         using var client = new SocketClient(content, Identity, CharacterName);
         client.EnterWorld(port);
 

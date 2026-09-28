@@ -110,7 +110,7 @@ public sealed class ServerEndToEndTests
     {
         using var root = new TemporaryDirectory();
         using IHost host = StartHost(root, true);
-        int port = host.Services.GetRequiredService<IServerTransport>().LocalPort;
+        int port = host.Services.GetRequiredService<LiteNetLibServerTransport>().LocalPort;
         uint contentVersion = host.Services.GetRequiredService<HandshakeValidator>().RequiredClientContentVersion;
         using var first = new TestNetClient();
         using var second = new TestNetClient();
@@ -163,7 +163,7 @@ public sealed class ServerEndToEndTests
     {
         using var root = new TemporaryDirectory();
         using IHost host = StartHost(root, false);
-        int port = host.Services.GetRequiredService<IServerTransport>().LocalPort;
+        int port = host.Services.GetRequiredService<LiteNetLibServerTransport>().LocalPort;
         uint contentVersion = host.Services.GetRequiredService<HandshakeValidator>().RequiredClientContentVersion;
         using var client = new TestNetClient();
         client.Connect(port, "evertorch");
@@ -182,7 +182,7 @@ public sealed class ServerEndToEndTests
     {
         using var root = new TemporaryDirectory();
         using IHost host = StartHost(root, true);
-        int port = host.Services.GetRequiredService<IServerTransport>().LocalPort;
+        int port = host.Services.GetRequiredService<LiteNetLibServerTransport>().LocalPort;
         using var client = new TestNetClient();
         client.Connect(port, "evertorch");
         Assert.That(client.WaitFor(() => client.IsConnected), Is.True);

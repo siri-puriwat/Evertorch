@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Linq;
 using System.Net;
 using System.Threading;
 using Evertorch.Game;
@@ -117,7 +116,7 @@ public sealed class LiteNetLibServerTransportTests
                 new AddressThrottle(limits, clock),
                 instruments,
                 new AuditLog(new CapturingLogger<AuditLog>(), clock),
-                connections ?? new ConnectionRegistry(),
+                connections ?? new ConnectionRegistry(Options.Create(options)),
                 new CapturingLogger<LiteNetLibServerTransport>());
         }
 
@@ -205,15 +204,20 @@ public sealed class LiteNetLibServerTransportTests
     [Test]
     public void Connect_TakesItsIdFromTheSharedRegistry()
     {
-        var connections = new ConnectionRegistry();
-        ConnectionId[] taken = { connections.Allocate(), connections.Allocate(), connections.Allocate() };
+        var connections = new ConnectionRegistry(Options.Create(new NetworkOptions { MaxConnections = 8 }));
+        var other = new InMemoryServerTransport();
+        for (int index = 0; index < 3; index++)
+        {
+            connections.TryAdmit(other, out ConnectionId _);
+        }
+
         using var harness = new Harness(connections: connections);
 
         using TestNetClient client = ConnectedClient(harness, out ConnectionId connection);
 
-        Assert.That(taken.Select(id => id.Value), Is.EqualTo(new[] { 1L, 2L, 3L }));
         Assert.That(connection.Value, Is.EqualTo(4));
-        Assert.That(connections.Allocate().Value, Is.EqualTo(5));
+        Assert.That(connections.TryGetOwner(connection, out IServerTransport? owner), Is.True);
+        Assert.That(owner, Is.SameAs(harness.Transport));
     }
 
     [Test]
@@ -231,6 +235,26 @@ public sealed class LiteNetLibServerTransportTests
         Assert.That(second.Notice, Is.Not.Null);
         Assert.That(second.Notice!.Reason, Is.EqualTo(DisconnectReason.ServerFull));
         Assert.That(first.IsConnected, Is.True);
+    }
+
+    // System Architecture §8: Network:MaxConnections counts every transport's connections together.
+    [Test]
+    public void Connect_WhileAnotherTransportHoldsEverySlot_IsRejectedWithServerFull()
+    {
+        var connections = new ConnectionRegistry(Options.Create(new NetworkOptions { MaxConnections = 2 }));
+        var other = new InMemoryServerTransport();
+        connections.TryAdmit(other, out ConnectionId first);
+        connections.TryAdmit(other, out ConnectionId _);
+        using var harness = new Harness(connections: connections);
+        using var refused = new TestNetClient();
+
+        refused.Connect(harness.Port, Key);
+
+        Assert.That(refused.WaitFor(() => refused.IsDisconnected), Is.True, "refused");
+        Assert.That(refused.Notice?.Reason, Is.EqualTo(DisconnectReason.ServerFull));
+        connections.Release(first);
+        using TestNetClient admitted = ConnectedClient(harness, out ConnectionId connection);
+        Assert.That(connection.Value, Is.EqualTo(3), "the freed slot, with a new ID");
     }
 
     [Test]
@@ -367,6 +391,21 @@ public sealed class LiteNetLibServerTransportTests
     }
 
     [Test]
+    public void Disconnect_OfAPeer_GivesItsSlotBack()
+    {
+        var connections = new ConnectionRegistry(Options.Create(new NetworkOptions { MaxConnections = 8 }));
+        using var harness = new Harness(connections: connections);
+        using TestNetClient client = ConnectedClient(harness, out ConnectionId _);
+        Assert.That(connections.Count, Is.EqualTo(1));
+
+        client.Disconnect();
+
+        Assert.That(harness.WaitForEvent(out InboundEvent left), Is.True);
+        Assert.That(left.Kind, Is.EqualTo(InboundEventKind.Disconnected));
+        Assert.That(connections.Count, Is.Zero);
+    }
+
+    [Test]
     public void Payload_FromAPeerTheServerClosed_IsIgnored()
     {
         using var harness = new Harness(abuse: new AbuseOptions());
@@ -475,6 +514,20 @@ public sealed class LiteNetLibServerTransportTests
         Assert.That(received.Connection, Is.EqualTo(connection));
     }
 
+    // ITransportStatistics: unknown until a round trip has been measured, rather than a round trip of 0.
+    [Test]
+    public void RoundTripTime_BeforeTheFirstMeasurement_IsUnknown_ThenKnown()
+    {
+        using var harness = new Harness();
+        using TestNetClient client = ConnectedClient(harness, out ConnectionId connection);
+
+        bool isKnownAtOnce = harness.Transport.TryGetRoundTripTime(connection, out int _);
+        bool isKnownLater = client.WaitFor(() => harness.Transport.TryGetRoundTripTime(connection, out int _));
+
+        Assert.That(isKnownAtOnce, Is.False);
+        Assert.That(isKnownLater, Is.True, "the library measured a round trip");
+    }
+
     [Test]
     public void Send_OfTheLargestSnapshot_FitsOneUnreliableDatagramAndArrivesOnTheStateChannel()
     {
@@ -553,7 +606,8 @@ public sealed class LiteNetLibServerTransportTests
         Assert.That(client.WaitFor(() => client.Received.Count == 1), Is.True);
 
         TransportStatistics statistics = harness.Transport.GetStatistics();
-        bool hasRoundTrip = harness.Transport.TryGetRoundTripTime(connection, out int milliseconds);
+        int milliseconds = 0;
+        bool hasRoundTrip = client.WaitFor(() => harness.Transport.TryGetRoundTripTime(connection, out milliseconds));
         bool hasUnknownRoundTrip = harness.Transport.TryGetRoundTripTime(new ConnectionId(999), out int _);
 
         Assert.That(statistics.BytesReceived, Is.GreaterThan(0));

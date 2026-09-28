@@ -89,7 +89,7 @@ public sealed class PrototypeAcceptanceTests
     {
         ServerContent content = host.Services.GetRequiredService<ServerContent>();
         IAdminCommandService admin = host.Services.GetRequiredService<IAdminCommandService>();
-        int port = host.Services.GetRequiredService<IServerTransport>().LocalPort;
+        int port = host.Services.GetRequiredService<LiteNetLibServerTransport>().LocalPort;
         var stopped = new Dictionary<string, PlayerSummary>();
 
         using var first = new SocketClient(content, Players.FirstIdentity, Players.FirstName);
@@ -165,7 +165,7 @@ public sealed class PrototypeAcceptanceTests
     {
         ServerContent content = host.Services.GetRequiredService<ServerContent>();
         IAdminCommandService admin = host.Services.GetRequiredService<IAdminCommandService>();
-        int port = host.Services.GetRequiredService<IServerTransport>().LocalPort;
+        int port = host.Services.GetRequiredService<LiteNetLibServerTransport>().LocalPort;
         using var first = new SocketClient(content, Players.FirstIdentity, Players.FirstName);
         using var second = new SocketClient(content, Players.SecondIdentity, Players.SecondName);
         EnterTogether(port, first, second);

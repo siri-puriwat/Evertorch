@@ -192,7 +192,7 @@ public sealed class PickupDurabilityTests
     private static SocketClient EnterWorld(IHost host)
     {
         var client = new SocketClient(host.Services.GetRequiredService<ServerContent>(), StopIdentity, StopName);
-        client.EnterWorld(host.Services.GetRequiredService<IServerTransport>().LocalPort);
+        client.EnterWorld(host.Services.GetRequiredService<LiteNetLibServerTransport>().LocalPort);
         return client;
     }
 

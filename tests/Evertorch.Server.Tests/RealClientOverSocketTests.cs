@@ -31,7 +31,7 @@ public sealed class RealClientOverSocketTests
             .CreateBuilder(new[] { "--Network:Port=0", "--DevelopmentAuthentication:Enabled=true" }, root.Path, store)
             .Build();
         host.Start();
-        int port = host.Services.GetRequiredService<IServerTransport>().LocalPort;
+        int port = host.Services.GetRequiredService<LiteNetLibServerTransport>().LocalPort;
         ServerContent content = host.Services.GetRequiredService<ServerContent>();
 
         using var first = new SocketClient(content, "socket-reconnect", "Socket23");
@@ -65,7 +65,7 @@ public sealed class RealClientOverSocketTests
             .CreateBuilder(new[] { "--Network:Port=0", "--DevelopmentAuthentication:Enabled=true" }, root.Path, store)
             .Build();
         host.Start();
-        int port = host.Services.GetRequiredService<IServerTransport>().LocalPort;
+        int port = host.Services.GetRequiredService<LiteNetLibServerTransport>().LocalPort;
         ServerContent content = host.Services.GetRequiredService<ServerContent>();
         IAdminCommandService admin = host.Services.GetRequiredService<IAdminCommandService>();
 

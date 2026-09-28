@@ -94,7 +94,7 @@ public sealed class AcceptanceScenarioTests
 
     private static int PortOf(IHost host)
     {
-        return host.Services.GetRequiredService<IServerTransport>().LocalPort;
+        return host.Services.GetRequiredService<LiteNetLibServerTransport>().LocalPort;
     }
 
     /// <summary>

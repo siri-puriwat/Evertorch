@@ -238,7 +238,7 @@ public sealed class GatewayTests
         ServerContent content = m_shared.Services.GetRequiredService<ServerContent>();
         using var client = new SocketClient(content, "tester", "Gateway2");
 
-        client.Connect(m_shared.Services.GetRequiredService<IServerTransport>().LocalPort);
+        client.Connect(m_shared.Services.GetRequiredService<LiteNetLibServerTransport>().LocalPort);
         client.PumpUntil(() => client.Connection.State == ClientConnectionState.Disconnected);
 
         Assert.That(client.Connection.Notice?.Reason, Is.EqualTo(DisconnectReason.AuthenticationFailed));
@@ -310,7 +310,8 @@ public sealed class GatewayTests
         GatewaySignInResult answer = SocketClient.SignIn(m_certificate, GatewayPort(m_shared), "ALICE", Password);
 
         Assert.That(answer.Host, Is.EqualTo("127.0.0.1"), "the UDP bind address");
-        Assert.That(answer.Port, Is.EqualTo(m_shared.Services.GetRequiredService<IServerTransport>().LocalPort));
+        Assert.That(answer.Port,
+            Is.EqualTo(m_shared.Services.GetRequiredService<LiteNetLibServerTransport>().LocalPort));
         Assert.That(SessionToken.TryParse(answer.Token, out byte[] hash), Is.True);
         StoredSessionToken? stored =
             m_sharedStore.FindSessionTokenAsync(hash, CancellationToken.None).GetAwaiter().GetResult();

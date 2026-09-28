@@ -45,6 +45,9 @@ public sealed class LiteNetLibServerTransport : IServerTransport, INetEventListe
     private readonly ConcurrentDictionary<ConnectionId, IPAddress> m_departed = new();
     private readonly ConcurrentQueue<ConnectionId> m_departures = new();
 
+    // An accepted request's ID, until its peer's connected callback, which the library can raise inside Accept.
+    private readonly ConcurrentDictionary<IPEndPoint, ConnectionId> m_admitted = new();
+
     private volatile bool m_isAdmissionClosed;
 
     public LiteNetLibServerTransport(
@@ -82,6 +85,11 @@ public sealed class LiteNetLibServerTransport : IServerTransport, INetEventListe
             UnsyncedEvents = true
         };
     }
+
+    /// <summary>
+    ///     The UDP port actually bound, which differs from the configured one when that is 0.
+    /// </summary>
+    public int LocalPort => m_manager.LocalPort;
 
     public void Dispose()
     {
@@ -123,18 +131,27 @@ public sealed class LiteNetLibServerTransport : IServerTransport, INetEventListe
             return;
         }
 
-        if (m_manager.ConnectedPeersCount >= m_options.MaxConnections)
+        // The slot is the registry's from here until this peer is reported gone, across every transport.
+        if (!m_connections.TryAdmit(this, out ConnectionId connection))
         {
             request.Reject(EncodeNotice(DisconnectReason.ServerFull, string.Empty));
             return;
         }
 
-        request.Accept();
+        m_admitted[request.RemoteEndPoint] = connection;
+        if (request.Accept() == null && m_admitted.TryRemove(request.RemoteEndPoint, out ConnectionId _))
+        {
+            m_connections.Release(connection);
+        }
     }
 
     void INetEventListener.OnPeerConnected(NetPeer peer)
     {
-        ConnectionId connection = m_connections.Allocate();
+        if (!m_admitted.TryRemove(new IPEndPoint(peer.Address, peer.Port), out ConnectionId connection))
+        {
+            return;
+        }
+
         peer.Tag = new PeerState(connection);
         m_peers[connection] = peer;
         m_throttle.OnConnected(peer.Address);
@@ -166,6 +183,8 @@ public sealed class LiteNetLibServerTransport : IServerTransport, INetEventListe
         {
             m_inbound.OnDisconnected(state.Connection);
         }
+
+        m_connections.Release(state.Connection);
     }
 
     void INetEventListener.OnNetworkReceive(
@@ -207,6 +226,10 @@ public sealed class LiteNetLibServerTransport : IServerTransport, INetEventListe
 
     void INetEventListener.OnNetworkLatencyUpdate(NetPeer peer, int latency)
     {
+        if (peer.Tag is PeerState state)
+        {
+            state.HasRoundTripTime = true;
+        }
     }
 
     void INetEventListener.OnMessageDelivered(NetPeer peer, object userData)
@@ -216,8 +239,6 @@ public sealed class LiteNetLibServerTransport : IServerTransport, INetEventListe
     void INetEventListener.OnPeerAddressChanged(NetPeer peer, IPEndPoint previousAddress)
     {
     }
-
-    public int LocalPort => m_manager.LocalPort;
 
     public void Start()
     {
@@ -308,7 +329,8 @@ public sealed class LiteNetLibServerTransport : IServerTransport, INetEventListe
 
     public bool TryGetRoundTripTime(ConnectionId connection, out int milliseconds)
     {
-        if (m_peers.TryGetValue(connection, out NetPeer? peer))
+        // The library reports a round trip of 0 before it has measured one.
+        if (m_peers.TryGetValue(connection, out NetPeer? peer) && peer.Tag is PeerState { HasRoundTripTime: true })
         {
             milliseconds = peer.RoundTripTime;
             return true;
@@ -367,6 +389,7 @@ public sealed class LiteNetLibServerTransport : IServerTransport, INetEventListe
     private sealed class PeerState
     {
         private volatile bool m_isClosedByServer;
+        private volatile bool m_hasRoundTripTime;
 
         public PeerState(ConnectionId connection)
         {
@@ -379,6 +402,12 @@ public sealed class LiteNetLibServerTransport : IServerTransport, INetEventListe
         {
             get => m_isClosedByServer;
             set => m_isClosedByServer = value;
+        }
+
+        public bool HasRoundTripTime
+        {
+            get => m_hasRoundTripTime;
+            set => m_hasRoundTripTime = value;
         }
     }
 }

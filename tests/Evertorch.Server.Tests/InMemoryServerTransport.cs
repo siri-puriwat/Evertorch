@@ -31,8 +31,6 @@ internal sealed class InMemoryServerTransport : IServerTransport
 
     public string StoppedWithMessage { get; private set; } = string.Empty;
 
-    public int LocalPort => 0;
-
     public bool IsAdmissionOpen { get; private set; } = true;
 
     public void Send(ConnectionId connection, ReadOnlySpan<byte> payload)

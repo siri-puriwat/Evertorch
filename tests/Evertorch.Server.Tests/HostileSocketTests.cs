@@ -192,7 +192,7 @@ public sealed class HostileSocketTests
         using var root = new TemporaryDirectory();
         var logs = new CapturingLoggerProvider();
         using IHost host = StartHost(root, logs);
-        int port = host.Services.GetRequiredService<IServerTransport>().LocalPort;
+        int port = host.Services.GetRequiredService<LiteNetLibServerTransport>().LocalPort;
         ServerContent content = host.Services.GetRequiredService<ServerContent>();
 
         using TestNetClient hostile = Connected(port);
@@ -223,7 +223,7 @@ public sealed class HostileSocketTests
         using var root = new TemporaryDirectory();
         var logs = new CapturingLoggerProvider();
         using IHost host = StartHost(root, logs);
-        int port = host.Services.GetRequiredService<IServerTransport>().LocalPort;
+        int port = host.Services.GetRequiredService<LiteNetLibServerTransport>().LocalPort;
         uint content = host.Services.GetRequiredService<HandshakeValidator>().RequiredClientContentVersion;
 
         using TestNetClient signedIn = Connected(port);
@@ -280,7 +280,7 @@ public sealed class HostileSocketTests
         // A burst small enough that the refusals before the throttle stay within the audit's share of a connection.
         const int itemBurst = 5;
         using IHost host = StartHost(root, logs, $"--Abuse:ItemCommandBurst={itemBurst}");
-        int port = host.Services.GetRequiredService<IServerTransport>().LocalPort;
+        int port = host.Services.GetRequiredService<LiteNetLibServerTransport>().LocalPort;
         ServerContent content = host.Services.GetRequiredService<ServerContent>();
         int violationsToClose = new AbuseOptions().ViolationThreshold / ViolationScore.Points;
         // A skill and an equip cut short, an unequip of slot 0, and a use of row 0.
@@ -327,7 +327,7 @@ public sealed class HostileSocketTests
         using var root = new TemporaryDirectory();
         var logs = new CapturingLoggerProvider();
         using IHost host = StartHost(root, logs);
-        int port = host.Services.GetRequiredService<IServerTransport>().LocalPort;
+        int port = host.Services.GetRequiredService<LiteNetLibServerTransport>().LocalPort;
         ServerContent content = host.Services.GetRequiredService<ServerContent>();
         InboundQueue inbound = host.Services.GetRequiredService<InboundQueue>();
         byte[] connectRequest = CaptureConnectRequest();
