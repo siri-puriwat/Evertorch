@@ -69,6 +69,15 @@ internal sealed class LiveDatabase : IDisposable
     }
 
     /// <summary>
+    ///     Gives the character named <paramref name="name" /> the build the Milestone 6 and 7 live tests play with, job
+    ///     level 6, before it first enters (Gameplay Systems §2.1, §9).
+    /// </summary>
+    public void SeedAdventurerBuild(string name)
+    {
+        Execute($"UPDATE characters SET job_level = 6, job_exp = 0 WHERE name = '{name}'");
+    }
+
+    /// <summary>
     ///     Removes every labelled container and its volumes; the IDs of those removed.
     /// </summary>
     public static string[] RemoveLeftovers()

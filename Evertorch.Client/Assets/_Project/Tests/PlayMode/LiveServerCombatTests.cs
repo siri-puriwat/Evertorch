@@ -295,7 +295,10 @@ public sealed class LiveServerCombatTests : InputTestFixture
         Keyboard keyboard = InputSystem.AddDevice<Keyboard>();
         Gamepad gamepad = InputSystem.AddDevice<Gamepad>();
         GameClient client = CreateClient(actionsPath);
-        yield return CreateAndEnterThroughTheLoginPanel(client, "LiveFighter");
+        yield return CreateAndEnterThroughTheLoginPanel(
+            client,
+            "LiveFighter",
+            () => m_database!.SeedAdventurerBuild("LiveFighter"));
         yield return WaitUntil(() => client.World != null && client.Combat != null, StartTimeoutSeconds);
         Assert.That(client.World, Is.Not.Null, $"{client.Status} server output: {m_server.JoinOutput()}");
         ClientWorld world = client.World!;

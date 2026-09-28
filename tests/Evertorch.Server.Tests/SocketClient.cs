@@ -69,10 +69,15 @@ internal sealed class SocketClient : IDisposable
                 content.ClientContentVersion,
                 token),
             new ContentMaps(content));
-        m_selection = new AutoEnter(Connection, characterName);
+        m_selection = new AutoEnter(Connection, characterName, afterCreate: () => AfterCreate?.Invoke());
     }
 
     public LossyTransport Link { get; }
+
+    /// <summary>
+    ///     Runs once, after the selection created the character and before it first enters the world.
+    /// </summary>
+    public Action? AfterCreate { get; set; }
 
     public ClientConnection Connection { get; }
 

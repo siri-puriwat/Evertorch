@@ -125,13 +125,14 @@ public sealed class TownLoopAcceptanceTests
     ///     the Quartermaster, tries the bought sword on a slime, and stops in town, and the server stops. Returns what
     ///     the server and the client last showed of the player's character.
     /// </summary>
-    private static Stopped PlayTheLoop(IHost host)
+    private static Stopped PlayTheLoop(IHost host, string connectionString)
     {
         ServerContent content = host.Services.GetRequiredService<ServerContent>();
         IAdminCommandService admin = host.Services.GetRequiredService<IAdminCommandService>();
         int port = host.Services.GetRequiredService<LiteNetLibServerTransport>().LocalPort;
 
         using var client = new SocketClient(content, Identity, CharacterName);
+        client.AfterCreate = () => BuildSeed.Adventurer.Apply(connectionString, CharacterName);
         client.EnterWorld(port);
         Assert.That(client.Connection.Characters.Single().Name, Is.EqualTo(CharacterName), "enter: created");
         Assert.That(client.World.Map, Is.EqualTo(new MapDefinitionId(TrainingGround)), "enter: in town");
@@ -143,6 +144,7 @@ public sealed class TownLoopAcceptanceTests
         MeetTheNpcs(content, admin, client);
         UseSkillsOnASlime(client);
         using var partner = new SocketClient(content, PartnerIdentity, PartnerName);
+        partner.AfterCreate = () => BuildSeed.Adventurer.Apply(connectionString, PartnerName);
         partner.EnterWorld(port);
         AcceptTheHunt("accept", client);
         AcceptTheHunt("partner accepts", partner);
@@ -322,7 +324,7 @@ public sealed class TownLoopAcceptanceTests
         Assert.That(
             client.PumpUntil(() => resolved.Any(result => result.Skill == strike)),
             Is.True,
-            $"{step}: Strike resolved");
+            $"{step}: Strike resolved; {StateOf(client, slime, refused)}");
         var sinceStrike = Stopwatch.StartNew();
         Assert.That(client.UseSkill(strike), Is.True, $"{step}: Strike pressed again at once");
         Assert.That(
@@ -965,6 +967,17 @@ public sealed class TownLoopAcceptanceTests
             .ToList();
     }
 
+    // What a failed skill step needs to be understood: the target, how far the slime is drawn, and every refusal.
+    private static string StateOf(SocketClient client, EntityId slime, List<CommandRejected> refused)
+    {
+        ClientWorld world = client.World;
+        string distance = world.Remotes.TryGetValue(slime, out RemoteEntity? remote) && Drawn(world, remote) is { } at
+            ? $"{client.DistanceTo(at):0.00} m"
+            : "not drawn";
+        string reasons = string.Join(", ", refused.Select(rejected => rejected.Reason));
+        return $"target {world.Target.Value}, slime {slime.Value} at {distance}, refused [{reasons}]";
+    }
+
     private static void AssertCleanTraffic(SocketClient client, string step)
     {
         Assert.That(client.Connection.MalformedMessages, Is.Zero, $"{step}: no malformed message");
@@ -1000,6 +1013,32 @@ public sealed class TownLoopAcceptanceTests
         Assert.That(trades.Sum(trade => trade.Coins), Is.EqualTo(stopped.Summary.Coins), "ledger: the coins held");
     }
 
+    // Both characters were given the Adventurer build the moment they were created, before they first entered.
+    private void AssertTheSeededBuilds()
+    {
+        using var connection = new NpgsqlConnection(m_database.ConnectionString);
+        connection.Open();
+        using var command = new NpgsqlCommand(
+            "SELECT name, job_level FROM characters WHERE name IN (@client, @partner) ORDER BY name",
+            connection);
+        command.Parameters.AddWithValue("client", CharacterName);
+        command.Parameters.AddWithValue("partner", PartnerName);
+        var seeded = new List<(string Name, int JobLevel)>();
+        using (NpgsqlDataReader reader = command.ExecuteReader())
+        {
+            while (reader.Read())
+            {
+                seeded.Add((reader.GetString(0), reader.GetInt32(1)));
+            }
+        }
+
+        int level = BuildSeed.Adventurer.JobLevel;
+        Assert.That(
+            seeded,
+            Is.EqualTo(new[] { (CharacterName, level), (PartnerName, level) }),
+            "seed: both characters");
+    }
+
     private sealed class Stopped
     {
         public Stopped(PlayerSummary summary, List<string> rows)
@@ -1025,8 +1064,9 @@ public sealed class TownLoopAcceptanceTests
         Stopped stopped;
         using (IHost first = StartHost(root.Path, logs))
         {
-            stopped = PlayTheLoop(first);
+            stopped = PlayTheLoop(first, m_database.ConnectionString);
             AssertTheTradesInTheLedger(stopped);
+            AssertTheSeededBuilds();
         }
 
         using (IHost restarted = StartHost(root.Path, logs))

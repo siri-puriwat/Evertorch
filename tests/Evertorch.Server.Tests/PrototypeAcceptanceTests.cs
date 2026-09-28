@@ -94,6 +94,8 @@ public sealed class PrototypeAcceptanceTests
 
         using var first = new SocketClient(content, Players.FirstIdentity, Players.FirstName);
         using var second = new SocketClient(content, Players.SecondIdentity, Players.SecondName);
+        first.AfterCreate = () => BuildSeed.Adventurer.Apply(connectionString, Players.FirstName);
+        second.AfterCreate = () => BuildSeed.Adventurer.Apply(connectionString, Players.SecondName);
         EnterTogether(port, first, second);
         foreach (SocketClient client in new[] { first, second })
         {

@@ -7,19 +7,23 @@ namespace Evertorch.Server.Tests
 {
 /// <summary>
 ///     Plays the character selection screen for a test client: once the first list arrives it enters the character
-///     named <see cref="Name" />, creating it first when the account has none by that name.
+///     named <see cref="Name" />, creating it first when the account has none by that name. For a character it created,
+///     it runs <c>afterCreate</c> once before entering, so a test can store what a new character has not earned.
 /// </summary>
 internal sealed class AutoEnter
 {
     private readonly ClientConnection m_connection;
     private readonly Action? m_beforeCreate;
+    private readonly Action? m_afterCreate;
     private bool m_hasList;
     private bool m_isCreating;
+    private bool m_hasEntered;
 
-    public AutoEnter(ClientConnection connection, string name, Action? beforeCreate = null)
+    public AutoEnter(ClientConnection connection, string name, Action? beforeCreate = null, Action? afterCreate = null)
     {
         m_connection = connection;
         m_beforeCreate = beforeCreate;
+        m_afterCreate = afterCreate;
         Name = name;
         connection.CharactersChanged += () => m_hasList = true;
     }
@@ -36,6 +40,12 @@ internal sealed class AutoEnter
         foreach (CharacterListEntry entry in m_connection.Characters.Where(entry =>
                      string.Equals(entry.Name, Name, StringComparison.OrdinalIgnoreCase)))
         {
+            if (m_isCreating && !m_hasEntered)
+            {
+                m_afterCreate?.Invoke();
+            }
+
+            m_hasEntered = true;
             m_connection.EnterWorld(entry.Character);
             return;
         }
