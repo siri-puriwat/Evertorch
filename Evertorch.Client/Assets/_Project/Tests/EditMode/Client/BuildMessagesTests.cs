@@ -12,12 +12,12 @@ namespace Evertorch.Client.Tests.EditMode
 [TestFixture]
 public sealed class BuildMessagesTests
 {
-    private static CharacterSheet Sheet(byte jobLevel, byte agility, byte agilityCost = 2)
+    private static CharacterSheet Sheet(byte jobLevel, byte agility, byte agilityCost = 2, byte skillPoints = 0)
     {
         CharacterSheetStat[] stats = Enumerable.Repeat(new CharacterSheetStat(5, 2), CharacterSheet.StatCount)
             .ToArray();
         stats[1] = new CharacterSheetStat(agility, agilityCost);
-        return new CharacterSheet(jobLevel, 0, 30, 3, 0, stats, 46, 12, 5, 6, 188, 125, 13, 154);
+        return new CharacterSheet(jobLevel, 0, 30, 3, skillPoints, stats, 46, 12, 5, 6, 188, 125, 13, 154);
     }
 
     private static SkillListEntry Entry(string skill, byte level, byte max, byte prerequisite = 255, byte needs = 0)
@@ -50,7 +50,25 @@ public sealed class BuildMessagesTests
             BuildMessages.Describe(Sheet(1, 5), Sheet(2, 7)),
             Is.EqualTo(new[] { "Job level 2.", "AGI 7." }),
             "the job level first, then each statistic that rose");
-        Assert.That(BuildMessages.Describe(Sheet(2, 9), Sheet(2, 5)), Is.Empty, "a lowered statistic says nothing");
+        Assert.That(
+            BuildMessages.Describe(Sheet(2, 9), Sheet(2, 5)),
+            Is.EqualTo(new[] { "Every point returned." }),
+            "only the reset lowers a statistic");
+    }
+
+    [Test]
+    public void Describe_TheGuildmastersReset_SaysEveryPointReturned_OnlyForTheReset()
+    {
+        Assert.That(
+            BuildMessages.Describe(Sheet(3, 5, skillPoints: 0), Sheet(3, 5, skillPoints: 2)),
+            Is.EqualTo(new[] { "Every point returned." }),
+            "skill points back without a job level: the skills were reset");
+        Assert.That(
+            BuildMessages.Describe(Sheet(2, 5, skillPoints: 0), Sheet(3, 5, skillPoints: 1)),
+            Is.EqualTo(new[] { "Job level 3." }),
+            "a job level's point is no reset");
+        Assert.That(BuildMessages.Describe(Sheet(3, 5, skillPoints: 1), Sheet(3, 5, skillPoints: 0)), Is.Empty,
+            "a level learned");
     }
 
     [Test]

@@ -10,13 +10,17 @@ namespace Evertorch.Client
 /// <summary>
 ///     The confirmed target (Prototype Content §2, §4): its name, its HP ratio as a bar, its distance, and whether it
 ///     is dead. It shows only a target the server confirmed with <c>TargetChanged</c>, and the HP that the monster's
-///     own bar shows at that moment, so the frame never runs ahead of the hits on screen.
+///     own bar shows at that moment, so the frame never runs ahead of the hits on screen. It sits at the top centre, and
+///     narrower beside a window at the top left while one shows (finding 1 of the Milestone 7 review).
 /// </summary>
 public sealed class TargetFrame : MonoBehaviour
 {
     // With the status bar, under the feedback lines and the login panel.
     private const int SortingOrder = 6;
     private const float Width = 420f;
+
+    // Between the windows at the top left and the inventory window at the top right.
+    private const float BesideWidth = 320f;
     private const float Margin = 8f;
     private const float StatusBarHeight = 56f;
     private const float BarHeight = 14f;
@@ -37,6 +41,8 @@ public sealed class TargetFrame : MonoBehaviour
     private int m_shownPermille = -1;
     private int m_shownTenths = -1;
     private bool m_shownDead;
+    private RectTransform? m_panelRect;
+    private bool m_isShownBeside;
 
     /// <summary>
     ///     How many times a label was rewritten, which only a changed value may cause.
@@ -62,6 +68,7 @@ public sealed class TargetFrame : MonoBehaviour
             return;
         }
 
+        PlaceBeside(m_client.IsSideWindowOpen);
         float ratio = target.HealthPermille / 1000f;
         bool isDead = target.IsDead;
         CombatPresenter? combat = m_client.Combat;
@@ -88,6 +95,16 @@ public sealed class TargetFrame : MonoBehaviour
         }
 
         ShowTarget(MonsterName(m_client.Content, target), ratio, distance, isDead);
+    }
+
+    /// <summary>
+    ///     The frame's left and right edges in canvas units: centred, or just right of the windows at the top left.
+    /// </summary>
+    public static Vector2 XRangeFor(bool isBesideAWindow)
+    {
+        return isBesideAWindow
+            ? new Vector2(NpcWindow.Right + Margin, NpcWindow.Right + Margin + BesideWidth)
+            : new Vector2((ClientUI.CanvasWidth - Width) / 2f, (ClientUI.CanvasWidth + Width) / 2f);
     }
 
     public static TargetFrame Create(GameClient client)
@@ -151,6 +168,21 @@ public sealed class TargetFrame : MonoBehaviour
                 : target.DefinitionId;
     }
 
+    private void PlaceBeside(bool isBeside)
+    {
+        if (isBeside == m_isShownBeside)
+        {
+            return;
+        }
+
+        m_isShownBeside = isBeside;
+        Vector2 range = XRangeFor(isBeside);
+        m_panelRect!.sizeDelta = new Vector2(range.y - range.x, m_panelRect.sizeDelta.y);
+        m_panelRect.anchoredPosition = new Vector2(
+            (range.x + range.y) / 2f - ClientUI.CanvasWidth / 2f,
+            m_panelRect.anchoredPosition.y);
+    }
+
     private void Build(GameClient client)
     {
         m_client = client;
@@ -164,6 +196,7 @@ public sealed class TargetFrame : MonoBehaviour
             Width,
             Padding);
         m_panel = panel.gameObject;
+        m_panelRect = panel;
         m_name = Ui.CreateLabel("Name", panel);
         m_name.alignment = TextAlignmentOptions.Center;
 

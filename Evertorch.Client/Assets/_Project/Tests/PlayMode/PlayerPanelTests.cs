@@ -245,6 +245,13 @@ public sealed class PlayerPanelTests
                 healthPermille));
     }
 
+    private static bool Press(Component window, string name)
+    {
+        Button? button = window.GetComponentsInChildren<Button>().FirstOrDefault(candidate => candidate.name == name);
+        button?.onClick.Invoke();
+        return button != null;
+    }
+
     private static TMP_Text Label(Component panel, string objectName)
     {
         return panel.GetComponentsInChildren<TMP_Text>(true).Single(label => label.name == objectName);
@@ -1111,14 +1118,92 @@ public sealed class PlayerPanelTests
             Is.EqualTo(
                 new[]
                 {
-                    "Minor Health Potion: 20 coins", "Training Sword: 50 coins", "Slime Gel x 12: 2 coins each",
-                    "All: 24 coins", "Training Sword x 1: 25 coins", "Close"
-                }));
+                    "Close", "Minor Health Potion: 20 coins", "Training Sword: 50 coins",
+                    "Slime Gel x 12: 2 coins each", "All: 24 coins", "Training Sword x 1: 25 coins"
+                }),
+            "Close at the heading's end");
         Assert.That(buttons.Select(button => button.navigation.mode), Is.All.EqualTo(Navigation.Mode.None));
-        buttons[0].onClick.Invoke();
-        buttons[3].onClick.Invoke();
+        buttons[1].onClick.Invoke();
+        buttons[4].onClick.Invoke();
         yield return null;
         Assert.That(window.Text, Does.Contain("Slime Gel x 12"), "a press shows nothing until the server answers");
+    }
+
+    // The Guildmaster's part (Prototype Content §2): "Reset all points" asks for a second press, "Press again to reset",
+    // within five seconds, after which it is "Reset all points" again.
+    [UnityTest]
+    public IEnumerator NpcWindow_ForTheGuildmaster_AsksForASecondPressBeforeTheReset()
+    {
+        GameClient client = CreateIdleClient();
+        ClientWorld world = GiveWorld(client);
+        GiveShop(client);
+        Spawn(world, 15, EntityKind.Npc, GateWarden, 1000);
+        DrawNpc(client, 15);
+        world.OnNpcServices(new NpcServices(new EntityId(15), new NpcServiceEntry[0], new NpcQuestOffer[0], true));
+        var window = NpcWindow.Create(client);
+        m_created.Add(window.gameObject);
+        window.Open(new EntityId(15));
+        yield return null;
+        string before = window.Text;
+
+        Assert.That(Press(window, "Reset all points"), Is.True, window.Text);
+        yield return null;
+        string armed = window.Text;
+        Assert.That(Press(window, "Press again to reset"), Is.True, window.Text);
+        yield return null;
+        string afterReset = window.Text;
+        Assert.That(Press(window, "Reset all points"), Is.True);
+        yield return null;
+        typeof(NpcWindow)
+            .GetField("m_resetArmedUntil", BindingFlags.NonPublic | BindingFlags.Instance)!
+            .SetValue(window, Time.unscaledTime - 1f);
+        yield return null;
+        yield return null;
+
+        Assert.That(
+            before,
+            Is.EqualTo("Stat and skill points\nEvery point back, for free\nReset all points"));
+        Assert.That(armed, Does.EndWith("\nPress again to reset"), "the first press only arms it");
+        Assert.That(afterReset, Does.EndWith("\nReset all points"), "the second asks for the reset");
+        Assert.That(window.Text, Does.EndWith("\nReset all points"), "unconfirmed, it disarms");
+        Assert.That(window.IsOpen, Is.True);
+    }
+
+    // While a window shows at the top left, the target frame stands narrower beside it (Milestone 7 review finding 1).
+    [UnityTest]
+    public IEnumerator TargetFrame_BesideAnOpenWindow_ClearsIt_AndGoesBackWhenItCloses()
+    {
+        GameClient client = CreateIdleClient();
+        ClientWorld world = GiveWorld(client);
+        var frame = TargetFrame.Create(client);
+        var stats = StatsWindow.Create(client);
+        m_created.Add(frame.gameObject);
+        m_created.Add(stats.gameObject);
+        typeof(GameClient)
+            .GetField("m_statsWindow", BindingFlags.NonPublic | BindingFlags.Instance)!
+            .SetValue(client, stats);
+        Spawn(world, 7, EntityKind.Monster, Slime, 600);
+        world.OnTargetChanged(new TargetChanged(Local, new EntityId(7)));
+        yield return null;
+        yield return null;
+        yield return null;
+        Rect centred = ScreenRect(frame.transform.Find("Panel"));
+
+        client.ToggleStats();
+        yield return null;
+        yield return null;
+        yield return null;
+        Rect beside = ScreenRect(frame.transform.Find("Panel"));
+        Rect window = ScreenRect(stats.transform.Find("Panel"));
+        Debug.Log($"Target frame centred {centred}, beside {beside}; Stats window {window}");
+        client.ToggleStats();
+        yield return null;
+        yield return null;
+        Rect back = ScreenRect(frame.transform.Find("Panel"));
+
+        Assert.That(centred.xMin, Is.LessThan(window.xMax), "centred, the frame reaches under the window");
+        Assert.That(beside.xMin, Is.GreaterThanOrEqualTo(window.xMax), "beside it, clear");
+        Assert.That(back.center.x, Is.EqualTo(centred.center.x).Within(0.5f), "centred again");
     }
 
     [UnityTest]
@@ -1175,7 +1260,7 @@ public sealed class PlayerPanelTests
 
     // A row over a skill slot would take the presses meant for it, and a press of a row buys or sells.
     [UnityTest]
-    public IEnumerator NpcWindow_WithMoreRowsThanFit_StopsAboveTheSkillBar_AndKeepsEveryRow()
+    public IEnumerator NpcWindow_WithMoreRowsThanFit_StopsAboveTheFeedbackLines_AndKeepsEveryRow()
     {
         NpcWindow window = OpenShop(
             out ClientWorld _,
@@ -1187,7 +1272,11 @@ public sealed class PlayerPanelTests
         float unitsToPixels = Screen.width / ClientUI.CanvasWidth;
         Debug.Log($"NPC window at {Screen.width} x {Screen.height}: {shown}");
 
-        Assert.That(shown.yMin, Is.GreaterThanOrEqualTo((SkillBar.Top + 8f) * unitsToPixels - 0.5f), "above the bar");
+        float canvasHeight = Screen.height / unitsToPixels;
+        Assert.That(
+            shown.yMin,
+            Is.GreaterThanOrEqualTo((FeedbackLines.TopFor(canvasHeight) + 8f) * unitsToPixels - 0.5f),
+            "above the feedback lines, and so the bar");
         Assert.That(
             window.GetComponentsInChildren<Button>(true),
             Has.Length.EqualTo(2 + 100 + 1),
@@ -1268,11 +1357,11 @@ public sealed class PlayerPanelTests
                 {
                     "Crawler Hunt", "Defeat: Forest Crawler × 5", "Reward: 150 base experience, 100 coins", "Accept"
                 }));
-        Assert.That(offeredButtons, Is.EqualTo(new[] { "Accept", "Close" }));
+        Assert.That(offeredButtons, Is.EqualTo(new[] { "Close", "Accept" }));
         Assert.That(active, Does.EndWith("\nProgress: 3/5"));
         Assert.That(activeButtons, Is.EqualTo(new[] { "Close" }), "no turn-in before the count");
         Assert.That(ready, Does.EndWith("\nProgress: 5/5\nTurn in"));
-        Assert.That(readyButtons, Is.EqualTo(new[] { "Turn in", "Close" }));
+        Assert.That(readyButtons, Is.EqualTo(new[] { "Close", "Turn in" }));
         Assert.That(window.Text, Does.EndWith("\nCompleted"));
         Assert.That(ButtonsOf(window), Is.EqualTo(new[] { "Close" }));
         Assert.That(window.CoinsText, Is.Empty, "the Gate Warden keeps no shop");

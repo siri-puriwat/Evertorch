@@ -19,7 +19,7 @@ public sealed class PresentationBoundaryTests
         + @"|AutoAttackState|PickupState|SkillState|TalkState|InventoryActions\.Press\b|MovementController"
         + @"|LocalPlayerDriver"
         + @"|MovementPredictor|\.Predictor\b|\.IsLocked\b|RequestRespawn|UseSkillSlot|PressInventoryRow|BuyFrom|SellTo"
-        + @"|AcceptQuestFrom|TurnInQuestTo|RaiseStat|ToggleStats|LearnSkillLevel|ToggleSkills|\.ActionLock\b"
+        + @"|AcceptQuestFrom|TurnInQuestTo|RaiseStat|ToggleStats|LearnSkillLevel|ToggleSkills|ResetBuildAt|\.ActionLock\b"
         + @"|\.On(Spawn|Despawn|Snapshot|TargetChanged|AttackStarted|Damage|EntityDied|EntityRevived|CommandRejected"
         + @"|ItemDropped|ItemPickedUp|CharacterHealth|CharacterProgress|SkillCastStarted|SkillResolved|SkillList"
         + @"|StatusEffects|NpcServices|QuestLog|CharacterSheet|LocalCancel|Changed)\("
@@ -100,7 +100,8 @@ public sealed class PresentationBoundaryTests
             "m_world.CollectNpcCandidates(candidates);", "m_client.BuyFrom(npc, item, 1);", "m_world.OnQuestLog(log);",
             "client.SellTo(npc, row.InventoryItem, 2);", "m_client.AcceptQuestFrom(npc, quest);",
             "client.TurnInQuestTo(npc, quest);", "m_client.RaiseStat(PrimaryStat.Agi);", "client.ToggleStats();",
-            "m_client.LearnSkillLevel(skill);", "client.ToggleSkills();"
+            "m_client.LearnSkillLevel(skill);", "client.ToggleSkills();",
+            "m_client.ResetBuildAt(npc);"
         };
         string[] allowed =
         {

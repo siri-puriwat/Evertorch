@@ -64,21 +64,32 @@ public sealed class PanelLayoutTests
         Assert.That(bar.xMax, Is.LessThan(column.xMin));
     }
 
-    // A row over a skill slot or the stick would take the presses meant for it, and a press of a row buys or sells.
+    // A row over a skill slot, the stick, or the feedback lines would hide them or take the presses meant for them, and
+    // a press of a row buys or sells (Milestone 7 review finding 1).
     [TestCase(486f)]
     [TestCase(607.5f)]
     [TestCase(1920f)]
-    public void NpcWindow_HangsBelowTheStatusBar_AndStopsAboveTheSkillBarAndTheStick(float canvasHeight)
+    public void NpcWindow_HangsBelowTheStatusBar_AndStopsAboveTheFeedbackLinesTheSkillBarAndTheStick(float canvasHeight)
     {
-        Rect bar = SkillBar.BoundsFor(ClientUI.CanvasWidth, SkillSlots.Count);
+        const float width = ClientUI.CanvasWidth;
+        Rect bar = SkillBar.BoundsFor(width, SkillSlots.Count);
+        var lines = new Rect(
+            (width - FeedbackLines.Width) / 2f,
+            FeedbackLines.BottomFor(canvasHeight),
+            FeedbackLines.Width,
+            LinesHeight);
         Rect withTouch = NpcWindow.BoundsFor(canvasHeight, 100, true);
         Rect withoutTouch = NpcWindow.BoundsFor(canvasHeight, 100, false);
 
         Assert.That(withTouch.yMax, Is.EqualTo(canvasHeight - 64f).Within(1e-3f), "below the status bar");
         Assert.That(withTouch.Overlaps(TouchControls.StickBounds), Is.False, "no row over the stick");
         Assert.That(withTouch.Overlaps(bar), Is.False, "nor over the skill bar");
-        Assert.That(withoutTouch.yMin, Is.EqualTo(SkillBar.Top + 8f).Within(1e-3f), "without the stick, to the bar");
-        Assert.That(withTouch.height, Is.GreaterThan(92f + 2 * 30f + 6f), "two rows show on the shortest screen");
+        Assert.That(withTouch.Overlaps(lines), Is.False, "nor over the feedback lines");
+        Assert.That(
+            withoutTouch.yMin,
+            Is.EqualTo(FeedbackLines.TopFor(canvasHeight) + 8f).Within(1e-3f),
+            "without the stick, to the lines");
+        Assert.That(withTouch.height, Is.GreaterThan(56f + 2 * 30f + 6f), "two rows show on the shortest screen");
     }
 
     // The Stats window shares the NPC window's place and stops above the feedback lines, which it would otherwise
@@ -103,7 +114,7 @@ public sealed class PanelLayoutTests
         Assert.That(withTouch.Overlaps(TouchControls.StickBounds), Is.False, "clear of the stick");
         Assert.That(withoutTouch.Overlaps(lines), Is.False);
         Assert.That(withTouch.yMin, Is.GreaterThanOrEqualTo(FeedbackLines.TopFor(canvasHeight) + 8f - 1e-3f));
-        Assert.That(withTouch.height, Is.GreaterThanOrEqualTo(92f + 30f), "a row shows on the shortest screen");
+        Assert.That(withTouch.height, Is.GreaterThanOrEqualTo(56f + 2 * 30f), "two rows show on the shortest screen");
     }
 
     // The Stats and Skills buttons stand above the Dev button's place on the left edge, clear of the stick and the Dev
@@ -142,7 +153,7 @@ public sealed class PanelLayoutTests
         Assert.That(withTouch.yMax, Is.EqualTo(canvasHeight - 64f).Within(1e-3f), "below the status bar");
         Assert.That(withTouch.Overlaps(lines), Is.False, "clear of the feedback lines");
         Assert.That(withTouch.Overlaps(TouchControls.StickBounds), Is.False, "clear of the stick");
-        Assert.That(withTouch.height, Is.GreaterThanOrEqualTo(92f + 30f), "a row shows on the shortest screen");
+        Assert.That(withTouch.height, Is.GreaterThanOrEqualTo(56f + 2 * 30f), "two rows show on the shortest screen");
     }
 
     [Test]
@@ -158,7 +169,7 @@ public sealed class PanelLayoutTests
     {
         Rect three = NpcWindow.BoundsFor(1920f, 3, true);
 
-        Assert.That(three.height, Is.EqualTo(92f + 3 * 30f + 2 * 6f).Within(1e-3f));
+        Assert.That(three.height, Is.EqualTo(56f + 3 * 30f + 2 * 6f).Within(1e-3f));
     }
 
     [Test]
@@ -166,7 +177,7 @@ public sealed class PanelLayoutTests
     {
         Rect three = SkillsWindow.BoundsFor(1920f, 3, true);
 
-        Assert.That(three.height, Is.EqualTo(92f + 9 * 30f + 8 * 6f).Within(1e-3f), "a heading and two lines each");
+        Assert.That(three.height, Is.EqualTo(56f + 9 * 30f + 8 * 6f).Within(1e-3f), "a heading and two lines each");
     }
 
     [Test]
@@ -174,7 +185,25 @@ public sealed class PanelLayoutTests
     {
         Rect bounds = StatsWindow.BoundsFor(1920f, true);
 
-        Assert.That(bounds.height, Is.EqualTo(92f + 10 * 30f + 9 * 6f).Within(1e-3f));
+        Assert.That(bounds.height, Is.EqualTo(56f + 10 * 30f + 9 * 6f).Within(1e-3f));
+    }
+
+    // The windows at the top left share one place and one right edge; the target frame moves right of it while one
+    // shows, and stays left of the inventory window (Milestone 7 review finding 1).
+    [Test]
+    public void TargetFrame_BesideAWindow_ClearsItAndTheInventoryWindow()
+    {
+        Vector2 centred = TargetFrame.XRangeFor(false);
+        Vector2 beside = TargetFrame.XRangeFor(true);
+        Rect inventory = InventoryWindow.BoundsFor(1920f, 3, false);
+
+        Assert.That(NpcWindow.BoundsFor(1920f, 3, false).xMax, Is.EqualTo(NpcWindow.Right));
+        Assert.That(StatsWindow.BoundsFor(1920f, false).xMax, Is.EqualTo(NpcWindow.Right));
+        Assert.That(SkillsWindow.BoundsFor(1920f, 3, false).xMax, Is.EqualTo(NpcWindow.Right));
+        Assert.That(centred.x, Is.LessThan(NpcWindow.Right), "centred, the frame would lie under a window");
+        Assert.That(beside.x, Is.GreaterThan(NpcWindow.Right), "beside, it clears the window");
+        Assert.That(beside.y, Is.LessThan(inventory.xMin), "and the inventory window");
+        Assert.That(beside.y - beside.x, Is.GreaterThanOrEqualTo(300f), "wide enough for a name and a bar");
     }
 }
 }

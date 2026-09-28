@@ -211,6 +211,14 @@ public sealed class GameClient : MonoBehaviour
         }
     }
 
+    /// <summary>
+    ///     Whether the NPC, Stats, or Skills window shows at the top left, which the target frame keeps clear of.
+    /// </summary>
+    public bool IsSideWindowOpen =>
+        (m_npcWindow != null && m_npcWindow.IsOpen)
+        || (m_statsWindow != null && m_statsWindow.IsOpen)
+        || (m_skillsWindow != null && m_skillsWindow.IsOpen);
+
     private IEnumerator Start()
     {
         DontDestroyOnLoad(gameObject);
@@ -631,6 +639,15 @@ public sealed class GameClient : MonoBehaviour
     public void RaiseStat(PrimaryStat stat)
     {
         Connection?.SendAllocateStat(stat, 1);
+    }
+
+    /// <summary>
+    ///     Asks <paramref name="npc" /> for the reset of the build (Gameplay Systems §6.1); the windows move only with the
+    ///     skill list and the sheet the server sends back.
+    /// </summary>
+    public void ResetBuildAt(EntityId npc)
+    {
+        Connection?.SendResetBuild(npc);
     }
 
     /// <summary>

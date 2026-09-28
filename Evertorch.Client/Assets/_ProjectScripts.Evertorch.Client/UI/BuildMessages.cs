@@ -56,14 +56,21 @@ public static class BuildMessages
 
     /// <summary>
     ///     The feedback lines for what <paramref name="after" /> raised over <paramref name="before" />: "Job level 3."
-    ///     and "AGI 6.", each statistic that rose with its new value. A world's first sheet, with no
-    ///     <paramref name="before" />, is its baseline and says nothing.
+    ///     and "AGI 6.", each statistic that rose with its new value, or "Every point returned." for the Guildmaster's
+    ///     reset, the only change that lowers a statistic or gives skill points back without a job level. A world's
+    ///     first sheet, with no <paramref name="before" />, is its baseline and says nothing.
     /// </summary>
     public static IReadOnlyList<string> Describe(CharacterSheet? before, CharacterSheet after)
     {
         var lines = new List<string>();
         if (before == null)
         {
+            return lines;
+        }
+
+        if (IsReset(before, after))
+        {
+            lines.Add("Every point returned.");
             return lines;
         }
 
@@ -143,6 +150,19 @@ public static class BuildMessages
         }
 
         return lines;
+    }
+
+    private static bool IsReset(CharacterSheet before, CharacterSheet after)
+    {
+        for (int index = 0; index < CharacterSheet.StatCount; index++)
+        {
+            if (after.Stats[index].Value < before.Stats[index].Value)
+            {
+                return true;
+            }
+        }
+
+        return after.SkillPoints > before.SkillPoints && after.JobLevel == before.JobLevel;
     }
 
     private static int LevelIn(IReadOnlyList<SkillListEntry> list, SkillDefinitionId skill)

@@ -4,11 +4,13 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Threading.Tasks;
+using Evertorch.Protocol;
 using NUnit.Framework;
 using TMPro;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.InputSystem.Controls;
+using UnityEngine.InputSystem.LowLevel;
 using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
 using UnityEngine.UI;
@@ -28,6 +30,8 @@ public sealed class LiveServerBuildTests : InputTestFixture
     private const string LevelClientName = "LiveBuildOne";
     private const string StatsClientName = "LiveBuildTwo";
     private const string SkillsClientName = "LiveBuildThree";
+    private const string ResetClientName = "LiveBuildFour";
+    private const string GuildmasterPrefab = "npc_guildmaster";
     private const float StartTimeoutSeconds = 30f;
     private const float FightTimeoutSeconds = 60f;
     private const int TestTimeoutMs = 300_000;
@@ -214,6 +218,80 @@ public sealed class LiveServerBuildTests : InputTestFixture
         yield return Tap(keyboard.kKey);
         yield return WaitUntil(() => !window.IsOpen, 2f);
         Assert.That(window.IsOpen, Is.False, "K closes it again");
+    }
+
+    // A character stored at base level 3 with AGI raised to 7 walks up to the Guildmaster with a click, presses "Reset all
+    // points" and then "Press again to reset": the server's sheet gives the 4 points back, and the feedback lines say so
+    // (Gameplay Systems §6.1; Prototype Content §2).
+    [UnityTest]
+    [Timeout(TestTimeoutMs)]
+    public IEnumerator Reset_ThroughTheGuildmastersWindow_ReturnsEveryPoint()
+    {
+        string actionsPath = RequirePrerequisites();
+        yield return StartDatabaseAndServer();
+        LiveServer server = m_server!;
+        LiveDatabase database = m_database!;
+        Mouse mouse = InputSystem.AddDevice<Mouse>();
+        GameClient client = CreateClient(actionsPath);
+
+        yield return EnterByName(
+            client,
+            ResetClientName,
+            () => database.Execute(
+                $"UPDATE characters SET base_level = 3, agi = 7 WHERE name = '{ResetClientName}'"));
+        ClientWorld world = client.World!;
+        NpcWindow window = client.GetComponentsInChildren<NpcWindow>(true).Single();
+        FeedbackLines lines = client.GetComponentsInChildren<FeedbackLines>(true).Single();
+        yield return WaitUntil(() => world.Sheet != null, StartTimeoutSeconds);
+        Assert.That(
+            (world.Sheet!.Stats[1].Value, world.Sheet.StatPoints),
+            Is.EqualTo(((byte)7, (ushort)2)),
+            "AGI 7 cost 4 of the 6 points");
+        yield return WaitUntil(() => NpcView(client, GuildmasterPrefab)?.HasBody == true, StartTimeoutSeconds);
+        EntityView guildmaster = NpcView(client, GuildmasterPrefab)!;
+        ClickAt(mouse,
+            Camera.main!.WorldToScreenPoint(guildmaster.transform.position + Vector3.up * EntityPicker.PickHeight));
+        yield return WaitUntil(() => window.IsOpen && window.Text.EndsWith("Reset all points"), StartTimeoutSeconds);
+        Assert.That(window.Text, Does.EndWith("Reset all points"), $"the Guildmaster's window: {client.Status}");
+
+        Assert.That(Press(window, "Reset all points"), Is.True);
+        yield return null;
+        Assert.That(Press(window, "Press again to reset"), Is.True, window.Text);
+        yield return WaitUntil(() => world.Sheet!.Stats[1].Value == 5, StartTimeoutSeconds);
+
+        Assert.That(
+            (world.Sheet!.Stats[1].Value, world.Sheet.StatPoints),
+            Is.EqualTo(((byte)5, (ushort)6)),
+            $"every point back: {server.JoinOutput()}");
+        Assert.That(lines.Text, Does.Contain("Every point returned."));
+    }
+
+    private static bool Press(Component window, string name)
+    {
+        Button? button = window.GetComponentsInChildren<Button>().FirstOrDefault(candidate => candidate.name == name);
+        button?.onClick.Invoke();
+        return button != null;
+    }
+
+    private static EntityView? NpcView(GameClient client, string prefab)
+    {
+        ClientWorld? world = client.World;
+        return world == null
+            ? null
+            : client.RemoteViews
+                .Where(pair => world.Remotes.TryGetValue(pair.Key, out RemoteEntity? remote)
+                    && remote.Kind == EntityKind.Npc
+                    && pair.Value.Key == prefab)
+                .Select(pair => pair.Value)
+                .SingleOrDefault();
+    }
+
+    private static void ClickAt(Mouse mouse, Vector2 screenPosition)
+    {
+        InputSystem.QueueStateEvent(mouse, new MouseState { position = screenPosition }.WithButton(MouseButton.Left));
+        InputSystem.Update();
+        InputSystem.QueueStateEvent(mouse, new MouseState { position = screenPosition });
+        InputSystem.Update();
     }
 
     private static string RequirePrerequisites()

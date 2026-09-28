@@ -32,8 +32,10 @@ public sealed class StatsWindow : MonoBehaviour
     // Six statistics and four rows of two derived ones.
     private const int ListRows = CharacterSheet.StatCount + 4;
 
-    // The padding, the heading, the Close button, and the space between them and the list.
-    private const float Chrome = 2 * Padding + 2 * RowHeight + 2 * RowSpacing;
+    private const float CloseWidth = 80f;
+
+    // The padding, the heading with Close at its end, and the space between it and the list.
+    private const float Chrome = 2 * Padding + RowHeight + RowSpacing;
 
     private static readonly UiBuilder Ui = new(22f, RowHeight, 0f, RowSpacing);
 
@@ -242,6 +244,7 @@ public sealed class StatsWindow : MonoBehaviour
         m_points = Ui.CreateLabel("Points", heading.transform);
         m_points.alignment = TextAlignmentOptions.MidlineRight;
         m_points.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1f;
+        Ui.CreateButton("Close", heading.transform, Close).GetComponent<LayoutElement>().preferredWidth = CloseWidth;
 
         Transform rows = CreateList(panel);
         for (int index = 0; index < CharacterSheet.StatCount; index++)
@@ -256,7 +259,6 @@ public sealed class StatsWindow : MonoBehaviour
             m_derived[2 * row + 1] = CreateCell(line.transform, "Right", 0f, 1f);
         }
 
-        Ui.CreateButton("Close", panel, Close);
         m_panel.SetActive(false);
     }
 

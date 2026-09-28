@@ -34,8 +34,10 @@ public sealed class SkillsWindow : MonoBehaviour
     // Each skill's heading and its description, which takes two lines; an unmet prerequisite adds one.
     private const int RowsPerSkill = 3;
 
-    // The padding, the heading, the Close button, and the space between them and the list.
-    private const float Chrome = 2 * Padding + 2 * RowHeight + 2 * RowSpacing;
+    private const float CloseWidth = 80f;
+
+    // The padding, the heading with Close at its end, and the space between it and the list.
+    private const float Chrome = 2 * Padding + RowHeight + RowSpacing;
 
     private static readonly UiBuilder Ui = new(22f, RowHeight, 0f, RowSpacing);
 
@@ -318,9 +320,9 @@ public sealed class SkillsWindow : MonoBehaviour
         m_points = Ui.CreateLabel("Points", heading.transform);
         m_points.alignment = TextAlignmentOptions.MidlineRight;
         m_points.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1f;
+        Ui.CreateButton("Close", heading.transform, Close).GetComponent<LayoutElement>().preferredWidth = CloseWidth;
 
         m_rows = CreateList(panel);
-        Ui.CreateButton("Close", panel, Close);
         m_panel.SetActive(false);
     }
 

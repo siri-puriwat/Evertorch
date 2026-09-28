@@ -14,14 +14,20 @@ namespace Evertorch.Client
 /// <summary>
 ///     The window of the NPC the player walked up to (Gameplay Systems §2.2, §6.1, §11.3; Prototype Content §2): the
 ///     NPC's name and Close; for an NPC that trades, the coins, a Buy list of what it sells at its price, and a Sell list
-///     of the character's rows it buys, not worn, at what one fetches; and for each quest the NPC gives, its objective,
-///     its reward, and where the character stands with it. A Buy press buys one; a Sell press sells one, and a stack's
-///     All sells the row; Accept and Turn in ask for the quest. The presses go through <see cref="GameClient" />, and
-///     only what the server commits moves the lists. It closes once the NPC is drawn beyond its range, the player dies,
-///     the map changes, or the connection closes.
+///     of the character's rows it buys, not worn, at what one fetches; for each quest the NPC gives, its objective, its
+///     reward, and where the character stands with it; and for the Guildmaster, "Reset all points". A Buy press buys
+///     one; a Sell press sells one, and a stack's All sells the row; Accept and Turn in ask for the quest; the reset
+///     asks for a second press within <see cref="ResetConfirmSeconds" />, since it undoes every choice. The presses go
+///     through <see cref="GameClient" />, and only what the server commits moves the lists. It closes once the NPC is
+///     drawn beyond its range, the player dies, the map changes, or the connection closes.
 /// </summary>
 public sealed class NpcWindow : MonoBehaviour
 {
+    /// <summary>
+    ///     How long "Press again to reset" waits for the second press.
+    /// </summary>
+    public const float ResetConfirmSeconds = 5f;
+
     // With the status bar and the target frame, under the feedback lines and the login panel.
     private const int SortingOrder = 6;
     private const float Width = 420f;
@@ -33,8 +39,16 @@ public sealed class NpcWindow : MonoBehaviour
     private const float NameWidth = 200f;
     private const float AllWidth = 130f;
 
-    // The padding, the heading, the Close button, and the space between them and the list.
-    private const float Chrome = 2 * Padding + 2 * RowHeight + 2 * RowSpacing;
+    private const float CloseWidth = 80f;
+
+    // The padding, the heading with Close at its end, and the space between it and the list.
+    private const float Chrome = 2 * Padding + RowHeight + RowSpacing;
+
+    /// <summary>
+    ///     The right edge of the windows at the top left, this one, the Stats window, and the Skills window, in canvas
+    ///     units.
+    /// </summary>
+    public const float Right = Margin + Width;
 
     private static readonly UiBuilder Ui = new(22f, RowHeight, 0f, RowSpacing);
 
@@ -55,6 +69,8 @@ public sealed class NpcWindow : MonoBehaviour
     private bool m_shownCurrent;
     private uint m_shownRevision;
     private bool m_hadContent;
+    private bool m_isResetArmed;
+    private float m_resetArmedUntil;
 
     public bool IsOpen => m_panel != null && m_panel.activeSelf;
 
@@ -105,6 +121,11 @@ public sealed class NpcWindow : MonoBehaviour
             return;
         }
 
+        if (m_isResetArmed && Time.unscaledTime > m_resetArmedUntil)
+        {
+            ArmReset(false);
+        }
+
         Show(world, m_client.Content);
         FitList();
     }
@@ -122,7 +143,8 @@ public sealed class NpcWindow : MonoBehaviour
     /// <summary>
     ///     Where a trading NPC's window sits on a canvas <paramref name="canvasHeight" /> units tall with
     ///     <paramref name="rows" /> rows in its lists, in canvas units from the bottom-left corner: below the status bar,
-    ///     down to the skill bar, or to the stick while the touch controls show. Rows beyond that scroll.
+    ///     down to the top of the feedback lines, the skill bar, or the stick while the touch controls show, whichever is
+    ///     highest. Rows beyond that scroll.
     /// </summary>
     public static Rect BoundsFor(float canvasHeight, int rows, bool isTouchShown)
     {
@@ -154,14 +176,19 @@ public sealed class NpcWindow : MonoBehaviour
     {
         m_world = null;
         Npc = default;
+        m_isResetArmed = false;
         UiBuilder.SetActive(m_panel!, false);
     }
 
-    // A row over a skill slot or the stick would take the presses meant for it, and a press of a row buys or sells.
+    // A row over a skill slot, the stick, or the feedback lines would hide them or take the presses meant for them, and a
+    // press of a row buys or sells.
     private static float ListHeightFor(float canvasHeight, int rows, bool isTouchShown)
     {
         float needed = rows * RowHeight + Math.Max(0, rows - 1) * RowSpacing;
-        float floor = Math.Max(SkillBar.Top, isTouchShown ? TouchControls.StickBounds.yMax : 0f) + Margin;
+        float floor = Math.Max(
+                Math.Max(SkillBar.Top, FeedbackLines.TopFor(canvasHeight)),
+                isTouchShown ? TouchControls.StickBounds.yMax : 0f)
+            + Margin;
         float room = canvasHeight - (StatusBarHeight + Margin) - Chrome - floor;
         return Math.Max(0f, Math.Min(needed, room));
     }
@@ -227,7 +254,8 @@ public sealed class NpcWindow : MonoBehaviour
         ClearRows();
         m_text.Clear();
         bool hasQuests = services != null && services.Offers.Count > 0;
-        UiBuilder.SetActive(m_list!, shop != null || hasQuests);
+        bool offersReset = services != null && services.OffersReset;
+        UiBuilder.SetActive(m_list!, shop != null || hasQuests || offersReset);
         m_coins!.text = shop != null && inventory.IsCurrent ? $"Coins: {inventory.Coins}" : string.Empty;
         if (shop != null)
         {
@@ -238,6 +266,11 @@ public sealed class NpcWindow : MonoBehaviour
         if (hasQuests)
         {
             ListQuests(services!, world.Quests, content);
+        }
+
+        if (offersReset)
+        {
+            ListReset();
         }
 
         Text = m_text.ToString();
@@ -323,6 +356,34 @@ public sealed class NpcWindow : MonoBehaviour
                 }
             }
         }
+    }
+
+    // The Guildmaster's reset (Gameplay Systems §6.1): free, but it undoes every choice, so the first press only arms it.
+    private void ListReset()
+    {
+        AddHeading("Stat and skill points");
+        AddLine("Every point back, for free");
+        AddButton(m_isResetArmed ? "Press again to reset" : "Reset all points", PressReset);
+    }
+
+    private void PressReset()
+    {
+        if (m_isResetArmed && Time.unscaledTime <= m_resetArmedUntil)
+        {
+            ArmReset(false);
+            m_client!.ResetBuildAt(Npc);
+            return;
+        }
+
+        ArmReset(true);
+    }
+
+    // The lists are written again so the button says what its next press does.
+    private void ArmReset(bool isArmed)
+    {
+        m_isResetArmed = isArmed;
+        m_resetArmedUntil = Time.unscaledTime + ResetConfirmSeconds;
+        m_shownServices = null;
     }
 
     private static bool TryFind(IReadOnlyList<QuestLogEntry> log, QuestDefinitionId quest, out QuestLogEntry entry)
@@ -456,8 +517,8 @@ public sealed class NpcWindow : MonoBehaviour
         m_coins.alignment = TextAlignmentOptions.MidlineRight;
         m_coins.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1f;
         FitOnOneLine(m_coins);
+        Ui.CreateButton("Close", heading.transform, Close).GetComponent<LayoutElement>().preferredWidth = CloseWidth;
         m_rows = CreateList(panel);
-        Ui.CreateButton("Close", panel, Close);
         m_panel.SetActive(false);
     }
 
