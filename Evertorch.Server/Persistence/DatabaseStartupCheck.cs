@@ -82,7 +82,9 @@ public sealed class DatabaseStartupCheck : IHostedService
                 || (MapDefinitionId.TryCreate(id, out MapDefinitionId map) && m_content.Maps.ContainsKey(map))
                 || (ItemDefinitionId.TryCreate(id, out ItemDefinitionId item) && m_content.Items.ContainsKey(item))
                 || (QuestDefinitionId.TryCreate(id, out QuestDefinitionId quest)
-                    && m_content.Quests.ContainsKey(quest));
+                    && m_content.Quests.ContainsKey(quest))
+                || (SkillDefinitionId.TryCreate(id, out SkillDefinitionId skill)
+                    && m_content.Skills.ContainsKey(skill));
             if (!isKnown)
             {
                 unknown.Add(id);

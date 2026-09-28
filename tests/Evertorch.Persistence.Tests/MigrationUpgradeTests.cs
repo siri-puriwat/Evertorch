@@ -17,6 +17,7 @@ public sealed class MigrationUpgradeTests
     private const string InitialSchema = "20260923125025_InitialSchema";
     private const string WidenLedgerOperationTypes = "20260926015421_WidenLedgerOperationTypes";
     private const string AddQuestsAndCoins = "20260926193354_AddQuestsAndCoins";
+    private const string AddSessionTokens = "20260927150302_AddSessionTokens";
     private const string CheckViolation = "23514";
     private const string UndefinedTable = "42P01";
 
@@ -84,6 +85,45 @@ public sealed class MigrationUpgradeTests
                 "UPDATE accounts SET password_hash = '1000$c2FsdA==$a2V5', password_scheme = 'pbkdf2-sha256' "
                 + $"WHERE id = {account}"),
             Is.Null);
+    }
+
+    // Every existing character stays at job level 1 with no learned skill (Persistence §4; owner decision 8 of the
+    // pre-Milestone-9 review): the migration changes no row.
+    [Test]
+    public void Upgrade_FromAddSessionTokens_KeepsEveryRow_AndAddsLearnedSkills()
+    {
+        using var database = PostgresFixture.Start(targetMigration: AddSessionTokens);
+        var sql = new Sql(database.ConnectionString);
+        long account = sql.InsertAccount();
+        long character = sql.InsertCharacter(account, Sql.UniqueName("Up"));
+        long weapon = sql.InsertItem(character, 1);
+        sql.Execute(Sql.EquipmentInsert(character, "Weapon", weapon));
+        sql.Scalar(Sql.LedgerInsert(Guid.NewGuid(), character, "buy"));
+        sql.Execute(Sql.QuestInsert(character, "quest.crawler_hunt", "active", 3));
+        sql.Execute(Sql.SessionTokenInsert(account));
+        sql.Execute(
+            $"UPDATE characters SET currency = 250, base_level = 7, base_exp = 12, str = 11 WHERE id = {character}");
+        string? skillBefore = SqlStateOf(sql, Sql.SkillInsert(character, "skill.strike", 1));
+        string before = Dump(sql, "character_quests", "session_tokens");
+
+        EvertorchDatabase.ApplyMigrationsAsync(database.ConnectionString, CancellationToken.None)
+            .GetAwaiter()
+            .GetResult();
+
+        IReadOnlyList<string> pending = EvertorchDatabase
+            .GetPendingMigrationsAsync(database.ConnectionString, CancellationToken.None)
+            .GetAwaiter()
+            .GetResult();
+        Assert.That(skillBefore, Is.EqualTo(UndefinedTable), "no learned skills before");
+        Assert.That(pending, Is.Empty);
+        Assert.That(Dump(sql, "character_quests", "session_tokens"), Is.EqualTo(before), "every row as it was");
+        Assert.That(
+            sql.Text($"SELECT job_level || ' ' || job_exp FROM characters WHERE id = {character}"),
+            Is.EqualTo("1 0"),
+            "still job level 1");
+        Assert.That(sql.Scalar("SELECT count(*) FROM character_skills"), Is.Zero, "nothing learned");
+        Assert.That(SqlStateOf(sql, Sql.SkillInsert(character, "skill.strike", 1)), Is.Null);
+        Assert.That(SqlStateOf(sql, Sql.SkillInsert(character, "skill.focus", 6)), Is.EqualTo(CheckViolation));
     }
 
     [Test]

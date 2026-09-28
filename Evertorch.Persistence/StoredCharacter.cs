@@ -5,7 +5,8 @@ using Evertorch.Game;
 namespace Evertorch.Persistence
 {
 /// <summary>
-///     A character as stored, with its inventory and its quests: what entering the world loads (Persistence §7).
+///     A character as stored, with its inventory, its quests, and its learned skills: what entering the world loads
+///     (Persistence §7).
 ///     Definition IDs are the stored text, which the current content may no longer define (Persistence §8).
 /// </summary>
 public sealed class StoredCharacter
@@ -25,7 +26,10 @@ public sealed class StoredCharacter
         uint inventoryRevision,
         long coins,
         IReadOnlyList<StoredItem> items,
-        IReadOnlyList<StoredQuest>? quests = null)
+        IReadOnlyList<StoredQuest>? quests = null,
+        int jobLevel = 1,
+        long jobExperience = 0,
+        IReadOnlyList<StoredSkill>? skills = null)
     {
         Id = id;
         Account = account;
@@ -42,6 +46,9 @@ public sealed class StoredCharacter
         Coins = coins;
         Items = items;
         Quests = quests ?? Array.Empty<StoredQuest>();
+        JobLevel = jobLevel;
+        JobExperience = jobExperience;
+        Skills = skills ?? Array.Empty<StoredSkill>();
     }
 
     public long Id { get; }
@@ -85,5 +92,17 @@ public sealed class StoredCharacter
     ///     The quests the character has accepted or completed, ordered by quest ID.
     /// </summary>
     public IReadOnlyList<StoredQuest> Quests { get; }
+
+    public int JobLevel { get; }
+
+    /// <summary>
+    ///     Job experience toward the next job level.
+    /// </summary>
+    public long JobExperience { get; }
+
+    /// <summary>
+    ///     The skills the character has learned, ordered by skill ID.
+    /// </summary>
+    public IReadOnlyList<StoredSkill> Skills { get; }
 }
 }

@@ -337,6 +337,13 @@ WHERE account_id = {account.Value} AND expires_at > {issuedAt} AND token_hash NO
                         quest.Progress))
                     .ToListAsync(cancellationToken)
                     .ConfigureAwait(false);
+                List<StoredSkill> skills = await context.CharacterSkills
+                    .AsNoTracking()
+                    .Where(skill => skill.CharacterId == characterId)
+                    .OrderBy(skill => skill.SkillDefinitionId)
+                    .Select(skill => new StoredSkill(skill.SkillDefinitionId, skill.Level))
+                    .ToListAsync(cancellationToken)
+                    .ConfigureAwait(false);
                 return new StoredCharacter(
                     row.Id,
                     account,
@@ -352,7 +359,10 @@ WHERE account_id = {account.Value} AND expires_at > {issuedAt} AND token_hash NO
                     (uint)row.InventoryRevision,
                     row.Currency,
                     items,
-                    quests);
+                    quests,
+                    row.JobLevel,
+                    row.JobExp,
+                    skills);
             },
             cancellationToken);
     }
@@ -371,13 +381,25 @@ WHERE account_id = {account.Value} AND expires_at > {issuedAt} AND token_hash NO
                 int level = checkpoint.Level;
                 long experience = checkpoint.Experience;
                 bool isRewardInFlight = checkpoint.IsRewardInFlight;
+                int jobLevel = checkpoint.JobLevel;
+                long jobExperience = checkpoint.JobExperience;
+                bool writesStats = !isRewardInFlight && checkpoint.Stats.HasValue;
+                PrimaryStats stats = checkpoint.Stats.GetValueOrDefault();
+                int str = stats.Str;
+                int agi = stats.Agi;
+                int vit = stats.Vit;
+                int intelligence = stats.Int;
+                int dex = stats.Dex;
+                int luk = stats.Luk;
                 DateTime at = checkpoint.At;
                 await using (IDbContextTransaction transaction =
                              await context.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false))
                 {
                     // Level and experience move only forward, compared as a pair, so a checkpoint can never take back
                     // what a turn-in committed; while a turn-in is in flight they stay as they are, since the ones in
-                    // memory may not hold its reward yet (Persistence §6).
+                    // memory may not hold its reward yet (Persistence §6). The job pair follows the same rule, and the
+                    // statistics and skills, which spend the points those levels grant, wait with them, so a crash can
+                    // never store more points spent than earned.
                     int updated = await context.Characters
                         .Where(row => row.Id == checkpoint.CharacterId)
                         .ExecuteUpdateAsync(
@@ -402,6 +424,26 @@ WHERE account_id = {account.Value} AND expires_at > {issuedAt} AND token_hash NO
                                             || (level == row.BaseLevel && experience >= row.BaseExp))
                                             ? experience
                                             : row.BaseExp)
+                                .SetProperty(
+                                    row => row.JobLevel,
+                                    row => !isRewardInFlight
+                                        && (jobLevel > row.JobLevel
+                                            || (jobLevel == row.JobLevel && jobExperience >= row.JobExp))
+                                            ? jobLevel
+                                            : row.JobLevel)
+                                .SetProperty(
+                                    row => row.JobExp,
+                                    row => !isRewardInFlight
+                                        && (jobLevel > row.JobLevel
+                                            || (jobLevel == row.JobLevel && jobExperience >= row.JobExp))
+                                            ? jobExperience
+                                            : row.JobExp)
+                                .SetProperty(row => row.Str, row => writesStats ? str : row.Str)
+                                .SetProperty(row => row.Agi, row => writesStats ? agi : row.Agi)
+                                .SetProperty(row => row.Vit, row => writesStats ? vit : row.Vit)
+                                .SetProperty(row => row.Int, row => writesStats ? intelligence : row.Int)
+                                .SetProperty(row => row.Dex, row => writesStats ? dex : row.Dex)
+                                .SetProperty(row => row.Luk, row => writesStats ? luk : row.Luk)
                                 .SetProperty(row => row.LastPlayedAt, at)
                                 .SetProperty(row => row.Version, row => row.Version + 1),
                             cancellationToken)
@@ -421,6 +463,12 @@ ON CONFLICT (character_id, quest_definition_id) DO UPDATE
 SET progress = EXCLUDED.progress, version = character_quests.version + 1
 WHERE character_quests.state = {CharacterQuestRow.ActiveState} AND character_quests.progress < EXCLUDED.progress",
                                 cancellationToken)
+                            .ConfigureAwait(false);
+                    }
+
+                    if (!isRewardInFlight && checkpoint.Skills != null && updated == 1)
+                    {
+                        await WriteSkillsAsync(context, checkpoint.CharacterId, checkpoint.Skills, cancellationToken)
                             .ConfigureAwait(false);
                     }
 
@@ -1021,11 +1069,40 @@ WHERE character_quests.state = {CharacterQuestRow.ActiveState} AND character_que
                     .ToListAsync(cancellationToken).ConfigureAwait(false);
                 List<string> quests = await context.CharacterQuests.Select(row => row.QuestDefinitionId).Distinct()
                     .ToListAsync(cancellationToken).ConfigureAwait(false);
-                return (IReadOnlyList<string>)jobs.Concat(maps).Concat(items).Concat(quests).Distinct()
+                List<string> skills = await context.CharacterSkills.Select(row => row.SkillDefinitionId).Distinct()
+                    .ToListAsync(cancellationToken).ConfigureAwait(false);
+                return (IReadOnlyList<string>)jobs.Concat(maps).Concat(items).Concat(quests).Concat(skills).Distinct()
                     .OrderBy(id => id, StringComparer.Ordinal)
                     .ToList();
             },
             cancellationToken);
+    }
+
+    // Written whole: each learned skill is inserted or moved to its level, and a stored skill left out is forgotten, so
+    // a reset's lowered build is stored as it is (Persistence §6).
+    private static async Task WriteSkillsAsync(
+        EvertorchDbContext context,
+        long characterId,
+        IReadOnlyList<StoredSkill> skills,
+        CancellationToken cancellationToken)
+    {
+        string[] learned = skills.Select(skill => skill.SkillDefinitionId).ToArray();
+        await context.Database
+            .ExecuteSqlInterpolatedAsync(
+                $"DELETE FROM character_skills WHERE character_id = {characterId} AND skill_definition_id <> ALL ({learned})",
+                cancellationToken)
+            .ConfigureAwait(false);
+        foreach (StoredSkill skill in skills)
+        {
+            await context.Database
+                .ExecuteSqlInterpolatedAsync(
+                    $@"INSERT INTO character_skills (character_id, skill_definition_id, level)
+VALUES ({characterId}, {skill.SkillDefinitionId}, {skill.Level})
+ON CONFLICT (character_id, skill_definition_id) DO UPDATE SET level = EXCLUDED.level
+WHERE character_skills.level <> EXCLUDED.level",
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
     }
 
     // A frozen server answers neither a query nor its cancellation. Npgsql then waits 15 s to open a connection and

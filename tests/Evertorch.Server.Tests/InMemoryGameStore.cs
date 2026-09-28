@@ -386,6 +386,28 @@ internal sealed class InMemoryGameStore : IGameStore
                     row.Experience = checkpoint.Experience;
                 }
 
+                bool isJobNotLower = checkpoint.JobLevel > row.JobLevel
+                    || (checkpoint.JobLevel == row.JobLevel && checkpoint.JobExperience >= row.JobExperience);
+                if (isJobNotLower && !checkpoint.IsRewardInFlight)
+                {
+                    row.JobLevel = checkpoint.JobLevel;
+                    row.JobExperience = checkpoint.JobExperience;
+                }
+
+                if (checkpoint.Stats.HasValue && !checkpoint.IsRewardInFlight)
+                {
+                    row.Stats = checkpoint.Stats.Value;
+                }
+
+                if (checkpoint.Skills != null && !checkpoint.IsRewardInFlight)
+                {
+                    row.Skills.Clear();
+                    foreach (StoredSkill skill in checkpoint.Skills)
+                    {
+                        row.Skills[skill.SkillDefinitionId] = skill.Level;
+                    }
+                }
+
                 foreach (StoredQuest quest in checkpoint.Quests)
                 {
                     if (!row.Quests.TryGetValue(quest.QuestDefinitionId, out StoredQuest? stored))
@@ -534,7 +556,8 @@ internal sealed class InMemoryGameStore : IGameStore
             IReadOnlyList<string> ids = m_characters.Values
                 .SelectMany(row => new[] { row.Job, row.Map }
                     .Concat(row.Items.Select(item => item.ItemDefinitionId))
-                    .Concat(row.Quests.Keys))
+                    .Concat(row.Quests.Keys)
+                    .Concat(row.Skills.Keys))
                 .Distinct()
                 .ToList();
             return Task.FromResult(ids);
@@ -588,7 +611,11 @@ internal sealed class InMemoryGameStore : IGameStore
         int? spirit = null,
         int? level = null,
         long? experience = null,
-        long? coins = null)
+        long? coins = null,
+        int? jobLevel = null,
+        long? jobExperience = null,
+        PrimaryStats? stats = null,
+        IReadOnlyDictionary<string, int>? skills = null)
     {
         lock (m_gate)
         {
@@ -601,6 +628,18 @@ internal sealed class InMemoryGameStore : IGameStore
             row.Level = level ?? row.Level;
             row.Experience = experience ?? row.Experience;
             row.Coins = coins ?? row.Coins;
+            row.JobLevel = jobLevel ?? row.JobLevel;
+            row.JobExperience = jobExperience ?? row.JobExperience;
+            row.Stats = stats ?? row.Stats;
+            if (skills != null)
+            {
+                row.Skills.Clear();
+                foreach (KeyValuePair<string, int> skill in skills)
+                {
+                    row.Skills[skill.Key] = skill.Value;
+                }
+            }
+
             if (item != null)
             {
                 row.Items.Add(new StoredItem(++m_lastItem, item, 1));
@@ -976,6 +1015,7 @@ internal sealed class InMemoryGameStore : IGameStore
             Position = created.Position;
             Health = created.Health;
             Spirit = created.Spirit;
+            Stats = created.Stats;
         }
 
         public AccountId Account { get; }
@@ -997,6 +1037,15 @@ internal sealed class InMemoryGameStore : IGameStore
         public int Level { get; set; } = 1;
 
         public long Experience { get; set; }
+
+        public int JobLevel { get; set; } = 1;
+
+        public long JobExperience { get; set; }
+
+        public PrimaryStats Stats { get; set; }
+
+        /// <summary>Each learned skill's level, by skill ID.</summary>
+        public Dictionary<string, int> Skills { get; } = new(StringComparer.Ordinal);
 
         public uint InventoryRevision { get; set; }
 
@@ -1034,7 +1083,7 @@ internal sealed class InMemoryGameStore : IGameStore
                 Job,
                 Level,
                 Experience,
-                Created.Stats,
+                Stats,
                 Health,
                 Spirit,
                 Map,
@@ -1042,7 +1091,12 @@ internal sealed class InMemoryGameStore : IGameStore
                 InventoryRevision,
                 Coins,
                 Items.Select(item => Read(item.Id)).ToList(),
-                Quests.Values.OrderBy(quest => quest.QuestDefinitionId, StringComparer.Ordinal).ToList());
+                Quests.Values.OrderBy(quest => quest.QuestDefinitionId, StringComparer.Ordinal).ToList(),
+                JobLevel,
+                JobExperience,
+                Skills.OrderBy(skill => skill.Key, StringComparer.Ordinal)
+                    .Select(skill => new StoredSkill(skill.Key, skill.Value))
+                    .ToList());
         }
     }
 }

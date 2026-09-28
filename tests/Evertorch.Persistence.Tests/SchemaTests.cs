@@ -252,6 +252,23 @@ public sealed class SchemaTests
     }
 
     [Test]
+    public void CharacterSkill_FromLevelOneToFive_IsStoredOncePerCharacterAndSkill()
+    {
+        long character = NewCharacter();
+        m_sql.Execute(Sql.SkillInsert(character, "skill.strike", 1));
+        m_sql.Execute(Sql.SkillInsert(character, "skill.focus", 5));
+
+        AssertFailsWith(UniqueViolation, Sql.SkillInsert(character, "skill.strike", 2));
+        AssertFailsWith(CheckViolation, Sql.SkillInsert(character, "skill.first_aid", 0));
+        AssertFailsWith(CheckViolation, Sql.SkillInsert(character, "skill.first_aid", 6));
+        AssertFailsWith(ForeignKeyViolation, Sql.SkillInsert(long.MaxValue, "skill.strike", 1));
+        AssertFailsWith(ValueTooLong, Sql.SkillInsert(character, $"skill.{new string('x', 59)}", 1));
+        Assert.That(
+            m_sql.Scalar($"SELECT count(*) FROM character_skills WHERE character_id = {character}"),
+            Is.EqualTo(2));
+    }
+
+    [Test]
     public void Character_AtTheLargestInventoryRevision_IsStored()
     {
         long account = m_sql.InsertAccount();
@@ -407,8 +424,8 @@ public sealed class SchemaTests
             m_sql.Scalar(
                 "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name IN "
                 + "('accounts', 'characters', 'inventory_items', 'equipment', 'economy_ledger', 'character_quests', "
-                + "'session_tokens')"),
-            Is.EqualTo(7));
+                + "'session_tokens', 'character_skills')"),
+            Is.EqualTo(8));
     }
 
     [Test]

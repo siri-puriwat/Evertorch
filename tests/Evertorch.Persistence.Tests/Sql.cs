@@ -97,6 +97,12 @@ internal sealed class Sql
             + $"VALUES ({character}, '{slot}', {item}, 0)";
     }
 
+    public static string SkillInsert(long character, string skill, int level)
+    {
+        return "INSERT INTO character_skills (character_id, skill_definition_id, level) "
+            + $"VALUES ({character}, '{skill}', {level})";
+    }
+
     public static string QuestInsert(long character, string quest, string state, int progress)
     {
         string completedAt = state == "completed" ? "now()" : "NULL";

@@ -1,4 +1,5 @@
 using System.Text;
+using Evertorch.Game;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
@@ -46,6 +47,8 @@ internal sealed class EvertorchDbContext : DbContext
 
     public DbSet<SessionTokenRow> SessionTokens => Set<SessionTokenRow>();
 
+    public DbSet<CharacterSkillRow> CharacterSkills => Set<CharacterSkillRow>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         ConfigureAccounts(modelBuilder.Entity<AccountRow>());
@@ -55,6 +58,7 @@ internal sealed class EvertorchDbContext : DbContext
         ConfigureLedger(modelBuilder.Entity<LedgerRow>());
         ConfigureQuests(modelBuilder.Entity<CharacterQuestRow>());
         ConfigureSessionTokens(modelBuilder.Entity<SessionTokenRow>());
+        ConfigureSkills(modelBuilder.Entity<CharacterSkillRow>());
 
         foreach (IMutableEntityType entity in modelBuilder.Model.GetEntityTypes())
         {
@@ -210,6 +214,20 @@ internal sealed class EvertorchDbContext : DbContext
             .HasForeignKey(row => row.CharacterId)
             .OnDelete(DeleteBehavior.Restrict)
             .HasConstraintName("fk_character_quests_characters");
+    }
+
+    private static void ConfigureSkills(EntityTypeBuilder<CharacterSkillRow> skill)
+    {
+        skill.ToTable("character_skills", table => table.HasCheckConstraint(
+            "ck_character_skills_level",
+            $"level BETWEEN 1 AND {ContentLimits.MaxSkillLevel}"));
+        skill.HasKey(row => new { row.CharacterId, row.SkillDefinitionId }).HasName("pk_character_skills");
+        skill.Property(row => row.SkillDefinitionId).HasMaxLength(MaxDefinitionIdLength).IsRequired();
+        skill.HasOne<CharacterRow>()
+            .WithMany()
+            .HasForeignKey(row => row.CharacterId)
+            .OnDelete(DeleteBehavior.Restrict)
+            .HasConstraintName("fk_character_skills_characters");
     }
 
     private static void ConfigureSessionTokens(EntityTypeBuilder<SessionTokenRow> token)

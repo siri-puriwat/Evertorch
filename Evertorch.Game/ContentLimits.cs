@@ -22,6 +22,11 @@ public static class ContentLimits
     /// </summary>
     public const int MaxPrimaryStat = 99;
 
+    /// <summary>
+    ///     The highest level a skill can have (Gameplay Systems §9).
+    /// </summary>
+    public const int MaxSkillLevel = 5;
+
     public const int MaxStatPercent = 1000;
     public const int MaxAttackSpeedPenalty = 200;
     public const int MaxDamageRatioPercent = 10_000;
