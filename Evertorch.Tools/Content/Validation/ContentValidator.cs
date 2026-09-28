@@ -209,6 +209,13 @@ public static class ContentValidator
                 job.Source,
                 "server.experienceTable",
                 diagnostics);
+            RequireReference(
+                experienceTables,
+                job.Definition.JobExperienceTable.Value,
+                "experience table",
+                job.Source,
+                "server.jobExperienceTable",
+                diagnostics);
             RequireJobSkills(job, skills, skillsById, diagnostics);
         }
     }

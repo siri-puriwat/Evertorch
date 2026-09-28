@@ -15,6 +15,13 @@ public static class ContentLimits
     public const int MaxExperienceLevels = MaxLevel - 1;
 
     public const int MaxStat = 9999;
+
+    /// <summary>
+    ///     The cap of a stored primary statistic (Gameplay Systems §2): stat points raise one no further, and a job starts
+    ///     within it.
+    /// </summary>
+    public const int MaxPrimaryStat = 99;
+
     public const int MaxStatPercent = 1000;
     public const int MaxAttackSpeedPenalty = 200;
     public const int MaxDamageRatioPercent = 10_000;

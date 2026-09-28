@@ -35,6 +35,7 @@ drops:
     amount: { min: 1, max: 2 }
 rewards:
   baseExperience: 25
+  jobExperience: 25
 client:
   prefab: monster_forest_crawler
   icon: monster_forest_crawler_icon

@@ -17,6 +17,7 @@ public sealed class JobDefinition
         MapDefinitionId startingMap,
         SkillDefinitionId basicAttack,
         ExperienceDefinitionId experienceTable,
+        ExperienceDefinitionId jobExperienceTable,
         IReadOnlyList<SkillDefinitionId> skills)
     {
         Id = id;
@@ -31,6 +32,7 @@ public sealed class JobDefinition
         StartingMap = startingMap;
         BasicAttack = basicAttack;
         ExperienceTable = experienceTable;
+        JobExperienceTable = jobExperienceTable;
         Skills = skills;
     }
 
@@ -58,6 +60,11 @@ public sealed class JobDefinition
     public SkillDefinitionId BasicAttack { get; }
 
     public ExperienceDefinitionId ExperienceTable { get; }
+
+    /// <summary>
+    ///     The table of the job's levels, which job experience fills (Gameplay Systems §2.1).
+    /// </summary>
+    public ExperienceDefinitionId JobExperienceTable { get; }
 
     /// <summary>
     ///     The skills the job knows from level 1 (Gameplay Systems §9).

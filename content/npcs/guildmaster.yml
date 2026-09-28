@@ -1,0 +1,7 @@
+id: npc.guildmaster
+displayName: Guildmaster
+server:
+  guild:
+    reset: true
+client:
+  prefab: npc_guildmaster

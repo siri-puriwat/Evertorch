@@ -117,6 +117,7 @@ internal static class ServerProjection
             writer.WriteString("startingMap", job.StartingMap.Value);
             writer.WriteString("basicAttack", job.BasicAttack.Value);
             writer.WriteString("experienceTable", job.ExperienceTable.Value);
+            writer.WriteString("jobExperienceTable", job.JobExperienceTable.Value);
             writer.WriteStartArray("skills");
             foreach (SkillDefinitionId skill in job.Skills)
             {
@@ -217,6 +218,7 @@ internal static class ServerProjection
             }
 
             writer.WriteEndArray();
+            writer.WriteBoolean("reset", npc.OffersReset);
             writer.WriteEndObject();
         }
 
@@ -236,6 +238,7 @@ internal static class ServerProjection
             writer.WriteString("monster", quest.Monster.Value);
             writer.WriteNumber("count", quest.Count);
             writer.WriteNumber("baseExperience", quest.BaseExperience);
+            writer.WriteNumber("jobExperience", quest.JobExperience);
             writer.WriteNumber("currency", quest.Currency);
             writer.WriteEndObject();
         }
@@ -271,6 +274,7 @@ internal static class ServerProjection
             writer.WriteNumber("scanIntervalMs", monster.ScanIntervalMs);
             writer.WriteNumber("keepDistance", monster.KeepDistance);
             writer.WriteNumber("baseExperience", monster.BaseExperience);
+            writer.WriteNumber("jobExperience", monster.JobExperience);
             writer.WriteStartArray("drops");
             foreach (MonsterDrop drop in monster.Drops)
             {

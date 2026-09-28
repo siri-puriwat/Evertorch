@@ -135,19 +135,22 @@ public sealed class ServerContentNpcTests
     }
 
     [Test]
-    public void Load_ForRepositoryContent_ReadsBothNpcsAndTheHunt()
+    public void Load_ForRepositoryContent_ReadsTheThreeNpcsAndTheHunt()
     {
         ServerContent content = ServerContentLoader.Load(PackageFixture.BuildRepositoryPackage());
 
         Assert.That(
             content.Npcs.Keys.Select(id => id.Value),
-            Is.EquivalentTo(new[] { "npc.gate_warden", "npc.quartermaster" }));
+            Is.EquivalentTo(new[] { "npc.gate_warden", "npc.guildmaster", "npc.quartermaster" }));
         Assert.That(content.Npcs[new NpcDefinitionId(Quartermaster)].Shop, Has.Count.EqualTo(5));
         Assert.That(content.Npcs[new NpcDefinitionId("npc.gate_warden")].HasShop, Is.False);
+        Assert.That(
+            content.Npcs.Values.Where(npc => npc.OffersReset).Select(npc => npc.Id.Value),
+            Is.EqualTo(new[] { "npc.guildmaster" }));
         Assert.That(content.Quests.Keys.Select(id => id.Value), Is.EqualTo(new[] { "quest.crawler_hunt" }));
         Assert.That(
             content.Maps[new MapDefinitionId(Ground)].Npcs.Select(npc => npc.Npc.Value),
-            Is.EqualTo(new[] { Quartermaster, "npc.gate_warden" }));
+            Is.EqualTo(new[] { Quartermaster, "npc.gate_warden", "npc.guildmaster" }));
         Assert.That(content.Maps[new MapDefinitionId("map.training_field")].Npcs, Is.Empty);
     }
 
@@ -178,7 +181,8 @@ public sealed class ServerContentNpcTests
             Is.EqualTo(
                 new[]
                 {
-                    "quests.json: definitions[0].baseExperience: a quest must reward base experience, coins, or both"
+                    "quests.json: definitions[0].baseExperience: a quest must reward base experience, job "
+                    + "experience, or coins"
                 }));
     }
 

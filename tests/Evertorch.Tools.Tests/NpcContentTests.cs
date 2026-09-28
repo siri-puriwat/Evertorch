@@ -153,7 +153,7 @@ public sealed class NpcContentTests
     }
 
     [Test]
-    public void Run_ForRepositoryContent_PlacesBothNpcs_AndTheHuntIsTheGateWardens()
+    public void Run_ForRepositoryContent_PlacesTheThreeNpcs_AndTheHuntIsTheGateWardens()
     {
         ContentPipelineResult result = ContentPipeline.Run(
             Path.Combine(ContentValidationTests.RepositoryRoot(), "content"));
@@ -162,7 +162,16 @@ public sealed class NpcContentTests
         AuthoredMap ground = result.Content.Maps.Single(map => map.Definition.Id.Value == "map.training_ground");
         Assert.That(
             ground.Definition.Npcs.Select(npc => (npc.Npc.Value, npc.Position.X, npc.Position.Z)),
-            Is.EqualTo(new[] { ("npc.quartermaster", -3.5f, 4.5f), ("npc.gate_warden", 20.5f, 3.5f) }));
+            Is.EqualTo(
+                new[]
+                {
+                    ("npc.quartermaster", -3.5f, 4.5f), ("npc.gate_warden", 20.5f, 3.5f),
+                    ("npc.guildmaster", 4.5f, -4.5f)
+                }));
+        Assert.That(
+            result.Content.Npcs.Where(npc => npc.Definition.OffersReset).Select(npc => npc.Definition.Id.Value),
+            Is.EqualTo(new[] { "npc.guildmaster" }),
+            "only the Guildmaster resets");
         AuthoredNpc quartermaster = result.Content.Npcs.Single(npc => npc.Definition.Id.Value == "npc.quartermaster");
         Assert.That(
             quartermaster.Definition.Shop.Select(entry => (entry.Item.Value, entry.Price)),
@@ -233,6 +242,27 @@ public sealed class NpcContentTests
                 Definition(result.Packages!.Server, "npcs.json", "npc.quartermaster").GetProperty("shop")
                     .GetArrayLength(),
                 Is.Zero);
+        }
+    }
+
+    [Test]
+    public void Run_WhenAnNpcOffersTheResetAlone_IsValid_AndTheServerPackageSaysSo()
+    {
+        using (var workspace = new ContentWorkspace())
+        {
+            workspace.Replace(
+                Npc,
+                "  shop:\n    - item: item.material.slime_gel\n      price: 146443\n",
+                "  guild:\n    reset: true\n");
+
+            ContentPipelineResult result = ContentPipeline.Run(workspace.ContentRoot);
+
+            Assert.That(result.Diagnostics, Is.Empty, Describe(result));
+            NpcDefinition npc = result.Content.Npcs.Single().Definition;
+            Assert.That((npc.HasShop, npc.OffersReset), Is.EqualTo((false, true)));
+            Assert.That(
+                Definition(result.Packages!.Server, "npcs.json", "npc.quartermaster").GetProperty("reset").GetBoolean(),
+                Is.True);
         }
     }
 

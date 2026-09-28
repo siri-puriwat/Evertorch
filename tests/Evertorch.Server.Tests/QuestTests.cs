@@ -210,8 +210,8 @@ public sealed class QuestTests
     }
 
     // The vectors "Near the cap" and "At the cap": the level stops at the table's cap, where experience stays 0.
-    [TestCase(9, 460L, 10, 0L)]
-    [TestCase(10, 0L, 10, 0L)]
+    [TestCase(14, 1060L, 15, 0L)]
+    [TestCase(15, 0L, 15, 0L)]
     public void TurnIn_NearOrAtTheLevelCap_StopsAtTheCap_AndStillPays(
         int level,
         long experience,

@@ -489,6 +489,7 @@ public static class ServerContentLoader
         }
 
         int baseExperience = entry.RequiredInt("baseExperience", 0, ContentLimits.MaxExperience);
+        int jobExperience = entry.RequiredInt("jobExperience", 0, ContentLimits.MaxExperience);
 
         var drops = new List<MonsterDrop>();
         foreach (PackageObjectReader drop in entry.RequiredObjectArray("drops"))
@@ -559,6 +560,7 @@ public static class ServerContentLoader
             scanIntervalMs,
             keepDistance,
             baseExperience,
+            jobExperience,
             drops.AsReadOnly(),
             skills.AsReadOnly());
     }
@@ -663,12 +665,12 @@ public static class ServerContentLoader
         PackageObjectReader? stats = entry.RequiredObject("startingStats");
         if (stats != null)
         {
-            str = stats.RequiredInt("str", 0, ContentLimits.MaxStat);
-            agi = stats.RequiredInt("agi", 0, ContentLimits.MaxStat);
-            vit = stats.RequiredInt("vit", 0, ContentLimits.MaxStat);
-            intelligence = stats.RequiredInt("int", 0, ContentLimits.MaxStat);
-            dex = stats.RequiredInt("dex", 0, ContentLimits.MaxStat);
-            luk = stats.RequiredInt("luk", 0, ContentLimits.MaxStat);
+            str = stats.RequiredInt("str", 0, ContentLimits.MaxPrimaryStat);
+            agi = stats.RequiredInt("agi", 0, ContentLimits.MaxPrimaryStat);
+            vit = stats.RequiredInt("vit", 0, ContentLimits.MaxPrimaryStat);
+            intelligence = stats.RequiredInt("int", 0, ContentLimits.MaxPrimaryStat);
+            dex = stats.RequiredInt("dex", 0, ContentLimits.MaxPrimaryStat);
+            luk = stats.RequiredInt("luk", 0, ContentLimits.MaxPrimaryStat);
             stats.ReportUnexpectedProperties();
         }
 
@@ -685,6 +687,9 @@ public static class ServerContentLoader
         SkillDefinitionId basicAttack = entry.RequiredId<SkillDefinitionId>("basicAttack", SkillDefinitionId.TryCreate);
         ExperienceDefinitionId experienceTable = entry.RequiredId<ExperienceDefinitionId>(
             "experienceTable",
+            ExperienceDefinitionId.TryCreate);
+        ExperienceDefinitionId jobExperienceTable = entry.RequiredId<ExperienceDefinitionId>(
+            "jobExperienceTable",
             ExperienceDefinitionId.TryCreate);
         var skills = new List<SkillDefinitionId>();
         IReadOnlyList<string> skillTexts = entry.RequiredStringArray("skills");
@@ -725,6 +730,7 @@ public static class ServerContentLoader
             startingMap,
             basicAttack,
             experienceTable,
+            jobExperienceTable,
             skills.AsReadOnly());
     }
 
@@ -747,8 +753,11 @@ public static class ServerContentLoader
             shop.Add(new ShopEntry(item, price));
         }
 
+        bool offersReset = entry.RequiredBool("reset");
         entry.ReportUnexpectedProperties();
-        return problems.Count == problemsBefore ? new NpcDefinition(id, displayName, shop.AsReadOnly()) : null;
+        return problems.Count == problemsBefore
+            ? new NpcDefinition(id, displayName, shop.AsReadOnly(), offersReset)
+            : null;
     }
 
     private static QuestDefinition? ReadQuest(PackageObjectReader entry, QuestDefinitionId id, List<string> problems)
@@ -759,15 +768,16 @@ public static class ServerContentLoader
         MonsterDefinitionId monster = entry.RequiredId<MonsterDefinitionId>("monster", MonsterDefinitionId.TryCreate);
         int count = entry.RequiredInt("count", 1, ContentLimits.MaxKillCount);
         int baseExperience = entry.RequiredInt("baseExperience", 0, ContentLimits.MaxExperience);
+        int jobExperience = entry.RequiredInt("jobExperience", 0, ContentLimits.MaxExperience);
         int currency = entry.RequiredInt("currency", 0, ContentLimits.MaxCurrency);
         entry.ReportUnexpectedProperties();
-        if (problems.Count == problemsBefore && baseExperience == 0 && currency == 0)
+        if (problems.Count == problemsBefore && baseExperience == 0 && jobExperience == 0 && currency == 0)
         {
-            entry.Report("baseExperience", "a quest must reward base experience, coins, or both");
+            entry.Report("baseExperience", "a quest must reward base experience, job experience, or coins");
         }
 
         return problems.Count == problemsBefore
-            ? new QuestDefinition(id, displayName, giver, monster, count, baseExperience, currency)
+            ? new QuestDefinition(id, displayName, giver, monster, count, baseExperience, jobExperience, currency)
             : null;
     }
 
@@ -1131,6 +1141,11 @@ public static class ServerContentLoader
             if (!declaredExperienceTables.Contains(job.ExperienceTable))
             {
                 problems.Add($"{JobsFile}: {job.Id}: uses unknown experience table '{job.ExperienceTable}'");
+            }
+
+            if (!declaredExperienceTables.Contains(job.JobExperienceTable))
+            {
+                problems.Add($"{JobsFile}: {job.Id}: uses unknown job experience table '{job.JobExperienceTable}'");
             }
 
             if (skills.TryGetValue(job.BasicAttack, out SkillDefinition? basicAttack) && basicAttack.DamageType == null)

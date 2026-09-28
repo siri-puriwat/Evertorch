@@ -21,7 +21,8 @@ public sealed class ContentProjectionTests
         "3917", "3918", "73219", "73220", "54321", "7613", "2917", "1553", "1027", "4.0625", "1.5625", "12347",
         "6.125", "12.375", "0.7321", "1.8125", "60413", "8123", "20417", "3119", "5.1875", "3.4375", "7.5625",
         "12.6875", "14.3125", "6.875", "86421", "6.4375", "4111", "5227", "139", "30211", "50423", "80637", "77173",
-        "1.6875", "4127", "3171", "7193", "5231", "21133", "1319", "146443", "61933", "71129", "0.6875", "0.3125"
+        "1.6875", "4127", "3171", "7193", "5231", "21133", "1319", "146443", "61933", "71129", "0.6875", "0.3125",
+        "40111", "40223", "77191", "61949"
     };
 
     private static readonly string[] ServerOnlyFieldNames =
@@ -37,7 +38,7 @@ public sealed class ContentProjectionTests
         "damageRatio", "healHp", "statPercent", "status", "durationMs", "portals", "destination", "magicAttack",
         "keepDistance", "skill", "equipment",
         "attack", "attackSpeedPenalty", "defense", "bonus", "sp", "shop", "price", "npcs", "npc", "giver", "objective",
-        "kill", "monster", "count", "currency"
+        "kill", "monster", "count", "currency", "jobExperienceTable", "jobExperience", "guild", "reset"
     };
 
     // The client package's allow-list (Content Pipeline §5), by file: a name not reviewed here fails.
@@ -67,7 +68,7 @@ public sealed class ContentProjectionTests
     private static readonly string[] FlattenedAuthoringSections =
     {
         "server", "stats", "movement", "combat", "ai", "amount", "health", "spirit", "idlePauseMs", "rewards",
-        "castTimeMs", "damage", "ratio", "heal", "objective", "kill"
+        "castTimeMs", "damage", "ratio", "heal", "objective", "kill", "guild"
     };
 
     private static ContentPackages BuildValid(ContentWorkspace workspace)
@@ -333,8 +334,18 @@ public sealed class ContentProjectionTests
                 FirstDefinition(packages.Server, "jobs.json").GetProperty("experienceTable").GetString(),
                 Is.EqualTo("experience.adventurer"));
             Assert.That(
+                FirstDefinition(packages.Server, "jobs.json").GetProperty("jobExperienceTable").GetString(),
+                Is.EqualTo("experience.adventurer_job"));
+            Assert.That(
                 FirstDefinition(packages.Server, "monsters.json").GetProperty("baseExperience").GetInt32(),
                 Is.EqualTo(77173));
+            Assert.That(
+                FirstDefinition(packages.Server, "monsters.json").GetProperty("jobExperience").GetInt32(),
+                Is.EqualTo(77191));
+            Assert.That(
+                FirstDefinition(packages.Server, "quests.json").GetProperty("jobExperience").GetInt32(),
+                Is.EqualTo(61949));
+            Assert.That(FirstDefinition(packages.Server, "npcs.json").GetProperty("reset").GetBoolean(), Is.False);
             Assert.That(packages.Client.DataFiles.Select(file => file.Path), Does.Not.Contain("experience.json"));
         }
     }

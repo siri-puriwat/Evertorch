@@ -6,4 +6,5 @@ server:
     kill: { monster: monster.training_slime, count: 7 }
   rewards:
     baseExperience: 61933
+    jobExperience: 61949
     currency: 71129

@@ -10,11 +10,16 @@ namespace Evertorch.Game
 /// </summary>
 public sealed class NpcDefinition
 {
-    public NpcDefinition(NpcDefinitionId id, string displayName, IReadOnlyList<ShopEntry>? shop = null)
+    public NpcDefinition(
+        NpcDefinitionId id,
+        string displayName,
+        IReadOnlyList<ShopEntry>? shop = null,
+        bool offersReset = false)
     {
         Id = id;
         DisplayName = displayName;
         Shop = shop ?? Array.Empty<ShopEntry>();
+        OffersReset = offersReset;
     }
 
     public NpcDefinitionId Id { get; }
@@ -27,5 +32,10 @@ public sealed class NpcDefinition
     public IReadOnlyList<ShopEntry> Shop { get; }
 
     public bool HasShop => Shop.Count > 0;
+
+    /// <summary>
+    ///     Whether the NPC is a Guildmaster, who returns every stat and skill point (Gameplay Systems §6.1).
+    /// </summary>
+    public bool OffersReset { get; }
 }
 }

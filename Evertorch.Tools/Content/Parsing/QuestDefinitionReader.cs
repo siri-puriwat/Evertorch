@@ -37,10 +37,13 @@ internal static class QuestDefinitionReader
         int errorsBeforeRewards = diagnostics.Count;
         YamlFieldReader rewards = server.RequiredMapping("rewards");
         int baseExperience = rewards.RequiredInt("baseExperience", 0, ContentLimits.MaxExperience);
+        int jobExperience = rewards.Has("jobExperience")
+            ? rewards.RequiredInt("jobExperience", 0, ContentLimits.MaxExperience)
+            : 0;
         int currency = rewards.RequiredInt("currency", 0, ContentLimits.MaxCurrency);
-        if (diagnostics.Count == errorsBeforeRewards && baseExperience == 0 && currency == 0)
+        if (diagnostics.Count == errorsBeforeRewards && baseExperience == 0 && jobExperience == 0 && currency == 0)
         {
-            server.ReportField("rewards", "must give base experience, coins, or both");
+            server.ReportField("rewards", "must give base experience, job experience, or coins");
         }
 
         root.ReportUnknownFields();
@@ -49,7 +52,15 @@ internal static class QuestDefinitionReader
             return null;
         }
 
-        var definition = new QuestDefinition(id, displayName, giver, monster, count, baseExperience, currency);
+        var definition = new QuestDefinition(
+            id,
+            displayName,
+            giver,
+            monster,
+            count,
+            baseExperience,
+            jobExperience,
+            currency);
         return new AuthoredQuest(root.ToSource(), definition);
     }
 }

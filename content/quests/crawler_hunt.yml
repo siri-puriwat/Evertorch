@@ -6,4 +6,5 @@ server:
     kill: { monster: monster.forest_crawler, count: 5 }
   rewards:
     baseExperience: 150
+    jobExperience: 150
     currency: 100

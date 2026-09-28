@@ -1,0 +1,4 @@
+# The Adventurer's job levels, 1 to 10. Every reward gives as much job experience as base experience, so the job
+# level keeps pace with the base level up to 10.
+id: experience.adventurer_job
+levels: [30, 50, 80, 120, 170, 230, 300, 380, 470]

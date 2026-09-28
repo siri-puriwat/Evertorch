@@ -26,6 +26,7 @@ public sealed class MonsterDefinition
         int scanIntervalMs,
         double keepDistance,
         int baseExperience,
+        int jobExperience,
         IReadOnlyList<MonsterDrop> drops,
         IReadOnlyList<MonsterSkill> skills)
     {
@@ -50,6 +51,7 @@ public sealed class MonsterDefinition
         ScanIntervalMs = scanIntervalMs;
         KeepDistance = keepDistance;
         BaseExperience = baseExperience;
+        JobExperience = jobExperience;
         Drops = drops;
         Skills = skills;
     }
@@ -108,6 +110,11 @@ public sealed class MonsterDefinition
     ///     gives none.
     /// </summary>
     public int BaseExperience { get; }
+
+    /// <summary>
+    ///     The job experience shared the same way as <see cref="BaseExperience" />; 0 gives none.
+    /// </summary>
+    public int JobExperience { get; }
 
     public IReadOnlyList<MonsterDrop> Drops { get; }
 

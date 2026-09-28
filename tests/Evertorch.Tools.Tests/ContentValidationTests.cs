@@ -27,7 +27,9 @@ public sealed class ContentValidationTests
     private const string Npc = "npcs/quartermaster.yml";
     private const string Quest = "quests/slime_hunt.yml";
     private const string NpcPosition = "position: { x: -1.5, y: 0.0, z: -3.5 }";
-    private const string Rewards = "    baseExperience: 61933\n    currency: 71129";
+    private const string ShopEnd = "      price: 146443\n";
+    private const string MonsterRewards = "rewards:\n  baseExperience: 77173\n  jobExperience: 77191";
+    private const string Rewards = "    baseExperience: 61933\n    jobExperience: 61949\n    currency: 71129";
 
     [TestCase(Potion, "id: item.consumable.minor_health", "id: Item.Consumable.MinorHealth", "id", "not a valid ID")]
     [TestCase(Potion, "id: item.consumable.minor_health", "id: item..minor_health", "id", "not a valid ID")]
@@ -165,8 +167,20 @@ public sealed class ContentValidationTests
     [TestCase(Experience, Levels, "levels: []", "levels", "must list between 1 and 998 levels")]
     [TestCase(Experience, Levels, Levels + "\ncap: 4", "cap", "unknown field")]
     [TestCase(Monster, "baseExperience: 77173", "baseExperience: -1", "rewards.baseExperience", "between 0 and")]
-    [TestCase(Monster, "rewards:\n  baseExperience: 77173", "rewards: {}", "rewards.baseExperience", "required field")]
-    [TestCase(Monster, "rewards:\n  baseExperience: 77173", "rewards: 77173", "rewards", "must be a mapping")]
+    [TestCase(Monster, MonsterRewards, "rewards: {}", "rewards.baseExperience", "required field")]
+    [TestCase(Monster, MonsterRewards, "rewards: 77173", "rewards", "must be a mapping")]
+    [TestCase(Monster, "jobExperience: 77191", "jobExperience: -1", "rewards.jobExperience", "between 0 and")]
+    [TestCase(
+        Job,
+        "jobExperienceTable: experience.adventurer_job",
+        "jobExperienceTable: experience.missing",
+        "server.jobExperienceTable",
+        "references unknown experience table 'experience.missing'")]
+    [TestCase(Job, "  jobExperienceTable: experience.adventurer_job\n", "", "server.jobExperienceTable", "required")]
+    [TestCase(Job, "str: 5,", "str: 100,", "server.startingStats.str", "between 0 and 99")]
+    [TestCase(Npc, ShopEnd, ShopEnd + "  guild:\n    reset: yes\n", "server.guild.reset", "must be true or false")]
+    [TestCase(Npc, ShopEnd, ShopEnd + "  guild:\n    reset: 1\n", "server.guild.reset", "must be true or false")]
+    [TestCase(Npc, ShopEnd, ShopEnd + "  guild: {}\n", "server.guild.reset", "required field")]
     [TestCase(
         Map,
         "        map: map.training_ground",
@@ -280,9 +294,10 @@ public sealed class ContentValidationTests
     [TestCase(
         Quest,
         Rewards,
-        "    baseExperience: 0\n    currency: 0",
+        "    baseExperience: 0\n    jobExperience: 0\n    currency: 0",
         "server.rewards",
-        "must give base experience, coins, or both")]
+        "must give base experience, job experience, or coins")]
+    [TestCase(Quest, "jobExperience: 61949", "jobExperience: -1", "server.rewards.jobExperience", "between 0 and")]
     [TestCase(Quest, "currency: 71129", "currency: 1000000001", "server.rewards.currency", "between 0 and")]
     [TestCase(Quest, "baseExperience: 61933", "baseExperience: -1", "server.rewards.baseExperience", "between 0 and")]
     [TestCase(Quest, "    currency: 71129\n", "", "server.rewards.currency", "required field is missing")]
@@ -473,7 +488,7 @@ public sealed class ContentValidationTests
             Assert.That(result.Content.Skills, Has.Count.EqualTo(3));
             Assert.That(result.Content.Jobs, Has.Count.EqualTo(1));
             Assert.That(result.Content.Maps, Has.Count.EqualTo(1));
-            Assert.That(result.Content.ExperienceTables, Has.Count.EqualTo(1));
+            Assert.That(result.Content.ExperienceTables, Has.Count.EqualTo(2));
             Assert.That(result.Content.StatusEffects, Has.Count.EqualTo(1));
             Assert.That(result.Content.Npcs, Has.Count.EqualTo(1));
             Assert.That(result.Content.Quests, Has.Count.EqualTo(1));
@@ -506,12 +521,13 @@ public sealed class ContentValidationTests
     {
         using (var workspace = new ContentWorkspace())
         {
-            workspace.Replace(Monster, "rewards:\n  baseExperience: 77173\n", "");
+            workspace.Replace(Monster, MonsterRewards + "\n", "");
 
             ContentPipelineResult result = ContentPipeline.Run(workspace.ContentRoot);
 
             Assert.That(result.Diagnostics, Is.Empty, Describe(result));
             Assert.That(result.Content.Monsters.Single().Definition.BaseExperience, Is.Zero);
+            Assert.That(result.Content.Monsters.Single().Definition.JobExperience, Is.Zero);
         }
     }
 

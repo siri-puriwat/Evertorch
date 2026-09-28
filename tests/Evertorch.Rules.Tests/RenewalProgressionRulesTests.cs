@@ -72,6 +72,58 @@ public sealed class RenewalProgressionRulesTests
         Assert.That(m_rules.ExperienceToNextLevel(Table, level), Is.EqualTo(expected));
     }
 
+    // Each base level L from 2 grants 3 + floor(L / 5) stat points (Gameplay Systems §2).
+    [TestCase(1, 0)]
+    [TestCase(2, 3)]
+    [TestCase(4, 3)]
+    [TestCase(5, 4)]
+    [TestCase(9, 4)]
+    [TestCase(10, 5)]
+    [TestCase(14, 5)]
+    [TestCase(15, 6)]
+    public void StatPointsForLevel_ForBaseLevel_GrantsThreePlusAFifth(int level, int points)
+    {
+        Assert.That(m_rules.StatPointsForLevel(level), Is.EqualTo(points));
+    }
+
+    // In all: 9 by level 4, 29 by level 9, 54 by level 14, and 60 at the cap of 15.
+    [TestCase(0, 0)]
+    [TestCase(1, 0)]
+    [TestCase(2, 3)]
+    [TestCase(4, 9)]
+    [TestCase(5, 13)]
+    [TestCase(9, 29)]
+    [TestCase(10, 34)]
+    [TestCase(14, 54)]
+    [TestCase(15, 60)]
+    public void StatPointsGranted_UpToBaseLevel_SumsEveryLevelFromTwo(int level, int points)
+    {
+        Assert.That(m_rules.StatPointsGranted(level), Is.EqualTo(points));
+    }
+
+    // Raising a statistic from x costs 2 + floor((x - 1) / 10).
+    [TestCase(0, 2)]
+    [TestCase(1, 2)]
+    [TestCase(5, 2)]
+    [TestCase(10, 2)]
+    [TestCase(11, 3)]
+    [TestCase(20, 3)]
+    [TestCase(21, 4)]
+    [TestCase(98, 11)]
+    public void StatRaiseCost_FromValue_GrowsEveryTenPoints(int value, int cost)
+    {
+        Assert.That(m_rules.StatRaiseCost(value), Is.EqualTo(cost));
+    }
+
+    [TestCase(1, 0)]
+    [TestCase(2, 1)]
+    [TestCase(6, 5)]
+    [TestCase(10, 9)]
+    public void SkillPointsGranted_UpToJobLevel_GrantsOnePerLevelFromTwo(int jobLevel, int points)
+    {
+        Assert.That(m_rules.SkillPointsGranted(jobLevel), Is.EqualTo(points));
+    }
+
     [Test]
     public void LevelProgress_BelowLevelOneOrWithNegativeExperience_Throws()
     {
@@ -88,6 +140,12 @@ public sealed class RenewalProgressionRulesTests
         long share = m_rules.ShareExperience(1_000_000_000, 4_000_000_000_000_000_000, 8_000_000_000_000_000_000);
 
         Assert.That(share, Is.EqualTo(500_000_000));
+    }
+
+    [Test]
+    public void StatCap_Is99()
+    {
+        Assert.That(m_rules.StatCap, Is.EqualTo(99));
     }
 }
 }

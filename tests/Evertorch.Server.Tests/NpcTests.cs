@@ -16,6 +16,7 @@ public sealed class NpcTests
 {
     private const string Quartermaster = "npc.quartermaster";
     private const string GateWarden = "npc.gate_warden";
+    private const string Guildmaster = "npc.guildmaster";
     private const int GraceMs = 1000;
 
     private static readonly MapDefinitionId Ground = new("map.training_ground");
@@ -74,8 +75,8 @@ public sealed class NpcTests
             .ToArray();
     }
 
-    // The field's portal lands a player east of x = 16, where only the Gate Warden's interest cell is in view; the
-    // Quartermaster comes into view once the player walks west of it.
+    // The field's portal lands a player east of x = 16, where the Gate Warden's interest cell and, diagonally, the
+    // Guildmaster's are in view; the Quartermaster comes into view once the player walks west of it.
     [Test]
     public void CrossingBack_TellsTheGateWardenOnArrival_AndTheQuartermasterOnceThePlayerWalksWestOfSixteen()
     {
@@ -85,7 +86,7 @@ public sealed class NpcTests
         server.Tick();
         Assert.That(server.SessionOf(player).Character!.Map.Definition.Id, Is.EqualTo(Field), "crossed");
         server.Tick(TestServer.TickRate);
-        Assert.That(NpcsToldTo(server, player).Length, Is.EqualTo(2), "both were told before the crossing");
+        Assert.That(NpcsToldTo(server, player).Length, Is.EqualTo(3), "all three were told before the crossing");
         server.Transport.ClearSent();
 
         StandIn(server, player, Field);
@@ -99,20 +100,20 @@ public sealed class NpcTests
         server.Tick(2);
 
         Assert.That(server.SessionOf(player).Character!.Map.Definition.Id, Is.EqualTo(Ground), "back in town");
-        Assert.That(onArrival, Is.EqualTo(new[] { GateWarden }));
+        Assert.That(onArrival, Is.EquivalentTo(new[] { GateWarden, Guildmaster }));
         Assert.That(eastOfSixteen, Is.Empty);
         Assert.That(NpcsToldTo(server, player), Is.EqualTo(new[] { Quartermaster }));
     }
 
     [Test]
-    public void Entering_AtTheSpawn_TellsBothNpcsEachFollowedByItsServices_Once()
+    public void Entering_AtTheSpawn_TellsEveryNpcEachFollowedByItsServices_Once()
     {
         var server = new TestServer(withNpcs: true);
 
         ConnectionId player = server.EnterWorld(1);
         server.Tick(5);
 
-        Assert.That(NpcsToldTo(server, player), Is.EquivalentTo(new[] { GateWarden, Quartermaster }));
+        Assert.That(NpcsToldTo(server, player), Is.EquivalentTo(new[] { GateWarden, Quartermaster, Guildmaster }));
     }
 
     [Test]
@@ -145,7 +146,7 @@ public sealed class NpcTests
 
         Assert.That(
             server.World.Maps.SelectMany(map => map.Npcs).Select(npc => npc.DefinitionId),
-            Is.EquivalentTo(new[] { GateWarden, Quartermaster }));
+            Is.EquivalentTo(new[] { GateWarden, Quartermaster, Guildmaster }));
         Assert.That(withoutNpcs.World.Maps.SelectMany(map => map.Npcs), Is.Empty, "a test asks for them");
     }
 
@@ -166,7 +167,7 @@ public sealed class NpcTests
         server.Tick(2);
 
         Assert.That(server.PlayerOf(second).Id, Is.EqualTo(entity), "the same body, attached again");
-        Assert.That(NpcsToldTo(server, second), Is.EquivalentTo(new[] { GateWarden, Quartermaster }));
+        Assert.That(NpcsToldTo(server, second), Is.EquivalentTo(new[] { GateWarden, Quartermaster, Guildmaster }));
     }
 
     // The shop trades its stock at the stock's prices and buys every item with a sell price at that price, sorted by

@@ -246,7 +246,12 @@ public sealed class NavigationContentTests
         Assert.That(markers, Is.EquivalentTo(map.Npcs.Select(npc => npc.Position)));
         Assert.That(
             markers,
-            Is.EquivalentTo(new[] { new WorldPosition(-3.5f, 0f, 4.5f), new WorldPosition(20.5f, 0f, 3.5f) }));
+            Is.EquivalentTo(
+                new[]
+                {
+                    new WorldPosition(-3.5f, 0f, 4.5f), new WorldPosition(20.5f, 0f, 3.5f),
+                    new WorldPosition(4.5f, 0f, -4.5f)
+                }));
     }
 
     [Test]

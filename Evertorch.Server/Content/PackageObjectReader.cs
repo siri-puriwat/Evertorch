@@ -98,6 +98,24 @@ internal sealed class PackageObjectReader
         return number;
     }
 
+    public bool RequiredBool(string name)
+    {
+        m_requested.Add(name);
+        if (!m_element.TryGetProperty(name, out JsonElement value))
+        {
+            Report(name, "required property is missing");
+            return false;
+        }
+
+        if (value.ValueKind != JsonValueKind.True && value.ValueKind != JsonValueKind.False)
+        {
+            Report(name, "must be true or false");
+            return false;
+        }
+
+        return value.GetBoolean();
+    }
+
     public double RequiredDouble(string name)
     {
         if (!TryGet(name, JsonValueKind.Number, "a number", out JsonElement value))

@@ -30,12 +30,12 @@ internal static class JobDefinitionReader
         YamlFieldReader server = root.RequiredMapping("server");
 
         YamlFieldReader stats = server.RequiredMapping("startingStats");
-        int str = stats.RequiredInt("str", 0, ContentLimits.MaxStat);
-        int agi = stats.RequiredInt("agi", 0, ContentLimits.MaxStat);
-        int vit = stats.RequiredInt("vit", 0, ContentLimits.MaxStat);
-        int intelligence = stats.RequiredInt("int", 0, ContentLimits.MaxStat);
-        int dex = stats.RequiredInt("dex", 0, ContentLimits.MaxStat);
-        int luk = stats.RequiredInt("luk", 0, ContentLimits.MaxStat);
+        int str = stats.RequiredInt("str", 0, ContentLimits.MaxPrimaryStat);
+        int agi = stats.RequiredInt("agi", 0, ContentLimits.MaxPrimaryStat);
+        int vit = stats.RequiredInt("vit", 0, ContentLimits.MaxPrimaryStat);
+        int intelligence = stats.RequiredInt("int", 0, ContentLimits.MaxPrimaryStat);
+        int dex = stats.RequiredInt("dex", 0, ContentLimits.MaxPrimaryStat);
+        int luk = stats.RequiredInt("luk", 0, ContentLimits.MaxPrimaryStat);
 
         YamlFieldReader health = server.RequiredMapping("health");
         int healthBase = health.RequiredInt("base", 1, ContentLimits.MaxHp);
@@ -63,6 +63,10 @@ internal static class JobDefinitionReader
             "experienceTable",
             ExperienceDefinitionId.TryCreate,
             ExperienceDefinitionId.KindPrefix);
+        ExperienceDefinitionId jobExperienceTable = server.RequiredId<ExperienceDefinitionId>(
+            "jobExperienceTable",
+            ExperienceDefinitionId.TryCreate,
+            ExperienceDefinitionId.KindPrefix);
         List<SkillDefinitionId> skills = ReadSkills(server);
 
         YamlFieldReader client = root.RequiredMapping("client");
@@ -87,6 +91,7 @@ internal static class JobDefinitionReader
             startingMap,
             basicAttack,
             experienceTable,
+            jobExperienceTable,
             skills.AsReadOnly());
         return new AuthoredJob(root.ToSource(), definition, prefab);
     }

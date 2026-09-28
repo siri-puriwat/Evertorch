@@ -53,6 +53,7 @@ public sealed class DefinitionShapeTests
             new MapDefinitionId("map.training_ground"),
             new SkillDefinitionId("skill.basic_attack"),
             new ExperienceDefinitionId("experience.adventurer"),
+            new ExperienceDefinitionId("experience.adventurer_job"),
             new[] { new SkillDefinitionId("skill.strike") });
 
         Assert.That(job.Id.Value, Is.EqualTo("job.adventurer"));
@@ -67,6 +68,7 @@ public sealed class DefinitionShapeTests
         Assert.That(job.StartingMap.Value, Is.EqualTo("map.training_ground"));
         Assert.That(job.BasicAttack.Value, Is.EqualTo("skill.basic_attack"));
         Assert.That(job.ExperienceTable.Value, Is.EqualTo("experience.adventurer"));
+        Assert.That(job.JobExperienceTable.Value, Is.EqualTo("experience.adventurer_job"));
         Assert.That(job.Skills, Is.EqualTo(new[] { new SkillDefinitionId("skill.strike") }));
     }
 
@@ -173,6 +175,7 @@ public sealed class DefinitionShapeTests
             100,
             0.75,
             10,
+            12,
             new[] { drop },
             new[] { new MonsterSkill(new SkillDefinitionId("skill.spark_bolt"), 0.25) });
 
@@ -197,7 +200,7 @@ public sealed class DefinitionShapeTests
         Assert.That(monster.Behavior, Is.EqualTo(MonsterBehavior.Passive));
         Assert.That(monster.PerceptionRadius, Is.EqualTo(6.0));
         Assert.That(monster.LeashRadius, Is.EqualTo(12.0));
-        Assert.That(monster.BaseExperience, Is.EqualTo(10));
+        Assert.That((monster.BaseExperience, monster.JobExperience), Is.EqualTo((10, 12)));
         Assert.That(monster.Drops, Is.EqualTo(new[] { drop }));
         Assert.That(drop.Item.Value, Is.EqualTo("item.material.slime_gel"));
         Assert.That(drop.Chance, Is.EqualTo(0.35));
@@ -206,12 +209,13 @@ public sealed class DefinitionShapeTests
     }
 
     [Test]
-    public void NpcDefinition_WithAShop_ExposesIt_AndWithoutOneHasNone()
+    public void NpcDefinition_WithAShopOrAReset_ExposesThem_AndWithoutHasNone()
     {
         var potion = new ShopEntry(new ItemDefinitionId("item.consumable.minor_health"), 20);
         var quartermaster =
             new NpcDefinition(new NpcDefinitionId("npc.quartermaster"), "Quartermaster", new[] { potion });
         var warden = new NpcDefinition(new NpcDefinitionId("npc.gate_warden"), "Gate Warden");
+        var guildmaster = new NpcDefinition(new NpcDefinitionId("npc.guildmaster"), "Guildmaster", offersReset: true);
 
         Assert.That(quartermaster.Id.Value, Is.EqualTo("npc.quartermaster"));
         Assert.That(quartermaster.DisplayName, Is.EqualTo("Quartermaster"));
@@ -220,6 +224,8 @@ public sealed class DefinitionShapeTests
         Assert.That((potion.Item.Value, potion.Price), Is.EqualTo(("item.consumable.minor_health", 20)));
         Assert.That(warden.Shop, Is.Empty);
         Assert.That(warden.HasShop, Is.False);
+        Assert.That((quartermaster.OffersReset, warden.OffersReset), Is.EqualTo((false, false)));
+        Assert.That((guildmaster.OffersReset, guildmaster.HasShop), Is.EqualTo((true, false)));
     }
 
     [Test]
@@ -232,13 +238,16 @@ public sealed class DefinitionShapeTests
             new MonsterDefinitionId("monster.forest_crawler"),
             5,
             150,
+            160,
             100);
 
         Assert.That(quest.Id.Value, Is.EqualTo("quest.crawler_hunt"));
         Assert.That(quest.DisplayName, Is.EqualTo("Crawler Hunt"));
         Assert.That(quest.Giver.Value, Is.EqualTo("npc.gate_warden"));
         Assert.That(quest.Monster.Value, Is.EqualTo("monster.forest_crawler"));
-        Assert.That((quest.Count, quest.BaseExperience, quest.Currency), Is.EqualTo((5, 150, 100)));
+        Assert.That(
+            (quest.Count, quest.BaseExperience, quest.JobExperience, quest.Currency),
+            Is.EqualTo((5, 150, 160, 100)));
     }
 
     [Test]

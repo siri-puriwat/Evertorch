@@ -34,6 +34,7 @@ drops:
     amount: { min: 1, max: 2 }
 rewards:
   baseExperience: 30
+  jobExperience: 30
 client:
   prefab: monster_spark_wisp
   icon: monster_spark_wisp_icon

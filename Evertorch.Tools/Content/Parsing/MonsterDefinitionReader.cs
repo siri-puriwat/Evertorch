@@ -61,9 +61,16 @@ internal static class MonsterDefinitionReader
             ai.ReportField("keepDistance", "must be below combat.attackRange");
         }
 
-        int baseExperience = root.Has("rewards")
-            ? root.RequiredMapping("rewards").RequiredInt("baseExperience", 0, ContentLimits.MaxExperience)
-            : 0;
+        int baseExperience = 0;
+        int jobExperience = 0;
+        if (root.Has("rewards"))
+        {
+            YamlFieldReader rewards = root.RequiredMapping("rewards");
+            baseExperience = rewards.RequiredInt("baseExperience", 0, ContentLimits.MaxExperience);
+            jobExperience = rewards.Has("jobExperience")
+                ? rewards.RequiredInt("jobExperience", 0, ContentLimits.MaxExperience)
+                : 0;
+        }
 
         var drops = new List<MonsterDrop>();
         foreach (YamlFieldReader drop in root.OptionalMappingSequence("drops"))
@@ -121,6 +128,7 @@ internal static class MonsterDefinitionReader
             scanIntervalMs,
             keepDistance,
             baseExperience,
+            jobExperience,
             drops,
             skills);
         return new AuthoredMonster(root.ToSource(), definition, prefab, icon, projectile);

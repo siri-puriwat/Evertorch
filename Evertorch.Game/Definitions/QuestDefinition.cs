@@ -1,8 +1,8 @@
 namespace Evertorch.Game
 {
 /// <summary>
-///     A quest (Gameplay Systems §2.2): the NPC that gives it, one kill objective, and a reward of base experience and
-///     coins.
+///     A quest (Gameplay Systems §2.2): the NPC that gives it, one kill objective, and a reward of base experience, job
+///     experience, and coins.
 /// </summary>
 public sealed class QuestDefinition
 {
@@ -13,6 +13,7 @@ public sealed class QuestDefinition
         MonsterDefinitionId monster,
         int count,
         int baseExperience,
+        int jobExperience,
         int currency)
     {
         Id = id;
@@ -21,6 +22,7 @@ public sealed class QuestDefinition
         Monster = monster;
         Count = count;
         BaseExperience = baseExperience;
+        JobExperience = jobExperience;
         Currency = currency;
     }
 
@@ -41,6 +43,8 @@ public sealed class QuestDefinition
     public int Count { get; }
 
     public int BaseExperience { get; }
+
+    public int JobExperience { get; }
 
     /// <summary>
     ///     The coins the turn-in pays.

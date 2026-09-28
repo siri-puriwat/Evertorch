@@ -4,10 +4,13 @@ using Evertorch.Game;
 namespace Evertorch.Rules
 {
 /// <summary>
-///     Experience shares and levelling as the experience research note describes them (Gameplay Systems §2.1).
+///     Experience shares and levelling as the experience research note describes them (Gameplay Systems §2.1), and the
+///     stat and skill points of the Adventurer build (Gameplay Systems §2, §9).
 /// </summary>
 public sealed class RenewalProgressionRules : IProgressionRules
 {
+    public int StatCap => ContentLimits.MaxPrimaryStat;
+
     public long ShareExperience(long baseExperience, long damage, long totalDamage)
     {
         if (baseExperience <= 0 || damage <= 0 || totalDamage <= 0)
@@ -43,6 +46,32 @@ public sealed class RenewalProgressionRules : IProgressionRules
     public long ExperienceToNextLevel(ExperienceTableDefinition table, int level)
     {
         return level >= 1 && level <= table.Levels.Count ? table.Levels[level - 1] : 0;
+    }
+
+    public int StatPointsForLevel(int level)
+    {
+        return level < 2 ? 0 : 3 + level / 5;
+    }
+
+    public int StatPointsGranted(int level)
+    {
+        int granted = 0;
+        for (int reached = 2; reached <= level; reached++)
+        {
+            granted += StatPointsForLevel(reached);
+        }
+
+        return granted;
+    }
+
+    public int StatRaiseCost(int value)
+    {
+        return 2 + Math.Max(0, value - 1) / 10;
+    }
+
+    public int SkillPointsGranted(int jobLevel)
+    {
+        return Math.Max(0, jobLevel - 1);
     }
 }
 }

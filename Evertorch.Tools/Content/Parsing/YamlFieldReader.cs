@@ -157,6 +157,23 @@ public sealed class YamlFieldReader
         return value;
     }
 
+    public bool RequiredBool(string key)
+    {
+        YamlScalarNode? scalar = RequiredScalar(key);
+        if (scalar == null)
+        {
+            return false;
+        }
+
+        if (scalar.Style != ScalarStyle.Plain || (scalar.Value != "true" && scalar.Value != "false"))
+        {
+            Report(key, scalar, "must be true or false");
+            return false;
+        }
+
+        return scalar.Value == "true";
+    }
+
     public double RequiredDouble(string key, double min, double max, bool isMinExclusive)
     {
         YamlScalarNode? scalar = RequiredScalar(key);
