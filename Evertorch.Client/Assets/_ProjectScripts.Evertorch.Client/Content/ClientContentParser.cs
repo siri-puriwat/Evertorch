@@ -371,7 +371,14 @@ public static class ClientContentParser
                 return null;
             }
 
-            skills.Add(id, new ClientSkill(id, skill.displayName ?? string.Empty, targetType, skill.icon));
+            skills.Add(
+                id,
+                new ClientSkill(
+                    id,
+                    skill.displayName ?? string.Empty,
+                    targetType,
+                    skill.icon,
+                    skill.description ?? string.Empty));
         }
 
         return skills;
@@ -820,6 +827,7 @@ public static class ClientContentParser
         public string? displayName = string.Empty;
         public string? targetType = string.Empty;
         public string? icon = string.Empty;
+        public string? description = string.Empty;
     }
 
     [Serializable]

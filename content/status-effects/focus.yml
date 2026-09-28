@@ -1,6 +1,4 @@
 id: status.focus
 displayName: Focus
-server:
-  statPercent: { agi: 100, dex: 100 }
 client:
   icon: status_focus

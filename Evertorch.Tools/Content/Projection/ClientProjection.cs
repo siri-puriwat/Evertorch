@@ -163,6 +163,11 @@ internal static class ClientProjection
             writer.WriteString("displayName", skill.DisplayName);
             writer.WriteString("targetType", EnumText.Of(skill.TargetType));
             writer.WriteString("icon", authored.Icon);
+            if (authored.Description != null)
+            {
+                writer.WriteString("description", authored.Description);
+            }
+
             writer.WriteEndObject();
         }
 

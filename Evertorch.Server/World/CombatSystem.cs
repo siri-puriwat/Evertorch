@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using Evertorch.Game;
 using Evertorch.Protocol;
 using Evertorch.Rules;
@@ -100,9 +99,9 @@ public sealed class CombatSystem : ITickPhase
         long now = TickMilliseconds(tick);
         CombatState combat = player.Combat;
         if (player.IsDead
-            || !m_content.Jobs[player.Job].Skills.Contains(skillId)
+            || !player.Skills.TryGetValue(skillId, out int level)
             || !m_content.Skills.TryGetValue(skillId, out SkillDefinition? skill)
-            || skill.Effect == null
+            || !skill.HasEffect
             || combat.IsCasting
             || combat.IsSwinging
             || now < combat.DelayEndsMs
@@ -111,7 +110,8 @@ public sealed class CombatSystem : ITickPhase
             return CastRefusal.NotAllowedNow;
         }
 
-        if (player.CurrentSpirit < skill.SpCost)
+        SkillLevel values = skill.ValuesAt(level);
+        if (player.CurrentSpirit < values.SpCost)
         {
             return CastRefusal.NotEnoughSp;
         }
@@ -146,15 +146,15 @@ public sealed class CombatSystem : ITickPhase
         }
 
         CastTiming timing = m_skillRules.CalculateCastTiming(
-            new SkillContext(skill, AttackerKind.Character, player.Stats.VariableCastPermille));
+            new SkillContext(skill, level, AttackerKind.Character, player.Stats.VariableCastPermille));
         bool isPaidNow = skill.SpPaidAt == SkillPaymentPoint.CastStart;
-        if (isPaidNow && skill.SpCost > 0)
+        if (isPaidNow && values.SpCost > 0)
         {
-            player.CurrentSpirit -= skill.SpCost;
+            player.CurrentSpirit -= values.SpCost;
             m_sender.SendHealth(player);
         }
 
-        combat.BeginCast(skillId, resolvedOn.Id, now + timing.CastMs, isPaidNow);
+        combat.BeginCast(skillId, level, resolvedOn.Id, now + timing.CastMs, isPaidNow);
         AnnounceCastStarted(map, player, resolvedOn, skillId, tick, timing.CastMs);
         return CastRefusal.None;
     }
@@ -176,7 +176,7 @@ public sealed class CombatSystem : ITickPhase
         return !monster.IsDead
             && !target.IsDead
             && m_content.Skills.TryGetValue(skillId, out SkillDefinition? skill)
-            && skill.Effect != null
+            && skill.HasEffect
             && !combat.IsCasting
             && !combat.IsSwinging
             && now >= combat.DelayEndsMs
@@ -186,8 +186,8 @@ public sealed class CombatSystem : ITickPhase
     }
 
     /// <summary>
-    ///     Begins a cast <see cref="CanMonsterCast" /> allowed. A monster pays no SP, and its cast time is the skill's
-    ///     fixed and variable time together.
+    ///     Begins a cast <see cref="CanMonsterCast" /> allowed. A monster casts at level 1, pays no SP, and its cast
+    ///     time is the level's fixed and variable time together.
     /// </summary>
     public void BeginMonsterCast(
         MapInstance map,
@@ -197,9 +197,9 @@ public sealed class CombatSystem : ITickPhase
         uint tick)
     {
         SkillDefinition skill = m_content.Skills[skillId];
-        CastTiming timing = m_skillRules.CalculateCastTiming(new SkillContext(skill, AttackerKind.Monster, 0));
+        CastTiming timing = m_skillRules.CalculateCastTiming(new SkillContext(skill, 1, AttackerKind.Monster, 0));
         Face(monster, target);
-        monster.Combat.BeginCast(skillId, target.Id, TickMilliseconds(tick) + timing.CastMs, true);
+        monster.Combat.BeginCast(skillId, 1, target.Id, TickMilliseconds(tick) + timing.CastMs, true);
         AnnounceCastStarted(map, monster, target, skillId, tick, timing.CastMs);
     }
 
@@ -464,6 +464,8 @@ public sealed class CombatSystem : ITickPhase
     {
         CombatState combat = caster.Combat;
         SkillDefinition skill = m_content.Skills[combat.CastSkill];
+        int level = combat.CastLevel;
+        SkillLevel values = skill.ValuesAt(level);
         WorldEntity? target = caster;
         if (combat.CastTarget != caster.Id
             && (!map.TryGetEntity(combat.CastTarget, out target) || target == null || target.IsDead))
@@ -472,13 +474,14 @@ public sealed class CombatSystem : ITickPhase
             return;
         }
 
-        if (caster is PlayerEntity paying && !combat.IsCastPaid && skill.SpCost > 0)
+        if (caster is PlayerEntity paying && !combat.IsCastPaid && values.SpCost > 0)
         {
-            paying.CurrentSpirit = Math.Max(0, paying.CurrentSpirit - skill.SpCost);
+            paying.CurrentSpirit = Math.Max(0, paying.CurrentSpirit - values.SpCost);
             m_sender.SendHealth(paying);
         }
 
-        CastTiming timing = m_skillRules.CalculateCastTiming(CreateSkillContext(caster, target, skill, false));
+        CastTiming timing =
+            m_skillRules.CalculateCastTiming(CreateSkillContext(caster, target, skill, level, false));
         combat.CompleteCast(now, timing.AfterCastDelayMs, timing.CooldownMs);
         m_instruments.RecordCast(true);
 
@@ -492,12 +495,16 @@ public sealed class CombatSystem : ITickPhase
             }
         }
 
-        if (skill.Effect!.Kind == SkillEffectKind.Status)
+        if (values.Effect.Kind == SkillEffectKind.Status)
         {
             // Effects are players' alone this milestone; the content keeps them to skills on the caster (§9.1).
             if (target is PlayerEntity affected)
             {
-                m_statusEffects.Apply(affected, skill.Effect.Status, now + skill.Effect.StatusDurationMs);
+                m_statusEffects.Apply(
+                    affected,
+                    values.Effect.Status,
+                    values.Effect.StatPercent,
+                    now + values.Effect.StatusDurationMs);
             }
 
             AnnounceResolved(map, caster, target, skill.Id, SkillOutcome.Applied, 0, tick);
@@ -505,7 +512,7 @@ public sealed class CombatSystem : ITickPhase
         }
 
         SkillResolution resolution = m_skillRules.Resolve(
-            CreateSkillContext(caster, target, skill, skill.Effect!.Kind == SkillEffectKind.Damage));
+            CreateSkillContext(caster, target, skill, level, values.Effect.Kind == SkillEffectKind.Damage));
         if (resolution.Result == SkillResult.Healed)
         {
             target.CurrentHealth = Math.Min(target.MaxHealth, target.CurrentHealth + resolution.Amount);
@@ -574,24 +581,29 @@ public sealed class CombatSystem : ITickPhase
         }
     }
 
-    private SkillContext CreateSkillContext(WorldEntity caster, WorldEntity target, SkillDefinition skill,
+    private SkillContext CreateSkillContext(
+        WorldEntity caster,
+        WorldEntity target,
+        SkillDefinition skill,
+        int level,
         bool isDamage)
     {
         AttackerKind kind = caster is PlayerEntity ? AttackerKind.Character : AttackerKind.Monster;
         int permille = caster is PlayerEntity player ? player.Stats.VariableCastPermille : 0;
         if (isDamage && skill.DamageType == SkillDamageType.Magical)
         {
-            return new SkillContext(skill, kind, permille, CreateMagicContext(caster, target));
+            return new SkillContext(skill, level, kind, permille, CreateMagicContext(caster, target));
         }
 
         return isDamage
             ? new SkillContext(
                 skill,
+                level,
                 kind,
                 permille,
                 CreateHitContext(caster, target),
                 CreateDamageContext(caster, target, false))
-            : new SkillContext(skill, kind, permille);
+            : new SkillContext(skill, level, kind, permille);
     }
 
     // A monster's magic attack is its definition's, a player's its derived one. Nothing gives hard magic defense yet,

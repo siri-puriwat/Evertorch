@@ -48,6 +48,12 @@ public sealed class CombatState
     public SkillDefinitionId CastSkill { get; private set; }
 
     /// <summary>
+    ///     The level the cast began at; it resolves with that level's values whatever is learned meanwhile (Gameplay
+    ///     Systems §9).
+    /// </summary>
+    public int CastLevel { get; private set; }
+
+    /// <summary>
     ///     The entity the cast resolves on: the caster itself for a skill on itself.
     /// </summary>
     public EntityId CastTarget { get; private set; }
@@ -79,10 +85,11 @@ public sealed class CombatState
         SwingTarget = default;
     }
 
-    public void BeginCast(SkillDefinitionId skill, EntityId target, long resolveMs, bool isPaid)
+    public void BeginCast(SkillDefinitionId skill, int level, EntityId target, long resolveMs, bool isPaid)
     {
         IsCasting = true;
         CastSkill = skill;
+        CastLevel = level;
         CastTarget = target;
         CastResolveMs = resolveMs;
         IsCastPaid = isPaid;
@@ -95,6 +102,7 @@ public sealed class CombatState
     {
         IsCasting = false;
         CastSkill = default;
+        CastLevel = 0;
         CastTarget = default;
         IsCastPaid = false;
     }

@@ -4,9 +4,10 @@ targetType: enemy
 damageType: magical
 server:
   range: 6.0
-  castTimeMs: { fixed: 500, variable: 1000 }
-  cooldownMs: 5000
-  effect:
-    damage: { ratio: 100 }
+  levels:
+    - castTimeMs: { fixed: 500, variable: 1000 }
+      cooldownMs: 5000
+      effect:
+        damage: { ratio: 100 }
 client:
   icon: skill_spark_bolt

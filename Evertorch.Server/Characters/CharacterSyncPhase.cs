@@ -101,19 +101,26 @@ public sealed class CharacterSyncPhase : ITickPhase
     private SkillList CreateSkillList(PlayerEntity player, long now)
     {
         m_entries.Clear();
+        // The job's tree in its order, each skill learned at its learned level's values (Gameplay Systems §9).
         foreach (SkillDefinitionId id in m_content.Jobs[player.Job].Skills)
         {
+            if (!player.Skills.TryGetValue(id, out int level))
+            {
+                continue;
+            }
+
             SkillDefinition skill = m_content.Skills[id];
+            SkillLevel values = skill.ValuesAt(level);
             long end = player.Combat.CooldownEndMs(id);
             long remaining = end == long.MinValue ? 0 : Math.Max(0, end - now);
             m_entries.Add(
                 new SkillListEntry(
                     id,
                     (float)skill.Range,
-                    (uint)skill.SpCost,
-                    (uint)skill.CooldownMs,
-                    (uint)skill.AfterCastDelayMs,
-                    (uint)Math.Min(remaining, skill.CooldownMs)));
+                    (uint)values.SpCost,
+                    (uint)values.CooldownMs,
+                    (uint)values.AfterCastDelayMs,
+                    (uint)Math.Min(remaining, values.CooldownMs)));
         }
 
         return new SkillList(m_entries.ToArray());

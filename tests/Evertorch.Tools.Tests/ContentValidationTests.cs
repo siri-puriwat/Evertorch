@@ -127,9 +127,9 @@ public sealed class ContentValidationTests
     [TestCase(Skill, "targetType: enemy", "targetType: everyone", "targetType", "one of: enemy, self")]
     [TestCase(
         Strike,
-        "    damage: { ratio: 1319 }",
-        "    damage: { ratio: 1319 }\n    heal: { hp: 5 }",
-        "server.effect.damage",
+        "        damage: { ratio: 1319 }",
+        "        damage: { ratio: 1319 }\n        heal: { hp: 5 }",
+        "server.levels[0].effect.damage",
         "exactly one of damage, heal, or status")]
     [TestCase(Focus, "targetType: self", "targetType: enemy", "targetType", "must be self for a status effect")]
     [TestCase(Strike, "targetType: enemy", "targetType: self", "targetType", "must be enemy for a damage effect")]
@@ -137,20 +137,38 @@ public sealed class ContentValidationTests
         Focus,
         "status: status.focus",
         "status: status.missing",
-        "server.effect.status.status",
+        "server.levels[0].effect.status.status",
         "references unknown status effect 'status.missing'")]
-    [TestCase(Focus, "durationMs: 43117", "durationMs: 0", "server.effect.status.durationMs", "between 1 and")]
-    [TestCase(Focus, "status: status.focus", "status: skill.focus", "server.effect.status.status",
+    [TestCase(Focus, "durationMs: 43117", "durationMs: 0", "server.levels[0].effect.status.durationMs",
+        "between 1 and")]
+    [TestCase(Focus, "status: status.focus", "status: skill.focus", "server.levels[0].effect.status.status",
         "expected 'status.'")]
-    [TestCase(FocusStatus, "agi: 137", "agi: 1001", "server.statPercent.agi", "between 0 and")]
-    [TestCase(FocusStatus, "agi: 137", "agi: -1", "server.statPercent.agi", "between 0 and")]
+    [TestCase(Focus, "agi: 137", "agi: 1001", "server.levels[0].effect.status.statPercent.agi", "between 0 and")]
+    [TestCase(Focus, "agi: 137", "agi: -1", "server.levels[0].effect.status.statPercent.agi", "between 0 and")]
+    [TestCase(
+        FocusStatus,
+        "displayName: Focus\n",
+        "displayName: Focus\nserver:\n  statPercent: { agi: 1 }\n",
+        "server",
+        "unknown field")]
+    [TestCase(Strike, "  maxLevel: 2\n", "  maxLevel: 3\n", "server.levels", "must list exactly maxLevel (3) levels")]
+    [TestCase(Strike, "  maxLevel: 2\n", "  maxLevel: 6\n", "server.maxLevel", "between 1 and 5")]
+    [TestCase(Strike, "damage: { ratio: 1321 }", "heal: { hp: 5 }", "server.levels", "the same kind of effect")]
+    [TestCase(
+        Strike,
+        "description: Hits the target harder than a swing.",
+        "description: \"Hits\\nhard\"",
+        "client.description",
+        "printable characters")]
+    [TestCase(Strike, "  spPaidAt: castStart\n  maxLevel: 2\n", "  spPaidAt: castStart\n", "server.levels",
+        "must list exactly maxLevel (1) levels")]
     [TestCase(FocusStatus, "displayName: Focus\n", "", "displayName", "required field is missing")]
     [TestCase(FocusStatus, "icon: status_focus", "icon: Status/Focus.png", "client.icon", "logical asset key")]
-    [TestCase(Strike, "ratio: 1319", "ratio: 0", "server.effect.damage.ratio", "between 1 and")]
+    [TestCase(Strike, "ratio: 1319", "ratio: 0", "server.levels[0].effect.damage.ratio", "between 1 and")]
     [TestCase(Strike, "damageType: physical\n", "", "damageType", "required for a damage effect")]
     [TestCase(Strike, "spPaidAt: castStart", "spPaidAt: later", "server.spPaidAt", "one of: resolution, castStart")]
-    [TestCase(Strike, "cooldownMs: 21133", "cooldownMs: -1", "server.cooldownMs", "between 0 and")]
-    [TestCase(Strike, "fixed: 3171", "fixed: 1.5", "server.castTimeMs.fixed", "whole number")]
+    [TestCase(Strike, "cooldownMs: 21133", "cooldownMs: -1", "server.levels[0].cooldownMs", "between 0 and")]
+    [TestCase(Strike, "fixed: 3171", "fixed: 1.5", "server.levels[0].castTimeMs.fixed", "whole number")]
     [TestCase(
         Job,
         JobSkills,
@@ -438,19 +456,24 @@ public sealed class ContentValidationTests
         {
             workspace.Replace(
                 Strike,
-                "  spCost: 4127\n  spPaidAt: castStart\n  castTimeMs: { fixed: 3171, variable: 7193 }\n"
-                + "  afterCastDelayMs: 5231\n  cooldownMs: 21133\n",
+                "  spPaidAt: castStart\n",
                 "");
+            workspace.Replace(
+                Strike,
+                "    - spCost: 4127\n      castTimeMs: { fixed: 3171, variable: 7193 }\n"
+                + "      afterCastDelayMs: 5231\n      cooldownMs: 21133\n      effect:",
+                "    - effect:");
 
             ContentPipelineResult result = ContentPipeline.Run(workspace.ContentRoot);
 
             Assert.That(result.Diagnostics, Is.Empty, Describe(result));
             SkillDefinition strike = result.Content.Skills.Single(skill => skill.Definition.Id.Value == "skill.strike")
                 .Definition;
+            SkillLevel first = strike.ValuesAt(1);
+            Assert.That(strike.SpPaidAt, Is.EqualTo(SkillPaymentPoint.Resolution));
             Assert.That(
-                (strike.SpCost, strike.SpPaidAt, strike.FixedCastMs, strike.VariableCastMs, strike.AfterCastDelayMs,
-                    strike.CooldownMs),
-                Is.EqualTo((0, SkillPaymentPoint.Resolution, 0, 0, 0, 0)));
+                (first.SpCost, first.FixedCastMs, first.VariableCastMs, first.AfterCastDelayMs, first.CooldownMs),
+                Is.EqualTo((0, 0, 0, 0, 0)));
         }
     }
 
@@ -542,7 +565,7 @@ public sealed class ContentValidationTests
             {
                 workspace.Write(
                     $"status-effects/extra_{index:D2}.yml",
-                    $"id: status.extra_{index:D2}\ndisplayName: Extra\nserver:\n  statPercent: {{ str: 1 }}\n");
+                    $"id: status.extra_{index:D2}\ndisplayName: Extra\n");
             }
 
             ContentPipelineResult fifteen = ContentPipeline.Run(workspace.ContentRoot);

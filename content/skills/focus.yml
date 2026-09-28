@@ -3,8 +3,19 @@ displayName: Focus
 targetType: self
 server:
   range: 0
-  spCost: 15
-  effect:
-    status: { status: status.focus, durationMs: 60000 }
+  maxLevel: 3
+  requires: { skill: skill.strike, level: 1 }
+  # Level 3 is the +100 % of Milestone 6; a recast replaces the effect rather than stacking.
+  levels:
+    - spCost: 15
+      effect:
+        status: { status: status.focus, durationMs: 60000, statPercent: { agi: 40, dex: 40 } }
+    - spCost: 15
+      effect:
+        status: { status: status.focus, durationMs: 60000, statPercent: { agi: 70, dex: 70 } }
+    - spCost: 15
+      effect:
+        status: { status: status.focus, durationMs: 60000, statPercent: { agi: 100, dex: 100 } }
 client:
   icon: skill_focus
+  description: Steady yourself for a minute, raising your AGI and DEX so that you swing sooner and hit more often.

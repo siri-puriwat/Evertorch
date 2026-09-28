@@ -16,6 +16,10 @@ public sealed class StatusEffectTests
     private const string Focus = "skill.focus";
     private static readonly StatusDefinitionId FocusStatus = new("status.focus");
 
+    // Focus 3's strength, Milestone 6's +100 % AGI and DEX, and Focus 1's.
+    private static readonly StatPercentages FocusThree = new(0, 100, 0, 0, 100, 0);
+    private static readonly StatPercentages FocusOne = new(0, 40, 0, 0, 40, 0);
+
     private static List<StatusEffects> StatusLists(TestServer server, ConnectionId player)
     {
         var lists = new List<StatusEffects>();
@@ -67,7 +71,7 @@ public sealed class StatusEffectTests
     public void Death_EndsEveryEffect_AndTheStatisticsReturn()
     {
         var rig = new CombatRig();
-        rig.Server.StatusEffects.Apply(rig.Entity, FocusStatus, Now(rig.Server) + 60_000);
+        rig.Server.StatusEffects.Apply(rig.Entity, FocusStatus, FocusThree, Now(rig.Server) + 60_000);
         rig.Server.Tick();
         rig.Server.Transport.ClearSent();
 
@@ -84,7 +88,7 @@ public sealed class StatusEffectTests
     public void Effect_WhenItsTimeIsUp_Ends_AndTheStatisticsReturn()
     {
         var rig = new CombatRig();
-        rig.Server.StatusEffects.Apply(rig.Entity, FocusStatus, Now(rig.Server) + 100);
+        rig.Server.StatusEffects.Apply(rig.Entity, FocusStatus, FocusThree, Now(rig.Server) + 100);
         int raised = rig.Entity.Stats.AttackSpeed;
         rig.Server.Tick();
         rig.Server.Transport.ClearSent();
@@ -142,6 +146,22 @@ public sealed class StatusEffectTests
             .Select(message => SkillResolved.TryRead(message.Payload, out SkillResolved? read) ? read! : null)
             .Single()!;
         Assert.That((seen.Target, seen.Outcome, seen.Amount), Is.EqualTo((rig.Entity.Id, SkillOutcome.Applied, 0u)));
+    }
+
+    // A recast at another level replaces the effect's strength and derives the statistics again at once; effects never
+    // stack (Gameplay Systems §9.1).
+    [Test]
+    public void Recast_AtAHigherLevel_ReplacesTheStrength_AndTheStatisticsFollowAtOnce()
+    {
+        var rig = new CombatRig();
+        rig.Server.StatusEffects.Apply(rig.Entity, FocusStatus, FocusOne, Now(rig.Server) + 60_000);
+        int hitAtLevelOne = rig.Entity.Stats.Hit;
+
+        rig.Server.StatusEffects.Apply(rig.Entity, FocusStatus, FocusThree, Now(rig.Server) + 60_000);
+
+        Assert.That(hitAtLevelOne, Is.GreaterThan(182).And.LessThan(187), "Focus 1 raises the hit less");
+        Assert.That(rig.Entity.Stats.Hit, Is.EqualTo(187), "Focus 3's hit, before any tick");
+        Assert.That(rig.Entity.StatusEffects.Single().StatPercent, Is.EqualTo(FocusThree), "one effect");
     }
 }
 }

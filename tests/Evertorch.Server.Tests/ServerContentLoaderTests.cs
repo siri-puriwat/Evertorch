@@ -80,18 +80,23 @@ public sealed class ServerContentLoaderTests
     [TestCase(Monsters, "\"baseSpeed\": 4", "\"baseSpeed\": -4", "definitions[0].baseSpeed: must not be negative")]
     [TestCase(Monsters, "\"behavior\": \"passive\"", "\"behavior\": \"sleepy\"", "behavior: unknown value 'sleepy'")]
     [TestCase(Skills, "\"range\": 1.5", "\"range\": true", "skills.json: definitions[0].range: must be a number")]
-    [TestCase(Skills, "\"spCost\": 0", "\"spCost\": -1", "skills.json: definitions[0].spCost: must be at least 0")]
+    [TestCase(Skills, "\"maxLevel\": 0", "\"maxLevel\": -1",
+        "skills.json: definitions[0].maxLevel: must be at least 0")]
+    [TestCase(Skills, "\"maxLevel\": 0", "\"maxLevel\": 1",
+        "skills.json: definitions[0].levels: must list exactly maxLevel (1)")]
     [TestCase(Skills, "\"resolution\"", "\"later\"", "definitions[0].spPaidAt: unknown value 'later'")]
     [TestCase(
         Skills,
-        "\"cooldownMs\": 0",
-        "\"cooldownMs\": 0,\n      \"effect\": {\n        \"damageRatio\": 0\n      }",
-        "definitions[0].effect.damageRatio: must be at least 1")]
+        "\"levels\": []",
+        "\"levels\": [ { \"spCost\": 0, \"fixedCastMs\": 0, \"variableCastMs\": 0, \"afterCastDelayMs\": 0, "
+        + "\"cooldownMs\": 0, \"effect\": { \"damageRatio\": 0 } } ]",
+        "definitions[0].levels[0].effect.damageRatio: must be at least 1")]
     [TestCase(
         Skills,
-        "\"cooldownMs\": 0",
-        "\"cooldownMs\": 0,\n      \"effect\": {}",
-        "definitions[0].effect.damageRatio: an effect must have exactly one of damageRatio, healHp, or status")]
+        "\"levels\": []",
+        "\"levels\": [ { \"spCost\": 0, \"fixedCastMs\": 0, \"variableCastMs\": 0, \"afterCastDelayMs\": 0, "
+        + "\"cooldownMs\": 0, \"effect\": {} } ]",
+        "definitions[0].levels[0].effect.damageRatio: an effect must have exactly one of damageRatio, healHp, or status")]
     [TestCase(
         Skills,
         "      \"damageType\": \"physical\",\n",
@@ -218,24 +223,38 @@ public sealed class ServerContentLoaderTests
             + map + "\", \"position\": { " + position + " }, \"facing\": { " + facing + " } } } ]";
     }
 
-    private static void AddFocus(Dictionary<string, byte[]> files, string percent)
+    private static void AddFocus(Dictionary<string, byte[]> files)
     {
         PackageFixture.Replace(
             files,
             StatusEffectsFile,
             "\"definitions\": []",
-            "\"definitions\": [ { \"id\": \"status.focus\", \"displayName\": \"Focus\", \"statPercent\": "
-            + $"{{ \"str\": 0, \"agi\": {percent}, \"vit\": 0, \"int\": 0, \"dex\": 100, \"luk\": 0 }} }} ]");
+            "\"definitions\": [ { \"id\": \"status.focus\", \"displayName\": \"Focus\" } ]");
     }
 
-    private static void MakeTheBasicAttackApply(Dictionary<string, byte[]> files, string status, string targetType)
+    // The fixture's basic attack given one level whose effect is <paramref name="effect" />.
+    private static void GiveTheBasicAttackALevel(Dictionary<string, byte[]> files, string effect)
     {
-        PackageFixture.Replace(files, Skills, "\"targetType\": \"enemy\"", $"\"targetType\": \"{targetType}\"");
+        PackageFixture.Replace(files, Skills, "\"maxLevel\": 0", "\"maxLevel\": 1");
         PackageFixture.Replace(
             files,
             Skills,
-            "\"cooldownMs\": 0",
-            $"\"cooldownMs\": 0, \"effect\": {{ \"status\": \"{status}\", \"durationMs\": 60000 }}");
+            "\"levels\": []",
+            "\"levels\": [ { \"spCost\": 0, \"fixedCastMs\": 0, \"variableCastMs\": 0, \"afterCastDelayMs\": 0, "
+            + $"\"cooldownMs\": 0, \"effect\": {effect} }} ]");
+    }
+
+    private static void MakeTheBasicAttackApply(
+        Dictionary<string, byte[]> files,
+        string status,
+        string targetType,
+        string agility = "100")
+    {
+        PackageFixture.Replace(files, Skills, "\"targetType\": \"enemy\"", $"\"targetType\": \"{targetType}\"");
+        GiveTheBasicAttackALevel(
+            files,
+            $"{{ \"status\": \"{status}\", \"durationMs\": 60000, \"statPercent\": {{ \"str\": 0, \"agi\": "
+            + $"{agility}, \"vit\": 0, \"int\": 0, \"dex\": 100, \"luk\": 0 }} }}");
     }
 
     [TestCase("map.elsewhere", "\"x\": 2, \"y\": 0, \"z\": 0", "a portal leads to unknown map 'map.elsewhere'")]
@@ -461,13 +480,9 @@ public sealed class ServerContentLoaderTests
     {
         Dictionary<string, byte[]> selfDamage = PackageFixture.BuildFixturePackage();
         PackageFixture.Replace(selfDamage, Skills, "\"targetType\": \"enemy\"", "\"targetType\": \"self\"");
-        PackageFixture.Replace(
-            selfDamage,
-            Skills,
-            "\"cooldownMs\": 0",
-            "\"cooldownMs\": 0, \"effect\": { \"damageRatio\": 100 }");
+        GiveTheBasicAttackALevel(selfDamage, "{ \"damageRatio\": 100 }");
         Dictionary<string, byte[]> castForItself = PackageFixture.BuildFixturePackage();
-        AddFocus(castForItself, "100");
+        AddFocus(castForItself);
         MakeTheBasicAttackApply(castForItself, "status.focus", "self");
         PackageFixture.Replace(
             castForItself,
@@ -494,7 +509,7 @@ public sealed class ServerContentLoaderTests
         Dictionary<string, byte[]> unknown = PackageFixture.BuildFixturePackage();
         MakeTheBasicAttackApply(unknown, "status.none", "self");
         Dictionary<string, byte[]> enemy = PackageFixture.BuildFixturePackage();
-        AddFocus(enemy, "100");
+        AddFocus(enemy);
         MakeTheBasicAttackApply(enemy, "status.focus", "enemy");
 
         Assert.That(
@@ -506,14 +521,28 @@ public sealed class ServerContentLoaderTests
     }
 
     [Test]
-    public void Load_WhenAStatusEffectAddsMoreThanATenfold_Fails()
+    public void Load_WhenASkillLevelsStatusAddsMoreThanATenfold_Fails()
     {
         Dictionary<string, byte[]> files = PackageFixture.BuildFixturePackage();
-        AddFocus(files, "1001");
+        AddFocus(files);
+        MakeTheBasicAttackApply(files, "status.focus", "self", "1001");
 
         Assert.That(
             ProblemsOf(files),
-            Is.EqualTo(new[] { "status-effects.json: definitions[0].statPercent.agi: must be at most 1000" }));
+            Is.EqualTo(new[] { "skills.json: definitions[0].levels[0].effect.statPercent.agi: must be at most 1000" }));
+    }
+
+    [Test]
+    public void Load_WhenAStatusEffectStillNamesItsStrength_Fails()
+    {
+        Dictionary<string, byte[]> files = PackageFixture.BuildFixturePackage();
+        PackageFixture.Replace(
+            files,
+            StatusEffectsFile,
+            "\"definitions\": []",
+            "\"definitions\": [ { \"id\": \"status.focus\", \"displayName\": \"Focus\", \"statPercent\": {} } ]");
+
+        Assert.That(ProblemsOf(files), Has.Some.Contains("statPercent"));
     }
 
     [Test]
@@ -772,8 +801,7 @@ public sealed class ServerContentLoaderTests
         string fifteen = string.Join(
             ", ",
             Enumerable.Range(1, 15).Select(index =>
-                $"{{ \"id\": \"status.s{index}\", \"displayName\": \"S\", \"statPercent\": "
-                + "{ \"str\": 1, \"agi\": 0, \"vit\": 0, \"int\": 0, \"dex\": 0, \"luk\": 0 } }"));
+                $"{{ \"id\": \"status.s{index}\", \"displayName\": \"S\" }}"));
         PackageFixture.Replace(files, StatusEffectsFile, "\"definitions\": []", $"\"definitions\": [ {fifteen} ]");
 
         Assert.That(

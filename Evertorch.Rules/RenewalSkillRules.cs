@@ -13,20 +13,24 @@ public sealed class RenewalSkillRules : ISkillRules
 
     public CastTiming CalculateCastTiming(SkillContext context)
     {
-        SkillDefinition skill = context.Skill;
+        SkillLevel values = context.Values;
         long variable = context.Caster == AttackerKind.Character
-            ? (long)skill.VariableCastMs * context.VariableCastPermille / FullCastPermille
-            : skill.VariableCastMs;
+            ? (long)values.VariableCastMs * context.VariableCastPermille / FullCastPermille
+            : values.VariableCastMs;
         return new CastTiming(
-            (int)Math.Min(int.MaxValue, skill.FixedCastMs + variable),
-            skill.AfterCastDelayMs,
-            skill.CooldownMs);
+            (int)Math.Min(int.MaxValue, values.FixedCastMs + variable),
+            values.AfterCastDelayMs,
+            values.CooldownMs);
     }
 
     public SkillResolution Resolve(SkillContext context)
     {
-        SkillEffect effect = context.Skill.Effect
-            ?? throw new ArgumentException($"Skill {context.Skill.Id} has no effect.", nameof(context));
+        if (!context.Skill.HasEffect)
+        {
+            throw new ArgumentException($"Skill {context.Skill.Id} has no effect.", nameof(context));
+        }
+
+        SkillEffect effect = context.Values.Effect;
         switch (effect.Kind)
         {
             case SkillEffectKind.Heal:

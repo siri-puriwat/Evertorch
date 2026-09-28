@@ -17,7 +17,8 @@
       "id": "skill.strike",
       "displayName": "Strike",
       "targetType": "enemy",
-      "icon": "skill_strike"
+      "icon": "skill_strike",
+      "description": "Hits the target harder than a swing."
     }
   ]
 }

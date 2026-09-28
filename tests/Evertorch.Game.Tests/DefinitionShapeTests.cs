@@ -251,47 +251,69 @@ public sealed class DefinitionShapeTests
     }
 
     [Test]
-    public void SkillDefinition_WithValues_ExposesThem()
+    public void SkillDefinition_WithLevels_ExposesThemAndHoldsALevelToThem()
     {
+        var first = new SkillLevel(8, 100, 200, 500, 2000, SkillEffect.Damage(130));
+        var second = new SkillLevel(9, 100, 200, 500, 2000, SkillEffect.Damage(145));
+        var requires = new SkillRequirement(new SkillDefinitionId("skill.first_aid"), 1);
         var skill = new SkillDefinition(
             new SkillDefinitionId("skill.strike"),
             "Strike",
             SkillTargetType.Enemy,
             SkillDamageType.Physical,
             1.5,
-            8,
             SkillPaymentPoint.CastStart,
-            100,
-            200,
-            500,
-            2000,
-            SkillEffect.Damage(130));
+            new[] { first, second },
+            requires);
 
         Assert.That(skill.Id.Value, Is.EqualTo("skill.strike"));
         Assert.That(skill.DisplayName, Is.EqualTo("Strike"));
         Assert.That(skill.TargetType, Is.EqualTo(SkillTargetType.Enemy));
         Assert.That(skill.DamageType, Is.EqualTo(SkillDamageType.Physical));
         Assert.That(skill.Range, Is.EqualTo(1.5));
-        Assert.That(skill.SpCost, Is.EqualTo(8));
         Assert.That(skill.SpPaidAt, Is.EqualTo(SkillPaymentPoint.CastStart));
-        Assert.That(skill.FixedCastMs, Is.EqualTo(100));
-        Assert.That(skill.VariableCastMs, Is.EqualTo(200));
-        Assert.That(skill.AfterCastDelayMs, Is.EqualTo(500));
-        Assert.That(skill.CooldownMs, Is.EqualTo(2000));
-        Assert.That(skill.Effect!.Kind, Is.EqualTo(SkillEffectKind.Damage));
-        Assert.That(skill.Effect.DamageRatioPercent, Is.EqualTo(130));
+        Assert.That((skill.MaxLevel, skill.HasEffect), Is.EqualTo((2, true)));
+        Assert.That(skill.Requires, Is.SameAs(requires));
+        Assert.That((requires.Skill.Value, requires.Level), Is.EqualTo(("skill.first_aid", 1)));
+        Assert.That(
+            (first.SpCost, first.FixedCastMs, first.VariableCastMs, first.AfterCastDelayMs, first.CooldownMs),
+            Is.EqualTo((8, 100, 200, 500, 2000)));
+        Assert.That(skill.ValuesAt(1), Is.SameAs(first));
+        Assert.That(skill.ValuesAt(2).Effect.DamageRatioPercent, Is.EqualTo(145));
+        Assert.That(skill.ValuesAt(0), Is.SameAs(first), "held to level 1");
+        Assert.That(skill.ValuesAt(7), Is.SameAs(second), "held to the maximum");
     }
 
     [Test]
-    public void SkillEffect_ForAStatus_NamesItAndItsDuration()
+    public void SkillDefinition_WithoutLevels_HasNoEffect()
     {
-        var focus = SkillEffect.StatusEffect(new StatusDefinitionId("status.focus"), 60_000);
-        Action noStatus = () => SkillEffect.StatusEffect(default, 60_000);
-        Action noDuration = () => SkillEffect.StatusEffect(new StatusDefinitionId("status.focus"), 0);
+        var basicAttack = new SkillDefinition(
+            new SkillDefinitionId("skill.basic_attack"),
+            "Basic Attack",
+            SkillTargetType.Enemy,
+            SkillDamageType.Physical,
+            1.5,
+            SkillPaymentPoint.Resolution,
+            Array.Empty<SkillLevel>());
+        Action values = () => basicAttack.ValuesAt(1);
+
+        Assert.That((basicAttack.MaxLevel, basicAttack.HasEffect), Is.EqualTo((0, false)));
+        Assert.That(basicAttack.Requires, Is.Null);
+        Assert.That(values, Throws.InvalidOperationException);
+    }
+
+    [Test]
+    public void SkillEffect_ForAStatus_NamesItItsDurationAndItsStrength()
+    {
+        var percent = new StatPercentages(0, 40, 0, 0, 40, 0);
+        var focus = SkillEffect.StatusEffect(new StatusDefinitionId("status.focus"), 60_000, percent);
+        Action noStatus = () => SkillEffect.StatusEffect(default, 60_000, percent);
+        Action noDuration = () => SkillEffect.StatusEffect(new StatusDefinitionId("status.focus"), 0, percent);
 
         Assert.That(
             (focus.Kind, focus.Status.Value, focus.StatusDurationMs, focus.HealHp),
             Is.EqualTo((SkillEffectKind.Status, "status.focus", 60_000, 0)));
+        Assert.That(focus.StatPercent, Is.EqualTo(percent));
         Assert.That(noStatus, Throws.ArgumentException);
         Assert.That(noDuration, Throws.InstanceOf<ArgumentOutOfRangeException>());
     }
@@ -321,14 +343,10 @@ public sealed class DefinitionShapeTests
     [Test]
     public void StatusEffectDefinition_WithValues_ExposesThem()
     {
-        var focus = new StatusEffectDefinition(
-            new StatusDefinitionId("status.focus"),
-            "Focus",
-            new StatPercentages(0, 100, 0, 0, 100, 0));
+        var focus = new StatusEffectDefinition(new StatusDefinitionId("status.focus"), "Focus");
 
         Assert.That(focus.Id.Value, Is.EqualTo("status.focus"));
         Assert.That(focus.DisplayName, Is.EqualTo("Focus"));
-        Assert.That(focus.StatPercent, Is.EqualTo(new StatPercentages(0, 100, 0, 0, 100, 0)));
     }
 }
 }

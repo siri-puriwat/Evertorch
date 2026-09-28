@@ -22,14 +22,6 @@ internal static class StatusEffectReader
         }
 
         string displayName = root.RequiredString("displayName");
-        YamlFieldReader percent = root.RequiredMapping("server").RequiredMapping("statPercent");
-        var statPercent = new StatPercentages(
-            OptionalPercent(percent, "str"),
-            OptionalPercent(percent, "agi"),
-            OptionalPercent(percent, "vit"),
-            OptionalPercent(percent, "int"),
-            OptionalPercent(percent, "dex"),
-            OptionalPercent(percent, "luk"));
 
         string? icon = null;
         if (root.Has("client"))
@@ -44,13 +36,8 @@ internal static class StatusEffectReader
             return null;
         }
 
-        var definition = new StatusEffectDefinition(id, displayName, statPercent);
+        var definition = new StatusEffectDefinition(id, displayName);
         return new AuthoredStatusEffect(root.ToSource(), definition, icon);
-    }
-
-    private static int OptionalPercent(YamlFieldReader reader, string key)
-    {
-        return reader.Has(key) ? reader.RequiredInt(key, 0, ContentLimits.MaxStatPercent) : 0;
     }
 }
 }

@@ -319,36 +319,63 @@ internal static class ServerProjection
             }
 
             writer.WriteNumber("range", skill.Range);
-            writer.WriteNumber("spCost", skill.SpCost);
             writer.WriteString("spPaidAt", EnumText.Of(skill.SpPaidAt));
-            writer.WriteNumber("fixedCastMs", skill.FixedCastMs);
-            writer.WriteNumber("variableCastMs", skill.VariableCastMs);
-            writer.WriteNumber("afterCastDelayMs", skill.AfterCastDelayMs);
-            writer.WriteNumber("cooldownMs", skill.CooldownMs);
-            if (skill.Effect != null)
+            writer.WriteNumber("maxLevel", skill.MaxLevel);
+            if (skill.Requires != null)
             {
-                writer.WriteStartObject("effect");
-                if (skill.Effect.Kind == SkillEffectKind.Damage)
-                {
-                    writer.WriteNumber("damageRatio", skill.Effect.DamageRatioPercent);
-                }
-                else if (skill.Effect.Kind == SkillEffectKind.Status)
-                {
-                    writer.WriteString("status", skill.Effect.Status.Value);
-                    writer.WriteNumber("durationMs", skill.Effect.StatusDurationMs);
-                }
-                else
-                {
-                    writer.WriteNumber("healHp", skill.Effect.HealHp);
-                }
-
+                writer.WriteStartObject("requires");
+                writer.WriteString("skill", skill.Requires.Skill.Value);
+                writer.WriteNumber("level", skill.Requires.Level);
                 writer.WriteEndObject();
             }
 
+            writer.WriteStartArray("levels");
+            foreach (SkillLevel level in skill.Levels)
+            {
+                WriteSkillLevel(writer, level);
+            }
+
+            writer.WriteEndArray();
             writer.WriteEndObject();
         }
 
         EndFile(writer);
+    }
+
+    private static void WriteSkillLevel(Utf8JsonWriter writer, SkillLevel level)
+    {
+        writer.WriteStartObject();
+        writer.WriteNumber("spCost", level.SpCost);
+        writer.WriteNumber("fixedCastMs", level.FixedCastMs);
+        writer.WriteNumber("variableCastMs", level.VariableCastMs);
+        writer.WriteNumber("afterCastDelayMs", level.AfterCastDelayMs);
+        writer.WriteNumber("cooldownMs", level.CooldownMs);
+        writer.WriteStartObject("effect");
+        SkillEffect effect = level.Effect;
+        if (effect.Kind == SkillEffectKind.Damage)
+        {
+            writer.WriteNumber("damageRatio", effect.DamageRatioPercent);
+        }
+        else if (effect.Kind == SkillEffectKind.Status)
+        {
+            writer.WriteString("status", effect.Status.Value);
+            writer.WriteNumber("durationMs", effect.StatusDurationMs);
+            writer.WriteStartObject("statPercent");
+            writer.WriteNumber("str", effect.StatPercent.Str);
+            writer.WriteNumber("agi", effect.StatPercent.Agi);
+            writer.WriteNumber("vit", effect.StatPercent.Vit);
+            writer.WriteNumber("int", effect.StatPercent.Int);
+            writer.WriteNumber("dex", effect.StatPercent.Dex);
+            writer.WriteNumber("luk", effect.StatPercent.Luk);
+            writer.WriteEndObject();
+        }
+        else
+        {
+            writer.WriteNumber("healHp", effect.HealHp);
+        }
+
+        writer.WriteEndObject();
+        writer.WriteEndObject();
     }
 
     private static void WriteStatusEffects(Utf8JsonWriter writer, ContentSet content)
@@ -360,14 +387,6 @@ internal static class ServerProjection
             writer.WriteStartObject();
             writer.WriteString("id", status.Id.Value);
             writer.WriteString("displayName", status.DisplayName);
-            writer.WriteStartObject("statPercent");
-            writer.WriteNumber("str", status.StatPercent.Str);
-            writer.WriteNumber("agi", status.StatPercent.Agi);
-            writer.WriteNumber("vit", status.StatPercent.Vit);
-            writer.WriteNumber("int", status.StatPercent.Int);
-            writer.WriteNumber("dex", status.StatPercent.Dex);
-            writer.WriteNumber("luk", status.StatPercent.Luk);
-            writer.WriteEndObject();
             writer.WriteEndObject();
         }
 

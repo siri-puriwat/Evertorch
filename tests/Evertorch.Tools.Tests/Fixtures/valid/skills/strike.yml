@@ -4,12 +4,21 @@ targetType: enemy
 damageType: physical
 server:
   range: 1.6875
-  spCost: 4127
   spPaidAt: castStart
-  castTimeMs: { fixed: 3171, variable: 7193 }
-  afterCastDelayMs: 5231
-  cooldownMs: 21133
-  effect:
-    damage: { ratio: 1319 }
+  maxLevel: 2
+  levels:
+    - spCost: 4127
+      castTimeMs: { fixed: 3171, variable: 7193 }
+      afterCastDelayMs: 5231
+      cooldownMs: 21133
+      effect:
+        damage: { ratio: 1319 }
+    - spCost: 4129
+      castTimeMs: { fixed: 3173, variable: 7197 }
+      afterCastDelayMs: 5233
+      cooldownMs: 21139
+      effect:
+        damage: { ratio: 1321 }
 client:
   icon: skill_strike
+  description: Hits the target harder than a swing.

@@ -3,8 +3,9 @@ displayName: Focus
 targetType: self
 server:
   range: 0
-  spCost: 15
-  effect:
-    status: { status: status.focus, durationMs: 43117 }
+  levels:
+    - spCost: 15
+      effect:
+        status: { status: status.focus, durationMs: 43117, statPercent: { agi: 137, dex: 211, luk: 7 } }
 client:
   icon: skill_focus

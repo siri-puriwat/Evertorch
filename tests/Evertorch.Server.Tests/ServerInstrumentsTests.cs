@@ -555,8 +555,9 @@ public sealed class ServerInstrumentsTests
         var focus = new StatusDefinitionId("status.focus");
         long now = (long)(rig.Server.CurrentTick - 1) * 1000 / TestServer.TickRate;
 
-        rig.Server.StatusEffects.Apply(rig.Entity, focus, now + 100);
-        rig.Server.StatusEffects.Apply(rig.Entity, focus, now + 150);
+        var percent = new StatPercentages(0, 100, 0, 0, 100, 0);
+        rig.Server.StatusEffects.Apply(rig.Entity, focus, percent, now + 100);
+        rig.Server.StatusEffects.Apply(rig.Entity, focus, percent, now + 150);
         rig.Server.Tick(5);
 
         Assert.That(SumTagged(recorder, "evertorch.combat.status_effects", "change", "started"), Is.EqualTo(1));

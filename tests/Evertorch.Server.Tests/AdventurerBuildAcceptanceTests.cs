@@ -5,6 +5,7 @@ using System.Linq;
 using Evertorch.Client;
 using Evertorch.Game;
 using Evertorch.Persistence.Tests;
+using Evertorch.Protocol;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Npgsql;
@@ -81,15 +82,20 @@ public sealed class AdventurerBuildAcceptanceTests
         Assert.That((client.World.Level, client.World.Experience), Is.EqualTo(((ushort)1, 0ul)), "enter: level 1");
         Assert.That(StoredJobProgress(), Is.EqualTo((1, 0L)), "enter: a new character is at job level 1");
 
-        // Until the character learns its skills (Milestone 9 line 4), it knows every skill its job lists.
+        // A new character has learned nothing, so it lists no skill and cannot use Strike (Gameplay Systems §9).
         Assert.That(
-            client.PumpUntil(() => client.World.Skills.Count == 3),
+            client.PumpUntil(() => client.World.SkillsReceivedAt > 0),
             Is.True,
             "enter: the skill list arrived");
+        Assert.That(client.World.Skills, Is.Empty, "enter: nothing learned");
+        var refused = new List<CommandRejected>();
+        client.World.CommandRejectedReceived += refused.Add;
+        uint sequence = client.Connection.SendUseSkill(new SkillDefinitionId("skill.strike"), default);
+        Assert.That(client.PumpUntil(() => refused.Count > 0), Is.True, "enter: Strike answered");
         Assert.That(
-            client.World.Skills.Select(entry => entry.Skill.Value),
-            Is.EqualTo(new[] { "skill.strike", "skill.first_aid", "skill.focus" }),
-            "enter: the job's skills");
+            (refused.Single().CommandSequence, refused.Single().Reason),
+            Is.EqualTo((sequence, CommandRejectionReason.NotAllowedNow)),
+            "enter: Strike not learned");
 
         FightUntilTheBaseLevelRises(client);
         Assert.That(

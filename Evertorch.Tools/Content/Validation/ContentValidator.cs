@@ -74,15 +74,19 @@ public static class ContentValidator
 
         foreach (AuthoredSkill skill in content.Skills)
         {
-            if (skill.Definition.Effect?.Kind == SkillEffectKind.Status)
+            for (int index = 0; index < skill.Definition.Levels.Count; index++)
             {
-                RequireReference(
-                    statusEffects,
-                    skill.Definition.Effect.Status.Value,
-                    "status effect",
-                    skill.Source,
-                    "server.effect.status.status",
-                    diagnostics);
+                SkillEffect effect = skill.Definition.Levels[index].Effect;
+                if (effect.Kind == SkillEffectKind.Status)
+                {
+                    RequireReference(
+                        statusEffects,
+                        effect.Status.Value,
+                        "status effect",
+                        skill.Source,
+                        string.Format(CultureInfo.InvariantCulture, "server.levels[{0}].effect.status.status", index),
+                        diagnostics);
+                }
             }
         }
 
@@ -435,10 +439,74 @@ public static class ContentValidator
             string fieldPath = string.Format(CultureInfo.InvariantCulture, "server.skills[{0}]", index);
             string skill = job.Definition.Skills[index].Value;
             RequireReference(knownSkills, skill, "skill", job.Source, fieldPath, diagnostics);
-            if (skillsById.TryGetValue(skill, out SkillDefinition? definition) && definition.Effect == null)
+            if (skillsById.TryGetValue(skill, out SkillDefinition? definition) && !definition.HasEffect)
             {
                 Report(job.Source, fieldPath, $"names skill '{skill}', which has no effect", diagnostics);
             }
+
+            if (definition?.Requires != null)
+            {
+                RequirePrerequisite(job, definition, skillsById, fieldPath, diagnostics);
+            }
+        }
+    }
+
+    // A prerequisite is another skill of the same tree at one of its levels, and prerequisites form no cycle (Content
+    // Pipeline §4).
+    private static void RequirePrerequisite(
+        AuthoredJob job,
+        SkillDefinition skill,
+        Dictionary<string, SkillDefinition> skillsById,
+        string fieldPath,
+        List<ContentDiagnostic> diagnostics)
+    {
+        // A required skill rejected for its own problem is reported there alone (§7).
+        SkillRequirement requires = skill.Requires!;
+        if (requires.Skill == skill.Id || !job.Definition.Skills.Contains(requires.Skill))
+        {
+            Report(
+                job.Source,
+                fieldPath,
+                $"names skill '{skill.Id.Value}', which requires '{requires.Skill.Value}', not another of the tree",
+                diagnostics);
+            return;
+        }
+
+        if (!skillsById.TryGetValue(requires.Skill.Value, out SkillDefinition? required))
+        {
+            return;
+        }
+
+        if (requires.Level > required.MaxLevel)
+        {
+            Report(
+                job.Source,
+                fieldPath,
+                string.Format(
+                    CultureInfo.InvariantCulture,
+                    "names skill '{0}', which requires '{1}' at level {2}, above its maximum {3}",
+                    skill.Id.Value,
+                    requires.Skill.Value,
+                    requires.Level,
+                    required.MaxLevel),
+                diagnostics);
+        }
+
+        var seen = new HashSet<SkillDefinitionId> { skill.Id };
+        SkillRequirement? next = requires;
+        while (next != null && skillsById.TryGetValue(next.Skill.Value, out SkillDefinition? step))
+        {
+            if (!seen.Add(next.Skill))
+            {
+                Report(
+                    job.Source,
+                    fieldPath,
+                    $"names skill '{skill.Id.Value}', which is in a cycle of prerequisites",
+                    diagnostics);
+                return;
+            }
+
+            next = step.Requires;
         }
     }
 
@@ -460,7 +528,7 @@ public static class ContentValidator
                 continue;
             }
 
-            if (definition.Effect == null)
+            if (!definition.HasEffect)
             {
                 Report(monster.Source, fieldPath, $"names skill '{skill}', which has no effect", diagnostics);
             }

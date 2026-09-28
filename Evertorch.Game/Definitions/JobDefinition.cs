@@ -67,7 +67,7 @@ public sealed class JobDefinition
     public ExperienceDefinitionId JobExperienceTable { get; }
 
     /// <summary>
-    ///     The skills the job knows from level 1 (Gameplay Systems §9).
+    ///     The job's skill tree, in order: the skills its characters can learn (Gameplay Systems §9).
     /// </summary>
     public IReadOnlyList<SkillDefinitionId> Skills { get; }
 }

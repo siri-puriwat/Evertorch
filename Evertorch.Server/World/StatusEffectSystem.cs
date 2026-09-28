@@ -62,22 +62,16 @@ public sealed class StatusEffectSystem : ITickPhase
     }
 
     /// <summary>
-    ///     Starts <paramref name="status" /> on <paramref name="player" /> until <paramref name="endMs" />, or renews it
-    ///     to end then when it is already active.
+    ///     Starts <paramref name="status" /> on <paramref name="player" /> at the strength of the level that cast it,
+    ///     ending at <paramref name="endMs" />, or, when it is already active, replaces its strength and renews it to end
+    ///     then; either way the statistics are derived again, so a recast at another level changes them at once
+    ///     (Gameplay Systems §9.1).
     /// </summary>
-    public void Apply(PlayerEntity player, StatusDefinitionId status, long endMs)
+    public void Apply(PlayerEntity player, StatusDefinitionId status, StatPercentages statPercent, long endMs)
     {
-        StatusEffectDefinition definition = m_content.StatusEffects[status];
-        if (player.StartStatusEffect(new ActiveStatusEffect(status, definition.StatPercent, endMs)))
-        {
-            m_instruments.RecordStatusEffects(StatusEffectChange.Started, 1);
-            Recalculate(player);
-        }
-        else
-        {
-            m_instruments.RecordStatusEffects(StatusEffectChange.Renewed, 1);
-            TellOwner(player);
-        }
+        bool isNew = player.StartStatusEffect(new ActiveStatusEffect(status, statPercent, endMs));
+        m_instruments.RecordStatusEffects(isNew ? StatusEffectChange.Started : StatusEffectChange.Renewed, 1);
+        Recalculate(player);
     }
 
     /// <summary>

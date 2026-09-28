@@ -574,25 +574,55 @@ public static class ServerContentLoader
             ? entry.RequiredEnum<SkillDamageType>("damageType")
             : null;
         double range = RequiredNonNegative(entry, "range", ContentLimits.MaxDistance);
-        int spCost = entry.RequiredInt("spCost", 0, ContentLimits.MaxHp);
         SkillPaymentPoint spPaidAt = entry.RequiredEnum<SkillPaymentPoint>("spPaidAt");
-        int fixedCastMs = entry.RequiredInt("fixedCastMs", 0, ContentLimits.MaxDurationMs);
-        int variableCastMs = entry.RequiredInt("variableCastMs", 0, ContentLimits.MaxDurationMs);
-        int afterCastDelayMs = entry.RequiredInt("afterCastDelayMs", 0, ContentLimits.MaxDurationMs);
-        int cooldownMs = entry.RequiredInt("cooldownMs", 0, ContentLimits.MaxDurationMs);
-        SkillEffect? effect = entry.Has("effect") ? ReadEffect(entry.RequiredObject("effect")) : null;
-        if (effect?.Kind == SkillEffectKind.Damage && damageType == null)
+        int maxLevel = entry.RequiredInt("maxLevel", 0, ContentLimits.MaxSkillLevel);
+        var levels = new List<SkillLevel>();
+        foreach (PackageObjectReader level in entry.RequiredObjectArray("levels"))
+        {
+            SkillLevel? read = ReadSkillLevel(level);
+            if (read != null)
+            {
+                levels.Add(read);
+            }
+        }
+
+        if (problems.Count == problemsBefore && levels.Count != maxLevel)
+        {
+            entry.Report("levels", $"must list exactly maxLevel ({maxLevel}) levels");
+        }
+
+        SkillRequirement? requires = null;
+        if (entry.Has("requires"))
+        {
+            PackageObjectReader? required = entry.RequiredObject("requires");
+            if (required != null)
+            {
+                SkillDefinitionId skill = required.RequiredId<SkillDefinitionId>("skill", SkillDefinitionId.TryCreate);
+                int level = required.RequiredInt("level", 1, ContentLimits.MaxSkillLevel);
+                required.ReportUnexpectedProperties();
+                requires = new SkillRequirement(skill, level);
+            }
+        }
+
+        // Every level does the same kind of thing; only its strength differs (Gameplay Systems §9).
+        SkillEffectKind? kind = levels.Count > 0 ? levels[0].Effect.Kind : null;
+        if (levels.Any(level => level.Effect.Kind != kind))
+        {
+            entry.Report("levels", "every level must have the same kind of effect");
+        }
+
+        if (kind == SkillEffectKind.Damage && damageType == null)
         {
             entry.Report("damageType", "is required for a damage effect");
         }
 
-        if (effect?.Kind == SkillEffectKind.Status && targetType != SkillTargetType.Self)
+        if (kind == SkillEffectKind.Status && targetType != SkillTargetType.Self)
         {
             entry.Report("targetType", "must be self for a status effect");
         }
 
         // A player's hit on itself has no hit context to resolve (CombatSystem).
-        if (effect?.Kind == SkillEffectKind.Damage && targetType != SkillTargetType.Enemy)
+        if (kind == SkillEffectKind.Damage && targetType != SkillTargetType.Enemy)
         {
             entry.Report("targetType", "must be enemy for a damage effect");
         }
@@ -605,13 +635,23 @@ public static class ServerContentLoader
                 targetType,
                 damageType,
                 range,
-                spCost,
                 spPaidAt,
-                fixedCastMs,
-                variableCastMs,
-                afterCastDelayMs,
-                cooldownMs,
-                effect)
+                levels.AsReadOnly(),
+                requires)
+            : null;
+    }
+
+    private static SkillLevel? ReadSkillLevel(PackageObjectReader level)
+    {
+        int spCost = level.RequiredInt("spCost", 0, ContentLimits.MaxHp);
+        int fixedCastMs = level.RequiredInt("fixedCastMs", 0, ContentLimits.MaxDurationMs);
+        int variableCastMs = level.RequiredInt("variableCastMs", 0, ContentLimits.MaxDurationMs);
+        int afterCastDelayMs = level.RequiredInt("afterCastDelayMs", 0, ContentLimits.MaxDurationMs);
+        int cooldownMs = level.RequiredInt("cooldownMs", 0, ContentLimits.MaxDurationMs);
+        SkillEffect? effect = ReadEffect(level.RequiredObject("effect"));
+        level.ReportUnexpectedProperties();
+        return effect != null
+            ? new SkillLevel(spCost, fixedCastMs, variableCastMs, afterCastDelayMs, cooldownMs, effect)
             : null;
     }
 
@@ -639,7 +679,8 @@ public static class ServerContentLoader
         {
             StatusDefinitionId status = effect.RequiredId<StatusDefinitionId>("status", StatusDefinitionId.TryCreate);
             int durationMs = effect.RequiredInt("durationMs", 1, ContentLimits.MaxDurationMs);
-            read = status != default && durationMs > 0 ? SkillEffect.StatusEffect(status, durationMs) : null;
+            StatPercentages percent = ReadStatPercent(effect.RequiredObject("statPercent"));
+            read = status != default && durationMs > 0 ? SkillEffect.StatusEffect(status, durationMs, percent) : null;
         }
         else
         {
@@ -649,6 +690,23 @@ public static class ServerContentLoader
 
         effect.ReportUnexpectedProperties();
         return read;
+    }
+
+    private static StatPercentages ReadStatPercent(PackageObjectReader? percent)
+    {
+        int[] values = new int[6];
+        if (percent != null)
+        {
+            string[] names = { "str", "agi", "vit", "int", "dex", "luk" };
+            for (int index = 0; index < names.Length; index++)
+            {
+                values[index] = percent.RequiredInt(names[index], 0, ContentLimits.MaxStatPercent);
+            }
+
+            percent.ReportUnexpectedProperties();
+        }
+
+        return new StatPercentages(values[0], values[1], values[2], values[3], values[4], values[5]);
     }
 
     private static JobDefinition? ReadJob(PackageObjectReader entry, JobDefinitionId id, List<string> problems)
@@ -810,26 +868,8 @@ public static class ServerContentLoader
     {
         int problemsBefore = problems.Count;
         string displayName = entry.RequiredString("displayName");
-        PackageObjectReader? percent = entry.RequiredObject("statPercent");
-        int[] values = new int[6];
-        if (percent != null)
-        {
-            string[] names = { "str", "agi", "vit", "int", "dex", "luk" };
-            for (int index = 0; index < names.Length; index++)
-            {
-                values[index] = percent.RequiredInt(names[index], 0, ContentLimits.MaxStatPercent);
-            }
-
-            percent.ReportUnexpectedProperties();
-        }
-
         entry.ReportUnexpectedProperties();
-        return problems.Count == problemsBefore
-            ? new StatusEffectDefinition(
-                id,
-                displayName,
-                new StatPercentages(values[0], values[1], values[2], values[3], values[4], values[5]))
-            : null;
+        return problems.Count == problemsBefore ? new StatusEffectDefinition(id, displayName) : null;
     }
 
     private static MapDefinition? ReadMap(PackageObjectReader entry, MapDefinitionId id, List<string> problems)
@@ -1065,9 +1105,12 @@ public static class ServerContentLoader
     {
         foreach (SkillDefinition skill in skills.Values)
         {
-            if (skill.Effect?.Kind == SkillEffectKind.Status && !declaredStatusEffects.Contains(skill.Effect.Status))
+            foreach (SkillEffect effect in skill.Levels.Select(level => level.Effect).Distinct())
             {
-                problems.Add($"{SkillsFile}: {skill.Id}: applies unknown status effect '{skill.Effect.Status}'");
+                if (effect.Kind == SkillEffectKind.Status && !declaredStatusEffects.Contains(effect.Status))
+                {
+                    problems.Add($"{SkillsFile}: {skill.Id}: applies unknown status effect '{effect.Status}'");
+                }
             }
         }
 
@@ -1094,7 +1137,7 @@ public static class ServerContentLoader
                 {
                     problems.Add($"{MonstersFile}: {monster.Id}: casts unknown skill '{tried.Skill}'");
                 }
-                else if (skills.TryGetValue(tried.Skill, out SkillDefinition? known) && known.Effect == null)
+                else if (skills.TryGetValue(tried.Skill, out SkillDefinition? known) && !known.HasEffect)
                 {
                     problems.Add($"{MonstersFile}: {monster.Id}: casts skill '{tried.Skill}', which has no effect");
                 }
@@ -1159,10 +1202,56 @@ public static class ServerContentLoader
                 {
                     problems.Add($"{JobsFile}: {job.Id}: knows unknown skill '{skill}'");
                 }
-                else if (skills.TryGetValue(skill, out SkillDefinition? known) && known.Effect == null)
+                else if (skills.TryGetValue(skill, out SkillDefinition? known) && !known.HasEffect)
                 {
                     problems.Add($"{JobsFile}: {job.Id}: knows skill '{skill}', which has no effect");
                 }
+            }
+
+            CheckPrerequisites(job, skills, problems);
+        }
+    }
+
+    // A prerequisite is another skill of the same tree at one of its levels, and prerequisites form no cycle
+    // (Content Pipeline §4).
+    private static void CheckPrerequisites(
+        JobDefinition job,
+        IReadOnlyDictionary<SkillDefinitionId, SkillDefinition> skills,
+        List<string> problems)
+    {
+        foreach (SkillDefinitionId id in job.Skills)
+        {
+            if (!skills.TryGetValue(id, out SkillDefinition? skill) || skill.Requires == null)
+            {
+                continue;
+            }
+
+            // A required skill refused for its own problem is reported there alone.
+            SkillRequirement requires = skill.Requires;
+            if (requires.Skill == id || !job.Skills.Contains(requires.Skill))
+            {
+                problems.Add(
+                    $"{JobsFile}: {job.Id}: skill '{id}' requires '{requires.Skill}', not another of its tree");
+            }
+            else if (skills.TryGetValue(requires.Skill, out SkillDefinition? required)
+                     && requires.Level > required.MaxLevel)
+            {
+                problems.Add(
+                    $"{JobsFile}: {job.Id}: skill '{id}' requires '{requires.Skill}' at level {requires.Level}, above "
+                    + $"its maximum {required.MaxLevel}");
+            }
+
+            var seen = new HashSet<SkillDefinitionId> { id };
+            SkillRequirement? next = requires;
+            while (next != null && skills.TryGetValue(next.Skill, out SkillDefinition? step))
+            {
+                if (!seen.Add(next.Skill))
+                {
+                    problems.Add($"{JobsFile}: {job.Id}: skill '{id}' is in a cycle of prerequisites");
+                    break;
+                }
+
+                next = step.Requires;
             }
         }
     }

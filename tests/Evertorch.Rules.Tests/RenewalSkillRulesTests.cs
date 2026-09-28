@@ -32,13 +32,8 @@ public sealed class RenewalSkillRulesTests
             targetType,
             damageType,
             1.5,
-            8,
             SkillPaymentPoint.Resolution,
-            fixedCastMs,
-            variableCastMs,
-            500,
-            2000,
-            effect);
+            new[] { new SkillLevel(8, fixedCastMs, variableCastMs, 500, 2000, effect) });
     }
 
     // The level 1 adventurer, every statistic 5, against the training slime (hard DEF 2, flee 102).
@@ -46,6 +41,7 @@ public sealed class RenewalSkillRulesTests
     {
         return new SkillContext(
             Strike,
+            1,
             AttackerKind.Character,
             831,
             new HitContext(182, 25, 102, 0, 0, random),
@@ -65,7 +61,7 @@ public sealed class RenewalSkillRulesTests
     {
         SkillDefinition skill = Skill(SkillTargetType.Self, null, fixedMs, variableMs, SkillEffect.Heal(15));
 
-        CastTiming timing = m_rules.CalculateCastTiming(new SkillContext(skill, AttackerKind.Character, permille));
+        CastTiming timing = m_rules.CalculateCastTiming(new SkillContext(skill, 1, AttackerKind.Character, permille));
 
         Assert.That(timing.CastMs, Is.EqualTo(castMs));
         Assert.That(timing.AfterCastDelayMs, Is.EqualTo(500));
@@ -98,10 +94,40 @@ public sealed class RenewalSkillRulesTests
         }
     }
 
+    // A cast uses the values of the level it began at (Gameplay Systems §9).
+    [TestCase(1, 1500, 2000, 15)]
+    [TestCase(2, 1000, 3000, 30)]
+    public void CalculateCastTimingAndResolve_AtALevel_UseThatLevelsValues(
+        int level,
+        int castMs,
+        int cooldownMs,
+        int healed)
+    {
+        var skill = new SkillDefinition(
+            new SkillDefinitionId("skill.b"),
+            "B",
+            SkillTargetType.Self,
+            null,
+            0,
+            SkillPaymentPoint.Resolution,
+            new[]
+            {
+                new SkillLevel(3, 500, 1000, 0, 2000, SkillEffect.Heal(15)),
+                new SkillLevel(5, 500, 500, 0, 3000, SkillEffect.Heal(30))
+            });
+        var context = new SkillContext(skill, level, AttackerKind.Monster, 0);
+
+        CastTiming timing = m_rules.CalculateCastTiming(context);
+        SkillResolution resolution = m_rules.Resolve(context);
+
+        Assert.That((timing.CastMs, timing.CooldownMs), Is.EqualTo((castMs, cooldownMs)));
+        Assert.That(resolution.Amount, Is.EqualTo(healed));
+    }
+
     [Test]
     public void CalculateCastTiming_ForAMonster_TakesTheWholeCastTime()
     {
-        CastTiming timing = m_rules.CalculateCastTiming(new SkillContext(FirstAid, AttackerKind.Monster, 251));
+        CastTiming timing = m_rules.CalculateCastTiming(new SkillContext(FirstAid, 1, AttackerKind.Monster, 251));
 
         Assert.That(timing.CastMs, Is.EqualTo(1500));
     }
@@ -109,7 +135,7 @@ public sealed class RenewalSkillRulesTests
     [Test]
     public void Resolve_ADamageSkillWithoutItsInputs_Throws()
     {
-        Action resolve = () => m_rules.Resolve(new SkillContext(Strike, AttackerKind.Character, 831));
+        Action resolve = () => m_rules.Resolve(new SkillContext(Strike, 1, AttackerKind.Character, 831));
 
         Assert.That(resolve, Throws.ArgumentException);
     }
@@ -117,7 +143,7 @@ public sealed class RenewalSkillRulesTests
     [Test]
     public void Resolve_FirstAid_HealsItsNominalAmount_WithoutARoll()
     {
-        SkillResolution resolution = m_rules.Resolve(new SkillContext(FirstAid, AttackerKind.Character, 831));
+        SkillResolution resolution = m_rules.Resolve(new SkillContext(FirstAid, 1, AttackerKind.Character, 831));
 
         Assert.That(resolution.Result, Is.EqualTo(SkillResult.Healed));
         Assert.That(resolution.Amount, Is.EqualTo(15));
@@ -135,7 +161,7 @@ public sealed class RenewalSkillRulesTests
         var random = new ScriptedRandomSource(8);
 
         SkillResolution resolution = m_rules.Resolve(
-            new SkillContext(sparkBolt, AttackerKind.Monster, 0, new MagicDamageContext(20, 0, 7, random)));
+            new SkillContext(sparkBolt, 1, AttackerKind.Monster, 0, new MagicDamageContext(20, 0, 7, random)));
 
         Assert.That((resolution.Result, resolution.Amount), Is.EqualTo((SkillResult.Hit, 17)));
         Assert.That(random.RequestedBounds, Is.EqualTo(new[] { 9 }), "the roll alone: magic never misses");

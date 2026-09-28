@@ -22,7 +22,7 @@ public sealed class ContentProjectionTests
         "6.125", "12.375", "0.7321", "1.8125", "60413", "8123", "20417", "3119", "5.1875", "3.4375", "7.5625",
         "12.6875", "14.3125", "6.875", "86421", "6.4375", "4111", "5227", "139", "30211", "50423", "80637", "77173",
         "1.6875", "4127", "3171", "7193", "5231", "21133", "1319", "146443", "61933", "71129", "0.6875", "0.3125",
-        "40111", "40223", "77191", "61949"
+        "40111", "40223", "77191", "61949", "4129", "3173", "7197", "5233", "21139", "1321"
     };
 
     private static readonly string[] ServerOnlyFieldNames =
@@ -38,7 +38,8 @@ public sealed class ContentProjectionTests
         "damageRatio", "healHp", "statPercent", "status", "durationMs", "portals", "destination", "magicAttack",
         "keepDistance", "skill", "equipment",
         "attack", "attackSpeedPenalty", "defense", "bonus", "sp", "shop", "price", "npcs", "npc", "giver", "objective",
-        "kill", "monster", "count", "currency", "jobExperienceTable", "jobExperience", "guild", "reset"
+        "kill", "monster", "count", "currency", "jobExperienceTable", "jobExperience", "guild", "reset", "maxLevel",
+        "requires"
     };
 
     // The client package's allow-list (Content Pipeline §5), by file: a name not reviewed here fails.
@@ -60,7 +61,8 @@ public sealed class ContentProjectionTests
         },
         ["npcs.json"] = new[] { "schemaVersion", "definitions", "id", "displayName", "prefab" },
         ["quests.json"] = new[] { "schemaVersion", "definitions", "id", "displayName" },
-        ["skills.json"] = new[] { "schemaVersion", "definitions", "id", "displayName", "targetType", "icon" },
+        ["skills.json"] = new[]
+            { "schemaVersion", "definitions", "id", "displayName", "targetType", "icon", "description" },
         ["status-effects.json"] = new[] { "schemaVersion", "definitions", "id", "displayName", "icon" }
     };
 
@@ -406,11 +408,13 @@ public sealed class ContentProjectionTests
             ContentPackages packages = BuildValid(workspace);
 
             JsonElement server = FirstDefinition(packages.Server, "status-effects.json");
-            JsonElement percent = server.GetProperty("statPercent");
             JsonElement client = FirstDefinition(packages.Client, "status-effects.json");
-            JsonElement effect = Definition(packages.Server, "skills.json", "skill.focus").GetProperty("effect");
+            JsonElement effect = Definition(packages.Server, "skills.json", "skill.focus").GetProperty("levels")[0]
+                .GetProperty("effect");
+            JsonElement percent = effect.GetProperty("statPercent");
 
             Assert.That(server.GetProperty("id").GetString(), Is.EqualTo("status.focus"));
+            Assert.That(server.TryGetProperty("statPercent", out _), Is.False, "the strength is the skill level's");
             Assert.That(
                 new[] { "str", "agi", "vit", "int", "dex", "luk" }.Select(stat => percent.GetProperty(stat).GetInt32()),
                 Is.EqualTo(new[] { 0, 137, 0, 0, 211, 7 }));
@@ -430,18 +434,24 @@ public sealed class ContentProjectionTests
             ContentPackages packages = BuildValid(workspace);
 
             JsonElement strike = Definition(packages.Server, "skills.json", "skill.strike");
+            JsonElement first = strike.GetProperty("levels")[0];
+            JsonElement second = strike.GetProperty("levels")[1];
             Assert.That(strike.GetProperty("damageType").GetString(), Is.EqualTo("physical"));
-            Assert.That(strike.GetProperty("spCost").GetInt32(), Is.EqualTo(4127));
             Assert.That(strike.GetProperty("spPaidAt").GetString(), Is.EqualTo("castStart"));
-            Assert.That(strike.GetProperty("fixedCastMs").GetInt32(), Is.EqualTo(3171));
-            Assert.That(strike.GetProperty("variableCastMs").GetInt32(), Is.EqualTo(7193));
-            Assert.That(strike.GetProperty("afterCastDelayMs").GetInt32(), Is.EqualTo(5231));
-            Assert.That(strike.GetProperty("cooldownMs").GetInt32(), Is.EqualTo(21133));
-            Assert.That(strike.GetProperty("effect").GetProperty("damageRatio").GetInt32(), Is.EqualTo(1319));
+            Assert.That(strike.GetProperty("maxLevel").GetInt32(), Is.EqualTo(2));
+            Assert.That(strike.TryGetProperty("requires", out _), Is.False, "no prerequisite writes none");
+            Assert.That(first.GetProperty("spCost").GetInt32(), Is.EqualTo(4127));
+            Assert.That(first.GetProperty("fixedCastMs").GetInt32(), Is.EqualTo(3171));
+            Assert.That(first.GetProperty("variableCastMs").GetInt32(), Is.EqualTo(7193));
+            Assert.That(first.GetProperty("afterCastDelayMs").GetInt32(), Is.EqualTo(5231));
+            Assert.That(first.GetProperty("cooldownMs").GetInt32(), Is.EqualTo(21133));
+            Assert.That(first.GetProperty("effect").GetProperty("damageRatio").GetInt32(), Is.EqualTo(1319));
+            Assert.That(second.GetProperty("effect").GetProperty("damageRatio").GetInt32(), Is.EqualTo(1321));
+            JsonElement basicAttack = Definition(packages.Server, "skills.json", "skill.basic_attack");
             Assert.That(
-                Definition(packages.Server, "skills.json", "skill.basic_attack").TryGetProperty("effect", out _),
-                Is.False,
-                "a skill without an effect writes none");
+                (basicAttack.GetProperty("maxLevel").GetInt32(), basicAttack.GetProperty("levels").GetArrayLength()),
+                Is.EqualTo((0, 0)),
+                "a skill without an effect has no levels");
             Assert.That(
                 FirstDefinition(packages.Server, "jobs.json").GetProperty("skills").EnumerateArray()
                     .Select(skill => skill.GetString()),

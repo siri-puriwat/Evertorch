@@ -9,7 +9,7 @@ namespace Evertorch.Rules
 /// </summary>
 public readonly struct SkillContext
 {
-    public SkillContext(SkillDefinition skill, AttackerKind caster, int variableCastPermille)
+    public SkillContext(SkillDefinition skill, int level, AttackerKind caster, int variableCastPermille)
     {
         if (variableCastPermille < 0)
         {
@@ -17,6 +17,7 @@ public readonly struct SkillContext
         }
 
         Skill = skill ?? throw new ArgumentNullException(nameof(skill));
+        Level = level;
         Caster = caster;
         VariableCastPermille = variableCastPermille;
         Hit = null;
@@ -26,23 +27,36 @@ public readonly struct SkillContext
 
     public SkillContext(
         SkillDefinition skill,
+        int level,
         AttackerKind caster,
         int variableCastPermille,
         HitContext hit,
         DamageContext damage)
-        : this(skill, caster, variableCastPermille)
+        : this(skill, level, caster, variableCastPermille)
     {
         Hit = hit;
         Damage = damage;
     }
 
-    public SkillContext(SkillDefinition skill, AttackerKind caster, int variableCastPermille, MagicDamageContext magic)
-        : this(skill, caster, variableCastPermille)
+    public SkillContext(
+        SkillDefinition skill,
+        int level,
+        AttackerKind caster,
+        int variableCastPermille,
+        MagicDamageContext magic)
+        : this(skill, level, caster, variableCastPermille)
     {
         Magic = magic;
     }
 
     public SkillDefinition Skill { get; }
+
+    /// <summary>
+    ///     The level the cast began at, whose values it uses (Gameplay Systems §9).
+    /// </summary>
+    public int Level { get; }
+
+    public SkillLevel Values => Skill.ValuesAt(Level);
 
     public AttackerKind Caster { get; }
 
