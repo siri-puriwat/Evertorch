@@ -46,6 +46,10 @@ internal sealed class FakeClientTransport : IClientTransport
         Sent.Add(new SentMessage(channel, delivery, payload.ToArray()));
     }
 
+    public void Dispose()
+    {
+    }
+
     public void Poll(IClientTransportListener listener)
     {
         while (m_events.Count > 0)

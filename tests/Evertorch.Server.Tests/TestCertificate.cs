@@ -82,9 +82,9 @@ internal sealed class TestCertificate : IDisposable
     /// <summary>
     ///     The request body a native client sends: its login, its password, and the one transport it can use.
     /// </summary>
-    public static string SignInJson(string login, string password)
+    public static string SignInJson(string login, string password, string transport = "udp")
     {
-        return $"{{\"login\":\"{login}\",\"password\":\"{password}\",\"transports\":[\"udp\"]}}";
+        return $"{{\"login\":\"{login}\",\"password\":\"{password}\",\"transports\":[\"{transport}\"]}}";
     }
 
     public static StringContent JsonContent(string json)

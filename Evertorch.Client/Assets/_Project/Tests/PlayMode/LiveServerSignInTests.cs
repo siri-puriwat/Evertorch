@@ -96,6 +96,31 @@ public sealed class LiveServerSignInTests : InputTestFixture
             Does.Not.Contain(LiveServer.AccountPassword).And.Not.Contain("Wrong-Password-1"));
     }
 
+    // Network Protocol §7: the browser's path in the editor, through the managed WebSocket with the pin, which is also
+    // where Unity's Mono proves it can speak wss:// at all.
+    [UnityTest]
+    [Timeout(TestTimeoutMs)]
+    public IEnumerator SignIn_OverWebSocket_EntersTheWorldThroughTheGateway()
+    {
+        string actionsPath = RequirePrerequisites();
+        yield return StartDatabaseAndServer();
+        GameClient client = CreateClient(actionsPath);
+        client.UsesWebSocket = true;
+
+        yield return LiveSignIn.PressConnect(client);
+        yield return WaitUntil(
+            () => client.Connection?.State == ClientConnectionState.SelectingCharacter,
+            StartTimeoutSeconds);
+        Assert.That(client.Connection?.State, Is.EqualTo(ClientConnectionState.SelectingCharacter), client.Status);
+        client.CreateCharacter("WebLive1");
+        yield return WaitUntil(() => client.Connection!.Characters.Count == 1, StartTimeoutSeconds);
+        client.EnterWorld(client.Connection!.Characters[0].Character);
+        yield return WaitUntil(() => client.World?.Inventory.IsCurrent == true, StartTimeoutSeconds);
+
+        Assert.That(client.World?.Inventory.IsCurrent, Is.True, client.Status);
+        Assert.That(client.Link!.RoundTripMilliseconds, Is.GreaterThanOrEqualTo(0));
+    }
+
     private static void SetPassword(GameClient client, string password)
     {
         client.GetComponentsInChildren<TMP_InputField>(true)

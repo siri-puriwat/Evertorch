@@ -11,7 +11,7 @@ namespace Evertorch.Client
 ///     The only client code that knows LiteNetLib. Events are raised from <see cref="Poll" />, so everything above it
 ///     runs on Unity's main thread.
 /// </summary>
-public sealed class LiteNetLibClientTransport : IClientTransport, IDisposable
+public sealed class LiteNetLibClientTransport : IClientTransport
 {
     private readonly NetManager m_manager;
     private readonly string m_connectionKey;

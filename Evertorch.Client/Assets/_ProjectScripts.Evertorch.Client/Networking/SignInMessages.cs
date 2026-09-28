@@ -10,11 +10,6 @@ public static class SignInMessages
 
     public const string MissingCredentials = "Enter a login and a password.";
 
-    /// <summary>
-    ///     A web build's answer to Connect until it can play over WebSocket (tracker §6, lines 7 and 8).
-    /// </summary>
-    public const string CannotConnectYet = "This build cannot connect yet.";
-
     public const string UnreadableAnswer = "The server's answer could not be read. Update the game to play here.";
 
     /// <param name="status">The HTTP status the gateway answered, or 0 when no answer came.</param>

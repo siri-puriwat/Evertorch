@@ -52,6 +52,10 @@ internal sealed class LoopbackClientTransport : IClientTransport
         }
     }
 
+    public void Dispose()
+    {
+    }
+
     public void Poll(IClientTransportListener listener)
     {
         if (IsConnected && !m_hasAnnouncedConnect)

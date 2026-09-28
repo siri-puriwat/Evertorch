@@ -44,6 +44,11 @@ public sealed class GatewayOptions
     ///     Sign-ins checked at once; each costs a password hash. More are answered 503.
     /// </summary>
     public int MaxConcurrentSignIns { get; set; } = 4;
+
+    /// <summary>
+    ///     The web pages that may call <c>/session</c> from a browser (<see cref="GatewayOrigins" />); none by default.
+    /// </summary>
+    public string[] AllowedOrigins { get; set; } = Array.Empty<string>();
 }
 
 public sealed class GatewayOptionsValidator : IValidateOptions<GatewayOptions>
@@ -69,6 +74,15 @@ public sealed class GatewayOptionsValidator : IValidateOptions<GatewayOptions>
         if (options.MaxConcurrentSignIns < 1 || options.MaxConcurrentSignIns > 64)
         {
             failures.Add($"{GatewayOptions.SectionName}:MaxConcurrentSignIns must be between 1 and 64.");
+        }
+
+        foreach (string origin in options.AllowedOrigins)
+        {
+            if (!GatewayOrigins.IsValidEntry(origin))
+            {
+                failures.Add(
+                    $"{GatewayOptions.SectionName}:AllowedOrigins holds '{origin}', which is not an http or https origin.");
+            }
         }
 
         return failures.Count == 0 ? ValidateOptionsResult.Success : ValidateOptionsResult.Fail(failures);

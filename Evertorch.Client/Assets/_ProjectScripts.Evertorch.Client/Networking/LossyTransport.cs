@@ -82,6 +82,11 @@ public sealed class LossyTransport : IClientTransport
         Hold(m_outbound, ref m_lastReliableOutbound, m_nowSeconds(), channel, delivery, payload);
     }
 
+    public void Dispose()
+    {
+        m_inner.Dispose();
+    }
+
     public void Poll(IClientTransportListener listener)
     {
         if (listener == null)

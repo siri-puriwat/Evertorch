@@ -130,6 +130,34 @@ public sealed class GatewayEndpoint : IHostedService, IDisposable
         }
     }
 
+    // The browser asks before it posts JSON from another origin; only an allowed page is told it may.
+    private void AnswerPreflight(HttpContext context)
+    {
+        if (!AddCorsHeaders(context))
+        {
+            context.Response.StatusCode = StatusCodes.Status403Forbidden;
+            return;
+        }
+
+        context.Response.Headers.AccessControlAllowMethods = "POST";
+        context.Response.Headers.AccessControlAllowHeaders = "Content-Type";
+        context.Response.Headers.AccessControlMaxAge = "600";
+        context.Response.StatusCode = StatusCodes.Status204NoContent;
+    }
+
+    private bool AddCorsHeaders(HttpContext context)
+    {
+        context.Response.Headers.Vary = "Origin";
+        string? origin = context.Request.Headers.Origin;
+        if (!GatewayOrigins.IsAllowed(origin, m_options.AllowedOrigins))
+        {
+            return false;
+        }
+
+        context.Response.Headers.AccessControlAllowOrigin = origin;
+        return true;
+    }
+
     // Every refusal before the upgrade is a bare status, as a UDP request with a wrong key gets no data
     // (Network Protocol §7); the transport runs the upgraded socket for as long as it stays open.
     private async Task PlayAsync(HttpContext context)
@@ -191,6 +219,18 @@ public sealed class GatewayEndpoint : IHostedService, IDisposable
             return;
         }
 
+        bool isSession = string.Equals(request.Path.Value, SessionPath, StringComparison.Ordinal);
+        if (isSession && HttpMethods.IsOptions(request.Method))
+        {
+            AnswerPreflight(context);
+            return;
+        }
+
+        if (isSession)
+        {
+            AddCorsHeaders(context);
+        }
+
         if (!HttpMethods.IsPost(request.Method) ||
             !string.Equals(request.Path.Value, SessionPath, StringComparison.Ordinal))
         {
@@ -204,7 +244,8 @@ public sealed class GatewayEndpoint : IHostedService, IDisposable
             : await m_signIn.SignInAsync(
                     body,
                     context.Connection.RemoteIpAddress ?? IPAddress.None,
-                    request.Host.Host)
+                    request.Host.Host,
+                    context.Connection.LocalPort)
                 .ConfigureAwait(false);
         context.Response.StatusCode = answer.StatusCode;
         context.Response.Headers.CacheControl = "no-store";

@@ -61,7 +61,7 @@ public sealed class GameClient : MonoBehaviour
     private readonly List<PickCandidate> m_npcCandidates = new();
     private readonly TargetCycler m_targetCycler = new();
     private readonly UiHitTest m_uiHitTest = new();
-    private LiteNetLibClientTransport? m_socket;
+    private IClientTransport? m_socket;
     private ManualMoveSource? m_manualSource;
     private PointerMoveSource? m_pointerSource;
     private PointerMoveHandler? m_pointerHandler;
@@ -102,6 +102,7 @@ public sealed class GameClient : MonoBehaviour
     private string m_signedInHost = string.Empty;
     private int m_signedInPort;
     private bool m_isReusingSession;
+    private bool m_isWebSocketChosen;
 
     public string Host
     {
@@ -130,6 +131,16 @@ public sealed class GameClient : MonoBehaviour
     public string? PinnedThumbprint { get; set; }
 
     public bool IsSigningIn { get; private set; }
+
+    /// <summary>
+    ///     Plays over WebSocket rather than UDP, as a web build always does; a test sets it to drive that path with a
+    ///     managed WebSocket in the editor. Never serialized.
+    /// </summary>
+    public bool UsesWebSocket
+    {
+        get => m_isWebSocketChosen || Application.platform == RuntimePlatform.WebGLPlayer;
+        set => m_isWebSocketChosen = value;
+    }
 
     public string Status { get; private set; } = "Loading content";
 
@@ -391,31 +402,35 @@ public sealed class GameClient : MonoBehaviour
         }
     }
 
+    // A browser has no .NET sockets, so a web build talks through its page; everywhere else a managed WebSocket serves,
+    // pinned to the one certificate a test trusts.
+    private IWebSocketConnection CreateWebSocket()
+    {
+#if UNITY_WEBGL && !UNITY_EDITOR
+        return new BrowserWebSocketConnection();
+#else
+        string? pin = PinnedThumbprint;
+        if (pin == null)
+        {
+            return new ManagedWebSocketConnection();
+        }
+
+        return new ManagedWebSocketConnection(options => options.RemoteCertificateValidationCallback =
+            (_, certificate, _, _) => certificate != null
+                && string.Equals(certificate.GetCertHashString(), pin, StringComparison.OrdinalIgnoreCase));
+#endif
+    }
+
     private bool IsIdle()
     {
         bool isOpen = Connection != null && Connection.State != ClientConnectionState.Disconnected;
         return m_contentLoader.Content != null && !isOpen && !IsSigningIn;
     }
 
-    /// <summary>
-    ///     Whether a build for <paramref name="platform" /> can play: not yet in a browser, which has no UDP, so a web
-    ///     build never makes the UDP transport.
-    /// </summary>
-    public static bool CanConnectFrom(RuntimePlatform platform)
-    {
-        return platform != RuntimePlatform.WebGLPlayer;
-    }
-
     private void SignIn()
     {
         if (!IsIdle())
         {
-            return;
-        }
-
-        if (!CanConnectFrom(Application.platform))
-        {
-            Status = SignInMessages.CannotConnectYet;
             return;
         }
 
@@ -428,7 +443,8 @@ public sealed class GameClient : MonoBehaviour
         IsSigningIn = true;
         CanReconnect = false;
         Status = SignInMessages.SigningIn;
-        StartCoroutine(SignInThenOpen(new GatewaySignIn(m_host, m_port, Login, Password, PinnedThumbprint)));
+        string transport = UsesWebSocket ? SignInAnswer.WebSocketTransport : SignInAnswer.UdpTransport;
+        StartCoroutine(SignInThenOpen(new GatewaySignIn(m_host, m_port, Login, Password, transport, PinnedThumbprint)));
     }
 
     private IEnumerator SignInThenOpen(GatewaySignIn signIn)
@@ -467,7 +483,9 @@ public sealed class GameClient : MonoBehaviour
         }
 
         m_socket?.Dispose();
-        m_socket = new LiteNetLibClientTransport(ConnectionKey, DisconnectTimeoutMilliseconds);
+        m_socket = UsesWebSocket
+            ? new WebSocketClientTransport(CreateWebSocket, ConnectionKey, DisconnectTimeoutMilliseconds)
+            : new LiteNetLibClientTransport(ConnectionKey, DisconnectTimeoutMilliseconds);
         LossyTransport? previousLink = Link;
         Link = new LossyTransport(m_socket, Environment.TickCount, () => Time.realtimeSinceStartupAsDouble);
         if (previousLink != null)

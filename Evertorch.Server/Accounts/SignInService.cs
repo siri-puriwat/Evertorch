@@ -21,6 +21,7 @@ public sealed class SignInService
 {
     public const int MaxBodyBytes = 1024;
     public const string UdpTransport = "udp";
+    public const string WebSocketTransport = "websocket";
 
     public const string IssuedOutcome = "issued";
     public const string RefusedOutcome = "refused";
@@ -49,6 +50,8 @@ public sealed class SignInService
     private readonly int m_timeoutMs;
     private readonly TimeSpan m_tokenLifetime;
     private readonly string? m_answeredHost;
+    private readonly string? m_publicHost;
+    private readonly string m_connectionKey;
 
     public SignInService(
         IGameStore store,
@@ -78,6 +81,8 @@ public sealed class SignInService
         m_timeoutMs = persistence.Value.CommandTimeoutMs;
         m_tokenLifetime = TimeSpan.FromMilliseconds(session.Value.TokenLifetimeMs);
         m_answeredHost = gateway.Value.PublicHost ?? SpecificAddress(network.Value.BindAddress);
+        m_publicHost = gateway.Value.PublicHost;
+        m_connectionKey = network.Value.ConnectionKey;
     }
 
     /// <summary>
@@ -92,7 +97,12 @@ public sealed class SignInService
     /// <param name="body">The request's JSON, at most <see cref="MaxBodyBytes" />.</param>
     /// <param name="remote">The caller's address, for its limit only.</param>
     /// <param name="requestHost">The host the request named, answered when nothing more specific is known.</param>
-    public async Task<GatewayAnswer> SignInAsync(ReadOnlyMemory<byte> body, IPAddress remote, string requestHost)
+    /// <param name="gatewayPort">The gateway's port, where a browser's WebSocket connects.</param>
+    public async Task<GatewayAnswer> SignInAsync(
+        ReadOnlyMemory<byte> body,
+        IPAddress remote,
+        string requestHost,
+        int gatewayPort)
     {
         if (!m_throttle.TryAdmitAddress(remote))
         {
@@ -107,8 +117,8 @@ public sealed class SignInService
 
         try
         {
-            return TryRead(body.Span, out string login, out string password)
-                ? await CheckAsync(login, password, requestHost).ConfigureAwait(false)
+            return TryRead(body.Span, out string login, out string password, out string transport)
+                ? await CheckAsync(login, password, transport, requestHost, gatewayPort).ConfigureAwait(false)
                 : Malformed();
         }
         finally
@@ -119,13 +129,18 @@ public sealed class SignInService
 
     // The request: an object with the login, the password, and the transports the client can use, which must name
     // one this server serves. Other members are ignored, and none may repeat.
-    private static bool TryRead(ReadOnlySpan<byte> body, out string login, out string password)
+    private static bool TryRead(
+        ReadOnlySpan<byte> body,
+        out string login,
+        out string password,
+        out string transport)
     {
         login = string.Empty;
         password = string.Empty;
+        transport = string.Empty;
         string? foundLogin = null;
         string? foundPassword = null;
-        bool? offersUdp = null;
+        string? chosen = null;
         try
         {
             var reader = new Utf8JsonReader(body, new JsonReaderOptions { MaxDepth = 4 });
@@ -152,7 +167,7 @@ public sealed class SignInService
                         foundPassword = reader.GetString();
                         break;
                     case "transports" when reader.TokenType == JsonTokenType.StartArray:
-                        offersUdp = ReadsUdp(ref reader);
+                        chosen = ReadTransport(ref reader);
                         break;
                     case "login":
                     case "password":
@@ -178,19 +193,21 @@ public sealed class SignInService
             return false;
         }
 
-        if (foundLogin == null || foundPassword == null || offersUdp != true)
+        if (foundLogin == null || foundPassword == null || chosen == null)
         {
             return false;
         }
 
         login = foundLogin;
         password = foundPassword;
+        transport = chosen;
         return true;
     }
 
-    private static bool ReadsUdp(ref Utf8JsonReader reader)
+    // The first transport listed that this server serves; null when it serves none of them.
+    private static string? ReadTransport(ref Utf8JsonReader reader)
     {
-        bool offersUdp = false;
+        string? chosen = null;
         while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
         {
             if (reader.TokenType != JsonTokenType.String)
@@ -198,10 +215,17 @@ public sealed class SignInService
                 throw new JsonException("A transport is a string.");
             }
 
-            offersUdp |= reader.ValueTextEquals(UdpTransport);
+            if (chosen == null && reader.ValueTextEquals(UdpTransport))
+            {
+                chosen = UdpTransport;
+            }
+            else if (chosen == null && reader.ValueTextEquals(WebSocketTransport))
+            {
+                chosen = WebSocketTransport;
+            }
         }
 
-        return offersUdp;
+        return chosen;
     }
 
     private static string? SpecificAddress(string bindAddress)
@@ -213,23 +237,42 @@ public sealed class SignInService
                 : null;
     }
 
-    private static byte[] Answer(string host, int port, string token)
+    private static byte[] Answer(string transport, string host, int port, string token, string? url)
     {
         var buffer = new ArrayBufferWriter<byte>(256);
         using (var writer = new Utf8JsonWriter(buffer))
         {
             writer.WriteStartObject();
-            writer.WriteString("transport", UdpTransport);
+            writer.WriteString("transport", transport);
             writer.WriteString("host", host);
             writer.WriteNumber("port", port);
             writer.WriteString("token", token);
+            if (url != null)
+            {
+                writer.WriteString("url", url);
+            }
+
             writer.WriteEndObject();
         }
 
         return buffer.WrittenSpan.ToArray();
     }
 
-    private async Task<GatewayAnswer> CheckAsync(string login, string password, string requestHost)
+    /// <summary>
+    ///     Where a browser's game connection goes (Network Protocol §7): the gateway's <c>/play</c> with the key.
+    /// </summary>
+    public static string PlayUrl(string host, int port, string connectionKey)
+    {
+        string bracketed = host.Contains(':', StringComparison.Ordinal) && !host.StartsWith('[') ? $"[{host}]" : host;
+        return $"wss://{bracketed}:{port}/play?key={Uri.EscapeDataString(connectionKey)}";
+    }
+
+    private async Task<GatewayAnswer> CheckAsync(
+        string login,
+        string password,
+        string transport,
+        string requestHost,
+        int gatewayPort)
     {
         bool isLogin = AccountCredentialRules.TryNormalizeLogin(login, out string normalized);
         string limited = isLogin ? normalized : login.ToLowerInvariant();
@@ -281,7 +324,15 @@ public sealed class SignInService
 
         m_instruments.RecordSignIn(IssuedOutcome);
         LogSignedIn(m_logger, credentials.Account.Value, (int)m_tokenLifetime.TotalSeconds, null);
-        return GatewayAnswer.Json(Answer(m_answeredHost ?? requestHost, m_udp.LocalPort, token.Text));
+        if (transport == WebSocketTransport)
+        {
+            // The page reached the gateway by the host it named, so the WebSocket goes there too.
+            string host = m_publicHost ?? requestHost;
+            return GatewayAnswer.Json(
+                Answer(transport, host, gatewayPort, token.Text, PlayUrl(host, gatewayPort, m_connectionKey)));
+        }
+
+        return GatewayAnswer.Json(Answer(transport, m_answeredHost ?? requestHost, m_udp.LocalPort, token.Text, null));
     }
 
     private GatewayAnswer Throttled(string limit, AccountId? account)

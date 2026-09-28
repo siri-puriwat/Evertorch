@@ -26,13 +26,14 @@ internal sealed class SocketClient : IDisposable
     private const int DisconnectTimeoutMilliseconds = 5000;
     public static readonly TimeSpan Limit = TimeSpan.FromSeconds(15);
 
-    // The whole answer, its members in their order: nothing more may appear in it.
+    // The whole answer, its members in their order: nothing more may appear in it. A WebSocket answer ends with the
+    // URL of the gateway's /play.
     private static readonly Regex AnswerShape = new(
-        @"^\{""transport"":""udp"",""host"":""(?<host>[^""]+)"",""port"":(?<port>[0-9]+),"
-        + @"""token"":""(?<token>[A-Za-z0-9_-]{43})""\}$",
+        @"^\{""transport"":""(?<transport>udp|websocket)"",""host"":""(?<host>[^""]+)"",""port"":(?<port>[0-9]+),"
+        + @"""token"":""(?<token>[A-Za-z0-9_-]{43})""(,""url"":""(?<url>[^""]+)"")?\}$",
         RegexOptions.CultureInvariant);
 
-    private readonly LiteNetLibClientTransport m_socket;
+    private readonly IClientTransport m_socket;
     private readonly ServerContent m_content;
     private readonly AutoEnter m_selection;
     private readonly Stopwatch m_clock = Stopwatch.StartNew();
@@ -52,15 +53,14 @@ internal sealed class SocketClient : IDisposable
     private double m_lastSeconds;
 
     public SocketClient(ServerContent content, string identity, string characterName)
-        : this(content, characterName, $"dev:{identity}", 0)
+        : this(content, characterName, $"dev:{identity}", Udp())
     {
     }
 
-    // The last parameter only tells this constructor from the public one.
-    private SocketClient(ServerContent content, string characterName, string token, int _)
+    private SocketClient(ServerContent content, string characterName, string token, IClientTransport transport)
     {
         m_content = content;
-        m_socket = new LiteNetLibClientTransport(ConnectionKey, DisconnectTimeoutMilliseconds);
+        m_socket = transport;
         Link = new LossyTransport(m_socket, 4, () => m_clock.Elapsed.TotalSeconds);
         Connection = new ClientConnection(
             Link,
@@ -104,21 +104,51 @@ internal sealed class SocketClient : IDisposable
     /// </summary>
     public static SocketClient WithToken(ServerContent content, string token, string characterName)
     {
-        return new SocketClient(content, characterName, token, 0);
+        return new SocketClient(content, characterName, token, Udp());
+    }
+
+    /// <summary>
+    ///     A client that plays over WebSocket, as a browser does, through the managed WebSocket pinned to
+    ///     <paramref name="certificate" />; <see cref="Connect" /> then takes the gateway's port.
+    /// </summary>
+    public static SocketClient OverWebSocket(
+        ServerContent content,
+        string token,
+        string characterName,
+        TestCertificate certificate)
+    {
+        var transport = new WebSocketClientTransport(
+            () => new ManagedWebSocketConnection(options => options.RemoteCertificateValidationCallback =
+                (_, presented, _, _) => presented != null
+                    && string.Equals(presented.GetCertHashString(), certificate.Thumbprint,
+                        StringComparison.OrdinalIgnoreCase)),
+            ConnectionKey,
+            DisconnectTimeoutMilliseconds);
+        return new SocketClient(content, characterName, token, transport);
+    }
+
+    private static IClientTransport Udp()
+    {
+        return new LiteNetLibClientTransport(ConnectionKey, DisconnectTimeoutMilliseconds);
     }
 
     /// <summary>
     ///     Signs in at the gateway as a native client does (Network Protocol §4), through a client that pins the test's
     ///     certificate, and checks the request's and the answer's JSON byte for byte.
     /// </summary>
-    public static GatewaySignInResult SignIn(TestCertificate certificate, int gatewayPort, string login,
-        string password)
+    public static GatewaySignInResult SignIn(
+        TestCertificate certificate,
+        int gatewayPort,
+        string login,
+        string password,
+        string transport = SignInAnswer.UdpTransport)
     {
         using HttpClient http = certificate.CreateClient();
-        string request = TestCertificate.SignInJson(login, password);
+        string request = TestCertificate.SignInJson(login, password, transport);
         Assert.That(
             request,
-            Is.EqualTo($"{{\"login\":\"{login}\",\"password\":\"{password}\",\"transports\":[\"udp\"]}}"));
+            Is.EqualTo(
+                $"{{\"login\":\"{login}\",\"password\":\"{password}\",\"transports\":[\"{transport}\"]}}"));
         using HttpResponseMessage response = http
             .PostAsync($"https://127.0.0.1:{gatewayPort}/session", TestCertificate.JsonContent(request))
             .GetAwaiter()
@@ -132,8 +162,22 @@ internal sealed class SocketClient : IDisposable
             answer.Groups["host"].Value,
             int.Parse(answer.Groups["port"].Value, CultureInfo.InvariantCulture),
             answer.Groups["token"].Value);
+        Assert.That(answer.Groups["transport"].Value, Is.EqualTo(transport), "the transport asked for");
         Assert.That(
-            SignInAnswer.TryCreate(SignInAnswer.UdpTransport, signIn.Host, signIn.Port, signIn.Token, out _),
+            answer.Groups["url"].Success,
+            Is.EqualTo(transport == SignInAnswer.WebSocketTransport),
+            "a URL for a WebSocket only");
+        if (answer.Groups["url"].Success)
+        {
+            Assert.That(
+                answer.Groups["url"].Value,
+                Is.EqualTo($"wss://{signIn.Host}:{signIn.Port}/play?key={ConnectionKey}"),
+                "the gateway's /play");
+        }
+
+        Assert.That(
+            SignInAnswer.TryCreate(transport, answer.Groups["transport"].Value, signIn.Host, signIn.Port, signIn.Token,
+                out _),
             Is.True,
             "the client's own check takes the answer");
         return signIn;

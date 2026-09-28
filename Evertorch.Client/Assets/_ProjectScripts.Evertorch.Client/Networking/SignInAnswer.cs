@@ -7,6 +7,7 @@ namespace Evertorch.Client
 public sealed class SignInAnswer
 {
     public const string UdpTransport = "udp";
+    public const string WebSocketTransport = "websocket";
     public const int TokenLength = 43;
 
     private const int MaxHostLength = 253;
@@ -27,10 +28,17 @@ public sealed class SignInAnswer
     /// </summary>
     public string Token { get; }
 
-    public static bool TryCreate(string? transport, string? host, int port, string? token, out SignInAnswer? answer)
+    /// <param name="requested">The one transport the sign-in offered; the answer must name it.</param>
+    public static bool TryCreate(
+        string requested,
+        string? transport,
+        string? host,
+        int port,
+        string? token,
+        out SignInAnswer? answer)
     {
         answer = null;
-        if (transport != UdpTransport
+        if (transport != requested
             || !IsHost(host)
             || port < 1
             || port > 65535

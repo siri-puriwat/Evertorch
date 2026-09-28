@@ -5,8 +5,9 @@ namespace Evertorch.Client
 {
 /// <summary>
 ///     The client's view of a network library. Everything above it deals in protocol channels and payload bytes only.
+///     Disposing it releases its socket, which may outlive play mode when the editor keeps the domain loaded.
 /// </summary>
-public interface IClientTransport
+public interface IClientTransport : IDisposable
 {
     bool IsConnected { get; }
 

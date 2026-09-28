@@ -50,7 +50,8 @@ public sealed class GatewayTests
             m_sharedStore,
             null,
             "--Abuse:SignInBurst=10000",
-            "--Abuse:SignInFailureBurst=1000");
+            "--Abuse:SignInFailureBurst=1000",
+            "--Gateway:AllowedOrigins:0=http://localhost:*");
         CreateAccount(m_shared, "alice");
         CreateAccount(m_shared, "disabled");
         m_sharedStore.Disable("disabled");
@@ -185,7 +186,7 @@ public sealed class GatewayTests
     [TestCase("{\"login\":\"alice\",\"transports\":[\"udp\"]}")]
     [TestCase("{\"login\":7,\"password\":\"Correct-Horse-9\",\"transports\":[\"udp\"]}")]
     [TestCase("{\"Login\":\"alice\",\"password\":\"Correct-Horse-9\",\"transports\":[\"udp\"]}")]
-    [TestCase("{\"login\":\"alice\",\"password\":\"Correct-Horse-9\",\"transports\":[\"websocket\"]}")]
+    [TestCase("{\"login\":\"alice\",\"password\":\"Correct-Horse-9\",\"transports\":[\"tcp\"]}")]
     [TestCase("{\"login\":\"alice\",\"password\":\"Correct-Horse-9\",\"transports\":\"udp\"}")]
     [TestCase("{\"login\":\"alice\",\"password\":\"Correct-Horse-9\",\"transports\":[\"udp\",1]}")]
     [TestCase("{\"login\":\"alice\",\"login\":\"bob\",\"password\":\"Correct-Horse-9\",\"transports\":[\"udp\"]}")]
@@ -246,6 +247,48 @@ public sealed class GatewayTests
         host.StopAsync().GetAwaiter().GetResult();
     }
 
+    private HttpResponseMessage SendWithOrigin(HttpMethod method, string origin, HttpContent? content)
+    {
+        using HttpClient http = m_certificate.CreateClient();
+        var request = new HttpRequestMessage(
+            method,
+            $"https://127.0.0.1:{GatewayPort(m_shared)}{GatewayEndpoint.SessionPath}") { Content = content };
+        request.Headers.Add("Origin", origin);
+        if (method == HttpMethod.Options)
+        {
+            request.Headers.Add("Access-Control-Request-Method", "POST");
+            request.Headers.Add("Access-Control-Request-Headers", "content-type");
+        }
+
+        return http.SendAsync(request).GetAwaiter().GetResult();
+    }
+
+    [TestCase("http://example.com")]
+    [TestCase("https://localhost:51234")]
+    [TestCase("http://localhost.example.com")]
+    [TestCase("null")]
+    public void Preflight_FromAnotherOrigin_IsRefusedWithoutAllowingIt(string origin)
+    {
+        using HttpResponseMessage response = SendWithOrigin(HttpMethod.Options, origin, null);
+
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.Forbidden));
+        Assert.That(response.Headers.Contains("Access-Control-Allow-Origin"), Is.False);
+        Assert.That(response.Headers.Vary, Does.Contain("Origin"));
+    }
+
+    [TestCase("[\"websocket\",\"udp\"]", "websocket")]
+    [TestCase("[\"tcp\",\"udp\"]", "udp")]
+    [TestCase("[\"udp\",\"websocket\"]", "udp")]
+    public void SignIn_OfferingSeveralTransports_GetsTheFirstThisServerServes(string transports, string chosen)
+    {
+        string json = $"{{\"login\":\"alice\",\"password\":\"{Password}\",\"transports\":{transports}}}";
+
+        (HttpStatusCode status, string body, _) = Post(m_shared, json);
+
+        Assert.That(status, Is.EqualTo(HttpStatusCode.OK));
+        Assert.That(body, Does.StartWith($"{{\"transport\":\"{chosen}\","));
+    }
+
     [Test]
     public void Hello_WithADevelopmentToken_OnAServerThatTakesPasswords_IsRefused()
     {
@@ -293,6 +336,53 @@ public sealed class GatewayTests
             Is.EqualTo(HttpStatusCode.BadRequest));
     }
 
+    // CORS (System Architecture §12): a web build's page on another origin may sign in.
+    [Test]
+    public void Preflight_FromAnAllowedOrigin_IsAnsweredWithWhatThePageMaySend()
+    {
+        using HttpResponseMessage response = SendWithOrigin(HttpMethod.Options, "http://localhost:51234", null);
+
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.NoContent));
+        Assert.That(response.Headers.GetValues("Access-Control-Allow-Origin").Single(),
+            Is.EqualTo("http://localhost:51234"));
+        Assert.That(response.Headers.GetValues("Access-Control-Allow-Methods").Single(), Is.EqualTo("POST"));
+        Assert.That(response.Headers.GetValues("Access-Control-Allow-Headers").Single(), Is.EqualTo("Content-Type"));
+        Assert.That(response.Headers.Vary, Does.Contain("Origin"));
+    }
+
+    [Test]
+    public void SignIn_ForTheWebSocketTransport_AnswersTheGatewaysPlayUrl()
+    {
+        GatewaySignInResult answer = SocketClient.SignIn(
+            m_certificate,
+            GatewayPort(m_shared),
+            "alice",
+            Password,
+            "websocket");
+
+        Assert.That(answer.Host, Is.EqualTo("127.0.0.1"), "the host the request named");
+        Assert.That(answer.Port, Is.EqualTo(GatewayPort(m_shared)));
+    }
+
+    [Test]
+    public void SignIn_FromAnAllowedOrigin_LetsThePageReadTheAnswer_AndFromAnotherDoesNot()
+    {
+        using HttpResponseMessage allowed = SendWithOrigin(
+            HttpMethod.Post,
+            "http://localhost:8000",
+            TestCertificate.JsonContent(TestCertificate.SignInJson("alice", Password, "websocket")));
+        using HttpResponseMessage other = SendWithOrigin(
+            HttpMethod.Post,
+            "http://example.com",
+            TestCertificate.JsonContent(TestCertificate.SignInJson("alice", Password, "websocket")));
+
+        Assert.That(allowed.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.That(allowed.Headers.GetValues("Access-Control-Allow-Origin").Single(),
+            Is.EqualTo("http://localhost:8000"));
+        Assert.That(other.Headers.Contains("Access-Control-Allow-Origin"), Is.False);
+        Assert.That(other.Headers.Vary, Does.Contain("Origin"));
+    }
+
     [Test]
     public void SignIn_ThenAHelloWithItsToken_EntersTheWorld()
     {
@@ -303,6 +393,21 @@ public sealed class GatewayTests
         client.EnterWorld(answer.Port);
 
         Assert.That(client.Connection.Characters.Single().Name, Is.EqualTo("Gateway1"));
+    }
+
+    // Network Protocol §7: a browser's whole path, with the managed WebSocket standing in for the page's.
+    [Test]
+    public void SignIn_ThenPlayOverWebSocket_EntersTheWorld()
+    {
+        GatewaySignInResult answer =
+            SocketClient.SignIn(m_certificate, GatewayPort(m_shared), "alice", Password, "websocket");
+        ServerContent content = m_shared.Services.GetRequiredService<ServerContent>();
+
+        using var client = SocketClient.OverWebSocket(content, answer.Token, "WebWalker", m_certificate);
+        client.EnterWorld(answer.Port);
+
+        Assert.That(client.Connection.Characters.Select(character => character.Name), Does.Contain("WebWalker"));
+        Assert.That(client.World.Inventory.IsCurrent, Is.True);
     }
 
     [Test]

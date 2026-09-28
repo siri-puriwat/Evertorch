@@ -21,17 +21,26 @@ public sealed class GatewaySignIn
     private readonly Uri m_url;
     private readonly string m_login;
     private readonly string m_password;
+    private readonly string m_transport;
     private readonly string? m_pinnedThumbprint;
 
+    /// <param name="transport">The one transport this build connects with: UDP natively, WebSocket in a browser.</param>
     /// <param name="pinnedThumbprint">
     ///     When set, the one certificate trusted, by its SHA-1 thumbprint, for tests that must not depend on what the
     ///     machine trusts; unset, the operating system decides.
     /// </param>
-    public GatewaySignIn(string host, int port, string login, string password, string? pinnedThumbprint)
+    public GatewaySignIn(
+        string host,
+        int port,
+        string login,
+        string password,
+        string transport,
+        string? pinnedThumbprint)
     {
         m_url = new UriBuilder(Uri.UriSchemeHttps, host, port, Path).Uri;
         m_login = login;
         m_password = password;
+        m_transport = transport;
         m_pinnedThumbprint = pinnedThumbprint;
     }
 
@@ -43,23 +52,23 @@ public sealed class GatewaySignIn
     public string Error { get; private set; } = string.Empty;
 
     /// <summary>
-    ///     The request body: <c>{"login":…,"password":…,"transports":["udp"]}</c>.
+    ///     The request body: <c>{"login":…,"password":…,"transports":["udp"]}</c>, or <c>["websocket"]</c>.
     /// </summary>
-    public static string RequestJson(string login, string password)
+    public static string RequestJson(string login, string password, string transport)
     {
         return JsonUtility.ToJson(
             new RequestDto
             {
                 login = login,
                 password = password,
-                transports = new[] { SignInAnswer.UdpTransport }
+                transports = new[] { transport }
             });
     }
 
     /// <summary>
     ///     The answer's fields, or null when the text is not the answer's JSON.
     /// </summary>
-    public static SignInAnswer? ReadAnswer(string json)
+    public static SignInAnswer? ReadAnswer(string json, string transport)
     {
         AnswerDto? answer;
         try
@@ -72,7 +81,13 @@ public sealed class GatewaySignIn
         }
 
         return answer != null
-            && SignInAnswer.TryCreate(answer.transport, answer.host, answer.port, answer.token, out SignInAnswer? read)
+            && SignInAnswer.TryCreate(
+                transport,
+                answer.transport,
+                answer.host,
+                answer.port,
+                answer.token,
+                out SignInAnswer? read)
                 ? read
                 : null;
     }
@@ -82,7 +97,7 @@ public sealed class GatewaySignIn
     /// </summary>
     public IEnumerator Run()
     {
-        byte[] body = Encoding.UTF8.GetBytes(RequestJson(m_login, m_password));
+        byte[] body = Encoding.UTF8.GetBytes(RequestJson(m_login, m_password, m_transport));
         using (var request = new UnityWebRequest(
                    m_url,
                    UnityWebRequest.kHttpVerbPOST,
@@ -99,7 +114,7 @@ public sealed class GatewaySignIn
             yield return request.SendWebRequest();
             if (request.result == UnityWebRequest.Result.Success)
             {
-                Answer = ReadAnswer(request.downloadHandler.text);
+                Answer = ReadAnswer(request.downloadHandler.text, m_transport);
                 Error = Answer == null ? SignInMessages.UnreadableAnswer : string.Empty;
             }
             else

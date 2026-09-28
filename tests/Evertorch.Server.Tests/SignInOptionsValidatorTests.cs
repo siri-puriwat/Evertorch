@@ -82,6 +82,31 @@ public sealed class SignInOptionsValidatorTests
         Assert.That(result.Succeeded, Is.EqualTo(isValid));
     }
 
+    [TestCase("localhost")]
+    [TestCase("http://localhost/game")]
+    [TestCase("ftp://localhost")]
+    [TestCase("http://localhost:*/")]
+    [TestCase("*")]
+    public void Gateway_WithAnAllowedOriginThatIsNoOrigin_Fails(string origin)
+    {
+        var options = new GatewayOptions { AllowedOrigins = new[] { origin } };
+
+        ValidateOptionsResult result = new GatewayOptionsValidator().Validate(null, options);
+
+        Assert.That(result.Failed, Is.True);
+        Assert.That(result.FailureMessage, Does.Contain("Gateway:AllowedOrigins"));
+    }
+
+    [TestCase("http://localhost:*")]
+    [TestCase("https://play.example.com")]
+    [TestCase("http://127.0.0.1:8000")]
+    public void Gateway_WithAnOriginOrAnyPortOfAHost_Passes(string origin)
+    {
+        var options = new GatewayOptions { AllowedOrigins = new[] { origin } };
+
+        Assert.That(new GatewayOptionsValidator().Validate(null, options).Succeeded, Is.True);
+    }
+
     [Test]
     public void Defaults_AreTheSpecifiedOnes()
     {

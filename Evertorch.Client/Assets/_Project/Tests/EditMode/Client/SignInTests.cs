@@ -1,6 +1,5 @@
 using Evertorch.Protocol;
 using NUnit.Framework;
-using UnityEngine;
 
 namespace Evertorch.Client.Tests.EditMode
 {
@@ -25,7 +24,7 @@ public sealed class SignInTests
     [TestCase("{\"transport\":\"udp\",\"host\":\"a b\",\"port\":7777,\"token\":\"" + Token + "\"}")]
     public void ReadAnswer_OfAnythingElse_IsNothing(string json)
     {
-        Assert.That(GatewaySignIn.ReadAnswer(json), Is.Null);
+        Assert.That(GatewaySignIn.ReadAnswer(json, SignInAnswer.UdpTransport), Is.Null);
     }
 
     [TestCase(0, "could not be reached, or its certificate is not trusted")]
@@ -39,16 +38,6 @@ public sealed class SignInTests
         Assert.That(SignInMessages.ForStatus(status), Does.Contain(expected));
     }
 
-    [TestCase(RuntimePlatform.WebGLPlayer, false)]
-    [TestCase(RuntimePlatform.WindowsPlayer, true)]
-    [TestCase(RuntimePlatform.WindowsEditor, true)]
-    [TestCase(RuntimePlatform.Android, true)]
-    [TestCase(RuntimePlatform.IPhonePlayer, true)]
-    public void CanConnectFrom_EveryPlatformButTheWeb_UntilItPlaysOverWebSocket(RuntimePlatform platform, bool expected)
-    {
-        Assert.That(GameClient.CanConnectFrom(platform), Is.EqualTo(expected));
-    }
-
     [Test]
     public void AuthenticationFailed_AsksForTheLoginAndPassword()
     {
@@ -58,10 +47,39 @@ public sealed class SignInTests
     }
 
     [Test]
+    public void PlayUrl_IsTheGatewaysPlayWithTheConnectionKey()
+    {
+        Assert.That(
+            WebSocketClientTransport.PlayUrl("127.0.0.1", 7443, "evertorch"),
+            Is.EqualTo("wss://127.0.0.1:7443/play?key=evertorch"));
+    }
+
+    [Test]
+    public void ReadAnswer_OfAWebSocketSignIn_GivesTheGatewayAndIgnoresTheUrl()
+    {
+        SignInAnswer? answer = GatewaySignIn.ReadAnswer(
+            "{\"transport\":\"websocket\",\"host\":\"127.0.0.1\",\"port\":7443,\"token\":\"" + Token
+            + "\",\"url\":\"wss://127.0.0.1:7443/play?key=evertorch\"}",
+            SignInAnswer.WebSocketTransport);
+
+        Assert.That(answer, Is.Not.Null);
+        Assert.That(answer!.Port, Is.EqualTo(7443));
+    }
+
+    [Test]
+    public void ReadAnswer_OfAnotherTransportThanAskedFor_IsNothing()
+    {
+        string udp = "{\"transport\":\"udp\",\"host\":\"127.0.0.1\",\"port\":7777,\"token\":\"" + Token + "\"}";
+
+        Assert.That(GatewaySignIn.ReadAnswer(udp, SignInAnswer.WebSocketTransport), Is.Null);
+    }
+
+    [Test]
     public void ReadAnswer_OfTheGatewaysAnswer_GivesWhereToConnectAndTheToken()
     {
         SignInAnswer? answer = GatewaySignIn.ReadAnswer(
-            "{\"transport\":\"udp\",\"host\":\"127.0.0.1\",\"port\":7777,\"token\":\"" + Token + "\"}");
+            "{\"transport\":\"udp\",\"host\":\"127.0.0.1\",\"port\":7777,\"token\":\"" + Token + "\"}",
+            SignInAnswer.UdpTransport);
 
         Assert.That(answer, Is.Not.Null);
         Assert.That(answer!.Host, Is.EqualTo("127.0.0.1"));
@@ -72,7 +90,7 @@ public sealed class SignInTests
     [Test]
     public void RequestJson_EscapesAQuoteOrABackslashInThePassword()
     {
-        string json = GatewaySignIn.RequestJson("alice", "a\"b\\c!d~e");
+        string json = GatewaySignIn.RequestJson("alice", "a\"b\\c!d~e", SignInAnswer.UdpTransport);
 
         Assert.That(json,
             Is.EqualTo("{\"login\":\"alice\",\"password\":\"a\\\"b\\\\c!d~e\",\"transports\":[\"udp\"]}"));
@@ -81,10 +99,20 @@ public sealed class SignInTests
     [Test]
     public void RequestJson_IsTheLoginPasswordAndTheUdpTransport_InThatOrder()
     {
-        string json = GatewaySignIn.RequestJson("alice", "Correct-Horse-9");
+        string json = GatewaySignIn.RequestJson("alice", "Correct-Horse-9", SignInAnswer.UdpTransport);
 
         Assert.That(json,
             Is.EqualTo("{\"login\":\"alice\",\"password\":\"Correct-Horse-9\",\"transports\":[\"udp\"]}"));
+    }
+
+    [Test]
+    public void RequestJson_OfABrowser_AsksForTheWebSocketTransport()
+    {
+        string json = GatewaySignIn.RequestJson("alice", "Correct-Horse-9", SignInAnswer.WebSocketTransport);
+
+        Assert.That(
+            json,
+            Is.EqualTo("{\"login\":\"alice\",\"password\":\"Correct-Horse-9\",\"transports\":[\"websocket\"]}"));
     }
 }
 }
