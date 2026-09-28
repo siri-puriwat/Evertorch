@@ -106,8 +106,13 @@ public static class ServerHost
         builder.Services.AddSingleton<AddressThrottle>();
         builder.Services.AddSingleton<ConnectionRegistry>();
         builder.Services.AddSingleton<LiteNetLibServerTransport>();
+        builder.Services.AddSingleton<WebSocketServerTransport>();
         builder.Services.AddSingleton<IServerTransport>(services => new ServerTransports(
-            new IServerTransport[] { services.GetRequiredService<LiteNetLibServerTransport>() },
+            new IServerTransport[]
+            {
+                services.GetRequiredService<LiteNetLibServerTransport>(),
+                services.GetRequiredService<WebSocketServerTransport>()
+            },
             services.GetRequiredService<ConnectionRegistry>()));
         builder.Services.AddSingleton<IOutboundMessages>(services => services.GetRequiredService<IServerTransport>());
         builder.Services.AddSingleton<ITransportStatistics>(services =>

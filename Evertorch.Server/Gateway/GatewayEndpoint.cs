@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using System.Net;
 using System.Net.Http.Headers;
+using System.Net.WebSockets;
 using System.Security.Cryptography.X509Certificates;
 using System.Threading;
 using System.Threading.Tasks;
@@ -26,6 +27,7 @@ namespace Evertorch.Server
 public sealed class GatewayEndpoint : IHostedService, IDisposable
 {
     public const string SessionPath = "/session";
+    public const string PlayPath = "/play";
 
     private static readonly Action<ILogger, string, int, string, Exception?> LogListening =
         LoggerMessage.Define<string, int, string>(
@@ -38,6 +40,7 @@ public sealed class GatewayEndpoint : IHostedService, IDisposable
     private readonly TimeProvider m_time;
     private readonly ILoggerFactory m_loggers;
     private readonly SignInService m_signIn;
+    private readonly WebSocketServerTransport m_webSockets;
     private readonly ILogger<GatewayEndpoint> m_logger;
     private WebApplication? m_app;
     private X509Certificate2? m_certificate;
@@ -48,6 +51,7 @@ public sealed class GatewayEndpoint : IHostedService, IDisposable
         TimeProvider time,
         ILoggerFactory loggers,
         SignInService signIn,
+        WebSocketServerTransport webSockets,
         ILogger<GatewayEndpoint> logger)
     {
         m_options = options.Value;
@@ -55,6 +59,7 @@ public sealed class GatewayEndpoint : IHostedService, IDisposable
         m_time = time;
         m_loggers = loggers;
         m_signIn = signIn;
+        m_webSockets = webSockets;
         m_logger = logger;
     }
 
@@ -105,6 +110,9 @@ public sealed class GatewayEndpoint : IHostedService, IDisposable
         builder.Services.AddSingleton<IHostLifetime, EmbeddedHostLifetime>();
         builder.Services.AddSingleton(m_loggers);
         WebApplication app = builder.Build();
+
+        // The transport keeps its own heartbeat (Network Protocol §7), so the middleware's ping stays off.
+        app.UseWebSockets(new WebSocketOptions { KeepAliveInterval = TimeSpan.Zero });
         app.Run(AnswerAsync);
         m_app = app;
 
@@ -120,6 +128,28 @@ public sealed class GatewayEndpoint : IHostedService, IDisposable
         {
             await m_app.StopAsync(cancellationToken).ConfigureAwait(false);
         }
+    }
+
+    // Every refusal before the upgrade is a bare status, as a UDP request with a wrong key gets no data
+    // (Network Protocol §7); the transport runs the upgraded socket for as long as it stays open.
+    private async Task PlayAsync(HttpContext context)
+    {
+        IPAddress remote = context.Connection.RemoteIpAddress ?? IPAddress.None;
+        if (!context.WebSockets.IsWebSocketRequest)
+        {
+            context.Response.StatusCode = StatusCodes.Status400BadRequest;
+            return;
+        }
+
+        int refusal = m_webSockets.CheckRequest(remote, context.Request.Query["key"]);
+        if (refusal != 0)
+        {
+            context.Response.StatusCode = refusal;
+            return;
+        }
+
+        using WebSocket socket = await context.WebSockets.AcceptWebSocketAsync().ConfigureAwait(false);
+        await m_webSockets.RunAsync(socket, remote, context.RequestAborted).ConfigureAwait(false);
     }
 
     private static bool IsJson(string? contentType)
@@ -155,6 +185,12 @@ public sealed class GatewayEndpoint : IHostedService, IDisposable
     private async Task AnswerAsync(HttpContext context)
     {
         HttpRequest request = context.Request;
+        if (HttpMethods.IsGet(request.Method) && string.Equals(request.Path.Value, PlayPath, StringComparison.Ordinal))
+        {
+            await PlayAsync(context).ConfigureAwait(false);
+            return;
+        }
+
         if (!HttpMethods.IsPost(request.Method) ||
             !string.Equals(request.Path.Value, SessionPath, StringComparison.Ordinal))
         {

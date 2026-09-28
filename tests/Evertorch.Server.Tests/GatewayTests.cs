@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
+using System.Net.WebSockets;
 using System.Text;
 using System.Threading;
 using Evertorch.Client;
@@ -198,6 +199,19 @@ public sealed class GatewayTests
         Assert.That(body, Is.Empty);
     }
 
+    [TestCase("wrong")]
+    [TestCase("")]
+    public void Play_WithAWrongKey_Answers403WithoutUpgrading(string key)
+    {
+        using ClientWebSocket socket = m_certificate.CreateWebSocket();
+        var url = new Uri($"wss://127.0.0.1:{GatewayPort(m_shared)}{GatewayEndpoint.PlayPath}?key={key}");
+
+        Action connect = () => socket.ConnectAsync(url, CancellationToken.None).GetAwaiter().GetResult();
+
+        Assert.That(connect, Throws.InstanceOf<WebSocketException>());
+        Assert.That(socket.HttpStatusCode, Is.EqualTo(HttpStatusCode.Forbidden));
+    }
+
     [TestCase("GET", GatewayEndpoint.SessionPath)]
     [TestCase("PUT", GatewayEndpoint.SessionPath)]
     [TestCase("POST", "/session/")]
@@ -242,6 +256,41 @@ public sealed class GatewayTests
         client.PumpUntil(() => client.Connection.State == ClientConnectionState.Disconnected);
 
         Assert.That(client.Connection.Notice?.Reason, Is.EqualTo(DisconnectReason.AuthenticationFailed));
+    }
+
+    // Network Protocol §7: the browser's path end to end, with a managed WebSocket standing in for it.
+    [Test]
+    public void Play_WithTheKey_ThenAHelloWithASignedInToken_IsAnsweredWithServerHelloOverWebSocket()
+    {
+        GatewaySignInResult answer = SocketClient.SignIn(m_certificate, GatewayPort(m_shared), "alice", Password);
+        uint content = m_shared.Services.GetRequiredService<HandshakeValidator>().RequiredClientContentVersion;
+        var hello = new ClientHello(ProtocolConstants.ProtocolVersion, ProtocolConstants.BuildVersion, content,
+            answer.Token);
+        byte[] payload = new byte[hello.GetEncodedLength()];
+        hello.Write(payload);
+        ClientWebSocket socket = m_certificate.CreateWebSocket();
+        socket.ConnectAsync(
+                new Uri($"wss://127.0.0.1:{GatewayPort(m_shared)}{GatewayEndpoint.PlayPath}?key=evertorch"),
+                CancellationToken.None)
+            .GetAwaiter()
+            .GetResult();
+        using var peer = new TestWebSocketPeer(socket);
+
+        peer.Send(ProtocolChannel.Control, payload);
+        byte[]? first = peer.Receive(TimeSpan.FromSeconds(10));
+
+        Assert.That(first, Is.Not.Null, "the server answered");
+        Assert.That(first![0], Is.EqualTo((byte)ProtocolChannel.Control));
+        Assert.That(MessageRouting.TryReadOpcode(first.AsSpan(1), out MessageOpcode opcode), Is.True);
+        Assert.That(opcode, Is.EqualTo(MessageOpcode.ServerHello));
+    }
+
+    [Test]
+    public void Play_WithoutAWebSocketUpgrade_Answers400()
+    {
+        Assert.That(
+            Send(m_shared, HttpMethod.Get, $"{GatewayEndpoint.PlayPath}?key=evertorch", null).Status,
+            Is.EqualTo(HttpStatusCode.BadRequest));
     }
 
     [Test]

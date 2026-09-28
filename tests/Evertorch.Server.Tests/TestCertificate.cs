@@ -3,6 +3,7 @@ using System.IO;
 using System.Net;
 using System.Net.Http;
 using System.Net.Security;
+using System.Net.WebSockets;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
@@ -62,6 +63,20 @@ internal sealed class TestCertificate : IDisposable
             }
         };
         return new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(30) };
+    }
+
+    /// <summary>
+    ///     A WebSocket client that trusts this certificate alone and keeps the handshake's HTTP status.
+    /// </summary>
+    public ClientWebSocket CreateWebSocket()
+    {
+        var socket = new ClientWebSocket();
+        socket.Options.KeepAliveInterval = TimeSpan.Zero;
+        socket.Options.CollectHttpResponseDetails = true;
+        socket.Options.RemoteCertificateValidationCallback = (_, certificate, _, _) =>
+            certificate != null
+            && string.Equals(certificate.GetCertHashString(), Thumbprint, StringComparison.OrdinalIgnoreCase);
+        return socket;
     }
 
     /// <summary>
