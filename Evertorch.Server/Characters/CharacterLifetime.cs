@@ -24,6 +24,7 @@ public sealed class CharacterLifetime
             + "is retried once the database answers.");
 
     private readonly WorldSimulation m_world;
+    private readonly CharacterBuilds m_builds;
     private readonly SessionRegistry m_sessions;
     private readonly PersistenceWorker m_persistence;
     private readonly TimeProvider m_time;
@@ -34,6 +35,7 @@ public sealed class CharacterLifetime
 
     public CharacterLifetime(
         WorldSimulation world,
+        CharacterBuilds builds,
         SessionRegistry sessions,
         PersistenceWorker persistence,
         TimeProvider time,
@@ -43,6 +45,7 @@ public sealed class CharacterLifetime
         ILogger<CharacterLifetime> logger)
     {
         m_world = world;
+        m_builds = builds;
         m_sessions = sessions;
         m_persistence = persistence;
         m_time = time;
@@ -68,6 +71,9 @@ public sealed class CharacterLifetime
             return null;
         }
 
+        // A build that spends more than its levels grant, from a hand-edited row or shortened content, starts again
+        // from the job's start; the next checkpoint stores that (Persistence §6).
+        m_builds.ResetIfOverspent(player!, owner.Connection);
         var character = new CharacterSession(
             new CharacterId(stored.Id),
             stored.Account,
@@ -84,8 +90,9 @@ public sealed class CharacterLifetime
     }
 
     /// <summary>
-    ///     Hands the character's current map, position, HP, SP, level, experience, and active quests to the writer,
-    ///     replacing any checkpoint of it still waiting. <paramref name="onComplete" /> runs on the tick thread when it is
+    ///     Hands the character's current map, position, HP, SP, level and experience, job level and job experience,
+    ///     primary statistics, learned skills, and active quests to the writer, replacing any checkpoint of it still
+    ///     waiting. <paramref name="onComplete" /> runs on the tick thread when it is
     ///     written or found unwritable.
     /// </summary>
     public PersistenceJob QueueCheckpoint(CharacterSession character, Action<PersistenceOutcome>? onComplete = null)
@@ -102,7 +109,11 @@ public sealed class CharacterLifetime
             player.Experience,
             m_time.GetUtcNow().UtcDateTime,
             character.Quests.ToCheckpoint(),
-            character.Operation?.Kind == InventoryOperationKind.QuestReward);
+            character.Operation?.Kind == InventoryOperationKind.QuestReward,
+            player.JobLevel,
+            player.JobExperience,
+            player.Primary,
+            StoredSkillsOf(player));
         ConnectionId connection = character.Connection?.Connection ?? default;
         PersistenceJob<bool>? job = null;
         job = new PersistenceJob<bool>(
@@ -125,6 +136,17 @@ public sealed class CharacterLifetime
             });
         m_persistence.QueueCheckpoint(job);
         return job;
+    }
+
+    private static List<StoredSkill> StoredSkillsOf(PlayerEntity player)
+    {
+        var skills = new List<StoredSkill>(player.Skills.Count);
+        foreach (KeyValuePair<SkillDefinitionId, int> skill in player.Skills)
+        {
+            skills.Add(new StoredSkill(skill.Key.Value, skill.Value));
+        }
+
+        return skills;
     }
 
     /// <summary>

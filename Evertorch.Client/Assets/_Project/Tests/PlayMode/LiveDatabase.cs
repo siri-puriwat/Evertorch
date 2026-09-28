@@ -70,11 +70,15 @@ internal sealed class LiveDatabase : IDisposable
 
     /// <summary>
     ///     Gives the character named <paramref name="name" /> the build the Milestone 6 and 7 live tests play with, job
-    ///     level 6, before it first enters (Gameplay Systems §2.1, §9).
+    ///     level 6 with Strike 1, First Aid 1, and Focus 3, before it first enters (Gameplay Systems §2.1, §9).
     /// </summary>
     public void SeedAdventurerBuild(string name)
     {
-        Execute($"UPDATE characters SET job_level = 6, job_exp = 0 WHERE name = '{name}'");
+        Execute(
+            $"UPDATE characters SET job_level = 6, job_exp = 0 WHERE name = '{name}'; "
+            + "INSERT INTO character_skills (character_id, skill_definition_id, level) "
+            + "SELECT id, skill, level FROM characters, (VALUES ('skill.strike', 1), ('skill.first_aid', 1), "
+            + $"('skill.focus', 3)) AS learned (skill, level) WHERE name = '{name}'");
     }
 
     /// <summary>

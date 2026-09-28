@@ -61,7 +61,8 @@ internal sealed class TestServer
         bool isAbuseControlEnabled = true,
         AbuseOptions? abuseOptions = null,
         bool withEveryMap = false,
-        bool withNpcs = false)
+        bool withNpcs = false,
+        bool withAdventurerBuild = true)
     {
         Content = Contents.GetOrAdd(
             (withEveryMap, withMonsters, withNpcs),
@@ -106,6 +107,14 @@ internal sealed class TestServer
         Log = new CapturingLogger<SessionManager>();
         Time = new FakeTimeProvider();
         GameStore = store ?? new InMemoryGameStore();
+
+        // The Milestone 6 and 7 suites use Strike, First Aid, and Focus from a new character, which from Milestone 9
+        // knows only what it learned (Gameplay Systems §9).
+        if (withAdventurerBuild && GameStore is InMemoryGameStore memory)
+        {
+            memory.SeedOnCreate = BuildSeed.Adventurer;
+        }
+
         PersistenceLog = new CapturingLogger<PersistenceWorker>();
         Persistence = new PersistenceWorker(
             GameStore,
@@ -115,8 +124,10 @@ internal sealed class TestServer
 
         var sender = new MessageSender(Transport);
         var targeting = new Targeting(sender);
+        Builds = new CharacterBuilds(Content, new RenewalProgressionRules(), stats, BuildsLog);
         Lifetime = new CharacterLifetime(
             World,
+            Builds,
             Sessions,
             Persistence,
             Time,
@@ -301,6 +312,10 @@ internal sealed class TestServer
         ?? throw new InvalidOperationException("This server runs on a real database, not the in-memory store.");
 
     public CharacterLifetime Lifetime { get; }
+
+    public CharacterBuilds Builds { get; }
+
+    public CapturingLogger<CharacterBuilds> BuildsLog { get; } = new();
 
     /// <summary>
     ///     The real writer, run on the test thread: <see cref="Tick" /> first lets it finish every job queued so far,

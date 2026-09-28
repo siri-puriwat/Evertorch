@@ -163,16 +163,19 @@ public sealed class AdventurerBuildAcceptanceTests
         AssertCleanTraffic(client, "restart");
     }
 
+    // The stored job level and job experience, once no learned skill is stored.
     private (int Level, long Experience) StoredJobProgress()
     {
         using var connection = new NpgsqlConnection(m_database.ConnectionString);
         connection.Open();
         using var command = new NpgsqlCommand(
-            "SELECT job_level, job_exp FROM characters WHERE name = @name",
+            "SELECT job_level, job_exp, (SELECT count(*) FROM character_skills WHERE character_id = characters.id) "
+            + "FROM characters WHERE name = @name",
             connection);
         command.Parameters.AddWithValue("name", CharacterName);
         using NpgsqlDataReader reader = command.ExecuteReader();
         Assert.That(reader.Read(), Is.True, "the character is stored");
+        Assert.That(reader.GetInt64(2), Is.Zero, "no learned skill stored");
         return (reader.GetInt32(0), reader.GetInt64(1));
     }
 

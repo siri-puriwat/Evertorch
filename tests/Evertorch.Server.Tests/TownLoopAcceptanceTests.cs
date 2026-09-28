@@ -1013,29 +1013,32 @@ public sealed class TownLoopAcceptanceTests
         Assert.That(trades.Sum(trade => trade.Coins), Is.EqualTo(stopped.Summary.Coins), "ledger: the coins held");
     }
 
-    // Both characters were given the Adventurer build the moment they were created, before they first entered.
+    // Both characters were given the Adventurer build the moment they were created, before they first entered, and every
+    // checkpoint since, which writes the learned skills whole, kept it.
     private void AssertTheSeededBuilds()
     {
         using var connection = new NpgsqlConnection(m_database.ConnectionString);
         connection.Open();
         using var command = new NpgsqlCommand(
-            "SELECT name, job_level FROM characters WHERE name IN (@client, @partner) ORDER BY name",
+            "SELECT name, job_level, (SELECT count(*) FROM character_skills WHERE character_id = characters.id) "
+            + "FROM characters WHERE name IN (@client, @partner) ORDER BY name",
             connection);
         command.Parameters.AddWithValue("client", CharacterName);
         command.Parameters.AddWithValue("partner", PartnerName);
-        var seeded = new List<(string Name, int JobLevel)>();
+        var seeded = new List<(string Name, int JobLevel, long Skills)>();
         using (NpgsqlDataReader reader = command.ExecuteReader())
         {
             while (reader.Read())
             {
-                seeded.Add((reader.GetString(0), reader.GetInt32(1)));
+                seeded.Add((reader.GetString(0), reader.GetInt32(1), reader.GetInt64(2)));
             }
         }
 
         int level = BuildSeed.Adventurer.JobLevel;
+        long skills = BuildSeed.Adventurer.Skills.Count;
         Assert.That(
             seeded,
-            Is.EqualTo(new[] { (CharacterName, level), (PartnerName, level) }),
+            Is.EqualTo(new[] { (CharacterName, level, skills), (PartnerName, level, skills) }),
             "seed: both characters");
     }
 

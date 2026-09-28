@@ -103,11 +103,13 @@ public sealed class WorldSimulation
 
     /// <summary>
     ///     Places a stored character in the world (Persistence §6, §8): its stored job, level, experience, and
-    ///     statistics, on its stored map, with its HP and SP within their maximums. It stands where it was
+    ///     statistics, its job level and job experience, and its learned skills, on its stored map, with its HP and SP
+    ///     within their maximums. It stands where it was
     ///     checkpointed, at the map's spawn point with full HP and SP when it was checkpointed dead, and at the spawn
     ///     point with its HP when its spot is no longer standable or lies inside a portal (Gameplay Systems §4.2).
     ///     Returns false, placing nothing, when the content does
-    ///     not define its job, its map, or one of its items; <paramref name="problem" /> then names what is missing.
+    ///     not define its job, its map, or one of its items, quests, or skills; <paramref name="problem" /> then names
+    ///     what is missing.
     /// </summary>
     public bool TrySpawnPlayer(
         StoredCharacter stored,
@@ -171,6 +173,16 @@ public sealed class WorldSimulation
             }
         }
 
+        foreach (StoredSkill skill in stored.Skills)
+        {
+            if (!SkillDefinitionId.TryCreate(skill.SkillDefinitionId, out SkillDefinitionId skillId)
+                || !m_content.Skills.ContainsKey(skillId))
+            {
+                problem = $"skill '{skill.SkillDefinitionId}'";
+                return false;
+            }
+        }
+
         int level = Math.Max(StartingLevel, stored.BaseLevel);
         DerivedStats stats = m_stats.Calculate(job, level, stored.Stats);
         MapDefinition definition = instance.Definition;
@@ -203,6 +215,13 @@ public sealed class WorldSimulation
         player.CurrentHealth = wasDead ? player.MaxHealth : Math.Min(stored.Health, player.MaxHealth);
         player.CurrentSpirit = wasDead ? player.MaxSpirit : Math.Min(stored.Spirit, player.MaxSpirit);
         player.Experience = stored.Experience;
+        player.JobLevel = Math.Max(StartingLevel, stored.JobLevel);
+        player.JobExperience = stored.JobExperience;
+        foreach (StoredSkill skill in stored.Skills)
+        {
+            player.SetSkillLevel(new SkillDefinitionId(skill.SkillDefinitionId), skill.Level);
+        }
+
         instance.Add(player);
         map = instance;
         problem = string.Empty;

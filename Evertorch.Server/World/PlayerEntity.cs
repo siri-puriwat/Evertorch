@@ -12,6 +12,7 @@ namespace Evertorch.Server
 public sealed class PlayerEntity : WorldEntity
 {
     private readonly List<ActiveStatusEffect> m_statusEffects = new();
+    private readonly Dictionary<SkillDefinitionId, int> m_skills = new();
 
     public PlayerEntity(
         EntityId id,
@@ -60,7 +61,23 @@ public sealed class PlayerEntity : WorldEntity
     /// </summary>
     public DerivedStats Stats { get; private set; }
 
-    public PrimaryStats Primary { get; }
+    /// <summary>
+    ///     The stored primary statistics, before status effects and equipment; they change only through
+    ///     <see cref="SetPrimary" /> (Gameplay Systems §2).
+    /// </summary>
+    public PrimaryStats Primary { get; private set; }
+
+    public int JobLevel { get; set; } = 1;
+
+    /// <summary>
+    ///     Job experience toward the next job level; 0 at the job's cap.
+    /// </summary>
+    public long JobExperience { get; set; }
+
+    /// <summary>
+    ///     The skills the character has learned, each at its level (Gameplay Systems §9); a skill not learned is absent.
+    /// </summary>
+    public IReadOnlyDictionary<SkillDefinitionId, int> Skills => m_skills;
 
     public Regeneration Regeneration { get; private set; }
 
@@ -128,6 +145,34 @@ public sealed class PlayerEntity : WorldEntity
         int count = m_statusEffects.Count;
         m_statusEffects.Clear();
         return count;
+    }
+
+    /// <summary>
+    ///     Replaces the primary statistics; the caller derives the statistics again.
+    /// </summary>
+    public void SetPrimary(PrimaryStats primary)
+    {
+        Primary = primary;
+    }
+
+    /// <summary>
+    ///     Learns <paramref name="skill" /> at <paramref name="level" />; level 0 forgets it.
+    /// </summary>
+    public void SetSkillLevel(SkillDefinitionId skill, int level)
+    {
+        if (level <= 0)
+        {
+            m_skills.Remove(skill);
+        }
+        else
+        {
+            m_skills[skill] = level;
+        }
+    }
+
+    public void ForgetSkills()
+    {
+        m_skills.Clear();
     }
 
     /// <summary>

@@ -56,6 +56,12 @@ internal sealed class InMemoryGameStore : IGameStore
     public long? NextCharacterId { get; set; }
 
     /// <summary>
+    ///     The build every character created from now on is stored with; null stores a new character as the server made
+    ///     it.
+    /// </summary>
+    public BuildSeed? SeedOnCreate { get; set; }
+
+    /// <summary>
     ///     Every login provisioned, in order, including repeats.
     /// </summary>
     public List<string> Logins { get; } = new();
@@ -345,7 +351,17 @@ internal sealed class InMemoryGameStore : IGameStore
             long id = NextCharacterId ?? m_lastCharacter + 1;
             NextCharacterId = null;
             m_lastCharacter = Math.Max(m_lastCharacter, id);
-            m_characters.Add(id, new Row(account, character));
+            var row = new Row(account, character);
+            if (SeedOnCreate != null)
+            {
+                row.JobLevel = SeedOnCreate.JobLevel;
+                foreach (KeyValuePair<string, int> skill in SeedOnCreate.Skills)
+                {
+                    row.Skills[skill.Key] = skill.Value;
+                }
+            }
+
+            m_characters.Add(id, row);
             return Task.FromResult(new CharacterCreation(CharacterCreationStatus.Created, id, List(account)));
         }
     }
