@@ -447,6 +447,24 @@ public sealed class WebSocketServerTransportTests
         Assert.That(harness.Inbound.TryDequeue(out InboundEvent _), Is.False);
     }
 
+    // Answers to the server's pings are outside the budget: three pings a second of the peer's own and its answers to
+    // the server's two stay within it, where counting them together would make five.
+    [Test]
+    public void Heartbeats_AnsweringTheServersPings_AreOutsideTheBudget()
+    {
+        using var harness = new Harness(disconnectTimeoutMs: 2000);
+        using TestWebSocketPeer peer = harness.Connect(out ConnectionId _);
+
+        var elapsed = Stopwatch.StartNew();
+        for (uint nonce = 1; elapsed.Elapsed < TimeSpan.FromSeconds(3); nonce++)
+        {
+            peer.Send(TestWebSocketPeer.Heartbeat(WebSocketServerTransport.HeartbeatPing, nonce));
+            Thread.Sleep(340);
+        }
+
+        Assert.That(peer.WaitForClose(TimeSpan.Zero), Is.False, $"the connection closed: {peer.CloseStatus}");
+    }
+
     [Test]
     public void Heartbeats_MoreThanFourInASecond_CloseTheConnection()
     {

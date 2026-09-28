@@ -243,6 +243,43 @@ public sealed class WebSocketClientTransportTests
         Assert.That(m_transport.RoundTripMilliseconds, Is.EqualTo(80));
     }
 
+    // The server's budget counts the client's own pings, so they stay at one a second even when the silence limit
+    // makes the server ping four times a second.
+    [Test]
+    public void Heartbeat_OfTheClient_StaysAtOneASecond_UnderTheShortestSilenceLimit()
+    {
+        var transport = new WebSocketClientTransport(
+            () =>
+            {
+                var connection = new FakeConnection();
+                m_connections.Add(connection);
+                return connection;
+            },
+            "evertorch",
+            1000,
+            () => m_now);
+        transport.Connect("127.0.0.1", 7443);
+        Connection.State = WebSocketConnectionState.Open;
+        transport.Poll(m_listener);
+
+        for (uint ping = 1; ping <= 4; ping++)
+        {
+            m_now = ping * 0.25;
+            Connection.Inbox.Enqueue(Heartbeat(WebSocketClientTransport.HeartbeatPing, ping));
+            transport.Poll(m_listener);
+        }
+
+        Assert.That(
+            Connection.Sent.Count(message => message[1] == WebSocketClientTransport.HeartbeatPing),
+            Is.EqualTo(1),
+            "one ping of its own, at one second");
+        Assert.That(
+            Connection.Sent.Count(message => message[1] == WebSocketClientTransport.HeartbeatPong),
+            Is.EqualTo(4),
+            "an answer to each of the server's");
+        Assert.That(m_listener.Disconnects, Is.Empty);
+    }
+
     [Test]
     public void Poll_OnceTheSocketOpens_ReportsConnectedOnce()
     {

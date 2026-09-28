@@ -24,10 +24,13 @@ public sealed class WebSocketClientTransport : IClientTransport
     /// </summary>
     public const int MaxMessageBytes = 1 + 1020;
 
+    // Only the round trip needs the client's own pings; its answers to the server's keep the server's silence limit
+    // fed, so one ping a second stays well inside the server's heartbeat budget at any silence limit.
+    private const double PingIntervalSeconds = 1.0;
+
     private readonly Func<IWebSocketConnection> m_createConnection;
     private readonly string m_connectionKey;
     private readonly double m_silenceSeconds;
-    private readonly double m_heartbeatSeconds;
     private readonly Func<double> m_clock;
     private IWebSocketConnection? m_connection;
     private byte[] m_notice = Array.Empty<byte>();
@@ -51,7 +54,6 @@ public sealed class WebSocketClientTransport : IClientTransport
         m_createConnection = createConnection ?? throw new ArgumentNullException(nameof(createConnection));
         m_connectionKey = connectionKey ?? throw new ArgumentNullException(nameof(connectionKey));
         m_silenceSeconds = disconnectTimeoutMilliseconds / 1000.0;
-        m_heartbeatSeconds = Math.Min(1.0, m_silenceSeconds / 4);
         if (clock == null)
         {
             var watch = Stopwatch.StartNew();
@@ -136,7 +138,7 @@ public sealed class WebSocketClientTransport : IClientTransport
                 m_isBroken = true;
                 connection.Close();
             }
-            else if (now - m_lastPing >= m_heartbeatSeconds)
+            else if (now - m_lastPing >= PingIntervalSeconds)
             {
                 m_lastPing = now;
                 m_pingNonce++;

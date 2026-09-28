@@ -331,6 +331,7 @@ public sealed class WebSocketServerTransport : IServerTransport
         private volatile bool m_isClosedByServer;
         private long m_lastReceivedTicks;
         private uint m_pingNonce;
+        private uint m_answeredNonce;
         private long m_pingSentTicks;
         private int m_roundTripMilliseconds = -1;
         private long m_heartbeatWindowStart;
@@ -531,22 +532,33 @@ public sealed class WebSocketServerTransport : IServerTransport
             return true;
         }
 
+        // The first answer to the server's latest ping is outside the budget: the server sets that pace, which at a short
+        // silence limit is itself four pings a second (Network Protocol §7). The receive loop alone reads the nonce.
         private bool HandleHeartbeat(ReadOnlySpan<byte> message)
         {
-            if (message.Length != HeartbeatLength || !IsWithinHeartbeatBudget())
+            if (message.Length != HeartbeatLength)
             {
                 return false;
             }
 
             uint nonce = BinaryPrimitives.ReadUInt32LittleEndian(message.Slice(2));
+            bool isAnswer = message[1] == HeartbeatPong
+                && nonce == Volatile.Read(ref m_pingNonce)
+                && nonce != m_answeredNonce;
+            if (!isAnswer && !IsWithinHeartbeatBudget())
+            {
+                return false;
+            }
+
             switch (message[1])
             {
                 case HeartbeatPing:
                     Enqueue(Heartbeat(HeartbeatPong, nonce));
                     return true;
                 case HeartbeatPong:
-                    if (nonce == Volatile.Read(ref m_pingNonce))
+                    if (isAnswer)
                     {
+                        m_answeredNonce = nonce;
                         long sent = Interlocked.Read(ref m_pingSentTicks);
                         int elapsed = (int)TimeSpan.FromTicks(m_clock.Elapsed.Ticks - sent).TotalMilliseconds;
                         Volatile.Write(ref m_roundTripMilliseconds, Math.Max(0, elapsed));
