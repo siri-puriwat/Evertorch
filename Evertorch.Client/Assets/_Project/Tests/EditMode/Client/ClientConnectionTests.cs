@@ -893,6 +893,27 @@ public sealed class ClientConnectionTests
     }
 
     [Test]
+    public void SendResetBuild_InTheWorld_TakesTheNextCommandSequence_AndOutsideSendsNothing()
+    {
+        var outside = new Harness();
+        outside.ConnectAndReceiveHello();
+        int before = outside.Transport.Sent.Count;
+        var harness = new Harness();
+        harness.EnterWorld(4);
+        var npc = new EntityId(15);
+
+        uint none = outside.Connection.SendResetBuild(npc);
+        uint sequence = harness.Connection.SendResetBuild(npc);
+        FakeClientTransport.SentMessage sent = harness.Transport.Sent.Last();
+
+        Assert.That((none, outside.Transport.Sent.Count), Is.EqualTo((0u, before)));
+        Assert.That(sequence, Is.EqualTo(5u));
+        Assert.That(ResetBuild.TryRead(sent.Payload, out ResetBuild read), Is.True);
+        Assert.That((read.Npc, read.CommandSequence), Is.EqualTo((npc, 5u)));
+        Assert.That(sent.Channel, Is.EqualTo(ProtocolChannel.Control));
+    }
+
+    [Test]
     public void SendTarget_BeforeTheWorldIsEntered_SendsNothing()
     {
         var harness = new Harness();

@@ -6,13 +6,14 @@ namespace Evertorch.Protocol
 {
 /// <summary>
 ///     What an NPC offers, sent right after every spawn of the NPC to a client (Network Protocol §6, §9): each item it
-///     trades with the price it sells for and the price it pays, and each quest it gives with its objective and reward.
+///     trades with the price it sells for and the price it pays, each quest it gives with its objective and reward, and
+///     whether it resets a build.
 ///     A shop's prices and a quest's terms travel on purpose, because the player must see them (Content Pipeline §5).
 /// </summary>
 public sealed class NpcServices
 {
     /// <summary>
-    ///     The most items one message holds: 74 bytes each with the longest ID, beside the 12 of the header.
+    ///     The most items one message holds: 74 bytes each with the longest ID, beside the 13 of the header.
     /// </summary>
     public const int MaxEntries = 13;
 
@@ -27,7 +28,14 @@ public sealed class NpcServices
     /// </summary>
     public const int MaxEncodedLength = 1020;
 
-    public NpcServices(EntityId npc, IReadOnlyList<NpcServiceEntry> entries, IReadOnlyList<NpcQuestOffer> offers)
+    // The services byte after the offers: bit 0, the build's reset; the other bits are not yet defined.
+    private const byte ResetService = 1;
+
+    public NpcServices(
+        EntityId npc,
+        IReadOnlyList<NpcServiceEntry> entries,
+        IReadOnlyList<NpcQuestOffer> offers,
+        bool offersReset = false)
     {
         if (entries == null)
         {
@@ -52,6 +60,7 @@ public sealed class NpcServices
         Npc = npc;
         Entries = entries;
         Offers = offers;
+        OffersReset = offersReset;
         if (GetEncodedLength() > MaxEncodedLength)
         {
             throw new ArgumentException($"An NPC's services must fit {MaxEncodedLength} bytes.", nameof(entries));
@@ -69,6 +78,11 @@ public sealed class NpcServices
     ///     The quests the NPC gives, ordered by quest ID.
     /// </summary>
     public IReadOnlyList<NpcQuestOffer> Offers { get; }
+
+    /// <summary>
+    ///     Whether the NPC resets a character's build (Gameplay Systems §6.1).
+    /// </summary>
+    public bool OffersReset { get; }
 
     public static bool TryRead(ReadOnlySpan<byte> source, out NpcServices? message)
     {
@@ -127,18 +141,18 @@ public sealed class NpcServices
             offers[index] = new NpcQuestOffer(quest, monster, count, baseExperience, jobExperience, coins);
         }
 
-        if (!reader.IsAtEnd)
+        if (!reader.TryReadByte(out byte services) || (services & ~ResetService) != 0 || !reader.IsAtEnd)
         {
             return false;
         }
 
-        message = new NpcServices(new EntityId(npc), entries, offers);
+        message = new NpcServices(new EntityId(npc), entries, offers, (services & ResetService) != 0);
         return true;
     }
 
     public int GetEncodedLength()
     {
-        int length = sizeof(ushort) + sizeof(long) + sizeof(byte) + sizeof(byte);
+        int length = sizeof(ushort) + sizeof(long) + 3 * sizeof(byte);
         foreach (NpcServiceEntry entry in Entries)
         {
             length += WireText.GetEncodedLength(entry.Item.Value, ProtocolLimits.MaxDefinitionIdBytes)
@@ -181,6 +195,7 @@ public sealed class NpcServices
             writer.WriteUInt32(offer.Coins);
         }
 
+        writer.WriteByte(OffersReset ? ResetService : (byte)0);
         return writer.Position;
     }
 

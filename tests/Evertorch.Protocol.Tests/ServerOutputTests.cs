@@ -59,7 +59,7 @@ public sealed class ServerOutputTests
         ["MonsterDefinitionId"] = new[] { "Value" },
         ["NpcQuestOffer"] = new[] { "BaseExperience", "Coins", "Count", "JobExperience", "Monster", "Quest" },
         ["NpcServiceEntry"] = new[] { "BuyPrice", "Item", "SellPrice" },
-        ["NpcServices"] = new[] { "Entries", "Npc", "Offers" },
+        ["NpcServices"] = new[] { "Entries", "Npc", "Offers", "OffersReset" },
         ["QuestDefinitionId"] = new[] { "Value" },
         ["QuestLog"] = new[] { "Entries" },
         ["QuestLogEntry"] = new[] { "Count", "Progress", "Quest", "State" },

@@ -127,6 +127,12 @@ public enum InboundEventKind
     ///     A request to learn one level of <see cref="InboundEvent.Skill" /> with a skill point, carrying a command
     ///     sequence.
     /// </summary>
-    LearnSkill = 25
+    LearnSkill = 25,
+
+    /// <summary>
+    ///     A request to the NPC <see cref="InboundEvent.Target" /> for the reset of the character's build, carrying a
+    ///     command sequence.
+    /// </summary>
+    ResetBuild = 26
 }
 }

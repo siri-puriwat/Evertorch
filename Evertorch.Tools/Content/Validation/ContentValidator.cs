@@ -17,7 +17,7 @@ public static class ContentValidator
 
     // One NpcServices message (Network Protocol §6): its header, then each item the NPC trades and each quest it gives
     // at their largest, with every ID at the 64-byte limit; one datagram carries 1,020 bytes.
-    private const int ServicesHeaderBytes = 12;
+    private const int ServicesHeaderBytes = 13;
     private const int ServicesEntryBytes = 74;
     private const int ServicesOfferBytes = 154;
     private const int MaxServicesBytes = 1020;

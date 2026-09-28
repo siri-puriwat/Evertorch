@@ -108,6 +108,13 @@ public sealed class InboundQueueTests
         return payload;
     }
 
+    private static byte[] ResetBuildPayload()
+    {
+        byte[] payload = new byte[ResetBuild.EncodedLength];
+        new ResetBuild(new EntityId(15), 9).Write(payload);
+        return payload;
+    }
+
     private static byte[] LearnSkillPayload()
     {
         var message = new LearnSkill(new SkillDefinitionId("skill.strike"), 9);
@@ -145,11 +152,12 @@ public sealed class InboundQueueTests
         byte[] complete = CompleteQuestPayload();
         byte[] allocate = AllocateStatPayload();
         byte[] learn = LearnSkillPayload();
+        byte[] reset = ResetBuildPayload();
         foreach ((string name, byte[] payload) in new[]
                  {
                      ("UseSkill", useSkill), ("EquipItem", equip), ("UnequipItem", unequip), ("UseItem", useItem),
                      ("BuyItem", buy), ("SellItem", sell), ("AcceptQuest", accept), ("CompleteQuest", complete),
-                     ("AllocateStat", allocate), ("LearnSkill", learn)
+                     ("AllocateStat", allocate), ("LearnSkill", learn), ("ResetBuild", reset)
                  })
         {
             yield return new TestCaseData(payload.Take(payload.Length - 1).ToArray()).SetName($"{name} cut short");
@@ -182,6 +190,8 @@ public sealed class InboundQueueTests
         yield return new TestCaseData(With(learn, text, 1, 0x20)).SetName("LearnSkill naming no skill");
         yield return new TestCaseData(With(learn, text, 1, 0xFF)).SetName("LearnSkill of broken UTF-8");
         yield return new TestCaseData(With(learn, text - 2, 2, 0xFF)).SetName("LearnSkill longer than any ID");
+        yield return new TestCaseData(With(reset, 2, 8, 0x00)).SetName("ResetBuild at NPC 0");
+        yield return new TestCaseData(With(reset, 2, 8, 0xFF)).SetName("ResetBuild at NPC -1");
     }
 
     [TestCaseSource(nameof(MalformedItemAndSkillCommands))]
@@ -317,7 +327,8 @@ public sealed class InboundQueueTests
         foreach (byte[] payload in new[]
                  {
                      UseSkillPayload(), EquipPayload(), UnequipPayload(), UseItemPayload(), BuyPayload(), SellPayload(),
-                     AcceptQuestPayload(), CompleteQuestPayload(), LearnSkillPayload(), AllocateStatPayload()
+                     AcceptQuestPayload(), CompleteQuestPayload(), LearnSkillPayload(), ResetBuildPayload(),
+                     AllocateStatPayload()
                  })
         {
             queue.OnPayload(Peer, ProtocolChannel.Control, payload);
@@ -326,10 +337,12 @@ public sealed class InboundQueueTests
         var kinds = new List<InboundEventKind>();
         InboundEvent allocate = default;
         InboundEvent learn = default;
+        InboundEvent reset = default;
         while (queue.TryDequeue(out InboundEvent inboundEvent))
         {
             kinds.Add(inboundEvent.Kind);
             learn = inboundEvent.Kind == InboundEventKind.LearnSkill ? inboundEvent : learn;
+            reset = inboundEvent.Kind == InboundEventKind.ResetBuild ? inboundEvent : reset;
             allocate = inboundEvent;
         }
 
@@ -341,13 +354,15 @@ public sealed class InboundQueueTests
                 {
                     InboundEventKind.UseSkill, InboundEventKind.Equip, InboundEventKind.Unequip,
                     InboundEventKind.UseItem, InboundEventKind.Buy, InboundEventKind.Sell, InboundEventKind.AcceptQuest,
-                    InboundEventKind.CompleteQuest, InboundEventKind.LearnSkill, InboundEventKind.AllocateStat
+                    InboundEventKind.CompleteQuest, InboundEventKind.LearnSkill, InboundEventKind.ResetBuild,
+                    InboundEventKind.AllocateStat
                 }));
         Assert.That(
             (allocate.Stat, allocate.Quantity, allocate.CommandSequence),
             Is.EqualTo((PrimaryStat.Agi, 2u, 9u)),
             "the statistic and its steps");
         Assert.That((learn.Skill, learn.CommandSequence), Is.EqualTo((new SkillDefinitionId("skill.strike"), 9u)));
+        Assert.That((reset.Target, reset.CommandSequence), Is.EqualTo((new EntityId(15), 9u)));
         Assert.That(UseSkillPayload().Skip(4).Take(12), Is.EqualTo(Encoding.ASCII.GetBytes("skill.strike")));
     }
 

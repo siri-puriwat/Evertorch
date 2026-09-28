@@ -97,7 +97,7 @@ internal sealed class TestServer
         Audit = new AuditLog(AuditLogger, Clock);
         Inbound = new InboundQueue(Options.Create(network), abuse, simulation, Clock, Instruments);
         Sessions = new SessionRegistry();
-        var stats = new CharacterStats(new RenewalCharacterRules());
+        CharacterStats stats = Stats = new CharacterStats(new RenewalCharacterRules());
         World = new WorldSimulation(
             Content,
             Options.Create(world),
@@ -366,6 +366,11 @@ internal sealed class TestServer
     ///     When false, <see cref="Tick" /> leaves queued database work alone, as a slow database would.
     /// </summary>
     public bool RunsPersistence { get; set; } = true;
+
+    /// <summary>
+    ///     The statistics the server derives, for a test that changes a player's level or primary statistics directly.
+    /// </summary>
+    public CharacterStats Stats { get; }
 
     /// <summary>
     ///     Runs after every tick, the ticks of the helpers included.
@@ -646,6 +651,13 @@ internal sealed class TestServer
         var message = new AcceptQuest(npc, new QuestDefinitionId(quest), commandSequence);
         byte[] payload = new byte[message.GetEncodedLength()];
         message.Write(payload);
+        Inbound.OnPayload(connection, ProtocolChannel.Control, payload);
+    }
+
+    public void SendResetBuild(ConnectionId connection, EntityId npc, uint commandSequence)
+    {
+        byte[] payload = new byte[ResetBuild.EncodedLength];
+        new ResetBuild(npc, commandSequence).Write(payload);
         Inbound.OnPayload(connection, ProtocolChannel.Control, payload);
     }
 

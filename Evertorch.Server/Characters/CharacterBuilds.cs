@@ -20,6 +20,11 @@ public sealed class CharacterBuilds
     /// </summary>
     public const string OverspentReason = "overspent";
 
+    /// <summary>
+    ///     Why the Guildmaster reset a build (Gameplay Systems §6.1).
+    /// </summary>
+    public const string GuildmasterReason = "guildmaster";
+
     private static readonly Action<ILogger, long, long, PrimaryStat, int, int, Exception?> LogStatRaised =
         LoggerMessage.Define<long, long, PrimaryStat, int, int>(
             LogLevel.Information,
@@ -232,6 +237,25 @@ public sealed class CharacterBuilds
         Reset(player);
         LogBuildReset(m_logger, player.Character.Value, connection.Value, OverspentReason, null);
         return true;
+    }
+
+    /// <summary>
+    ///     The Guildmaster's reset (Gameplay Systems §6.1): every point back for free, the owner told of new maximums at
+    ///     once and of the rest through its sheet, logged and counted. The caller interrupts a cast and queues the
+    ///     checkpoint.
+    /// </summary>
+    public void ResetAtGuildmaster(PlayerEntity player, ConnectionId connection)
+    {
+        int maxHealth = player.MaxHealth;
+        int maxSpirit = player.MaxSpirit;
+        Reset(player);
+        if (player.MaxHealth != maxHealth || player.MaxSpirit != maxSpirit)
+        {
+            m_sender.SendHealth(player);
+        }
+
+        LogBuildReset(m_logger, player.Character.Value, connection.Value, GuildmasterReason, null);
+        m_instruments.RecordBuildChange(BuildChange.Reset);
     }
 
     /// <summary>

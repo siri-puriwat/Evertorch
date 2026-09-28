@@ -241,6 +241,24 @@ public sealed class ServerInstrumentsTests
     }
 
     [Test]
+    public void BuildChanges_CountAReset_TaggedReset()
+    {
+        var server = new TestServer(withNpcs: true);
+        using var recorder = new MeterRecorder(server.Instruments.Meter);
+        ConnectionId player = server.EnterWorld(1);
+        NpcEntity guildmaster = server.NpcOf("npc.guildmaster");
+        server.Place(player, guildmaster.Position.X + 2f, guildmaster.Position.Z);
+        server.Tick(2);
+
+        server.SendResetBuild(player, guildmaster.Id, 1);
+        server.SendResetBuild(player, server.NpcOf("npc.gate_warden").Id, 2);
+        server.Tick();
+
+        Assert.That(Tagged(recorder, "evertorch.build.changes", "change", "reset"), Is.EqualTo(1));
+        Assert.That(Named(recorder, "evertorch.build.changes"), Has.Count.EqualTo(1), "the Gate Warden's, refused");
+    }
+
+    [Test]
     public void BuildChanges_CountEachAcceptedRaise_TaggedStat_AndNoRefusal()
     {
         var server = new TestServer();

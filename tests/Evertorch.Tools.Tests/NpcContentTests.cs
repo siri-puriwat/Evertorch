@@ -84,8 +84,8 @@ public sealed class NpcContentTests
         workspace.Write(Map, string.Join("\n", lines));
     }
 
-    // With the quest it gives (154 bytes) and the header (12), the Quartermaster's services fit one message while it
-    // trades at most 11 items of 74 bytes: 12 + 11 × 74 + 154 = 980, where 12 items take 1,054 of the 1,020.
+    // With the quest it gives (154 bytes) and the header (13), the Quartermaster's services fit one message while it
+    // trades at most 11 items of 74 bytes: 13 + 11 × 74 + 154 = 981, where 12 items take 1,055 of the 1,020.
     [TestCase(9, true)]
     [TestCase(10, false)]
     public void Run_ForAnNpcsServices_AcceptsWhatFitsOneMessage(int extraItems, bool isValid)
@@ -106,7 +106,7 @@ public sealed class NpcContentTests
                     : Is.EqualTo(
                         new[]
                         {
-                            (Npc, "id", "offers services that take 1054 bytes, more than the 1020 one message carries")
+                            (Npc, "id", "offers services that take 1055 bytes, more than the 1020 one message carries")
                         }),
                 Describe(result));
         }

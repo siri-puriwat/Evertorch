@@ -326,6 +326,14 @@ public sealed class InboundQueue
                     complete.Quest,
                     complete.CommandSequence);
                 return true;
+            case MessageOpcode.ResetBuild:
+                if (!ResetBuild.TryRead(payload, out ResetBuild reset))
+                {
+                    return false;
+                }
+
+                decoded = InboundEvent.ForResetBuild(connection, reset.Npc, reset.CommandSequence);
+                return true;
             case MessageOpcode.LearnSkill:
                 if (!LearnSkill.TryRead(payload, out LearnSkill? learn))
                 {

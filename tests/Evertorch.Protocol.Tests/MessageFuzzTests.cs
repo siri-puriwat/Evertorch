@@ -200,6 +200,10 @@ public sealed class MessageFuzzTests
             Encode(new CompleteQuest(new EntityId(14), new QuestDefinitionId("quest.crawler_hunt"), 7)),
             payload => CompleteQuest.TryRead(payload, out CompleteQuest? message) ? Encode(message!) : null);
         yield return Case(
+            "ResetBuild",
+            Encode(new ResetBuild(new EntityId(15), 7)),
+            payload => ResetBuild.TryRead(payload, out ResetBuild message) ? Encode(message) : null);
+        yield return Case(
             "LearnSkill",
             Encode(new LearnSkill(new SkillDefinitionId("skill.strike"), 7)),
             payload => LearnSkill.TryRead(payload, out LearnSkill? message) ? Encode(message!) : null);
@@ -667,6 +671,13 @@ public sealed class MessageFuzzTests
     private static byte[] Encode(AcceptQuest message)
     {
         byte[] buffer = new byte[message.GetEncodedLength()];
+        message.Write(buffer);
+        return buffer;
+    }
+
+    private static byte[] Encode(ResetBuild message)
+    {
+        byte[] buffer = new byte[ResetBuild.EncodedLength];
         message.Write(buffer);
         return buffer;
     }

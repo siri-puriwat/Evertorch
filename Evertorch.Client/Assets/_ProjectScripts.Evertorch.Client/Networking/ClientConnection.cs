@@ -577,6 +577,22 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
     }
 
     /// <summary>
+    ///     Asks <paramref name="npc" /> for the reset of the character's build; 0 while not in the world, else the
+    ///     command's sequence. The server answers with the skill list and the sheet, or a refusal.
+    /// </summary>
+    public uint SendResetBuild(EntityId npc)
+    {
+        if (State != ClientConnectionState.InWorld)
+        {
+            return 0;
+        }
+
+        uint sequence = NextCommandSequence();
+        SendRouted(MessageOpcode.ResetBuild, new ResetBuild(npc, sequence).Write(m_sendBuffer));
+        return sequence;
+    }
+
+    /// <summary>
     ///     Asks to learn one level of <paramref name="skill" /> with a skill point; 0 while not in the world, else the
     ///     command's sequence. The server answers with the skill list and the sheet, or a refusal.
     /// </summary>

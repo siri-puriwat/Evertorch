@@ -17,7 +17,8 @@ namespace Evertorch.Server.Tests
 ///     The Milestone 9 Adventurer build (ROADMAP §8) end to end: the composed server host on a real PostgreSQL 18, real
 ///     UDP sockets on loopback, and a client built from the client's production networking and gameplay code, pumped on
 ///     the test's thread. A new Adventurer starts at job level 1, fights until its base level rises, spends its stat
-///     point and its skill point, and keeps what it earned and spent through a restart. Each later line of Milestone 9
+///     point and its skill point, keeps what it earned and spent through a restart, has the Guildmaster return every
+///     point, and keeps that through a second restart. Each later line of Milestone 9
 ///     adds its steps here:
 ///     the job levels, the raised
 ///     statistics, the learned skill levels and their measured effects, and the Guildmaster's reset.
@@ -35,6 +36,10 @@ public sealed class AdventurerBuildAcceptanceTests
     private const string Strike = "skill.strike";
     private const string FirstAid = "skill.first_aid";
     private const string Focus = "skill.focus";
+    private const string Guildmaster = "npc.guildmaster";
+
+    // Where the town's NPCs are in view, clear of every obstacle (as in TownLoopAcceptanceTests).
+    private static readonly WorldPosition TownSpot = new(10f, 0f, -3f);
     private const string Identity = "adventurer";
     private const string CharacterName = "Builder1";
     private const float ConvergedDistance = 1e-3f;
@@ -277,7 +282,74 @@ public sealed class AdventurerBuildAcceptanceTests
             (client.World.Sheet.SkillPoints, StoredSkills()),
             Is.EqualTo(((byte)0, $"{Strike}=1")),
             "restart: the point spent, and the level stored");
+        ResetAtTheGuildmaster(client);
         AssertCleanTraffic(client, "restart");
+    }
+
+    // The Guildmaster returns every point for free (Gameplay Systems §6.1): AGI back to 5, Strike to 0, the 3 stat
+    // points and the skill point left again; its checkpoint is queued at once, so the database has it at once.
+    private void ResetAtTheGuildmaster(SocketClient client)
+    {
+        const string step = "reset";
+        ClientWorld world = client.World;
+        Assert.That(client.Controller.TryMoveTo(world.Predictor.Position, TownSpot), Is.True, $"{step}: a way to town");
+        Assert.That(
+            client.PumpUntil(() => !client.Controller.HasPath && client.DistanceTo(TownSpot) < 0.5f),
+            Is.True,
+            $"{step}: in town");
+        Assert.That(
+            client.PumpUntil(() => GuildmasterInView(world) != null),
+            Is.True,
+            $"{step}: the Guildmaster in view, offering the reset");
+        RemoteEntity guildmaster = GuildmasterInView(world)!;
+        int windows = client.NpcWindows.Count;
+        client.TalkTo(guildmaster.Entity);
+        Assert.That(client.PumpUntil(() => client.NpcWindows.Count > windows), Is.True, $"{step}: walked up to it");
+
+        client.Connection.SendResetBuild(guildmaster.Entity);
+        Assert.That(
+            client.PumpUntil(() => world.Sheet!.StatPoints == 3
+                && world.Sheet.SkillPoints == 1
+                && world.Skills.All(entry => entry.Level == 0)),
+            Is.True,
+            $"{step}: every point back; {world.LastRejection}");
+        Assert.That(world.Sheet!.Stats[1].Value, Is.EqualTo((byte)5), $"{step}: AGI back to the job's start");
+        Assert.That(
+            client.PumpUntil(() => StoredAgility() == 5 && StoredSkills().Length == 0),
+            Is.True,
+            $"{step}: checkpointed at once");
+    }
+
+    private static RemoteEntity? GuildmasterInView(ClientWorld world)
+    {
+        RemoteEntity? remote = world.Remotes.Values.SingleOrDefault(candidate =>
+            candidate.Kind == EntityKind.Npc && candidate.DefinitionId == Guildmaster);
+        return remote != null
+            && world.TryGetNpcServices(remote.Entity, out NpcServices? services)
+            && services!.OffersReset
+                ? remote
+                : null;
+    }
+
+    // After the second restart the character still has every point back and nothing learned.
+    private void PlayAfterTheReset(IHost host)
+    {
+        ServerContent content = host.Services.GetRequiredService<ServerContent>();
+        int port = host.Services.GetRequiredService<LiteNetLibServerTransport>().LocalPort;
+        using var client = new SocketClient(content, Identity, CharacterName);
+        client.EnterWorld(port);
+
+        Assert.That(
+            client.PumpUntil(() => client.World.Sheet != null && client.World.SkillsReceivedAt > 0),
+            Is.True,
+            "second restart: the sheet and the list arrived");
+        CharacterSheet sheet = client.World.Sheet!;
+        Assert.That(
+            (sheet.Stats[1].Value, sheet.StatPoints, sheet.SkillPoints),
+            Is.EqualTo(((byte)5, (ushort)3, (byte)1)),
+            "second restart: the reset kept");
+        Assert.That(client.World.Skills.Select(entry => entry.Level), Is.All.EqualTo((byte)0));
+        AssertCleanTraffic(client, "second restart");
     }
 
     private (int Level, long Experience) StoredJobProgress()
@@ -339,6 +411,12 @@ public sealed class AdventurerBuildAcceptanceTests
         {
             PlayAfterTheRestart(restarted, stopped);
             restarted.StopAsync().GetAwaiter().GetResult();
+        }
+
+        using (IHost reset = StartHost(root.Path))
+        {
+            PlayAfterTheReset(reset);
+            reset.StopAsync().GetAwaiter().GetResult();
         }
     }
 }

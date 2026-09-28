@@ -10,7 +10,7 @@ namespace Evertorch.Protocol.Tests
 public sealed class NpcServicesMessageTests
 {
     // NPC 7; item.a sold for 20 and bought for 10; quest.a asks for 5 of monster.a for 150 experience, 160 job
-    // experience, and 100 coins.
+    // experience, and 100 coins; no reset.
     private static readonly byte[] ServicesBytes =
     {
         0x1D, 0x80, 0x07, 0, 0, 0, 0, 0, 0, 0, 0x01,
@@ -18,7 +18,8 @@ public sealed class NpcServicesMessageTests
         0x01,
         0x07, 0x00, 0x71, 0x75, 0x65, 0x73, 0x74, 0x2E, 0x61,
         0x09, 0x00, 0x6D, 0x6F, 0x6E, 0x73, 0x74, 0x65, 0x72, 0x2E, 0x61,
-        0x05, 0x00, 0x96, 0, 0, 0, 0, 0, 0, 0, 0xA0, 0, 0, 0, 0, 0, 0, 0, 0x64, 0, 0, 0
+        0x05, 0x00, 0x96, 0, 0, 0, 0, 0, 0, 0, 0xA0, 0, 0, 0, 0, 0, 0, 0, 0x64, 0, 0, 0,
+        0x00
     };
 
     // Offsets into the golden bytes.
@@ -32,6 +33,7 @@ public sealed class NpcServicesMessageTests
     private const int Experience = 50;
     private const int JobExperience = 58;
     private const int Coins = 66;
+    private const int ServicesByte = 70;
 
     private static NpcServices Golden =>
         new(
@@ -87,6 +89,7 @@ public sealed class NpcServicesMessageTests
             .Concat(items.SelectMany(Entry))
             .Concat(new[] { (byte)quests.Length })
             .Concat(quests.SelectMany(quest => Offer(quest, monster)))
+            .Concat(new byte[] { 0x00 })
             .ToArray();
     }
 
@@ -127,9 +130,9 @@ public sealed class NpcServicesMessageTests
 
         Assert.That(entries[0].Item.Value.Length, Is.EqualTo(64));
         Assert.That(offers[0].Monster.Value.Length, Is.EqualTo(64));
-        Assert.That(shop.GetEncodedLength(), Is.EqualTo(12 + 13 * 74), "974 bytes");
-        Assert.That(giver.GetEncodedLength(), Is.EqualTo(12 + 6 * 154), "936 bytes");
-        Assert.That(tooLarge, Throws.ArgumentException, "1,128 bytes do not fit the 1,020 a reliable message carries");
+        Assert.That(shop.GetEncodedLength(), Is.EqualTo(13 + 13 * 74), "975 bytes");
+        Assert.That(giver.GetEncodedLength(), Is.EqualTo(13 + 6 * 154), "937 bytes");
+        Assert.That(tooLarge, Throws.ArgumentException, "1,129 bytes do not fit the 1,020 a reliable message carries");
         foreach (NpcServices message in new[] { shop, giver })
         {
             byte[] buffer = new byte[message.GetEncodedLength()];
@@ -160,8 +163,8 @@ public sealed class NpcServicesMessageTests
         Assert.That(NpcServices.TryRead(Services(none, seven.Take(6).ToArray(), "monster.a"), out _), Is.True);
         Assert.That(NpcServices.TryRead(Services(fourteen, none, "monster.a"), out _), Is.False, "14 entries");
         Assert.That(NpcServices.TryRead(Services(none, seven, "monster.a"), out _), Is.False, "7 offers");
-        Assert.That(tooLarge.Length, Is.EqualTo(1128));
-        Assert.That(NpcServices.TryRead(tooLarge, out _), Is.False, "1,128 bytes");
+        Assert.That(tooLarge.Length, Is.EqualTo(1129));
+        Assert.That(NpcServices.TryRead(tooLarge, out _), Is.False, "1,129 bytes");
     }
 
     [Test]
@@ -198,18 +201,26 @@ public sealed class NpcServicesMessageTests
         Assert.That(BitConverter.ToUInt64(ServicesBytes, Experience), Is.EqualTo(150ul));
         Assert.That(BitConverter.ToUInt64(ServicesBytes, JobExperience), Is.EqualTo(160ul));
         Assert.That(BitConverter.ToUInt32(ServicesBytes, Coins), Is.EqualTo(100u));
+        Assert.That(ServicesBytes[ServicesByte], Is.Zero);
     }
 
     [Test]
     public void NpcServices_WithAnItemOrAQuestTwice_IsRefused()
     {
         byte[] entry = ServicesBytes.Skip(11).Take(16).ToArray();
-        byte[] offer = ServicesBytes.Skip(28).ToArray();
+        byte[] offer = ServicesBytes.Skip(28).Take(ServicesByte - 28).ToArray();
         byte[] header = ServicesBytes.Take(10).ToArray();
-        byte[] itemTwice = header.Concat(new byte[] { 0x02 }).Concat(entry).Concat(entry).Concat(new byte[] { 0x00 })
+        byte[] itemTwice = header.Concat(new byte[] { 0x02 })
+            .Concat(entry)
+            .Concat(entry)
+            .Concat(new byte[] { 0x00, 0x00 })
             .ToArray();
-        byte[] questTwice = header.Concat(new byte[] { 0x00, 0x02 }).Concat(offer).Concat(offer).ToArray();
-        byte[] once = header.Concat(new byte[] { 0x01 }).Concat(entry).Concat(new byte[] { 0x00 }).ToArray();
+        byte[] questTwice = header.Concat(new byte[] { 0x00, 0x02 })
+            .Concat(offer)
+            .Concat(offer)
+            .Concat(new byte[] { 0x00 })
+            .ToArray();
+        byte[] once = header.Concat(new byte[] { 0x01 }).Concat(entry).Concat(new byte[] { 0x00, 0x00 }).ToArray();
 
         Assert.That(NpcServices.TryRead(once, out _), Is.True, "the pieces read alone");
         Assert.That(NpcServices.TryRead(itemTwice, out _), Is.False, "the same item twice");
@@ -223,9 +234,26 @@ public sealed class NpcServicesMessageTests
         byte[] written = new byte[message.GetEncodedLength()];
         message.Write(written);
 
-        Assert.That(written, Is.EqualTo(new byte[] { 0x1D, 0x80, 0x07, 0, 0, 0, 0, 0, 0, 0, 0x00, 0x00 }));
+        Assert.That(written, Is.EqualTo(new byte[] { 0x1D, 0x80, 0x07, 0, 0, 0, 0, 0, 0, 0, 0x00, 0x00, 0x00 }));
         Assert.That(NpcServices.TryRead(written, out NpcServices? read), Is.True);
         Assert.That((read!.Entries.Count, read.Offers.Count), Is.EqualTo((0, 0)));
+    }
+
+    [Test]
+    public void NpcServices_WithTheResetBit_OffersTheReset_AndRefusesAnyOtherBit()
+    {
+        var guildmaster = new NpcServices(new EntityId(7), new NpcServiceEntry[0], new NpcQuestOffer[0], true);
+        byte[] written = new byte[guildmaster.GetEncodedLength()];
+        guildmaster.Write(written);
+
+        Assert.That(written, Is.EqualTo(new byte[] { 0x1D, 0x80, 0x07, 0, 0, 0, 0, 0, 0, 0, 0x00, 0x00, 0x01 }));
+        Assert.That(NpcServices.TryRead(written, out NpcServices? read), Is.True);
+        Assert.That(read!.OffersReset, Is.True);
+        Assert.That(Golden.OffersReset, Is.False);
+        Assert.That(NpcServices.TryRead(WireMatrix.With(ServicesBytes, ServicesByte, 0x01), out read), Is.True);
+        Assert.That(read!.OffersReset, Is.True);
+        Assert.That(NpcServices.TryRead(WireMatrix.With(ServicesBytes, ServicesByte, 0x02), out _), Is.False);
+        Assert.That(NpcServices.TryRead(WireMatrix.With(ServicesBytes, ServicesByte, 0x81), out _), Is.False);
     }
 
     [Test]

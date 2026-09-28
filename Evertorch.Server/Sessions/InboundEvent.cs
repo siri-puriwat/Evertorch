@@ -278,6 +278,11 @@ public readonly struct InboundEvent
             quest: quest);
     }
 
+    public static InboundEvent ForResetBuild(ConnectionId connection, EntityId npc, uint commandSequence)
+    {
+        return new InboundEvent(InboundEventKind.ResetBuild, connection, null, default, default, npc, commandSequence);
+    }
+
     public static InboundEvent ForLearnSkill(ConnectionId connection, SkillDefinitionId skill, uint commandSequence)
     {
         return new InboundEvent(

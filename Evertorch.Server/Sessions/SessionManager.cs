@@ -91,6 +91,7 @@ public sealed class SessionManager : ITickPhase
     private readonly uint m_tickRate;
     private readonly uint m_handshakeTimeoutTicks;
     private readonly int m_maxQueuedInputs;
+    private readonly float m_npcReach;
     private readonly List<ClientSession> m_expired = new();
     private readonly List<CharacterSession> m_cancelledLogouts = new();
     private readonly List<ClientSession> m_transfers = new();
@@ -125,6 +126,7 @@ public sealed class SessionManager : ITickPhase
         m_abuse = abuse.Value;
         m_audit = audit;
         m_maxQueuedInputs = worldOptions.Value.MaxQueuedInputs;
+        m_npcReach = NpcInteraction.Range + worldOptions.Value.AttackRangeTolerance;
         m_inbound = inbound;
         m_persistence = persistence;
         m_sessions = sessions;
@@ -286,6 +288,7 @@ public sealed class SessionManager : ITickPhase
             case InboundEventKind.CompleteQuest:
             case InboundEventKind.AllocateStat:
             case InboundEventKind.LearnSkill:
+            case InboundEventKind.ResetBuild:
                 HandleCommand(session, inboundEvent, tick);
                 break;
             default:
@@ -955,8 +958,38 @@ public sealed class SessionManager : ITickPhase
                 command.Stat,
                 (int)command.Quantity),
             InboundEventKind.LearnSkill => Learn(session, command.Skill),
+            InboundEventKind.ResetBuild => ResetBuild(session, command.Target),
             _ => CommandRejectionReason.NotAllowedNow
         };
+    }
+
+    // The Guildmaster's reset (Gameplay Systems §6.1): refused while an inventory operation is in flight, as a turn-in
+    // is, then by the NPC checks. A cast under way ends, status effects run out unchanged, and the checkpoint is queued
+    // at once, even with nothing spent.
+    private CommandRejectionReason ResetBuild(ClientSession session, EntityId npc)
+    {
+        CharacterSession character = session.Character!;
+        if (character.Operation != null)
+        {
+            return CommandRejectionReason.ItemActionInFlight;
+        }
+
+        CommandRejectionReason reach = NpcReach.Check(session, npc, m_npcReach, out NpcEntity? found);
+        if (reach != CommandRejectionReason.None)
+        {
+            return reach;
+        }
+
+        if (!found!.Definition.OffersReset)
+        {
+            return CommandRejectionReason.InvalidTarget;
+        }
+
+        m_combat.InterruptCast(session.Player!);
+        m_builds.ResetAtGuildmaster(session.Player!, session.Connection);
+        session.NeedsSkillList = true;
+        m_lifetime.QueueCheckpoint(character);
+        return CommandRejectionReason.None;
     }
 
     // The owner hears of the new level through the skill list, and of the point spent through the sheet.

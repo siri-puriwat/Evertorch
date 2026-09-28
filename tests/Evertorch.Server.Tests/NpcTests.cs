@@ -173,7 +173,7 @@ public sealed class NpcTests
     // The shop trades its stock at the stock's prices and buys every item with a sell price at that price, sorted by
     // item ID; the Gate Warden gives the quest that names it (Prototype Content §2).
     [Test]
-    public void Services_OfTheRepositoryNpcs_AreTheShopAndTheQuest()
+    public void Services_OfTheRepositoryNpcs_AreTheShopTheQuestAndTheReset()
     {
         var server = new TestServer(withNpcs: true);
 
@@ -198,7 +198,14 @@ public sealed class NpcTests
             warden.Offers.Select(offer =>
                 (offer.Quest.Value, offer.Monster.Value, offer.Count, offer.BaseExperience, offer.Coins)),
             Is.EqualTo(new[] { ("quest.crawler_hunt", "monster.forest_crawler", (ushort)5, 150ul, 100u) }));
-        Assert.That((shop.GetEncodedLength(), warden.GetEncodedLength()), Is.EqualTo((254, 78)));
+        NpcServices guildmaster = server.World.Maps.SelectMany(map => map.Npcs)
+            .Single(npc => npc.DefinitionId == "npc.guildmaster")
+            .Services;
+        Assert.That((shop.OffersReset, warden.OffersReset, guildmaster.OffersReset), Is.EqualTo((false, false, true)));
+        Assert.That((guildmaster.Entries.Count, guildmaster.Offers.Count), Is.EqualTo((0, 0)));
+        Assert.That(
+            (shop.GetEncodedLength(), warden.GetEncodedLength(), guildmaster.GetEncodedLength()),
+            Is.EqualTo((255, 79, 13)));
     }
 
     [Test]

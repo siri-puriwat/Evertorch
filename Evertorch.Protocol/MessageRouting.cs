@@ -37,6 +37,7 @@ public static class MessageRouting
             case MessageOpcode.CompleteQuest:
             case MessageOpcode.AllocateStat:
             case MessageOpcode.LearnSkill:
+            case MessageOpcode.ResetBuild:
             case MessageOpcode.ServerHello:
             case MessageOpcode.WorldEntered:
             case MessageOpcode.EntitySpawn:
