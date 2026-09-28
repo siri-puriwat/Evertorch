@@ -1,4 +1,5 @@
 using System.Linq;
+using Evertorch.Game;
 using Evertorch.Protocol;
 using NUnit.Framework;
 
@@ -19,6 +20,25 @@ public sealed class BuildMessagesTests
         return new CharacterSheet(jobLevel, 0, 30, 3, 0, stats, 46, 12, 5, 6, 188, 125, 13, 154);
     }
 
+    private static SkillListEntry Entry(string skill, byte level, byte max, byte prerequisite = 255, byte needs = 0)
+    {
+        return new SkillListEntry(new SkillDefinitionId(skill), 0f, 0, 0, 0, 0, level, max, prerequisite, needs);
+    }
+
+    [Test]
+    public void DescribeSkills_SaysEachSkillWhoseLevelRose_AndNothingForTheFirstList()
+    {
+        SkillListEntry[] before = { Entry("skill.strike", 1, 5), Entry("skill.focus", 0, 3, 0, 1) };
+        SkillListEntry[] after = { Entry("skill.strike", 2, 5), Entry("skill.focus", 1, 3, 0, 1) };
+
+        Assert.That(BuildMessages.DescribeSkills(null, after, null), Is.Empty, "the baseline");
+        Assert.That(BuildMessages.DescribeSkills(before, before, null), Is.Empty, "a cooldown's new list");
+        Assert.That(
+            BuildMessages.DescribeSkills(before, after, null),
+            Is.EqualTo(new[] { "skill.strike Lv 2.", "skill.focus Lv 1." }),
+            "without content, the definition names it");
+    }
+
     [Test]
     public void Describe_SaysWhatANewSheetRaised_AndNothingForTheFirst()
     {
@@ -31,6 +51,18 @@ public sealed class BuildMessagesTests
             Is.EqualTo(new[] { "Job level 2.", "AGI 7." }),
             "the job level first, then each statistic that rose");
         Assert.That(BuildMessages.Describe(Sheet(2, 9), Sheet(2, 5)), Is.Empty, "a lowered statistic says nothing");
+    }
+
+    [Test]
+    public void TheSkillsWindowsWords_GiveTheLevelOfTheMaximum_AndAnUnmetPrerequisite()
+    {
+        SkillListEntry[] tree = { Entry("skill.strike", 0, 5), Entry("skill.focus", 0, 3, 0, 1) };
+        SkillListEntry[] learned = { Entry("skill.strike", 1, 5), tree[1] };
+
+        Assert.That(BuildMessages.SkillLevel(Entry("skill.strike", 2, 5)), Is.EqualTo("Lv 2/5"));
+        Assert.That(BuildMessages.UnmetPrerequisite(tree, tree[0], null), Is.Null, "no prerequisite");
+        Assert.That(BuildMessages.UnmetPrerequisite(tree, tree[1], null), Is.EqualTo("Needs skill.strike Lv 1"));
+        Assert.That(BuildMessages.UnmetPrerequisite(learned, learned[1], null), Is.Null, "met");
     }
 
     [Test]

@@ -106,20 +106,43 @@ public sealed class PanelLayoutTests
         Assert.That(withTouch.height, Is.GreaterThanOrEqualTo(92f + 30f), "a row shows on the shortest screen");
     }
 
-    // The Stats button stands above the Dev button's place on the left edge, clear of the stick and the Dev button.
+    // The Stats and Skills buttons stand above the Dev button's place on the left edge, clear of the stick and the Dev
+    // button.
     [TestCase(486f)]
     [TestCase(607.5f)]
     [TestCase(1920f)]
     public void StatsButton_StandsAboveTheDevButton_ClearOfTheStick(float canvasHeight)
     {
         Rect stats = TouchControls.StatsButtonBounds(canvasHeight);
+        Rect skills = TouchControls.SkillsButtonBounds(canvasHeight);
         Rect dev = TouchControls.OverlayToggleBounds(canvasHeight);
 
+        Assert.That(skills.yMin, Is.GreaterThan(stats.yMax), "Skills above Stats");
+        Assert.That(skills.yMax, Is.LessThan(canvasHeight), "on the screen");
         Assert.That(stats.Overlaps(TouchControls.StickBounds), Is.False, "the stick");
         Assert.That(dev.Overlaps(TouchControls.StickBounds), Is.False, "the Dev button and the stick");
         Assert.That(stats.Overlaps(dev), Is.False, "the Dev button");
         Assert.That(stats.yMin, Is.GreaterThan(dev.yMax));
         Assert.That(stats.xMin, Is.Zero, "on the left edge");
+    }
+
+    [TestCase(486f)]
+    [TestCase(607.5f)]
+    [TestCase(1920f)]
+    public void SkillsWindow_HangsBelowTheStatusBar_AndStopsAboveTheFeedbackLinesAndTheStick(float canvasHeight)
+    {
+        const float width = ClientUI.CanvasWidth;
+        var lines = new Rect(
+            (width - FeedbackLines.Width) / 2f,
+            FeedbackLines.BottomFor(canvasHeight),
+            FeedbackLines.Width,
+            LinesHeight);
+        Rect withTouch = SkillsWindow.BoundsFor(canvasHeight, 11, true);
+
+        Assert.That(withTouch.yMax, Is.EqualTo(canvasHeight - 64f).Within(1e-3f), "below the status bar");
+        Assert.That(withTouch.Overlaps(lines), Is.False, "clear of the feedback lines");
+        Assert.That(withTouch.Overlaps(TouchControls.StickBounds), Is.False, "clear of the stick");
+        Assert.That(withTouch.height, Is.GreaterThanOrEqualTo(92f + 30f), "a row shows on the shortest screen");
     }
 
     [Test]
@@ -136,6 +159,14 @@ public sealed class PanelLayoutTests
         Rect three = NpcWindow.BoundsFor(1920f, 3, true);
 
         Assert.That(three.height, Is.EqualTo(92f + 3 * 30f + 2 * 6f).Within(1e-3f));
+    }
+
+    [Test]
+    public void SkillsWindow_WhileItsRowsFit_IsJustTallEnoughForThem()
+    {
+        Rect three = SkillsWindow.BoundsFor(1920f, 3, true);
+
+        Assert.That(three.height, Is.EqualTo(92f + 9 * 30f + 8 * 6f).Within(1e-3f), "a heading and two lines each");
     }
 
     [Test]

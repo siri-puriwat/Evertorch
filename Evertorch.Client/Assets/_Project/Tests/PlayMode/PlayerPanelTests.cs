@@ -30,6 +30,11 @@ public sealed class PlayerPanelTests
 
     private static readonly EntityId Local = new(100);
 
+    private static readonly SkillDefinitionId[] TreeIds =
+    {
+        new("skill.strike"), new("skill.first_aid"), new("skill.focus")
+    };
+
     private readonly List<Object> m_created = new();
 
     [TearDown]
@@ -253,6 +258,24 @@ public sealed class PlayerPanelTests
     private static string SlotText(SkillBar bar, int slot)
     {
         return Slot(bar, slot).GetComponentInChildren<TMP_Text>(true).text;
+    }
+
+    // The Adventurer's tree with Strike at the given level: Strike 1-5, First Aid 1, and Focus 1-3 needing Strike 1.
+    private static SkillList Tree(byte strikeLevel)
+    {
+        return new SkillList(
+            new[]
+            {
+                new SkillListEntry(TreeIds[0], 1.5f, 8, 2000, 500, 0, strikeLevel, 5, SkillListEntry.NoPrerequisite, 0),
+                new SkillListEntry(TreeIds[1], 0f, 3, 0, 0, 0, 0, 1, SkillListEntry.NoPrerequisite, 0),
+                new SkillListEntry(TreeIds[2], 0f, 15, 0, 0, 0, 0, 3, 0, 1)
+            });
+    }
+
+    private static CharacterSheet SkillSheet(byte skillPoints)
+    {
+        CharacterSheetStat[] stats = Enumerable.Repeat(new CharacterSheetStat(5, 2), 6).ToArray();
+        return new CharacterSheet(2, 0, 50, 0, skillPoints, stats, 10, 5, 2, 3, 182, 105, 11, 153);
     }
 
     private static SkillList StrikeAndFirstAid(uint strikeCooldownLeftMs)
@@ -483,7 +506,7 @@ public sealed class PlayerPanelTests
 
     // The Stats and NPC windows share one place, so opening either closes the other (Prototype Content §2).
     [UnityTest]
-    public IEnumerator StatsAndNpcWindows_OpenOneAtATime()
+    public IEnumerator StatsSkillsAndNpcWindows_OpenOneAtATime()
     {
         GameClient client = CreateIdleClient();
         ClientWorld world = GiveWorld(client);
@@ -493,25 +516,97 @@ public sealed class PlayerPanelTests
         world.OnNpcServices(QuartermasterServices(13));
         var npcWindow = NpcWindow.Create(client);
         var statsWindow = StatsWindow.Create(client);
+        var skillsWindow = SkillsWindow.Create(client);
         m_created.Add(npcWindow.gameObject);
         m_created.Add(statsWindow.gameObject);
+        m_created.Add(skillsWindow.gameObject);
         const BindingFlags field = BindingFlags.NonPublic | BindingFlags.Instance;
         typeof(GameClient).GetField("m_npcWindow", field)!.SetValue(client, npcWindow);
         typeof(GameClient).GetField("m_statsWindow", field)!.SetValue(client, statsWindow);
+        typeof(GameClient).GetField("m_skillsWindow", field)!.SetValue(client, skillsWindow);
         MethodInfo talkArrived = typeof(GameClient).GetMethod("OnTalkArrived", field)!;
         npcWindow.Open(new EntityId(13));
         yield return null;
 
         client.ToggleStats();
-        (bool Npc, bool Stats) afterStats = (npcWindow.IsOpen, statsWindow.IsOpen);
+        (bool, bool, bool) afterStats = (npcWindow.IsOpen, statsWindow.IsOpen, skillsWindow.IsOpen);
+        client.ToggleSkills();
+        (bool, bool, bool) afterSkills = (npcWindow.IsOpen, statsWindow.IsOpen, skillsWindow.IsOpen);
+        client.ToggleStats();
+        (bool, bool, bool) statsAgain = (npcWindow.IsOpen, statsWindow.IsOpen, skillsWindow.IsOpen);
         talkArrived.Invoke(client, new object[] { new EntityId(13) });
-        (bool Npc, bool Stats) afterTalk = (npcWindow.IsOpen, statsWindow.IsOpen);
-        client.ToggleStats();
-        client.ToggleStats();
+        (bool, bool, bool) afterTalk = (npcWindow.IsOpen, statsWindow.IsOpen, skillsWindow.IsOpen);
+        client.ToggleSkills();
+        talkArrived.Invoke(client, new object[] { new EntityId(13) });
+        (bool, bool, bool) talkOverSkills = (npcWindow.IsOpen, statsWindow.IsOpen, skillsWindow.IsOpen);
+        client.ToggleSkills();
+        client.ToggleSkills();
 
-        Assert.That(afterStats, Is.EqualTo((false, true)), "the Stats window replaces the NPC window");
-        Assert.That(afterTalk, Is.EqualTo((true, false)), "reaching an NPC replaces the Stats window");
-        Assert.That((npcWindow.IsOpen, statsWindow.IsOpen), Is.EqualTo((false, false)), "a second toggle closes it");
+        Assert.That(afterStats, Is.EqualTo((false, true, false)), "the Stats window replaces the NPC window");
+        Assert.That(afterSkills, Is.EqualTo((false, false, true)), "the Skills window replaces the Stats window");
+        Assert.That(statsAgain, Is.EqualTo((false, true, false)), "and the Stats window the Skills window");
+        Assert.That(afterTalk, Is.EqualTo((true, false, false)), "reaching an NPC replaces the Stats window");
+        Assert.That(talkOverSkills, Is.EqualTo((true, false, false)), "and the Skills window");
+        Assert.That(
+            (npcWindow.IsOpen, statsWindow.IsOpen, skillsWindow.IsOpen),
+            Is.EqualTo((false, false, false)),
+            "a second toggle closes it");
+    }
+
+    // The tree in its order with each level of its maximum, an unmet prerequisite, the description, and Learn while a
+    // point is left and the skill can take it (Prototype Content §2).
+    [UnityTest]
+    public IEnumerator SkillsWindow_ShowsTheTree_WithLearnWhereAPointAndTheSkillAllowIt()
+    {
+        GameClient client = CreateIdleClient();
+        ClientWorld world = GiveWorld(client);
+        var window = SkillsWindow.Create(client);
+        m_created.Add(window.gameObject);
+        window.Open();
+        yield return null;
+        string before = window.Text;
+
+        world.OnSkillList(Tree(0));
+        world.OnCharacterSheet(SkillSheet(1));
+        yield return null;
+        string unlearned = window.Text;
+        bool[] canLearn = TreeIds.Select(id => window.IsLearnShown(id)).ToArray();
+        world.OnSkillList(Tree(1));
+        yield return null;
+        bool focusAfterStrike = window.IsLearnShown(TreeIds[2]);
+        world.OnCharacterSheet(SkillSheet(0));
+        yield return null;
+        bool[] withoutAPoint = TreeIds.Select(id => window.IsLearnShown(id)).ToArray();
+
+        Assert.That(before, Is.EqualTo("Waiting for the server"));
+        Assert.That(
+            unlearned,
+            Is.EqualTo(
+                "Points: 1\nskill.strike Lv 0/5, Learn\nskill.first_aid Lv 0/1, Learn\nskill.focus Lv 0/3"
+                + "\nNeeds skill.strike Lv 1"));
+        Assert.That(canLearn, Is.EqualTo(new[] { true, true, false }), "Focus needs Strike 1");
+        Assert.That(focusAfterStrike, Is.True, "Strike 1 opens Focus");
+        Assert.That(withoutAPoint, Is.EqualTo(new[] { false, false, false }), "no point, no Learn");
+        Assert.That(window.Text, Does.StartWith("Points: 0\nskill.strike Lv 1/5\n"));
+    }
+
+    [UnityTest]
+    public IEnumerator FeedbackLines_SayALearnedSkillLevel_AndNothingForTheFirstList()
+    {
+        GameClient client = CreateIdleClient();
+        ClientWorld world = GiveWorld(client);
+        var lines = FeedbackLines.Create(client);
+        m_created.Add(lines.gameObject);
+        yield return null;
+
+        world.OnSkillList(Tree(0));
+        string afterBaseline = lines.Text;
+        world.OnSkillList(Tree(0));
+        string afterSame = lines.Text;
+        world.OnSkillList(Tree(1));
+
+        Assert.That((afterBaseline, afterSame), Is.EqualTo((string.Empty, string.Empty)));
+        Assert.That(lines.Text, Is.EqualTo("skill.strike Lv 1."));
     }
 
     [UnityTest]
@@ -721,7 +816,7 @@ public sealed class PlayerPanelTests
     }
 
     [UnityTest]
-    public IEnumerator SkillBar_ShowsTheListedSlots_WithTheirKeyOrWhatIsLeftOfTheCooldown()
+    public IEnumerator SkillBar_ShowsEverySkillSlot_LockedUntilLearned_ThenItsKeyOrWhatIsLeftOfTheCooldown()
     {
         GameClient client = CreateIdleClient();
         ClientWorld world = GiveWorld(client);
@@ -729,22 +824,27 @@ public sealed class PlayerPanelTests
         m_created.Add(bar.gameObject);
         yield return null;
         bool isShownWithoutAList = bar.IsVisible;
+        string lockedStrike = SlotText(bar, 1);
 
         world.OnSkillList(StrikeAndFirstAid(1500));
         yield return null;
         string strike = SlotText(bar, 1);
         string firstAid = SlotText(bar, 2);
-        bool isFocusShown = Slot(bar, 3).activeSelf;
+        string focus = SlotText(bar, 3);
+        bool isFocusPressable = Slot(bar, 3).GetComponent<Button>().interactable;
         int changes = bar.TextChanges;
         yield return null;
         int changesLater = bar.TextChanges;
         world.Advance(1.5f);
         yield return null;
 
-        Assert.That(isShownWithoutAList, Is.False);
+        Assert.That(isShownWithoutAList, Is.True, "the skill slots show from entering");
+        Assert.That(lockedStrike, Is.EqualTo("skill.strike\nLocked"), "until the list says it is learned");
         Assert.That(strike, Is.EqualTo("skill.strike\n1.5 s"), "without content the bar names the definition");
         Assert.That(firstAid, Is.EqualTo("skill.first_aid\n2"), "a skill ready to use shows its key");
-        Assert.That(isFocusShown, Is.False, "Focus waits until the server lists it");
+        Assert.That(focus, Is.EqualTo("skill.focus\nLocked"), "Focus is not learned");
+        Assert.That(isFocusPressable, Is.False, "a locked slot cannot be pressed");
+        Assert.That(Slot(bar, 1).GetComponent<Button>().interactable, Is.True);
         Assert.That(changesLater, Is.EqualTo(changes), "an unchanged tenth of a second rewrites nothing");
         Assert.That(SlotText(bar, 1), Is.EqualTo("skill.strike\n1"));
         Assert.That(bar.IsVisible, Is.True);

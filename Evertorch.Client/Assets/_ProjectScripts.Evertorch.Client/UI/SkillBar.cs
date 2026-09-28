@@ -1,7 +1,6 @@
 using System;
 using System.Globalization;
 using Evertorch.Game;
-using Evertorch.Protocol;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -9,10 +8,10 @@ using UnityEngine.UI;
 namespace Evertorch.Client
 {
 /// <summary>
-///     The skill bar across the bottom centre while in the world (Prototype Content §2, §4): a button for each slot
-///     whose skill the server listed, with the slot's key or what is left of the skill's cooldown, and for each potion
-///     slot while the inventory holds its potion, with how many and the key. It is text only, and a press asks for the
-///     slot exactly as its key does.
+///     The skill bar across the bottom centre while in the world (Prototype Content §2, §4): a button for each skill
+///     slot, with the slot's key or what is left of the skill's cooldown once the skill is learned and "Locked" until
+///     then, and for each potion slot while the inventory holds its potion, with how many and the key. It is text only,
+///     and a press asks for the slot exactly as its key does; a locked slot's press does nothing.
 /// </summary>
 public sealed class SkillBar : MonoBehaviour
 {
@@ -34,6 +33,9 @@ public sealed class SkillBar : MonoBehaviour
     private const float SlotHeight = 76f;
     private const float Spacing = 8f;
     private const int Padding = 6;
+
+    // What a locked slot records as shown, below any cooldown's tenths.
+    private const int LockedTenths = -2;
 
     private static readonly UiBuilder Ui = new(22f, SlotHeight, 0f, Spacing);
 
@@ -66,10 +68,10 @@ public sealed class SkillBar : MonoBehaviour
             }
             else
             {
-                isShown = world != null && IsListed(world, slot.Skill);
+                isShown = world != null;
                 if (isShown)
                 {
-                    Show(slot, world!.CooldownRemaining(slot.Skill));
+                    Show(slot, world!.SkillLevel(slot.Skill) > 0, world.CooldownRemaining(slot.Skill));
                 }
             }
 
@@ -107,26 +109,6 @@ public sealed class SkillBar : MonoBehaviour
         return new Rect((canvasWidth - width) / 2f, BottomInset, width, Height);
     }
 
-    private static bool IsListed(ClientWorld world, SkillDefinitionId skill)
-    {
-        foreach (SkillListEntry entry in world.Skills)
-        {
-            if (entry.Skill == skill)
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    private static string SkillName(ClientContent? content, SkillDefinitionId skill)
-    {
-        return content != null && content.TryGetSkill(skill, out ClientSkill? found) && found != null
-            ? found.DisplayName
-            : skill.Value;
-    }
-
     private static string ItemName(ClientContent? content, ItemDefinitionId item)
     {
         return content != null && content.TryGetItem(item, out ClientItem? found) && found != null
@@ -149,10 +131,10 @@ public sealed class SkillBar : MonoBehaviour
     }
 
     // Tenths of a second, rounded up, so a cooldown never reads 0.0 while it lasts.
-    private void Show(Slot slot, double cooldownSeconds)
+    private void Show(Slot slot, bool isLearned, double cooldownSeconds)
     {
-        int tenths = (int)Math.Ceiling(cooldownSeconds * 10.0);
-        string name = SkillName(m_client != null ? m_client.Content : null, slot.Skill);
+        int tenths = isLearned ? (int)Math.Ceiling(cooldownSeconds * 10.0) : LockedTenths;
+        string name = BuildMessages.SkillName(m_client != null ? m_client.Content : null, slot.Skill);
         if (tenths == slot.ShownTenths && string.Equals(name, slot.ShownName, StringComparison.Ordinal))
         {
             return;
@@ -160,10 +142,13 @@ public sealed class SkillBar : MonoBehaviour
 
         slot.ShownTenths = tenths;
         slot.ShownName = name;
-        string detail = tenths > 0
-            ? (tenths / 10.0).ToString("0.0", CultureInfo.InvariantCulture) + " s"
-            : slot.Number.ToString(CultureInfo.InvariantCulture);
+        string detail = !isLearned
+            ? "Locked"
+            : tenths > 0
+                ? (tenths / 10.0).ToString("0.0", CultureInfo.InvariantCulture) + " s"
+                : slot.Number.ToString(CultureInfo.InvariantCulture);
         slot.Label.text = $"{name}\n{detail}";
+        slot.Button.GetComponent<Button>().interactable = isLearned;
         TextChanges++;
     }
 

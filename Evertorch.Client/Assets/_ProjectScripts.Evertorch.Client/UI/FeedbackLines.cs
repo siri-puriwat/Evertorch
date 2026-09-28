@@ -11,7 +11,7 @@ namespace Evertorch.Client
 /// <summary>
 ///     Short-lived lines over the lower middle of the screen, clear of the skill bar (Prototype Content §2): a refused
 ///     command in plain words, what the player picked up, bought, or sold, a quest accepted, advanced, ready, or
-///     completed, a level-up, a job level-up, and a raised statistic.
+///     completed, a level-up, a job level-up, a raised statistic, and a learned skill level.
 /// </summary>
 public sealed class FeedbackLines : MonoBehaviour
 {
@@ -44,6 +44,7 @@ public sealed class FeedbackLines : MonoBehaviour
     private GameClient? m_client;
     private ClientWorld? m_watched;
     private IReadOnlyList<QuestLogEntry>? m_lastQuests;
+    private IReadOnlyList<SkillListEntry>? m_lastSkills;
     private GameObject? m_panel;
     private RectTransform? m_panelRect;
     private TMP_Text? m_label;
@@ -131,6 +132,7 @@ public sealed class FeedbackLines : MonoBehaviour
             m_watched.ItemPickedUpReceived -= OnPickedUp;
             m_watched.LeveledUp -= OnLeveledUp;
             m_watched.SheetChanged -= OnSheetChanged;
+            m_watched.SkillsChanged -= OnSkillsChanged;
             m_watched.Inventory.ChangeApplied -= OnChangeApplied;
             m_watched.QuestsChanged -= OnQuestsChanged;
         }
@@ -139,12 +141,14 @@ public sealed class FeedbackLines : MonoBehaviour
 
         // A world's first quest log is its baseline, which is no news; it may have come before this frame.
         m_lastQuests = world != null && world.QuestLogsReceived > 0 ? world.Quests : null;
+        m_lastSkills = world != null && world.SkillsReceivedAt > 0 ? world.Skills : null;
         if (world != null)
         {
             world.CommandRejectedReceived += OnRejected;
             world.ItemPickedUpReceived += OnPickedUp;
             world.LeveledUp += OnLeveledUp;
             world.SheetChanged += OnSheetChanged;
+            world.SkillsChanged += OnSkillsChanged;
             world.Inventory.ChangeApplied += OnChangeApplied;
             world.QuestsChanged += OnQuestsChanged;
         }
@@ -173,6 +177,24 @@ public sealed class FeedbackLines : MonoBehaviour
     private void OnLeveledUp()
     {
         Add("Level up");
+    }
+
+    // A world's first skill list is its baseline, which is no news.
+    private void OnSkillsChanged()
+    {
+        if (m_watched == null)
+        {
+            return;
+        }
+
+        IReadOnlyList<SkillListEntry> after = m_watched.Skills;
+        foreach (string line in BuildMessages.DescribeSkills(m_lastSkills, after,
+                     m_client != null ? m_client.Content : null))
+        {
+            Add(line);
+        }
+
+        m_lastSkills = after;
     }
 
     private void OnSheetChanged(CharacterSheet? before)

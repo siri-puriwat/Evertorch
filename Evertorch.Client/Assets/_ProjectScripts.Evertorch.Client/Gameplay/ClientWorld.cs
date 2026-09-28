@@ -421,6 +421,22 @@ public sealed class ClientWorld
     }
 
     /// <summary>
+    ///     The level the local character learned of <paramref name="skill" />; 0 while it is not learned or not listed.
+    /// </summary>
+    public int SkillLevel(SkillDefinitionId skill)
+    {
+        foreach (SkillListEntry entry in Skills)
+        {
+            if (entry.Skill == skill)
+            {
+                return entry.Level;
+            }
+        }
+
+        return 0;
+    }
+
+    /// <summary>
     ///     What is left of a listed skill's cooldown now, in seconds; 0 once it is ready, and for a skill not listed.
     /// </summary>
     public double CooldownRemaining(SkillDefinitionId skill)

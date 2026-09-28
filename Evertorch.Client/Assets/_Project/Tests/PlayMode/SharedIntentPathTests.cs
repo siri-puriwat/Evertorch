@@ -368,10 +368,10 @@ public sealed class SharedIntentPathTests : InputTestFixture
         Assert.That(requests, Is.EqualTo(new[] { CombatRequest.Next, CombatRequest.Previous, CombatRequest.Clear }));
     }
 
-    // The Stats touch button drives the gamepad's Select, so the one action serves C, Select, and the button (Prototype
-    // Content §4).
+    // The Stats touch button drives the gamepad's Select and the Skills button a press of the left stick, so one action
+    // each serves the key, the gamepad, and the button (Prototype Content §4).
     [UnityTest]
-    public IEnumerator StatsTouchButton_AsksForTheStatsWindow_AsSelectDoes()
+    public IEnumerator WindowTouchButtons_AskForTheirWindows_AsTheirGamepadControlsDo()
     {
         InputSystem.settings.backgroundBehavior = InputSettings.BackgroundBehavior.IgnoreFocus;
 #if UNITY_EDITOR
@@ -389,13 +389,25 @@ public sealed class SharedIntentPathTests : InputTestFixture
         yield return null;
         yield return null;
         bool pressed = source.TakeStatsToggle();
+        bool skillsOnStats = source.TakeSkillsToggle();
         EndTouch(1, onButton, screen: touchscreen);
         yield return null;
         yield return null;
         bool again = source.TakeStatsToggle();
+        Vector2 onSkills = CenterOf(Child(controls, "Skills"));
+        BeginTouch(2, onSkills, screen: touchscreen);
+        yield return null;
+        yield return null;
+        bool skills = source.TakeSkillsToggle();
+        bool statsOnSkills = source.TakeStatsToggle();
+        EndTouch(2, onSkills, screen: touchscreen);
+        yield return null;
+        yield return null;
 
-        Assert.That(pressed, Is.True, "the button asks for the window");
+        Assert.That(pressed, Is.True, "the Stats button asks for its window");
         Assert.That(again, Is.False, "once per press");
+        Assert.That(skills, Is.True, "the Skills button asks for its window");
+        Assert.That((skillsOnStats, statsOnSkills), Is.EqualTo((false, false)), "each button asks for its own");
     }
 
     [UnityTest]
@@ -740,7 +752,9 @@ public sealed class SharedIntentPathTests : InputTestFixture
 
         public WindowInputSource CreateWindowSource()
         {
-            m_windows = new WindowInputSource(m_actions.FindAction("Player/Stats", true));
+            m_windows = new WindowInputSource(
+                m_actions.FindAction("Player/Stats", true),
+                m_actions.FindAction("Player/Skills", true));
             return m_windows;
         }
 

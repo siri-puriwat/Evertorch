@@ -27,6 +27,7 @@ public sealed class LiveServerBuildTests : InputTestFixture
     private const string ActionsAsset = "_Project/Settings/InputSystem_Actions.inputactions";
     private const string LevelClientName = "LiveBuildOne";
     private const string StatsClientName = "LiveBuildTwo";
+    private const string SkillsClientName = "LiveBuildThree";
     private const float StartTimeoutSeconds = 30f;
     private const float FightTimeoutSeconds = 60f;
     private const int TestTimeoutMs = 300_000;
@@ -165,6 +166,54 @@ public sealed class LiveServerBuildTests : InputTestFixture
         yield return Tap(keyboard.cKey);
         yield return WaitUntil(() => !window.IsOpen, 2f);
         Assert.That(window.IsOpen, Is.False, "C closes it again");
+    }
+
+    // A character stored at job level 2, with 1 skill point, opens the Skills window with K and learns Strike: the
+    // server's list moves the row, the skill bar's first slot unlocks, and the feedback lines say so (Gameplay Systems
+    // §9; Prototype Content §2, §4).
+    [UnityTest]
+    [Timeout(TestTimeoutMs)]
+    public IEnumerator Skills_LearnedThroughTheWindow_UnlockTheirSlot()
+    {
+        string actionsPath = RequirePrerequisites();
+        yield return StartDatabaseAndServer();
+        LiveServer server = m_server!;
+        LiveDatabase database = m_database!;
+        Keyboard keyboard = InputSystem.AddDevice<Keyboard>();
+        GameClient client = CreateClient(actionsPath);
+
+        yield return EnterByName(
+            client,
+            SkillsClientName,
+            () => database.Execute($"UPDATE characters SET job_level = 2 WHERE name = '{SkillsClientName}'"));
+        ClientWorld world = client.World!;
+        SkillsWindow window = client.GetComponentsInChildren<SkillsWindow>(true).Single();
+        SkillBar bar = client.GetComponentsInChildren<SkillBar>(true).Single();
+        FeedbackLines lines = client.GetComponentsInChildren<FeedbackLines>(true).Single();
+        TMP_Text slot = bar.GetComponentsInChildren<Button>(true)
+            .Single(button => button.name == "Slot 1")
+            .GetComponentInChildren<TMP_Text>(true);
+        yield return WaitUntil(() => world.Sheet != null && world.SkillsReceivedAt > 0, StartTimeoutSeconds);
+        yield return WaitUntil(() => slot.text == "Strike\nLocked", 2f);
+        Assert.That(slot.text, Is.EqualTo("Strike\nLocked"), "nothing learned yet");
+        yield return Tap(keyboard.digit1Key);
+        yield return null;
+        Assert.That(lines.Text, Is.Empty, "a locked slot's key does nothing, not even ask for a target");
+
+        yield return Tap(keyboard.kKey);
+        yield return WaitUntil(() => window.IsOpen && window.Text.Contains("Strike Lv 0/5, Learn"), 2f);
+        Assert.That(window.IsOpen, Is.True, "K opens the window");
+        Assert.That(window.Text, Does.StartWith("Points: 1\nStrike Lv 0/5, Learn"), $"{server.JoinOutput()}");
+        Button learn = window.GetComponentsInChildren<Button>().Single(button => button.name == "Learn skill.strike");
+        learn.onClick.Invoke();
+        yield return WaitUntil(() => slot.text == "Strike\n1", StartTimeoutSeconds);
+
+        Assert.That(slot.text, Is.EqualTo("Strike\n1"), $"the slot unlocks: {client.Status} {server.JoinOutput()}");
+        Assert.That(window.Text, Does.StartWith("Points: 0\nStrike Lv 1/5\n"));
+        Assert.That(lines.Text, Does.Contain("Strike Lv 1."));
+        yield return Tap(keyboard.kKey);
+        yield return WaitUntil(() => !window.IsOpen, 2f);
+        Assert.That(window.IsOpen, Is.False, "K closes it again");
     }
 
     private static string RequirePrerequisites()

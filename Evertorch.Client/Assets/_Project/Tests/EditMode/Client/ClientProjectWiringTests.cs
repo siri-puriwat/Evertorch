@@ -46,6 +46,7 @@ public sealed class ClientProjectWiringTests
     [TestCase("Player/Slot5")]
     [TestCase("Player/Talk")]
     [TestCase("Player/Stats")]
+    [TestCase("Player/Skills")]
     public void InputActions_HaveTheActionsTheClientBinds(string actionPath)
     {
         Assert.That(LoadActions().FindAction(actionPath), Is.Not.Null);
@@ -186,6 +187,12 @@ public sealed class ClientProjectWiringTests
             "the Stats touch button drives the gamepad's Select");
         Assert.That(TouchControls.StatsControlPath, Is.EqualTo("<Gamepad>/select"));
         Assert.That(actions.FindAction("Player/Stats", true).interactions, Is.Empty, "a press, not a hold");
+        Assert.That(
+            Paths(actions, "Player/Skills"),
+            Is.EquivalentTo(new[] { "<Keyboard>/k", TouchControls.SkillsControlPath }),
+            "the Skills touch button drives a press of the left stick");
+        Assert.That(TouchControls.SkillsControlPath, Is.EqualTo("<Gamepad>/leftStickPress"));
+        Assert.That(actions.FindAction("Player/Skills", true).interactions, Is.Empty, "a press, not a hold");
     }
 
     [Test]

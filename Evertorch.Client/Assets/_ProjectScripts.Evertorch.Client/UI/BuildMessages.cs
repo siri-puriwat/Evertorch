@@ -1,12 +1,14 @@
 using System.Collections.Generic;
 using System.Globalization;
+using Evertorch.Game;
 using Evertorch.Protocol;
 
 namespace Evertorch.Client
 {
 /// <summary>
 ///     The client's words for a character's build (Prototype Content §2), composed from the values of
-///     <see cref="CharacterSheet" />: the Stats window's rows and the feedback lines for what a new sheet raised.
+///     <see cref="CharacterSheet" /> and <see cref="SkillList" />: the Stats and Skills windows' rows and the feedback
+///     lines for what a new sheet or skill list raised.
 /// </summary>
 public static class BuildMessages
 {
@@ -80,6 +82,80 @@ public static class BuildMessages
         }
 
         return lines;
+    }
+
+    public static string SkillName(ClientContent? content, SkillDefinitionId skill)
+    {
+        return content != null && content.TryGetSkill(skill, out ClientSkill? found) && found != null
+            ? found.DisplayName
+            : skill.Value;
+    }
+
+    /// <summary>
+    ///     "Lv 1/5": the level learned of the skill's maximum.
+    /// </summary>
+    public static string SkillLevel(SkillListEntry entry)
+    {
+        return $"Lv {Number(entry.Level)}/{Number(entry.MaxLevel)}";
+    }
+
+    /// <summary>
+    ///     "Needs Strike Lv 1" while <paramref name="entry" />'s prerequisite in <paramref name="tree" /> is below its
+    ///     level; null once it is met, or without one.
+    /// </summary>
+    public static string? UnmetPrerequisite(
+        IReadOnlyList<SkillListEntry> tree,
+        SkillListEntry entry,
+        ClientContent? content)
+    {
+        if (entry.PrerequisiteIndex >= tree.Count)
+        {
+            return null;
+        }
+
+        SkillListEntry required = tree[entry.PrerequisiteIndex];
+        return required.Level >= entry.PrerequisiteLevel
+            ? null
+            : $"Needs {SkillName(content, required.Skill)} Lv {Number(entry.PrerequisiteLevel)}";
+    }
+
+    /// <summary>
+    ///     The feedback lines for what <paramref name="after" /> raised over <paramref name="before" />: "Strike Lv 2."
+    ///     for each skill whose level rose. A world's first list, with no <paramref name="before" />, says nothing.
+    /// </summary>
+    public static IReadOnlyList<string> DescribeSkills(
+        IReadOnlyList<SkillListEntry>? before,
+        IReadOnlyList<SkillListEntry> after,
+        ClientContent? content)
+    {
+        var lines = new List<string>();
+        if (before == null)
+        {
+            return lines;
+        }
+
+        foreach (SkillListEntry entry in after)
+        {
+            if (entry.Level > LevelIn(before, entry.Skill))
+            {
+                lines.Add($"{SkillName(content, entry.Skill)} Lv {Number(entry.Level)}.");
+            }
+        }
+
+        return lines;
+    }
+
+    private static int LevelIn(IReadOnlyList<SkillListEntry> list, SkillDefinitionId skill)
+    {
+        foreach (SkillListEntry entry in list)
+        {
+            if (entry.Skill == skill)
+            {
+                return entry.Level;
+            }
+        }
+
+        return 0;
     }
 
     private static string Number(long value)

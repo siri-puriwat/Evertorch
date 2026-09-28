@@ -7,10 +7,10 @@ using UnityEngine.UI;
 namespace Evertorch.Client
 {
 /// <summary>
-///     The on-screen stick, the Next, Previous, and Clear target buttons, the Stats button, and the development overlay's
-///     toggle. The stick and the target and Stats buttons drive a virtual gamepad, so the actions read them through the
-///     same bindings as a real gamepad and no touch-specific movement, targeting, or window code exists (Prototype
-///     Content §4).
+///     The on-screen stick, the Next, Previous, and Clear target buttons, the Stats and Skills buttons, and the
+///     development overlay's toggle. The stick and the other buttons but the toggle drive a virtual gamepad, so the
+///     actions read them through the same bindings as a real gamepad and no touch-specific movement, targeting, or
+///     window code exists (Prototype Content §4).
 /// </summary>
 public sealed class TouchControls : MonoBehaviour
 {
@@ -19,6 +19,7 @@ public sealed class TouchControls : MonoBehaviour
     public const string PreviousControlPath = "<Gamepad>/leftShoulder";
     public const string ClearControlPath = "<Gamepad>/buttonEast";
     public const string StatsControlPath = "<Gamepad>/select";
+    public const string SkillsControlPath = "<Gamepad>/leftStickPress";
 
     private const float StickRange = 51f;
     private const float StickSize = 146f;
@@ -72,7 +73,15 @@ public sealed class TouchControls : MonoBehaviour
     /// </summary>
     public static Rect StatsButtonBounds(float canvasHeight)
     {
-        return new Rect(0f, canvasHeight / 2f + ToggleSize.y / 2f + ButtonGap, ToggleSize.x, ToggleSize.y);
+        return WindowButtonBounds(canvasHeight, 0);
+    }
+
+    /// <summary>
+    ///     The Skills button, just above the Stats button, from the canvas's bottom-left corner.
+    /// </summary>
+    public static Rect SkillsButtonBounds(float canvasHeight)
+    {
+        return WindowButtonBounds(canvasHeight, 1);
     }
 
     /// <summary>
@@ -94,7 +103,8 @@ public sealed class TouchControls : MonoBehaviour
     }
 
     /// <summary>
-    ///     Shows or hides the stick, the target buttons, and the Stats button. The Dev button stays: on a device without
+    ///     Shows or hides the stick, the target buttons, and the Stats and Skills buttons. The Dev button stays: on a device
+    ///     without
     ///     a keyboard it is the only way back to the overlay, whose toggle calls this.
     /// </summary>
     public void SetVisible(bool isVisible)
@@ -146,7 +156,8 @@ public sealed class TouchControls : MonoBehaviour
 
         m_windowButtons = UiBuilder.CreateUiObject("Window buttons", canvasObject.transform);
         UiBuilder.Stretch(m_windowButtons, 0f, 0f);
-        CreateWindowButton("Stats", StatsControlPath);
+        CreateWindowButton("Stats", StatsControlPath, 0);
+        CreateWindowButton("Skills", SkillsControlPath, 1);
 
         if (toggleOverlay != null)
         {
@@ -170,15 +181,21 @@ public sealed class TouchControls : MonoBehaviour
         button.SetActive(true);
     }
 
-    // On the left edge above the Dev button's place, clear of the stick.
-    private void CreateWindowButton(string label, string controlPath)
+    private static Rect WindowButtonBounds(float canvasHeight, int row)
+    {
+        float bottom = canvasHeight / 2f + ToggleSize.y / 2f + ButtonGap + row * (ToggleSize.y + ButtonGap);
+        return new Rect(0f, bottom, ToggleSize.x, ToggleSize.y);
+    }
+
+    // On the left edge above the Dev button's place, one above the other, clear of the stick.
+    private void CreateWindowButton(string label, string controlPath, int row)
     {
         GameObject button = CreateImage(label, m_windowButtons!.transform, ToggleSize, AreaColor);
         var rect = (RectTransform)button.transform;
         rect.anchorMin = new Vector2(0f, 0.5f);
         rect.anchorMax = new Vector2(0f, 0.5f);
         rect.pivot = new Vector2(0f, 0f);
-        rect.anchoredPosition = new Vector2(0f, ToggleSize.y / 2f + ButtonGap);
+        rect.anchoredPosition = new Vector2(0f, ToggleSize.y / 2f + ButtonGap + row * (ToggleSize.y + ButtonGap));
         AddLabel(label, button.transform);
 
         button.SetActive(false);

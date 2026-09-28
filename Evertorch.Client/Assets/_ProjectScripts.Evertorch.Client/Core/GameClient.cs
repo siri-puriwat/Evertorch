@@ -92,6 +92,7 @@ public sealed class GameClient : MonoBehaviour
     private InventoryWindow? m_inventoryWindow;
     private NpcWindow? m_npcWindow;
     private StatsWindow? m_statsWindow;
+    private SkillsWindow? m_skillsWindow;
     private SkillBar? m_skillBar;
     private FeedbackLines? m_feedback;
     private CombatPresenter? m_combat;
@@ -240,6 +241,8 @@ public sealed class GameClient : MonoBehaviour
         m_npcWindow.transform.SetParent(transform, false);
         m_statsWindow = StatsWindow.Create(this);
         m_statsWindow.transform.SetParent(transform, false);
+        m_skillsWindow = SkillsWindow.Create(this);
+        m_skillsWindow.transform.SetParent(transform, false);
         m_skillBar = SkillBar.Create(this);
         m_skillBar.transform.SetParent(transform, false);
         m_feedback = FeedbackLines.Create(this);
@@ -269,6 +272,7 @@ public sealed class GameClient : MonoBehaviour
             m_combatSource?.TakeRequest();
             m_skillSource?.TakeSlot();
             m_windowSource?.TakeStatsToggle();
+            m_windowSource?.TakeSkillsToggle();
             return;
         }
 
@@ -296,6 +300,11 @@ public sealed class GameClient : MonoBehaviour
         if (m_windowSource != null && m_windowSource.TakeStatsToggle())
         {
             ToggleStats();
+        }
+
+        if (m_windowSource != null && m_windowSource.TakeSkillsToggle())
+        {
+            ToggleSkills();
         }
 
         int slot = m_skillSource?.TakeSlot() ?? 0;
@@ -625,7 +634,16 @@ public sealed class GameClient : MonoBehaviour
     }
 
     /// <summary>
-    ///     Opens the Stats window in place of the NPC window, or closes it (Prototype Content §2, §4).
+    ///     Asks to learn one level of <paramref name="skill" /> with a skill point (Gameplay Systems §9); the Skills
+    ///     window moves only with the skill list the server sends back.
+    /// </summary>
+    public void LearnSkillLevel(SkillDefinitionId skill)
+    {
+        Connection?.SendLearnSkill(skill);
+    }
+
+    /// <summary>
+    ///     Opens the Stats window in place of the NPC or Skills window, or closes it (Prototype Content §2, §4).
     /// </summary>
     public void ToggleStats()
     {
@@ -641,7 +659,29 @@ public sealed class GameClient : MonoBehaviour
         }
 
         m_npcWindow?.Close();
+        m_skillsWindow?.Close();
         m_statsWindow.Open();
+    }
+
+    /// <summary>
+    ///     Opens the Skills window in place of the NPC or Stats window, or closes it (Prototype Content §2, §4).
+    /// </summary>
+    public void ToggleSkills()
+    {
+        if (m_skillsWindow == null)
+        {
+            return;
+        }
+
+        if (m_skillsWindow.IsOpen)
+        {
+            m_skillsWindow.Close();
+            return;
+        }
+
+        m_npcWindow?.Close();
+        m_statsWindow?.Close();
+        m_skillsWindow.Open();
     }
 
     /// <summary>
@@ -669,6 +709,12 @@ public sealed class GameClient : MonoBehaviour
             || !SkillSlots.TryGetSkill(slot, out SkillDefinitionId skill)
             || !content.TryGetSkill(skill, out ClientSkill? definition)
             || definition == null)
+        {
+            return;
+        }
+
+        // A locked slot sends nothing; the server would refuse a skill not learned (Gameplay Systems §9).
+        if (m_world.SkillLevel(skill) == 0)
         {
             return;
         }
@@ -917,9 +963,10 @@ public sealed class GameClient : MonoBehaviour
         }
 
         InputAction? stats = actions?.FindAction("Player/Stats");
-        if (stats != null)
+        InputAction? skills = actions?.FindAction("Player/Skills");
+        if (stats != null && skills != null)
         {
-            m_windowSource = new WindowInputSource(stats);
+            m_windowSource = new WindowInputSource(stats, skills);
         }
     }
 
@@ -1052,6 +1099,7 @@ public sealed class GameClient : MonoBehaviour
     private void OnTalkArrived(EntityId npc)
     {
         m_statsWindow?.Close();
+        m_skillsWindow?.Close();
         m_npcWindow?.Open(npc);
     }
 
@@ -1159,6 +1207,11 @@ public sealed class GameClient : MonoBehaviour
         if (m_statsWindow != null)
         {
             m_statsWindow.Close();
+        }
+
+        if (m_skillsWindow != null)
+        {
+            m_skillsWindow.Close();
         }
 
         m_controller = null;
