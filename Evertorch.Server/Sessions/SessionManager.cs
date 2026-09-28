@@ -285,6 +285,7 @@ public sealed class SessionManager : ITickPhase
             case InboundEventKind.AcceptQuest:
             case InboundEventKind.CompleteQuest:
             case InboundEventKind.AllocateStat:
+            case InboundEventKind.LearnSkill:
                 HandleCommand(session, inboundEvent, tick);
                 break;
             default:
@@ -953,8 +954,21 @@ public sealed class SessionManager : ITickPhase
                 session.Connection,
                 command.Stat,
                 (int)command.Quantity),
+            InboundEventKind.LearnSkill => Learn(session, command.Skill),
             _ => CommandRejectionReason.NotAllowedNow
         };
+    }
+
+    // The owner hears of the new level through the skill list, and of the point spent through the sheet.
+    private CommandRejectionReason Learn(ClientSession session, SkillDefinitionId skill)
+    {
+        CommandRejectionReason refusal = m_builds.TryLearn(session.Player!, session.Connection, skill);
+        if (refusal == CommandRejectionReason.None)
+        {
+            session.NeedsSkillList = true;
+        }
+
+        return refusal;
     }
 
     private void Reject(ClientSession session, uint commandSequence, CommandRejectionReason reason)

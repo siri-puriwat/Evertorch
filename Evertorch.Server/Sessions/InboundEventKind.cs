@@ -121,6 +121,12 @@ public enum InboundEventKind
     ///     A request to raise <see cref="InboundEvent.Stat" /> by <see cref="InboundEvent.Quantity" /> steps with stat
     ///     points, carrying a command sequence.
     /// </summary>
-    AllocateStat = 24
+    AllocateStat = 24,
+
+    /// <summary>
+    ///     A request to learn one level of <see cref="InboundEvent.Skill" /> with a skill point, carrying a command
+    ///     sequence.
+    /// </summary>
+    LearnSkill = 25
 }
 }

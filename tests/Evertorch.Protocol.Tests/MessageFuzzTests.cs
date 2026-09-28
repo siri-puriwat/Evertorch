@@ -148,8 +148,18 @@ public sealed class MessageFuzzTests
                 new SkillList(
                     new[]
                     {
-                        new SkillListEntry(new SkillDefinitionId("skill.strike"), 1.5f, 8, 2000, 500, 1250),
-                        new SkillListEntry(new SkillDefinitionId("skill.first_aid"), 0f, 3, 0, 0, 0)
+                        new SkillListEntry(
+                            new SkillDefinitionId("skill.strike"),
+                            1.5f,
+                            8,
+                            2000,
+                            500,
+                            1250,
+                            1,
+                            5,
+                            SkillListEntry.NoPrerequisite,
+                            0),
+                        new SkillListEntry(new SkillDefinitionId("skill.focus"), 0f, 15, 0, 0, 0, 0, 3, 0, 1)
                     })),
             payload => SkillList.TryRead(payload, out SkillList? message) ? Encode(message!) : null);
         yield return Case(
@@ -189,6 +199,10 @@ public sealed class MessageFuzzTests
             "CompleteQuest",
             Encode(new CompleteQuest(new EntityId(14), new QuestDefinitionId("quest.crawler_hunt"), 7)),
             payload => CompleteQuest.TryRead(payload, out CompleteQuest? message) ? Encode(message!) : null);
+        yield return Case(
+            "LearnSkill",
+            Encode(new LearnSkill(new SkillDefinitionId("skill.strike"), 7)),
+            payload => LearnSkill.TryRead(payload, out LearnSkill? message) ? Encode(message!) : null);
         yield return Case(
             "AllocateStat",
             Encode(new AllocateStat(PrimaryStat.Dex, 2, 7)),
@@ -651,6 +665,13 @@ public sealed class MessageFuzzTests
     }
 
     private static byte[] Encode(AcceptQuest message)
+    {
+        byte[] buffer = new byte[message.GetEncodedLength()];
+        message.Write(buffer);
+        return buffer;
+    }
+
+    private static byte[] Encode(LearnSkill message)
     {
         byte[] buffer = new byte[message.GetEncodedLength()];
         message.Write(buffer);

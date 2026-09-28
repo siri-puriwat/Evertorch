@@ -8,7 +8,7 @@ namespace Evertorch.Server.Tests
 {
 /// <summary>
 ///     Learned skills and their levels in play (Gameplay Systems §9, §9.1): a skill is used only once learned, each cast
-///     uses the values of the level it began at, and the owner's skill list names the learned skills alone.
+///     uses the values of the level it began at, and the owner's skill list names the job's whole tree.
 /// </summary>
 [TestFixture]
 public sealed class SkillLevelTests
@@ -85,7 +85,7 @@ public sealed class SkillLevelTests
     }
 
     [Test]
-    public void SkillList_NamesTheLearnedSkillsAlone_InTheTreesOrder_AtTheirLearnedLevelsValues()
+    public void SkillList_NamesTheWholeTree_InItsOrder_AtTheLearnedLevelsValues_OrLevelOnes()
     {
         var server = new TestServer(withAdventurerBuild: false);
         ConnectionId player = server.Connect();
@@ -99,8 +99,18 @@ public sealed class SkillLevelTests
 
         Assert.That(
             list.Skills.Select(entry => (entry.Skill.Value, entry.SpCost, entry.CooldownMs)),
-            Is.EqualTo(new[] { (Strike, 10u, 2000u), (Focus, 15u, 0u) }),
-            "Strike 3 costs 10 SP; First Aid, not learned, is not listed");
+            Is.EqualTo(new[] { (Strike, 10u, 2000u), (FirstAid, 3u, 0u), (Focus, 15u, 0u) }),
+            "Strike 3 costs 10 SP; First Aid, not learned, shows level 1's values");
+        Assert.That(
+            list.Skills.Select(entry =>
+                (entry.Level, entry.MaxLevel, entry.PrerequisiteIndex, entry.PrerequisiteLevel)),
+            Is.EqualTo(
+                new[]
+                {
+                    ((byte)3, (byte)5, SkillListEntry.NoPrerequisite, (byte)0),
+                    ((byte)0, (byte)1, SkillListEntry.NoPrerequisite, (byte)0), ((byte)1, (byte)3, (byte)0, (byte)1)
+                }),
+            "Focus requires Strike, the first entry, at level 1");
     }
 
     [Test]

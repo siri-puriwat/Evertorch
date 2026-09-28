@@ -225,6 +225,22 @@ public sealed class ServerInstrumentsTests
     }
 
     [Test]
+    public void BuildChanges_CountALearnedLevel_TaggedSkill()
+    {
+        var server = new TestServer(withAdventurerBuild: false);
+        using var recorder = new MeterRecorder(server.Instruments.Meter);
+        ConnectionId player = server.EnterWorld(1);
+        server.PlayerOf(player).JobLevel = 2;
+
+        server.SendLearnSkill(player, "skill.strike", 1);
+        server.SendLearnSkill(player, "skill.strike", 2);
+        server.Tick();
+
+        Assert.That(Tagged(recorder, "evertorch.build.changes", "change", "skill"), Is.EqualTo(1));
+        Assert.That(Named(recorder, "evertorch.build.changes"), Has.Count.EqualTo(1), "the second, without a point");
+    }
+
+    [Test]
     public void BuildChanges_CountEachAcceptedRaise_TaggedStat_AndNoRefusal()
     {
         var server = new TestServer();

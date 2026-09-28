@@ -68,7 +68,8 @@ public readonly struct InboundEvent
     public int Count { get; }
 
     /// <summary>
-    ///     For <see cref="InboundEventKind.UseSkill" />, the skill asked for.
+    ///     For <see cref="InboundEventKind.UseSkill" />, the skill asked for; for <see cref="InboundEventKind.LearnSkill" />,
+    ///     the skill to learn.
     /// </summary>
     public SkillDefinitionId Skill { get; }
 
@@ -275,6 +276,18 @@ public readonly struct InboundEvent
             npc,
             commandSequence,
             quest: quest);
+    }
+
+    public static InboundEvent ForLearnSkill(ConnectionId connection, SkillDefinitionId skill, uint commandSequence)
+    {
+        return new InboundEvent(
+            InboundEventKind.LearnSkill,
+            connection,
+            null,
+            default,
+            default,
+            commandSequence: commandSequence,
+            skill: skill);
     }
 
     public static InboundEvent ForAllocateStat(

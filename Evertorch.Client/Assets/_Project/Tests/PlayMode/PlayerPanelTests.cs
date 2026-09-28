@@ -260,8 +260,10 @@ public sealed class PlayerPanelTests
         return new SkillList(
             new[]
             {
-                new SkillListEntry(new SkillDefinitionId("skill.strike"), 1.5f, 8, 2000, 500, strikeCooldownLeftMs),
-                new SkillListEntry(new SkillDefinitionId("skill.first_aid"), 0f, 3, 0, 0, 0)
+                new SkillListEntry(new SkillDefinitionId("skill.strike"), 1.5f, 8, 2000, 500, strikeCooldownLeftMs, 1,
+                    1, SkillListEntry.NoPrerequisite, 0),
+                new SkillListEntry(new SkillDefinitionId("skill.first_aid"), 0f, 3, 0, 0, 0, 1, 1,
+                    SkillListEntry.NoPrerequisite, 0)
             });
     }
 

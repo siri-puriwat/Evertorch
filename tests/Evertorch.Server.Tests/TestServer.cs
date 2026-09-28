@@ -649,6 +649,14 @@ internal sealed class TestServer
         Inbound.OnPayload(connection, ProtocolChannel.Control, payload);
     }
 
+    public void SendLearnSkill(ConnectionId connection, string skill, uint commandSequence)
+    {
+        var message = new LearnSkill(new SkillDefinitionId(skill), commandSequence);
+        byte[] payload = new byte[message.GetEncodedLength()];
+        message.Write(payload);
+        Inbound.OnPayload(connection, ProtocolChannel.Control, payload);
+    }
+
     public void SendAllocateStat(ConnectionId connection, PrimaryStat stat, byte steps, uint commandSequence)
     {
         byte[] payload = new byte[AllocateStat.EncodedLength];

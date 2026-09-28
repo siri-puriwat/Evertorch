@@ -73,7 +73,8 @@ public sealed class ServerOutputTests
         ["SkillList"] = new[] { "Skills" },
         ["SkillListEntry"] = new[]
         {
-            "AfterCastDelayMs", "CooldownMs", "Range", "RemainingCooldownMs", "Skill", "SpCost"
+            "AfterCastDelayMs", "CooldownMs", "IsLearned", "Level", "MaxLevel", "PrerequisiteIndex",
+            "PrerequisiteLevel", "Range", "RemainingCooldownMs", "Skill", "SpCost"
         },
         ["SkillResolved"] = new[]
         {

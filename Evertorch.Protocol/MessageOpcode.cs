@@ -28,6 +28,7 @@ public enum MessageOpcode : ushort
     AcceptQuest = 0x0015,
     CompleteQuest = 0x0016,
     AllocateStat = 0x0017,
+    LearnSkill = 0x0018,
     ServerHello = 0x8001,
     WorldEntered = 0x8003,
     EntitySpawn = 0x8004,

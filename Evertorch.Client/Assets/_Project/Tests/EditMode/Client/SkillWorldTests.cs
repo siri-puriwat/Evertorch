@@ -83,7 +83,8 @@ public sealed class SkillWorldTests
     {
         ClientWorld world = CreateWorld();
         world.Advance(3f);
-        world.OnSkillList(new SkillList(new[] { new SkillListEntry(Strike, 1.5f, 8, 2000, 500, 0) }));
+        world.OnSkillList(new SkillList(new[]
+            { new SkillListEntry(Strike, 1.5f, 8, 2000, 500, 0, 1, 1, SkillListEntry.NoPrerequisite, 0) }));
 
         world.OnSkillResolved(new SkillResolved(Other, Slime, Strike, SkillOutcome.Hit, 17, 12, 660));
         double afterAnotherCaster = world.AfterCastDelayRemaining;
@@ -151,7 +152,8 @@ public sealed class SkillWorldTests
         ClientWorld world = CreateWorld();
         world.Advance(3f);
 
-        world.OnSkillList(new SkillList(new[] { new SkillListEntry(Strike, 1.5f, 8, 2000, 500, 1250) }));
+        world.OnSkillList(new SkillList(new[]
+            { new SkillListEntry(Strike, 1.5f, 8, 2000, 500, 1250, 1, 1, SkillListEntry.NoPrerequisite, 0) }));
         double atArrival = world.CooldownRemaining(Strike);
         world.Advance(0.5f);
         double later = world.CooldownRemaining(Strike);
@@ -170,8 +172,10 @@ public sealed class SkillWorldTests
         int changes = 0;
         world.SkillsChanged += () => changes++;
 
-        world.OnSkillList(new SkillList(new[] { new SkillListEntry(Strike, 1.5f, 8, 2000, 500, 0) }));
-        world.OnSkillList(new SkillList(new[] { new SkillListEntry(Strike, 1.5f, 8, 2000, 500, 1250) }));
+        world.OnSkillList(new SkillList(new[]
+            { new SkillListEntry(Strike, 1.5f, 8, 2000, 500, 0, 1, 1, SkillListEntry.NoPrerequisite, 0) }));
+        world.OnSkillList(new SkillList(new[]
+            { new SkillListEntry(Strike, 1.5f, 8, 2000, 500, 1250, 1, 1, SkillListEntry.NoPrerequisite, 0) }));
 
         Assert.That(world.Skills.Count, Is.EqualTo(1));
         Assert.That(world.Skills[0].RemainingCooldownMs, Is.EqualTo(1250u));

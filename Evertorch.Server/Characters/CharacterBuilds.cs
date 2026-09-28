@@ -26,6 +26,12 @@ public sealed class CharacterBuilds
             new EventId(1012, "StatRaised"),
             "Character {Character} on connection {Connection} raised {Stat} from {Previous} to {Value}.");
 
+    private static readonly Action<ILogger, long, long, SkillDefinitionId, int, Exception?> LogSkillLearned =
+        LoggerMessage.Define<long, long, SkillDefinitionId, int>(
+            LogLevel.Information,
+            new EventId(1013, "SkillLearned"),
+            "Character {Character} on connection {Connection} learned {Skill} at level {Level}.");
+
     private static readonly Action<ILogger, long, long, string, Exception?> LogBuildReset =
         LoggerMessage.Define<long, long, string>(
             LogLevel.Information,
@@ -110,6 +116,44 @@ public sealed class CharacterBuilds
 
         LogStatRaised(m_logger, player.Character.Value, connection.Value, stat, value, value + steps, null);
         m_instruments.RecordBuildChange(BuildChange.Stat);
+        return CommandRejectionReason.None;
+    }
+
+    /// <summary>
+    ///     Learns one level of <paramref name="skill" /> with a skill point (Gameplay Systems §9): refused with
+    ///     <see cref="CommandRejectionReason.RequirementNotMet" /> for a skill outside the job's tree, at its maximum, or
+    ///     whose prerequisite is not met, then with <see cref="CommandRejectionReason.NotEnoughPoints" /> when no point
+    ///     is left. A cast under way keeps the level it began at.
+    /// </summary>
+    public CommandRejectionReason TryLearn(PlayerEntity player, ConnectionId connection, SkillDefinitionId skill)
+    {
+        if (!Contains(m_content.Jobs[player.Job].Skills, skill))
+        {
+            return CommandRejectionReason.RequirementNotMet;
+        }
+
+        SkillDefinition definition = m_content.Skills[skill];
+        player.Skills.TryGetValue(skill, out int level);
+        SkillRequirement? requires = definition.Requires;
+        int required = 0;
+        if (requires != null)
+        {
+            player.Skills.TryGetValue(requires.Skill, out required);
+        }
+
+        if (level >= definition.MaxLevel || (requires != null && required < requires.Level))
+        {
+            return CommandRejectionReason.RequirementNotMet;
+        }
+
+        if (SkillPointsLeft(player) < 1)
+        {
+            return CommandRejectionReason.NotEnoughPoints;
+        }
+
+        player.SetSkillLevel(skill, level + 1);
+        LogSkillLearned(m_logger, player.Character.Value, connection.Value, skill, level + 1, null);
+        m_instruments.RecordBuildChange(BuildChange.Skill);
         return CommandRejectionReason.None;
     }
 

@@ -33,13 +33,18 @@ public sealed class SharedSkillMessageTests
         SkillA,
         new byte[] { 0x01, 0x11, 0, 0, 0, 0x20, 0, 0, 0, 0x94, 0x02 });
 
+    // skill.a at level 2 of 5, with no prerequisite.
     private static readonly byte[] ListBytes = Concat(
         new byte[] { 0x1B, 0x80, 0x01 },
         SkillA,
         new byte[]
         {
-            0x00, 0x00, 0xC0, 0x3F, 0x08, 0, 0, 0, 0xD0, 0x07, 0, 0, 0xF4, 0x01, 0, 0, 0xE2, 0x04, 0, 0
+            0x00, 0x00, 0xC0, 0x3F, 0x08, 0, 0, 0, 0xD0, 0x07, 0, 0, 0xF4, 0x01, 0, 0, 0xE2, 0x04, 0, 0,
+            0x02, 0x05, 0xFF, 0x00
         });
+
+    private static readonly byte[] LearnBytes =
+        Concat(new byte[] { 0x18, 0x00 }, SkillA, new byte[] { 0x78, 0x56, 0x34, 0x12 });
 
     private static readonly byte[] EffectsBytes = Concat(
         new byte[] { 0x1C, 0x80, 0x01 },
@@ -55,6 +60,20 @@ public sealed class SharedSkillMessageTests
     private static byte[] Concat(params byte[][] parts)
     {
         return parts.SelectMany(part => part).ToArray();
+    }
+
+    [Test]
+    public void LearnSkill_WriteAndRead_MatchGoldenBytes()
+    {
+        var message = new LearnSkill(Skill, 0x12345678);
+        byte[] buffer = new byte[message.GetEncodedLength()];
+        message.Write(buffer);
+
+        bool isRead = LearnSkill.TryRead(LearnBytes, out LearnSkill? read);
+
+        Assert.That(buffer, Is.EqualTo(LearnBytes));
+        Assert.That(isRead, Is.True);
+        Assert.That((read!.Skill, read.CommandSequence), Is.EqualTo((Skill, 0x12345678u)));
     }
 
     [Test]
@@ -91,7 +110,7 @@ public sealed class SharedSkillMessageTests
     }
 
     [Test]
-    public void SkillList_AtItsLargest_Is949Bytes()
+    public void SkillList_AtItsLargest_Is993Bytes()
     {
         SkillListEntry[] entries = Enumerable.Range(0, SkillList.MaxEntries)
             .Select(index => new SkillListEntry(
@@ -100,16 +119,21 @@ public sealed class SharedSkillMessageTests
                 uint.MaxValue,
                 uint.MaxValue,
                 uint.MaxValue,
-                uint.MaxValue))
+                uint.MaxValue,
+                5,
+                5,
+                SkillListEntry.NoPrerequisite,
+                0))
             .ToArray();
 
-        Assert.That(new SkillList(entries).GetEncodedLength(), Is.EqualTo(949));
+        Assert.That(new SkillList(entries).GetEncodedLength(), Is.EqualTo(993));
     }
 
     [Test]
     public void SkillList_WriteAndRead_MatchGoldenBytes()
     {
-        var message = new SkillList(new[] { new SkillListEntry(Skill, 1.5f, 8, 2000, 500, 1250) });
+        var message = new SkillList(
+            new[] { new SkillListEntry(Skill, 1.5f, 8, 2000, 500, 1250, 2, 5, SkillListEntry.NoPrerequisite, 0) });
         byte[] buffer = new byte[message.GetEncodedLength()];
         message.Write(buffer);
 
@@ -124,6 +148,9 @@ public sealed class SharedSkillMessageTests
         Assert.That(entry.CooldownMs, Is.EqualTo(2000u));
         Assert.That(entry.AfterCastDelayMs, Is.EqualTo(500u));
         Assert.That(entry.RemainingCooldownMs, Is.EqualTo(1250u));
+        Assert.That(
+            (entry.Level, entry.MaxLevel, entry.PrerequisiteIndex, entry.PrerequisiteLevel),
+            Is.EqualTo(((byte)2, (byte)5, SkillListEntry.NoPrerequisite, (byte)0)));
     }
 
     [Test]

@@ -111,21 +111,34 @@ public sealed class CharacterSyncPhase : ITickPhase
         return new StatusEffects(m_effects.ToArray());
     }
 
+    private static int IndexOf(IReadOnlyList<SkillDefinitionId> tree, SkillDefinitionId skill)
+    {
+        for (int index = 0; index < tree.Count; index++)
+        {
+            if (tree[index] == skill)
+            {
+                return index;
+            }
+        }
+
+        return -1;
+    }
+
     private SkillList CreateSkillList(PlayerEntity player, long now)
     {
         m_entries.Clear();
-        // The job's tree in its order, each skill learned at its learned level's values (Gameplay Systems §9).
-        foreach (SkillDefinitionId id in m_content.Jobs[player.Job].Skills)
+        // The job's whole tree in its order, each skill at its learned level's values, or level 1's while not learned
+        // (Gameplay Systems §9).
+        IReadOnlyList<SkillDefinitionId> tree = m_content.Jobs[player.Job].Skills;
+        foreach (SkillDefinitionId id in tree)
         {
-            if (!player.Skills.TryGetValue(id, out int level))
-            {
-                continue;
-            }
-
+            player.Skills.TryGetValue(id, out int level);
             SkillDefinition skill = m_content.Skills[id];
-            SkillLevel values = skill.ValuesAt(level);
+            SkillLevel values = skill.ValuesAt(Math.Max(1, level));
             long end = player.Combat.CooldownEndMs(id);
             long remaining = end == long.MinValue ? 0 : Math.Max(0, end - now);
+            SkillRequirement? requires = skill.Requires;
+            int prerequisite = requires == null ? -1 : IndexOf(tree, requires.Skill);
             m_entries.Add(
                 new SkillListEntry(
                     id,
@@ -133,7 +146,11 @@ public sealed class CharacterSyncPhase : ITickPhase
                     (uint)values.SpCost,
                     (uint)values.CooldownMs,
                     (uint)values.AfterCastDelayMs,
-                    (uint)Math.Min(remaining, values.CooldownMs)));
+                    (uint)Math.Min(remaining, values.CooldownMs),
+                    (byte)level,
+                    (byte)skill.MaxLevel,
+                    prerequisite < 0 ? SkillListEntry.NoPrerequisite : (byte)prerequisite,
+                    prerequisite < 0 ? (byte)0 : (byte)requires!.Level));
         }
 
         return new SkillList(m_entries.ToArray());

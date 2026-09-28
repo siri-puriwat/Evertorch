@@ -326,6 +326,14 @@ public sealed class InboundQueue
                     complete.Quest,
                     complete.CommandSequence);
                 return true;
+            case MessageOpcode.LearnSkill:
+                if (!LearnSkill.TryRead(payload, out LearnSkill? learn))
+                {
+                    return false;
+                }
+
+                decoded = InboundEvent.ForLearnSkill(connection, learn!.Skill, learn.CommandSequence);
+                return true;
             case MessageOpcode.AllocateStat:
                 if (!AllocateStat.TryRead(payload, out AllocateStat allocate))
                 {

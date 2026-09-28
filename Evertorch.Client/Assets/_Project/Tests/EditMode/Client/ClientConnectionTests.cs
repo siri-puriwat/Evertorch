@@ -827,6 +827,27 @@ public sealed class ClientConnectionTests
     }
 
     [Test]
+    public void SendLearnSkill_InTheWorld_TakesTheNextCommandSequence_AndOutsideSendsNothing()
+    {
+        var outside = new Harness();
+        outside.ConnectAndReceiveHello();
+        int before = outside.Transport.Sent.Count;
+        var harness = new Harness();
+        harness.EnterWorld(4);
+        var strike = new SkillDefinitionId("skill.strike");
+
+        uint none = outside.Connection.SendLearnSkill(strike);
+        uint sequence = harness.Connection.SendLearnSkill(strike);
+        FakeClientTransport.SentMessage sent = harness.Transport.Sent.Last();
+
+        Assert.That((none, outside.Transport.Sent.Count), Is.EqualTo((0u, before)));
+        Assert.That(sequence, Is.EqualTo(5u));
+        Assert.That(LearnSkill.TryRead(sent.Payload, out LearnSkill? read), Is.True);
+        Assert.That((read!.Skill, read.CommandSequence), Is.EqualTo((strike, 5u)));
+        Assert.That(sent.Channel, Is.EqualTo(ProtocolChannel.Control));
+    }
+
+    [Test]
     public void SendLogout_InTheWorld_UsesTheCommandSequenceAndKeepsTheWorldUntilConfirmed()
     {
         var harness = new Harness();
@@ -1033,7 +1054,11 @@ public sealed class ClientConnectionTests
             10,
             1331);
         var list = new SkillList(
-            new[] { new SkillListEntry(new SkillDefinitionId("skill.first_aid"), 0f, 3, 0, 0, 0) });
+            new[]
+            {
+                new SkillListEntry(new SkillDefinitionId("skill.first_aid"), 0f, 3, 0, 0, 0, 1, 1,
+                    SkillListEntry.NoPrerequisite, 0)
+            });
         var resolved = new SkillResolved(
             ClientWorldFixture.LocalEntity,
             ClientWorldFixture.LocalEntity,

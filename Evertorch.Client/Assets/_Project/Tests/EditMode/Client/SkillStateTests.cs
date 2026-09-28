@@ -32,8 +32,8 @@ public sealed class SkillStateTests
                 new SkillList(
                     new[]
                     {
-                        new SkillListEntry(Strike, 1.5f, 8, 2000, 500, 0),
-                        new SkillListEntry(FirstAid, 0f, 3, 0, 0, 0)
+                        new SkillListEntry(Strike, 1.5f, 8, 2000, 500, 0, 1, 1, SkillListEntry.NoPrerequisite, 0),
+                        new SkillListEntry(FirstAid, 0f, 3, 0, 0, 0, 1, 1, SkillListEntry.NoPrerequisite, 0)
                     }));
             World.OnTargetChanged(new TargetChanged(ClientWorldFixture.LocalEntity, Slime));
             Controller = new MovementController(World.Grid);
@@ -181,8 +181,8 @@ public sealed class SkillStateTests
         var cooling = new SkillList(
             new[]
             {
-                new SkillListEntry(Strike, 1.5f, 8, 2000, 500, 1000),
-                new SkillListEntry(FirstAid, 0f, 3, 0, 0, 0)
+                new SkillListEntry(Strike, 1.5f, 8, 2000, 500, 1000, 1, 1, SkillListEntry.NoPrerequisite, 0),
+                new SkillListEntry(FirstAid, 0f, 3, 0, 0, 0, 1, 1, SkillListEntry.NoPrerequisite, 0)
             });
         var strike = new Rig(1f);
         strike.World.OnSkillList(cooling);

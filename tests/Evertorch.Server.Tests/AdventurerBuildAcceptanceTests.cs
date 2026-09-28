@@ -17,7 +17,8 @@ namespace Evertorch.Server.Tests
 ///     The Milestone 9 Adventurer build (ROADMAP §8) end to end: the composed server host on a real PostgreSQL 18, real
 ///     UDP sockets on loopback, and a client built from the client's production networking and gameplay code, pumped on
 ///     the test's thread. A new Adventurer starts at job level 1, fights until its base level rises, spends its stat
-///     points, and keeps what it earned and spent through a restart. Each later line of Milestone 9 adds its steps here:
+///     point and its skill point, and keeps what it earned and spent through a restart. Each later line of Milestone 9
+///     adds its steps here:
 ///     the job levels, the raised
 ///     statistics, the learned skill levels and their measured effects, and the Guildmaster's reset.
 /// </summary>
@@ -31,6 +32,9 @@ public sealed class AdventurerBuildAcceptanceTests
 {
     private const string TrainingGround = "map.training_ground";
     private const string TrainingSlime = "monster.training_slime";
+    private const string Strike = "skill.strike";
+    private const string FirstAid = "skill.first_aid";
+    private const string Focus = "skill.focus";
     private const string Identity = "adventurer";
     private const string CharacterName = "Builder1";
     private const float ConvergedDistance = 1e-3f;
@@ -92,15 +96,19 @@ public sealed class AdventurerBuildAcceptanceTests
             Is.EqualTo(((byte)1, 0ul, 30ul)),
             "enter: job level 1, 30 to the next");
 
-        // A new character has learned nothing, so it lists no skill and cannot use Strike (Gameplay Systems §9).
+        // A new character has learned nothing, so its tree lists every skill at level 0 and it cannot use Strike
+        // (Gameplay Systems §9).
         Assert.That(
             client.PumpUntil(() => client.World.SkillsReceivedAt > 0),
             Is.True,
             "enter: the skill list arrived");
-        Assert.That(client.World.Skills, Is.Empty, "enter: nothing learned");
+        Assert.That(
+            client.World.Skills.Select(entry => (entry.Skill.Value, entry.Level)),
+            Is.EqualTo(new[] { (Strike, (byte)0), (FirstAid, (byte)0), (Focus, (byte)0) }),
+            "enter: the tree, nothing learned");
         var refused = new List<CommandRejected>();
         client.World.CommandRejectedReceived += refused.Add;
-        uint sequence = client.Connection.SendUseSkill(new SkillDefinitionId("skill.strike"), default);
+        uint sequence = client.Connection.SendUseSkill(new SkillDefinitionId(Strike), default);
         Assert.That(client.PumpUntil(() => refused.Count > 0), Is.True, "enter: Strike answered");
         Assert.That(
             (refused.Single().CommandSequence, refused.Single().Reason),
@@ -124,6 +132,7 @@ public sealed class AdventurerBuildAcceptanceTests
             "fight: the job level keeps pace with the base level");
         Assert.That(stopped.JobLevel, Is.EqualTo(sheet.JobLevel), "fight: the console shows the job level");
         SpendStatPoints(client);
+        LearnStrike(client);
 
         host.StopAsync().GetAwaiter().GetResult();
         Assert.That(
@@ -181,8 +190,41 @@ public sealed class AdventurerBuildAcceptanceTests
         Assert.That(world.Sheet!.Stats[4].Value, Is.EqualTo((byte)5), $"{step}: DEX unchanged");
     }
 
+    // Job level 2 grants 1 skill point (Gameplay Systems §9): Focus, whose prerequisite Strike 1 is not met, is refused
+    // with 13 before the point is looked at; Strike takes the point; then Focus is refused with 12.
+    private static void LearnStrike(SocketClient client)
+    {
+        const string step = "skills";
+        ClientWorld world = client.World;
+        Assert.That(world.Sheet!.SkillPoints, Is.EqualTo((byte)1), $"{step}: job level 2 grants 1 point");
+        var refused = new List<CommandRejected>();
+        world.CommandRejectedReceived += refused.Add;
+
+        uint early = client.Connection.SendLearnSkill(new SkillDefinitionId(Focus));
+        Assert.That(client.PumpUntil(() => refused.Count > 0), Is.True, $"{step}: Focus answered");
+        uint learned = client.Connection.SendLearnSkill(new SkillDefinitionId(Strike));
+        Assert.That(
+            client.PumpUntil(() =>
+                world.Skills.Count > 0 && world.Skills[0].Level == 1 && world.Sheet!.SkillPoints == 0),
+            Is.True,
+            $"{step}: Strike learned");
+        uint late = client.Connection.SendLearnSkill(new SkillDefinitionId(Focus));
+        Assert.That(client.PumpUntil(() => refused.Count > 1), Is.True, $"{step}: Focus answered again");
+
+        Assert.That(learned, Is.GreaterThan(early));
+        Assert.That(
+            refused.Select(rejection => (rejection.CommandSequence, rejection.Reason)),
+            Is.EqualTo(
+                new[]
+                {
+                    (early, CommandRejectionReason.RequirementNotMet), (late, CommandRejectionReason.NotEnoughPoints)
+                }),
+            $"{step}: the prerequisite, then the point");
+        Assert.That(world.Skills.Select(entry => entry.Level), Is.EqualTo(new byte[] { 1, 0, 0 }), step);
+    }
+
     // After a clean stop and a second server on the same database, the character keeps its level and experience, its
-    // job level and job experience, and the statistic it raised.
+    // job level and job experience, the statistic it raised, and the skill it learned.
     private void PlayAfterTheRestart(IHost host, PlayerSummary stopped)
     {
         IAdminCommandService admin = host.Services.GetRequiredService<IAdminCommandService>();
@@ -223,23 +265,45 @@ public sealed class AdventurerBuildAcceptanceTests
             Is.EqualTo(((byte)6, (ushort)1)),
             "restart: the raised AGI and the point left");
         Assert.That(StoredAgility(), Is.EqualTo(6), "restart: the raised AGI, stored");
+        Assert.That(
+            client.PumpUntil(() => client.World.SkillsReceivedAt > 0),
+            Is.True,
+            "restart: the skill list arrived");
+        Assert.That(
+            client.World.Skills.Select(entry => (entry.Skill.Value, entry.Level)),
+            Is.EqualTo(new[] { (Strike, (byte)1), (FirstAid, (byte)0), (Focus, (byte)0) }),
+            "restart: Strike 1 kept");
+        Assert.That(
+            (client.World.Sheet.SkillPoints, StoredSkills()),
+            Is.EqualTo(((byte)0, $"{Strike}=1")),
+            "restart: the point spent, and the level stored");
         AssertCleanTraffic(client, "restart");
     }
 
-    // The stored job level and job experience, once no learned skill is stored.
     private (int Level, long Experience) StoredJobProgress()
     {
         using var connection = new NpgsqlConnection(m_database.ConnectionString);
         connection.Open();
         using var command = new NpgsqlCommand(
-            "SELECT job_level, job_exp, (SELECT count(*) FROM character_skills WHERE character_id = characters.id) "
-            + "FROM characters WHERE name = @name",
+            "SELECT job_level, job_exp FROM characters WHERE name = @name",
             connection);
         command.Parameters.AddWithValue("name", CharacterName);
         using NpgsqlDataReader reader = command.ExecuteReader();
         Assert.That(reader.Read(), Is.True, "the character is stored");
-        Assert.That(reader.GetInt64(2), Is.Zero, "no learned skill stored");
         return (reader.GetInt32(0), reader.GetInt64(1));
+    }
+
+    // "skill=level" for each stored skill, in the skills' order.
+    private string StoredSkills()
+    {
+        using var connection = new NpgsqlConnection(m_database.ConnectionString);
+        connection.Open();
+        using var command = new NpgsqlCommand(
+            "SELECT string_agg(s.skill_definition_id || '=' || s.level, ',' ORDER BY s.skill_definition_id) "
+            + "FROM character_skills s JOIN characters c ON c.id = s.character_id WHERE c.name = @name",
+            connection);
+        command.Parameters.AddWithValue("name", CharacterName);
+        return command.ExecuteScalar() as string ?? string.Empty;
     }
 
     private int StoredAgility()

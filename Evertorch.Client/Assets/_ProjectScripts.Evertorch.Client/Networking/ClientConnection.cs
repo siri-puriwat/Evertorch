@@ -577,6 +577,23 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
     }
 
     /// <summary>
+    ///     Asks to learn one level of <paramref name="skill" /> with a skill point; 0 while not in the world, else the
+    ///     command's sequence. The server answers with the skill list and the sheet, or a refusal.
+    /// </summary>
+    public uint SendLearnSkill(SkillDefinitionId skill)
+    {
+        if (State != ClientConnectionState.InWorld)
+        {
+            return 0;
+        }
+
+        uint sequence = NextCommandSequence();
+        var message = new LearnSkill(skill, sequence);
+        SendRouted(MessageOpcode.LearnSkill, message.Write(m_sendBuffer));
+        return sequence;
+    }
+
+    /// <summary>
     ///     Asks to raise <paramref name="stat" /> by <paramref name="steps" /> with stat points; 0 while not in the world,
     ///     else the command's sequence. The server answers with the sheet or a refusal.
     /// </summary>
