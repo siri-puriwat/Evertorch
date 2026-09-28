@@ -312,12 +312,12 @@ public sealed class PlayerPanelTests
         m_created.Add(bar.gameObject);
         yield return null;
 
-        bar.ShowCharacter("Tester", 3);
+        bar.ShowCharacter("Tester", 3, "Adventurer", 2);
         bar.ShowHealth(50, 71, false);
         bar.ShowMap("Training Ground");
         bar.ShowPing(42);
         int afterFirst = bar.TextChanges;
-        bar.ShowCharacter("Tester", 3);
+        bar.ShowCharacter("Tester", 3, "Adventurer", 2);
         bar.ShowHealth(50, 71, false);
         bar.ShowMap("Training Ground");
         bar.ShowPing(42);
@@ -327,7 +327,7 @@ public sealed class PlayerPanelTests
         Assert.That(afterFirst, Is.EqualTo(4));
         Assert.That(afterRepeat, Is.EqualTo(4), "the same values rewrite nothing");
         Assert.That(bar.TextChanges, Is.EqualTo(5));
-        Assert.That(Label(bar, "Name").text, Is.EqualTo("Tester   Lv 3"));
+        Assert.That(Label(bar, "Name").text, Is.EqualTo("Tester   Lv 3   Adventurer Lv 2"));
         Assert.That(Label(bar, "Health").text, Is.EqualTo("HP 0 / 71   You died"));
         Assert.That(Label(bar, "Map").text, Is.EqualTo("Training Ground"));
         Assert.That(Label(bar, "Ping").text, Is.EqualTo("42 ms"));
@@ -354,6 +354,36 @@ public sealed class PlayerPanelTests
         Assert.That(spirit, Is.EqualTo("SP 12 / 24"));
         Assert.That(half, Is.EqualTo(0.5f).Within(0.001f));
         Assert.That(bar.ShownExperienceRatio, Is.EqualTo(1f), "nothing more to earn at the cap");
+    }
+
+    // The job's strip fills under the base experience's from the character sheet (Prototype Content §2); before the
+    // sheet it is empty.
+    [UnityTest]
+    public IEnumerator StatusBar_FillsTheJobStrip_FromTheSheet()
+    {
+        GameClient client = CreateIdleClient();
+        ClientWorld world = GiveWorld(client);
+        var bar = StatusBar.Create(client);
+        m_created.Add(bar.gameObject);
+        world.OnCharacterProgress(new CharacterProgress(3, 0, 80));
+        yield return null;
+        float before = bar.ShownJobExperienceRatio;
+
+        world.OnCharacterSheet(Sheet(2, 10, 40));
+        yield return null;
+        float quarter = bar.ShownJobExperienceRatio;
+        world.OnCharacterSheet(Sheet(10, 0, 0));
+        yield return null;
+
+        Assert.That(before, Is.Zero, "no strip before the sheet");
+        Assert.That(quarter, Is.EqualTo(0.25f).Within(0.001f));
+        Assert.That(bar.ShownJobExperienceRatio, Is.EqualTo(1f), "full at the job's cap");
+    }
+
+    private static CharacterSheet Sheet(byte jobLevel, ulong jobExperience, ulong toNext)
+    {
+        CharacterSheetStat[] stats = Enumerable.Repeat(new CharacterSheetStat(5, 2), 6).ToArray();
+        return new CharacterSheet(jobLevel, jobExperience, toNext, 0, 0, stats, 10, 5, 2, 3, 182, 105, 11, 153);
     }
 
     // What OnChangedMap leaves the panels while the next map loads: no world, and a map change under way.
@@ -404,6 +434,26 @@ public sealed class PlayerPanelTests
 
         Assert.That(afterAward, Is.Empty);
         Assert.That(lines.Text, Is.EqualTo("Level up"));
+    }
+
+    [UnityTest]
+    public IEnumerator FeedbackLines_SayTheJobLevel_OnlyWhenTheSheetRaisesIt()
+    {
+        GameClient client = CreateIdleClient();
+        ClientWorld world = GiveWorld(client);
+        var lines = FeedbackLines.Create(client);
+        m_created.Add(lines.gameObject);
+        yield return null;
+
+        world.OnCharacterSheet(Sheet(1, 0, 30));
+        string afterBaseline = lines.Text;
+        world.OnCharacterSheet(Sheet(1, 20, 30));
+        string afterAward = lines.Text;
+        world.OnCharacterSheet(Sheet(2, 5, 50));
+
+        Assert.That(afterBaseline, Is.Empty, "the first sheet is the baseline");
+        Assert.That(afterAward, Is.Empty);
+        Assert.That(lines.Text, Is.EqualTo("Job level 2."));
     }
 
     [UnityTest]

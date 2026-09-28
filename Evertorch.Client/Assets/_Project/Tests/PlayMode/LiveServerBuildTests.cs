@@ -29,7 +29,8 @@ public sealed class LiveServerBuildTests : InputTestFixture
     private const float FightTimeoutSeconds = 60f;
     private const int TestTimeoutMs = 300_000;
 
-    // Five short of the 30 the second base level needs, so the first slime (10) raises it and leaves 5 of the next 50.
+    // Five short of the 30 the second base and job levels need, so the first slime (10 of each) raises both and leaves
+    // 5 of the next 50.
     private const int SeededExperience = 25;
     private const float ExperienceAfterTheKill = 5f / 50f;
 
@@ -68,12 +69,12 @@ public sealed class LiveServerBuildTests : InputTestFixture
         }
     }
 
-    // A new character, stored five experience short of its second base level, kills one training slime with Tab and
-    // the West button: the status bar shows the new level and the experience bar what is left over (Gameplay Systems
+    // A new character, stored five experience short of its second base and job levels, kills one training slime with
+    // Tab and the West button: the status bar shows both new levels and both bars what is left over (Gameplay Systems
     // §2.1; Prototype Content §2).
     [UnityTest]
     [Timeout(TestTimeoutMs)]
-    public IEnumerator Level_RisenByOneSlime_ShowsOnTheStatusBar()
+    public IEnumerator Levels_RisenByOneSlime_ShowOnTheStatusBar()
     {
         string actionsPath = RequirePrerequisites();
         yield return StartDatabaseAndServer();
@@ -88,12 +89,14 @@ public sealed class LiveServerBuildTests : InputTestFixture
             client,
             LevelClientName,
             () => database.Execute(
-                $"UPDATE characters SET base_exp = {SeededExperience} WHERE name = '{LevelClientName}'"));
+                $"UPDATE characters SET base_exp = {SeededExperience}, job_exp = {SeededExperience} "
+                + $"WHERE name = '{LevelClientName}'"));
         ClientWorld world = client.World!;
         StatusBar bar = client.GetComponentsInChildren<StatusBar>(true).Single();
         TMP_Text shownName = bar.GetComponentsInChildren<TMP_Text>(true).Single(label => label.name == "Name");
-        yield return WaitUntil(() => shownName.text.EndsWith("Lv 1", StringComparison.Ordinal), StartTimeoutSeconds);
-        Assert.That(shownName.text, Does.EndWith("Lv 1"), "a new character");
+        string before = $"{LevelClientName}   Lv 1   Adventurer Lv 1";
+        yield return WaitUntil(() => shownName.text == before, StartTimeoutSeconds);
+        Assert.That(shownName.text, Is.EqualTo(before), "a new character, once its sheet arrived");
 
         float deadline = Time.realtimeSinceStartup + FightTimeoutSeconds;
         while (world.Level < 2 && Time.realtimeSinceStartup < deadline)
@@ -114,9 +117,11 @@ public sealed class LiveServerBuildTests : InputTestFixture
         }
 
         Assert.That(world.Level, Is.EqualTo(2), $"{client.Status} {server.JoinOutput()}");
-        yield return WaitUntil(() => shownName.text.EndsWith("Lv 2", StringComparison.Ordinal), 2f);
-        Assert.That(shownName.text, Does.EndWith("Lv 2"), "the status bar shows the new level");
+        string after = $"{LevelClientName}   Lv 2   Adventurer Lv 2";
+        yield return WaitUntil(() => shownName.text == after, 2f);
+        Assert.That(shownName.text, Is.EqualTo(after), "the status bar shows both new levels");
         Assert.That(bar.ShownExperienceRatio, Is.EqualTo(ExperienceAfterTheKill).Within(0.001f), "the left over");
+        Assert.That(bar.ShownJobExperienceRatio, Is.EqualTo(ExperienceAfterTheKill).Within(0.001f), "the job's too");
     }
 
     private static string RequirePrerequisites()

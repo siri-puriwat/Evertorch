@@ -27,7 +27,7 @@ public static class QuestMessages
     }
 
     /// <summary>
-    ///     "Reward: 150 base experience, 100 coins", either part alone when the other is 0.
+    ///     "Reward: 150 base experience, 150 job experience, 100 coins", each part left out when it is 0.
     /// </summary>
     public static string Reward(NpcQuestOffer offer)
     {
@@ -50,7 +50,7 @@ public static class QuestMessages
     /// <summary>
     ///     The feedback line for one quest between two quest logs, or null when nothing a player would notice changed:
     ///     "Accepted Crawler Hunt.", "Crawler Hunt: Forest Crawler 3/5.", "Crawler Hunt is ready to turn in.", or
-    ///     "Completed Crawler Hunt: 150 base experience, 100 coins."
+    ///     "Completed Crawler Hunt: 150 base experience, 150 job experience, 100 coins."
     /// </summary>
     public static string? Describe(
         QuestLogEntry? before,
@@ -99,10 +99,15 @@ public static class QuestMessages
 
     private static string Rewards(NpcQuestOffer offer)
     {
-        var parts = new List<string>(2);
+        var parts = new List<string>(3);
         if (offer.BaseExperience > 0)
         {
             parts.Add($"{offer.BaseExperience.ToString(CultureInfo.InvariantCulture)} base experience");
+        }
+
+        if (offer.JobExperience > 0)
+        {
+            parts.Add($"{offer.JobExperience.ToString(CultureInfo.InvariantCulture)} job experience");
         }
 
         if (offer.Coins > 0)

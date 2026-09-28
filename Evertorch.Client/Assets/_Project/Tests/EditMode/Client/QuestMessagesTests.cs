@@ -79,6 +79,12 @@ public sealed class QuestMessagesTests
         Assert.That(QuestMessages.Objective(Offer, content), Is.EqualTo("Defeat: Forest Crawler × 5"));
         Assert.That(QuestMessages.Reward(Offer), Is.EqualTo("Reward: 150 base experience, 100 coins"));
         Assert.That(QuestMessages.Reward(new NpcQuestOffer(Hunt, Crawler, 5, 0, 0, 1)), Is.EqualTo("Reward: 1 coin"));
+        Assert.That(
+            QuestMessages.Reward(new NpcQuestOffer(Hunt, Crawler, 5, 150, 150, 100)),
+            Is.EqualTo("Reward: 150 base experience, 150 job experience, 100 coins"));
+        Assert.That(
+            QuestMessages.Reward(new NpcQuestOffer(Hunt, Crawler, 5, 0, 40, 0)),
+            Is.EqualTo("Reward: 40 job experience"));
         Assert.That(QuestMessages.Objective(Offer, null), Is.EqualTo("Defeat: monster.forest_crawler × 5"));
     }
 }

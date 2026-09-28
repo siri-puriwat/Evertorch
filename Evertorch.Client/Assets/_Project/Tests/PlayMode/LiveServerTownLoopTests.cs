@@ -406,14 +406,17 @@ public sealed class LiveServerTownLoopTests : InputTestFixture
         Assert.That(inventory.CoinsText, Is.EqualTo("Coins: 100"));
         Assert.That(client.World.Level, Is.EqualTo(3), "150 base experience through two levels");
         TMP_Text name = bar.GetComponentsInChildren<TMP_Text>(true).Single(label => label.name == "Name");
+        const string completed = "Completed Crawler Hunt: 150 base experience, 150 job experience, 100 coins.";
         yield return WaitUntil(
-            () => name.text.EndsWith("Lv 3")
+            () => name.text.EndsWith("   Lv 3   Adventurer Lv 3")
                 && bar.QuestText.Length == 0
-                && lines.Text.Contains("Completed Crawler Hunt: 150 base experience, 100 coins."),
+                && lines.Text.Contains(completed)
+                && lines.Text.Contains("Job level 3."),
             StepTimeoutSeconds);
-        Assert.That(name.text, Does.EndWith("Lv 3"));
+        Assert.That(name.text, Does.EndWith("   Lv 3   Adventurer Lv 3"), "150 job experience through two job levels");
         Assert.That(bar.QuestText, Is.Empty, "no active quest");
-        Assert.That(lines.Text, Does.Contain("Completed Crawler Hunt: 150 base experience, 100 coins."));
+        Assert.That(lines.Text, Does.Contain(completed));
+        Assert.That(lines.Text, Does.Contain("Job level 3."));
 
         // The console republishes what it reads once a second.
         yield return new WaitForSecondsRealtime(1.5f);

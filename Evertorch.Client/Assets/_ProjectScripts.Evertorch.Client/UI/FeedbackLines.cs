@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Text;
 using Evertorch.Game;
 using Evertorch.Protocol;
@@ -114,6 +115,7 @@ public sealed class FeedbackLines : MonoBehaviour
             m_watched.CommandRejectedReceived -= OnRejected;
             m_watched.ItemPickedUpReceived -= OnPickedUp;
             m_watched.LeveledUp -= OnLeveledUp;
+            m_watched.SheetChanged -= OnSheetChanged;
             m_watched.Inventory.ChangeApplied -= OnChangeApplied;
             m_watched.QuestsChanged -= OnQuestsChanged;
         }
@@ -127,6 +129,7 @@ public sealed class FeedbackLines : MonoBehaviour
             world.CommandRejectedReceived += OnRejected;
             world.ItemPickedUpReceived += OnPickedUp;
             world.LeveledUp += OnLeveledUp;
+            world.SheetChanged += OnSheetChanged;
             world.Inventory.ChangeApplied += OnChangeApplied;
             world.QuestsChanged += OnQuestsChanged;
         }
@@ -155,6 +158,16 @@ public sealed class FeedbackLines : MonoBehaviour
     private void OnLeveledUp()
     {
         Add("Level up");
+    }
+
+    // A world's first sheet is its baseline, which is no news.
+    private void OnSheetChanged(CharacterSheet? before)
+    {
+        CharacterSheet? after = m_watched?.Sheet;
+        if (before != null && after != null && after.JobLevel > before.JobLevel)
+        {
+            Add($"Job level {after.JobLevel.ToString(CultureInfo.InvariantCulture)}.");
+        }
     }
 
     // Each quest the new log changed says so; the objective's monster and the reward come from the offer this session

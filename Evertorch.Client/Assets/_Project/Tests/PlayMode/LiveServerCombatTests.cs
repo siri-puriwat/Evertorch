@@ -519,7 +519,7 @@ public sealed class LiveServerCombatTests : InputTestFixture
         yield return WaitUntil(() => IsShowing(bar, name, spirit, world), 2f);
 
         Assert.That(world.Level > 1 || world.Experience > 0, Is.True, "the kills gave experience");
-        Assert.That(name.text, Does.EndWith($"Lv {world.Level}"), "the level comes from the world");
+        Assert.That(name.text, Does.Contain($"   Lv {world.Level}   "), "the level comes from the world");
         Assert.That(spirit.text, Is.EqualTo($"SP {world.LocalSpirit} / {world.LocalMaximumSpirit}"));
         Assert.That(bar.ShownExperienceRatio, Is.EqualTo(ExperienceRatio(world)).Within(0.001f));
     }
@@ -652,7 +652,7 @@ public sealed class LiveServerCombatTests : InputTestFixture
 
     private static bool IsShowing(StatusBar bar, TMP_Text name, TMP_Text spirit, ClientWorld world)
     {
-        return name.text.EndsWith($"Lv {world.Level}", StringComparison.Ordinal)
+        return name.text.Contains($"   Lv {world.Level}   ")
             && spirit.text == $"SP {world.LocalSpirit} / {world.LocalMaximumSpirit}"
             && Math.Abs(bar.ShownExperienceRatio - ExperienceRatio(world)) < 0.001f;
     }
