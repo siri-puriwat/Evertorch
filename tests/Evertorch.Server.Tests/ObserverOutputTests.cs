@@ -13,7 +13,8 @@ namespace Evertorch.Server.Tests
 ///     potion, has a command refused, and crosses to the field, while an observer beside it at full HP and SP does
 ///     nothing. The observer hears what anyone near sees, and nothing of the actor's own target, health, progress,
 ///     skills, status effects, inventory, refusals, or new map. Milestone 7 adds the town: the actor's trades,
-///     quest, and reward reach the observer as nothing more.
+///     quest, and reward reach the observer as nothing more. Milestone 9 adds the build: the actor's raises, learned
+///     levels, and reset reach the observer as nothing at all.
 /// </summary>
 [TestFixture]
 public sealed class ObserverOutputTests
@@ -29,6 +30,7 @@ public sealed class ObserverOutputTests
     private const string Quartermaster = "npc.quartermaster";
     private const string GateWarden = "npc.gate_warden";
     private const string Hunt = "quest.crawler_hunt";
+    private const string Guildmaster = "npc.guildmaster";
 
     private static readonly MessageOpcode[] WhatAnyoneNearSees =
     {
@@ -102,6 +104,51 @@ public sealed class ObserverOutputTests
         return server.Transport.SentTo(connection)
             .Where(message => message.Opcode == opcode)
             .Select(message => read(message.Payload)!);
+    }
+
+    // The build (Milestone 9 verification): the actor raises AGI and VIT, learns Strike, is refused a raise past its
+    // points, and is reset at the Guildmaster, while the observer stands beside it. The actor hears its sheet, its skill
+    // list, and its new maximums; the observer hears none of them, nor anything at all of the build.
+    [Test]
+    public void AnotherPlayersBuild_ReachesAnObserverAsNothing()
+    {
+        var server = new TestServer(withNpcs: true, withAdventurerBuild: false);
+        ConnectionId actor = server.EnterWorld(Actor);
+        ConnectionId observer = server.EnterWorld(Observer);
+        server.PlayerOf(actor).Level = 5;
+        server.PlayerOf(actor).JobLevel = 2;
+        NpcEntity guildmaster = server.NpcOf(Guildmaster);
+        server.Place(actor, guildmaster.Position.X + 2f, guildmaster.Position.Z);
+        server.Place(observer, guildmaster.Position.X + 2.5f, guildmaster.Position.Z);
+        server.Tick(2);
+        server.Transport.ClearSent();
+
+        server.SendAllocateStat(actor, PrimaryStat.Agi, 2, 1);
+        server.SendAllocateStat(actor, PrimaryStat.Vit, 2, 2);
+        server.SendLearnSkill(actor, Strike, 3);
+        server.SendAllocateStat(actor, PrimaryStat.Dex, 50, 4);
+        server.Tick();
+        server.SendResetBuild(actor, guildmaster.Id, 5);
+        server.Tick(2);
+
+        MessageOpcode[] actorHeard = server.Transport.SentTo(actor).Select(message => message.Opcode).ToArray();
+        MessageOpcode[] observerHeard = server.Transport.SentTo(observer).Select(message => message.Opcode).ToArray();
+        Assert.That(
+            actorHeard,
+            Is.SupersetOf(
+                new[]
+                {
+                    MessageOpcode.CharacterSheet, MessageOpcode.SkillList, MessageOpcode.CharacterHealth,
+                    MessageOpcode.CommandRejected
+                }),
+            "the actor was told of its build");
+        Assert.That(actorHeard.Count(opcode => opcode == MessageOpcode.CharacterSheet), Is.GreaterThanOrEqualTo(2));
+        Assert.That(server.PlayerOf(actor).Skills, Is.Empty, "the reset went through");
+        Assert.That(observerHeard.Distinct(), Is.SubsetOf(WhatAnyoneNearSees));
+        Assert.That(
+            observerHeard,
+            Has.None.EqualTo(MessageOpcode.CharacterSheet).And.None.EqualTo(MessageOpcode.SkillList),
+            "never another's sheet or skills");
     }
 
     [Test]
