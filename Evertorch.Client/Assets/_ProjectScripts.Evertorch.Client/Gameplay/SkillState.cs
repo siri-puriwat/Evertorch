@@ -6,8 +6,10 @@ namespace Evertorch.Client
 {
 /// <summary>
 ///     The local side of a skill (Gameplay Systems §5.1): a skill on the caster is asked for at once, and one on an
-///     enemy or on a selected player walks within the skill's range, as an attack does, before it is asked for. The
-///     server checks the skill, its cost, its range, and its target again and decides; nothing here predicts the cast.
+///     enemy or a player walks within the skill's range, as an attack does, before it is asked for. Its target is the
+///     selection (<see cref="Use" />, the gamepad's way) or one a click or tap chose after the press
+///     (<see cref="UseAt" />). The server checks the skill, its cost, its range, and its target again and decides;
+///     nothing here predicts the cast.
 /// </summary>
 public sealed class SkillState
 {
@@ -34,6 +36,7 @@ public sealed class SkillState
     private readonly int m_castAwaitTicks;
     private float m_range;
     private uint m_sentSequence;
+    private bool m_isAimed;
 
     public SkillState(ClientWorld world, MovementController controller, ISkillCommandSink commands, double tickSeconds)
     {
@@ -82,18 +85,33 @@ public sealed class SkillState
             return false;
         }
 
-        End();
-        Skill = skill;
-        Target = target;
-        m_range = range;
-        IsActive = true;
+        Start(skill, target, range, false);
+        return true;
+    }
 
-        // An approach replaces a walk the player asked for, as an attack's does.
-        if (target != default && !m_controller.IsChasing)
+    /// <summary>
+    ///     Asks for <paramref name="skill" /> at <paramref name="target" />, which a click or tap chose after the press
+    ///     (Prototype Content §4): a live monster for an enemy skill, a live player for an ally skill, or the caster, by its
+    ///     own ID or the default value, for an ally skill. The selection plays no part, so a later change of it leaves
+    ///     the skill alone. False, with nothing started, while dead, for a skill the server has not listed, and for a
+    ///     target the skill cannot take.
+    /// </summary>
+    public bool UseAt(SkillDefinitionId skill, SkillTargetType targetType, EntityId target)
+    {
+        if (target == m_world.LocalEntity)
         {
-            m_controller.CancelPath();
+            target = default;
         }
 
+        bool isTakeable = target == default
+            ? targetType != SkillTargetType.Enemy
+            : targetType != SkillTargetType.Self && SkillTargeting.CanTake(m_world, targetType, target);
+        if (m_world.IsLocalDead || !TryGetRange(skill, out float range) || !isTakeable)
+        {
+            return false;
+        }
+
+        Start(skill, target, range, true);
         return true;
     }
 
@@ -103,6 +121,18 @@ public sealed class SkillState
     public void Cancel()
     {
         if (IsActive)
+        {
+            End();
+        }
+    }
+
+    /// <summary>
+    ///     The player cleared what it was after (Esc, the gamepad's East, the Clear button): a skill still walking to its
+    ///     target ends, and one on the caster goes on.
+    /// </summary>
+    public void CancelApproach()
+    {
+        if (IsActive && Target != default)
         {
             End();
         }
@@ -165,6 +195,7 @@ public sealed class SkillState
         IsActive = false;
         Skill = default;
         Target = default;
+        m_isAimed = false;
     }
 
     private static float HorizontalDistance(WorldPosition a, WorldPosition b)
@@ -199,12 +230,29 @@ public sealed class SkillState
         }
     }
 
-    // The player cleared the target or chose another: the approach was for the one before.
+    // The player cleared the target or chose another: an approach to the selection was for the one before. A skill aimed
+    // by a click or tap is not the selection's, so a change of it leaves the skill alone.
     private void OnTargetChanged()
     {
-        if (IsActive && Target != default && m_world.Target != Target)
+        if (IsActive && !m_isAimed && Target != default && m_world.Target != Target)
         {
             End();
+        }
+    }
+
+    private void Start(SkillDefinitionId skill, EntityId target, float range, bool isAimed)
+    {
+        End();
+        Skill = skill;
+        Target = target;
+        m_range = range;
+        m_isAimed = isAimed;
+        IsActive = true;
+
+        // An approach replaces a walk the player asked for, as an attack's does.
+        if (target != default && !m_controller.IsChasing)
+        {
+            m_controller.CancelPath();
         }
     }
 
@@ -218,6 +266,7 @@ public sealed class SkillState
         IsActive = false;
         Skill = default;
         Target = default;
+        m_isAimed = false;
     }
 }
 }

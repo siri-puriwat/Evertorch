@@ -171,6 +171,29 @@ public sealed class SharedIntentPathTests : InputTestFixture
         Assert.That(asked, Is.EqualTo(new[] { 1, 6, 7, 8, 1, 6, 8 }));
     }
 
+    // A gamepad has no pointer to choose a skill's target with, so the source says which device asked (owner's walk,
+    // 2026-09-30).
+    [Test]
+    public void SkillSource_SaysWhetherAGamepadAsked()
+    {
+        Keyboard keyboard = InputSystem.AddDevice<Keyboard>();
+        Gamepad gamepad = InputSystem.AddDevice<Gamepad>();
+        Rig rig = CreateRig();
+        SkillInputSource source = rig.CreateSkillSource();
+
+        Press(gamepad.buttonSouth);
+        Release(gamepad.buttonSouth);
+        int fromPad = source.TakeSlot(out bool isPad);
+        Press(keyboard.digit6Key);
+        Release(keyboard.digit6Key);
+        int fromKey = source.TakeSlot(out bool isKeyPad);
+        int none = source.TakeSlot(out bool isNonePad);
+
+        Assert.That((fromPad, isPad), Is.EqualTo((1, true)));
+        Assert.That((fromKey, isKeyPad), Is.EqualTo((6, false)));
+        Assert.That((none, isNonePad), Is.EqualTo((0, false)));
+    }
+
     // Out of the world the page and a turn asked for there are forgotten, so the next entry starts on slots 1 to 3
     // (review of Milestone 10).
     [Test]
@@ -284,6 +307,22 @@ public sealed class SharedIntentPathTests : InputTestFixture
         Assert.That(rig.Controller.HasPath, Is.True);
         AssertNear(rig.Destination, target);
         Assert.That(rig.Sent.Count, Is.EqualTo(1), "the walk produced this tick's intent");
+    }
+
+    // While a skill waits for its target a click on the ground walks nowhere; the client ends the wait instead
+    // (owner's walk, 2026-09-30).
+    [UnityTest]
+    public IEnumerator MouseClick_OnTheGround_WhileASkillWaits_WalksNowhere()
+    {
+        Mouse mouse = InputSystem.AddDevice<Mouse>();
+        Rig rig = CreateRig();
+        yield return null;
+
+        ClickAt(mouse, rig.ScreenPointOf(new WorldPosition(7.5f, 0f, 5.5f)));
+        PointerMoveResult result = rig.Tick(false);
+
+        Assert.That(result, Is.EqualTo(PointerMoveResult.OnGround));
+        Assert.That(rig.Controller.HasPath, Is.False);
     }
 
     [UnityTest]
@@ -863,7 +902,7 @@ public sealed class SharedIntentPathTests : InputTestFixture
         /// <summary>
         ///     One client frame in the order <see cref="GameClient" /> runs it: held direction, pointer request, tick.
         /// </summary>
-        public PointerMoveResult Tick()
+        public PointerMoveResult Tick(bool isWalking = true)
         {
             m_manual.Apply(Controller, 0f);
             PointerMoveResult result = m_handler.Handle(
@@ -873,7 +912,8 @@ public sealed class SharedIntentPathTests : InputTestFixture
                 Controller,
                 m_world.Predictor.Position,
                 out WorldPosition _,
-                out EntityId picked);
+                out EntityId picked,
+                isWalking);
             Picked = picked;
             m_tick++;
             m_driver.Tick(m_tick);

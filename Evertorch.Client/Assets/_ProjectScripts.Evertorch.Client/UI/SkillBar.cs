@@ -15,7 +15,8 @@ namespace Evertorch.Client
 ///     and "Locked" until then, and for each potion slot while the inventory holds its potion, with how many and the
 ///     key. With a first job's own skills on 6 to 8 the slots narrow so all eight fit between the stick and the touch
 ///     buttons, and the keys the gamepad's page reaches are shown in brackets. It is text only, and a press asks for
-///     the slot exactly as its key does; a locked slot's press does nothing.
+///     the slot exactly as its key does; a locked slot's press does nothing. The slot of a skill waiting for its target
+///     is drawn in the accent colour until the target is chosen or the wait ends (Prototype Content §4).
 /// </summary>
 public sealed class SkillBar : MonoBehaviour
 {
@@ -70,6 +71,7 @@ public sealed class SkillBar : MonoBehaviour
         IReadOnlyList<SkillListEntry> skills = world != null ? world.Skills : Array.Empty<SkillListEntry>();
         bool hasOwnSkills = SkillSlots.HasOwnSkills(skills);
         bool isGamepadOnOwnSkills = m_client != null && m_client.IsGamepadOnOwnSkills;
+        SkillDefinitionId choosing = m_client != null ? m_client.TargetingSkill : default;
         FitSlots(hasOwnSkills ? NarrowSlotWidth : SlotWidth);
         bool isAnyShown = false;
         foreach (Slot slot in m_slots)
@@ -96,6 +98,7 @@ public sealed class SkillBar : MonoBehaviour
                             ? slot.Number >= SkillSlots.FirstOwnSlot
                             : slot.Number < SkillSlots.FirstOwnSlot);
                     Show(slot, world!.SkillLevel(slot.Skill) > 0, world.CooldownRemaining(slot.Skill), isOnPage);
+                    ShowChoosing(slot, choosing != default && slot.Skill == choosing);
                 }
             }
 
@@ -164,6 +167,18 @@ public sealed class SkillBar : MonoBehaviour
             slot.Skill = skill;
             slot.ShownName = null;
         }
+    }
+
+    // Only the button's colour changes, so the text and its count stay as they were.
+    private static void ShowChoosing(Slot slot, bool isChoosing)
+    {
+        if (isChoosing == slot.IsShownChoosing)
+        {
+            return;
+        }
+
+        slot.IsShownChoosing = isChoosing;
+        slot.Background.color = isChoosing ? UiBuilder.AccentColor : UiBuilder.ControlColor;
     }
 
     private void FitSlots(float width)
@@ -244,7 +259,7 @@ public sealed class SkillBar : MonoBehaviour
             label.enableAutoSizing = true;
             label.fontSizeMin = 12f;
             label.fontSizeMax = label.fontSize;
-            m_slots[index] = new Slot(number, item, button, label);
+            m_slots[index] = new Slot(number, item, button, button.GetComponent<Image>(), label);
         }
 
         m_bar.SetActive(false);
@@ -260,11 +275,12 @@ public sealed class SkillBar : MonoBehaviour
 
     private sealed class Slot
     {
-        public Slot(int number, ItemDefinitionId item, GameObject button, TMP_Text label)
+        public Slot(int number, ItemDefinitionId item, GameObject button, Image background, TMP_Text label)
         {
             Number = number;
             Item = item;
             Button = button;
+            Background = background;
             Label = label;
         }
 
@@ -280,6 +296,8 @@ public sealed class SkillBar : MonoBehaviour
 
         public GameObject Button { get; }
 
+        public Image Background { get; }
+
         public TMP_Text Label { get; }
 
         /// <summary>The tenths of a second of cooldown shown, or for a potion the count.</summary>
@@ -289,6 +307,9 @@ public sealed class SkillBar : MonoBehaviour
 
         /// <summary>Whether the key shown is one the gamepad's page reaches.</summary>
         public bool IsShownOnPage { get; set; }
+
+        /// <summary>Whether the slot is drawn as the skill waiting for its target.</summary>
+        public bool IsShownChoosing { get; set; }
     }
 }
 }

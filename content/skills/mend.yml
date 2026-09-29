@@ -20,4 +20,4 @@ server:
         heal: { hp: 100 }
 client:
   icon: skill_mend
-  description: Mend the wounds of the player you have selected, or your own when none is. You stand still while you cast. Each level heals more.
+  description: Mend the wounds of a player you choose, or your own. You stand still while you cast. Each level heals more.

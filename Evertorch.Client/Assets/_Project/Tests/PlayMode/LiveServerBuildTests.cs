@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -38,6 +39,7 @@ public sealed class LiveServerBuildTests : InputTestFixture
     private const string MendedName = "LiveBuildSeven";
     private const string BarClientName = "LiveBuildEight";
     private const string BoltClientName = "LiveBuildNine";
+    private const string SelfMendClientName = "LiveBuildTen";
     private const string GuildmasterPrefab = "npc_guildmaster";
     private const float StartTimeoutSeconds = 30f;
     private const float FightTimeoutSeconds = 60f;
@@ -347,9 +349,9 @@ public sealed class LiveServerBuildTests : InputTestFixture
         Assert.That(lines.Text, Does.Not.Contain("Job level"), "nothing of the job level that fell");
     }
 
-    // An Arcanist with Mend 1 clicks another player, which the server confirms: the target frame names its job alone,
-    // and Mend then heals that player, as the healed player's own connection hears (Gameplay Systems §6, §9; Prototype
-    // Content §2, §4).
+    // An Arcanist with Mend 1 clicks another player, which the server confirms: the target frame names its job alone.
+    // Then 8 waits for Mend's target, and a click on that player heals it, as the healed player's own connection hears,
+    // choosing nobody as the selection (Gameplay Systems §6, §9; Prototype Content §2, §4; owner's walk, 2026-09-30).
     [UnityTest]
     [Timeout(TestTimeoutMs)]
     public IEnumerator Mend_OnAPlayerClickedOn_HealsItWhileTheFrameNamesItsJob()
@@ -360,6 +362,7 @@ public sealed class LiveServerBuildTests : InputTestFixture
         LiveDatabase database = m_database!;
         Assert.That(server.TryReadListeningPort(out int port), Is.True, server.JoinOutput());
         Mouse mouse = InputSystem.AddDevice<Mouse>();
+        Keyboard keyboard = InputSystem.AddDevice<Keyboard>();
         GameClient client = CreateClient(actionsPath);
         yield return EnterByName(
             client,
@@ -421,11 +424,36 @@ public sealed class LiveServerBuildTests : InputTestFixture
             Is.EqualTo(("Adventurer", string.Empty)),
             "the frame names the job alone");
 
+        // Esc clears the selection, and a walk apart keeps the caster's own body from lying under the click, since both
+        // entered on the same spawn point.
+        yield return Tap(keyboard.escapeKey);
+        yield return WaitUntil(
+            () =>
+            {
+                other.Poll();
+                return world.Target == default;
+            },
+            StartTimeoutSeconds);
+        Assert.That(WalkApart(client, world), Is.True, "a place 3 m away to walk to");
+        yield return WaitUntil(
+            () =>
+            {
+                other.Poll();
+                return !client.Controller!.HasPath && world.Predictor.PendingCount == 0;
+            },
+            StartTimeoutSeconds);
+
         SkillResolved? seen = null;
         SkillResolved? heard = null;
         world.SkillResolvedReceived += resolved => seen = resolved.Target == healed ? resolved : seen;
         otherWorld.SkillResolvedReceived += resolved => heard = resolved;
-        client.UseSkill(new SkillDefinitionId("skill.mend"));
+        yield return Tap(keyboard.digit8Key);
+        Assert.That(client.TargetingSkill.Value, Is.EqualTo("skill.mend"), "the key waits for Mend's target");
+        yield return null;
+        ClickAt(
+            mouse,
+            Camera.main!.WorldToScreenPoint(
+                client.RemoteViews[healed].transform.position + Vector3.up * EntityPicker.PickHeight));
         yield return WaitUntil(
             () =>
             {
@@ -441,7 +469,7 @@ public sealed class LiveServerBuildTests : InputTestFixture
             "Mend 1 on the player");
         Assert.That((heard!.Caster, heard.Target), Is.EqualTo((world.LocalEntity, healed)),
             "the healed player heard it");
-        Assert.That(world.Target, Is.EqualTo(healed), "still selected");
+        Assert.That(world.Target, Is.EqualTo(default(EntityId)), "a heal chooses nobody as the selection");
         Assert.That(other.MalformedMessages + other.UnexpectedMessages, Is.Zero, "the healed player's traffic");
     }
 
@@ -503,8 +531,9 @@ public sealed class LiveServerBuildTests : InputTestFixture
         Assert.That(blow!.Outcome, Is.Not.EqualTo(SkillOutcome.Healed));
     }
 
-    // An Arcanist with Arcane Bolt 1 targets a slime with Tab and casts from slot 6 with its key: the bolt's projectile
-    // flies from the local player before the cast resolves (Gameplay Systems §8; Prototype Content §2).
+    // An Arcanist with Arcane Bolt 1 presses its key, 6, which waits for a target, then clicks a slime: the slime becomes
+    // the selection, and the bolt's projectile flies from the local player before the cast resolves (Gameplay Systems
+    // §8; Prototype Content §2, §4; owner's walk, 2026-09-30).
     [UnityTest]
     [Timeout(TestTimeoutMs)]
     public IEnumerator ArcaneBolt_CastByTheLocalPlayer_FliesItsProjectile()
@@ -514,6 +543,7 @@ public sealed class LiveServerBuildTests : InputTestFixture
         LiveServer server = m_server!;
         LiveDatabase database = m_database!;
         Keyboard keyboard = InputSystem.AddDevice<Keyboard>();
+        Mouse mouse = InputSystem.AddDevice<Mouse>();
         GameClient client = CreateClient(actionsPath);
         yield return EnterByName(
             client,
@@ -534,26 +564,153 @@ public sealed class LiveServerBuildTests : InputTestFixture
                 launchedBeforeTheResolution = client.Projectiles!.Launched;
             }
         };
+        bool isChoosingAfterTheKey = false;
+        EntityId aimedAt = default;
+        float retryAt = 0f;
         float deadline = Time.realtimeSinceStartup + FightTimeoutSeconds;
         while (bolt == null && Time.realtimeSinceStartup < deadline)
         {
-            if (world.Target == default)
-            {
-                yield return Tap(keyboard.tabKey);
-                yield return WaitUntil(() => world.Target != default, 2f);
-                if (world.Target != default)
-                {
-                    yield return Tap(keyboard.digit6Key);
-                }
-            }
-            else
+            // A slime that wandered off or died before the cast is chosen again after a while.
+            if (Time.realtimeSinceStartup < retryAt)
             {
                 yield return null;
+                continue;
+            }
+
+            yield return Tap(keyboard.digit6Key);
+            isChoosingAfterTheKey |= client.TargetingSkill.Value == "skill.arcane_bolt";
+            EntityView? slime = NearestSlimeInView(client, world);
+            if (slime == null)
+            {
+                retryAt = Time.realtimeSinceStartup + 0.5f;
+                continue;
+            }
+
+            aimedAt = client.RemoteViews.Single(pair => pair.Value == slime).Key;
+            ClickAt(mouse,
+                Camera.main!.WorldToScreenPoint(slime.transform.position + Vector3.up * EntityPicker.PickHeight));
+            retryAt = Time.realtimeSinceStartup + 4f;
+            yield return null;
+        }
+
+        Assert.That(bolt, Is.Not.Null, $"key 6 then a click cast Arcane Bolt: {world.LastRejection} {client.Status}");
+        Assert.That(isChoosingAfterTheKey, Is.True, "the key waited for a target");
+        Assert.That(bolt!.Target, Is.EqualTo(aimedAt), "at the slime clicked");
+        Assert.That(world.Target, Is.EqualTo(aimedAt), "which became the selection");
+        Assert.That(launchedBeforeTheResolution, Is.GreaterThanOrEqualTo(1), "the bolt flew before it resolved");
+    }
+
+    // An Arcanist hurt to 20 HP heals itself with Mend both ways: 8 pressed twice, and 8 then a click on its own body
+    // (Prototype Content §4; owner's walk, 2026-09-30).
+    [UnityTest]
+    [Timeout(TestTimeoutMs)]
+    public IEnumerator Mend_OnYourself_ByPressingItTwice_OrClickingYourOwnBody()
+    {
+        string actionsPath = RequirePrerequisites();
+        yield return StartDatabaseAndServer();
+        LiveServer server = m_server!;
+        LiveDatabase database = m_database!;
+        Keyboard keyboard = InputSystem.AddDevice<Keyboard>();
+        Mouse mouse = InputSystem.AddDevice<Mouse>();
+        GameClient client = CreateClient(actionsPath);
+        yield return EnterByName(
+            client,
+            SelfMendClientName,
+            () =>
+            {
+                database.SeedJob(
+                    SelfMendClientName,
+                    "job.arcanist",
+                    1,
+                    ("skill.arcane_bolt", 1),
+                    ("skill.clarity", 1),
+                    ("skill.mend", 1));
+                database.Execute($"UPDATE characters SET hp = 20 WHERE name = '{SelfMendClientName}'");
+            });
+        ClientWorld world = client.World!;
+        SkillBar bar = client.GetComponentsInChildren<SkillBar>(true).Single();
+        yield return WaitUntil(() => SlotLabel(bar, 8).text == "Mend\n8", StartTimeoutSeconds);
+        Assert.That(SlotLabel(bar, 8).text, Is.EqualTo("Mend\n8"), $"{client.Status} {server.JoinOutput()}");
+        var heals = new List<SkillResolved>();
+        world.SkillResolvedReceived += resolved =>
+        {
+            if (resolved.Caster == world.LocalEntity && resolved.Target == world.LocalEntity)
+            {
+                heals.Add(resolved);
+            }
+        };
+
+        yield return Tap(keyboard.digit8Key);
+        string waiting = client.TargetingSkill.Value;
+        yield return Tap(keyboard.digit8Key);
+        yield return WaitUntil(() => heals.Count == 1, StartTimeoutSeconds);
+        Assert.That(waiting, Is.EqualTo("skill.mend"), "the first press waits for a target");
+        Assert.That(heals, Has.Count.EqualTo(1), $"pressed twice, Mend heals the caster: {world.LastRejection}");
+        yield return WaitUntil(() => world.AfterCastDelayRemaining <= 0.0, StartTimeoutSeconds);
+
+        yield return Tap(keyboard.digit8Key);
+        yield return null;
+        ClickAt(
+            mouse,
+            Camera.main!.WorldToScreenPoint(LocalBody(client).transform.position +
+                Vector3.up * EntityPicker.PickHeight));
+        yield return WaitUntil(() => heals.Count == 2, StartTimeoutSeconds);
+
+        Assert.That(heals, Has.Count.EqualTo(2), $"a click on its own body heals the caster: {world.LastRejection}");
+        Assert.That(heals.Select(heal => (heal.Outcome, heal.Amount)), Is.All.EqualTo((SkillOutcome.Healed, 40u)));
+        Assert.That(client.TargetingSkill, Is.EqualTo(default(SkillDefinitionId)), "nothing waits any more");
+    }
+
+    // The nearest live monster drawn in front of the camera and on the screen, away from the controls.
+    private static EntityView? NearestSlimeInView(GameClient client, ClientWorld world)
+    {
+        var controls = new UiHitTest();
+        WorldPosition self = world.Predictor.Position;
+        return client.RemoteViews
+            .Where(pair => world.Remotes.TryGetValue(pair.Key, out RemoteEntity? remote)
+                && remote.Kind == EntityKind.Monster
+                && !remote.IsDead
+                && pair.Value.HasBody)
+            .Select(pair => pair.Value)
+            .Where(view =>
+            {
+                Vector3 screen = Camera.main!.WorldToScreenPoint(
+                    view.transform.position + Vector3.up * EntityPicker.PickHeight);
+                return screen.z > 0f
+                    && screen.x > 0f
+                    && screen.x < Screen.width
+                    && screen.y > 0f
+                    && screen.y < Screen.height
+                    && !controls.IsOverUi(screen);
+            })
+            .OrderBy(view =>
+            {
+                Vector3 at = view.transform.position;
+                return (at.x - self.X) * (at.x - self.X) + (at.z - self.Z) * (at.z - self.Z);
+            })
+            .FirstOrDefault();
+    }
+
+    // Walks the local player 3 m to the first side it can reach.
+    private static bool WalkApart(GameClient client, ClientWorld world)
+    {
+        WorldPosition from = world.Predictor.Position;
+        foreach ((float dx, float dz) in new[] { (3f, 0f), (-3f, 0f), (0f, 3f), (0f, -3f) })
+        {
+            if (client.Controller!.TryMoveTo(from, new WorldPosition(from.X + dx, from.Y, from.Z + dz)))
+            {
+                return true;
             }
         }
 
-        Assert.That(bolt, Is.Not.Null, $"key 6 cast Arcane Bolt: {world.LastRejection} {client.Status}");
-        Assert.That(launchedBeforeTheResolution, Is.GreaterThanOrEqualTo(1), "the bolt flew before it resolved");
+        return false;
+    }
+
+    private static EntityView LocalBody(GameClient client)
+    {
+        return (EntityView)typeof(GameClient)
+            .GetField("m_localView", BindingFlags.NonPublic | BindingFlags.Instance)!
+            .GetValue(client)!;
     }
 
     private static TMP_Text SlotLabel(SkillBar bar, int slot)

@@ -25,6 +25,10 @@ public sealed class PointerMoveHandler
     /// <param name="entities">What a click may pick; tested before the ground, so the entity under it wins.</param>
     /// <param name="point">Where on the map the request landed, when it reached the map at all.</param>
     /// <param name="entity">The picked entity when the result is <see cref="PointerMoveResult.Entity" />.</param>
+    /// <param name="isWalking">
+    ///     False while a skill waits for its target: a click on the map then walks nowhere and answers
+    ///     <see cref="PointerMoveResult.OnGround" />.
+    /// </param>
     public PointerMoveResult Handle(
         Camera? camera,
         Collider? ground,
@@ -32,7 +36,8 @@ public sealed class PointerMoveHandler
         MovementController controller,
         WorldPosition from,
         out WorldPosition point,
-        out EntityId entity)
+        out EntityId entity,
+        bool isWalking = true)
     {
         point = default;
         entity = default;
@@ -59,6 +64,11 @@ public sealed class PointerMoveHandler
         if (camera == null || ground == null || !GroundPicker.TryPick(camera, ground, screenPosition, out point))
         {
             return PointerMoveResult.MissedMap;
+        }
+
+        if (!isWalking)
+        {
+            return PointerMoveResult.OnGround;
         }
 
         return controller.TryMoveTo(from, point) ? PointerMoveResult.Accepted : PointerMoveResult.Refused;

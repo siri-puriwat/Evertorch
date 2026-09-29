@@ -6,8 +6,8 @@ namespace Evertorch.Client
 {
 /// <summary>
 ///     The one test of whether a screen position is on the client's UI (Gameplay Systems §5.1): the event system's
-///     raycast over every client canvas, so a click or tap on any panel is never also one in the world. Text that lets
-///     clicks through sets <c>raycastTarget</c> to false.
+///     raycast over every client canvas, so a click or tap on a panel is never also one in the world. Text that lets
+///     clicks through sets <c>raycastTarget</c> to false, as does the feedback lines' panel, which only speaks.
 /// </summary>
 public sealed class UiHitTest
 {

@@ -224,7 +224,8 @@ public sealed class PlayerPanelTests
         IReadOnlyDictionary<NpcDefinitionId, ClientNpc>? npcs = null,
         IReadOnlyDictionary<MonsterDefinitionId, ClientMonster>? monsters = null,
         IReadOnlyDictionary<QuestDefinitionId, ClientQuest>? quests = null,
-        IReadOnlyDictionary<JobDefinitionId, ClientJob>? jobs = null)
+        IReadOnlyDictionary<JobDefinitionId, ClientJob>? jobs = null,
+        IReadOnlyDictionary<SkillDefinitionId, ClientSkill>? skills = null)
     {
         var content = new ClientContent(
             "0000000000000000",
@@ -232,7 +233,7 @@ public sealed class PlayerPanelTests
             jobs ?? new Dictionary<JobDefinitionId, ClientJob>(),
             monsters ?? new Dictionary<MonsterDefinitionId, ClientMonster>(),
             items.ToDictionary(item => item.Id),
-            new Dictionary<SkillDefinitionId, ClientSkill>(),
+            skills ?? new Dictionary<SkillDefinitionId, ClientSkill>(),
             new Dictionary<StatusDefinitionId, ClientStatusEffect>(),
             npcs,
             quests);
@@ -1069,6 +1070,75 @@ public sealed class PlayerPanelTests
             Slot(bar, 6).GetComponent<LayoutElement>().preferredWidth,
             Is.EqualTo(70f),
             "all eight fit between the stick and the touch buttons");
+    }
+
+    // A key or a bar button of a skill for an enemy waits for a click on its target (owner's walk, 2026-09-30): its slot
+    // takes the accent colour and the lines prompt the click, the text of the slots unchanged; a locked slot does
+    // nothing, and a skill on the caster goes at once and ends the wait (Prototype Content §4).
+    [UnityTest]
+    public IEnumerator SkillBarAndLines_ForASkillWaitingForItsTarget_ColourItsSlotAndPromptTheClick()
+    {
+        GameClient client = CreateIdleClient();
+        ClientWorld world = GiveWorld(client);
+        var strike = new SkillDefinitionId("skill.strike");
+        var firstAid = new SkillDefinitionId("skill.first_aid");
+        var focus = new SkillDefinitionId("skill.focus");
+        GiveContent(
+            client,
+            new ClientItem[0],
+            skills: new Dictionary<SkillDefinitionId, ClientSkill>
+            {
+                [strike] = new(strike, "Strike", SkillTargetType.Enemy, "skill_strike"),
+                [firstAid] = new(firstAid, "First Aid", SkillTargetType.Self, "skill_first_aid"),
+                [focus] = new(focus, "Focus", SkillTargetType.Self, "skill_focus")
+            });
+        world.OnSkillList(StrikeFirstAidAndFocus(0));
+        var bar = SkillBar.Create(client);
+        m_created.Add(bar.gameObject);
+        var lines = FeedbackLines.Create(client);
+        m_created.Add(lines.gameObject);
+        yield return null;
+        int changes = bar.TextChanges;
+
+        client.UseSkillSlot(1);
+        yield return null;
+        SkillDefinitionId waiting = client.TargetingSkill;
+        Color waitingColour = Slot(bar, 1).GetComponent<Image>().color;
+        string prompt = lines.Text;
+        client.UseSkillSlot(3);
+        yield return null;
+        SkillDefinitionId afterTheLockedSlot = client.TargetingSkill;
+        client.UseSkillSlot(2);
+        yield return null;
+
+        Assert.That(waiting, Is.EqualTo(strike), "Strike waits for its target");
+        Assert.That(waitingColour, Is.EqualTo(UiBuilder.AccentColor));
+        Assert.That(prompt, Is.EqualTo("Strike: click a target. Esc cancels."));
+        Assert.That(bar.TextChanges, Is.EqualTo(changes), "only the colour changed");
+        Assert.That(afterTheLockedSlot, Is.EqualTo(strike), "a locked slot does nothing");
+        Assert.That(client.TargetingSkill, Is.EqualTo(default(SkillDefinitionId)), "First Aid went at once");
+        Assert.That(Slot(bar, 1).GetComponent<Image>().color, Is.EqualTo(UiBuilder.ControlColor));
+        Assert.That(lines.Text, Is.Empty, "the prompt went with the wait");
+        Assert.That(lines.IsVisible, Is.False);
+    }
+
+    // The crosshair is drawn at run time and handed to Unity's cursor without a complaint, and given back.
+    [UnityTest]
+    public IEnumerator TargetCursor_ShowsHidesAndDisposes_WithoutAnError()
+    {
+        var cursor = new TargetCursor();
+
+        cursor.SetShown(true);
+        bool isShown = cursor.IsShown;
+        yield return null;
+        cursor.SetShown(false);
+        cursor.SetShown(true);
+        cursor.Dispose();
+        yield return null;
+
+        Assert.That(isShown, Is.True);
+        Assert.That(cursor.IsShown, Is.False);
+        LogAssert.NoUnexpectedReceived();
     }
 
     [UnityTest]

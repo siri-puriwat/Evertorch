@@ -5,13 +5,15 @@ using Evertorch.Game;
 using Evertorch.Protocol;
 using TMPro;
 using UnityEngine;
+using UnityEngine.UI;
 
 namespace Evertorch.Client
 {
 /// <summary>
 ///     Short-lived lines over the lower middle of the screen, clear of the skill bar (Prototype Content §2): a refused
 ///     command in plain words, what the player picked up, bought, or sold, a quest accepted, advanced, ready, or
-///     completed, a level-up, a job level-up, a raised statistic, and a learned skill level.
+///     completed, a level-up, a job level-up, a raised statistic, and a learned skill level. While a skill waits for its
+///     target, its prompt stays as the last line (Prototype Content §4).
 /// </summary>
 public sealed class FeedbackLines : MonoBehaviour
 {
@@ -49,6 +51,7 @@ public sealed class FeedbackLines : MonoBehaviour
     private RectTransform? m_panelRect;
     private TMP_Text? m_label;
     private float m_placedForHeight = -1f;
+    private string? m_prompt;
 
     public int TextChanges { get; private set; }
 
@@ -74,8 +77,10 @@ public sealed class FeedbackLines : MonoBehaviour
 
         int count = m_lines.Count;
         m_lines.RemoveAll(line => line.ExpiresAt <= Time.unscaledTime);
-        if (m_lines.Count != count)
+        string? prompt = CurrentPrompt();
+        if (m_lines.Count != count || !string.Equals(prompt, m_prompt, StringComparison.Ordinal))
         {
+            m_prompt = prompt;
             Rewrite();
         }
     }
@@ -110,6 +115,18 @@ public sealed class FeedbackLines : MonoBehaviour
     public static float TopFor(float canvasHeight)
     {
         return BottomFor(canvasHeight) + MaxHeight;
+    }
+
+    /// <summary>
+    ///     The line that stays while a skill waits for its target (Prototype Content §4), in the words of the device that
+    ///     chooses: a click and Esc, or a tap and the Clear button.
+    /// </summary>
+    public static string PromptFor(string skillName, SkillTargetType targetType, bool isTouch)
+    {
+        string target = targetType == SkillTargetType.Ally ? "a player or yourself" : "a target";
+        return isTouch
+            ? $"{skillName}: tap {target}. Clear cancels."
+            : $"{skillName}: click {target}. Esc cancels.";
     }
 
     public void Add(string line)
@@ -278,27 +295,60 @@ public sealed class FeedbackLines : MonoBehaviour
             Padding);
         m_panel = panel.gameObject;
         m_panelRect = panel;
+
+        // The lines only speak: a click on a monster behind them, a skill's target among them, reaches the world.
+        panel.GetComponent<Image>().raycastTarget = false;
         m_label = Ui.CreateLabel("Lines", panel);
         m_label.alignment = TextAlignmentOptions.Center;
         m_panel.SetActive(false);
     }
 
+    // The prompt, while there is one, takes the last of the lines, below the newest others.
     private void Rewrite()
     {
         m_text.Clear();
-        foreach (Line line in m_lines)
+        int first = m_prompt != null ? Math.Max(0, m_lines.Count - (MaxLines - 1)) : 0;
+        for (int index = first; index < m_lines.Count; index++)
         {
-            if (m_text.Length > 0)
-            {
-                m_text.Append('\n');
-            }
+            Append(m_lines[index].Text);
+        }
 
-            m_text.Append(line.Text);
+        if (m_prompt != null)
+        {
+            Append(m_prompt);
         }
 
         m_label!.text = m_text.ToString();
         TextChanges++;
-        UiBuilder.SetActive(m_panel!, m_lines.Count > 0);
+        UiBuilder.SetActive(m_panel!, m_text.Length > 0);
+    }
+
+    private void Append(string line)
+    {
+        if (m_text.Length > 0)
+        {
+            m_text.Append('\n');
+        }
+
+        m_text.Append(line);
+    }
+
+    private string? CurrentPrompt()
+    {
+        SkillDefinitionId skill = m_client != null ? m_client.TargetingSkill : default;
+        if (skill == default)
+        {
+            return null;
+        }
+
+        ClientContent? content = m_client!.Content;
+        SkillTargetType targetType = content != null
+            && content.TryGetSkill(skill, out ClientSkill? definition)
+            && definition != null
+                ? definition.TargetType
+                : SkillTargetType.Enemy;
+        bool isTouch = m_client.Touch != null && m_client.Touch.IsVisible;
+        return PromptFor(BuildMessages.SkillName(content, skill), targetType, isTouch);
     }
 
     private readonly struct Line

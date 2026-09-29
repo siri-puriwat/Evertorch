@@ -59,6 +59,8 @@ public sealed class GameClient : MonoBehaviour
     private readonly List<PickCandidate> m_targetCandidates = new();
     private readonly List<PickCandidate> m_pointerCandidates = new();
     private readonly List<PickCandidate> m_npcCandidates = new();
+    private readonly List<PickCandidate> m_aimCandidates = new();
+    private readonly SkillTargeting m_targeting = new();
     private readonly TargetCycler m_targetCycler = new();
     private readonly UiHitTest m_uiHitTest = new();
     private IClientTransport? m_socket;
@@ -69,6 +71,7 @@ public sealed class GameClient : MonoBehaviour
     private WindowInputSource? m_windowSource;
     private SkillInputSource? m_skillSource;
     private CameraInputSource? m_cameraSource;
+    private TargetCursor? m_cursor;
     private TargetMarker? m_targetMarker;
     private AutoAttackState? m_autoAttack;
     private PickupState? m_pickup;
@@ -217,6 +220,11 @@ public sealed class GameClient : MonoBehaviour
     public bool IsGamepadOnOwnSkills => m_skillSource != null && m_skillSource.IsOnOwnSkills;
 
     /// <summary>
+    ///     The skill waiting for a click or tap on its target (Prototype Content §4); the default value while none is.
+    /// </summary>
+    public SkillDefinitionId TargetingSkill => m_targeting.IsChoosing ? m_targeting.Skill : default;
+
+    /// <summary>
     ///     Whether the NPC, Stats, or Skills window shows at the top left, which the target frame keeps clear of.
     /// </summary>
     public bool IsSideWindowOpen =>
@@ -285,6 +293,7 @@ public sealed class GameClient : MonoBehaviour
             m_combatSource?.TakeRequest();
             m_skillSource?.TakeSlot();
             m_skillSource?.Reset();
+            m_targeting.Cancel();
             m_windowSource?.TakeStatsToggle();
             m_windowSource?.TakeSkillsToggle();
             return;
@@ -310,6 +319,16 @@ public sealed class GameClient : MonoBehaviour
             m_pointerCandidates.Add(new PickCandidate(npc.Entity, OnPlinth(npc.Position)));
         }
 
+        // A death, a reset, or a job change can take the waiting skill away.
+        if (m_targeting.IsChoosing && (m_world.IsLocalDead || m_world.SkillLevel(m_targeting.Skill) == 0))
+        {
+            m_targeting.Cancel();
+        }
+
+        // The caster is chosen where it was drawn last frame, which is what the click was aimed at.
+        m_aimCandidates.Clear();
+        m_targeting.CollectCandidates(m_world, m_world.Smoother.Sample(m_clock.Alpha), m_aimCandidates);
+
         HandlePointerRequest();
         HandleCombatRequest();
         if (m_windowSource != null && m_windowSource.TakeStatsToggle())
@@ -322,17 +341,19 @@ public sealed class GameClient : MonoBehaviour
             ToggleSkills();
         }
 
+        int slot = 0;
+        bool isFromGamepad = false;
         if (m_skillSource != null)
         {
             bool hasOwnSkills = SkillSlots.HasOwnSkills(m_world.Skills);
             bool isTurned = m_skillSource.TakePageToggle();
             m_skillSource.IsOnOwnSkills = hasOwnSkills && m_skillSource.IsOnOwnSkills != isTurned;
+            slot = m_skillSource.TakeSlot(out isFromGamepad);
         }
 
-        int slot = m_skillSource?.TakeSlot() ?? 0;
         if (slot != 0)
         {
-            UseSkillSlot(slot);
+            UseSkillSlot(slot, isFromGamepad);
         }
 
         int ticks = m_clock.Advance(Time.unscaledDeltaTime);
@@ -346,6 +367,9 @@ public sealed class GameClient : MonoBehaviour
 
     private void LateUpdate()
     {
+        // After every Update, the EventSystem's among them, so a choice a bar button began this frame shows at once.
+        m_cursor ??= new TargetCursor();
+        m_cursor.SetShown(m_targeting.IsChoosing && !Application.isMobilePlatform);
         if (m_world == null || m_clock == null)
         {
             return;
@@ -396,6 +420,7 @@ public sealed class GameClient : MonoBehaviour
         m_windowSource?.Dispose();
         m_skillSource?.Dispose();
         m_cameraSource?.Dispose();
+        m_cursor?.Dispose();
         m_socket?.Dispose();
         m_viewCatalog.Dispose();
         if (m_runtimeMaterial != null)
@@ -725,10 +750,44 @@ public sealed class GameClient : MonoBehaviour
     }
 
     /// <summary>
-    ///     Uses the skill in a slot of the skill bar, numbered from 1 (Prototype Content §4): what the slot's key,
-    ///     gamepad button, and button on the bar ask for.
+    ///     Uses the skill in a slot of the skill bar, numbered from 1 (Prototype Content §4): what the slot's key and its
+    ///     button on the bar ask for. A skill for an enemy or an ally then waits for a click or tap on its target.
     /// </summary>
     public void UseSkillSlot(int slot)
+    {
+        UseSkillSlot(slot, false);
+    }
+
+    /// <summary>
+    ///     Uses <paramref name="skill" /> as a key, a bar button, or a tap asks (Prototype Content §4): a skill on the
+    ///     caster goes at once; one for an enemy or an ally waits for a click or tap on its target
+    ///     (<see cref="TargetingSkill" />), and an ally skill pressed again while it waits goes on the caster. A locked or
+    ///     unknown skill does nothing.
+    /// </summary>
+    public void UseSkill(SkillDefinitionId skill)
+    {
+        ClientSkill? definition = UsableSkill(skill);
+        if (definition == null)
+        {
+            return;
+        }
+
+        if (m_world!.IsLocalDead)
+        {
+            m_targeting.Cancel();
+            return;
+        }
+
+        SkillPress press = m_targeting.Press(skill, definition.TargetType);
+        if (press == SkillPress.Instant || press == SkillPress.OnCaster)
+        {
+            m_pickup?.Cancel();
+            m_talk?.Cancel();
+            m_skill?.UseAt(skill, definition.TargetType, default);
+        }
+    }
+
+    private void UseSkillSlot(int slot, bool isFromGamepad)
     {
         if (SkillSlots.TryGetItem(slot, out ItemDefinitionId item))
         {
@@ -742,36 +801,34 @@ public sealed class GameClient : MonoBehaviour
             return;
         }
 
-        if (m_world != null && SkillSlots.TryGetSkill(m_world.Skills, slot, out SkillDefinitionId skill))
+        if (m_world == null || !SkillSlots.TryGetSkill(m_world.Skills, slot, out SkillDefinitionId skill))
+        {
+            return;
+        }
+
+        if (isFromGamepad)
+        {
+            UseSkillAtSelection(skill);
+        }
+        else
         {
             UseSkill(skill);
         }
     }
 
-    /// <summary>
-    ///     Uses <paramref name="skill" />: an enemy skill at the confirmed monster, an ally skill at the selected
-    ///     player or else on the caster, and any other on the caster (Gameplay Systems §9; Prototype Content §4).
-    /// </summary>
-    public void UseSkill(SkillDefinitionId skill)
+    // The gamepad's way, for it has no pointer to choose with: an enemy skill goes to the confirmed monster, and an ally
+    // skill to the selected player or else the caster (Prototype Content §4).
+    private void UseSkillAtSelection(SkillDefinitionId skill)
     {
-        ClientContent? content = m_contentLoader.Content;
-        if (m_world == null
-            || m_skill == null
-            || content == null
-            || !content.TryGetSkill(skill, out ClientSkill? definition)
-            || definition == null)
+        ClientSkill? definition = UsableSkill(skill);
+        if (definition == null || m_skill == null)
         {
             return;
         }
 
-        // A locked slot sends nothing; the server would refuse a skill not learned (Gameplay Systems §9).
-        if (m_world.SkillLevel(skill) == 0)
-        {
-            return;
-        }
-
+        m_targeting.Cancel();
         if (definition.TargetType == SkillTargetType.Enemy
-            && (m_world.Target == default || m_world.IsPlayer(m_world.Target)))
+            && (m_world!.Target == default || m_world.IsPlayer(m_world.Target)))
         {
             m_feedback?.Add("Choose a target first.");
             return;
@@ -780,6 +837,23 @@ public sealed class GameClient : MonoBehaviour
         m_pickup?.Cancel();
         m_talk?.Cancel();
         m_skill.Use(skill, definition.TargetType);
+    }
+
+    // The skill's definition when the character is in the world and has learned it; a locked slot sends nothing, since
+    // the server would refuse a skill not learned (Gameplay Systems §9).
+    private ClientSkill? UsableSkill(SkillDefinitionId skill)
+    {
+        ClientContent? content = m_contentLoader.Content;
+        if (m_world == null
+            || content == null
+            || !content.TryGetSkill(skill, out ClientSkill? definition)
+            || definition == null
+            || m_world.SkillLevel(skill) == 0)
+        {
+            return null;
+        }
+
+        return definition;
     }
 
     /// <summary>
@@ -1031,14 +1105,22 @@ public sealed class GameClient : MonoBehaviour
         }
 
         Collider? ground = m_map == null ? null : m_map.GroundCollider;
+        bool isChoosing = m_targeting.IsChoosing;
         PointerMoveResult result = m_pointerHandler.Handle(
             Camera.main,
             ground,
-            m_pointerCandidates,
+            isChoosing ? m_aimCandidates : m_pointerCandidates,
             m_controller,
             m_world.Predictor.Position,
             out WorldPosition point,
-            out EntityId entity);
+            out EntityId entity,
+            !isChoosing);
+        if (isChoosing)
+        {
+            AimAt(result, entity);
+            return;
+        }
+
         if (result == PointerMoveResult.Accepted)
         {
             m_autoAttack?.OnWalkRequested();
@@ -1088,6 +1170,13 @@ public sealed class GameClient : MonoBehaviour
         CombatRequest request = m_combatSource.TakeRequest();
         if (request == CombatRequest.Clear)
         {
+            // It ends a wait for a skill's target first; otherwise a skill walking to its target, and the selection.
+            if (m_targeting.Cancel())
+            {
+                return;
+            }
+
+            m_skill?.CancelApproach();
             Connection?.SendTarget(default);
         }
         else if (request == CombatRequest.Attack)
@@ -1128,8 +1217,39 @@ public sealed class GameClient : MonoBehaviour
         }
     }
 
+    // A click or tap while a skill waits for its target (Prototype Content §4). On a target the skill can take, the skill
+    // goes there, and a monster becomes the selection so the frame and the ring follow it; anywhere else the wait ends
+    // and nothing walks. A tap on the controls, a bar button's own among them, changes nothing.
+    private void AimAt(PointerMoveResult result, EntityId entity)
+    {
+        if (result == PointerMoveResult.None || result == PointerMoveResult.OnControl || m_world == null)
+        {
+            return;
+        }
+
+        SkillDefinitionId skill = m_targeting.Skill;
+        SkillTargetType targetType = m_targeting.TargetType;
+        bool isTaken = result == PointerMoveResult.Entity && m_targeting.Accepts(m_world, entity);
+        m_targeting.Cancel();
+        if (!isTaken)
+        {
+            return;
+        }
+
+        if (targetType == SkillTargetType.Enemy && m_world.Target != entity)
+        {
+            Connection?.SendTarget(entity);
+        }
+
+        m_pickup?.Cancel();
+        m_talk?.Cancel();
+        m_skill?.UseAt(skill, targetType, entity);
+    }
+
     private void Attack(EntityId target)
     {
+        m_targeting.Cancel();
+
         // A selected player is only ever healed: the attack key or button does nothing to it (Gameplay Systems §6).
         if (m_world != null && m_world.IsPlayer(target))
         {
@@ -1155,6 +1275,7 @@ public sealed class GameClient : MonoBehaviour
     // A pickup replaces an auto-attack, whose chase would otherwise pull the character away from the drop.
     private void StartPickup(EntityId drop)
     {
+        m_targeting.Cancel();
         m_autoAttack?.OnWalkRequested();
         m_skill?.Cancel();
         m_talk?.Cancel();
@@ -1164,6 +1285,7 @@ public sealed class GameClient : MonoBehaviour
     // Talking replaces whatever else the character was doing; it only walks.
     private void StartTalk(EntityId npc)
     {
+        m_targeting.Cancel();
         m_autoAttack?.OnWalkRequested();
         m_pickup?.Cancel();
         m_skill?.Cancel();
@@ -1250,6 +1372,8 @@ public sealed class GameClient : MonoBehaviour
 
     private void TearDownWorld()
     {
+        m_targeting.Cancel();
+        m_cursor?.SetShown(false);
         if (m_world != null)
         {
             m_world.RemoteSpawned -= AddRemoteView;

@@ -155,6 +155,98 @@ public sealed class SkillStateTests
         return skills;
     }
 
+    // Aimed at another player, Mend walks within its range and asks at that player; the selection stays the slime.
+    [Test]
+    public void AimedAllySkill_AtAPlayer_AsksAtIt_AndLeavesTheSelection()
+    {
+        var rig = new Rig(4f);
+        rig.SpawnPlayer(Ally, 8f);
+
+        bool isStarted = rig.Skill.UseAt(Mend, SkillTargetType.Ally, Ally);
+        int ticks = rig.TickUntilSent(200);
+
+        Assert.That(isStarted, Is.True);
+        Assert.That(rig.Sent, Is.EqualTo(new[] { (Mend, Ally) }));
+        Assert.That(ticks, Is.GreaterThan(1), "it walked first");
+        Assert.That(rig.World.Target, Is.EqualTo(Slime));
+    }
+
+    // Mend aimed at the caster, by its own ID or by none, asks with none and walks nowhere.
+    [Test]
+    public void AimedAllySkill_AtTheCaster_AsksWithNoTarget_WithoutAnApproach()
+    {
+        var byId = new Rig(4f);
+        var byNone = new Rig(4f);
+
+        bool[] started =
+        {
+            byId.Skill.UseAt(Mend, SkillTargetType.Ally, ClientWorldFixture.LocalEntity),
+            byNone.Skill.UseAt(Mend, SkillTargetType.Ally, default)
+        };
+        byId.Tick();
+        byNone.Tick();
+
+        Assert.That(started, Is.EqualTo(new[] { true, true }));
+        Assert.That(byId.Sent, Is.EqualTo(new[] { (Mend, default(EntityId)) }));
+        Assert.That(byNone.Sent, Is.EqualTo(new[] { (Mend, default(EntityId)) }));
+        Assert.That(byId.Controller.IsChasing, Is.False);
+    }
+
+    [Test]
+    public void AimedSkill_AtWhatItCannotTake_OrWhileDead_StartsNothing()
+    {
+        var rig = new Rig(4f);
+        rig.SpawnPlayer(Ally, 1f);
+        var dead = new Rig(4f);
+        dead.World.OnEntityDied(new EntityDied(ClientWorldFixture.LocalEntity, Slime, 2));
+
+        bool[] started =
+        {
+            rig.Skill.UseAt(Strike, SkillTargetType.Enemy, Ally),
+            rig.Skill.UseAt(Strike, SkillTargetType.Enemy, default),
+            rig.Skill.UseAt(Mend, SkillTargetType.Ally, Slime),
+            rig.Skill.UseAt(FirstAid, SkillTargetType.Self, Slime),
+            dead.Skill.UseAt(Mend, SkillTargetType.Ally, default)
+        };
+        rig.Tick();
+        dead.Tick();
+
+        Assert.That(started, Is.All.False);
+        Assert.That(rig.Sent, Is.Empty);
+        Assert.That(dead.Sent, Is.Empty);
+    }
+
+    // A skill aimed by a click or tap is not the selection's: a change of the selection leaves it, and it asks at its own
+    // target (owner's walk, 2026-09-30).
+    [Test]
+    public void AimedSkill_SurvivesAChangeOfTheSelection_AndAsksAtItsOwnTarget()
+    {
+        var rig = new Rig(4f);
+
+        bool isStarted = rig.Skill.UseAt(Strike, SkillTargetType.Enemy, Other);
+        rig.Tick();
+        rig.World.OnTargetChanged(new TargetChanged(ClientWorldFixture.LocalEntity, default));
+        rig.World.OnTargetChanged(new TargetChanged(ClientWorldFixture.LocalEntity, Slime));
+        rig.TickUntilSent(200);
+
+        Assert.That(isStarted, Is.True);
+        Assert.That(rig.Sent, Is.EqualTo(new[] { (Strike, Other) }));
+    }
+
+    [Test]
+    public void AimedSkill_WhenItsTargetDies_EndsWithoutAsking()
+    {
+        var rig = new Rig(4f);
+        rig.Skill.UseAt(Strike, SkillTargetType.Enemy, Slime);
+        rig.Tick();
+
+        rig.World.OnEntityDied(new EntityDied(Slime, default, 3));
+        rig.Tick();
+
+        Assert.That(rig.Sent, Is.Empty);
+        Assert.That((rig.Skill.IsActive, rig.Controller.IsChasing), Is.EqualTo((false, false)));
+    }
+
     // An ally skill goes to the selected player, walking within its range less the margin first (Gameplay Systems §9).
     [Test]
     public void AllySkill_ForASelectedPlayer_WalksWithinRangeThenAsksAtIt()
@@ -191,6 +283,26 @@ public sealed class SkillStateTests
         Assert.That(monster.Sent, Is.EqualTo(new[] { (Mend, default(EntityId)) }), "never at the monster");
         Assert.That(nothing.Sent, Is.EqualTo(new[] { (Mend, default(EntityId)) }));
         Assert.That(monster.Controller.IsChasing, Is.False);
+    }
+
+    // Esc and its peers end a skill walking to its target, and leave one on the caster to go.
+    [Test]
+    public void CancelApproach_EndsASkillWalkingToItsTarget_NotOneOnTheCaster()
+    {
+        var aimed = new Rig(4f);
+        aimed.Skill.UseAt(Strike, SkillTargetType.Enemy, Slime);
+        aimed.Tick();
+        var self = new Rig(4f);
+        self.Skill.Use(FirstAid, SkillTargetType.Self);
+
+        aimed.Skill.CancelApproach();
+        self.Skill.CancelApproach();
+        aimed.TickUntilSent(40);
+        self.Tick();
+
+        Assert.That(aimed.Sent, Is.Empty);
+        Assert.That((aimed.Skill.IsActive, aimed.Controller.IsChasing), Is.EqualTo((false, false)));
+        Assert.That(self.Sent, Is.EqualTo(new[] { (FirstAid, default(EntityId)) }));
     }
 
     [Test]

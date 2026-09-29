@@ -18,6 +18,7 @@ public sealed class SkillInputSource : IDisposable
     private readonly InputAction? m_page;
     private readonly Action<InputAction.CallbackContext> m_pageHandler;
     private int m_requested;
+    private bool m_isRequestedByGamepad;
     private bool m_isPageToggled;
 
     /// <param name="slots">The actions of slots 1, 2, and onwards, in that order.</param>
@@ -35,7 +36,7 @@ public sealed class SkillInputSource : IDisposable
         {
             int slot = index + 1;
             m_slots[index] = slots[index] ?? throw new ArgumentException("A slot has no action.", nameof(slots));
-            m_handlers[index] = context => m_requested = SlotFor(slot, context.control?.device);
+            m_handlers[index] = context => Request(slot, context.control?.device);
             m_slots[index].performed += m_handlers[index];
             m_slots[index].Enable();
         }
@@ -81,8 +82,20 @@ public sealed class SkillInputSource : IDisposable
     /// </summary>
     public int TakeSlot()
     {
+        return TakeSlot(out bool _);
+    }
+
+    /// <summary>
+    ///     The slot asked for since the last call, numbered from 1, or 0 for none; <paramref name="isFromGamepad" /> says
+    ///     whether a gamepad button asked, since a gamepad has no pointer to choose a skill's target with (Prototype
+    ///     Content §4).
+    /// </summary>
+    public int TakeSlot(out bool isFromGamepad)
+    {
         int slot = m_requested;
+        isFromGamepad = slot != 0 && m_isRequestedByGamepad;
         m_requested = 0;
+        m_isRequestedByGamepad = false;
         return slot;
     }
 
@@ -94,6 +107,12 @@ public sealed class SkillInputSource : IDisposable
         bool isToggled = m_isPageToggled;
         m_isPageToggled = false;
         return isToggled;
+    }
+
+    private void Request(int slot, InputDevice? device)
+    {
+        m_requested = SlotFor(slot, device);
+        m_isRequestedByGamepad = device is Gamepad;
     }
 
     // Only the gamepad's buttons follow the page; the keys 1 to 8 always ask for their own slot.
