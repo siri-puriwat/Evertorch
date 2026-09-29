@@ -34,6 +34,15 @@ public sealed class HostileSocketTests
 
     private static IHost StartHost(TemporaryDirectory root, CapturingLoggerProvider logs, params string[] settings)
     {
+        return StartHost(root, logs, new InMemoryGameStore(), settings);
+    }
+
+    private static IHost StartHost(
+        TemporaryDirectory root,
+        CapturingLoggerProvider logs,
+        InMemoryGameStore store,
+        params string[] settings)
+    {
         PackageFixture.WriteTo(
             Path.Combine(root.Path, "content", "server"),
             PackageFixture.BuildRepositoryPackage());
@@ -46,7 +55,7 @@ public sealed class HostileSocketTests
                 "--Logging:LogLevel:Default=Debug"
             }.Concat(settings).ToArray(),
             root.Path,
-            new InMemoryGameStore());
+            store);
         builder.Logging.AddProvider(logs);
         builder.Logging.AddFilter<ConsoleLoggerProvider>(null, LogLevel.Warning);
         IHost host = builder.Build();
@@ -215,6 +224,75 @@ public sealed class HostileSocketTests
         Assert.That(early.Connection.Notice?.Reason, Is.EqualTo(DisconnectReason.RateLimited));
         Assert.That(later.Connection.MalformedMessages + later.Connection.UnexpectedMessages, Is.Zero);
         host.StopAsync().GetAwaiter().GetResult();
+    }
+
+    // Milestone 9's commands from a player in the world at job level 3: a raise without points, a skill outside the tree,
+    // and a reset at no NPC refused and audited, one level learned, a burst of raises over the item bucket, then
+    // malformed build commands until the connection is closed. The identity carries a word no log may repeat.
+    [Test]
+    public void HostileBuildCommands_AreRefusedThrottledAndScored_AndLeaveNoSecretInTheLogs()
+    {
+        using var root = new TemporaryDirectory();
+        var logs = new CapturingLoggerProvider();
+        const int itemBurst = 5;
+        var store = new InMemoryGameStore { SeedOnCreate = new BuildSeed(3, new Dictionary<string, int>()) };
+        using IHost host = StartHost(root, logs, store, $"--Abuse:ItemCommandBurst={itemBurst}");
+        int port = host.Services.GetRequiredService<LiteNetLibServerTransport>().LocalPort;
+        ServerContent content = host.Services.GetRequiredService<ServerContent>();
+        int violationsToClose = new AbuseOptions().ViolationThreshold / ViolationScore.Points;
+        // A raise of statistic 0, a skill ID of broken UTF-8, and a reset at NPC 0.
+        byte[][] malformed =
+        {
+            new byte[] { 0x17, 0x00, 0x00, 0x01, 0x01, 0x00, 0x00, 0x00 },
+            new byte[] { 0x18, 0x00, 0x01, 0x00, 0xFF, 0x01, 0x00, 0x00, 0x00 },
+            new byte[] { 0x19, 0x00, 0, 0, 0, 0, 0, 0, 0, 0, 0x01, 0x00, 0x00, 0x00 }
+        };
+
+        using var player = new SocketClient(content, "secret-build-identity", "Hostile9");
+        player.EnterWorld(port);
+        var refused = new List<CommandRejectionReason>();
+        player.World.CommandRejectedReceived += rejection => refused.Add(rejection.Reason);
+        player.Connection.SendAllocateStat(PrimaryStat.Agi, 1);
+        player.Connection.SendLearnSkill(new SkillDefinitionId("skill.spark_bolt"));
+        player.Connection.SendResetBuild(new EntityId(999999));
+        player.Connection.SendLearnSkill(new SkillDefinitionId("skill.strike"));
+        player.PumpFor(TimeSpan.FromMilliseconds(1100));
+        var firstRefusals = refused.ToList();
+        for (int index = 0; index <= itemBurst; index++)
+        {
+            player.Connection.SendAllocateStat(PrimaryStat.Vit, 1);
+        }
+
+        player.PumpFor(TimeSpan.FromMilliseconds(1100));
+        for (int index = 0; index < 2 * violationsToClose; index++)
+        {
+            player.Link.Send(ProtocolChannel.Control, MessageDelivery.ReliableOrdered,
+                malformed[index % malformed.Length]);
+        }
+
+        bool isClosed = player.PumpUntil(() => player.Connection.State == ClientConnectionState.Disconnected);
+        host.StopAsync().GetAwaiter().GetResult();
+
+        IReadOnlyList<string> lines = logs.Lines;
+        Assert.That(
+            firstRefusals,
+            Is.EqualTo(
+                new[]
+                {
+                    CommandRejectionReason.NotEnoughPoints, CommandRejectionReason.RequirementNotMet,
+                    CommandRejectionReason.InvalidTarget
+                }),
+            "no points, no such skill in the tree, no such NPC; Strike learned");
+        Assert.That(refused.Skip(3), Has.Some.EqualTo(CommandRejectionReason.NotAllowedNow), "the throttled raise");
+        Assert.That(isClosed, Is.True, "the connection was closed");
+        Assert.That(player.Connection.Notice?.Reason, Is.EqualTo(DisconnectReason.Kicked));
+        Assert.That(lines.Any(line => line.Contains("had AllocateStat refused")), Is.True, "the refused raise audited");
+        Assert.That(lines.Any(line => line.Contains("had LearnSkill refused")), Is.True, "the refused skill audited");
+        Assert.That(lines.Any(line => line.Contains("had ResetBuild refused")), Is.True, "the refused reset audited");
+        Assert.That(lines.Any(line => line.Contains("sent AllocateStat over the session_item limit")), Is.True);
+        Assert.That(lines.Any(line => line.Contains("learned skill.strike at level 1")), Is.True, "SkillLearned");
+        Assert.That(lines.Any(line => line.Contains("ViolationDisconnect")), Is.True);
+        AssertNoSecretIn(lines);
     }
 
     [Test]
