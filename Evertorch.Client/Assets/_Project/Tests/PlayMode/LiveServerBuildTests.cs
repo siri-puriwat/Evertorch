@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Threading.Tasks;
+using Evertorch.Game;
 using Evertorch.Protocol;
 using NUnit.Framework;
 using TMPro;
@@ -31,6 +32,7 @@ public sealed class LiveServerBuildTests : InputTestFixture
     private const string StatsClientName = "LiveBuildTwo";
     private const string SkillsClientName = "LiveBuildThree";
     private const string ResetClientName = "LiveBuildFour";
+    private const string ChangeClientName = "LiveBuildFive";
     private const string GuildmasterPrefab = "npc_guildmaster";
     private const float StartTimeoutSeconds = 30f;
     private const float FightTimeoutSeconds = 60f;
@@ -267,6 +269,44 @@ public sealed class LiveServerBuildTests : InputTestFixture
             Is.EqualTo(((byte)5, (ushort)6)),
             $"every point back: {server.JoinOutput()}");
         Assert.That(lines.Text, Does.Contain("Every point returned."));
+    }
+
+    // A character stored at Adventurer job level 10, whose nine skill points bought four levels, wearing the training
+    // staff: the status bar shows the job level, and the sheet the five points it carries into a first job (Gameplay
+    // Systems §2.1, §9).
+    [UnityTest]
+    [Timeout(TestTimeoutMs)]
+    public IEnumerator JobChange_ReadyAtAdventurerJobLevelTen_ShowsOnTheStatusBar()
+    {
+        string actionsPath = RequirePrerequisites();
+        yield return StartDatabaseAndServer();
+        LiveServer server = m_server!;
+        LiveDatabase database = m_database!;
+        GameClient client = CreateClient(actionsPath);
+
+        yield return EnterByName(
+            client,
+            ChangeClientName,
+            () =>
+            {
+                database.SeedJob(
+                    ChangeClientName,
+                    "job.adventurer",
+                    10,
+                    ("skill.strike", 1),
+                    ("skill.first_aid", 1),
+                    ("skill.focus", 2));
+                database.SeedWornWeapon(ChangeClientName, "item.weapon.training_staff");
+            });
+        ClientWorld world = client.World!;
+        StatusBar bar = client.GetComponentsInChildren<StatusBar>(true).Single();
+        TMP_Text shownName = bar.GetComponentsInChildren<TMP_Text>(true).Single(label => label.name == "Name");
+        string shown = $"{ChangeClientName}   Lv 1   Adventurer Lv 10";
+        yield return WaitUntil(() => shownName.text == shown, StartTimeoutSeconds);
+
+        Assert.That(shownName.text, Is.EqualTo(shown), $"{client.Status} {server.JoinOutput()}");
+        Assert.That(world.Sheet!.SkillPoints, Is.EqualTo(5), "four of the nine points spent");
+        Assert.That(world.Inventory.Rows.Single().Slot, Is.EqualTo(EquipmentSlot.Weapon), "the staff worn");
     }
 
     private static bool Press(Component window, string name)

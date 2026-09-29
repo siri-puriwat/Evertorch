@@ -354,6 +354,7 @@ internal sealed class InMemoryGameStore : IGameStore
             var row = new Row(account, character);
             if (SeedOnCreate != null)
             {
+                row.Job = SeedOnCreate.Job;
                 row.JobLevel = SeedOnCreate.JobLevel;
                 foreach (KeyValuePair<string, int> skill in SeedOnCreate.Skills)
                 {

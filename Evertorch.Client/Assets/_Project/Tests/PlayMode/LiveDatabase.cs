@@ -74,11 +74,40 @@ internal sealed class LiveDatabase : IDisposable
     /// </summary>
     public void SeedAdventurerBuild(string name)
     {
+        SeedJob(name, "job.adventurer", 6, ("skill.strike", 1), ("skill.first_aid", 1), ("skill.focus", 3));
+    }
+
+    /// <summary>
+    ///     Stores the character named <paramref name="name" /> in <paramref name="job" /> at
+    ///     <paramref name="jobLevel" /> with the learned <paramref name="skills" />, before it first enters.
+    /// </summary>
+    public void SeedJob(string name, string job, int jobLevel, params (string Skill, int Level)[] skills)
+    {
         Execute(
-            $"UPDATE characters SET job_level = 6, job_exp = 0 WHERE name = '{name}'; "
-            + "INSERT INTO character_skills (character_id, skill_definition_id, level) "
-            + "SELECT id, skill, level FROM characters, (VALUES ('skill.strike', 1), ('skill.first_aid', 1), "
-            + $"('skill.focus', 3)) AS learned (skill, level) WHERE name = '{name}'");
+            $"UPDATE characters SET job_definition_id = '{job}', job_level = {jobLevel}, job_exp = 0 "
+            + $"WHERE name = '{name}'");
+        if (skills.Length == 0)
+        {
+            return;
+        }
+
+        string learned = string.Join(", ", skills.Select(skill => $"('{skill.Skill}', {skill.Level})"));
+        Execute(
+            "INSERT INTO character_skills (character_id, skill_definition_id, level) "
+            + $"SELECT id, skill, level FROM characters, (VALUES {learned}) AS learned (skill, level) "
+            + $"WHERE name = '{name}'");
+    }
+
+    /// <summary>
+    ///     Stores one <paramref name="item" /> worn in the weapon slot of the character named <paramref name="name" />.
+    /// </summary>
+    public void SeedWornWeapon(string name, string item)
+    {
+        Execute(
+            "WITH worn AS (INSERT INTO inventory_items (character_id, item_definition_id, quantity, refine_level, "
+            + $"version) SELECT id, '{item}', 1, 0, 0 FROM characters WHERE name = '{name}' "
+            + "RETURNING character_id, id) INSERT INTO equipment (character_id, slot, inventory_item_id, version) "
+            + "SELECT character_id, 'Weapon', id, 0 FROM worn");
     }
 
     /// <summary>
