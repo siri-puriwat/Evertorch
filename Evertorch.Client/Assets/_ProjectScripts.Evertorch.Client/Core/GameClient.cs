@@ -651,6 +651,15 @@ public sealed class GameClient : MonoBehaviour
     }
 
     /// <summary>
+    ///     Asks <paramref name="npc" /> to change the character's job to <paramref name="job" /> (Gameplay Systems §6.1);
+    ///     the body, the bar, and the windows move only with the sheet and the skill list the server sends back.
+    /// </summary>
+    public void ChangeJobAt(EntityId npc, JobDefinitionId job)
+    {
+        Connection?.SendChangeJob(npc, job);
+    }
+
+    /// <summary>
     ///     Asks to learn one level of <paramref name="skill" /> with a skill point (Gameplay Systems §9); the Skills
     ///     window moves only with the skill list the server sends back.
     /// </summary>
@@ -873,6 +882,7 @@ public sealed class GameClient : MonoBehaviour
 
         world.RemoteSpawned += AddRemoteView;
         world.RemoteDespawned += RemoveRemoteView;
+        world.LocalJobChanged += ReplaceLocalBody;
         m_combat = new CombatPresenter(world, 1.0 / Connection.ServerTickRate, material);
         m_projectiles = new ProjectilePresenter(
             world,
@@ -1294,6 +1304,27 @@ public sealed class GameClient : MonoBehaviour
         }
 
         return m_runtimeMaterial;
+    }
+
+    // A job change draws the new job's body where the old one stood, and the camera follows it (Prototype Content §2).
+    private void ReplaceLocalBody()
+    {
+        if (m_world == null || m_localView == null || m_contentLoader.Content == null)
+        {
+            return;
+        }
+
+        DestroyView(m_localView);
+        m_localView = EntityView.Create(
+            "LocalPlayer",
+            EntityViewKeys.ForJob(m_contentLoader.Content, m_world.LocalJob),
+            m_viewCatalog,
+            LocalColor);
+        m_localView.SetPose(m_world.Smoother.Sample(m_clock?.Alpha ?? 1f), m_world.Predictor.Facing);
+        if (m_camera != null && m_map != null)
+        {
+            m_camera.Follow(m_localView.transform, CameraState, m_map.GroundCollider);
+        }
     }
 
     private static void DestroyView(MonoBehaviour? view)

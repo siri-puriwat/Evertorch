@@ -80,6 +80,11 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
     public bool IsOnCharacterList =>
         State == ClientConnectionState.SelectingCharacter || State == ClientConnectionState.EnteringWorld;
 
+    /// <summary>
+    ///     The command sequence of the last equip sent, 0 before any, so a refusal can say what it answers.
+    /// </summary>
+    public uint LastEquipSequence { get; private set; }
+
     void IClientTransportListener.OnConnected()
     {
         if (State != ClientConnectionState.Connecting)
@@ -411,6 +416,7 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
         uint sequence = NextCommandSequence();
         new EquipItem(inventoryItem, sequence).Write(m_sendBuffer);
         SendRouted(MessageOpcode.EquipItem, EquipItem.EncodedLength);
+        LastEquipSequence = sequence;
         return sequence;
     }
 

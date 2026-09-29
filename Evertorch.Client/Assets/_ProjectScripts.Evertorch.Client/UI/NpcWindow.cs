@@ -15,16 +15,19 @@ namespace Evertorch.Client
 ///     The window of the NPC the player walked up to (Gameplay Systems §2.2, §6.1, §11.3; Prototype Content §2): the
 ///     NPC's name and Close; for an NPC that trades, the coins, a Buy list of what it sells at its price, and a Sell list
 ///     of the character's rows it buys, not worn, at what one fetches; for each quest the NPC gives, its objective, its
-///     reward, and where the character stands with it; and for the Guildmaster, "Reset all points". A Buy press buys
-///     one; a Sell press sells one, and a stack's All sells the row; Accept and Turn in ask for the quest; the reset
-///     asks for a second press within <see cref="ResetConfirmSeconds" />, since it undoes every choice. The presses go
-///     through <see cref="GameClient" />, and only what the server commits moves the lists. It closes once the NPC is
-///     drawn beyond its range, the player dies, the map changes, or the connection closes.
+///     reward, and where the character stands with it; and for the Guildmaster, "Reset all points" and each first job
+///     it offers from the character's job, "Become a Vanguard" from its base job's cap and "Needs Adventurer Lv 10 to
+///     become a Vanguard" below it. A Buy press buys one; a Sell press sells one, and a stack's All sells the row; Accept
+///     and Turn in ask for the quest; the reset and a change each ask for a second press within
+///     <see cref="ResetConfirmSeconds" />, since the reset undoes every choice and the change is final, and arming one
+///     disarms the other. The presses go through <see cref="GameClient" />, and only what the server commits moves the
+///     lists. It closes once the NPC is drawn beyond its range, the player dies, the map changes, or the connection
+///     closes.
 /// </summary>
 public sealed class NpcWindow : MonoBehaviour
 {
     /// <summary>
-    ///     How long "Press again to reset" waits for the second press.
+    ///     How long "Press again to reset" and "Press again to become a Vanguard" wait for the second press.
     /// </summary>
     public const float ResetConfirmSeconds = 5f;
 
@@ -71,6 +74,8 @@ public sealed class NpcWindow : MonoBehaviour
     private bool m_hadContent;
     private bool m_isResetArmed;
     private float m_resetArmedUntil;
+    private JobDefinitionId m_armedJob;
+    private CharacterSheet? m_shownSheet;
 
     public bool IsOpen => m_panel != null && m_panel.activeSelf;
 
@@ -121,7 +126,7 @@ public sealed class NpcWindow : MonoBehaviour
             return;
         }
 
-        if (m_isResetArmed && Time.unscaledTime > m_resetArmedUntil)
+        if ((m_isResetArmed || m_armedJob != default) && Time.unscaledTime > m_resetArmedUntil)
         {
             ArmReset(false);
         }
@@ -177,6 +182,7 @@ public sealed class NpcWindow : MonoBehaviour
         m_world = null;
         Npc = default;
         m_isResetArmed = false;
+        m_armedJob = default;
 
         // The services stay cached for the NPC, so the next open must write the lists again, disarmed.
         m_shownServices = null;
@@ -239,6 +245,7 @@ public sealed class NpcWindow : MonoBehaviour
         ClientInventory inventory = world.Inventory;
         bool hasContent = content != null;
         if (services == m_shownServices
+            && world.Sheet == m_shownSheet
             && world.Quests == m_shownQuests
             && inventory == m_shownInventory
             && inventory.IsCurrent == m_shownCurrent
@@ -249,6 +256,7 @@ public sealed class NpcWindow : MonoBehaviour
         }
 
         m_shownServices = services;
+        m_shownSheet = world.Sheet;
         m_shownQuests = world.Quests;
         m_shownInventory = inventory;
         m_shownCurrent = inventory.IsCurrent;
@@ -258,7 +266,8 @@ public sealed class NpcWindow : MonoBehaviour
         m_text.Clear();
         bool hasQuests = services != null && services.Offers.Count > 0;
         bool offersReset = services != null && services.OffersReset;
-        UiBuilder.SetActive(m_list!, shop != null || hasQuests || offersReset);
+        bool offersChange = services != null && HasChangeFrom(services, world.LocalJob);
+        UiBuilder.SetActive(m_list!, shop != null || hasQuests || offersReset || offersChange);
         m_coins!.text = shop != null && inventory.IsCurrent ? $"Coins: {inventory.Coins}" : string.Empty;
         if (shop != null)
         {
@@ -274,6 +283,11 @@ public sealed class NpcWindow : MonoBehaviour
         if (offersReset)
         {
             ListReset();
+        }
+
+        if (offersChange)
+        {
+            ListJobChanges(services!, world, content);
         }
 
         Text = m_text.ToString();
@@ -381,12 +395,69 @@ public sealed class NpcWindow : MonoBehaviour
         ArmReset(true);
     }
 
-    // The lists are written again so the button says what its next press does.
+    // The lists are written again so the button says what its next press does; arming the reset disarms a change.
     private void ArmReset(bool isArmed)
     {
         m_isResetArmed = isArmed;
+        m_armedJob = default;
         m_resetArmedUntil = Time.unscaledTime + ResetConfirmSeconds;
         m_shownServices = null;
+    }
+
+    private static bool HasChangeFrom(NpcServices services, JobDefinitionId job)
+    {
+        foreach (NpcJobChangeOffer change in services.JobChanges)
+        {
+            if (change.FromJob == job)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    // The Guildmaster's job changes (Gameplay Systems §6.1) from the character's job: final, so the first press only
+    // arms one; below the base job's cap, what it still needs.
+    private void ListJobChanges(NpcServices services, ClientWorld world, ClientContent? content)
+    {
+        AddHeading("Change job");
+        foreach (NpcJobChangeOffer change in services.JobChanges)
+        {
+            if (change.FromJob != world.LocalJob)
+            {
+                continue;
+            }
+
+            string name = BuildMessages.JobName(content, change.Job);
+            if (world.Sheet == null || world.Sheet.JobLevel < change.Level)
+            {
+                AddLine(
+                    $"Needs {BuildMessages.JobName(content, change.FromJob)} Lv {change.Level} to become "
+                    + BuildMessages.WithArticle(name));
+                continue;
+            }
+
+            JobDefinitionId job = change.Job;
+            AddButton(
+                m_armedJob == job
+                    ? $"Press again to become {BuildMessages.WithArticle(name)}"
+                    : $"Become {BuildMessages.WithArticle(name)}",
+                () => PressChange(job));
+        }
+    }
+
+    private void PressChange(JobDefinitionId job)
+    {
+        if (m_armedJob == job && Time.unscaledTime <= m_resetArmedUntil)
+        {
+            ArmReset(false);
+            m_client!.ChangeJobAt(Npc, job);
+            return;
+        }
+
+        ArmReset(false);
+        m_armedJob = job;
     }
 
     private static bool TryFind(IReadOnlyList<QuestLogEntry> log, QuestDefinitionId quest, out QuestLogEntry entry)

@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Linq;
 using Evertorch.Game;
 using Evertorch.Protocol;
@@ -14,12 +15,32 @@ public sealed class BuildMessagesTests
 {
     private static readonly JobDefinitionId Adventurer = new("job.adventurer");
 
-    private static CharacterSheet Sheet(byte jobLevel, byte agility, byte agilityCost = 2, byte skillPoints = 0)
+    private static CharacterSheet Sheet(
+        byte jobLevel,
+        byte agility,
+        byte agilityCost = 2,
+        byte skillPoints = 0,
+        string job = "job.adventurer")
     {
         CharacterSheetStat[] stats = Enumerable.Repeat(new CharacterSheetStat(5, 2), CharacterSheet.StatCount)
             .ToArray();
         stats[1] = new CharacterSheetStat(agility, agilityCost);
-        return new CharacterSheet(jobLevel, Adventurer, 0, 30, 3, skillPoints, stats, 46, 12, 5, 6, 188, 125, 13, 154);
+        return new CharacterSheet(
+            jobLevel,
+            new JobDefinitionId(job),
+            0,
+            30,
+            3,
+            skillPoints,
+            stats,
+            46,
+            12,
+            5,
+            6,
+            188,
+            125,
+            13,
+            154);
     }
 
     private static SkillListEntry Entry(string skill, byte level, byte max, byte prerequisite = 255, byte needs = 0)
@@ -38,6 +59,37 @@ public sealed class BuildMessagesTests
         Assert.That(
             BuildMessages.DescribeSkills(before, after, null),
             Is.EqualTo(new[] { "skill.strike Lv 2.", "skill.focus Lv 1." }),
+            "without content, the definition names it");
+    }
+
+    // A job change says so, and nothing of the job level that fell with it (Prototype Content §2).
+    [Test]
+    public void Describe_OfAJobChange_SaysTheNewJobAlone()
+    {
+        var content = new ClientContent(
+            "0000000000000000",
+            new Dictionary<MapDefinitionId, ClientMap>(),
+            new Dictionary<JobDefinitionId, ClientJob>
+            {
+                [new JobDefinitionId("job.vanguard")] = new(new JobDefinitionId("job.vanguard"), "Vanguard", "v"),
+                [new JobDefinitionId("job.arcanist")] = new(new JobDefinitionId("job.arcanist"), "Arcanist", "a")
+            },
+            new Dictionary<MonsterDefinitionId, ClientMonster>(),
+            new Dictionary<ItemDefinitionId, ClientItem>(),
+            new Dictionary<SkillDefinitionId, ClientSkill>(),
+            new Dictionary<StatusDefinitionId, ClientStatusEffect>());
+
+        Assert.That(
+            BuildMessages.Describe(Sheet(10, 5, skillPoints: 5), Sheet(1, 5, skillPoints: 5, job: "job.vanguard"),
+                content),
+            Is.EqualTo(new[] { "You are now a Vanguard." }));
+        Assert.That(
+            BuildMessages.Describe(Sheet(10, 5), Sheet(1, 5, skillPoints: 9, job: "job.arcanist"), content),
+            Is.EqualTo(new[] { "You are now an Arcanist." }),
+            "not a reset, though the points rose");
+        Assert.That(
+            BuildMessages.Describe(Sheet(10, 5), Sheet(1, 5, job: "job.vanguard")),
+            Is.EqualTo(new[] { "You are now a job.vanguard." }),
             "without content, the definition names it");
     }
 

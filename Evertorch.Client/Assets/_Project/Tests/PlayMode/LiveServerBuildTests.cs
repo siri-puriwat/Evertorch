@@ -225,9 +225,9 @@ public sealed class LiveServerBuildTests : InputTestFixture
         Assert.That(window.IsOpen, Is.False, "K closes it again");
     }
 
-    // A character stored at base level 3 with AGI raised to 7 walks up to the Guildmaster with a click, presses "Reset all
-    // points" and then "Press again to reset": the server's sheet gives the 4 points back, and the feedback lines say so
-    // (Gameplay Systems §6.1; Prototype Content §2).
+    // A character stored at base level 3 with AGI raised to 7 walks up to the Guildmaster with a click, which offers it
+    // no job change below the Adventurer's cap, presses "Reset all points" and then "Press again to reset": the server's
+    // sheet gives the 4 points back, and the feedback lines say so (Gameplay Systems §6.1; Prototype Content §2).
     [UnityTest]
     [Timeout(TestTimeoutMs)]
     public IEnumerator Reset_ThroughTheGuildmastersWindow_ReturnsEveryPoint()
@@ -256,8 +256,10 @@ public sealed class LiveServerBuildTests : InputTestFixture
         EntityView guildmaster = NpcView(client, GuildmasterPrefab)!;
         ClickAt(mouse,
             Camera.main!.WorldToScreenPoint(guildmaster.transform.position + Vector3.up * EntityPicker.PickHeight));
-        yield return WaitUntil(() => window.IsOpen && window.Text.EndsWith("Reset all points"), StartTimeoutSeconds);
-        Assert.That(window.Text, Does.EndWith("Reset all points"), $"the Guildmaster's window: {client.Status}");
+        const string offered = "\nReset all points\nChange job\nNeeds Adventurer Lv 10 to become an Arcanist"
+            + "\nNeeds Adventurer Lv 10 to become a Vanguard";
+        yield return WaitUntil(() => window.IsOpen && window.Text.EndsWith(offered), StartTimeoutSeconds);
+        Assert.That(window.Text, Does.EndWith(offered), $"the Guildmaster's window: {client.Status}");
 
         Assert.That(Press(window, "Reset all points"), Is.True);
         yield return null;
@@ -272,16 +274,18 @@ public sealed class LiveServerBuildTests : InputTestFixture
     }
 
     // A character stored at Adventurer job level 10, whose nine skill points bought four levels, wearing the training
-    // staff: the status bar shows the job level, and the sheet the five points it carries into a first job (Gameplay
-    // Systems §2.1, §9).
+    // staff, walks up to the Guildmaster with a click and presses "Become a Vanguard" twice: the server's sheet names
+    // the Vanguard at job level 1 with the five points carried, the status bar and the body follow it, the staff comes
+    // off, and the feedback lines say so (Gameplay Systems §2.1, §6.1; Prototype Content §2).
     [UnityTest]
     [Timeout(TestTimeoutMs)]
-    public IEnumerator JobChange_ReadyAtAdventurerJobLevelTen_ShowsOnTheStatusBar()
+    public IEnumerator JobChange_ThroughTheGuildmastersWindow_DrawsTheVanguardAndTakesTheStaffOff()
     {
         string actionsPath = RequirePrerequisites();
         yield return StartDatabaseAndServer();
         LiveServer server = m_server!;
         LiveDatabase database = m_database!;
+        Mouse mouse = InputSystem.AddDevice<Mouse>();
         GameClient client = CreateClient(actionsPath);
 
         yield return EnterByName(
@@ -307,6 +311,40 @@ public sealed class LiveServerBuildTests : InputTestFixture
         Assert.That(shownName.text, Is.EqualTo(shown), $"{client.Status} {server.JoinOutput()}");
         Assert.That(world.Sheet!.SkillPoints, Is.EqualTo(5), "four of the nine points spent");
         Assert.That(world.Inventory.Rows.Single().Slot, Is.EqualTo(EquipmentSlot.Weapon), "the staff worn");
+        Assert.That(LocalBodyKey(client), Is.EqualTo("character_adventurer"));
+
+        NpcWindow window = client.GetComponentsInChildren<NpcWindow>(true).Single();
+        FeedbackLines lines = client.GetComponentsInChildren<FeedbackLines>(true).Single();
+        yield return WaitUntil(() => NpcView(client, GuildmasterPrefab)?.HasBody == true, StartTimeoutSeconds);
+        EntityView guildmaster = NpcView(client, GuildmasterPrefab)!;
+        ClickAt(mouse,
+            Camera.main!.WorldToScreenPoint(guildmaster.transform.position + Vector3.up * EntityPicker.PickHeight));
+        yield return WaitUntil(() => window.IsOpen && window.Text.EndsWith("Become a Vanguard"), StartTimeoutSeconds);
+        Assert.That(window.Text, Does.EndWith("\nChange job\nBecome an Arcanist\nBecome a Vanguard"), client.Status);
+        Assert.That(Press(window, "Become a Vanguard"), Is.True);
+        yield return null;
+        Assert.That(Press(window, "Press again to become a Vanguard"), Is.True, window.Text);
+        yield return WaitUntil(() => world.LocalJob.Value == "job.vanguard", StartTimeoutSeconds);
+
+        string changed = $"{ChangeClientName}   Lv 1   Vanguard Lv 1";
+        yield return WaitUntil(() => shownName.text == changed && LocalBodyKey(client) == "character_vanguard", 2f);
+        Assert.That(
+            (world.Sheet!.Job.Value, world.Sheet.JobLevel, world.Sheet.SkillPoints),
+            Is.EqualTo(("job.vanguard", (ushort)1, (ushort)5)),
+            $"the change: {server.JoinOutput()}");
+        Assert.That(shownName.text, Is.EqualTo(changed), "the status bar names the Vanguard");
+        Assert.That(LocalBodyKey(client), Is.EqualTo("character_vanguard"), "the Vanguard's body");
+        Assert.That(world.Inventory.Rows.Single().Slot, Is.EqualTo(EquipmentSlot.None), "the staff taken off");
+        Assert.That(lines.Text, Does.Contain("You are now a Vanguard."));
+        Assert.That(lines.Text, Does.Not.Contain("Job level"), "nothing of the job level that fell");
+    }
+
+    private static string LocalBodyKey(GameClient client)
+    {
+        var view = (EntityView?)typeof(GameClient)
+            .GetField("m_localView", BindingFlags.NonPublic | BindingFlags.Instance)!
+            .GetValue(client);
+        return view != null ? view.Key : string.Empty;
     }
 
     private static bool Press(Component window, string name)

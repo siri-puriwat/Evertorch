@@ -10,6 +10,15 @@ public static class RejectionMessages
 {
     public static string Describe(CommandRejectionReason reason)
     {
+        return Describe(reason, false);
+    }
+
+    /// <summary>
+    ///     The words for <paramref name="reason" />; an equip refused for a requirement is a weapon the character's job
+    ///     cannot wield (Gameplay Systems §11.1).
+    /// </summary>
+    public static string Describe(CommandRejectionReason reason, bool isEquip)
+    {
         switch (reason)
         {
             case CommandRejectionReason.InvalidTarget:
@@ -37,7 +46,7 @@ public static class RejectionMessages
             case CommandRejectionReason.NotEnoughPoints:
                 return "You do not have enough points.";
             case CommandRejectionReason.RequirementNotMet:
-                return "That cannot be done.";
+                return isEquip ? "Your job cannot wield that." : "That cannot be done.";
             default:
                 return "The server refused that.";
         }

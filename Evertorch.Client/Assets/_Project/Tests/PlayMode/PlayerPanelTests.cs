@@ -27,7 +27,10 @@ public sealed class PlayerPanelTests
     private const string GateWarden = "npc.gate_warden";
     private const string Hunt = "quest.crawler_hunt";
     private const string Crawler = "monster.forest_crawler";
+    private const string Guildmaster = "npc.guildmaster";
     private static readonly JobDefinitionId Adventurer = new("job.adventurer");
+    private static readonly JobDefinitionId Vanguard = new("job.vanguard");
+    private static readonly JobDefinitionId Arcanist = new("job.arcanist");
 
     private static readonly EntityId Local = new(100);
 
@@ -64,8 +67,30 @@ public sealed class PlayerPanelTests
     // The world the client would hold after entering, which only the test feeds.
     private static ClientWorld GiveWorld(GameClient client)
     {
+        var world = new ClientWorld(YardGrid(), Entered(), 20);
+        typeof(GameClient)
+            .GetField("m_world", BindingFlags.NonPublic | BindingFlags.Instance)!
+            .SetValue(client, world);
+        return world;
+    }
+
+    // The same world, entered through a connection that records what the client sends (finding C7 of the Milestone 9
+    // review).
+    private static (ClientWorld World, RecordingConnection Recording) GiveRecordedWorld(GameClient client)
+    {
+        var recording = RecordingConnection.EnterWorld(client, Entered(), YardGrid());
+        return (client.World!, recording);
+    }
+
+    private static NavigationGrid YardGrid()
+    {
         NavigationCell[] cells = Enumerable.Repeat(NavigationCell.Level(NavigationSurface.Floor, 0f), 16).ToArray();
-        var entered = new WorldEntered(
+        return new NavigationGrid(4, 4, 1f, 0f, 0f, 0.3f, 0.4f, cells);
+    }
+
+    private static WorldEntered Entered()
+    {
+        return new WorldEntered(
             new MapDefinitionId("map.training_ground"),
             1,
             Local,
@@ -84,11 +109,6 @@ public sealed class PlayerPanelTests
             30,
             24,
             24);
-        var world = new ClientWorld(new NavigationGrid(4, 4, 1f, 0f, 0f, 0.3f, 0.4f, cells), entered, 20);
-        typeof(GameClient)
-            .GetField("m_world", BindingFlags.NonPublic | BindingFlags.Instance)!
-            .SetValue(client, world);
-        return world;
     }
 
     // The content the client would have loaded, which only the test gives it: a material and a weapon.
@@ -136,6 +156,41 @@ public sealed class PlayerPanelTests
             npcs);
     }
 
+    // The Guildmaster's content: the NPC and the three jobs' names.
+    private static void GiveGuild(GameClient client)
+    {
+        var guildmaster = new NpcDefinitionId(Guildmaster);
+        GiveContent(
+            client,
+            new ClientItem[0],
+            new Dictionary<NpcDefinitionId, ClientNpc>
+            {
+                [guildmaster] = new(guildmaster, "Guildmaster", "npc_guildmaster")
+            },
+            jobs: new Dictionary<JobDefinitionId, ClientJob>
+            {
+                [Adventurer] = new(Adventurer, "Adventurer", "character_adventurer"),
+                [Vanguard] = new(Vanguard, "Vanguard", "character_vanguard"),
+                [Arcanist] = new(Arcanist, "Arcanist", "character_arcanist")
+            });
+    }
+
+    // What the Guildmaster offers: the reset, both first jobs from the Adventurer's job level 10, and a change the
+    // Adventurer cannot make.
+    private static NpcServices GuildmasterServices(long npc)
+    {
+        return new NpcServices(
+            new EntityId(npc),
+            new NpcServiceEntry[0],
+            new NpcQuestOffer[0],
+            true,
+            new[]
+            {
+                new NpcJobChangeOffer(Arcanist, Adventurer, 10), new NpcJobChangeOffer(Vanguard, Adventurer, 10),
+                new NpcJobChangeOffer(new JobDefinitionId("job.warden"), Vanguard, 10)
+            });
+    }
+
     // The quest's content: the Gate Warden, the crawler it asks for, and the quest's name.
     private static void GiveQuest(GameClient client)
     {
@@ -168,12 +223,13 @@ public sealed class PlayerPanelTests
         IEnumerable<ClientItem> items,
         IReadOnlyDictionary<NpcDefinitionId, ClientNpc>? npcs = null,
         IReadOnlyDictionary<MonsterDefinitionId, ClientMonster>? monsters = null,
-        IReadOnlyDictionary<QuestDefinitionId, ClientQuest>? quests = null)
+        IReadOnlyDictionary<QuestDefinitionId, ClientQuest>? quests = null,
+        IReadOnlyDictionary<JobDefinitionId, ClientJob>? jobs = null)
     {
         var content = new ClientContent(
             "0000000000000000",
             new Dictionary<MapDefinitionId, ClientMap>(),
-            new Dictionary<JobDefinitionId, ClientJob>(),
+            jobs ?? new Dictionary<JobDefinitionId, ClientJob>(),
             monsters ?? new Dictionary<MonsterDefinitionId, ClientMonster>(),
             items.ToDictionary(item => item.Id),
             new Dictionary<SkillDefinitionId, ClientSkill>(),
@@ -1188,7 +1244,7 @@ public sealed class PlayerPanelTests
     public IEnumerator NpcWindow_ForTheGuildmaster_AsksForASecondPressBeforeTheReset()
     {
         GameClient client = CreateIdleClient();
-        ClientWorld world = GiveWorld(client);
+        (ClientWorld world, RecordingConnection recording) = GiveRecordedWorld(client);
         GiveShop(client);
         Spawn(world, 15, EntityKind.Npc, GateWarden, 1000);
         DrawNpc(client, 15);
@@ -1202,9 +1258,11 @@ public sealed class PlayerPanelTests
         Assert.That(Press(window, "Reset all points"), Is.True, window.Text);
         yield return null;
         string armed = window.Text;
+        int sentOnArming = recording.SentOf(MessageOpcode.ResetBuild).Count();
         Assert.That(Press(window, "Press again to reset"), Is.True, window.Text);
         yield return null;
         string afterReset = window.Text;
+        byte[][] resets = recording.SentOf(MessageOpcode.ResetBuild).ToArray();
         Assert.That(Press(window, "Reset all points"), Is.True);
         yield return null;
         typeof(NpcWindow)
@@ -1217,9 +1275,87 @@ public sealed class PlayerPanelTests
             before,
             Is.EqualTo("Stat and skill points\nEvery point back, for free\nReset all points"));
         Assert.That(armed, Does.EndWith("\nPress again to reset"), "the first press only arms it");
+        Assert.That(sentOnArming, Is.Zero, "nothing sent on arming");
         Assert.That(afterReset, Does.EndWith("\nReset all points"), "the second asks for the reset");
+        Assert.That(resets.Length, Is.EqualTo(1), "the second press sends the reset once");
+        Assert.That(ResetBuild.TryRead(resets[0], out ResetBuild sent), Is.True);
+        Assert.That(sent.Npc, Is.EqualTo(new EntityId(15)));
         Assert.That(window.Text, Does.EndWith("\nReset all points"), "unconfirmed, it disarms");
         Assert.That(window.IsOpen, Is.True);
+    }
+
+    // The Guildmaster's "Change job" part (Prototype Content §2): each first job offered from the character's job, which a
+    // first press arms and a second asks for; arming the reset disarms a change and the reverse.
+    [UnityTest]
+    public IEnumerator NpcWindow_ForTheGuildmaster_ArmsAJobChangeBeforeAskingForIt()
+    {
+        GameClient client = CreateIdleClient();
+        (ClientWorld world, RecordingConnection recording) = GiveRecordedWorld(client);
+        GiveGuild(client);
+        world.OnCharacterSheet(Sheet(10, 0, 0));
+        Spawn(world, 15, EntityKind.Npc, Guildmaster, 1000);
+        DrawNpc(client, 15);
+        world.OnNpcServices(GuildmasterServices(15));
+        var window = NpcWindow.Create(client);
+        m_created.Add(window.gameObject);
+        window.Open(new EntityId(15));
+        yield return null;
+        string before = window.Text;
+
+        Assert.That(Press(window, "Become a Vanguard"), Is.True, window.Text);
+        yield return null;
+        string armed = window.Text;
+        Assert.That(Press(window, "Reset all points"), Is.True, window.Text);
+        yield return null;
+        string resetArmed = window.Text;
+        Assert.That(Press(window, "Become a Vanguard"), Is.True, window.Text);
+        yield return null;
+        string changeArmed = window.Text;
+        int sentOnArming = recording.SentOf(MessageOpcode.ChangeJob).Count();
+        Assert.That(Press(window, "Press again to become a Vanguard"), Is.True, window.Text);
+        yield return null;
+        byte[][] changes = recording.SentOf(MessageOpcode.ChangeJob).ToArray();
+
+        Assert.That(
+            before,
+            Is.EqualTo(
+                "Stat and skill points\nEvery point back, for free\nReset all points\nChange job\nBecome an Arcanist"
+                + "\nBecome a Vanguard"),
+            "the changes from the Adventurer's job only");
+        Assert.That(armed, Does.EndWith("\nBecome an Arcanist\nPress again to become a Vanguard"));
+        Assert.That(resetArmed, Does.Contain("\nPress again to reset\n").And.EndWith("\nBecome a Vanguard"),
+            "arming the reset disarms the change");
+        Assert.That(changeArmed, Does.Contain("\nReset all points\n").And.EndWith("to become a Vanguard"),
+            "arming the change disarms the reset");
+        Assert.That((sentOnArming, recording.SentOf(MessageOpcode.ResetBuild).Count()), Is.EqualTo((0, 0)));
+        Assert.That(changes.Length, Is.EqualTo(1), "the second press asks once");
+        Assert.That(ChangeJob.TryRead(changes[0], out ChangeJob? sent), Is.True);
+        Assert.That((sent!.Npc, sent.Job), Is.EqualTo((new EntityId(15), Vanguard)));
+        Assert.That(window.Text, Does.EndWith("\nBecome a Vanguard"), "disarmed once asked");
+    }
+
+    // Below its base job's cap the change is not offered, only what it needs (Prototype Content §2).
+    [UnityTest]
+    public IEnumerator NpcWindow_ForTheGuildmaster_BelowTheCap_SaysWhatAChangeNeeds()
+    {
+        GameClient client = CreateIdleClient();
+        ClientWorld world = GiveWorld(client);
+        GiveGuild(client);
+        world.OnCharacterSheet(Sheet(9, 0, 470));
+        Spawn(world, 15, EntityKind.Npc, Guildmaster, 1000);
+        DrawNpc(client, 15);
+        world.OnNpcServices(GuildmasterServices(15));
+        var window = NpcWindow.Create(client);
+        m_created.Add(window.gameObject);
+        window.Open(new EntityId(15));
+        yield return null;
+
+        Assert.That(
+            window.Text,
+            Does.EndWith(
+                "\nChange job\nNeeds Adventurer Lv 10 to become an Arcanist\nNeeds Adventurer Lv 10 to become a Vanguard"));
+        Assert.That(window.GetComponentsInChildren<Button>().Select(button => button.name),
+            Has.None.StartWith("Become"));
     }
 
     // Closed while armed, the window opens again for the same NPC saying what its next press does (M9 review).

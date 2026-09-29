@@ -162,7 +162,8 @@ public sealed class FeedbackLines : MonoBehaviour
 
     private void OnRejected(CommandRejected rejected)
     {
-        Add(RejectionMessages.Describe(rejected.Reason));
+        uint equip = m_client != null && m_client.Connection != null ? m_client.Connection.LastEquipSequence : 0;
+        Add(RejectionMessages.Describe(rejected.Reason, equip != 0 && equip == rejected.CommandSequence));
     }
 
     private void OnPickedUp(ItemPickedUp pickedUp)
@@ -205,7 +206,7 @@ public sealed class FeedbackLines : MonoBehaviour
             return;
         }
 
-        foreach (string line in BuildMessages.Describe(before, after))
+        foreach (string line in BuildMessages.Describe(before, after, m_client != null ? m_client.Content : null))
         {
             Add(line);
         }

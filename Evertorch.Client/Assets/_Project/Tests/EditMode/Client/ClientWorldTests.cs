@@ -53,6 +53,32 @@ public sealed class ClientWorldTests
         Assert.That(alive.IsLocalDead, Is.False);
     }
 
+    // The sheet names the job, so the owner learns of a change from it (Network Protocol §9); the same job again changes
+    // nothing.
+    [Test]
+    public void OnCharacterSheet_NamingAnotherJob_ChangesTheLocalJobOnce()
+    {
+        ClientWorld world = ClientWorldFixture.Create(ClientTestGrids.CreateYard(), Start);
+        int changes = 0;
+        world.LocalJobChanged += () => changes++;
+        CharacterSheetStat[] stats =
+        {
+            new(5, 2), new(5, 2), new(5, 2), new(5, 2), new(5, 2), new(5, 2)
+        };
+
+        world.OnCharacterSheet(new CharacterSheet(10, ClientWorldFixture.LocalJob, 0, 0, 0, 5, stats, 1, 1, 1, 1, 1, 1,
+            1, 1));
+        int afterSameJob = changes;
+        world.OnCharacterSheet(new CharacterSheet(1, new JobDefinitionId("job.vanguard"), 0, 250, 0, 5, stats, 1, 1, 1,
+            1, 1, 1, 1, 1));
+        world.OnCharacterSheet(new CharacterSheet(1, new JobDefinitionId("job.vanguard"), 5, 250, 0, 5, stats, 1, 1, 1,
+            1, 1, 1, 1, 1));
+
+        Assert.That(afterSameJob, Is.Zero);
+        Assert.That(world.LocalJob.Value, Is.EqualTo("job.vanguard"));
+        Assert.That(changes, Is.EqualTo(1));
+    }
+
     [Test]
     public void OnDespawn_RemovesTheEntityAndAnnouncesIt()
     {

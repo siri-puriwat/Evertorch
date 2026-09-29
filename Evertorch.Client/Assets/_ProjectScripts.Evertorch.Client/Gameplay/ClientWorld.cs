@@ -71,7 +71,10 @@ public sealed class ClientWorld
 
     public EntityId LocalEntity { get; }
 
-    public JobDefinitionId LocalJob { get; }
+    /// <summary>
+    ///     The character's job: <c>WorldEntered</c>'s, then each sheet's, which names a job change (Network Protocol §9).
+    /// </summary>
+    public JobDefinitionId LocalJob { get; private set; }
 
     /// <summary>
     ///     The character the server entered, which may not be the one asked for last (Network Protocol §5).
@@ -240,6 +243,11 @@ public sealed class ClientWorld
     ///     A new sheet arrived; its predecessor, null for the baseline's, is passed along.
     /// </summary>
     public event Action<CharacterSheet?>? SheetChanged;
+
+    /// <summary>
+    ///     A sheet named another job than the character had: its body and its job's name change (Gameplay Systems §6.1).
+    /// </summary>
+    public event Action? LocalJobChanged;
 
     /// <summary>
     ///     A drop this client knows was picked up; its despawn follows.
@@ -618,7 +626,13 @@ public sealed class ClientWorld
     {
         CharacterSheet? previous = Sheet;
         Sheet = sheet;
+        bool isJobChanged = sheet.Job != LocalJob;
+        LocalJob = sheet.Job;
         SheetChanged?.Invoke(previous);
+        if (isJobChanged)
+        {
+            LocalJobChanged?.Invoke();
+        }
     }
 
     public void OnCharacterProgress(CharacterProgress progress)

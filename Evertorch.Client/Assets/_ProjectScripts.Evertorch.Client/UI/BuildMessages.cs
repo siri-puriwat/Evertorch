@@ -60,11 +60,21 @@ public static class BuildMessages
     ///     reset, the only change that lowers a statistic or gives skill points back without a job level. A world's
     ///     first sheet, with no <paramref name="before" />, is its baseline and says nothing.
     /// </summary>
-    public static IReadOnlyList<string> Describe(CharacterSheet? before, CharacterSheet after)
+    public static IReadOnlyList<string> Describe(
+        CharacterSheet? before,
+        CharacterSheet after,
+        ClientContent? content = null)
     {
         var lines = new List<string>();
         if (before == null)
         {
+            return lines;
+        }
+
+        // A job change says so, and nothing of the job level that fell with it (Prototype Content §2).
+        if (after.Job != before.Job)
+        {
+            lines.Add($"You are now {WithArticle(JobName(content, after.Job))}.");
             return lines;
         }
 
@@ -89,6 +99,21 @@ public static class BuildMessages
         }
 
         return lines;
+    }
+
+    public static string JobName(ClientContent? content, JobDefinitionId job)
+    {
+        return content != null && content.TryGetJob(job, out ClientJob? found) && found != null
+            ? found.DisplayName
+            : job.Value;
+    }
+
+    /// <summary>
+    ///     "a Vanguard", "an Arcanist".
+    /// </summary>
+    public static string WithArticle(string name)
+    {
+        return name.Length > 0 && "AEIOUaeiou".IndexOf(name[0]) >= 0 ? $"an {name}" : $"a {name}";
     }
 
     public static string SkillName(ClientContent? content, SkillDefinitionId skill)

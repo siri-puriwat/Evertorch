@@ -28,6 +28,19 @@ public sealed class RejectionMessagesTests
         Assert.That(text, Is.EqualTo("The server refused that."));
     }
 
+    // An equip refused for a requirement is a weapon the job cannot wield (Gameplay Systems §11.1).
+    [Test]
+    public void Describe_ARequirementAnEquipDidNotMeet_SaysTheJobCannotWieldIt()
+    {
+        Assert.That(
+            RejectionMessages.Describe(CommandRejectionReason.RequirementNotMet, true),
+            Is.EqualTo("Your job cannot wield that."));
+        Assert.That(
+            RejectionMessages.Describe(CommandRejectionReason.NotAllowedNow, true),
+            Is.EqualTo(RejectionMessages.Describe(CommandRejectionReason.NotAllowedNow)),
+            "any other reason keeps its words");
+    }
+
     [Test]
     public void Describe_EverySentReason_HasItsOwnWordsNotItsCodeName()
     {
