@@ -9,10 +9,11 @@ using Object = UnityEngine.Object;
 namespace Evertorch.Client
 {
 /// <summary>
-///     Flies a projectile for every attack and cast of a monster whose content names one (Gameplay Systems §8), from
-///     1 m above the monster to 1 m above its target, on the monster's interpolated timeline, so that it lands when the
-///     impact or the resolution is drawn. The key's Addressables prefab flies when there is one, a plain sphere
-///     otherwise. Like the combat presenter it only draws.
+///     Flies a projectile for every attack and cast of a monster whose content names one, and for every cast of a skill
+///     whose content names one, by any caster, the local player included (Gameplay Systems §8; Prototype Content §2),
+///     from 1 m above the caster to 1 m above its target, on the interpolated timeline, so that it lands when the impact
+///     or the resolution is drawn. The key's Addressables prefab flies when there is one, a plain sphere otherwise. Like
+///     the combat presenter it only draws.
 /// </summary>
 public sealed class ProjectilePresenter : IDisposable
 {
@@ -51,12 +52,12 @@ public sealed class ProjectilePresenter : IDisposable
         m_sphereMaterial = new Material(baseMaterial) { color = SphereColor };
         foreach (ClientMonster monster in content.Monsters)
         {
-            string key = monster.ProjectileKey;
-            if (key.Length > 0 && !m_prefabs.ContainsKey(key))
-            {
-                m_prefabs.Add(key, null);
-                catalog.Request(key, prefab => m_prefabs[key] = prefab);
-            }
+            RequestPrefab(catalog, monster.ProjectileKey);
+        }
+
+        foreach (ClientSkill skill in content.Skills)
+        {
+            RequestPrefab(catalog, skill.ProjectileKey);
         }
 
         m_world.AttackStartedReceived += OnAttackStarted;
@@ -102,12 +103,8 @@ public sealed class ProjectilePresenter : IDisposable
                 continue;
             }
 
-            EntityView? from = remotes.TryGetValue(flight.Source, out EntityView? source) ? source : null;
-            EntityView? to = flight.Target == m_world.LocalEntity
-                ? local
-                : remotes.TryGetValue(flight.Target, out EntityView? target)
-                    ? target
-                    : null;
+            EntityView? from = ViewOf(flight.Source, local, remotes);
+            EntityView? to = ViewOf(flight.Target, local, remotes);
             if (from == null || to == null || !flight.Timing.TryGetProgress(now, out float progress))
             {
                 flight.Hide();
@@ -142,11 +139,12 @@ public sealed class ProjectilePresenter : IDisposable
         }
     }
 
+    // A skill that names its projectile flies it from any caster; otherwise a monster's own projectile flies.
     private void OnSkillCastStarted(SkillCastStarted started)
     {
         if (started.Target != default
             && started.Target != started.Caster
-            && TryGetProjectile(started.Caster, out string key))
+            && (TryGetSkillProjectile(started.Skill, out string key) || TryGetProjectile(started.Caster, out key)))
         {
             double start = started.StartTick * m_tickSeconds;
             m_flights.Add(
@@ -202,6 +200,36 @@ public sealed class ProjectilePresenter : IDisposable
 
         key = monster.ProjectileKey;
         return key.Length > 0;
+    }
+
+    private bool TryGetSkillProjectile(SkillDefinitionId skill, out string key)
+    {
+        key = m_content.TryGetSkill(skill, out ClientSkill? definition) && definition != null
+            ? definition.ProjectileKey
+            : string.Empty;
+        return key.Length > 0;
+    }
+
+    private EntityView? ViewOf(
+        EntityId entity,
+        EntityView? local,
+        IReadOnlyDictionary<EntityId, EntityView> remotes)
+    {
+        if (entity == m_world.LocalEntity)
+        {
+            return local;
+        }
+
+        return remotes.TryGetValue(entity, out EntityView? view) ? view : null;
+    }
+
+    private void RequestPrefab(EntityViewCatalog catalog, string key)
+    {
+        if (key.Length > 0 && !m_prefabs.ContainsKey(key))
+        {
+            m_prefabs.Add(key, null);
+            catalog.Request(key, prefab => m_prefabs[key] = prefab);
+        }
     }
 
     private GameObject CreateView(string key)

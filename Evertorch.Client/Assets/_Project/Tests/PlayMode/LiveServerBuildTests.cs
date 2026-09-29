@@ -37,6 +37,7 @@ public sealed class LiveServerBuildTests : InputTestFixture
     private const string MendClientName = "LiveBuildSix";
     private const string MendedName = "LiveBuildSeven";
     private const string BarClientName = "LiveBuildEight";
+    private const string BoltClientName = "LiveBuildNine";
     private const string GuildmasterPrefab = "npc_guildmaster";
     private const float StartTimeoutSeconds = 30f;
     private const float FightTimeoutSeconds = 60f;
@@ -500,6 +501,59 @@ public sealed class LiveServerBuildTests : InputTestFixture
         Assert.That(blow, Is.Not.Null,
             $"South on the second page cast Heavy Blow: {world.LastRejection} {client.Status}");
         Assert.That(blow!.Outcome, Is.Not.EqualTo(SkillOutcome.Healed));
+    }
+
+    // An Arcanist with Arcane Bolt 1 targets a slime with Tab and casts from slot 6 with its key: the bolt's projectile
+    // flies from the local player before the cast resolves (Gameplay Systems §8; Prototype Content §2).
+    [UnityTest]
+    [Timeout(TestTimeoutMs)]
+    public IEnumerator ArcaneBolt_CastByTheLocalPlayer_FliesItsProjectile()
+    {
+        string actionsPath = RequirePrerequisites();
+        yield return StartDatabaseAndServer();
+        LiveServer server = m_server!;
+        LiveDatabase database = m_database!;
+        Keyboard keyboard = InputSystem.AddDevice<Keyboard>();
+        GameClient client = CreateClient(actionsPath);
+        yield return EnterByName(
+            client,
+            BoltClientName,
+            () => database.SeedJob(BoltClientName, "job.arcanist", 1, ("skill.arcane_bolt", 1)));
+        ClientWorld world = client.World!;
+        SkillBar bar = client.GetComponentsInChildren<SkillBar>(true).Single();
+        yield return WaitUntil(() => SlotLabel(bar, 6).text == "Arcane Bolt\n6", StartTimeoutSeconds);
+        Assert.That(SlotLabel(bar, 6).text, Is.EqualTo("Arcane Bolt\n6"), $"{client.Status} {server.JoinOutput()}");
+
+        SkillResolved? bolt = null;
+        int launchedBeforeTheResolution = -1;
+        world.SkillResolvedReceived += resolved =>
+        {
+            if (resolved.Caster == world.LocalEntity && resolved.Skill.Value == "skill.arcane_bolt" && bolt == null)
+            {
+                bolt = resolved;
+                launchedBeforeTheResolution = client.Projectiles!.Launched;
+            }
+        };
+        float deadline = Time.realtimeSinceStartup + FightTimeoutSeconds;
+        while (bolt == null && Time.realtimeSinceStartup < deadline)
+        {
+            if (world.Target == default)
+            {
+                yield return Tap(keyboard.tabKey);
+                yield return WaitUntil(() => world.Target != default, 2f);
+                if (world.Target != default)
+                {
+                    yield return Tap(keyboard.digit6Key);
+                }
+            }
+            else
+            {
+                yield return null;
+            }
+        }
+
+        Assert.That(bolt, Is.Not.Null, $"key 6 cast Arcane Bolt: {world.LastRejection} {client.Status}");
+        Assert.That(launchedBeforeTheResolution, Is.GreaterThanOrEqualTo(1), "the bolt flew before it resolved");
     }
 
     private static TMP_Text SlotLabel(SkillBar bar, int slot)

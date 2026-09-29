@@ -14,7 +14,8 @@ namespace Evertorch.Client.Tests.PlayMode
 {
 /// <summary>
 ///     A monster whose content names a projectile flies one at its target for each attack and cast, on the monster's
-///     interpolated timeline (Gameplay Systems §8); one that names none flies nothing.
+///     interpolated timeline (Gameplay Systems §8); one that names none flies nothing. A skill whose content names one
+///     flies it from any caster, the local player and another player included (Prototype Content §2).
 /// </summary>
 public sealed class ProjectilePresenterTests
 {
@@ -25,6 +26,9 @@ public sealed class ProjectilePresenterTests
     private static readonly EntityId Slime = new(301);
     private static readonly EntityId OtherWisp = new(302);
     private static readonly SkillDefinitionId SparkBolt = new("skill.spark_bolt");
+    private static readonly SkillDefinitionId ArcaneBolt = new("skill.arcane_bolt");
+    private static readonly SkillDefinitionId Strike = new("skill.strike");
+    private static readonly EntityId OtherPlayer = new(303);
 
     // Interval 1.8 s, impact 0.9 s after the start.
     private static readonly AttackTiming Timing = new(
@@ -108,6 +112,15 @@ public sealed class ProjectilePresenterTests
                     1000));
         }
 
+        world.OnSpawn(
+            new EntitySpawn(
+                OtherPlayer,
+                EntityKind.Player,
+                "job.arcanist",
+                new WorldPosition(2.5f, 0f, 6.5f),
+                new WorldDirection(0f, -1f),
+                EntityStateFlags.None,
+                0));
         return world;
     }
 
@@ -130,7 +143,12 @@ public sealed class ProjectilePresenterTests
             new Dictionary<JobDefinitionId, ClientJob>(),
             new Dictionary<MonsterDefinitionId, ClientMonster> { { wisp.Id, wisp }, { slime.Id, slime } },
             new Dictionary<ItemDefinitionId, ClientItem>(),
-            new Dictionary<SkillDefinitionId, ClientSkill>(),
+            new Dictionary<SkillDefinitionId, ClientSkill>
+            {
+                [ArcaneBolt] =
+                    new(ArcaneBolt, "Arcane Bolt", SkillTargetType.Enemy, "skill_arcane_bolt", "", AbsentKey),
+                [Strike] = new(Strike, "Strike", SkillTargetType.Enemy, "skill_strike")
+            },
             new Dictionary<StatusDefinitionId, ClientStatusEffect>());
     }
 
@@ -148,6 +166,11 @@ public sealed class ProjectilePresenterTests
             m_created.Add(monsterObject);
             views.Add(monster, monsterObject.AddComponent<EntityView>());
         }
+
+        var playerObject = new GameObject("Player 303");
+        playerObject.transform.position = new Vector3(2.5f, 0f, 6.5f);
+        m_created.Add(playerObject);
+        views.Add(OtherPlayer, playerObject.AddComponent<EntityView>());
 
         return views;
     }
@@ -191,6 +214,35 @@ public sealed class ProjectilePresenterTests
         Assert.That(hasCollider, Is.False, "a click never lands on it");
         Assert.That(presenter.Pending, Is.Zero, "it landed at the impact");
         Assert.That(Projectiles(), Is.Empty);
+    }
+
+    // Arcane Bolt names its projectile: cast by the local player from tick 2 for 1,100 ms, and by another player the
+    // same, it flies from each caster to the slime over the cast's last four tenths, landing at 1.2 s; Strike names
+    // none, and the slime names none, so its cast flies nothing (Prototype Content §2).
+    [UnityTest]
+    public IEnumerator Cast_OfASkillThatNamesAProjectile_FliesItFromTheLocalAndAnotherPlayer()
+    {
+        ClientWorld world = CreateWorld();
+        Dictionary<EntityId, EntityView> remotes = CreateViews(out EntityView local);
+        ProjectilePresenter presenter = CreatePresenter(world);
+
+        world.OnSkillCastStarted(new SkillCastStarted(Local, ArcaneBolt, Slime, 2, 1100));
+        world.OnSkillCastStarted(new SkillCastStarted(OtherPlayer, ArcaneBolt, Slime, 2, 1100));
+        world.OnSkillCastStarted(new SkillCastStarted(Local, Strike, Slime, 2, 1100));
+        int pending = presenter.Pending;
+        world.Advance(1.05f);
+        presenter.Present(local, remotes);
+        Vector3[] positions = Projectiles().Select(projectile => projectile.transform.position).ToArray();
+        yield return null;
+        world.Advance(0.3f);
+        presenter.Present(local, remotes);
+
+        Assert.That(pending, Is.EqualTo(2), "Strike names no projectile");
+        Assert.That(positions, Has.Length.EqualTo(2), "both in the air at 0.95 s");
+        Assert.That(positions.Select(position => position.x), Has.Some.GreaterThan(2.5f).And.Some.LessThan(6.5f));
+        Assert.That(positions.Select(position => position.z), Has.Some.GreaterThan(2.5f), "one from the other player");
+        Assert.That(presenter.Launched, Is.EqualTo(2));
+        Assert.That(presenter.Pending, Is.Zero, "both landed at the resolution");
     }
 
     // A cast from tick 2 of 1,500 ms resolves at 1.6 s. Its wisp dies at tick 20 (1.0 s), before that, which ends
