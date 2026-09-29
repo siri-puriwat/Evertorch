@@ -53,6 +53,7 @@ public sealed class StatsWindow : MonoBehaviour
     private ClientWorld? m_world;
     private CharacterSheet? m_shownSheet;
     private bool m_isShown;
+    private bool m_wasDead;
 
     public bool IsOpen => m_panel != null && m_panel.activeSelf;
 
@@ -78,7 +79,7 @@ public sealed class StatsWindow : MonoBehaviour
             return;
         }
 
-        Show(world.Sheet);
+        Show(world.Sheet, world.IsLocalDead);
         FitList();
     }
 
@@ -124,7 +125,7 @@ public sealed class StatsWindow : MonoBehaviour
         m_world = world;
         m_isShown = false;
         UiBuilder.SetActive(m_panel!, true);
-        Show(world.Sheet);
+        Show(world.Sheet, world.IsLocalDead);
     }
 
     public void Close()
@@ -150,16 +151,18 @@ public sealed class StatsWindow : MonoBehaviour
         return (PrimaryStat)(index + 1);
     }
 
-    // Rewrites the rows only when a new sheet arrived; each message replaces the sheet.
-    private void Show(CharacterSheet? sheet)
+    // Rewrites the rows only when a new sheet arrived, each message replacing the sheet, or the character died or came
+    // back: the server refuses a raise from the dead (3), so none is offered then.
+    private void Show(CharacterSheet? sheet, bool isDead)
     {
-        if (m_isShown && sheet == m_shownSheet)
+        if (m_isShown && sheet == m_shownSheet && isDead == m_wasDead)
         {
             return;
         }
 
         m_isShown = true;
         m_shownSheet = sheet;
+        m_wasDead = isDead;
         m_text.Clear();
         UiBuilder.SetActive(m_list!, sheet != null);
         if (sheet == null)
@@ -183,7 +186,7 @@ public sealed class StatsWindow : MonoBehaviour
         for (int index = 0; index < CharacterSheet.StatCount; index++)
         {
             CharacterSheetStat stat = sheet.Stats[index];
-            bool canRaise = stat.NextCost > 0 && stat.NextCost <= sheet.StatPoints;
+            bool canRaise = !m_wasDead && stat.NextCost > 0 && stat.NextCost <= sheet.StatPoints;
             m_values[index].text = BuildMessages.StatValue(StatAt(index), stat);
             m_costs[index].text = BuildMessages.NextCost(stat);
             m_raises[index].interactable = canRaise;

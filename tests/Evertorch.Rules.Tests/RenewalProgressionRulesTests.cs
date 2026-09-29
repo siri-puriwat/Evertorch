@@ -147,5 +147,20 @@ public sealed class RenewalProgressionRulesTests
     {
         Assert.That(m_rules.StatCap, Is.EqualTo(99));
     }
+
+    // A stored level no content reaches still answers at once, the sum held to what an int carries (M9 review).
+    [Test]
+    public void StatPointsGranted_AtAnyLevel_IsTheSumAtOnce_HeldToAnInt()
+    {
+        int summed = 0;
+        for (int level = 2; level <= 1000; level++)
+        {
+            summed += m_rules.StatPointsForLevel(level);
+        }
+
+        Assert.That(m_rules.StatPointsGranted(1000), Is.EqualTo(summed));
+        Assert.That(m_rules.StatPointsGranted(int.MaxValue), Is.EqualTo(int.MaxValue));
+        Assert.That(m_rules.StatPointsGranted(int.MinValue), Is.Zero);
+    }
 }
 }

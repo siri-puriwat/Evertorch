@@ -616,6 +616,57 @@ public sealed class PlayerPanelTests
         Assert.That(lines.Text, Is.EqualTo("skill.strike Lv 1."));
     }
 
+    // Dead, the server refuses every raise and learned level (3), so neither window offers one (M9 review).
+    [UnityTest]
+    public IEnumerator StatsAndSkillsWindows_WhileDead_OfferNoRaiseAndNoLearn()
+    {
+        GameClient client = CreateIdleClient();
+        ClientWorld world = GiveWorld(client);
+        var stats = StatsWindow.Create(client);
+        var skills = SkillsWindow.Create(client);
+        m_created.Add(stats.gameObject);
+        m_created.Add(skills.gameObject);
+        world.OnSkillList(Tree(1));
+        world.OnCharacterSheet(StatSheet(3));
+        stats.Open();
+        skills.Open();
+        yield return null;
+        bool raiseAlive = stats.IsRaiseShown(PrimaryStat.Str);
+        bool learnAlive = skills.IsLearnShown(TreeIds[0]);
+
+        world.OnEntityDied(new EntityDied(Local, Local, 10));
+        yield return null;
+
+        Assert.That((raiseAlive, learnAlive), Is.EqualTo((true, true)), "alive, both are offered");
+        Assert.That(stats.IsRaiseShown(PrimaryStat.Str), Is.False, "dead, no raise");
+        Assert.That(skills.IsLearnShown(TreeIds[0]), Is.False, "dead, no learn");
+    }
+
+    // A sheet that changes nothing the Skills window shows, such as a kill's job experience, leaves its rows and their
+    // Learn buttons alone, so a press is never lost to a rebuild (M9 review).
+    [UnityTest]
+    public IEnumerator SkillsWindow_KeepsItsRows_ForASheetThatChangesNothingItShows()
+    {
+        GameClient client = CreateIdleClient();
+        ClientWorld world = GiveWorld(client);
+        var window = SkillsWindow.Create(client);
+        m_created.Add(window.gameObject);
+        world.OnSkillList(Tree(1));
+        world.OnCharacterSheet(SkillSheet(1));
+        window.Open();
+        yield return null;
+        int changes = window.TextChanges;
+        Button learn = window.GetComponentsInChildren<Button>().Single(button => button.name == "Learn skill.strike");
+
+        CharacterSheet same = world.Sheet!;
+        world.OnCharacterSheet(
+            new CharacterSheet(2, 30, 50, same.StatPoints, 1, same.Stats, 10, 5, 2, 3, 182, 105, 11, 153));
+        yield return null;
+
+        Assert.That(window.TextChanges, Is.EqualTo(changes), "the same points, the same rows");
+        Assert.That(learn != null, Is.True, "the button pressed is still there");
+    }
+
     [UnityTest]
     public IEnumerator StatsWindow_ClosesWhenTheWorldChanges()
     {
@@ -1167,6 +1218,32 @@ public sealed class PlayerPanelTests
         Assert.That(afterReset, Does.EndWith("\nReset all points"), "the second asks for the reset");
         Assert.That(window.Text, Does.EndWith("\nReset all points"), "unconfirmed, it disarms");
         Assert.That(window.IsOpen, Is.True);
+    }
+
+    // Closed while armed, the window opens again for the same NPC saying what its next press does (M9 review).
+    [UnityTest]
+    public IEnumerator NpcWindow_ClosedWhileTheResetIsArmed_OpensAgainDisarmed()
+    {
+        GameClient client = CreateIdleClient();
+        ClientWorld world = GiveWorld(client);
+        GiveShop(client);
+        Spawn(world, 15, EntityKind.Npc, GateWarden, 1000);
+        DrawNpc(client, 15);
+        world.OnNpcServices(new NpcServices(new EntityId(15), new NpcServiceEntry[0], new NpcQuestOffer[0], true));
+        var window = NpcWindow.Create(client);
+        m_created.Add(window.gameObject);
+        window.Open(new EntityId(15));
+        yield return null;
+        Press(window, "Reset all points");
+        yield return null;
+        string armed = window.Text;
+
+        window.Close();
+        window.Open(new EntityId(15));
+        yield return null;
+
+        Assert.That(armed, Does.EndWith("\nPress again to reset"));
+        Assert.That(window.Text, Does.EndWith("\nReset all points"));
     }
 
     // While a window shows at the top left, the target frame stands narrower beside it (Milestone 7 review finding 1).

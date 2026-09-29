@@ -515,8 +515,8 @@ public sealed class QuestTests
             .Single(entry => entry.EventId.Name == "QuestCompleted")
             .Fields;
         Assert.That(
-            (fields["Quest"], fields["Experience"], fields["Coins"]),
-            Is.EqualTo(((object?)Hunt, (object?)150L, (object?)100L)));
+            (fields["Quest"], fields["Experience"], fields["JobExperience"], fields["Coins"]),
+            Is.EqualTo(((object?)Hunt, (object?)150L, (object?)150L, (object?)100L)));
     }
 
     // The server's copy said ready and the database said completed: that copy is out of date, which nothing the player

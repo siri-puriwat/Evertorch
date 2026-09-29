@@ -210,7 +210,10 @@ public sealed class LiveServerBuildTests : InputTestFixture
         Assert.That(window.Text, Does.StartWith("Points: 1\nStrike Lv 0/5, Learn"), $"{server.JoinOutput()}");
         Button learn = window.GetComponentsInChildren<Button>().Single(button => button.name == "Learn skill.strike");
         learn.onClick.Invoke();
-        yield return WaitUntil(() => slot.text == "Strike\n1", StartTimeoutSeconds);
+        yield return WaitUntil(
+            () => slot.text == "Strike\n1" &&
+                window.Text.StartsWith("Points: 0\nStrike Lv 1/5\n", StringComparison.Ordinal),
+            StartTimeoutSeconds);
 
         Assert.That(slot.text, Is.EqualTo("Strike\n1"), $"the slot unlocks: {client.Status} {server.JoinOutput()}");
         Assert.That(window.Text, Does.StartWith("Points: 0\nStrike Lv 1/5\n"));

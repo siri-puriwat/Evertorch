@@ -201,8 +201,8 @@ public sealed class CharacterBuilds
 
     /// <summary>
     ///     Whether <paramref name="player" />'s build spends more than its levels grant, holds a statistic below its job's
-    ///     start, or has learned a skill its job's tree lacks or above the skill's maximum: what only a hand-edited row
-    ///     or changed content leaves.
+    ///     start, or has learned a skill its job's tree lacks, above the skill's maximum, or without its prerequisite:
+    ///     what only a hand-edited row or changed content leaves.
     /// </summary>
     public bool IsOverspent(PlayerEntity player)
     {
@@ -216,6 +216,13 @@ public sealed class CharacterBuilds
         foreach (KeyValuePair<SkillDefinitionId, int> learned in player.Skills)
         {
             if (!Contains(job.Skills, learned.Key) || learned.Value > m_content.Skills[learned.Key].MaxLevel)
+            {
+                return true;
+            }
+
+            SkillRequirement? requires = m_content.Skills[learned.Key].Requires;
+            if (requires != null
+                && (!player.Skills.TryGetValue(requires.Skill, out int required) || required < requires.Level))
             {
                 return true;
             }

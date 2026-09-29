@@ -177,6 +177,9 @@ public sealed class NpcWindow : MonoBehaviour
         m_world = null;
         Npc = default;
         m_isResetArmed = false;
+
+        // The services stay cached for the NPC, so the next open must write the lists again, disarmed.
+        m_shownServices = null;
         UiBuilder.SetActive(m_panel!, false);
     }
 

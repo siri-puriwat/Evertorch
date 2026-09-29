@@ -60,6 +60,7 @@ public sealed class CharacterBuildLoadTests
     [TestCase(5, 2, 5, "skill.strike", 2, TestName = "Load_WithMoreSkillLevelsThanTheJobLevelsGrant_ResetsTheBuild")]
     [TestCase(5, 6, 5, "skill.spark_bolt", 1, TestName = "Load_WithASkillOutsideTheJobsTree_ResetsTheBuild")]
     [TestCase(5, 6, 5, "skill.focus", 4, TestName = "Load_WithASkillAboveItsMaximum_ResetsTheBuild")]
+    [TestCase(5, 2, 5, "skill.focus", 1, TestName = "Load_WithASkillWhosePrerequisiteIsUnmet_ResetsTheBuild")]
     public void Load_WithAnOverspentBuild_ResetsItLogsItAndTheNextCheckpointStoresIt(
         int level,
         int jobLevel,

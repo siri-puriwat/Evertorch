@@ -27,7 +27,13 @@ public sealed class BuildDeterminismTests
         MessageOpcode.StatusEffects, MessageOpcode.CharacterSheet, MessageOpcode.SkillList
     };
 
-    private static readonly Lazy<List<string>> SeedEleven = new(() => Record(11, true));
+    // What the fight did, without the build's own messages.
+    private static readonly MessageOpcode[] Combat =
+    {
+        MessageOpcode.AttackStarted, MessageOpcode.Damage, MessageOpcode.SkillResolved
+    };
+
+    private static readonly Lazy<Recording> SeedEleven = new(() => Record(11, true));
 
     /// <summary>
     ///     Every step depends only on server state: the build's commands at the first tick and halfway, then an attack
@@ -35,7 +41,7 @@ public sealed class BuildDeterminismTests
     ///     forty ticks. With <paramref name="isBuilt" /> false the same character fights with nothing spent but Strike
     ///     1 and Focus 1.
     /// </summary>
-    private static List<string> Record(ulong seed, bool isBuilt)
+    private static Recording Record(ulong seed, bool isBuilt)
     {
         var server = new TestServer(withMonsters: true, randomSeed: seed, withAdventurerBuild: false);
         ConnectionId player = server.EnterWorld(1);
@@ -92,34 +98,70 @@ public sealed class BuildDeterminismTests
             server.Tick();
         }
 
+        PlayerEntity final = server.PlayerOf(player);
+        final.Skills.TryGetValue(new SkillDefinitionId("skill.strike"), out int strike);
+        return new Recording(
+            Describe(server, player, Outcomes),
+            Describe(server, player, Combat),
+            final.Primary,
+            strike);
+    }
+
+    private static List<string> Describe(TestServer server, ConnectionId player, MessageOpcode[] opcodes)
+    {
         return server.Transport.ControlSentTo(player)
-            .Where(message => Outcomes.Contains(message.Opcode))
+            .Where(message => opcodes.Contains(message.Opcode))
             .Select(message => BitConverter.ToString(message.Payload))
             .ToList();
+    }
+
+    private sealed class Recording
+    {
+        public Recording(List<string> outcomes, List<string> combat, PrimaryStats primary, int strike)
+        {
+            Outcomes = outcomes;
+            Combat = combat;
+            Primary = primary;
+            Strike = strike;
+        }
+
+        public List<string> Outcomes { get; }
+
+        public List<string> Combat { get; }
+
+        public PrimaryStats Primary { get; }
+
+        public int Strike { get; }
     }
 
     [Test]
     public void AnotherSeed_ProducesADifferentRun()
     {
-        Assert.That(Record(12, true), Is.Not.EqualTo(SeedEleven.Value));
+        Assert.That(Record(12, true).Outcomes, Is.Not.EqualTo(SeedEleven.Value.Outcomes));
     }
 
     [Test]
     public void TheSameSeed_ReplaysTheBuildsEffects_Identically()
     {
-        List<string> again = Record(11, true);
+        Recording again = Record(11, true);
 
-        Assert.That(SeedEleven.Value, Has.Count.GreaterThan(100), "a long fight was recorded");
-        Assert.That(again, Is.EqualTo(SeedEleven.Value));
+        Assert.That(SeedEleven.Value.Outcomes, Has.Count.GreaterThan(100), "a long fight was recorded");
+        Assert.That(
+            (SeedEleven.Value.Primary, SeedEleven.Value.Strike),
+            Is.EqualTo((new PrimaryStats(5, 10, 8, 5, 10, 5), 3)),
+            "every raise and learned level was made");
+        Assert.That(again.Outcomes, Is.EqualTo(SeedEleven.Value.Outcomes));
     }
 
-    // The build is part of what the seed replays: the same seed without it runs differently.
+    // The build is part of what the seed replays: the same seed without it fights differently, its swings, hits, and
+    // skills, not only its sheets.
     [Test]
-    public void TheSameSeed_WithoutTheBuild_ProducesADifferentRun()
+    public void TheSameSeed_WithoutTheBuild_FightsDifferently()
     {
-        List<string> unbuilt = Record(11, false);
+        Recording unbuilt = Record(11, false);
 
-        Assert.That(unbuilt, Is.Not.EqualTo(SeedEleven.Value));
+        Assert.That((unbuilt.Primary, unbuilt.Strike), Is.EqualTo((new PrimaryStats(5, 5, 5, 5, 5, 5), 1)));
+        Assert.That(unbuilt.Combat, Is.Not.EqualTo(SeedEleven.Value.Combat));
     }
 }
 }

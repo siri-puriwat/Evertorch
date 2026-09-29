@@ -5,8 +5,8 @@ namespace Evertorch.Protocol
 {
 /// <summary>
 ///     Asks the NPC that offers it for the reset of the character's build (Gameplay Systems §6.1): every stat and
-///     skill point back, for free. An accepted one answers with <see cref="SkillList" /> and
-///     <see cref="CharacterSheet" />.
+///     skill point back, for free. An accepted one answers with <see cref="SkillList" />, and with
+///     <see cref="CharacterSheet" /> when the sheet changed.
 /// </summary>
 public readonly struct ResetBuild
 {

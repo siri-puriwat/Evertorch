@@ -1105,11 +1105,16 @@ public static class ServerContentLoader
     {
         foreach (SkillDefinition skill in skills.Values)
         {
-            foreach (SkillEffect effect in skill.Levels.Select(level => level.Effect).Distinct())
+            IEnumerable<StatusDefinitionId> applied = skill.Levels
+                .Select(level => level.Effect)
+                .Where(effect => effect.Kind == SkillEffectKind.Status)
+                .Select(effect => effect.Status)
+                .Distinct();
+            foreach (StatusDefinitionId status in applied)
             {
-                if (effect.Kind == SkillEffectKind.Status && !declaredStatusEffects.Contains(effect.Status))
+                if (!declaredStatusEffects.Contains(status))
                 {
-                    problems.Add($"{SkillsFile}: {skill.Id}: applies unknown status effect '{effect.Status}'");
+                    problems.Add($"{SkillsFile}: {skill.Id}: applies unknown status effect '{status}'");
                 }
             }
         }

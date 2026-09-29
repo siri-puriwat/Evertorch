@@ -19,6 +19,11 @@ public sealed class CharacterProgression
     private const string QuestAccepted = "accepted";
     private const string QuestCompleted = "completed";
 
+    // Seven fields, one more than LoggerMessage.Define takes; a turn-in is rare enough for the formatted overload.
+    private const string QuestCompletedMessage =
+        "Character {Character} on connection {Connection} completed {Quest} for {Experience} base experience, "
+        + "{JobExperience} job experience, and {Coins} coins (operation {OperationId}).";
+
     private static readonly Action<ILogger, long, long, int, int, Exception?> LogLeveledUp =
         LoggerMessage.Define<long, long, int, int>(
             LogLevel.Information,
@@ -31,12 +36,7 @@ public sealed class CharacterProgression
             new EventId(1009, "QuestAccepted"),
             "Character {Character} on connection {Connection} accepted {Quest}.");
 
-    private static readonly Action<ILogger, long, long, string, long, long, Guid, Exception?> LogQuestCompleted =
-        LoggerMessage.Define<long, long, string, long, long, Guid>(
-            LogLevel.Information,
-            new EventId(1010, "QuestCompleted"),
-            "Character {Character} on connection {Connection} completed {Quest} for {Experience} base experience and "
-            + "{Coins} coins (operation {OperationId}).");
+    private static readonly EventId QuestCompletedEvent = new(1010, "QuestCompleted");
 
     private static readonly Action<ILogger, long, long, int, int, Exception?> LogJobLeveledUp =
         LoggerMessage.Define<long, long, int, int>(
@@ -92,14 +92,6 @@ public sealed class CharacterProgression
     public LevelProgress WithExperience(PlayerEntity player, long experience)
     {
         return m_rules.AddExperience(TableOf(player), new LevelProgress(player.Level, player.Experience), experience);
-    }
-
-    /// <summary>
-    ///     What <paramref name="player" />'s next job level needs in all; 0 at its job's cap.
-    /// </summary>
-    public long JobExperienceToNextLevel(PlayerEntity player)
-    {
-        return m_rules.ExperienceToNextLevel(JobTableOf(player), player.JobLevel);
     }
 
     /// <summary>
@@ -257,15 +249,16 @@ public sealed class CharacterProgression
             character.Connection.NeedsQuestLog = true;
         }
 
-        LogQuestCompleted(
-            m_logger,
+        m_logger.LogInformation(
+            QuestCompletedEvent,
+            QuestCompletedMessage,
             character.Character.Value,
             character.Connection?.Connection.Value ?? 0,
             quest.Value,
             definition.BaseExperience,
+            definition.JobExperience,
             definition.Currency,
-            operationId,
-            null);
+            operationId);
         m_instruments.RecordQuest(QuestCompleted);
     }
 

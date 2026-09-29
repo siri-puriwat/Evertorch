@@ -619,6 +619,23 @@ public sealed class ServerContentLoaderTests
         Assert.That(problems[0], Does.Contain("definitions[1].id: 'skill.basic_attack' is defined more than once"));
     }
 
+    // Every level naming the same unknown status is one problem, not one a level (M9 review).
+    [Test]
+    public void Load_WhenEveryLevelOfASkillAppliesTheSameUnknownStatusEffect_SaysSoOnce()
+    {
+        Dictionary<string, byte[]> files = PackageFixture.BuildFixturePackage();
+        string level = "{ \"spCost\": 0, \"fixedCastMs\": 0, \"variableCastMs\": 0, \"afterCastDelayMs\": 0, "
+            + "\"cooldownMs\": 0, \"effect\": { \"status\": \"status.none\", \"durationMs\": 60000, "
+            + "\"statPercent\": { \"str\": 0, \"agi\": 100, \"vit\": 0, \"int\": 0, \"dex\": 100, \"luk\": 0 } } }";
+        PackageFixture.Replace(files, Skills, "\"targetType\": \"enemy\"", "\"targetType\": \"self\"");
+        PackageFixture.Replace(files, Skills, "\"maxLevel\": 0", "\"maxLevel\": 2");
+        PackageFixture.Replace(files, Skills, "\"levels\": []", $"\"levels\": [ {level}, {level} ]");
+
+        Assert.That(
+            ProblemsOf(files),
+            Is.EqualTo(new[] { "skills.json: skill.basic_attack: applies unknown status effect 'status.none'" }));
+    }
+
     [Test]
     public void Load_WhenFileDiffersFromManifestHash_FailsWithoutParsingIt()
     {

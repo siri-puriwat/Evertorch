@@ -53,7 +53,8 @@ public sealed class SkillsWindow : MonoBehaviour
     private float m_listHeight = -1f;
     private ClientWorld? m_world;
     private IReadOnlyList<SkillListEntry>? m_shownSkills;
-    private CharacterSheet? m_shownSheet;
+    private int m_shownPoints = -1;
+    private bool m_wasDead;
     private bool m_hadContent;
     private bool m_isShown;
     private int m_listRows;
@@ -157,13 +158,17 @@ public sealed class SkillsWindow : MonoBehaviour
             : string.Empty;
     }
 
-    // Rebuilds the rows only when a new skill list or sheet arrived, or the content to name them came.
+    // Rebuilds the rows only when a new skill list arrived, the skill points changed, the character died or came back,
+    // or the content to name them came: a sheet that changes nothing shown here, such as a kill's job experience, must
+    // not destroy a Learn button under a press. The server refuses learning from the dead (3).
     private void Show(ClientWorld world, ClientContent? content)
     {
         bool hasContent = content != null;
+        int points = world.Sheet?.SkillPoints ?? -1;
         if (m_isShown
             && world.Skills == m_shownSkills
-            && world.Sheet == m_shownSheet
+            && points == m_shownPoints
+            && world.IsLocalDead == m_wasDead
             && hasContent == m_hadContent)
         {
             return;
@@ -171,7 +176,8 @@ public sealed class SkillsWindow : MonoBehaviour
 
         m_isShown = true;
         m_shownSkills = world.Skills;
-        m_shownSheet = world.Sheet;
+        m_shownPoints = points;
+        m_wasDead = world.IsLocalDead;
         m_hadContent = hasContent;
         ClearRows();
         m_text.Clear();
@@ -201,7 +207,7 @@ public sealed class SkillsWindow : MonoBehaviour
     {
         string name = BuildMessages.SkillName(content, entry.Skill);
         string? unmet = BuildMessages.UnmetPrerequisite(tree, entry, content);
-        bool canLearn = points > 0 && entry.Level < entry.MaxLevel && unmet == null;
+        bool canLearn = !m_wasDead && points > 0 && entry.Level < entry.MaxLevel && unmet == null;
 
         GameObject heading = Ui.CreateRow($"Skill {entry.Skill.Value}", m_rows!);
         m_rowObjects.Add(heading);

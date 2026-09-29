@@ -53,15 +53,19 @@ public sealed class RenewalProgressionRules : IProgressionRules
         return level < 2 ? 0 : 3 + level / 5;
     }
 
+    // The sum of 3 + floor(L / 5) for L from 2 to the level, in closed form: a stored level no content reaches must not
+    // loop the tick thread, and the sum is held to what an int carries.
     public int StatPointsGranted(int level)
     {
-        int granted = 0;
-        for (int reached = 2; reached <= level; reached++)
+        if (level < 2)
         {
-            granted += StatPointsForLevel(reached);
+            return 0;
         }
 
-        return granted;
+        long whole = level / 5;
+        long floors = 5 * whole * (whole - 1) / 2 + whole * (level % 5 + 1);
+        long granted = 3L * (level - 1) + floors;
+        return (int)Math.Min(int.MaxValue, granted);
     }
 
     public int StatRaiseCost(int value)
