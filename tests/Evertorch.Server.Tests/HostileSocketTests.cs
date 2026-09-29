@@ -399,6 +399,95 @@ public sealed class HostileSocketTests
         AssertNoSecretIn(lines);
     }
 
+    // Milestone 10's commands from an Adventurer at job level 10 with Strike, beside a second player: a job change at
+    // no NPC refused and audited; the other player selected, then attacked and struck, both refused; a burst of job
+    // changes over the item bucket; then malformed job changes until the connection is closed. The identity carries a
+    // word no log may repeat.
+    [Test]
+    public void HostileJobChangesAndPlayerTargets_AreRefusedThrottledAndScored_AndLeaveNoSecretInTheLogs()
+    {
+        using var root = new TemporaryDirectory();
+        var logs = new CapturingLoggerProvider();
+        const int itemBurst = 5;
+        var store = new InMemoryGameStore
+        {
+            SeedOnCreate = new BuildSeed(10, new Dictionary<string, int> { ["skill.strike"] = 1 })
+        };
+        using IHost host = StartHost(root, logs, store, $"--Abuse:ItemCommandBurst={itemBurst}");
+        int port = host.Services.GetRequiredService<LiteNetLibServerTransport>().LocalPort;
+        ServerContent content = host.Services.GetRequiredService<ServerContent>();
+        int violationsToClose = new AbuseOptions().ViolationThreshold / ViolationScore.Points;
+        byte[] vanguard = Encoding.ASCII.GetBytes("job.vanguard");
+        byte[] notAJob = Encoding.ASCII.GetBytes("item.x");
+        // A change at NPC 0, a job ID of broken UTF-8, and an item's ID for the job.
+        byte[][] malformed =
+        {
+            new byte[] { 0x1A, 0x00, 0, 0, 0, 0, 0, 0, 0, 0, 0x0C, 0x00 }.Concat(vanguard)
+                .Concat(new byte[] { 0x01, 0x00, 0x00, 0x00 }).ToArray(),
+            new byte[] { 0x1A, 0x00, 0x01, 0, 0, 0, 0, 0, 0, 0, 0x01, 0x00, 0xFF, 0x01, 0x00, 0x00, 0x00 },
+            new byte[] { 0x1A, 0x00, 0x01, 0, 0, 0, 0, 0, 0, 0, 0x06, 0x00 }.Concat(notAJob)
+                .Concat(new byte[] { 0x01, 0x00, 0x00, 0x00 }).ToArray()
+        };
+
+        using var player = new SocketClient(content, "secret-job-identity", "Hostile10");
+        using var other = new SocketClient(content, "job-bystander", "Bystander10");
+        player.EnterWorld(port);
+        other.EnterWorld(port);
+        EntityId bystander = other.World.LocalEntity;
+        Assert.That(
+            SocketClients.PumpUntil(() => player.World.Remotes.ContainsKey(bystander), player, other),
+            Is.True,
+            "the bystander in view");
+        var refused = new List<CommandRejectionReason>();
+        player.World.CommandRejectedReceived += rejection => refused.Add(rejection.Reason);
+        player.Connection.SendChangeJob(new EntityId(999999), new JobDefinitionId("job.vanguard"));
+        player.Connection.SendTarget(bystander);
+        Assert.That(
+            SocketClients.PumpUntil(() => player.World.Target == bystander, player, other),
+            Is.True,
+            "a player may be selected");
+        player.Connection.SendAttack(bystander);
+        player.Connection.SendUseSkill(new SkillDefinitionId("skill.strike"), bystander);
+        SocketClients.PumpUntil(() => refused.Count >= 3, player, other);
+        var firstRefusals = refused.ToList();
+        for (int index = 0; index <= itemBurst; index++)
+        {
+            player.Connection.SendChangeJob(new EntityId(999999), new JobDefinitionId("job.vanguard"));
+        }
+
+        player.PumpFor(TimeSpan.FromMilliseconds(1100));
+        for (int index = 0; index < 2 * violationsToClose; index++)
+        {
+            player.Link.Send(ProtocolChannel.Control, MessageDelivery.ReliableOrdered,
+                malformed[index % malformed.Length]);
+        }
+
+        bool isClosed = player.PumpUntil(() => player.Connection.State == ClientConnectionState.Disconnected);
+        int bystanderHealth = (int)other.World.LocalHealth;
+        host.StopAsync().GetAwaiter().GetResult();
+
+        IReadOnlyList<string> lines = logs.Lines;
+        Assert.That(
+            firstRefusals,
+            Is.EqualTo(
+                new[]
+                {
+                    CommandRejectionReason.InvalidTarget, CommandRejectionReason.InvalidTarget,
+                    CommandRejectionReason.InvalidTarget
+                }),
+            "no such NPC; a player is never attacked or struck");
+        Assert.That(refused.Skip(3), Has.Some.EqualTo(CommandRejectionReason.NotAllowedNow), "the throttled change");
+        Assert.That(bystanderHealth, Is.EqualTo((int)other.World.LocalMaximumHealth), "the bystander untouched");
+        Assert.That(isClosed, Is.True, "the connection was closed");
+        Assert.That(player.Connection.Notice?.Reason, Is.EqualTo(DisconnectReason.Kicked));
+        Assert.That(lines.Any(line => line.Contains("had ChangeJob refused")), Is.True, "the refused change audited");
+        Assert.That(lines.Any(line => line.Contains("had Attack refused")), Is.True, "the refused attack audited");
+        Assert.That(lines.Any(line => line.Contains("had UseSkill refused")), Is.True, "the refused strike audited");
+        Assert.That(lines.Any(line => line.Contains("sent ChangeJob over the session_item limit")), Is.True);
+        Assert.That(lines.Any(line => line.Contains("ViolationDisconnect")), Is.True);
+        AssertNoSecretIn(lines);
+    }
+
     [Test]
     public void RawDatagrams_OfGarbageTruncatedHeadersAndOversizedRequests_LeaveTheServerServingHonestClients()
     {
