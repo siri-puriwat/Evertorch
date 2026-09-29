@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Evertorch.Client;
@@ -15,10 +16,10 @@ namespace Evertorch.Server.Tests
 ///     The Milestone 10 first jobs (ROADMAP §8) end to end: the composed server host on a real PostgreSQL 18, real UDP
 ///     sockets on loopback, and two clients built from the client's production networking and gameplay code, pumped
 ///     side by side on the test's thread. A changer stored at Adventurer job level 10, with skill points left unspent
-///     and the training staff worn, enters beside a second character at the same level, which sees it; both keep what
-///     they hold through a restart. Each later line of Milestone 10 adds its steps here: the change to a Vanguard with
-///     the staff taken off, a learned Heavy Blow, the second character's view of the Vanguard, and the second character
-///     becoming an Arcanist and Mending the first.
+///     and the training staff worn, enters beside a second character at the same level, which sees it. The changer
+///     walks up to the Guildmaster and becomes a Vanguard: the staff comes off, its unspent points carry over, it
+///     learns Heavy Blow, and the second character sees the Vanguard's body in place of the Adventurer's. Both keep
+///     what they hold through a restart. Line 6 adds the second character becoming an Arcanist and Mending the first.
 /// </summary>
 /// <remarks>
 ///     Combat and drops draw from scripted sources (<see cref="TestHosts.ScriptOutcomes" />): every attack hits
@@ -30,6 +31,12 @@ public sealed class FirstJobsAcceptanceTests
 {
     private const string TrainingGround = "map.training_ground";
     private const string Adventurer = "job.adventurer";
+    private const string Vanguard = "job.vanguard";
+    private const string Arcanist = "job.arcanist";
+    private const string Guildmaster = "npc.guildmaster";
+    private const string HeavyBlow = "skill.heavy_blow";
+    private const string WarCry = "skill.war_cry";
+    private const string IronGuard = "skill.iron_guard";
     private const string TrainingStaff = "item.weapon.training_staff";
     private const string Strike = "skill.strike";
     private const string FirstAid = "skill.first_aid";
@@ -67,9 +74,10 @@ public sealed class FirstJobsAcceptanceTests
 
     /// <summary>
     ///     Both characters are stored at Adventurer job level 10 before they first enter, the changer wearing the
-    ///     training staff; they enter the training ground and see each other, and the server stops.
+    ///     training staff; they enter the training ground and see each other; the changer becomes a Vanguard and learns
+    ///     Heavy Blow; and the server stops.
     /// </summary>
-    private void PlayBeforeTheChange(IHost host)
+    private void PlayTheChange(IHost host)
     {
         ServerContent content = host.Services.GetRequiredService<ServerContent>();
         IAdminCommandService admin = host.Services.GetRequiredService<IAdminCommandService>();
@@ -93,6 +101,17 @@ public sealed class FirstJobsAcceptanceTests
             Is.All.EqualTo(10),
             "enter: the console shows both at job level 10");
 
+        ChangeToVanguard(changer, mender);
+        LearnHeavyBlow(changer, mender);
+        Assert.That(
+            SocketClients.PumpUntil(
+                () => admin.GetPlayers(AdminActor.LocalConsole)
+                    .Any(player => player.Entity == changer.World.LocalEntity && player.Job.Value == Vanguard),
+                changer,
+                mender),
+            Is.True,
+            "change: the console names the job");
+
         host.StopAsync().GetAwaiter().GetResult();
         Assert.That(
             SocketClients.PumpUntil(
@@ -102,11 +121,90 @@ public sealed class FirstJobsAcceptanceTests
                 mender),
             Is.True,
             "stop: both clients heard the server stop");
-        AssertCleanTraffic("before the change", changer, mender);
+        AssertCleanTraffic("change", changer, mender);
     }
 
-    // After a clean stop and a second server on the same database, both characters keep their job, their job level,
-    // and their skills, and the changer still wears the staff.
+    // The changer walks up to the Guildmaster, which offers both first jobs from job level 10, and becomes a Vanguard:
+    // the commit takes the staff off, the sheet names the new job at job level 1 with the 5 points it carried, the
+    // skill list names the whole tree, and the second character sees the new body in place of the old, with no
+    // despawn (Gameplay Systems §6.1; Network Protocol §9).
+    private static void ChangeToVanguard(SocketClient changer, SocketClient mender)
+    {
+        const string step = "change";
+        ClientWorld world = changer.World;
+        Assert.That(
+            SocketClients.PumpUntil(() => GuildmasterInView(world) != null, changer, mender),
+            Is.True,
+            $"{step}: the Guildmaster in view");
+        RemoteEntity guildmaster = GuildmasterInView(world)!;
+        world.TryGetNpcServices(guildmaster.Entity, out NpcServices? services);
+        Assert.That(
+            services!.JobChanges.Select(change => (change.Job.Value, change.FromJob.Value, change.Level)),
+            Is.EqualTo(new[] { (Arcanist, Adventurer, (ushort)10), (Vanguard, Adventurer, (ushort)10) }),
+            $"{step}: both first jobs offered");
+        int windows = changer.NpcWindows.Count;
+        changer.TalkTo(guildmaster.Entity);
+        Assert.That(
+            SocketClients.PumpUntil(() => changer.NpcWindows.Count > windows, changer, mender),
+            Is.True,
+            $"{step}: walked up to it");
+
+        var despawned = new List<EntityId>();
+        mender.World.RemoteDespawned += remote => despawned.Add(remote.Entity);
+        changer.Connection.SendChangeJob(guildmaster.Entity, new JobDefinitionId(Vanguard));
+        Assert.That(
+            SocketClients.PumpUntil(() => world.Sheet!.Job.Value == Vanguard, changer, mender),
+            Is.True,
+            $"{step}: the sheet names the Vanguard; {world.LastRejection}");
+        Assert.That(
+            (world.Sheet!.JobLevel, world.Sheet.SkillPoints),
+            Is.EqualTo(((ushort)1, (ushort)5)),
+            $"{step}: job level 1, the 5 points carried");
+        Assert.That(
+            SocketClients.PumpUntil(() => world.Skills.Count == 6, changer, mender),
+            Is.True,
+            $"{step}: the whole tree listed");
+        Assert.That(
+            world.Inventory.Rows.Single(row => row.Item.Value == TrainingStaff).Slot,
+            Is.EqualTo(EquipmentSlot.None),
+            $"{step}: the staff taken off, still held");
+        Assert.That(
+            SocketClients.PumpUntil(
+                () => mender.World.Remotes.TryGetValue(world.LocalEntity, out RemoteEntity? seen)
+                    && seen.DefinitionId == Vanguard,
+                changer,
+                mender),
+            Is.True,
+            $"{step}: the other sees the Vanguard");
+        Assert.That(despawned, Has.Count.EqualTo(1), $"{step}: the old body replaced once, in place");
+        Assert.That(mender.World.Sheet!.Job.Value, Is.EqualTo(Adventurer), $"{step}: the other's own job unchanged");
+    }
+
+    // A skill of the Vanguard's own tree takes one of the carried points (Gameplay Systems §9).
+    private static void LearnHeavyBlow(SocketClient changer, SocketClient mender)
+    {
+        const string step = "learn";
+        ClientWorld world = changer.World;
+        changer.Connection.SendLearnSkill(new SkillDefinitionId(HeavyBlow));
+        Assert.That(
+            SocketClients.PumpUntil(
+                () => world.Skills.Any(entry => entry.Skill.Value == HeavyBlow && entry.Level == 1)
+                    && world.Sheet!.SkillPoints == 4,
+                changer,
+                mender),
+            Is.True,
+            $"{step}: Heavy Blow 1 for a point; {world.LastRejection}");
+    }
+
+    private static RemoteEntity? GuildmasterInView(ClientWorld world)
+    {
+        return world.Remotes.Values.SingleOrDefault(candidate =>
+            candidate.Kind == EntityKind.Npc && candidate.DefinitionId == Guildmaster);
+    }
+
+    // After a clean stop and a second server on the same database, the changer is still a Vanguard at job level 1
+    // with Heavy Blow and the staff unworn, which the second character sees; the second is still an Adventurer at
+    // job level 10.
     private void PlayAfterTheRestart(IHost host)
     {
         ServerContent content = host.Services.GetRequiredService<ServerContent>();
@@ -115,11 +213,27 @@ public sealed class FirstJobsAcceptanceTests
         using var mender = new SocketClient(content, MenderIdentity, MenderName);
         EnterTogether(port, changer, mender);
 
-        AssertReadyToChange("restart", changer);
-        AssertWearsTheStaff("restart", changer);
+        CharacterSheet sheet = changer.World.Sheet!;
+        Assert.That(
+            (sheet.Job.Value, sheet.JobLevel, sheet.SkillPoints),
+            Is.EqualTo((Vanguard, (ushort)1, (ushort)4)),
+            "restart: still a Vanguard");
+        Assert.That(
+            changer.World.Skills.Select(entry => (entry.Skill.Value, entry.Level)),
+            Is.EqualTo(
+                new[]
+                {
+                    (Strike, (byte)1), (FirstAid, (byte)1), (Focus, (byte)2), (HeavyBlow, (byte)1), (WarCry, (byte)0),
+                    (IronGuard, (byte)0)
+                }),
+            "restart: both trees as learned");
+        Assert.That(
+            changer.World.Inventory.Rows.Single(row => row.Item.Value == TrainingStaff).Slot,
+            Is.EqualTo(EquipmentSlot.None),
+            "restart: the staff still off");
         AssertReadyToChange("restart", mender);
-        AssertSees("restart", mender, changer, Adventurer);
-        Assert.That(StoredJob(ChangerName), Is.EqualTo((Adventurer, 10, 0L)), "restart: the job stored");
+        AssertSees("restart", mender, changer, Vanguard);
+        Assert.That(StoredJob(ChangerName), Is.EqualTo((Vanguard, 1, 0L)), "restart: the change stored");
         Assert.That(StoredJob(MenderName), Is.EqualTo((Adventurer, 10, 0L)), "restart: the job stored");
         AssertCleanTraffic("restart", changer, mender);
     }
@@ -150,7 +264,7 @@ public sealed class FirstJobsAcceptanceTests
     private static void AssertReadyToChange(string step, SocketClient client)
     {
         CharacterSheet sheet = client.World.Sheet!;
-        Assert.That((sheet.JobLevel, sheet.SkillPoints), Is.EqualTo(((byte)10, (byte)5)), $"{step}: 5 points left");
+        Assert.That((sheet.JobLevel, sheet.SkillPoints), Is.EqualTo(((ushort)10, (ushort)5)), $"{step}: 5 points left");
         Assert.That(
             client.World.Skills.Select(entry => (entry.Skill.Value, entry.Level)),
             Is.EqualTo(new[] { (Strike, (byte)1), (FirstAid, (byte)1), (Focus, (byte)2) }),
@@ -213,7 +327,7 @@ public sealed class FirstJobsAcceptanceTests
     }
 
     [Test]
-    public void FirstJobs_OverRealSocketsAndPostgres_AreReachedFromAdventurerJobLevelTenAndKeptThroughARestart()
+    public void FirstJobs_OverRealSocketsAndPostgres_AreReachedAtTheGuildmasterAndKeptThroughARestart()
     {
         using var root = new TemporaryDirectory();
         PackageFixture.WriteTo(
@@ -222,7 +336,7 @@ public sealed class FirstJobsAcceptanceTests
 
         using (IHost first = StartHost(root.Path))
         {
-            PlayBeforeTheChange(first);
+            PlayTheChange(first);
         }
 
         using (IHost restarted = StartHost(root.Path))

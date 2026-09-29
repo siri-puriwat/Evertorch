@@ -100,6 +100,12 @@ public sealed class PlayerEntity : WorldEntity
     public ItemEquipment? Armor { get; set; }
 
     /// <summary>
+    ///     Set by a job change: the next visibility pass sends the player's spawn, with its new job, to every session
+    ///     that already sees it, and clears the flag (Network Protocol §9).
+    /// </summary>
+    public bool RespawnPending { get; set; }
+
+    /// <summary>
     ///     When the next HP and SP regeneration steps fall due; <see cref="long.MinValue" /> until the regeneration
     ///     phase first sees the player.
     /// </summary>

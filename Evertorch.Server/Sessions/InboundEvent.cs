@@ -25,7 +25,8 @@ public readonly struct InboundEvent
         ItemDefinitionId item = default,
         uint quantity = 0,
         QuestDefinitionId quest = default,
-        PrimaryStat stat = PrimaryStat.None)
+        PrimaryStat stat = PrimaryStat.None,
+        JobDefinitionId job = default)
     {
         Kind = kind;
         Connection = connection;
@@ -44,6 +45,7 @@ public readonly struct InboundEvent
         Quantity = quantity;
         Quest = quest;
         Stat = stat;
+        Job = job;
     }
 
     public InboundEventKind Kind { get; }
@@ -109,6 +111,11 @@ public readonly struct InboundEvent
     ///     For <see cref="InboundEventKind.AllocateStat" />, the statistic to raise.
     /// </summary>
     public PrimaryStat Stat { get; }
+
+    /// <summary>
+    ///     For <see cref="InboundEventKind.ChangeJob" />, the first job to become.
+    /// </summary>
+    public JobDefinitionId Job { get; }
 
     public static InboundEvent Connected(ConnectionId connection)
     {
@@ -281,6 +288,23 @@ public readonly struct InboundEvent
     public static InboundEvent ForResetBuild(ConnectionId connection, EntityId npc, uint commandSequence)
     {
         return new InboundEvent(InboundEventKind.ResetBuild, connection, null, default, default, npc, commandSequence);
+    }
+
+    public static InboundEvent ForChangeJob(
+        ConnectionId connection,
+        EntityId npc,
+        JobDefinitionId job,
+        uint commandSequence)
+    {
+        return new InboundEvent(
+            InboundEventKind.ChangeJob,
+            connection,
+            null,
+            default,
+            default,
+            npc,
+            commandSequence,
+            job: job);
     }
 
     public static InboundEvent ForLearnSkill(ConnectionId connection, SkillDefinitionId skill, uint commandSequence)

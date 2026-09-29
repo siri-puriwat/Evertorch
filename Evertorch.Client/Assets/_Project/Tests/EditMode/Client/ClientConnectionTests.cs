@@ -10,6 +10,8 @@ namespace Evertorch.Client.Tests.EditMode
 [TestFixture]
 public sealed class ClientConnectionTests
 {
+    private static readonly JobDefinitionId Adventurer = new("job.adventurer");
+
     private const string ContentVersion = "11326bd1bdfe0c49";
     private const string Token = "dev:tester-secret";
 
@@ -201,13 +203,13 @@ public sealed class ClientConnectionTests
         var harness = new Harness();
         harness.EnterWorld();
         CharacterSheetStat[] stats = Enumerable.Repeat(new CharacterSheetStat(5, 2), 6).ToArray();
-        var first = new CharacterSheet(1, 0, 30, 0, 0, stats, 10, 5, 2, 3, 182, 105, 11, 153);
-        var second = new CharacterSheet(2, 5, 50, 0, 1, stats, 10, 5, 2, 3, 182, 105, 11, 153);
+        var first = new CharacterSheet(1, Adventurer, 0, 30, 0, 0, stats, 10, 5, 2, 3, 182, 105, 11, 153);
+        var second = new CharacterSheet(2, Adventurer, 5, 50, 0, 1, stats, 10, 5, 2, 3, 182, 105, 11, 153);
         var replaced = new List<CharacterSheet?>();
         harness.Connection.World!.SheetChanged += replaced.Add;
 
-        harness.Deliver(ProtocolChannel.Control, Encode(CharacterSheet.EncodedLength, first.Write));
-        harness.Deliver(ProtocolChannel.Control, Encode(CharacterSheet.EncodedLength, second.Write));
+        harness.Deliver(ProtocolChannel.Control, Encode(first.GetEncodedLength(), first.Write));
+        harness.Deliver(ProtocolChannel.Control, Encode(second.GetEncodedLength(), second.Write));
         harness.Deliver(ProtocolChannel.Control, new byte[] { 0x1F, 0x80, 0x00 });
 
         Assert.That(harness.Connection.World.Sheet, Is.EqualTo(second));
@@ -788,6 +790,28 @@ public sealed class ClientConnectionTests
             (sell.Npc, sell.InventoryItem, sell.Quantity, sell.CommandSequence),
             Is.EqualTo((npc, 41L, 3u, 6u)));
         Assert.That(new[] { buySent.Channel, sellSent.Channel }, Is.All.EqualTo(ProtocolChannel.Control));
+    }
+
+    [Test]
+    public void SendChangeJob_InTheWorld_TakesTheNextCommandSequence_AndOutsideSendsNothing()
+    {
+        var outside = new Harness();
+        outside.ConnectAndReceiveHello();
+        int before = outside.Transport.Sent.Count;
+        var harness = new Harness();
+        harness.EnterWorld(4);
+        var npc = new EntityId(15);
+        var job = new JobDefinitionId("job.vanguard");
+
+        uint none = outside.Connection.SendChangeJob(npc, job);
+        uint sequence = harness.Connection.SendChangeJob(npc, job);
+        FakeClientTransport.SentMessage sent = harness.Transport.Sent.Last();
+
+        Assert.That((none, outside.Transport.Sent.Count), Is.EqualTo((0u, before)));
+        Assert.That(sequence, Is.EqualTo(5u));
+        Assert.That(ChangeJob.TryRead(sent.Payload, out ChangeJob? read), Is.True);
+        Assert.That((read!.Npc, read.Job, read.CommandSequence), Is.EqualTo((npc, job, 5u)));
+        Assert.That(sent.Channel, Is.EqualTo(ProtocolChannel.Control));
     }
 
     [Test]

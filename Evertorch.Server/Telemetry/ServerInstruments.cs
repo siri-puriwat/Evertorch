@@ -70,6 +70,7 @@ public sealed class ServerInstruments
     private static readonly KeyValuePair<string, object?> StatChange = new("change", "stat");
     private static readonly KeyValuePair<string, object?> SkillChange = new("change", "skill");
     private static readonly KeyValuePair<string, object?> ResetChange = new("change", "reset");
+    private static readonly KeyValuePair<string, object?> JobChange = new("change", "job");
 
     private static readonly KeyValuePair<string, object?> RateLimitedReason = new("reason", "rate_limited");
     private static readonly KeyValuePair<string, object?> KickedReason = new("reason", "kicked");
@@ -343,6 +344,7 @@ public sealed class ServerInstruments
         {
             BuildChange.Stat => StatChange,
             BuildChange.Skill => SkillChange,
+            BuildChange.Job => JobChange,
             _ => ResetChange
         };
         m_buildChanges.Add(1, tag);

@@ -48,6 +48,7 @@ public sealed class SessionCommandLimits
             case InboundEventKind.AllocateStat:
             case InboundEventKind.LearnSkill:
             case InboundEventKind.ResetBuild:
+            case InboundEventKind.ChangeJob:
                 limit = ServerInstruments.ItemCommandLimit;
                 return m_item.TryTake(tick);
             case InboundEventKind.CreateCharacter:

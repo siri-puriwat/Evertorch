@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using Evertorch.Game;
 using NUnit.Framework;
 
 namespace Evertorch.Protocol.Tests
@@ -7,27 +8,31 @@ namespace Evertorch.Protocol.Tests
 [TestFixture]
 public sealed class CharacterSheetTests
 {
-    // Job level 3 with 20 of 80 job experience; 7 stat points and 2 skill points; STR 5 (2), AGI 11 (3), VIT 99 (at
-    // the cap, 0), INT 5 (2), DEX 21 (4), LUK 1 (2); attack 46, magic attack 12, defense 5, magic defense 6, hit 188,
-    // flee 125, critical 13 (1.3 %), attack speed 154.
+    // Job level 3 of job.a with 20 of 80 job experience; 7 stat points and 2 skill points; STR 5 (2), AGI 11 (3), VIT
+    // 99 (at the cap, 0), INT 5 (2), DEX 21 (4), LUK 1 (2); attack 46, magic attack 12, defense 5, magic defense 6,
+    // hit 188, flee 125, critical 13 (1.3 %), attack speed 154.
     private static readonly byte[] SheetBytes =
     {
-        0x1F, 0x80, 0x03,
+        0x1F, 0x80, 0x03, 0x00,
+        0x05, 0x00, 0x6A, 0x6F, 0x62, 0x2E, 0x61,
         0x14, 0, 0, 0, 0, 0, 0, 0,
         0x50, 0, 0, 0, 0, 0, 0, 0,
-        0x07, 0x00, 0x02,
+        0x07, 0x00, 0x02, 0x00,
         0x05, 0x02, 0x0B, 0x03, 0x63, 0x00, 0x05, 0x02, 0x15, 0x04, 0x01, 0x02,
         0x2E, 0x00, 0x0C, 0x00, 0x05, 0x00, 0x06, 0x00, 0xBC, 0x00, 0x7D, 0x00, 0x0D, 0x00, 0x9A, 0x00
     };
 
     // Offsets into the golden bytes.
     private const int JobLevel = 2;
-    private const int FirstStat = 22;
-    private const int VitCost = 27;
+    private const int Job = 6;
+    private const int SkillPoints = 29;
+    private const int FirstStat = 31;
+    private const int VitCost = 36;
 
     public static CharacterSheet Golden =>
         new(
             3,
+            new JobDefinitionId("job.a"),
             20,
             80,
             7,
@@ -46,7 +51,30 @@ public sealed class CharacterSheetTests
             13,
             154);
 
-    [TestCase(JobLevel, new byte[] { 0x00 }, "job level 0")]
+    private static CharacterSheet With(ushort jobLevel, string job, ushort skillPoints)
+    {
+        CharacterSheet golden = Golden;
+        return new CharacterSheet(
+            jobLevel,
+            new JobDefinitionId(job),
+            20,
+            80,
+            7,
+            skillPoints,
+            golden.Stats,
+            46,
+            12,
+            5,
+            6,
+            188,
+            125,
+            13,
+            154);
+    }
+
+    [TestCase(JobLevel, new byte[] { 0x00, 0x00 }, "job level 0")]
+    [TestCase(Job, new byte[] { 0x4A }, "a job ID with a capital")]
+    [TestCase(Job, new byte[] { 0x73, 0x6B, 0x69 }, "an ID of another kind")]
     [TestCase(FirstStat, new byte[] { 0x64, 0x00 }, "a statistic above 99")]
     [TestCase(FirstStat, new byte[] { 0x05, 0x00 }, "no cost below the cap")]
     [TestCase(VitCost, new byte[] { 0x02 }, "a cost at the cap")]
@@ -60,18 +88,19 @@ public sealed class CharacterSheetTests
     [Test]
     public void CharacterSheet_ForGoldenBytes_RoundTrips()
     {
-        byte[] written = new byte[CharacterSheet.EncodedLength];
+        byte[] written = new byte[Golden.GetEncodedLength()];
         int length = Golden.Write(written);
         bool isRead = CharacterSheet.TryRead(SheetBytes, out CharacterSheet? read);
 
-        Assert.That(CharacterSheet.EncodedLength, Is.EqualTo(50));
+        Assert.That(Golden.GetEncodedLength(), Is.EqualTo(59));
         Assert.That(length, Is.EqualTo(SheetBytes.Length));
         Assert.That(written, Is.EqualTo(SheetBytes));
         Assert.That(isRead, Is.True);
         Assert.That(read, Is.EqualTo(Golden));
         Assert.That(
-            (read!.JobLevel, read.JobExperience, read.JobExperienceToNextLevel, read.StatPoints, read.SkillPoints),
-            Is.EqualTo(((byte)3, 20ul, 80ul, (ushort)7, (byte)2)));
+            (read!.JobLevel, read.Job.Value, read.JobExperience, read.JobExperienceToNextLevel, read.StatPoints,
+                read.SkillPoints),
+            Is.EqualTo(((ushort)3, "job.a", 20ul, 80ul, (ushort)7, (ushort)2)));
         Assert.That(
             read.Stats.Select(stat => (stat.Value, stat.NextCost)),
             Is.EqualTo(new[] { (5, 2), (11, 3), (99, 0), (5, 2), (21, 4), (1, 2) }.Select(pair =>
@@ -87,20 +116,87 @@ public sealed class CharacterSheetTests
     }
 
     [Test]
+    public void CharacterSheet_GoldenOffsets_PointAtTheirFields()
+    {
+        Assert.That(BitConverter.ToUInt16(SheetBytes, JobLevel), Is.EqualTo(3));
+        Assert.That(SheetBytes[Job], Is.EqualTo((byte)'j'));
+        Assert.That(BitConverter.ToUInt16(SheetBytes, SkillPoints), Is.EqualTo(2));
+        Assert.That((SheetBytes[FirstStat], SheetBytes[VitCost]), Is.EqualTo(((byte)5, (byte)0)));
+    }
+
+    [Test]
     public void CharacterSheet_ThatDiffersInOneField_IsNotEqual()
     {
         CharacterSheet golden = Golden;
-        var faster = new CharacterSheet(3, 20, 80, 7, 2, golden.Stats, 46, 12, 5, 6, 188, 125, 13, 155);
+        var faster = new CharacterSheet(
+            3,
+            golden.Job,
+            20,
+            80,
+            7,
+            2,
+            golden.Stats,
+            46,
+            12,
+            5,
+            6,
+            188,
+            125,
+            13,
+            155);
 
         Assert.That(Golden, Is.EqualTo(golden));
         Assert.That(faster, Is.Not.EqualTo(golden));
+        Assert.That(With(3, "job.b", 2), Is.Not.EqualTo(golden), "another job");
         Assert.That(golden.Equals(null), Is.False);
+    }
+
+    // The job level and the skill points are u16 (finding S3 of the Milestone 9 review): nothing past 255 is clamped.
+    [Test]
+    public void CharacterSheet_WithAJobLevelAndSkillPointsPast255_KeepsThem()
+    {
+        CharacterSheet wide = With(300, "job.a", 1000);
+        byte[] written = new byte[wide.GetEncodedLength()];
+        wide.Write(written);
+
+        Assert.That(CharacterSheet.TryRead(written, out CharacterSheet? read), Is.True);
+        Assert.That((read!.JobLevel, read.SkillPoints), Is.EqualTo(((ushort)300, (ushort)1000)));
+    }
+
+    // The longest job ID makes the longest sheet (Network Protocol §6).
+    [Test]
+    public void CharacterSheet_WithTheLongestJobId_IsTheLongestSheet()
+    {
+        string longest = "job." + new string('a', DefinitionIdLimits.MaxLength - 4);
+        CharacterSheet sheet = With(10, longest, 5);
+        byte[] written = new byte[sheet.GetEncodedLength()];
+        sheet.Write(written);
+
+        Assert.That(sheet.GetEncodedLength(), Is.EqualTo(CharacterSheet.MaxEncodedLength));
+        Assert.That(CharacterSheet.MaxEncodedLength, Is.EqualTo(118));
+        Assert.That(CharacterSheet.TryRead(written, out CharacterSheet? read), Is.True);
+        Assert.That(read!.Job.Value, Is.EqualTo(longest));
     }
 
     [Test]
     public void CharacterSheet_WithoutSixStatistics_CannotBeBuilt()
     {
-        Action five = () => _ = new CharacterSheet(1, 0, 0, 0, 0, new CharacterSheetStat[5], 0, 0, 0, 0, 0, 0, 0, 0);
+        Action five = () => _ = new CharacterSheet(
+            1,
+            new JobDefinitionId("job.a"),
+            0,
+            0,
+            0,
+            0,
+            new CharacterSheetStat[5],
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0);
 
         Assert.That(five, Throws.ArgumentException);
     }

@@ -173,7 +173,7 @@ public sealed class NpcTests
     // The shop trades its stock at the stock's prices and buys every item with a sell price at that price, sorted by
     // item ID; the Gate Warden gives the quest that names it (Prototype Content §2).
     [Test]
-    public void Services_OfTheRepositoryNpcs_AreTheShopTheQuestAndTheReset()
+    public void Services_OfTheRepositoryNpcs_AreTheShopTheQuestTheResetAndTheJobChanges()
     {
         var server = new TestServer(withNpcs: true);
 
@@ -204,8 +204,17 @@ public sealed class NpcTests
         Assert.That((shop.OffersReset, warden.OffersReset, guildmaster.OffersReset), Is.EqualTo((false, false, true)));
         Assert.That((guildmaster.Entries.Count, guildmaster.Offers.Count), Is.EqualTo((0, 0)));
         Assert.That(
+            guildmaster.JobChanges.Select(change => (change.Job.Value, change.FromJob.Value, change.Level)),
+            Is.EqualTo(
+                new[]
+                {
+                    ("job.arcanist", "job.adventurer", (ushort)10), ("job.vanguard", "job.adventurer", (ushort)10)
+                }),
+            "every first job, at its base job's cap");
+        Assert.That(shop.JobChanges.Concat(warden.JobChanges), Is.Empty, "only the Guildmaster changes jobs");
+        Assert.That(
             (shop.GetEncodedLength(), warden.GetEncodedLength(), guildmaster.GetEncodedLength()),
-            Is.EqualTo((255, 79, 13)));
+            Is.EqualTo((256, 80, 78)));
     }
 
     [Test]

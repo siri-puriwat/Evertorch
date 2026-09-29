@@ -289,6 +289,7 @@ public sealed class SessionManager : ITickPhase
             case InboundEventKind.AllocateStat:
             case InboundEventKind.LearnSkill:
             case InboundEventKind.ResetBuild:
+            case InboundEventKind.ChangeJob:
                 HandleCommand(session, inboundEvent, tick);
                 break;
             default:
@@ -959,6 +960,11 @@ public sealed class SessionManager : ITickPhase
                 (int)command.Quantity),
             InboundEventKind.LearnSkill => Learn(session, command.Skill),
             InboundEventKind.ResetBuild => ResetBuild(session, command.Target),
+            InboundEventKind.ChangeJob => m_items.TryChangeJob(
+                session,
+                command.Target,
+                command.Job,
+                command.CommandSequence),
             _ => CommandRejectionReason.NotAllowedNow
         };
     }

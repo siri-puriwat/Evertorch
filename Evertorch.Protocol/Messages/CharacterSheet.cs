@@ -1,11 +1,13 @@
 using System;
 using System.Collections.Generic;
+using Evertorch.Game;
 
 namespace Evertorch.Protocol
 {
 /// <summary>
-///     The receiver's own character's build (Network Protocol §6, §9): its job level and job experience, the stat and
-///     skill points it has left, each primary statistic with what raising it next costs, and the derived statistics the
+///     The receiver's own character's build (Network Protocol §6, §9): its job level, its job, which the owner's client
+///     draws its body from, and its job experience, the stat and skill points it has left, each primary statistic with
+///     what raising it next costs, and the derived statistics the
 ///     Stats window shows. Sent to its owner alone, right after <c>WorldEntered</c> in every baseline and in the tick of
 ///     any change. The values travel on purpose, because the player must see them (Content Pipeline §5).
 /// </summary>
@@ -21,15 +23,20 @@ public sealed class CharacterSheet : IEquatable<CharacterSheet>
     /// </summary>
     public const byte MaxStat = 99;
 
-    public const int EncodedLength = sizeof(ushort) + sizeof(byte) + 2 * sizeof(ulong) + sizeof(ushort)
-        + sizeof(byte) + StatCount * 2 * sizeof(byte) + 8 * sizeof(ushort);
+    /// <summary>
+    ///     The longest sheet, with a job ID at the 64-byte limit.
+    /// </summary>
+    public const int MaxEncodedLength = sizeof(ushort) + sizeof(ushort) + sizeof(ushort)
+        + ProtocolLimits.MaxDefinitionIdBytes + 2 * sizeof(ulong) + 2 * sizeof(ushort) + StatCount * 2 * sizeof(byte)
+        + 8 * sizeof(ushort);
 
     public CharacterSheet(
-        byte jobLevel,
+        ushort jobLevel,
+        JobDefinitionId job,
         ulong jobExperience,
         ulong jobExperienceToNextLevel,
         ushort statPoints,
-        byte skillPoints,
+        ushort skillPoints,
         IReadOnlyList<CharacterSheetStat> stats,
         ushort attack,
         ushort magicAttack,
@@ -50,7 +57,13 @@ public sealed class CharacterSheet : IEquatable<CharacterSheet>
             throw new ArgumentException($"A sheet holds exactly {StatCount} statistics.", nameof(stats));
         }
 
+        if (job == default)
+        {
+            throw new ArgumentException("A job is required.", nameof(job));
+        }
+
         JobLevel = jobLevel;
+        Job = job;
         JobExperience = jobExperience;
         JobExperienceToNextLevel = jobExperienceToNextLevel;
         StatPoints = statPoints;
@@ -66,7 +79,12 @@ public sealed class CharacterSheet : IEquatable<CharacterSheet>
         AttackSpeed = attackSpeed;
     }
 
-    public byte JobLevel { get; }
+    public ushort JobLevel { get; }
+
+    /// <summary>
+    ///     The character's job, which a job change replaces (Gameplay Systems §6.1).
+    /// </summary>
+    public JobDefinitionId Job { get; }
 
     /// <summary>
     ///     Job experience toward the next job level.
@@ -80,7 +98,7 @@ public sealed class CharacterSheet : IEquatable<CharacterSheet>
 
     public ushort StatPoints { get; }
 
-    public byte SkillPoints { get; }
+    public ushort SkillPoints { get; }
 
     /// <summary>
     ///     STR, AGI, VIT, INT, DEX, and LUK, in that order.
@@ -122,6 +140,7 @@ public sealed class CharacterSheet : IEquatable<CharacterSheet>
         }
 
         return JobLevel == other.JobLevel
+            && Job == other.Job
             && JobExperience == other.JobExperience
             && JobExperienceToNextLevel == other.JobExperienceToNextLevel
             && StatPoints == other.StatPoints
@@ -141,12 +160,14 @@ public sealed class CharacterSheet : IEquatable<CharacterSheet>
         message = null;
         var reader = new WireReader(source);
         if (!reader.TryReadOpcode(MessageOpcode.CharacterSheet)
-            || !reader.TryReadByte(out byte jobLevel)
+            || !reader.TryReadUInt16(out ushort jobLevel)
+            || !reader.TryReadString(ProtocolLimits.MaxDefinitionIdBytes, out string jobText)
             || !reader.TryReadUInt64(out ulong jobExperience)
             || !reader.TryReadUInt64(out ulong jobExperienceToNextLevel)
             || !reader.TryReadUInt16(out ushort statPoints)
-            || !reader.TryReadByte(out byte skillPoints)
-            || jobLevel == 0)
+            || !reader.TryReadUInt16(out ushort skillPoints)
+            || jobLevel == 0
+            || !JobDefinitionId.TryCreate(jobText, out JobDefinitionId job))
         {
             return false;
         }
@@ -181,6 +202,7 @@ public sealed class CharacterSheet : IEquatable<CharacterSheet>
 
         message = new CharacterSheet(
             jobLevel,
+            job,
             jobExperience,
             jobExperienceToNextLevel,
             statPoints,
@@ -201,11 +223,12 @@ public sealed class CharacterSheet : IEquatable<CharacterSheet>
     {
         var writer = new WireWriter(destination);
         writer.WriteOpcode(MessageOpcode.CharacterSheet);
-        writer.WriteByte(JobLevel);
+        writer.WriteUInt16(JobLevel);
+        writer.WriteString(Job.Value, ProtocolLimits.MaxDefinitionIdBytes);
         writer.WriteUInt64(JobExperience);
         writer.WriteUInt64(JobExperienceToNextLevel);
         writer.WriteUInt16(StatPoints);
-        writer.WriteByte(SkillPoints);
+        writer.WriteUInt16(SkillPoints);
         foreach (CharacterSheetStat stat in Stats)
         {
             writer.WriteByte(stat.Value);
@@ -228,9 +251,15 @@ public sealed class CharacterSheet : IEquatable<CharacterSheet>
         return Equals(obj as CharacterSheet);
     }
 
+    public int GetEncodedLength()
+    {
+        return MaxEncodedLength - ProtocolLimits.MaxDefinitionIdBytes
+            + WireText.GetEncodedLength(Job.Value, ProtocolLimits.MaxDefinitionIdBytes) - sizeof(ushort);
+    }
+
     public override int GetHashCode()
     {
-        return HashCode.Combine(JobLevel, JobExperience, StatPoints, SkillPoints, Attack, Hit, Flee, AttackSpeed);
+        return HashCode.Combine(JobLevel, Job, JobExperience, StatPoints, SkillPoints, Attack, Hit, AttackSpeed);
     }
 }
 }

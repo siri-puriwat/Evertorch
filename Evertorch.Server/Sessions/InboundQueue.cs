@@ -334,6 +334,14 @@ public sealed class InboundQueue
 
                 decoded = InboundEvent.ForResetBuild(connection, reset.Npc, reset.CommandSequence);
                 return true;
+            case MessageOpcode.ChangeJob:
+                if (!ChangeJob.TryRead(payload, out ChangeJob? change))
+                {
+                    return false;
+                }
+
+                decoded = InboundEvent.ForChangeJob(connection, change!.Npc, change.Job, change.CommandSequence);
+                return true;
             case MessageOpcode.LearnSkill:
                 if (!LearnSkill.TryRead(payload, out LearnSkill? learn))
                 {

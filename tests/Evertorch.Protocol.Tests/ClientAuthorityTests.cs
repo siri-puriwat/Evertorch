@@ -46,7 +46,7 @@ public sealed class ClientAuthorityTests
                     "ClientHello", "EnterWorldRequest", "MoveInput", "StopMovement", "TargetEntity",
                     "AttackEntity", "CancelAction", "UseSkill", "PickupItem", "Respawn", "CreateCharacter", "Logout",
                     "InventoryResyncRequest", "EquipItem", "UnequipItem", "UseItem", "BuyItem", "SellItem",
-                    "AcceptQuest", "CompleteQuest", "AllocateStat", "LearnSkill", "ResetBuild"
+                    "AcceptQuest", "CompleteQuest", "AllocateStat", "LearnSkill", "ResetBuild", "ChangeJob"
                 }),
             "a new client message must be checked against the rules below before it joins this list");
     }

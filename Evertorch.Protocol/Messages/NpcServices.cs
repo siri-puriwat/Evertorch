@@ -6,14 +6,14 @@ namespace Evertorch.Protocol
 {
 /// <summary>
 ///     What an NPC offers, sent right after every spawn of the NPC to a client (Network Protocol §6, §9): each item it
-///     trades with the price it sells for and the price it pays, each quest it gives with its objective and reward, and
-///     whether it resets a build.
+///     trades with the price it sells for and the price it pays, each quest it gives with its objective and reward,
+///     whether it resets a build, and each job change it offers.
 ///     A shop's prices and a quest's terms travel on purpose, because the player must see them (Content Pipeline §5).
 /// </summary>
 public sealed class NpcServices
 {
     /// <summary>
-    ///     The most items one message holds: 74 bytes each with the longest ID, beside the 13 of the header.
+    ///     The most items one message holds: 74 bytes each with the longest ID, beside the 14 of the header.
     /// </summary>
     public const int MaxEntries = 13;
 
@@ -21,6 +21,11 @@ public sealed class NpcServices
     ///     The most quests one message holds: 154 bytes each with the longest IDs.
     /// </summary>
     public const int MaxOffers = 6;
+
+    /// <summary>
+    ///     The most job changes one message holds: 134 bytes each with the longest IDs.
+    /// </summary>
+    public const int MaxJobChanges = 7;
 
     /// <summary>
     ///     What one reliable message may carry, LiteNetLib's first MTU less its header; the content keeps every NPC's
@@ -35,7 +40,8 @@ public sealed class NpcServices
         EntityId npc,
         IReadOnlyList<NpcServiceEntry> entries,
         IReadOnlyList<NpcQuestOffer> offers,
-        bool offersReset = false)
+        bool offersReset = false,
+        IReadOnlyList<NpcJobChangeOffer>? jobChanges = null)
     {
         if (entries == null)
         {
@@ -57,10 +63,19 @@ public sealed class NpcServices
             throw new ArgumentException($"An NPC's services hold at most {MaxOffers} quests.", nameof(offers));
         }
 
+        jobChanges ??= Array.Empty<NpcJobChangeOffer>();
+        if (jobChanges.Count > MaxJobChanges)
+        {
+            throw new ArgumentException(
+                $"An NPC's services hold at most {MaxJobChanges} job changes.",
+                nameof(jobChanges));
+        }
+
         Npc = npc;
         Entries = entries;
         Offers = offers;
         OffersReset = offersReset;
+        JobChanges = jobChanges;
         if (GetEncodedLength() > MaxEncodedLength)
         {
             throw new ArgumentException($"An NPC's services must fit {MaxEncodedLength} bytes.", nameof(entries));
@@ -83,6 +98,12 @@ public sealed class NpcServices
     ///     Whether the NPC resets a character's build (Gameplay Systems §6.1).
     /// </summary>
     public bool OffersReset { get; }
+
+    /// <summary>
+    ///     The job changes the NPC offers, ordered by job ID; the NPC changes jobs when there is at least one
+    ///     (Gameplay Systems §6.1).
+    /// </summary>
+    public IReadOnlyList<NpcJobChangeOffer> JobChanges { get; }
 
     public static bool TryRead(ReadOnlySpan<byte> source, out NpcServices? message)
     {
@@ -141,18 +162,44 @@ public sealed class NpcServices
             offers[index] = new NpcQuestOffer(quest, monster, count, baseExperience, jobExperience, coins);
         }
 
-        if (!reader.TryReadByte(out byte services) || (services & ~ResetService) != 0 || !reader.IsAtEnd)
+        if (!reader.TryReadByte(out byte services)
+            || (services & ~ResetService) != 0
+            || !reader.TryReadByte(out byte jobChangeCount)
+            || jobChangeCount > MaxJobChanges)
         {
             return false;
         }
 
-        message = new NpcServices(new EntityId(npc), entries, offers, (services & ResetService) != 0);
+        var jobChanges = new NpcJobChangeOffer[jobChangeCount];
+        for (int index = 0; index < jobChangeCount; index++)
+        {
+            if (!reader.TryReadString(ProtocolLimits.MaxDefinitionIdBytes, out string jobText)
+                || !reader.TryReadString(ProtocolLimits.MaxDefinitionIdBytes, out string fromText)
+                || !reader.TryReadUInt16(out ushort level)
+                || level == 0
+                || !JobDefinitionId.TryCreate(jobText, out JobDefinitionId job)
+                || !JobDefinitionId.TryCreate(fromText, out JobDefinitionId from)
+                || job == from
+                || ContainsJob(jobChanges, index, job))
+            {
+                return false;
+            }
+
+            jobChanges[index] = new NpcJobChangeOffer(job, from, level);
+        }
+
+        if (!reader.IsAtEnd)
+        {
+            return false;
+        }
+
+        message = new NpcServices(new EntityId(npc), entries, offers, (services & ResetService) != 0, jobChanges);
         return true;
     }
 
     public int GetEncodedLength()
     {
-        int length = sizeof(ushort) + sizeof(long) + 3 * sizeof(byte);
+        int length = sizeof(ushort) + sizeof(long) + 4 * sizeof(byte);
         foreach (NpcServiceEntry entry in Entries)
         {
             length += WireText.GetEncodedLength(entry.Item.Value, ProtocolLimits.MaxDefinitionIdBytes)
@@ -166,6 +213,13 @@ public sealed class NpcServices
                 + sizeof(ushort)
                 + 2 * sizeof(ulong)
                 + sizeof(uint);
+        }
+
+        foreach (NpcJobChangeOffer change in JobChanges)
+        {
+            length += WireText.GetEncodedLength(change.Job.Value, ProtocolLimits.MaxDefinitionIdBytes)
+                + WireText.GetEncodedLength(change.FromJob.Value, ProtocolLimits.MaxDefinitionIdBytes)
+                + sizeof(ushort);
         }
 
         return length;
@@ -196,6 +250,14 @@ public sealed class NpcServices
         }
 
         writer.WriteByte(OffersReset ? ResetService : (byte)0);
+        writer.WriteByte((byte)JobChanges.Count);
+        foreach (NpcJobChangeOffer change in JobChanges)
+        {
+            writer.WriteString(change.Job.Value, ProtocolLimits.MaxDefinitionIdBytes);
+            writer.WriteString(change.FromJob.Value, ProtocolLimits.MaxDefinitionIdBytes);
+            writer.WriteUInt16(change.Level);
+        }
+
         return writer.Position;
     }
 
@@ -204,6 +266,19 @@ public sealed class NpcServices
         for (int index = 0; index < count; index++)
         {
             if (entries[index].Item == item)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool ContainsJob(NpcJobChangeOffer[] changes, int count, JobDefinitionId job)
+    {
+        for (int index = 0; index < count; index++)
+        {
+            if (changes[index].Job == job)
             {
                 return true;
             }

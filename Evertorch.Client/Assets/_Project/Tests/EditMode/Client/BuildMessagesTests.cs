@@ -12,12 +12,14 @@ namespace Evertorch.Client.Tests.EditMode
 [TestFixture]
 public sealed class BuildMessagesTests
 {
+    private static readonly JobDefinitionId Adventurer = new("job.adventurer");
+
     private static CharacterSheet Sheet(byte jobLevel, byte agility, byte agilityCost = 2, byte skillPoints = 0)
     {
         CharacterSheetStat[] stats = Enumerable.Repeat(new CharacterSheetStat(5, 2), CharacterSheet.StatCount)
             .ToArray();
         stats[1] = new CharacterSheetStat(agility, agilityCost);
-        return new CharacterSheet(jobLevel, 0, 30, 3, skillPoints, stats, 46, 12, 5, 6, 188, 125, 13, 154);
+        return new CharacterSheet(jobLevel, Adventurer, 0, 30, 3, skillPoints, stats, 46, 12, 5, 6, 188, 125, 13, 154);
     }
 
     private static SkillListEntry Entry(string skill, byte level, byte max, byte prerequisite = 255, byte needs = 0)

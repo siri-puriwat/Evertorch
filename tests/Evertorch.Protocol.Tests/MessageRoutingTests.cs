@@ -38,6 +38,7 @@ public sealed class MessageRoutingTests
     [TestCase(MessageOpcode.AllocateStat)]
     [TestCase(MessageOpcode.LearnSkill)]
     [TestCase(MessageOpcode.ResetBuild)]
+    [TestCase(MessageOpcode.ChangeJob)]
     [TestCase(MessageOpcode.ServerHello)]
     [TestCase(MessageOpcode.WorldEntered)]
     [TestCase(MessageOpcode.EntitySpawn)]
@@ -109,6 +110,7 @@ public sealed class MessageRoutingTests
     [TestCase(MessageOpcode.AllocateStat, true)]
     [TestCase(MessageOpcode.LearnSkill, true)]
     [TestCase(MessageOpcode.ResetBuild, true)]
+    [TestCase(MessageOpcode.ChangeJob, true)]
     [TestCase(MessageOpcode.Respawn, true)]
     [TestCase(MessageOpcode.MoveInput, true)]
     [TestCase(MessageOpcode.StopMovement, true)]
@@ -152,7 +154,7 @@ public sealed class MessageRoutingTests
             "UseSkill=0x0008", "PickupItem=0x0009", "Respawn=0x000C", "CreateCharacter=0x000D", "Logout=0x000E",
             "InventoryResyncRequest=0x000F", "EquipItem=0x0010", "UnequipItem=0x0011", "UseItem=0x0012",
             "BuyItem=0x0013", "SellItem=0x0014", "AcceptQuest=0x0015", "CompleteQuest=0x0016", "AllocateStat=0x0017",
-            "LearnSkill=0x0018", "ResetBuild=0x0019",
+            "LearnSkill=0x0018", "ResetBuild=0x0019", "ChangeJob=0x001A",
             "ServerHello=0x8001", "WorldEntered=0x8003",
             "EntitySpawn=0x8004", "EntityDespawn=0x8005", "EntitySnapshot=0x8006", "TargetChanged=0x8007",
             "AttackStarted=0x8008", "Damage=0x8009", "EntityDied=0x800A", "SkillCastStarted=0x800B",
@@ -184,9 +186,9 @@ public sealed class MessageRoutingTests
     }
 
     [Test]
-    public void ProtocolVersion_IsTwentyEight()
+    public void ProtocolVersion_IsTwentyNine()
     {
-        Assert.That(ProtocolConstants.ProtocolVersion, Is.EqualTo(28));
+        Assert.That(ProtocolConstants.ProtocolVersion, Is.EqualTo(29));
     }
 
     [Test]

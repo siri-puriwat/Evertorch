@@ -37,6 +37,13 @@ public sealed class CharacterBuilds
             new EventId(1013, "SkillLearned"),
             "Character {Character} on connection {Connection} learned {Skill} at level {Level}.");
 
+    private static readonly Action<ILogger, long, long, JobDefinitionId, JobDefinitionId, string, Exception?>
+        LogJobChanged = LoggerMessage.Define<long, long, JobDefinitionId, JobDefinitionId, string>(
+            LogLevel.Information,
+            new EventId(1015, "JobChanged"),
+            "Character {Character} on connection {Connection} changed job from {PreviousJob} to {Job}; taken off: "
+            + "{Item}.");
+
     private static readonly Action<ILogger, long, long, string, Exception?> LogBuildReset =
         LoggerMessage.Define<long, long, string>(
             LogLevel.Information,
@@ -196,11 +203,12 @@ public sealed class CharacterBuilds
 
         DerivedStats derived = player.Stats;
         return new CharacterSheet(
-            (byte)Math.Min(byte.MaxValue, player.JobLevel),
+            (ushort)Math.Min(ushort.MaxValue, player.JobLevel),
+            player.Job,
             (ulong)Math.Max(0, player.JobExperience),
             (ulong)m_rules.ExperienceToNextLevel(table, player.JobLevel),
             (ushort)Math.Min(ushort.MaxValue, StatPointsLeft(player)),
-            (byte)Math.Min(byte.MaxValue, SkillPointsLeft(player)),
+            (ushort)Math.Min(ushort.MaxValue, SkillPointsLeft(player)),
             stats,
             Clamp(derived.PhysicalAttack),
             Clamp(derived.MagicalAttack),
@@ -277,6 +285,29 @@ public sealed class CharacterBuilds
 
         LogBuildReset(m_logger, player.Character.Value, connection.Value, GuildmasterReason, null);
         m_instruments.RecordBuildChange(BuildChange.Reset);
+    }
+
+    /// <summary>
+    ///     A committed job change, once its commit is back (Gameplay Systems §6.1): the player becomes
+    ///     <paramref name="job" /> at job level 1 with job experience 0, keeps its learned skills, has its statistics
+    ///     derived again, and is spawned again for those who see it; the change is logged with the item it took off, if
+    ///     any, and counted. The caller interrupts a cast, wears what the commit left worn, and tells the owner.
+    /// </summary>
+    public void ChangeJob(PlayerEntity player, ConnectionId connection, JobDefinitionId job, ItemDefinitionId takenOff)
+    {
+        JobDefinitionId previous = player.Job;
+        player.ChangeJob(job);
+        m_stats.Recalculate(player, m_content.Jobs[job]);
+        player.RespawnPending = true;
+        LogJobChanged(
+            m_logger,
+            player.Character.Value,
+            connection.Value,
+            previous,
+            job,
+            takenOff == default ? "nothing" : takenOff.Value,
+            null);
+        m_instruments.RecordBuildChange(BuildChange.Job);
     }
 
     /// <summary>

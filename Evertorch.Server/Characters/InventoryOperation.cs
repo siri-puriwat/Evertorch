@@ -6,8 +6,8 @@ namespace Evertorch.Server
 /// <summary>
 ///     A character's one inventory change whose commit has not settled (Persistence §5, §7): its kind, the command that
 ///     asked for it, and its operation ID, with what the answer needs besides: a pickup's reserved drop, the row a swap
-///     takes out of its slot, which the ledger does not name, the item a use restores with, what a trade moves, or
-///     the quest a turn-in completes.
+///     takes out of its slot, which the ledger does not name, the item a use restores with, what a trade moves, the
+///     quest a turn-in completes, or the job a change makes.
 /// </summary>
 public sealed class InventoryOperation
 {
@@ -20,7 +20,8 @@ public sealed class InventoryOperation
         ItemDefinitionId item = default,
         int quantity = 0,
         long coins = 0,
-        QuestDefinitionId quest = default)
+        QuestDefinitionId quest = default,
+        JobDefinitionId job = default)
     {
         Kind = kind;
         CommandSequence = commandSequence;
@@ -31,6 +32,7 @@ public sealed class InventoryOperation
         Quantity = quantity;
         Coins = coins;
         Quest = quest;
+        Job = job;
     }
 
     public InventoryOperationKind Kind { get; }
@@ -56,6 +58,9 @@ public sealed class InventoryOperation
 
     /// <summary>The quest a turn-in completes; default for every other kind.</summary>
     public QuestDefinitionId Quest { get; }
+
+    /// <summary>The first job a change makes; default for every other kind.</summary>
+    public JobDefinitionId Job { get; }
 
     /// <summary>
     ///     A pickup of <paramref name="drop" />, whose drop ID is the operation ID.

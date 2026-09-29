@@ -42,10 +42,11 @@ public sealed class SharedCharacterMessageTests
     // 125, critical 13, attack speed 154.
     private static readonly byte[] SheetBytes =
     {
-        0x1F, 0x80, 0x03,
+        0x1F, 0x80, 0x03, 0x00,
+        0x05, 0x00, 0x6A, 0x6F, 0x62, 0x2E, 0x61,
         0x14, 0, 0, 0, 0, 0, 0, 0,
         0x50, 0, 0, 0, 0, 0, 0, 0,
-        0x07, 0x00, 0x02,
+        0x07, 0x00, 0x02, 0x00,
         0x05, 0x02, 0x0B, 0x03, 0x63, 0x00, 0x05, 0x02, 0x15, 0x04, 0x01, 0x02,
         0x2E, 0x00, 0x0C, 0x00, 0x05, 0x00, 0x06, 0x00, 0xBC, 0x00, 0x7D, 0x00, 0x0D, 0x00, 0x9A, 0x00
     };
@@ -120,6 +121,7 @@ public sealed class SharedCharacterMessageTests
     {
         var sheet = new CharacterSheet(
             3,
+            new JobDefinitionId("job.a"),
             20,
             80,
             7,
@@ -137,7 +139,7 @@ public sealed class SharedCharacterMessageTests
             125,
             13,
             154);
-        byte[] buffer = new byte[CharacterSheet.EncodedLength];
+        byte[] buffer = new byte[sheet.GetEncodedLength()];
         sheet.Write(buffer);
 
         bool isRead = CharacterSheet.TryRead(SheetBytes, out CharacterSheet? read);
@@ -148,6 +150,7 @@ public sealed class SharedCharacterMessageTests
         Assert.That(read!.Stats[2].Value, Is.EqualTo((byte)99));
         Assert.That(read.Stats[2].NextCost, Is.EqualTo((byte)0));
         Assert.That(read.AttackSpeed, Is.EqualTo((ushort)154));
+        Assert.That((read.JobLevel, read.Job.Value, read.SkillPoints), Is.EqualTo(((ushort)3, "job.a", (ushort)2)));
     }
 
     [Test]

@@ -30,6 +30,7 @@ public enum MessageOpcode : ushort
     AllocateStat = 0x0017,
     LearnSkill = 0x0018,
     ResetBuild = 0x0019,
+    ChangeJob = 0x001A,
     ServerHello = 0x8001,
     WorldEntered = 0x8003,
     EntitySpawn = 0x8004,

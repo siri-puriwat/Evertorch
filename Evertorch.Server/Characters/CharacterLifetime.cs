@@ -141,7 +141,8 @@ public sealed class CharacterLifetime
             player.Experience,
             m_time.GetUtcNow().UtcDateTime,
             character.Quests.ToCheckpoint(),
-            character.Operation?.Kind == InventoryOperationKind.QuestReward,
+            character.Operation?.Kind == InventoryOperationKind.QuestReward
+            || character.Operation?.Kind == InventoryOperationKind.JobChange,
             player.JobLevel,
             player.JobExperience,
             player.Primary,

@@ -27,6 +27,7 @@ public sealed class PlayerPanelTests
     private const string GateWarden = "npc.gate_warden";
     private const string Hunt = "quest.crawler_hunt";
     private const string Crawler = "monster.forest_crawler";
+    private static readonly JobDefinitionId Adventurer = new("job.adventurer");
 
     private static readonly EntityId Local = new(100);
 
@@ -282,7 +283,7 @@ public sealed class PlayerPanelTests
     private static CharacterSheet SkillSheet(byte skillPoints)
     {
         CharacterSheetStat[] stats = Enumerable.Repeat(new CharacterSheetStat(5, 2), 6).ToArray();
-        return new CharacterSheet(2, 0, 50, 0, skillPoints, stats, 10, 5, 2, 3, 182, 105, 11, 153);
+        return new CharacterSheet(2, Adventurer, 0, 50, 0, skillPoints, stats, 10, 5, 2, 3, 182, 105, 11, 153);
     }
 
     private static SkillList StrikeAndFirstAid(uint strikeCooldownLeftMs)
@@ -419,13 +420,14 @@ public sealed class PlayerPanelTests
         {
             new(5, 2), new(11, 3), new(99, 0), new(5, 2), new(21, 4), new(1, 2)
         };
-        return new CharacterSheet(3, 20, 80, statPoints, 2, stats, 46, 12, 5, 6, 188, 125, 13, 154);
+        return new CharacterSheet(3, Adventurer, 20, 80, statPoints, 2, stats, 46, 12, 5, 6, 188, 125, 13, 154);
     }
 
     private static CharacterSheet Sheet(byte jobLevel, ulong jobExperience, ulong toNext)
     {
         CharacterSheetStat[] stats = Enumerable.Repeat(new CharacterSheetStat(5, 2), 6).ToArray();
-        return new CharacterSheet(jobLevel, jobExperience, toNext, 0, 0, stats, 10, 5, 2, 3, 182, 105, 11, 153);
+        return new CharacterSheet(jobLevel, Adventurer, jobExperience, toNext, 0, 0, stats, 10, 5, 2, 3, 182, 105, 11,
+            153);
     }
 
     // What OnChangedMap leaves the panels while the next map loads: no world, and a map change under way.
@@ -660,7 +662,7 @@ public sealed class PlayerPanelTests
 
         CharacterSheet same = world.Sheet!;
         world.OnCharacterSheet(
-            new CharacterSheet(2, 30, 50, same.StatPoints, 1, same.Stats, 10, 5, 2, 3, 182, 105, 11, 153));
+            new CharacterSheet(2, Adventurer, 30, 50, same.StatPoints, 1, same.Stats, 10, 5, 2, 3, 182, 105, 11, 153));
         yield return null;
 
         Assert.That(window.TextChanges, Is.EqualTo(changes), "the same points, the same rows");
@@ -727,7 +729,7 @@ public sealed class PlayerPanelTests
         CharacterSheetStat[] raised = before.Stats.ToArray();
         raised[1] = new CharacterSheetStat(6, 2);
         world.OnCharacterSheet(
-            new CharacterSheet(1, 0, 30, 0, 0, raised, 10, 5, 2, 3, 182, 106, 11, 153));
+            new CharacterSheet(1, Adventurer, 0, 30, 0, 0, raised, 10, 5, 2, 3, 182, 106, 11, 153));
 
         Assert.That(lines.Text, Is.EqualTo("AGI 6."));
     }

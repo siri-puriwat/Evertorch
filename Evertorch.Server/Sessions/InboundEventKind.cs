@@ -133,6 +133,12 @@ public enum InboundEventKind
     ///     A request to the NPC <see cref="InboundEvent.Target" /> for the reset of the character's build, carrying a
     ///     command sequence.
     /// </summary>
-    ResetBuild = 26
+    ResetBuild = 26,
+
+    /// <summary>
+    ///     A request to the NPC <see cref="InboundEvent.Target" /> to change the character's job to
+    ///     <see cref="InboundEvent.Job" />, carrying a command sequence.
+    /// </summary>
+    ChangeJob = 27
 }
 }

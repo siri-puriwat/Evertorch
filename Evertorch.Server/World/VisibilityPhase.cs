@@ -47,6 +47,18 @@ public sealed class VisibilityPhase : ITickPhase
                 Update(session, session.Player, session.Map, context.Tick);
             }
         }
+
+        // Every session has had its chance to see a changed body; one that comes into view later spawns it anew.
+        foreach (MapInstance map in m_world.Maps)
+        {
+            foreach (WorldEntity entity in map.Entities)
+            {
+                if (entity is PlayerEntity player)
+                {
+                    player.RespawnPending = false;
+                }
+            }
+        }
     }
 
     private void Update(ClientSession session, PlayerEntity observer, MapInstance map, uint tick)
@@ -58,31 +70,30 @@ public sealed class VisibilityPhase : ITickPhase
         foreach (WorldEntity entity in m_visible)
         {
             m_visibleIds.Add(entity.Id);
-            if (session.KnownEntities.Add(entity.Id))
+            if (!session.KnownEntities.Add(entity.Id))
             {
-                m_sender.Send(
-                    session.Connection,
-                    new EntitySpawn(
-                        entity.Id,
-                        entity.Kind,
-                        entity.DefinitionId,
-                        entity.Position,
-                        entity.Facing,
-                        entity.StateFlags,
-                        entity.SharedHealthPermille));
-                if (entity is NpcEntity npc)
+                // A second spawn of a known entity replaces it: a player whose job changed shows its new body in
+                // place, with no despawn (Network Protocol §9).
+                if (entity is PlayerEntity { RespawnPending: true })
                 {
-                    // Each spawn, on entering, an attach, a map change, or coming into range, is followed by what the
-                    // NPC offers (Network Protocol §9).
-                    m_sender.Send(session.Connection, npc.Services);
+                    SendSpawn(session, entity);
                 }
-                else if (entity is ItemDropEntity drop && drop.DroppedTick == tick)
-                {
-                    // Only a client that sees the drop land is told what fell; one that walks up later sees the item.
-                    m_sender.Send(
-                        session.Connection,
-                        new ItemDropped(drop.Id, drop.DefinitionId, drop.Amount, drop.Position));
-                }
+
+                continue;
+            }
+
+            SendSpawn(session, entity);
+            if (entity is NpcEntity npc)
+            {
+                // Each spawn, on entering, an attach, a map change, or coming into range, is followed by what the NPC
+                // offers (Network Protocol §9).
+                m_sender.Send(session.Connection, npc.Services);
+            }
+            else if (entity is ItemDropEntity drop && drop.DroppedTick == tick)
+            {
+                // Only a client that sees the drop land is told what fell; one that walks up later sees the item.
+                m_sender.Send(session.Connection,
+                    new ItemDropped(drop.Id, drop.DefinitionId, drop.Amount, drop.Position));
             }
         }
 
@@ -102,6 +113,20 @@ public sealed class VisibilityPhase : ITickPhase
             m_sender.Send(session.Connection, new EntityDespawn(departed, reason));
             m_targeting.ClearIfTargeting(session, departed);
         }
+    }
+
+    private void SendSpawn(ClientSession session, WorldEntity entity)
+    {
+        m_sender.Send(
+            session.Connection,
+            new EntitySpawn(
+                entity.Id,
+                entity.Kind,
+                entity.DefinitionId,
+                entity.Position,
+                entity.Facing,
+                entity.StateFlags,
+                entity.SharedHealthPermille));
     }
 }
 }

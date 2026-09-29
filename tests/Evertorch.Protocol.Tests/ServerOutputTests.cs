@@ -31,8 +31,8 @@ public sealed class ServerOutputTests
         ["CharacterProgress"] = new[] { "Experience", "ExperienceToNextLevel", "Level" },
         ["CharacterSheet"] = new[]
         {
-            "Attack", "AttackSpeed", "Critical", "Defense", "Flee", "Hit", "JobExperience", "JobExperienceToNextLevel",
-            "JobLevel", "MagicAttack", "MagicDefense", "SkillPoints", "StatPoints", "Stats"
+            "Attack", "AttackSpeed", "Critical", "Defense", "Flee", "Hit", "Job", "JobExperience",
+            "JobExperienceToNextLevel", "JobLevel", "MagicAttack", "MagicDefense", "SkillPoints", "StatPoints", "Stats"
         },
         ["CharacterSheetStat"] = new[] { "NextCost", "Value" },
         ["CommandRejected"] = new[] { "CommandSequence", "Reason" },
@@ -57,9 +57,10 @@ public sealed class ServerOutputTests
         ["LogoutComplete"] = Array.Empty<string>(),
         ["MapDefinitionId"] = new[] { "Value" },
         ["MonsterDefinitionId"] = new[] { "Value" },
+        ["NpcJobChangeOffer"] = new[] { "FromJob", "Job", "Level" },
         ["NpcQuestOffer"] = new[] { "BaseExperience", "Coins", "Count", "JobExperience", "Monster", "Quest" },
         ["NpcServiceEntry"] = new[] { "BuyPrice", "Item", "SellPrice" },
-        ["NpcServices"] = new[] { "Entries", "Npc", "Offers", "OffersReset" },
+        ["NpcServices"] = new[] { "Entries", "JobChanges", "Npc", "Offers", "OffersReset" },
         ["QuestDefinitionId"] = new[] { "Value" },
         ["QuestLog"] = new[] { "Entries" },
         ["QuestLogEntry"] = new[] { "Count", "Progress", "Quest", "State" },

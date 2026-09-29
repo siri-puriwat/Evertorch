@@ -50,7 +50,7 @@ public sealed class AbuseOptions
     /// <summary>
     ///     Commands of the item class per second, per connection: <c>EquipItem</c>, <c>UnequipItem</c>, <c>UseItem</c>,
     ///     <c>BuyItem</c>, <c>SellItem</c>, <c>AcceptQuest</c>, <c>CompleteQuest</c>, <c>AllocateStat</c>,
-    ///     <c>LearnSkill</c>, and <c>ResetBuild</c>.
+    ///     <c>LearnSkill</c>, <c>ResetBuild</c>, and <c>ChangeJob</c>.
     /// </summary>
     public int ItemCommandsPerSecond { get; set; } = 10;
 

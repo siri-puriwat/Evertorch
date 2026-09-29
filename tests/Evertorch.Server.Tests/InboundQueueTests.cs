@@ -115,6 +115,14 @@ public sealed class InboundQueueTests
         return payload;
     }
 
+    private static byte[] ChangeJobPayload()
+    {
+        var message = new ChangeJob(new EntityId(15), new JobDefinitionId("job.vanguard"), 9);
+        byte[] payload = new byte[message.GetEncodedLength()];
+        message.Write(payload);
+        return payload;
+    }
+
     private static byte[] LearnSkillPayload()
     {
         var message = new LearnSkill(new SkillDefinitionId("skill.strike"), 9);
@@ -153,11 +161,12 @@ public sealed class InboundQueueTests
         byte[] allocate = AllocateStatPayload();
         byte[] learn = LearnSkillPayload();
         byte[] reset = ResetBuildPayload();
+        byte[] change = ChangeJobPayload();
         foreach ((string name, byte[] payload) in new[]
                  {
                      ("UseSkill", useSkill), ("EquipItem", equip), ("UnequipItem", unequip), ("UseItem", useItem),
                      ("BuyItem", buy), ("SellItem", sell), ("AcceptQuest", accept), ("CompleteQuest", complete),
-                     ("AllocateStat", allocate), ("LearnSkill", learn), ("ResetBuild", reset)
+                     ("AllocateStat", allocate), ("LearnSkill", learn), ("ResetBuild", reset), ("ChangeJob", change)
                  })
         {
             yield return new TestCaseData(payload.Take(payload.Length - 1).ToArray()).SetName($"{name} cut short");
@@ -192,6 +201,11 @@ public sealed class InboundQueueTests
         yield return new TestCaseData(With(learn, text - 2, 2, 0xFF)).SetName("LearnSkill longer than any ID");
         yield return new TestCaseData(With(reset, 2, 8, 0x00)).SetName("ResetBuild at NPC 0");
         yield return new TestCaseData(With(reset, 2, 8, 0xFF)).SetName("ResetBuild at NPC -1");
+        const int job = 12;
+        yield return new TestCaseData(With(change, 2, 8, 0x00)).SetName("ChangeJob at NPC 0");
+        yield return new TestCaseData(With(change, job, 1, 0x20)).SetName("ChangeJob naming no job");
+        yield return new TestCaseData(With(change, job, 1, 0xFF)).SetName("ChangeJob of broken UTF-8");
+        yield return new TestCaseData(With(change, job - 2, 2, 0xFF)).SetName("ChangeJob longer than any ID");
     }
 
     [TestCaseSource(nameof(MalformedItemAndSkillCommands))]
@@ -328,7 +342,7 @@ public sealed class InboundQueueTests
                  {
                      UseSkillPayload(), EquipPayload(), UnequipPayload(), UseItemPayload(), BuyPayload(), SellPayload(),
                      AcceptQuestPayload(), CompleteQuestPayload(), LearnSkillPayload(), ResetBuildPayload(),
-                     AllocateStatPayload()
+                     ChangeJobPayload(), AllocateStatPayload()
                  })
         {
             queue.OnPayload(Peer, ProtocolChannel.Control, payload);
@@ -338,11 +352,13 @@ public sealed class InboundQueueTests
         InboundEvent allocate = default;
         InboundEvent learn = default;
         InboundEvent reset = default;
+        InboundEvent change = default;
         while (queue.TryDequeue(out InboundEvent inboundEvent))
         {
             kinds.Add(inboundEvent.Kind);
             learn = inboundEvent.Kind == InboundEventKind.LearnSkill ? inboundEvent : learn;
             reset = inboundEvent.Kind == InboundEventKind.ResetBuild ? inboundEvent : reset;
+            change = inboundEvent.Kind == InboundEventKind.ChangeJob ? inboundEvent : change;
             allocate = inboundEvent;
         }
 
@@ -355,7 +371,7 @@ public sealed class InboundQueueTests
                     InboundEventKind.UseSkill, InboundEventKind.Equip, InboundEventKind.Unequip,
                     InboundEventKind.UseItem, InboundEventKind.Buy, InboundEventKind.Sell, InboundEventKind.AcceptQuest,
                     InboundEventKind.CompleteQuest, InboundEventKind.LearnSkill, InboundEventKind.ResetBuild,
-                    InboundEventKind.AllocateStat
+                    InboundEventKind.ChangeJob, InboundEventKind.AllocateStat
                 }));
         Assert.That(
             (allocate.Stat, allocate.Quantity, allocate.CommandSequence),
@@ -363,6 +379,9 @@ public sealed class InboundQueueTests
             "the statistic and its steps");
         Assert.That((learn.Skill, learn.CommandSequence), Is.EqualTo((new SkillDefinitionId("skill.strike"), 9u)));
         Assert.That((reset.Target, reset.CommandSequence), Is.EqualTo((new EntityId(15), 9u)));
+        Assert.That(
+            (change.Target, change.Job, change.CommandSequence),
+            Is.EqualTo((new EntityId(15), new JobDefinitionId("job.vanguard"), 9u)));
         Assert.That(UseSkillPayload().Skip(4).Take(12), Is.EqualTo(Encoding.ASCII.GetBytes("skill.strike")));
     }
 

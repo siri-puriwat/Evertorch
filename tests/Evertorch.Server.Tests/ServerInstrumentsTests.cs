@@ -225,6 +225,27 @@ public sealed class ServerInstrumentsTests
     }
 
     [Test]
+    public void BuildChanges_CountAJobChange_TaggedJob()
+    {
+        var server = new TestServer(withNpcs: true);
+        server.Store.SeedOnCreate = BuildSeed.ReadyToChange;
+        using var recorder = new MeterRecorder(server.Instruments.Meter);
+        ConnectionId player = server.EnterWorld(1);
+        NpcEntity guildmaster = server.NpcOf("npc.guildmaster");
+        server.Place(player, guildmaster.Position.X + 2f, guildmaster.Position.Z);
+        server.Tick();
+
+        server.SendChangeJob(player, guildmaster.Id, "job.adventurer", 1);
+        server.Tick();
+        server.SendChangeJob(player, guildmaster.Id, "job.vanguard", 2);
+        server.TickUntil(() => server.PlayerOf(player).Job.Value == "job.vanguard");
+
+        Assert.That(Tagged(recorder, "evertorch.build.changes", "change", "job"), Is.EqualTo(1));
+        Assert.That(Named(recorder, "evertorch.build.changes"), Has.Count.EqualTo(1),
+            "the refused change counts nothing");
+    }
+
+    [Test]
     public void BuildChanges_CountALearnedLevel_TaggedSkill()
     {
         var server = new TestServer(withAdventurerBuild: false);

@@ -7,6 +7,7 @@ public enum BuildChange
 {
     Stat,
     Skill,
-    Reset
+    Reset,
+    Job
 }
 }

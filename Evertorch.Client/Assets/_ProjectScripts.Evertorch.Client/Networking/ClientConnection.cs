@@ -593,6 +593,24 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
     }
 
     /// <summary>
+    ///     Asks <paramref name="npc" /> to change the character's job to <paramref name="job" />; 0 while not in the
+    ///     world, else the command's sequence. The server answers after its commit with the skill list and the sheet,
+    ///     which names the new job, or a refusal.
+    /// </summary>
+    public uint SendChangeJob(EntityId npc, JobDefinitionId job)
+    {
+        if (State != ClientConnectionState.InWorld)
+        {
+            return 0;
+        }
+
+        uint sequence = NextCommandSequence();
+        var message = new ChangeJob(npc, job, sequence);
+        SendRouted(MessageOpcode.ChangeJob, message.Write(m_sendBuffer));
+        return sequence;
+    }
+
+    /// <summary>
     ///     Asks to learn one level of <paramref name="skill" /> with a skill point; 0 while not in the world, else the
     ///     command's sequence. The server answers with the skill list and the sheet, or a refusal.
     /// </summary>

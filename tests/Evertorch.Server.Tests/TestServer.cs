@@ -156,19 +156,6 @@ internal sealed class TestServer
             Instruments,
             Options.Create(world),
             ProgressionLog);
-        Items = new ItemActionSystem(
-            Persistence,
-            sender,
-            Lifetime,
-            stats,
-            Content,
-            Time,
-            simulation,
-            Options.Create(world),
-            Instruments,
-            Progression,
-            Audit,
-            ItemActionLog);
         var tokens = new SessionTokenValidator(
             new DevelopmentTokenValidator(Options.Create(authentication), Time),
             new ProductionTokenValidator(Time));
@@ -190,6 +177,21 @@ internal sealed class TestServer
             Instruments,
             Options.Create(world),
             simulation);
+        Items = new ItemActionSystem(
+            Persistence,
+            sender,
+            Lifetime,
+            stats,
+            Content,
+            Time,
+            simulation,
+            Options.Create(world),
+            Instruments,
+            Progression,
+            Builds,
+            Combat,
+            Audit,
+            ItemActionLog);
         SessionManager = new SessionManager(
             Inbound,
             Persistence,
@@ -658,6 +660,14 @@ internal sealed class TestServer
     {
         byte[] payload = new byte[ResetBuild.EncodedLength];
         new ResetBuild(npc, commandSequence).Write(payload);
+        Inbound.OnPayload(connection, ProtocolChannel.Control, payload);
+    }
+
+    public void SendChangeJob(ConnectionId connection, EntityId npc, string job, uint commandSequence)
+    {
+        var message = new ChangeJob(npc, new JobDefinitionId(job), commandSequence);
+        byte[] payload = new byte[message.GetEncodedLength()];
+        message.Write(payload);
         Inbound.OnPayload(connection, ProtocolChannel.Control, payload);
     }
 

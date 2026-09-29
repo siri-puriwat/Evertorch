@@ -13,8 +13,9 @@ using Microsoft.Extensions.Options;
 namespace Evertorch.Server
 {
 /// <summary>
-///     Equips, unequips, uses, buys, and sells items, and turns in quests (Gameplay Systems §2.2, §6.1, §11.1–§11.3;
-///     Persistence §5). The checks happen on the tick thread; the inventory and the coins change only through the
+///     Equips, unequips, uses, buys, and sells items, turns in quests, and changes jobs (Gameplay Systems §2.2, §6.1,
+///     §11.1–§11.3; Persistence §5). The checks happen on the tick thread; the inventory and the coins change only through
+///     the
 ///     commit, and the server's copy of them, the statistics, HP and SP, the quests, and the owner learn of it once its
 ///     result is back. A commit whose answer was lost is settled from the ledger before the character may start another
 ///     inventory operation.
@@ -33,6 +34,8 @@ public sealed class ItemActionSystem : ITickPhase
     private const string SellLookup = "sell lookup";
     private const string QuestRewardOperation = "quest reward";
     private const string QuestRewardLookup = "quest reward lookup";
+    private const string JobChangeOperation = "job change";
+    private const string JobChangeLookup = "job change lookup";
     private const int MillisecondsPerSecond = 1000;
 
     // A lookup that failed for a reason other than an outage is asked again only after this long, not on every tick
@@ -70,6 +73,8 @@ public sealed class ItemActionSystem : ITickPhase
     private readonly ILogger<ItemActionSystem> m_logger;
     private readonly ServerInstruments m_instruments;
     private readonly CharacterProgression m_progression;
+    private readonly CharacterBuilds m_builds;
+    private readonly CombatSystem m_combat;
     private readonly float m_npcReach;
     private readonly uint m_failedLookupDelayTicks;
     private readonly List<(CharacterSession Character, uint NotBefore)> m_unsettled = new();
@@ -86,6 +91,8 @@ public sealed class ItemActionSystem : ITickPhase
         IOptions<WorldOptions> world,
         ServerInstruments instruments,
         CharacterProgression progression,
+        CharacterBuilds builds,
+        CombatSystem combat,
         AuditLog audit,
         ILogger<ItemActionSystem> logger)
     {
@@ -99,6 +106,8 @@ public sealed class ItemActionSystem : ITickPhase
         m_logger = logger;
         m_instruments = instruments;
         m_progression = progression;
+        m_builds = builds;
+        m_combat = combat;
         m_npcReach = NpcInteraction.Range + world.Value.AttackRangeTolerance;
         m_failedLookupDelayTicks =
             (uint)((long)FailedLookupDelayMs * simulation.Value.TickRate / MillisecondsPerSecond);
@@ -437,6 +446,62 @@ public sealed class ItemActionSystem : ITickPhase
             (store, cancellation) => store.CommitQuestRewardAsync(commit, cancellation));
     }
 
+    /// <summary>
+    ///     Checks a job change (Gameplay Systems §6.1, after the checks of that section, in order) and, when it passes,
+    ///     queues its commit, which takes off a worn weapon the new job cannot wield: the NPC must offer changes, and the
+    ///     job must be a first job of the character's job, which must be at its cap. The caller has already refused a
+    ///     dead or leaving character.
+    /// </summary>
+    public CommandRejectionReason TryChangeJob(
+        ClientSession session,
+        EntityId npc,
+        JobDefinitionId job,
+        uint commandSequence)
+    {
+        CharacterSession character = session.Character!;
+        if (character.Operation != null)
+        {
+            return CommandRejectionReason.ItemActionInFlight;
+        }
+
+        CommandRejectionReason reach = NpcReach.Check(session, npc, m_npcReach, out NpcEntity? guildmaster);
+        if (reach != CommandRejectionReason.None)
+        {
+            return reach;
+        }
+
+        if (!guildmaster!.Definition.OffersJobChange)
+        {
+            return CommandRejectionReason.InvalidTarget;
+        }
+
+        PlayerEntity player = character.Player;
+        if (!m_content.Jobs.TryGetValue(job, out JobDefinition? definition)
+            || definition!.BaseJob != player.Job
+            || player.JobLevel < NpcServicesBuilder.JobCap(m_content, m_content.Jobs[player.Job]))
+        {
+            return CommandRejectionReason.RequirementNotMet;
+        }
+
+        long worn = character.Inventory.WornIn(EquipmentSlot.Weapon);
+        bool isTakenOff = character.Inventory.TryGetRow(worn, out InventoryEntry weapon)
+            && m_content.Items[weapon.Item].Equipment?.WeaponType is WeaponType type
+            && !definition.CanWield(type);
+        var operation = new InventoryOperation(
+            InventoryOperationKind.JobChange,
+            commandSequence,
+            Guid.NewGuid(),
+            job: job);
+        var commit = new JobChangeCommit(
+            operation.OperationId,
+            character.Character.Value,
+            player.Job.Value,
+            job.Value,
+            isTakenOff ? CharacterInventory.StoredNameOf(EquipmentSlot.Weapon) : null,
+            m_time.GetUtcNow().UtcDateTime);
+        return TryCommit(session, operation, (store, cancellation) => store.CommitJobChangeAsync(commit, cancellation));
+    }
+
     // A stackable item merges into its one row; any other takes a new row.
     private static bool HasRoomFor(CharacterInventory inventory, ItemDefinition item, uint quantity)
     {
@@ -470,6 +535,7 @@ public sealed class ItemActionSystem : ITickPhase
             InventoryOperationKind.Buy => InboundEventKind.Buy,
             InventoryOperationKind.Sell => InboundEventKind.Sell,
             InventoryOperationKind.QuestReward => InboundEventKind.CompleteQuest,
+            InventoryOperationKind.JobChange => InboundEventKind.ChangeJob,
             _ => throw NotAnItemAction(operation)
         };
     }
@@ -484,6 +550,7 @@ public sealed class ItemActionSystem : ITickPhase
             InventoryOperationKind.Buy => BuyOperation,
             InventoryOperationKind.Sell => SellOperation,
             InventoryOperationKind.QuestReward => QuestRewardOperation,
+            InventoryOperationKind.JobChange => JobChangeOperation,
             _ => throw NotAnItemAction(operation)
         };
     }
@@ -498,6 +565,7 @@ public sealed class ItemActionSystem : ITickPhase
             InventoryOperationKind.Buy => BuyLookup,
             InventoryOperationKind.Sell => SellLookup,
             InventoryOperationKind.QuestReward => QuestRewardLookup,
+            InventoryOperationKind.JobChange => JobChangeLookup,
             _ => throw NotAnItemAction(operation)
         };
     }
@@ -558,11 +626,20 @@ public sealed class ItemActionSystem : ITickPhase
         InventoryOperation operation = character.Operation!;
         long id = character.Character.Value;
         long[] reportRows = ReportRows(operation);
+
+        // A change that took nothing off keeps no ledger row, so the stored job says whether it committed
+        // (Persistence §5).
+        Func<IGameStore, CancellationToken, Task<InventoryResult?>> find =
+            operation.Kind == InventoryOperationKind.JobChange
+                ? (store, cancellation) =>
+                    store.FindJobChangeAsync(operation.OperationId, id, operation.Job.Value, cancellation)
+                : (store, cancellation) =>
+                    store.FindOperationAsync(operation.OperationId, id, reportRows, cancellation);
         var lookup = new PersistenceJob<InventoryResult?>(
             LookupNameOf(operation),
             character.Connection?.Connection ?? default,
             id,
-            (store, cancellation) => store.FindOperationAsync(operation.OperationId, id, reportRows, cancellation),
+            find,
             (outcome, found) => CompleteLookup(character, outcome, found),
             operation.OperationId.ToString());
         return m_persistence.TryEnqueue(lookup);
@@ -598,8 +675,14 @@ public sealed class ItemActionSystem : ITickPhase
 
         uint prior = character.Inventory.Revision;
         InventoryEntry[] rows = character.Inventory.Apply(result);
-        m_sender.SendInventoryChange(character, prior, rows);
         InventoryOperation operation = character.Operation!;
+
+        // A job change that took nothing off leaves the inventory as it was.
+        if (operation.Kind != InventoryOperationKind.JobChange || result.InventoryRevision != prior)
+        {
+            m_sender.SendInventoryChange(character, prior, rows);
+        }
+
         long connection = character.Connection?.Connection.Value ?? 0;
         switch (operation.Kind)
         {
@@ -638,11 +721,41 @@ public sealed class ItemActionSystem : ITickPhase
                 m_progression.CompleteQuest(character, operation.Quest, operation.OperationId);
                 m_instruments.RecordCoins(QuestRewardOperation, operation.Coins);
                 break;
+            case InventoryOperationKind.JobChange:
+                ChangeJob(character, operation.Job, rows);
+                break;
             default:
                 throw NotAnItemAction(operation);
         }
 
         Finish(character);
+    }
+
+    // Once committed, a cast ends, the job changes with what the commit left worn, the owner hears of new maximums, is
+    // owed its skill list and its sheet, and those who see the character get its new body (Gameplay Systems §6.1).
+    // Status effects run out unchanged.
+    private void ChangeJob(CharacterSession character, JobDefinitionId job, InventoryEntry[] takenOff)
+    {
+        PlayerEntity player = character.Player;
+        int maxHealth = player.MaxHealth;
+        int maxSpirit = player.MaxSpirit;
+        m_combat.InterruptCast(player);
+        player.Weapon = EquipmentIn(character.Inventory, EquipmentSlot.Weapon);
+        player.Armor = EquipmentIn(character.Inventory, EquipmentSlot.Armor);
+        m_builds.ChangeJob(
+            player,
+            character.Connection?.Connection ?? default,
+            job,
+            takenOff.Length > 0 ? takenOff[0].Item : default);
+        if (player.MaxHealth != maxHealth || player.MaxSpirit != maxSpirit)
+        {
+            m_sender.SendHealth(player);
+        }
+
+        if (character.Connection != null)
+        {
+            character.Connection.NeedsSkillList = true;
+        }
     }
 
     // A use restores what its item gives once its commit returns, capped at the maximums (Gameplay Systems §11.2). A
@@ -698,13 +811,14 @@ public sealed class ItemActionSystem : ITickPhase
 
     private void Finish(CharacterSession character)
     {
-        bool wasTurnIn = character.Operation?.Kind == InventoryOperationKind.QuestReward;
+        bool wasProgressCommit = character.Operation?.Kind == InventoryOperationKind.QuestReward
+            || character.Operation?.Kind == InventoryOperationKind.JobChange;
         character.Operation = null;
 
-        // Checkpoints taken while a turn-in was in flight left the level and experience to it (Persistence §6), the
-        // reward's own level-up among them; once it is over, what the character holds is saved at once. A logout or
-        // a removal waiting for it writes its own final checkpoint.
-        if (wasTurnIn && !character.IsLoggingOut && !character.IsExpelled && !character.IsRemovalDeferred)
+        // Checkpoints taken while a turn-in or a job change was in flight left the levels and experience to it
+        // (Persistence §6), the reward's own level-up among them; once it is over, what the character holds is saved
+        // at once. A logout or a removal waiting for it writes its own final checkpoint.
+        if (wasProgressCommit && !character.IsLoggingOut && !character.IsExpelled && !character.IsRemovalDeferred)
         {
             m_lifetime.QueueCheckpoint(character);
         }

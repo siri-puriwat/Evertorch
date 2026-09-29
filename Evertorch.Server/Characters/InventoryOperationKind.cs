@@ -15,6 +15,11 @@ public enum InventoryOperationKind
     /// <summary>
     ///     A quest's turn-in, which pays the reward's coins with the inventory's revision.
     /// </summary>
-    QuestReward = 7
+    QuestReward = 7,
+
+    /// <summary>
+    ///     A job change, which takes a weapon the new job cannot wield off with the job (Persistence §5).
+    /// </summary>
+    JobChange = 8
 }
 }

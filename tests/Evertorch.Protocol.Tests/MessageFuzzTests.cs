@@ -192,6 +192,26 @@ public sealed class MessageFuzzTests
                     })),
             payload => NpcServices.TryRead(payload, out NpcServices? message) ? Encode(message!) : null);
         yield return Case(
+            "NpcServices of a Guildmaster",
+            Encode(
+                new NpcServices(
+                    new EntityId(15),
+                    new NpcServiceEntry[0],
+                    new NpcQuestOffer[0],
+                    true,
+                    new[]
+                    {
+                        new NpcJobChangeOffer(
+                            new JobDefinitionId("job.arcanist"),
+                            new JobDefinitionId("job.adventurer"),
+                            10),
+                        new NpcJobChangeOffer(
+                            new JobDefinitionId("job.vanguard"),
+                            new JobDefinitionId("job.adventurer"),
+                            10)
+                    })),
+            payload => NpcServices.TryRead(payload, out NpcServices? message) ? Encode(message!) : null);
+        yield return Case(
             "AcceptQuest",
             Encode(new AcceptQuest(new EntityId(14), new QuestDefinitionId("quest.crawler_hunt"), 7)),
             payload => AcceptQuest.TryRead(payload, out AcceptQuest? message) ? Encode(message!) : null);
@@ -203,6 +223,10 @@ public sealed class MessageFuzzTests
             "ResetBuild",
             Encode(new ResetBuild(new EntityId(15), 7)),
             payload => ResetBuild.TryRead(payload, out ResetBuild message) ? Encode(message) : null);
+        yield return Case(
+            "ChangeJob",
+            Encode(new ChangeJob(new EntityId(15), new JobDefinitionId("job.vanguard"), 7)),
+            payload => ChangeJob.TryRead(payload, out ChangeJob? message) ? Encode(message!) : null);
         yield return Case(
             "LearnSkill",
             Encode(new LearnSkill(new SkillDefinitionId("skill.strike"), 7)),
@@ -724,9 +748,16 @@ public sealed class MessageFuzzTests
         return buffer;
     }
 
+    private static byte[] Encode(ChangeJob message)
+    {
+        byte[] buffer = new byte[message.GetEncodedLength()];
+        message.Write(buffer);
+        return buffer;
+    }
+
     private static byte[] Encode(CharacterSheet message)
     {
-        byte[] buffer = new byte[CharacterSheet.EncodedLength];
+        byte[] buffer = new byte[message.GetEncodedLength()];
         message.Write(buffer);
         return buffer;
     }
