@@ -1,4 +1,7 @@
 # Runs the repository's build, test, and code-convention checks. Exits non-zero on the first failure.
+# -Full cleans every C# file with ReSharper; by default only the files that differ from HEAD are cleaned.
+param([switch] $Full)
+
 $ErrorActionPreference = 'Stop'
 
 $root = Split-Path -Parent $PSScriptRoot
@@ -24,6 +27,25 @@ function Get-SourceHashes {
         }
     }
     return $hashes
+}
+
+# The C# files that differ from HEAD, changed or new, or $null when the whole tree must be cleaned: nothing changed
+# (a verify after a commit), a setting that steers the cleanup changed, or too many files for one command line.
+function Get-ChangedSourceFiles {
+    $settings = git -C $root diff --name-only HEAD -- '.editorconfig' 'Evertorch.sln.DotSettings' `
+        '.config/dotnet-tools.json' 'Directory.Build.props'
+    if ($settings) {
+        return $null
+    }
+
+    $files = @(git -C $root diff --name-only --diff-filter=d HEAD -- '*.cs') +
+        @(git -C $root ls-files --others --exclude-standard -- '*.cs')
+    $files = @($files | Where-Object { $_ } | Sort-Object -Unique)
+    if ($files.Count -eq 0 -or $files.Count -gt 200) {
+        return $null
+    }
+
+    return , $files
 }
 
 function Get-ContentPackageHashes([string] $directory) {
@@ -95,9 +117,33 @@ try {
 
     # ReSharper cleanup has no verify-only mode, so drift is detected by comparing file hashes. The profile is the
     # one Rider runs, so code cleaned in the IDE passes unchanged.
+    # Cleaning only the changed files saves about five minutes a run; a file nobody touched can still drift when
+    # another file changes (a using left unused after a type moves), which a -Full run catches.
+    $changedFiles = if ($Full) { $null } else { Get-ChangedSourceFiles }
+    $clientPrefix = 'Evertorch.Client/'
+    $clientFolders = @('Assets/_Project/', 'Assets/_ProjectScripts.Evertorch.Client/')
+    if ($null -eq $changedFiles) {
+        Write-Host '==> ReSharper cleanup scope: every C# file'
+        $serverInclude = '**/*.cs'
+        $clientInclude = ($clientFolders | ForEach-Object { "$_**/*.cs" }) -join ';'
+    }
+    else {
+        Write-Host "==> ReSharper cleanup scope: C# files that differ from HEAD ($($changedFiles.Count))"
+        $serverInclude = ($changedFiles | Where-Object { -not $_.StartsWith($clientPrefix) }) -join ';'
+        $clientInclude = ($changedFiles | Where-Object { $_.StartsWith($clientPrefix) } |
+            ForEach-Object { $_.Substring($clientPrefix.Length) } |
+            Where-Object { $path = $_; $clientFolders | Where-Object { $path.StartsWith($_) } }) -join ';'
+    }
+
     $before = Get-SourceHashes
-    Invoke-Step 'ReSharper cleanup' {
-        dotnet jb cleanupcode $solution '--profile=Built-in: Full Cleanup' '--include=**/*.cs' --no-build
+    # An empty --include would clean every file, so a side with no changed file is skipped.
+    if ($serverInclude) {
+        Invoke-Step 'ReSharper cleanup' {
+            dotnet jb cleanupcode $solution '--profile=Built-in: Full Cleanup' "--include=$serverInclude" --no-build
+        }
+    }
+    else {
+        Write-Host '==> ReSharper cleanup: no changed file'
     }
 
     # Client code outside the folders linked into Evertorch.sln is reached through the solution Unity generates,
@@ -105,10 +151,12 @@ try {
     # fails, and the tool then exits without cleaning anything.
     $clientSolution = Join-Path $root 'Evertorch.Client/Evertorch.Client.sln'
     $isClientChecked = Test-Path $clientSolution
-    if ($isClientChecked) {
+    if ($isClientChecked -and -not $clientInclude) {
+        Write-Host '==> ReSharper cleanup (client): no changed file'
+    }
+    elseif ($isClientChecked) {
         Invoke-Step 'ReSharper cleanup (client)' {
-            dotnet jb cleanupcode $clientSolution '--profile=Built-in: Full Cleanup' `
-                '--include=Assets/_Project/**/*.cs;Assets/_ProjectScripts.Evertorch.Client/**/*.cs' --no-build
+            dotnet jb cleanupcode $clientSolution '--profile=Built-in: Full Cleanup' "--include=$clientInclude" --no-build
         }
     }
     else {
