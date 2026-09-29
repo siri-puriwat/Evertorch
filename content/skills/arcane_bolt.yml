@@ -1,0 +1,38 @@
+id: skill.arcane_bolt
+displayName: Arcane Bolt
+targetType: enemy
+damageType: magical
+server:
+  range: 8.0
+  maxLevel: 5
+  # Each level hits 25 % harder for 2 SP more.
+  levels:
+    - spCost: 10
+      castTimeMs: { fixed: 300, variable: 800 }
+      afterCastDelayMs: 500
+      effect:
+        damage: { ratio: 100 }
+    - spCost: 12
+      castTimeMs: { fixed: 300, variable: 800 }
+      afterCastDelayMs: 500
+      effect:
+        damage: { ratio: 125 }
+    - spCost: 14
+      castTimeMs: { fixed: 300, variable: 800 }
+      afterCastDelayMs: 500
+      effect:
+        damage: { ratio: 150 }
+    - spCost: 16
+      castTimeMs: { fixed: 300, variable: 800 }
+      afterCastDelayMs: 500
+      effect:
+        damage: { ratio: 175 }
+    - spCost: 18
+      castTimeMs: { fixed: 300, variable: 800 }
+      afterCastDelayMs: 500
+      effect:
+        damage: { ratio: 200 }
+client:
+  icon: skill_arcane_bolt
+  projectile: projectile_arcane_bolt
+  description: Gather arcane force and hurl it at your target from afar. You stand still while you cast. Each level hits harder for more SP.

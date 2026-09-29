@@ -3,5 +3,6 @@ displayName: Guildmaster
 server:
   guild:
     reset: true
+    jobChange: true
 client:
   prefab: npc_guildmaster

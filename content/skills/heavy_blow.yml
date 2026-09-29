@@ -1,0 +1,37 @@
+id: skill.heavy_blow
+displayName: Heavy Blow
+targetType: enemy
+damageType: physical
+server:
+  range: 1.5
+  maxLevel: 5
+  # Each level hits 25 % harder for 2 SP more.
+  levels:
+    - spCost: 12
+      afterCastDelayMs: 800
+      cooldownMs: 4000
+      effect:
+        damage: { ratio: 200 }
+    - spCost: 14
+      afterCastDelayMs: 800
+      cooldownMs: 4000
+      effect:
+        damage: { ratio: 225 }
+    - spCost: 16
+      afterCastDelayMs: 800
+      cooldownMs: 4000
+      effect:
+        damage: { ratio: 250 }
+    - spCost: 18
+      afterCastDelayMs: 800
+      cooldownMs: 4000
+      effect:
+        damage: { ratio: 275 }
+    - spCost: 20
+      afterCastDelayMs: 800
+      cooldownMs: 4000
+      effect:
+        damage: { ratio: 300 }
+client:
+  icon: skill_heavy_blow
+  description: A crushing blow at your target, far harder than Strike but slow to recover from. Each level hits harder for more SP.

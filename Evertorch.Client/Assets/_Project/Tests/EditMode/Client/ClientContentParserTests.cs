@@ -198,8 +198,8 @@ public sealed class ClientContentParserTests
     [TestCase(
         ClientContentParser.SkillsFile,
         "\"targetType\":\"self\"",
-        "\"targetType\":\"ally\"",
-        "Skill 'skill.first_aid': targetType is not enemy or self")]
+        "\"targetType\":\"friend\"",
+        "Skill 'skill.first_aid': targetType is not enemy, self, or ally")]
     [TestCase(
         ClientContentParser.SkillsFile,
         "\"id\":\"skill.strike\"",
@@ -349,6 +349,22 @@ public sealed class ClientContentParserTests
                 return string.Concat(sha256.ComputeHash(content).Select(value => value.ToString("x2")));
             }
         }
+    }
+
+    // A heal may name another player (Gameplay Systems §9).
+    [Test]
+    public void Parse_ForASkillOnAnAlly_ReadsItsTargetType()
+    {
+        string original = Package.DefaultTexts(Maps)[ClientContentParser.SkillsFile];
+        var package = Package.With(
+            ClientContentParser.SkillsFile,
+            original.Replace("\"targetType\":\"self\"", "\"targetType\":\"ally\""));
+
+        ClientContent? content = ClientContentParser.Parse(package.Manifest, package.Files, out string error);
+
+        Assert.That(content, Is.Not.Null, error);
+        Assert.That(content!.TryGetSkill(new SkillDefinitionId("skill.first_aid"), out ClientSkill? aid), Is.True);
+        Assert.That(aid!.TargetType, Is.EqualTo(SkillTargetType.Ally));
     }
 
     [Test]

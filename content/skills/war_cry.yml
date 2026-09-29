@@ -1,0 +1,20 @@
+id: skill.war_cry
+displayName: War Cry
+targetType: self
+server:
+  range: 0
+  maxLevel: 3
+  requires: { skill: skill.heavy_blow, level: 1 }
+  levels:
+    - spCost: 15
+      effect:
+        status: { status: status.war_cry, durationMs: 60000, statPercent: { str: 40 } }
+    - spCost: 15
+      effect:
+        status: { status: status.war_cry, durationMs: 60000, statPercent: { str: 70 } }
+    - spCost: 15
+      effect:
+        status: { status: status.war_cry, durationMs: 60000, statPercent: { str: 100 } }
+client:
+  icon: skill_war_cry
+  description: Roar to steel yourself for a minute, raising your STR so that every blow lands harder.

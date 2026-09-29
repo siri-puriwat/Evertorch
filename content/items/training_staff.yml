@@ -8,6 +8,7 @@ server:
   equipment:
     attack: 8
     attackSpeedPenalty: 54
+    weaponType: staff
     bonus: { int: 10 }
 client:
   icon: item_training_staff

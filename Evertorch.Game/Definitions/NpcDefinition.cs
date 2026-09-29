@@ -14,12 +14,14 @@ public sealed class NpcDefinition
         NpcDefinitionId id,
         string displayName,
         IReadOnlyList<ShopEntry>? shop = null,
-        bool offersReset = false)
+        bool offersReset = false,
+        bool offersJobChange = false)
     {
         Id = id;
         DisplayName = displayName;
         Shop = shop ?? Array.Empty<ShopEntry>();
         OffersReset = offersReset;
+        OffersJobChange = offersJobChange;
     }
 
     public NpcDefinitionId Id { get; }
@@ -37,5 +39,11 @@ public sealed class NpcDefinition
     ///     Whether the NPC is a Guildmaster, who returns every stat and skill point (Gameplay Systems §6.1).
     /// </summary>
     public bool OffersReset { get; }
+
+    /// <summary>
+    ///     Whether the NPC changes jobs: it offers every first job's change to a character of that job's base job
+    ///     (Gameplay Systems §6.1).
+    /// </summary>
+    public bool OffersJobChange { get; }
 }
 }

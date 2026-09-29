@@ -43,8 +43,9 @@ public interface IProgressionRules
 
     /// <summary>
     ///     The skill points every job level up to <paramref name="jobLevel" /> has granted in all: one for each job
-    ///     level from 2.
+    ///     level from 2, beside the <paramref name="carriedSkillPoints" /> a first job is granted for its base job's
+    ///     levels (Gameplay Systems §2.1).
     /// </summary>
-    int SkillPointsGranted(int jobLevel);
+    int SkillPointsGranted(int jobLevel, int carriedSkillPoints);
 }
 }

@@ -81,7 +81,8 @@ public sealed class CharacterBuilds
     /// </summary>
     public int SkillPointsLeft(PlayerEntity player)
     {
-        return Math.Max(0, m_rules.SkillPointsGranted(player.JobLevel) - SkillPointsSpent(player));
+        int granted = m_rules.SkillPointsGranted(player.JobLevel, m_content.Jobs[player.Job].CarriedSkillPoints);
+        return Math.Max(0, granted - SkillPointsSpent(player));
     }
 
     /// <summary>
@@ -228,7 +229,7 @@ public sealed class CharacterBuilds
             }
         }
 
-        return SkillPointsSpent(player) > m_rules.SkillPointsGranted(player.JobLevel);
+        return SkillPointsSpent(player) > m_rules.SkillPointsGranted(player.JobLevel, job.CarriedSkillPoints);
     }
 
     /// <summary>

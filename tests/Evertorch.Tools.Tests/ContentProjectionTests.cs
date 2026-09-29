@@ -39,7 +39,7 @@ public sealed class ContentProjectionTests
         "keepDistance", "skill", "equipment",
         "attack", "attackSpeedPenalty", "defense", "bonus", "sp", "shop", "price", "npcs", "npc", "giver", "objective",
         "kill", "monster", "count", "currency", "jobExperienceTable", "jobExperience", "guild", "reset", "maxLevel",
-        "requires"
+        "requires", "baseJob", "weapons", "weaponType", "jobChange"
     };
 
     // The client package's allow-list (Content Pipeline §5), by file: a name not reviewed here fails.
@@ -62,7 +62,9 @@ public sealed class ContentProjectionTests
         ["npcs.json"] = new[] { "schemaVersion", "definitions", "id", "displayName", "prefab" },
         ["quests.json"] = new[] { "schemaVersion", "definitions", "id", "displayName" },
         ["skills.json"] = new[]
-            { "schemaVersion", "definitions", "id", "displayName", "targetType", "icon", "description" },
+        {
+            "schemaVersion", "definitions", "id", "displayName", "targetType", "icon", "description", "projectile"
+        },
         ["status-effects.json"] = new[] { "schemaVersion", "definitions", "id", "displayName", "icon" }
     };
 

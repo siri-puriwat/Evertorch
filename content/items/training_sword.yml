@@ -8,6 +8,7 @@ server:
   equipment:
     attack: 20
     attackSpeedPenalty: 50
+    weaponType: sword
 client:
   icon: item_training_sword
   model: pickup_training_sword

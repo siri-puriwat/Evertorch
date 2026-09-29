@@ -1,0 +1,20 @@
+id: skill.iron_guard
+displayName: Iron Guard
+targetType: self
+server:
+  range: 0
+  maxLevel: 3
+  requires: { skill: skill.war_cry, level: 1 }
+  levels:
+    - spCost: 15
+      effect:
+        status: { status: status.iron_guard, durationMs: 60000, statPercent: { vit: 40 } }
+    - spCost: 15
+      effect:
+        status: { status: status.iron_guard, durationMs: 60000, statPercent: { vit: 70 } }
+    - spCost: 15
+      effect:
+        status: { status: status.iron_guard, durationMs: 60000, statPercent: { vit: 100 } }
+client:
+  icon: skill_iron_guard
+  description: Brace yourself for a minute, raising your VIT so that you shrug off more of every hit.

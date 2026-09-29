@@ -48,6 +48,14 @@ public sealed class WorldSimulation
                 $"{WorldOptions.SectionName}:StartingJob '{world.StartingJob}' is not in the loaded content.");
         }
 
+        // A first job is reached only by a change at the Guildmaster (Gameplay Systems §6.1).
+        if (job.BaseJob != null)
+        {
+            throw new InvalidOperationException(
+                $"{WorldOptions.SectionName}:StartingJob '{world.StartingJob}' is a first job; a new character starts "
+                + "in a base job.");
+        }
+
         m_startingJob = job;
         m_startingStats = stats.Calculate(job, StartingLevel, job.StartingStats);
 

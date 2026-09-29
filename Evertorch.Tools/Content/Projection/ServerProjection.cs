@@ -74,6 +74,11 @@ internal static class ServerProjection
                 writer.WriteNumber("dex", equipment.Bonus.Dex);
                 writer.WriteNumber("luk", equipment.Bonus.Luk);
                 writer.WriteEndObject();
+                if (equipment.WeaponType.HasValue)
+                {
+                    writer.WriteString("weaponType", EnumText.Of(equipment.WeaponType.Value));
+                }
+
                 writer.WriteEndObject();
             }
 
@@ -100,28 +105,50 @@ internal static class ServerProjection
             writer.WriteStartObject();
             writer.WriteString("id", job.Id.Value);
             writer.WriteString("displayName", job.DisplayName);
-            writer.WriteStartObject("startingStats");
-            writer.WriteNumber("str", job.StartingStats.Str);
-            writer.WriteNumber("agi", job.StartingStats.Agi);
-            writer.WriteNumber("vit", job.StartingStats.Vit);
-            writer.WriteNumber("int", job.StartingStats.Int);
-            writer.WriteNumber("dex", job.StartingStats.Dex);
-            writer.WriteNumber("luk", job.StartingStats.Luk);
-            writer.WriteEndObject();
+
+            // A first job is written as authored, and the server's loader takes the rest from its base job again
+            // (Content Pipeline §4).
+            if (job.BaseJob.HasValue)
+            {
+                writer.WriteString("baseJob", job.BaseJob.Value.Value);
+            }
+            else
+            {
+                writer.WriteStartObject("startingStats");
+                writer.WriteNumber("str", job.StartingStats.Str);
+                writer.WriteNumber("agi", job.StartingStats.Agi);
+                writer.WriteNumber("vit", job.StartingStats.Vit);
+                writer.WriteNumber("int", job.StartingStats.Int);
+                writer.WriteNumber("dex", job.StartingStats.Dex);
+                writer.WriteNumber("luk", job.StartingStats.Luk);
+                writer.WriteEndObject();
+            }
+
             writer.WriteNumber("healthBase", job.HealthBase);
             writer.WriteNumber("healthPerLevel", job.HealthPerLevel);
             writer.WriteNumber("spiritBase", job.SpiritBase);
             writer.WriteNumber("spiritPerLevel", job.SpiritPerLevel);
-            writer.WriteNumber("unarmedAttackSpeedPenalty", job.UnarmedAttackSpeedPenalty);
-            writer.WriteNumber("baseSpeed", job.BaseSpeed);
-            writer.WriteString("startingMap", job.StartingMap.Value);
-            writer.WriteString("basicAttack", job.BasicAttack.Value);
-            writer.WriteString("experienceTable", job.ExperienceTable.Value);
+            if (!job.BaseJob.HasValue)
+            {
+                writer.WriteNumber("unarmedAttackSpeedPenalty", job.UnarmedAttackSpeedPenalty);
+                writer.WriteNumber("baseSpeed", job.BaseSpeed);
+                writer.WriteString("startingMap", job.StartingMap.Value);
+                writer.WriteString("basicAttack", job.BasicAttack.Value);
+                writer.WriteString("experienceTable", job.ExperienceTable.Value);
+            }
+
             writer.WriteString("jobExperienceTable", job.JobExperienceTable.Value);
             writer.WriteStartArray("skills");
             foreach (SkillDefinitionId skill in job.Skills)
             {
                 writer.WriteStringValue(skill.Value);
+            }
+
+            writer.WriteEndArray();
+            writer.WriteStartArray("weapons");
+            foreach (WeaponType weapon in job.Weapons)
+            {
+                writer.WriteStringValue(EnumText.Of(weapon));
             }
 
             writer.WriteEndArray();
@@ -219,6 +246,7 @@ internal static class ServerProjection
 
             writer.WriteEndArray();
             writer.WriteBoolean("reset", npc.OffersReset);
+            writer.WriteBoolean("jobChange", npc.OffersJobChange);
             writer.WriteEndObject();
         }
 

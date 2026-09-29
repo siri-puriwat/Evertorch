@@ -31,6 +31,7 @@ public sealed class ServerContentBoundsTests
     private const string AtMostAMillion = "must be at most 1000000";
     private const string AtMostABillion = "must be at most 1000000000";
     private const string AtMostAStat = "must be at most 9999";
+    private const string AtMostAPenalty = "must be at most 200";
     private const string AtMostADay = "must be at most 86400000";
     private const string AtMostADistance = "must be at most 10000";
     private const string OnTheMap = "must be between -100000 and 100000";
@@ -61,7 +62,7 @@ public sealed class ServerContentBoundsTests
     [TestCase(Items, Gel, "weight", "1000001", AtMostAMillion)]
     [TestCase(Items, Gel, "sellPrice", "1000000001", AtMostABillion)]
     [TestCase(Items, "item.weapon.training_sword", "equipment.attack", "10000", AtMostAStat)]
-    [TestCase(Items, "item.weapon.training_sword", "equipment.attackSpeedPenalty", "10000", AtMostAStat)]
+    [TestCase(Items, "item.weapon.training_sword", "equipment.attackSpeedPenalty", "201", AtMostAPenalty)]
     [TestCase(Items, "item.armor.cloth", "equipment.defense", "10000", AtMostAStat)]
     [TestCase(Items, "item.weapon.training_staff", "equipment.bonus.int", "10000", AtMostAStat)]
     [TestCase(Items, "item.consumable.minor_health", "effect.hp", "10000", AtMostAStat)]

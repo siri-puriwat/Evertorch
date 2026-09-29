@@ -168,6 +168,11 @@ internal static class ClientProjection
                 writer.WriteString("description", authored.Description);
             }
 
+            if (authored.Projectile != null)
+            {
+                writer.WriteString("projectile", authored.Projectile);
+            }
+
             writer.WriteEndObject();
         }
 

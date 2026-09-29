@@ -64,9 +64,16 @@ internal static class SkillDefinitionReader
             root.ReportField("targetType", "must be enemy for a damage effect");
         }
 
+        // Another player may only be healed: there is no PvP (Gameplay Systems §6, §9).
+        if (targetType == SkillTargetType.Ally && kind != SkillEffectKind.Heal)
+        {
+            root.ReportField("targetType", "may be ally only for a heal effect");
+        }
+
         YamlFieldReader client = root.RequiredMapping("client");
         string icon = client.RequiredAssetKey("icon");
         string? description = client.Has("description") ? ReadDescription(client) : null;
+        string? projectile = client.Has("projectile") ? client.RequiredAssetKey("projectile") : null;
 
         root.ReportUnknownFields();
         if (diagnostics.Count != errorsBefore)
@@ -83,7 +90,7 @@ internal static class SkillDefinitionReader
             spPaidAt,
             levels.AsReadOnly(),
             requires);
-        return new AuthoredSkill(root.ToSource(), definition, icon, description);
+        return new AuthoredSkill(root.ToSource(), definition, icon, description, projectile);
     }
 
     // A skill without levels is a basic attack, which has no effect; one with levels lists exactly its maxLevel

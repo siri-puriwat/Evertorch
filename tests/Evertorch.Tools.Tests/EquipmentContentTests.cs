@@ -5,8 +5,8 @@ using NUnit.Framework;
 namespace Evertorch.Tools.Tests
 {
 /// <summary>
-///     Weapons and armor (Content Pipeline §4; Gameplay Systems §11.1): a stack limit of 1, a weapon's attack and
-///     attack-speed penalty, an armor's defense, and optional statistic bonuses, all for the server alone.
+///     Weapons and armor (Content Pipeline §4; Gameplay Systems §11.1): a stack limit of 1, a weapon's attack,
+///     attack-speed penalty, and type, an armor's defense, and optional statistic bonuses, all for the server alone.
 /// </summary>
 [TestFixture]
 public sealed class EquipmentContentTests
@@ -25,6 +25,7 @@ public sealed class EquipmentContentTests
         + "  equipment:\n"
         + "    attack: 20\n"
         + "    attackSpeedPenalty: 50\n"
+        + "    weaponType: sword\n"
         + "    bonus: { int: 3 }\n"
         + "client:\n"
         + "  icon: item_training_sword\n"
@@ -66,6 +67,20 @@ public sealed class EquipmentContentTests
     [TestCase(Sword, "    attack: 20", "    attack: 20\n    defense: 3", "server.equipment.defense", "unknown field")]
     [TestCase(Sword, "    attack: 20", "    attack: -1", "server.equipment.attack", "between 0 and")]
     [TestCase(Sword, "{ int: 3 }", "{ wis: 3 }", "server.equipment.bonus.wis", "unknown field")]
+    [TestCase(Sword, "    weaponType: sword\n", "", "server.equipment.weaponType", "required field is missing")]
+    [TestCase(Sword, "weaponType: sword", "weaponType: axe", "server.equipment.weaponType", "sword, staff")]
+    [TestCase(
+        Sword,
+        "attackSpeedPenalty: 50",
+        "attackSpeedPenalty: 201",
+        "server.equipment.attackSpeedPenalty",
+        "between 0 and 200")]
+    [TestCase(
+        Armor,
+        "    defense: 8\n",
+        "    defense: 8\n    weaponType: staff\n",
+        "server.equipment.weaponType",
+        "unknown field")]
     [TestCase(Armor, "    defense: 8\n", "    attack: 8\n", "server.equipment.defense", "required field is missing")]
     [TestCase(
         Armor,
@@ -113,6 +128,8 @@ public sealed class EquipmentContentTests
                 (sword.GetProperty("attack").GetInt32(), sword.GetProperty("attackSpeedPenalty").GetInt32(),
                     sword.GetProperty("defense").GetInt32(), sword.GetProperty("bonus").GetProperty("int").GetInt32()),
                 Is.EqualTo((20, 50, 0, 3)));
+            Assert.That(sword.GetProperty("weaponType").GetString(), Is.EqualTo("sword"));
+            Assert.That(armor.TryGetProperty("weaponType", out _), Is.False, "an armor has no weapon type");
             Assert.That(
                 (armor.GetProperty("defense").GetInt32(), armor.GetProperty("attack").GetInt32()),
                 Is.EqualTo((8, 0)));

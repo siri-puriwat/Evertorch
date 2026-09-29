@@ -30,12 +30,20 @@ public static class ServerContentLoader
     private const int ContentVersionLength = 16;
     private const float GroundHeightTolerance = 0.01f;
 
-    // One NpcServices message (Network Protocol §6): its header, then each item the NPC trades and each quest it gives
-    // at their largest, with every ID at the 64-byte limit; one datagram carries 1,020 bytes. The tools check the same.
-    private const int ServicesHeaderBytes = 13;
+    // One NpcServices message (Network Protocol §6): its header, then each item the NPC trades, each quest it gives,
+    // and each job change it offers at their largest, with every ID at the 64-byte limit; one datagram carries 1,020
+    // bytes. The tools check the same.
+    private const int ServicesHeaderBytes = 14;
     private const int ServicesEntryBytes = 74;
     private const int ServicesOfferBytes = 154;
+    private const int ServicesJobChangeBytes = 134;
     private const int MaxServicesBytes = 1020;
+
+    // What a first job takes from its base job, so its entry omits them (Content Pipeline §4).
+    private static readonly string[] InheritedJobFields =
+    {
+        "startingStats", "startingMap", "experienceTable", "basicAttack", "baseSpeed", "unarmedAttackSpeedPenalty"
+    };
 
     private static readonly string[] DataFiles =
     {
@@ -80,7 +88,7 @@ public static class ServerContentLoader
         var monsters =
             new Dictionary<MonsterDefinitionId, MonsterDefinition>();
         var skills = new Dictionary<SkillDefinitionId, SkillDefinition>();
-        var jobs = new Dictionary<JobDefinitionId, JobDefinition>();
+        var jobEntries = new Dictionary<JobDefinitionId, JobEntry>();
         var maps = new Dictionary<MapDefinitionId, MapDefinition>();
         var experienceTables = new Dictionary<ExperienceDefinitionId, ExperienceTableDefinition>();
         var statusEffects = new Dictionary<StatusDefinitionId, StatusEffectDefinition>();
@@ -108,11 +116,11 @@ public static class ServerContentLoader
             skills,
             SkillDefinitionId.TryCreate,
             ReadSkill);
-        ReadDefinitions(
+        HashSet<JobDefinitionId> declaredJobs = ReadDefinitions(
             files,
             JobsFile,
             problems,
-            jobs,
+            jobEntries,
             JobDefinitionId.TryCreate,
             ReadJob);
         HashSet<MapDefinitionId> declaredMaps = ReadDefinitions(
@@ -150,6 +158,8 @@ public static class ServerContentLoader
             quests,
             QuestDefinitionId.TryCreate,
             ReadQuest);
+        Dictionary<JobDefinitionId, JobDefinition> jobs =
+            ResolveJobs(jobEntries, experienceTables, declaredJobs, problems);
         if (declaredStatusEffects.Count > StatusEffects.MaxEntries)
         {
             problems.Add(
@@ -180,6 +190,7 @@ public static class ServerContentLoader
             npcs.Values,
             quests.Values,
             maps.Values,
+            jobs.Values.Count(job => job.BaseJob != null),
             items,
             declaredItems,
             declaredMonsters,
@@ -377,7 +388,7 @@ public static class ServerContentLoader
 
         if (entry.Has("equipment"))
         {
-            equipment = ReadEquipment(entry.RequiredObject("equipment"));
+            equipment = ReadEquipment(entry.RequiredObject("equipment"), type == ItemType.Weapon);
             if (!isEquipment)
             {
                 entry.Report("equipment", "is only for a weapon or armor");
@@ -428,7 +439,8 @@ public static class ServerContentLoader
         return new ItemEffect(health, spirit);
     }
 
-    private static ItemEquipment? ReadEquipment(PackageObjectReader? values)
+    // A weapon names its type and keeps its attack-speed penalty within a job's limit (Gameplay Systems §11.1).
+    private static ItemEquipment? ReadEquipment(PackageObjectReader? values, bool isWeapon)
     {
         PackageObjectReader? bonus = values?.RequiredObject("bonus");
         if (values == null || bonus == null)
@@ -444,11 +456,22 @@ public static class ServerContentLoader
             bonus.RequiredInt("dex", 0, ContentLimits.MaxStat),
             bonus.RequiredInt("luk", 0, ContentLimits.MaxStat));
         bonus.ReportUnexpectedProperties();
+        WeaponType? weaponType = null;
+        if (isWeapon)
+        {
+            weaponType = values.RequiredEnum<WeaponType>("weaponType");
+        }
+        else if (values.Has("weaponType"))
+        {
+            values.Report("weaponType", "is only for a weapon");
+        }
+
         var equipment = new ItemEquipment(
             values.RequiredInt("attack", 0, ContentLimits.MaxStat),
-            values.RequiredInt("attackSpeedPenalty", 0, ContentLimits.MaxStat),
+            values.RequiredInt("attackSpeedPenalty", 0, ContentLimits.MaxAttackSpeedPenalty),
             values.RequiredInt("defense", 0, ContentLimits.MaxStat),
-            stats);
+            stats,
+            weaponType);
         values.ReportUnexpectedProperties();
         return equipment;
     }
@@ -627,6 +650,12 @@ public static class ServerContentLoader
             entry.Report("targetType", "must be enemy for a damage effect");
         }
 
+        // Another player may only be healed: there is no PvP (Gameplay Systems §6, §9).
+        if (targetType == SkillTargetType.Ally && kind != SkillEffectKind.Heal)
+        {
+            entry.Report("targetType", "may be ally only for a heal effect");
+        }
+
         entry.ReportUnexpectedProperties();
         return problems.Count == problemsBefore
             ? new SkillDefinition(
@@ -709,43 +738,28 @@ public static class ServerContentLoader
         return new StatPercentages(values[0], values[1], values[2], values[3], values[4], values[5]);
     }
 
-    private static JobDefinition? ReadJob(PackageObjectReader entry, JobDefinitionId id, List<string> problems)
+    // A base job is complete as read; a first job keeps its own values until its base job is known (ResolveJobs).
+    private static JobEntry? ReadJob(PackageObjectReader entry, JobDefinitionId id, List<string> problems)
     {
         int problemsBefore = problems.Count;
         string displayName = entry.RequiredString("displayName");
-
-        int str = 0;
-        int agi = 0;
-        int vit = 0;
-        int intelligence = 0;
-        int dex = 0;
-        int luk = 0;
-        PackageObjectReader? stats = entry.RequiredObject("startingStats");
-        if (stats != null)
+        JobDefinitionId? baseJob = null;
+        if (entry.Has("baseJob"))
         {
-            str = stats.RequiredInt("str", 0, ContentLimits.MaxPrimaryStat);
-            agi = stats.RequiredInt("agi", 0, ContentLimits.MaxPrimaryStat);
-            vit = stats.RequiredInt("vit", 0, ContentLimits.MaxPrimaryStat);
-            intelligence = stats.RequiredInt("int", 0, ContentLimits.MaxPrimaryStat);
-            dex = stats.RequiredInt("dex", 0, ContentLimits.MaxPrimaryStat);
-            luk = stats.RequiredInt("luk", 0, ContentLimits.MaxPrimaryStat);
-            stats.ReportUnexpectedProperties();
+            baseJob = entry.RequiredId<JobDefinitionId>("baseJob", JobDefinitionId.TryCreate);
+            foreach (string inherited in InheritedJobFields)
+            {
+                if (entry.Has(inherited))
+                {
+                    entry.Report(inherited, "is taken from the base job, so a first job omits it");
+                }
+            }
         }
 
         int healthBase = entry.RequiredInt("healthBase", 1, ContentLimits.MaxHp);
         int healthPerLevel = entry.RequiredInt("healthPerLevel", 0, ContentLimits.MaxHp);
         int spiritBase = entry.RequiredInt("spiritBase", 0, ContentLimits.MaxHp);
         int spiritPerLevel = entry.RequiredInt("spiritPerLevel", 0, ContentLimits.MaxHp);
-        int unarmedAttackSpeedPenalty = entry.RequiredInt(
-            "unarmedAttackSpeedPenalty",
-            0,
-            ContentLimits.MaxAttackSpeedPenalty);
-        double baseSpeed = RequiredPositive(entry, "baseSpeed", ContentLimits.MaxSpeed);
-        MapDefinitionId startingMap = entry.RequiredId<MapDefinitionId>("startingMap", MapDefinitionId.TryCreate);
-        SkillDefinitionId basicAttack = entry.RequiredId<SkillDefinitionId>("basicAttack", SkillDefinitionId.TryCreate);
-        ExperienceDefinitionId experienceTable = entry.RequiredId<ExperienceDefinitionId>(
-            "experienceTable",
-            ExperienceDefinitionId.TryCreate);
         ExperienceDefinitionId jobExperienceTable = entry.RequiredId<ExperienceDefinitionId>(
             "jobExperienceTable",
             ExperienceDefinitionId.TryCreate);
@@ -768,6 +782,20 @@ public static class ServerContentLoader
             }
         }
 
+        List<WeaponType> weapons = ReadWeapons(entry);
+        JobDefinition? definition = baseJob == null
+            ? ReadBaseJob(
+                entry,
+                id,
+                displayName,
+                healthBase,
+                healthPerLevel,
+                spiritBase,
+                spiritPerLevel,
+                jobExperienceTable,
+                skills,
+                weapons)
+            : null;
         entry.ReportUnexpectedProperties();
 
         if (problems.Count != problemsBefore)
@@ -775,6 +803,60 @@ public static class ServerContentLoader
             return null;
         }
 
+        return definition != null
+            ? new JobEntry(definition)
+            : new JobEntry(
+                displayName,
+                baseJob.GetValueOrDefault(),
+                healthBase,
+                healthPerLevel,
+                spiritBase,
+                spiritPerLevel,
+                jobExperienceTable,
+                skills.AsReadOnly(),
+                weapons.AsReadOnly());
+    }
+
+    private static JobDefinition ReadBaseJob(
+        PackageObjectReader entry,
+        JobDefinitionId id,
+        string displayName,
+        int healthBase,
+        int healthPerLevel,
+        int spiritBase,
+        int spiritPerLevel,
+        ExperienceDefinitionId jobExperienceTable,
+        List<SkillDefinitionId> skills,
+        List<WeaponType> weapons)
+    {
+        int str = 0;
+        int agi = 0;
+        int vit = 0;
+        int intelligence = 0;
+        int dex = 0;
+        int luk = 0;
+        PackageObjectReader? stats = entry.RequiredObject("startingStats");
+        if (stats != null)
+        {
+            str = stats.RequiredInt("str", 0, ContentLimits.MaxPrimaryStat);
+            agi = stats.RequiredInt("agi", 0, ContentLimits.MaxPrimaryStat);
+            vit = stats.RequiredInt("vit", 0, ContentLimits.MaxPrimaryStat);
+            intelligence = stats.RequiredInt("int", 0, ContentLimits.MaxPrimaryStat);
+            dex = stats.RequiredInt("dex", 0, ContentLimits.MaxPrimaryStat);
+            luk = stats.RequiredInt("luk", 0, ContentLimits.MaxPrimaryStat);
+            stats.ReportUnexpectedProperties();
+        }
+
+        int unarmedAttackSpeedPenalty = entry.RequiredInt(
+            "unarmedAttackSpeedPenalty",
+            0,
+            ContentLimits.MaxAttackSpeedPenalty);
+        double baseSpeed = RequiredPositive(entry, "baseSpeed", ContentLimits.MaxSpeed);
+        MapDefinitionId startingMap = entry.RequiredId<MapDefinitionId>("startingMap", MapDefinitionId.TryCreate);
+        SkillDefinitionId basicAttack = entry.RequiredId<SkillDefinitionId>("basicAttack", SkillDefinitionId.TryCreate);
+        ExperienceDefinitionId experienceTable = entry.RequiredId<ExperienceDefinitionId>(
+            "experienceTable",
+            ExperienceDefinitionId.TryCreate);
         return new JobDefinition(
             id,
             displayName,
@@ -789,7 +871,122 @@ public static class ServerContentLoader
             basicAttack,
             experienceTable,
             jobExperienceTable,
-            skills.AsReadOnly());
+            skills.AsReadOnly(),
+            weapons.AsReadOnly());
+    }
+
+    // Every job wields at least one weapon type, each listed once (Gameplay Systems §11.1).
+    private static List<WeaponType> ReadWeapons(PackageObjectReader entry)
+    {
+        var weapons = new List<WeaponType>();
+        IReadOnlyList<string> texts = entry.RequiredStringArray("weapons");
+        foreach (string text in texts)
+        {
+            WeaponType? weapon = null;
+            foreach (WeaponType candidate in (WeaponType[])Enum.GetValues(typeof(WeaponType)))
+            {
+                string name = candidate.ToString();
+                if (string.Equals($"{char.ToLowerInvariant(name[0])}{name.Substring(1)}", text,
+                        StringComparison.Ordinal))
+                {
+                    weapon = candidate;
+                }
+            }
+
+            if (weapon == null || weapons.Contains(weapon.Value))
+            {
+                entry.Report("weapons", $"'{text}' is not a weapon type or appears more than once");
+            }
+            else
+            {
+                weapons.Add(weapon.Value);
+            }
+        }
+
+        if (texts.Count == 0 && entry.Has("weapons"))
+        {
+            entry.Report("weapons", "must list at least one weapon type");
+        }
+
+        return weapons;
+    }
+
+    // The second pass (Content Pipeline §4): a first job takes its base job's values, and its base job's job table
+    // caps the points it carries. A base job must be a base job, and a first job's own skills must not repeat its base
+    // tree; a base job or table refused for its own problem is reported there alone.
+    private static Dictionary<JobDefinitionId, JobDefinition> ResolveJobs(
+        Dictionary<JobDefinitionId, JobEntry> entries,
+        IReadOnlyDictionary<ExperienceDefinitionId, ExperienceTableDefinition> experienceTables,
+        HashSet<JobDefinitionId> declaredJobs,
+        List<string> problems)
+    {
+        var jobs = new Dictionary<JobDefinitionId, JobDefinition>();
+        foreach (KeyValuePair<JobDefinitionId, JobEntry> pair in entries)
+        {
+            if (pair.Value.Definition != null)
+            {
+                jobs.Add(pair.Key, pair.Value.Definition);
+            }
+        }
+
+        foreach (KeyValuePair<JobDefinitionId, JobEntry> pair in entries)
+        {
+            JobEntry entry = pair.Value;
+            if (entry.Definition != null)
+            {
+                continue;
+            }
+
+            if (!entries.TryGetValue(entry.BaseJob, out JobEntry? baseEntry))
+            {
+                if (!declaredJobs.Contains(entry.BaseJob))
+                {
+                    problems.Add($"{JobsFile}: {pair.Key}: its base job '{entry.BaseJob}' is unknown");
+                }
+
+                continue;
+            }
+
+            JobDefinition? baseJob = baseEntry.Definition;
+            if (baseJob == null)
+            {
+                problems.Add($"{JobsFile}: {pair.Key}: its base job '{entry.BaseJob}' has a base job of its own");
+                continue;
+            }
+
+            bool isRepeated = false;
+            foreach (SkillDefinitionId skill in entry.Skills)
+            {
+                if (baseJob.Tree.Contains(skill))
+                {
+                    problems.Add($"{JobsFile}: {pair.Key}: skill '{skill}' repeats one of its base job's tree");
+                    isRepeated = true;
+                }
+            }
+
+            if (isRepeated
+                || !experienceTables.TryGetValue(baseJob.JobExperienceTable, out ExperienceTableDefinition? table))
+            {
+                continue;
+            }
+
+            jobs.Add(
+                pair.Key,
+                JobDefinition.FirstJob(
+                    pair.Key,
+                    entry.DisplayName,
+                    baseJob,
+                    table,
+                    entry.HealthBase,
+                    entry.HealthPerLevel,
+                    entry.SpiritBase,
+                    entry.SpiritPerLevel,
+                    entry.JobExperienceTable,
+                    entry.Skills,
+                    entry.Weapons));
+        }
+
+        return jobs;
     }
 
     private static NpcDefinition? ReadNpc(PackageObjectReader entry, NpcDefinitionId id, List<string> problems)
@@ -812,9 +1009,10 @@ public static class ServerContentLoader
         }
 
         bool offersReset = entry.RequiredBool("reset");
+        bool offersJobChange = entry.RequiredBool("jobChange");
         entry.ReportUnexpectedProperties();
         return problems.Count == problemsBefore
-            ? new NpcDefinition(id, displayName, shop.AsReadOnly(), offersReset)
+            ? new NpcDefinition(id, displayName, shop.AsReadOnly(), offersReset, offersJobChange)
             : null;
     }
 
@@ -1176,29 +1374,20 @@ public static class ServerContentLoader
 
         foreach (JobDefinition job in jobs)
         {
-            if (!declaredMaps.Contains(job.StartingMap))
+            if (job.BaseJob == null)
             {
-                problems.Add($"{JobsFile}: {job.Id}: starts on unknown map '{job.StartingMap}'");
+                CheckBaseJobReferences(job, skills, declaredSkills, declaredMaps, declaredExperienceTables, problems);
             }
-
-            if (!declaredSkills.Contains(job.BasicAttack))
+            else if (job.Tree.Count > SkillList.MaxEntries)
             {
-                problems.Add($"{JobsFile}: {job.Id}: uses unknown skill '{job.BasicAttack}'");
-            }
-
-            if (!declaredExperienceTables.Contains(job.ExperienceTable))
-            {
-                problems.Add($"{JobsFile}: {job.Id}: uses unknown experience table '{job.ExperienceTable}'");
+                problems.Add(
+                    $"{JobsFile}: {job.Id}: its whole tree holds {job.Tree.Count} skills, more than the "
+                    + $"{SkillList.MaxEntries} a skill list carries");
             }
 
             if (!declaredExperienceTables.Contains(job.JobExperienceTable))
             {
                 problems.Add($"{JobsFile}: {job.Id}: uses unknown job experience table '{job.JobExperienceTable}'");
-            }
-
-            if (skills.TryGetValue(job.BasicAttack, out SkillDefinition? basicAttack) && basicAttack.DamageType == null)
-            {
-                problems.Add($"{JobsFile}: {job.Id}: its basic attack '{job.BasicAttack}' has no damage type");
             }
 
             foreach (SkillDefinitionId skill in job.Skills)
@@ -1217,7 +1406,36 @@ public static class ServerContentLoader
         }
     }
 
-    // A prerequisite is another skill of the same tree at one of its levels, and prerequisites form no cycle
+    private static void CheckBaseJobReferences(
+        JobDefinition job,
+        IReadOnlyDictionary<SkillDefinitionId, SkillDefinition> skills,
+        HashSet<SkillDefinitionId> declaredSkills,
+        HashSet<MapDefinitionId> declaredMaps,
+        HashSet<ExperienceDefinitionId> declaredExperienceTables,
+        List<string> problems)
+    {
+        if (!declaredMaps.Contains(job.StartingMap))
+        {
+            problems.Add($"{JobsFile}: {job.Id}: starts on unknown map '{job.StartingMap}'");
+        }
+
+        if (!declaredSkills.Contains(job.BasicAttack))
+        {
+            problems.Add($"{JobsFile}: {job.Id}: uses unknown skill '{job.BasicAttack}'");
+        }
+
+        if (!declaredExperienceTables.Contains(job.ExperienceTable))
+        {
+            problems.Add($"{JobsFile}: {job.Id}: uses unknown experience table '{job.ExperienceTable}'");
+        }
+
+        if (skills.TryGetValue(job.BasicAttack, out SkillDefinition? basicAttack) && basicAttack.DamageType == null)
+        {
+            problems.Add($"{JobsFile}: {job.Id}: its basic attack '{job.BasicAttack}' has no damage type");
+        }
+    }
+
+    // A prerequisite is another skill of the job's whole tree at one of its levels, and prerequisites form no cycle
     // (Content Pipeline §4).
     private static void CheckPrerequisites(
         JobDefinition job,
@@ -1233,7 +1451,7 @@ public static class ServerContentLoader
 
             // A required skill refused for its own problem is reported there alone.
             SkillRequirement requires = skill.Requires;
-            if (requires.Skill == id || !job.Skills.Contains(requires.Skill))
+            if (requires.Skill == id || !job.Tree.Contains(requires.Skill))
             {
                 problems.Add(
                     $"{JobsFile}: {job.Id}: skill '{id}' requires '{requires.Skill}', not another of its tree");
@@ -1267,6 +1485,7 @@ public static class ServerContentLoader
         IEnumerable<NpcDefinition> npcs,
         IEnumerable<QuestDefinition> quests,
         IEnumerable<MapDefinition> maps,
+        int firstJobs,
         IReadOnlyDictionary<ItemDefinitionId, ItemDefinition> items,
         HashSet<ItemDefinitionId> declaredItems,
         HashSet<MonsterDefinitionId> declaredMonsters,
@@ -1319,7 +1538,10 @@ public static class ServerContentLoader
             }
 
             int offers = questList.Count(quest => quest.Giver == npc.Id);
-            int size = ServicesHeaderBytes + ServicesEntryBytes * traded.Count + ServicesOfferBytes * offers;
+            int size = ServicesHeaderBytes
+                + ServicesEntryBytes * traded.Count
+                + ServicesOfferBytes * offers
+                + (npc.OffersJobChange ? ServicesJobChangeBytes * firstJobs : 0);
             if (size > MaxServicesBytes)
             {
                 problems.Add(
@@ -1414,6 +1636,60 @@ public static class ServerContentLoader
         }
 
         return ComputeHash(Encoding.UTF8.GetBytes(listing.ToString())).Substring(0, ContentVersionLength);
+    }
+
+    // A job as read: a base job's definition, or a first job's own values until its base job is known.
+    private sealed class JobEntry
+    {
+        public JobEntry(JobDefinition definition)
+        {
+            Definition = definition;
+            DisplayName = definition.DisplayName;
+            Skills = definition.Skills;
+            Weapons = definition.Weapons;
+        }
+
+        public JobEntry(
+            string displayName,
+            JobDefinitionId baseJob,
+            int healthBase,
+            int healthPerLevel,
+            int spiritBase,
+            int spiritPerLevel,
+            ExperienceDefinitionId jobExperienceTable,
+            IReadOnlyList<SkillDefinitionId> skills,
+            IReadOnlyList<WeaponType> weapons)
+        {
+            DisplayName = displayName;
+            BaseJob = baseJob;
+            HealthBase = healthBase;
+            HealthPerLevel = healthPerLevel;
+            SpiritBase = spiritBase;
+            SpiritPerLevel = spiritPerLevel;
+            JobExperienceTable = jobExperienceTable;
+            Skills = skills;
+            Weapons = weapons;
+        }
+
+        public JobDefinition? Definition { get; }
+
+        public string DisplayName { get; }
+
+        public JobDefinitionId BaseJob { get; }
+
+        public int HealthBase { get; }
+
+        public int HealthPerLevel { get; }
+
+        public int SpiritBase { get; }
+
+        public int SpiritPerLevel { get; }
+
+        public ExperienceDefinitionId JobExperienceTable { get; }
+
+        public IReadOnlyList<SkillDefinitionId> Skills { get; }
+
+        public IReadOnlyList<WeaponType> Weapons { get; }
     }
 
     private sealed class PackageManifest

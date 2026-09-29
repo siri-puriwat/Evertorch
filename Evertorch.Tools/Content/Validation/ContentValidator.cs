@@ -15,11 +15,13 @@ public static class ContentValidator
     private const int MaxStatusEffects = 14;
     private const int MaxQuests = 14;
 
-    // One NpcServices message (Network Protocol §6): its header, then each item the NPC trades and each quest it gives
-    // at their largest, with every ID at the 64-byte limit; one datagram carries 1,020 bytes.
-    private const int ServicesHeaderBytes = 13;
+    // One NpcServices message (Network Protocol §6): its header, then each item the NPC trades, each quest it gives,
+    // and each job change it offers at their largest, with every ID at the 64-byte limit; one datagram carries 1,020
+    // bytes.
+    private const int ServicesHeaderBytes = 14;
     private const int ServicesEntryBytes = 74;
     private const int ServicesOfferBytes = 154;
+    private const int ServicesJobChangeBytes = 134;
     private const int MaxServicesBytes = 1020;
 
     public static void Validate(ContentSet content, List<ContentDiagnostic> diagnostics)
@@ -202,17 +204,22 @@ public static class ContentValidator
 
         foreach (AuthoredJob job in content.Jobs)
         {
-            RequireReference(maps, job.Definition.StartingMap.Value, "map", job.Source, "server.startingMap",
-                diagnostics);
-            RequireReference(skills, job.Definition.BasicAttack.Value, "skill", job.Source, "server.basicAttack",
-                diagnostics);
-            RequireReference(
-                experienceTables,
-                job.Definition.ExperienceTable.Value,
-                "experience table",
-                job.Source,
-                "server.experienceTable",
-                diagnostics);
+            // A first job's inherited values were checked on its base job.
+            if (job.Definition.BaseJob == null)
+            {
+                RequireReference(maps, job.Definition.StartingMap.Value, "map", job.Source, "server.startingMap",
+                    diagnostics);
+                RequireReference(skills, job.Definition.BasicAttack.Value, "skill", job.Source, "server.basicAttack",
+                    diagnostics);
+                RequireReference(
+                    experienceTables,
+                    job.Definition.ExperienceTable.Value,
+                    "experience table",
+                    job.Source,
+                    "server.experienceTable",
+                    diagnostics);
+            }
+
             RequireReference(
                 experienceTables,
                 job.Definition.JobExperienceTable.Value,
@@ -310,7 +317,13 @@ public static class ContentValidator
             }
         }
 
-        int size = ServicesHeaderBytes + ServicesEntryBytes * traded.Count + ServicesOfferBytes * offers;
+        int jobChanges = npc.Definition.OffersJobChange
+            ? content.Jobs.Count(job => job.Definition.BaseJob != null)
+            : 0;
+        int size = ServicesHeaderBytes
+            + ServicesEntryBytes * traded.Count
+            + ServicesOfferBytes * offers
+            + ServicesJobChangeBytes * jobChanges;
         if (size > MaxServicesBytes)
         {
             Report(
@@ -420,18 +433,32 @@ public static class ContentValidator
         }
     }
 
-    // A basic attack needs its damage type; every other skill a job lists needs an effect to resolve (Content
-    // Pipeline §7).
+    // A basic attack needs its damage type; every other skill a job lists needs an effect to resolve, and a first
+    // job's whole tree fits one skill list (Content Pipeline §7).
     private static void RequireJobSkills(
         AuthoredJob job,
         HashSet<string> knownSkills,
         Dictionary<string, SkillDefinition> skillsById,
         List<ContentDiagnostic> diagnostics)
     {
-        if (skillsById.TryGetValue(job.Definition.BasicAttack.Value, out SkillDefinition? basicAttack)
+        if (job.Definition.BaseJob == null
+            && skillsById.TryGetValue(job.Definition.BasicAttack.Value, out SkillDefinition? basicAttack)
             && basicAttack.DamageType == null)
         {
             Report(job.Source, "server.basicAttack", "names a skill without a damageType", diagnostics);
+        }
+
+        if (job.Definition.Tree.Count > JobDefinitionReader.MaxSkills)
+        {
+            Report(
+                job.Source,
+                "server.skills",
+                string.Format(
+                    CultureInfo.InvariantCulture,
+                    "makes a whole tree of {0} skills with its base job's, more than the {1} a skill list carries",
+                    job.Definition.Tree.Count,
+                    JobDefinitionReader.MaxSkills),
+                diagnostics);
         }
 
         for (int index = 0; index < job.Definition.Skills.Count; index++)
@@ -451,8 +478,8 @@ public static class ContentValidator
         }
     }
 
-    // A prerequisite is another skill of the same tree at one of its levels, and prerequisites form no cycle (Content
-    // Pipeline §4).
+    // A prerequisite is another skill of the job's whole tree at one of its levels, and prerequisites form no cycle
+    // (Content Pipeline §4).
     private static void RequirePrerequisite(
         AuthoredJob job,
         SkillDefinition skill,
@@ -462,7 +489,7 @@ public static class ContentValidator
     {
         // A required skill rejected for its own problem is reported there alone (§7).
         SkillRequirement requires = skill.Requires!;
-        if (requires.Skill == skill.Id || !job.Definition.Skills.Contains(requires.Skill))
+        if (requires.Skill == skill.Id || !job.Definition.Tree.Contains(requires.Skill))
         {
             Report(
                 job.Source,

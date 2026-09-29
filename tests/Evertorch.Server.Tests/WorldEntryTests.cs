@@ -112,7 +112,7 @@ public sealed class WorldEntryTests
     public void EnterWorld_MovementSpeed_ComesFromTheJobThroughTheRules()
     {
         var server = new TestServer();
-        JobDefinition job = server.Content.Jobs.Values.Single();
+        JobDefinition job = server.Content.Jobs[new JobDefinitionId("job.adventurer")];
 
         ConnectionId connection = server.EnterWorld(7);
 

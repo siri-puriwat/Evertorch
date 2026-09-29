@@ -121,7 +121,17 @@ public sealed class RenewalProgressionRulesTests
     [TestCase(10, 9)]
     public void SkillPointsGranted_UpToJobLevel_GrantsOnePerLevelFromTwo(int jobLevel, int points)
     {
-        Assert.That(m_rules.SkillPointsGranted(jobLevel), Is.EqualTo(points));
+        Assert.That(m_rules.SkillPointsGranted(jobLevel, 0), Is.EqualTo(points));
+    }
+
+    // The research note's vectors (research/jobs-and-job-change.md §4): a first job of the Adventurer, whose job cap is
+    // 10, carries 9 points.
+    [TestCase(1, 9)]
+    [TestCase(4, 12)]
+    [TestCase(10, 18)]
+    public void SkillPointsGranted_ForAFirstJob_AddsThePointsItCarries(int jobLevel, int points)
+    {
+        Assert.That(m_rules.SkillPointsGranted(jobLevel, 9), Is.EqualTo(points));
     }
 
     [Test]

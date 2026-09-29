@@ -25,6 +25,7 @@ internal static class NpcDefinitionReader
         string displayName = root.RequiredString("displayName");
         var shop = new List<ShopEntry>();
         bool offersReset = false;
+        bool offersJobChange = false;
         if (root.Has("server"))
         {
             YamlFieldReader server = root.RequiredMapping("server");
@@ -35,7 +36,9 @@ internal static class NpcDefinitionReader
 
             if (server.Has("guild"))
             {
-                offersReset = server.RequiredMapping("guild").RequiredBool("reset");
+                YamlFieldReader guild = server.RequiredMapping("guild");
+                offersReset = guild.RequiredBool("reset");
+                offersJobChange = guild.Has("jobChange") && guild.RequiredBool("jobChange");
             }
         }
 
@@ -48,7 +51,10 @@ internal static class NpcDefinitionReader
             return null;
         }
 
-        return new AuthoredNpc(root.ToSource(), new NpcDefinition(id, displayName, shop, offersReset), prefab);
+        return new AuthoredNpc(
+            root.ToSource(),
+            new NpcDefinition(id, displayName, shop, offersReset, offersJobChange),
+            prefab);
     }
 
     // An NPC keeps a shop only when it sells something, so an authored shop lists at least one item, each once.

@@ -99,8 +99,13 @@ public sealed class SkillLevelContentTests
         Assert.That((focus.Requires!.Skill.Value, focus.Requires.Level), Is.EqualTo(("skill.strike", 1)));
         Assert.That(
             result.Content.Skills.Where(skill => skill.Description != null).Select(skill => skill.Definition.Id.Value),
-            Is.EquivalentTo(new[] { "skill.strike", "skill.first_aid", "skill.focus" }),
-            "each skill of the tree is described");
+            Is.EquivalentTo(
+                new[]
+                {
+                    "skill.strike", "skill.first_aid", "skill.focus", "skill.heavy_blow", "skill.war_cry",
+                    "skill.iron_guard", "skill.arcane_bolt", "skill.clarity", "skill.mend"
+                }),
+            "each skill of the jobs' trees is described");
     }
 
     [Test]

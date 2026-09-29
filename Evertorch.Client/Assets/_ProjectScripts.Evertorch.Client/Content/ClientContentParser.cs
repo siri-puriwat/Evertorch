@@ -361,7 +361,7 @@ public static class ClientContentParser
 
             if (!TryParseTargetType(skill.targetType, out SkillTargetType targetType))
             {
-                error = $"Skill '{skill.id}': targetType is not enemy or self.";
+                error = $"Skill '{skill.id}': targetType is not enemy, self, or ally.";
                 return null;
             }
 
@@ -506,6 +506,9 @@ public static class ClientContentParser
                 return true;
             case "self":
                 targetType = SkillTargetType.Self;
+                return true;
+            case "ally":
+                targetType = SkillTargetType.Ally;
                 return true;
             default:
                 targetType = SkillTargetType.Enemy;

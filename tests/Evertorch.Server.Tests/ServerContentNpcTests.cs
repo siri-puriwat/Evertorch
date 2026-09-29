@@ -80,8 +80,8 @@ public sealed class ServerContentNpcTests
         Assert.That(ProblemsOf(files), Is.EqualTo(new[] { $"{file}: {expected}" }));
     }
 
-    // The fixture NPC gives one quest (154 bytes) beside the header (13), so its shop may trade 11 items of 74 bytes:
-    // 981 bytes, where 12 items take 1,055 of the 1,020 one message carries.
+    // The fixture NPC gives one quest (154 bytes) beside the header (14), so its shop may trade 11 items of 74 bytes:
+    // 982 bytes, where 12 items take 1,056 of the 1,020 one message carries.
     [TestCase(11, false)]
     [TestCase(12, true)]
     public void Load_ForAnNpcsServices_TakesWhatFitsOneMessage(int items, bool isRefused)
@@ -101,7 +101,7 @@ public sealed class ServerContentNpcTests
                 ? Is.EqualTo(
                     new[]
                     {
-                        "npcs.json: npc.quartermaster: its services take 1055 bytes, more than the 1020 one message "
+                        "npcs.json: npc.quartermaster: its services take 1056 bytes, more than the 1020 one message "
                         + "carries"
                     })
                 : Is.Empty);

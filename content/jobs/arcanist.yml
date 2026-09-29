@@ -1,0 +1,12 @@
+id: job.arcanist
+displayName: Arcanist
+server:
+  # A first job: it takes its starting statistics, map, base table, basic attack, and movement from the Adventurer.
+  baseJob: job.adventurer
+  health: { base: 60, perLevel: 5 }
+  spirit: { base: 20, perLevel: 7 }
+  jobExperienceTable: experience.first_job
+  skills: [skill.arcane_bolt, skill.clarity, skill.mend]
+  weapons: [staff]
+client:
+  prefab: character_arcanist

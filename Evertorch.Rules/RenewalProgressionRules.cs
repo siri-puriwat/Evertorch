@@ -73,9 +73,9 @@ public sealed class RenewalProgressionRules : IProgressionRules
         return 2 + Math.Max(0, value - 1) / 10;
     }
 
-    public int SkillPointsGranted(int jobLevel)
+    public int SkillPointsGranted(int jobLevel, int carriedSkillPoints)
     {
-        return Math.Max(0, jobLevel - 1);
+        return Math.Max(0, carriedSkillPoints) + Math.Max(0, jobLevel - 1);
     }
 }
 }

@@ -12,5 +12,6 @@ server:
   experienceTable: experience.adventurer
   jobExperienceTable: experience.adventurer_job
   skills: [skill.strike, skill.first_aid, skill.focus]
+  weapons: [sword, staff]
 client:
   prefab: character_adventurer

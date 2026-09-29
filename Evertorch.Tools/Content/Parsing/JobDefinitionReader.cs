@@ -1,5 +1,7 @@
+using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using Evertorch.Game;
 
 namespace Evertorch.Tools
@@ -7,9 +9,15 @@ namespace Evertorch.Tools
 internal static class JobDefinitionReader
 {
     // One SkillList message carries at most this many (Network Protocol §9).
-    private const int MaxSkills = 11;
+    public const int MaxSkills = 11;
 
-    public static AuthoredJob? Read(
+    // What a first job takes from its base job, so its own file omits them (Content Pipeline §4).
+    private static readonly string[] InheritedFields =
+    {
+        "startingStats", "startingMap", "experienceTable", "basicAttack", "movement", "unarmedAttackSpeedPenalty"
+    };
+
+    public static JobDraft? Read(
         YamlFieldReader root,
         List<ContentDiagnostic> diagnostics,
         ISet<string> declaredIds)
@@ -28,14 +36,19 @@ internal static class JobDefinitionReader
         string displayName = root.RequiredString("displayName");
 
         YamlFieldReader server = root.RequiredMapping("server");
-
-        YamlFieldReader stats = server.RequiredMapping("startingStats");
-        int str = stats.RequiredInt("str", 0, ContentLimits.MaxPrimaryStat);
-        int agi = stats.RequiredInt("agi", 0, ContentLimits.MaxPrimaryStat);
-        int vit = stats.RequiredInt("vit", 0, ContentLimits.MaxPrimaryStat);
-        int intelligence = stats.RequiredInt("int", 0, ContentLimits.MaxPrimaryStat);
-        int dex = stats.RequiredInt("dex", 0, ContentLimits.MaxPrimaryStat);
-        int luk = stats.RequiredInt("luk", 0, ContentLimits.MaxPrimaryStat);
+        JobDefinitionId? baseJob = null;
+        if (server.Has("baseJob"))
+        {
+            baseJob = server.RequiredId<JobDefinitionId>("baseJob", JobDefinitionId.TryCreate,
+                JobDefinitionId.KindPrefix);
+            foreach (string inherited in InheritedFields)
+            {
+                if (server.Has(inherited))
+                {
+                    server.ReportField(inherited, "is taken from the base job, so a first job omits it");
+                }
+            }
+        }
 
         YamlFieldReader health = server.RequiredMapping("health");
         int healthBase = health.RequiredInt("base", 1, ContentLimits.MaxHp);
@@ -44,6 +57,73 @@ internal static class JobDefinitionReader
         YamlFieldReader spirit = server.RequiredMapping("spirit");
         int spiritBase = spirit.RequiredInt("base", 0, ContentLimits.MaxHp);
         int spiritPerLevel = spirit.RequiredInt("perLevel", 0, ContentLimits.MaxHp);
+
+        ExperienceDefinitionId jobExperienceTable = server.RequiredId<ExperienceDefinitionId>(
+            "jobExperienceTable",
+            ExperienceDefinitionId.TryCreate,
+            ExperienceDefinitionId.KindPrefix);
+        List<SkillDefinitionId> skills = ReadSkills(server);
+        List<WeaponType> weapons = ReadWeapons(server);
+        JobDefinition? definition = baseJob == null
+            ? ReadBaseJob(
+                server,
+                id,
+                displayName,
+                healthBase,
+                healthPerLevel,
+                spiritBase,
+                spiritPerLevel,
+                jobExperienceTable,
+                skills,
+                weapons)
+            : null;
+
+        YamlFieldReader client = root.RequiredMapping("client");
+        string prefab = client.RequiredAssetKey("prefab");
+
+        root.ReportUnknownFields();
+        if (diagnostics.Count != errorsBefore)
+        {
+            return null;
+        }
+
+        DefinitionSource source = root.ToSource();
+        return definition != null
+            ? new JobDraft(new AuthoredJob(source, definition, prefab))
+            : new JobDraft(
+                source,
+                prefab,
+                id,
+                displayName,
+                baseJob.GetValueOrDefault(),
+                healthBase,
+                healthPerLevel,
+                spiritBase,
+                spiritPerLevel,
+                jobExperienceTable,
+                skills.AsReadOnly(),
+                weapons.AsReadOnly());
+    }
+
+    private static JobDefinition ReadBaseJob(
+        YamlFieldReader server,
+        JobDefinitionId id,
+        string displayName,
+        int healthBase,
+        int healthPerLevel,
+        int spiritBase,
+        int spiritPerLevel,
+        ExperienceDefinitionId jobExperienceTable,
+        List<SkillDefinitionId> skills,
+        List<WeaponType> weapons)
+    {
+        YamlFieldReader stats = server.RequiredMapping("startingStats");
+        int str = stats.RequiredInt("str", 0, ContentLimits.MaxPrimaryStat);
+        int agi = stats.RequiredInt("agi", 0, ContentLimits.MaxPrimaryStat);
+        int vit = stats.RequiredInt("vit", 0, ContentLimits.MaxPrimaryStat);
+        int intelligence = stats.RequiredInt("int", 0, ContentLimits.MaxPrimaryStat);
+        int dex = stats.RequiredInt("dex", 0, ContentLimits.MaxPrimaryStat);
+        int luk = stats.RequiredInt("luk", 0, ContentLimits.MaxPrimaryStat);
 
         int unarmedAttackSpeedPenalty =
             server.RequiredInt("unarmedAttackSpeedPenalty", 0, ContentLimits.MaxAttackSpeedPenalty);
@@ -63,22 +143,8 @@ internal static class JobDefinitionReader
             "experienceTable",
             ExperienceDefinitionId.TryCreate,
             ExperienceDefinitionId.KindPrefix);
-        ExperienceDefinitionId jobExperienceTable = server.RequiredId<ExperienceDefinitionId>(
-            "jobExperienceTable",
-            ExperienceDefinitionId.TryCreate,
-            ExperienceDefinitionId.KindPrefix);
-        List<SkillDefinitionId> skills = ReadSkills(server);
 
-        YamlFieldReader client = root.RequiredMapping("client");
-        string prefab = client.RequiredAssetKey("prefab");
-
-        root.ReportUnknownFields();
-        if (diagnostics.Count != errorsBefore)
-        {
-            return null;
-        }
-
-        var definition = new JobDefinition(
+        return new JobDefinition(
             id,
             displayName,
             new PrimaryStats(str, agi, vit, intelligence, dex, luk),
@@ -92,8 +158,8 @@ internal static class JobDefinitionReader
             basicAttack,
             experienceTable,
             jobExperienceTable,
-            skills.AsReadOnly());
-        return new AuthoredJob(root.ToSource(), definition, prefab);
+            skills.AsReadOnly(),
+            weapons.AsReadOnly());
     }
 
     // Optional: a job without skills has only its basic attack.
@@ -140,6 +206,56 @@ internal static class JobDefinitionReader
         }
 
         return skills;
+    }
+
+    // Every job wields at least one weapon type, each listed once (Gameplay Systems §11.1).
+    private static List<WeaponType> ReadWeapons(YamlFieldReader server)
+    {
+        var weapons = new List<WeaponType>();
+        IReadOnlyList<string> values = server.RequiredStringSequence("weapons");
+        for (int index = 0; index < values.Count; index++)
+        {
+            string element = string.Format(CultureInfo.InvariantCulture, "weapons[{0}]", index);
+            if (!TryParseWeapon(values[index], out WeaponType weapon))
+            {
+                server.ReportField(element, $"must be one of: {string.Join(", ", AllowedWeapons())}");
+            }
+            else if (weapons.Contains(weapon))
+            {
+                server.ReportField(element, $"lists '{values[index]}' more than once");
+            }
+            else
+            {
+                weapons.Add(weapon);
+            }
+        }
+
+        if (values.Count == 0 && server.Has("weapons"))
+        {
+            server.ReportField("weapons", "must list at least one weapon type");
+        }
+
+        return weapons;
+    }
+
+    private static bool TryParseWeapon(string text, out WeaponType weapon)
+    {
+        foreach (WeaponType candidate in Enum.GetValues<WeaponType>())
+        {
+            if (string.Equals(EnumText.Of(candidate), text, StringComparison.Ordinal))
+            {
+                weapon = candidate;
+                return true;
+            }
+        }
+
+        weapon = default;
+        return false;
+    }
+
+    private static IEnumerable<string> AllowedWeapons()
+    {
+        return Enum.GetValues<WeaponType>().Select(weapon => EnumText.Of(weapon));
     }
 }
 }

@@ -1,0 +1,12 @@
+id: job.vanguard
+displayName: Vanguard
+server:
+  # A first job: it takes its starting statistics, map, base table, basic attack, and movement from the Adventurer.
+  baseJob: job.adventurer
+  health: { base: 60, perLevel: 14 }
+  spirit: { base: 20, perLevel: 3 }
+  jobExperienceTable: experience.first_job
+  skills: [skill.heavy_blow, skill.war_cry, skill.iron_guard]
+  weapons: [sword]
+client:
+  prefab: character_vanguard

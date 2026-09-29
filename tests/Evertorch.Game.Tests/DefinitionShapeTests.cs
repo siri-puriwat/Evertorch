@@ -7,6 +7,42 @@ namespace Evertorch.Game.Tests
 [TestFixture]
 public sealed class DefinitionShapeTests
 {
+    private static JobDefinition Adventurer()
+    {
+        return new JobDefinition(
+            new JobDefinitionId("job.adventurer"),
+            "Adventurer",
+            new PrimaryStats(5, 6, 7, 8, 9, 10),
+            60,
+            8,
+            20,
+            3,
+            44,
+            5.0,
+            new MapDefinitionId("map.training_ground"),
+            new SkillDefinitionId("skill.basic_attack"),
+            new ExperienceDefinitionId("experience.adventurer"),
+            new ExperienceDefinitionId("experience.adventurer_job"),
+            new[] { new SkillDefinitionId("skill.strike") },
+            new[] { WeaponType.Sword, WeaponType.Staff });
+    }
+
+    private static JobDefinition FirstJobOf(JobDefinition baseJob, ExperienceTableDefinition table)
+    {
+        return JobDefinition.FirstJob(
+            new JobDefinitionId("job.vanguard"),
+            "Vanguard",
+            baseJob,
+            table,
+            60,
+            14,
+            20,
+            3,
+            new ExperienceDefinitionId("experience.first_job"),
+            new SkillDefinitionId[0],
+            new[] { WeaponType.Sword });
+    }
+
     [Test]
     public void ExperienceTableDefinition_WithValues_ExposesThem()
     {
@@ -37,6 +73,67 @@ public sealed class DefinitionShapeTests
     }
 
     [Test]
+    public void JobDefinition_FirstJobOfAFirstJobOrWithAnotherTable_Throws()
+    {
+        JobDefinition adventurer = Adventurer();
+        var table = new ExperienceTableDefinition(new ExperienceDefinitionId("experience.adventurer_job"),
+            new[] { 30 });
+        var other = new ExperienceTableDefinition(new ExperienceDefinitionId("experience.first_job"), new[] { 250 });
+        JobDefinition first = FirstJobOf(adventurer, table);
+
+        Action ofFirstJob = () => FirstJobOf(first, other);
+        Action withAnotherTable = () => FirstJobOf(adventurer, other);
+
+        Assert.That(ofFirstJob, Throws.ArgumentException);
+        Assert.That(withAnotherTable, Throws.ArgumentException);
+    }
+
+    // A first job takes its base job's starting statistics, map, base table, basic attack, and movement, keeps its own
+    // values, and learns from the base tree followed by its own; it carries the base job's job cap less one in points
+    // (Content Pipeline §4; Gameplay Systems §2.1).
+    [Test]
+    public void JobDefinition_FirstJob_TakesItsBaseJobsValuesAndWholeTree()
+    {
+        JobDefinition adventurer = Adventurer();
+        var table = new ExperienceTableDefinition(
+            new ExperienceDefinitionId("experience.adventurer_job"),
+            new[] { 30, 50, 80, 120, 170, 230, 300, 380, 470 });
+
+        var vanguard = JobDefinition.FirstJob(
+            new JobDefinitionId("job.vanguard"),
+            "Vanguard",
+            adventurer,
+            table,
+            60,
+            14,
+            20,
+            3,
+            new ExperienceDefinitionId("experience.first_job"),
+            new[] { new SkillDefinitionId("skill.heavy_blow") },
+            new[] { WeaponType.Sword });
+
+        Assert.That((vanguard.Id.Value, vanguard.DisplayName), Is.EqualTo(("job.vanguard", "Vanguard")));
+        Assert.That(vanguard.BaseJob, Is.EqualTo(adventurer.Id));
+        Assert.That(vanguard.StartingStats, Is.EqualTo(adventurer.StartingStats));
+        Assert.That(vanguard.StartingMap, Is.EqualTo(adventurer.StartingMap));
+        Assert.That(vanguard.ExperienceTable, Is.EqualTo(adventurer.ExperienceTable));
+        Assert.That(vanguard.BasicAttack, Is.EqualTo(adventurer.BasicAttack));
+        Assert.That(vanguard.BaseSpeed, Is.EqualTo(adventurer.BaseSpeed));
+        Assert.That(vanguard.UnarmedAttackSpeedPenalty, Is.EqualTo(adventurer.UnarmedAttackSpeedPenalty));
+        Assert.That(
+            (vanguard.HealthBase, vanguard.HealthPerLevel, vanguard.SpiritBase, vanguard.SpiritPerLevel),
+            Is.EqualTo((60, 14, 20, 3)));
+        Assert.That(vanguard.JobExperienceTable.Value, Is.EqualTo("experience.first_job"));
+        Assert.That(vanguard.Skills.Select(skill => skill.Value), Is.EqualTo(new[] { "skill.heavy_blow" }));
+        Assert.That(
+            vanguard.Tree.Select(skill => skill.Value),
+            Is.EqualTo(new[] { "skill.strike", "skill.heavy_blow" }));
+        Assert.That(vanguard.CarriedSkillPoints, Is.EqualTo(9), "a table of 9 caps the Adventurer at 10");
+        Assert.That((vanguard.CanWield(WeaponType.Sword), vanguard.CanWield(WeaponType.Staff)),
+            Is.EqualTo((true, false)));
+    }
+
+    [Test]
     public void JobDefinition_WithValues_ExposesThem()
     {
         var stats = new PrimaryStats(5, 6, 7, 8, 9, 10);
@@ -54,7 +151,8 @@ public sealed class DefinitionShapeTests
             new SkillDefinitionId("skill.basic_attack"),
             new ExperienceDefinitionId("experience.adventurer"),
             new ExperienceDefinitionId("experience.adventurer_job"),
-            new[] { new SkillDefinitionId("skill.strike") });
+            new[] { new SkillDefinitionId("skill.strike") },
+            new[] { WeaponType.Sword, WeaponType.Staff });
 
         Assert.That(job.Id.Value, Is.EqualTo("job.adventurer"));
         Assert.That(job.DisplayName, Is.EqualTo("Adventurer"));
@@ -70,6 +168,9 @@ public sealed class DefinitionShapeTests
         Assert.That(job.ExperienceTable.Value, Is.EqualTo("experience.adventurer"));
         Assert.That(job.JobExperienceTable.Value, Is.EqualTo("experience.adventurer_job"));
         Assert.That(job.Skills, Is.EqualTo(new[] { new SkillDefinitionId("skill.strike") }));
+        Assert.That(job.Weapons, Is.EqualTo(new[] { WeaponType.Sword, WeaponType.Staff }));
+        Assert.That((job.BaseJob, job.CarriedSkillPoints), Is.EqualTo(((JobDefinitionId?)null, 0)), "a base job");
+        Assert.That(job.Tree, Is.EqualTo(job.Skills), "its tree is its own skills");
     }
 
     [Test]

@@ -117,7 +117,10 @@ public sealed class CombatSystem : ITickPhase
         }
 
         WorldEntity? resolvedOn = player;
-        if (skill.TargetType == SkillTargetType.Self)
+
+        // An ally skill heals the caster until players can be selected (Milestone 10's line 6); it never lands on a
+        // monster.
+        if (skill.TargetType == SkillTargetType.Self || skill.TargetType == SkillTargetType.Ally)
         {
             if (target != default && target != player.Id)
             {

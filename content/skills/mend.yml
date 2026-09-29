@@ -1,0 +1,23 @@
+id: skill.mend
+displayName: Mend
+targetType: ally
+server:
+  range: 6.0
+  maxLevel: 3
+  requires: { skill: skill.clarity, level: 1 }
+  levels:
+    - spCost: 12
+      castTimeMs: { fixed: 1000 }
+      effect:
+        heal: { hp: 40 }
+    - spCost: 15
+      castTimeMs: { fixed: 1000 }
+      effect:
+        heal: { hp: 70 }
+    - spCost: 18
+      castTimeMs: { fixed: 1000 }
+      effect:
+        heal: { hp: 100 }
+client:
+  icon: skill_mend
+  description: Mend the wounds of the player you have selected, or your own when none is. You stand still while you cast. Each level heals more.

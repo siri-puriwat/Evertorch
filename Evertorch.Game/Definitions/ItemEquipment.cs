@@ -3,12 +3,17 @@ using System;
 namespace Evertorch.Game
 {
 /// <summary>
-///     What a worn item adds (Gameplay Systems §11.1): a weapon's attack and attack-speed penalty, an armor's defense,
-///     and primary-statistic bonuses on either. Server-only content.
+///     What a worn item adds (Gameplay Systems §11.1): a weapon's attack, attack-speed penalty, and type, an armor's
+///     defense, and primary-statistic bonuses on either. Server-only content.
 /// </summary>
 public sealed class ItemEquipment
 {
-    public ItemEquipment(int attack, int attackSpeedPenalty, int defense, PrimaryStats bonus)
+    public ItemEquipment(
+        int attack,
+        int attackSpeedPenalty,
+        int defense,
+        PrimaryStats bonus,
+        WeaponType? weaponType = null)
     {
         if (attack < 0 || attackSpeedPenalty < 0 || defense < 0)
         {
@@ -19,6 +24,7 @@ public sealed class ItemEquipment
         AttackSpeedPenalty = attackSpeedPenalty;
         Defense = defense;
         Bonus = bonus;
+        WeaponType = weaponType;
     }
 
     public int Attack { get; }
@@ -31,5 +37,8 @@ public sealed class ItemEquipment
 
     /// <summary>Added to the wearer's primary statistics.</summary>
     public PrimaryStats Bonus { get; }
+
+    /// <summary>A weapon's type, which decides the jobs that can wield it; null for an armor.</summary>
+    public WeaponType? WeaponType { get; }
 }
 }

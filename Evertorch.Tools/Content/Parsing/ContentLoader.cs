@@ -27,7 +27,7 @@ public static class ContentLoader
         var items = new List<AuthoredItem>();
         var monsters = new List<AuthoredMonster>();
         var skills = new List<AuthoredSkill>();
-        var jobs = new List<AuthoredJob>();
+        var jobs = new List<JobDraft>();
         var maps = new List<AuthoredMap>();
         var experienceTables = new List<AuthoredExperienceTable>();
         var statusEffects = new List<AuthoredStatusEffect>();
@@ -42,7 +42,7 @@ public static class ContentLoader
                 items,
                 monsters,
                 skills,
-                jobs,
+                new List<AuthoredJob>(),
                 maps,
                 experienceTables,
                 statusEffects,
@@ -112,11 +112,13 @@ public static class ContentLoader
             }
         }
 
+        // A first job takes values from its base job, which may come from any file (Content Pipeline §4).
+        List<AuthoredJob> resolvedJobs = JobDraft.ResolveAll(jobs, experienceTables, declaredIds, diagnostics);
         return new ContentSet(
             items,
             monsters,
             skills,
-            jobs,
+            resolvedJobs,
             maps,
             experienceTables,
             statusEffects,

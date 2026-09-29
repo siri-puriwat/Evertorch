@@ -67,12 +67,16 @@ internal static class ItemDefinitionReader
         return new AuthoredItem(root.ToSource(), definition, icon, model);
     }
 
-    // A weapon has an attack and an attack-speed penalty, armor a defense; either may add to primary statistics.
+    // A weapon has an attack, an attack-speed penalty within the job's limit, and a type, armor a defense; either may
+    // add to primary statistics.
     private static ItemEquipment ReadEquipment(YamlFieldReader equipment, ItemType type)
     {
         bool isWeapon = type == ItemType.Weapon;
         int attack = isWeapon ? equipment.RequiredInt("attack", 0, ContentLimits.MaxStat) : 0;
-        int penalty = isWeapon ? equipment.RequiredInt("attackSpeedPenalty", 0, ContentLimits.MaxStat) : 0;
+        int penalty = isWeapon
+            ? equipment.RequiredInt("attackSpeedPenalty", 0, ContentLimits.MaxAttackSpeedPenalty)
+            : 0;
+        WeaponType? weaponType = isWeapon ? equipment.RequiredEnum<WeaponType>("weaponType") : null;
         int defense = isWeapon ? 0 : equipment.RequiredInt("defense", 0, ContentLimits.MaxStat);
         var bonus = new PrimaryStats(0, 0, 0, 0, 0, 0);
         if (equipment.Has("bonus"))
@@ -87,7 +91,7 @@ internal static class ItemDefinitionReader
                 OptionalStat(stats, "luk"));
         }
 
-        return new ItemEquipment(attack, penalty, defense, bonus);
+        return new ItemEquipment(attack, penalty, defense, bonus, weaponType);
     }
 
     // A consumable restores HP, SP, or both, each an optional flat amount.
