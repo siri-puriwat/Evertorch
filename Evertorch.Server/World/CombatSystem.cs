@@ -118,11 +118,12 @@ public sealed class CombatSystem : ITickPhase
 
         WorldEntity? resolvedOn = player;
 
-        // An ally skill heals the caster until players can be selected (Milestone 10's line 6); it never lands on a
-        // monster.
-        if (skill.TargetType == SkillTargetType.Self || skill.TargetType == SkillTargetType.Ally)
+        // An ally skill names the caster by 0 or its own ID, like a self skill, or another player it knows; an enemy
+        // skill a monster alone (Gameplay Systems §9).
+        bool isOnCaster = target == default || target == player.Id;
+        if (skill.TargetType == SkillTargetType.Self || (skill.TargetType == SkillTargetType.Ally && isOnCaster))
         {
-            if (target != default && target != player.Id)
+            if (!isOnCaster)
             {
                 return CastRefusal.InvalidTarget;
             }
@@ -132,7 +133,9 @@ public sealed class CombatSystem : ITickPhase
             ClientSession? session = FindSession(player);
             if (target == default
                 || session == null
-                || !Targeting.IsTargetable(session, target)
+                || !(skill.TargetType == SkillTargetType.Ally
+                    ? Targeting.IsSelectablePlayer(session, target)
+                    : Targeting.IsAttackable(session, target))
                 || !map.TryGetEntity(target, out resolvedOn)
                 || resolvedOn == null)
             {
@@ -722,7 +725,7 @@ public sealed class CombatSystem : ITickPhase
         {
             ClientSession? session = FindSession(player);
             return session != null
-                && Targeting.IsTargetable(session, player.Target)
+                && Targeting.IsAttackable(session, player.Target)
                 && map.TryGetEntity(player.Target, out target);
         }
 

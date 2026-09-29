@@ -260,29 +260,6 @@ public sealed class FirstJobTests
         Assert.That(server.LifetimeLog.Entries.Where(entry => entry.EventId.Id == 1016), Is.Empty);
     }
 
-    // Until line 6 lets a player be selected, an ally skill lands on its caster alone, never on a monster.
-    [Test]
-    public void Mend_BeforePlayersCanBeSelected_HealsTheCaster()
-    {
-        var server = new TestServer(withAdventurerBuild: false);
-        ConnectionId player = server.EnterWorld(Character);
-        PlayerEntity entity = server.PlayerOf(player);
-        entity.ChangeJob(new JobDefinitionId("job.arcanist"));
-        entity.SetSkillLevel(new SkillDefinitionId(Mend), 1);
-        entity.CurrentHealth = 10;
-        entity.CurrentSpirit = entity.MaxSpirit;
-
-        server.SendUseSkill(player, Mend, default, 1);
-        server.Tick(30);
-
-        SkillResolved healed = Read(server, player, MessageOpcode.SkillResolved,
-            (byte[] payload, out SkillResolved? read) =>
-                SkillResolved.TryRead(payload, out read)).Single();
-        Assert.That(Rejections(server, player), Is.Empty);
-        Assert.That((healed.Caster, healed.Target, healed.Amount), Is.EqualTo((entity.Id, entity.Id, 40u)), "Mend 1");
-        Assert.That(entity.CurrentHealth, Is.GreaterThanOrEqualTo(50));
-    }
-
     // The Guildmaster's reset returns the points of both trees and keeps the job (Gameplay Systems §6.1).
     [Test]
     public void Reset_OfAFirstJob_ForgetsBothTreesAndKeepsTheJob()

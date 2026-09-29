@@ -101,25 +101,6 @@ public sealed class TargetingTests
     }
 
     [Test]
-    public void Target_ForAnotherPlayer_IsRefused()
-    {
-        var server = new TestServer();
-        ConnectionId first = server.EnterWorld(1);
-        ConnectionId second = server.EnterWorld(2);
-        server.Tick();
-        server.Transport.ClearSent();
-
-        server.SendTarget(first, server.PlayerOf(second).Id);
-        server.Tick();
-
-        Assert.That(server.PlayerOf(first).Target, Is.EqualTo(default(EntityId)));
-        Assert.That(TargetChanges(server, first), Is.Empty);
-        server.Tick(TestServer.TickRate);
-        PlayerSummary summary = server.Status.Current.Players.Single(p => p.Connection == first);
-        Assert.That(summary.RefusedCommands, Is.EqualTo(1));
-    }
-
-    [Test]
     public void Target_ForEntityZero_ClearsTheTarget()
     {
         (TestServer server, ConnectionId player, EntityId slime) = EnterNearSlimes();

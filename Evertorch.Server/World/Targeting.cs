@@ -16,10 +16,10 @@ public sealed class Targeting
     }
 
     /// <summary>
-    ///     In version 1 only live monsters the server has spawned to this client are targetable. A hidden entity
-    ///     and a missing one are refused alike, so a refusal reveals nothing.
+    ///     Only live monsters the server has spawned to this client can be attacked or struck: there is no PvP. A hidden
+    ///     entity and a missing one are refused alike, so a refusal reveals nothing.
     /// </summary>
-    public static bool IsTargetable(ClientSession session, EntityId target)
+    public static bool IsAttackable(ClientSession session, EntityId target)
     {
         return session.Map != null
             && session.KnownEntities.Contains(target)
@@ -29,8 +29,22 @@ public sealed class Targeting
     }
 
     /// <summary>
-    ///     Selects <paramref name="target" />, or clears the selection for entity 0. Returns false, changing nothing,
-    ///     when the target may not be selected.
+    ///     A live player other than its own that the server has spawned to this client on its map instance, which it
+    ///     may select and an ally skill may name (Gameplay Systems §6, §9).
+    /// </summary>
+    public static bool IsSelectablePlayer(ClientSession session, EntityId target)
+    {
+        return session.Map != null
+            && session.KnownEntities.Contains(target)
+            && session.Map.TryGetPlayer(target, out PlayerEntity? player)
+            && player != null
+            && !player.IsDead;
+    }
+
+    /// <summary>
+    ///     Selects <paramref name="target" />, a monster it could attack or a player it knows, or clears the selection
+    ///     for entity 0. Returns false, changing nothing, when the target may not be selected. Selecting ends an
+    ///     auto-attack and never starts one.
     /// </summary>
     public bool TrySelect(ClientSession session, EntityId target)
     {
@@ -39,7 +53,7 @@ public sealed class Targeting
             return false;
         }
 
-        if (target != default && !IsTargetable(session, target))
+        if (target != default && !IsAttackable(session, target) && !IsSelectablePlayer(session, target))
         {
             return false;
         }
@@ -62,11 +76,14 @@ public sealed class Targeting
 
     /// <summary>
     ///     Selects <paramref name="target" /> and keeps attacking it. Returns false, changing nothing, when the
-    ///     target may not be selected.
+    ///     target may not be attacked.
     /// </summary>
     public bool TryAttack(ClientSession session, EntityId target)
     {
-        if (session.Player == null || target == default || !TrySelect(session, target))
+        if (session.Player == null
+            || target == default
+            || !IsAttackable(session, target)
+            || !TrySelect(session, target))
         {
             return false;
         }
