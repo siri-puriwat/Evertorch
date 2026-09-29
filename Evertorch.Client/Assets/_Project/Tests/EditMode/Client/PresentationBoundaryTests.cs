@@ -18,13 +18,14 @@ public sealed class PresentationBoundaryTests
         @"ClientConnection|ICombatCommandSink|IMoveIntentSink|ISkillCommandSink|IItemCommandSink|\bSend\w*\("
         + @"|AutoAttackState|PickupState|SkillState|TalkState|InventoryActions\.Press\b|MovementController"
         + @"|LocalPlayerDriver"
-        + @"|MovementPredictor|\.Predictor\b|\.IsLocked\b|RequestRespawn|UseSkillSlot|PressInventoryRow|BuyFrom|SellTo"
+        + @"|MovementPredictor|\.Predictor\b|\.IsLocked\b|RequestRespawn|UseSkillSlot|\bUseSkill\(|PressInventoryRow"
+        + @"|BuyFrom|SellTo"
         + @"|AcceptQuestFrom|TurnInQuestTo|RaiseStat|ToggleStats|LearnSkillLevel|ToggleSkills|ResetBuildAt|ChangeJobAt"
         + @"|\.ActionLock\b"
         + @"|\.On(Spawn|Despawn|Snapshot|TargetChanged|AttackStarted|Damage|EntityDied|EntityRevived|CommandRejected"
         + @"|ItemDropped|ItemPickedUp|CharacterHealth|CharacterProgress|SkillCastStarted|SkillResolved|SkillList"
         + @"|StatusEffects|NpcServices|QuestLog|CharacterSheet|LocalCancel|Changed)\("
-        + @"|\.(Advance|CollectTargetCandidates|CollectDropCandidates|CollectNpcCandidates)\("
+        + @"|\.(Advance|CollectTargetCandidates|CollectPlayerCandidates|CollectDropCandidates|CollectNpcCandidates)\("
         + @"|\.(HealthPermille|StateFlags|CurrentHealth|Target|LastRejection|LocalHealth|LocalMaximumHealth|IsDead"
         + @"|LocalSpirit|LocalMaximumSpirit|Level|Experience|ExperienceToNextLevel)\s*=(?![=>])");
 
@@ -47,7 +48,7 @@ public sealed class PresentationBoundaryTests
         + @"|\.On(Spawn|Despawn|Snapshot|TargetChanged|AttackStarted|Damage|EntityDied|EntityRevived|CommandRejected"
         + @"|ItemDropped|ItemPickedUp|CharacterHealth|CharacterProgress|SkillCastStarted|SkillResolved|SkillList"
         + @"|StatusEffects|NpcServices|QuestLog|CharacterSheet|LocalCancel|Changed)\("
-        + @"|\.(Advance|CollectTargetCandidates|CollectDropCandidates|CollectNpcCandidates)\("
+        + @"|\.(Advance|CollectTargetCandidates|CollectPlayerCandidates|CollectDropCandidates|CollectNpcCandidates)\("
         + @"|\.(Target|LastRejection|LocalHealth|LocalMaximumHealth|HealthPermille|StateFlags|CurrentHealth|IsLocked"
         + @"|IsDead|LocalSpirit|LocalMaximumSpirit|Level|Experience|ExperienceToNextLevel)\s*=(?![=>])");
 
@@ -91,7 +92,8 @@ public sealed class PresentationBoundaryTests
             "connection.SendAttack(target);", "m_world.OnDamage(damage);", "remote.HealthPermille = 0;",
             "controller.IsLocked = true;", "new AutoAttackState(world, controller, sink, 0.05);",
             "var skill = new SkillState(world, controller, sink);", "m_world.OnStatusEffects(effects);",
-            "m_client.UseSkillSlot(1);", "client.PressInventoryRow(row);",
+            "m_client.UseSkillSlot(1);", "m_client.UseSkill(skill);", "m_world.CollectPlayerCandidates(candidates);",
+            "client.PressInventoryRow(row);",
             "InventoryActions.Press(sink, row, ItemType.Consumable);", "IItemCommandSink items = m_items;",
             "ISkillCommandSink skills = m_skills;", "m_world.OnCharacterProgress(progress);",
             "world.Inventory.OnChanged(change);", "m_world.OnItemPickedUp(pickedUp);",

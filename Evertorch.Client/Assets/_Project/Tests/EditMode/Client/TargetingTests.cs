@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using Evertorch.Game;
 using Evertorch.Protocol;
 using NUnit.Framework;
@@ -76,6 +77,40 @@ public sealed class TargetingTests
         var cycler = new TargetCycler();
 
         Assert.That(cycler.Choose(new List<PickCandidate>(), Origin, default, true), Is.EqualTo(default(EntityId)));
+    }
+
+    // A click or tap selects a live player; cycling never visits one (Gameplay Systems §6).
+    [Test]
+    public void CollectPlayerCandidates_ListsLivePlayersButNotMonstersOrTheDead()
+    {
+        var monster = new EntityId(300);
+        var living = new EntityId(301);
+        var dead = new EntityId(302);
+        ClientWorld world = CreateWorldWithMonster(monster);
+        foreach ((EntityId player, EntityStateFlags flags) in new[]
+                 {
+                     (living, EntityStateFlags.None), (dead, EntityStateFlags.Dead)
+                 })
+        {
+            world.OnSpawn(
+                new EntitySpawn(
+                    player,
+                    EntityKind.Player,
+                    "job.arcanist",
+                    ClientTestGrids.Center(5, 8),
+                    new WorldDirection(0f, 1f),
+                    flags,
+                    0));
+        }
+
+        var candidates = new List<PickCandidate>();
+
+        world.CollectPlayerCandidates(candidates);
+
+        Assert.That(candidates.Select(candidate => candidate.Entity), Is.EqualTo(new[] { living }));
+        Assert.That(
+            new[] { world.IsPlayer(living), world.IsPlayer(dead), world.IsPlayer(monster), world.IsPlayer(default) },
+            Is.EqualTo(new[] { true, true, false, false }));
     }
 
     [Test]

@@ -295,6 +295,7 @@ public sealed class GameClient : MonoBehaviour
         m_world.CollectTargetCandidates(m_targetCandidates);
         m_pointerCandidates.Clear();
         m_pointerCandidates.AddRange(m_targetCandidates);
+        m_world.CollectPlayerCandidates(m_pointerCandidates);
         m_world.CollectDropCandidates(m_pointerCandidates);
         m_npcCandidates.Clear();
         m_world.CollectNpcCandidates(m_npcCandidates);
@@ -712,7 +713,7 @@ public sealed class GameClient : MonoBehaviour
 
     /// <summary>
     ///     Uses the skill in a slot of the skill bar, numbered from 1 (Prototype Content §4): what the slot's key,
-    ///     gamepad button, and button on the bar ask for. An enemy skill is for the confirmed target.
+    ///     gamepad button, and button on the bar ask for.
     /// </summary>
     public void UseSkillSlot(int slot)
     {
@@ -728,11 +729,22 @@ public sealed class GameClient : MonoBehaviour
             return;
         }
 
+        if (SkillSlots.TryGetSkill(slot, out SkillDefinitionId skill))
+        {
+            UseSkill(skill);
+        }
+    }
+
+    /// <summary>
+    ///     Uses <paramref name="skill" />: an enemy skill at the confirmed monster, an ally skill at the selected
+    ///     player or else on the caster, and any other on the caster (Gameplay Systems §9; Prototype Content §4).
+    /// </summary>
+    public void UseSkill(SkillDefinitionId skill)
+    {
         ClientContent? content = m_contentLoader.Content;
         if (m_world == null
             || m_skill == null
             || content == null
-            || !SkillSlots.TryGetSkill(slot, out SkillDefinitionId skill)
             || !content.TryGetSkill(skill, out ClientSkill? definition)
             || definition == null)
         {
@@ -745,7 +757,8 @@ public sealed class GameClient : MonoBehaviour
             return;
         }
 
-        if (definition.TargetType == SkillTargetType.Enemy && m_world.Target == default)
+        if (definition.TargetType == SkillTargetType.Enemy
+            && (m_world.Target == default || m_world.IsPlayer(m_world.Target)))
         {
             m_feedback?.Add("Choose a target first.");
             return;
@@ -1027,8 +1040,9 @@ public sealed class GameClient : MonoBehaviour
         }
         else if (result == PointerMoveResult.Entity)
         {
-            // A click or tap on a monster attacks it, one on a drop picks it up, as in the reference game, and one on
-            // an NPC talks to it, never attacks it (Prototype Content §4).
+            // A click or tap on a monster attacks it, one on a drop picks it up, as in the reference game, one on an
+            // NPC talks to it, and one on a player selects it for an ally skill; NPCs and players are never attacked
+            // (Prototype Content §4).
             EntityKind kind = m_world.Remotes.TryGetValue(entity, out RemoteEntity? remote)
                 ? remote.Kind
                 : EntityKind.None;
@@ -1039,6 +1053,10 @@ public sealed class GameClient : MonoBehaviour
             else if (kind == EntityKind.Npc)
             {
                 StartTalk(entity);
+            }
+            else if (kind == EntityKind.Player)
+            {
+                SelectPlayer(entity);
             }
             else
             {
@@ -1099,10 +1117,26 @@ public sealed class GameClient : MonoBehaviour
 
     private void Attack(EntityId target)
     {
+        // A selected player is only ever healed: the attack key or button does nothing to it (Gameplay Systems §6).
+        if (m_world != null && m_world.IsPlayer(target))
+        {
+            m_feedback?.Add("Players cannot be attacked.");
+            return;
+        }
+
         m_pickup?.Cancel();
         m_skill?.Cancel();
         m_talk?.Cancel();
         m_autoAttack?.Attack(target);
+    }
+
+    // Selecting a player asks the server; the auto-attack on a monster ends once the server confirms the new target.
+    private void SelectPlayer(EntityId player)
+    {
+        if (m_world != null && m_world.Target != player)
+        {
+            Connection?.SendTarget(player);
+        }
     }
 
     // A pickup replaces an auto-attack, whose chase would otherwise pull the character away from the drop.

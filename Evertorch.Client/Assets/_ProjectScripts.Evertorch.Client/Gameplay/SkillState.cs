@@ -6,8 +6,8 @@ namespace Evertorch.Client
 {
 /// <summary>
 ///     The local side of a skill (Gameplay Systems §5.1): a skill on the caster is asked for at once, and one on an
-///     enemy walks within the skill's range, as an attack does, before it is asked for. The server checks the skill,
-///     its cost, its range, and its target again and decides; nothing here predicts the cast.
+///     enemy or on a selected player walks within the skill's range, as an attack does, before it is asked for. The
+///     server checks the skill, its cost, its range, and its target again and decides; nothing here predicts the cast.
 /// </summary>
 public sealed class SkillState
 {
@@ -56,22 +56,28 @@ public sealed class SkillState
     public SkillDefinitionId Skill { get; private set; }
 
     /// <summary>
-    ///     The enemy the skill is for; the default value for a skill on the caster.
+    ///     The enemy or the player the skill is for; the default value for a skill on the caster.
     /// </summary>
     public EntityId Target { get; private set; }
 
     public int SkillsSent { get; private set; }
 
     /// <summary>
-    ///     Asks for <paramref name="skill" /> on the caster, or at the confirmed target for an enemy skill. False, with
-    ///     nothing started, while dead, for a skill the server has not listed, and for an enemy skill without a target.
+    ///     Asks for <paramref name="skill" /> on the caster, at the confirmed target for an enemy skill, or for an ally
+    ///     skill at the selected player, else on the caster (Gameplay Systems §9). False, with nothing started, while
+    ///     dead, for a skill the server has not listed, and for an enemy skill without a target or at a player.
     /// </summary>
     public bool Use(SkillDefinitionId skill, SkillTargetType targetType)
     {
-        EntityId target = targetType == SkillTargetType.Enemy ? m_world.Target : default;
+        EntityId target = targetType switch
+        {
+            SkillTargetType.Enemy => m_world.Target,
+            SkillTargetType.Ally when m_world.IsPlayer(m_world.Target) => m_world.Target,
+            _ => default
+        };
         if (m_world.IsLocalDead
             || !TryGetRange(skill, out float range)
-            || (targetType == SkillTargetType.Enemy && target == default))
+            || (targetType == SkillTargetType.Enemy && (target == default || m_world.IsPlayer(target))))
         {
             return false;
         }

@@ -17,6 +17,8 @@ public sealed class SkillStateTests
     private static readonly EntityId Other = new(301);
     private static readonly SkillDefinitionId Strike = new("skill.strike");
     private static readonly SkillDefinitionId FirstAid = new("skill.first_aid");
+    private static readonly SkillDefinitionId Mend = new("skill.mend");
+    private static readonly EntityId Ally = new(302);
     private static readonly WorldPosition Start = ClientTestGrids.Center(1, 8);
 
     private sealed class Rig : ISkillCommandSink
@@ -33,7 +35,8 @@ public sealed class SkillStateTests
                     new[]
                     {
                         new SkillListEntry(Strike, 1.5f, 8, 2000, 500, 0, 1, 1, SkillListEntry.NoPrerequisite, 0),
-                        new SkillListEntry(FirstAid, 0f, 3, 0, 0, 0, 1, 1, SkillListEntry.NoPrerequisite, 0)
+                        new SkillListEntry(FirstAid, 0f, 3, 0, 0, 0, 1, 1, SkillListEntry.NoPrerequisite, 0),
+                        new SkillListEntry(Mend, 6f, 12, 0, 0, 0, 1, 1, SkillListEntry.NoPrerequisite, 0)
                     }));
             World.OnTargetChanged(new TargetChanged(ClientWorldFixture.LocalEntity, Slime));
             Controller = new MovementController(World.Grid);
@@ -90,6 +93,19 @@ public sealed class SkillStateTests
             return ticks;
         }
 
+        public void SpawnPlayer(EntityId entity, float dx)
+        {
+            World.OnSpawn(
+                new EntitySpawn(
+                    entity,
+                    EntityKind.Player,
+                    "job.adventurer",
+                    new WorldPosition(Start.X + dx, Start.Y, Start.Z),
+                    new WorldDirection(0f, 1f),
+                    EntityStateFlags.None,
+                    0));
+        }
+
         private void Spawn(EntityId entity, float dx)
         {
             World.OnSpawn(
@@ -110,6 +126,44 @@ public sealed class SkillStateTests
         return (float)Math.Sqrt(Math.Pow(at.X - (Start.X + 4f), 2) + Math.Pow(at.Z - Start.Z, 2));
     }
 
+    // An ally skill goes to the selected player, walking within its range less the margin first (Gameplay Systems §9).
+    [Test]
+    public void AllySkill_ForASelectedPlayer_WalksWithinRangeThenAsksAtIt()
+    {
+        var rig = new Rig(4f);
+        rig.SpawnPlayer(Ally, 8f);
+        rig.World.OnTargetChanged(new TargetChanged(ClientWorldFixture.LocalEntity, Ally));
+
+        bool isStarted = rig.Skill.Use(Mend, SkillTargetType.Ally);
+        int ticks = rig.TickUntilSent(200);
+        float distance = Math.Abs(rig.World.Predictor.Position.X - (Start.X + 8f));
+
+        Assert.That(isStarted, Is.True);
+        Assert.That(rig.Sent, Is.EqualTo(new[] { (Mend, Ally) }));
+        Assert.That(ticks, Is.GreaterThan(1), "it walked first");
+        Assert.That(distance, Is.LessThanOrEqualTo(6f).And.GreaterThan(4.5f));
+    }
+
+    // With a monster or nothing selected, an ally skill lands on the caster, as a gamepad's always does
+    // (Prototype Content §4).
+    [Test]
+    public void AllySkill_WithAMonsterOrNothingSelected_IsForTheCaster()
+    {
+        var monster = new Rig(4f);
+        var nothing = new Rig(4f);
+        nothing.World.OnTargetChanged(new TargetChanged(ClientWorldFixture.LocalEntity, default));
+
+        bool[] started =
+            { monster.Skill.Use(Mend, SkillTargetType.Ally), nothing.Skill.Use(Mend, SkillTargetType.Ally) };
+        monster.Tick();
+        nothing.Tick();
+
+        Assert.That(started, Is.EqualTo(new[] { true, true }));
+        Assert.That(monster.Sent, Is.EqualTo(new[] { (Mend, default(EntityId)) }), "never at the monster");
+        Assert.That(nothing.Sent, Is.EqualTo(new[] { (Mend, default(EntityId)) }));
+        Assert.That(monster.Controller.IsChasing, Is.False);
+    }
+
     [Test]
     public void EnemySkill_AfterTheTargetDied_OrAnotherWasConfirmed_EndsWithoutAsking()
     {
@@ -128,6 +182,21 @@ public sealed class SkillStateTests
         Assert.That((died.Skill.IsActive, died.Controller.IsChasing), Is.EqualTo((false, false)));
         Assert.That(retargeted.Sent, Is.Empty);
         Assert.That((retargeted.Skill.IsActive, retargeted.Controller.IsChasing), Is.EqualTo((false, false)));
+    }
+
+    // An enemy skill is never asked for at a player, which the server would refuse (Gameplay Systems §6).
+    [Test]
+    public void EnemySkill_AtASelectedPlayer_StartsNothing()
+    {
+        var rig = new Rig(4f);
+        rig.SpawnPlayer(Ally, 1f);
+        rig.World.OnTargetChanged(new TargetChanged(ClientWorldFixture.LocalEntity, Ally));
+
+        bool isStarted = rig.Skill.Use(Strike, SkillTargetType.Enemy);
+        rig.Tick();
+
+        Assert.That(isStarted, Is.False);
+        Assert.That(rig.Sent, Is.Empty);
     }
 
     [Test]

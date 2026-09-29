@@ -15,6 +15,7 @@ using UnityEngine.InputSystem.LowLevel;
 using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
 using UnityEngine.UI;
+using EntityId = Evertorch.Game.EntityId;
 using Object = UnityEngine.Object;
 
 namespace Evertorch.Client.Tests.PlayMode
@@ -33,6 +34,8 @@ public sealed class LiveServerBuildTests : InputTestFixture
     private const string SkillsClientName = "LiveBuildThree";
     private const string ResetClientName = "LiveBuildFour";
     private const string ChangeClientName = "LiveBuildFive";
+    private const string MendClientName = "LiveBuildSix";
+    private const string MendedName = "LiveBuildSeven";
     private const string GuildmasterPrefab = "npc_guildmaster";
     private const float StartTimeoutSeconds = 30f;
     private const float FightTimeoutSeconds = 60f;
@@ -47,6 +50,7 @@ public sealed class LiveServerBuildTests : InputTestFixture
     private LiveServer? m_server;
     private GameObject? m_client;
     private InputActionAsset? m_actions;
+    private LiteNetLibClientTransport? m_otherSocket;
 
     [UnityTearDown]
     public IEnumerator StopEverything()
@@ -57,6 +61,8 @@ public sealed class LiveServerBuildTests : InputTestFixture
             m_client = null;
         }
 
+        m_otherSocket?.Dispose();
+        m_otherSocket = null;
         m_server?.Dispose();
         m_server = null;
         m_database?.Dispose();
@@ -337,6 +343,104 @@ public sealed class LiveServerBuildTests : InputTestFixture
         Assert.That(world.Inventory.Rows.Single().Slot, Is.EqualTo(EquipmentSlot.None), "the staff taken off");
         Assert.That(lines.Text, Does.Contain("You are now a Vanguard."));
         Assert.That(lines.Text, Does.Not.Contain("Job level"), "nothing of the job level that fell");
+    }
+
+    // An Arcanist with Mend 1 clicks another player, which the server confirms: the target frame names its job alone,
+    // and Mend then heals that player, as the healed player's own connection hears (Gameplay Systems §6, §9; Prototype
+    // Content §2, §4).
+    [UnityTest]
+    [Timeout(TestTimeoutMs)]
+    public IEnumerator Mend_OnAPlayerClickedOn_HealsItWhileTheFrameNamesItsJob()
+    {
+        string actionsPath = RequirePrerequisites();
+        yield return StartDatabaseAndServer();
+        LiveServer server = m_server!;
+        LiveDatabase database = m_database!;
+        Assert.That(server.TryReadListeningPort(out int port), Is.True, server.JoinOutput());
+        Mouse mouse = InputSystem.AddDevice<Mouse>();
+        GameClient client = CreateClient(actionsPath);
+        yield return EnterByName(
+            client,
+            MendClientName,
+            () => database.SeedJob(
+                MendClientName,
+                "job.arcanist",
+                1,
+                ("skill.arcane_bolt", 1),
+                ("skill.clarity", 1),
+                ("skill.mend", 1)));
+        ClientWorld world = client.World!;
+        ClientContent content = client.Content!;
+
+        // The healed player: the client's own networking without Unity's views, as a second window would run it.
+        m_otherSocket = new LiteNetLibClientTransport("evertorch", 5000);
+        var other = new ClientConnection(
+            m_otherSocket,
+            new ClientConnectionSettings(ProtocolConstants.BuildVersion, content.Version, "dev:livemend"),
+            content);
+        var picker = new CharacterPicker(MendedName);
+        other.Connect("127.0.0.1", port);
+        yield return WaitUntil(
+            () =>
+            {
+                other.Poll();
+                picker.Poll(other);
+                return other.World?.Inventory.IsCurrent == true;
+            },
+            StartTimeoutSeconds);
+        Assert.That(other.World, Is.Not.Null, $"{other.LocalError} {server.JoinOutput()}");
+        ClientWorld otherWorld = other.World!;
+        EntityId healed = otherWorld.LocalEntity;
+        yield return WaitUntil(
+            () =>
+            {
+                other.Poll();
+                return client.RemoteViews.TryGetValue(healed, out EntityView? view) && view.HasBody;
+            },
+            StartTimeoutSeconds);
+
+        TargetFrame frame = client.GetComponentsInChildren<TargetFrame>(true).Single();
+        ClickAt(
+            mouse,
+            Camera.main!.WorldToScreenPoint(
+                client.RemoteViews[healed].transform.position + Vector3.up * EntityPicker.PickHeight));
+        yield return WaitUntil(
+            () =>
+            {
+                other.Poll();
+                return world.Target == healed && frame.IsVisible;
+            },
+            StartTimeoutSeconds);
+        Assert.That(world.Target, Is.EqualTo(healed), $"the click selected the player: {server.JoinOutput()}");
+        yield return null;
+        TMP_Text[] labels = frame.GetComponentsInChildren<TMP_Text>(true);
+        Assert.That(
+            (labels.Single(label => label.name == "Name").text, labels.Single(label => label.name == "Detail").text),
+            Is.EqualTo(("Adventurer", string.Empty)),
+            "the frame names the job alone");
+
+        SkillResolved? seen = null;
+        SkillResolved? heard = null;
+        world.SkillResolvedReceived += resolved => seen = resolved.Target == healed ? resolved : seen;
+        otherWorld.SkillResolvedReceived += resolved => heard = resolved;
+        client.UseSkill(new SkillDefinitionId("skill.mend"));
+        yield return WaitUntil(
+            () =>
+            {
+                other.Poll();
+                return seen != null && heard != null;
+            },
+            StartTimeoutSeconds);
+
+        Assert.That(seen, Is.Not.Null, $"the caster saw the heal: {world.LastRejection} {server.JoinOutput()}");
+        Assert.That(
+            (seen!.Caster, seen.Outcome, seen.Amount),
+            Is.EqualTo((world.LocalEntity, SkillOutcome.Healed, 40u)),
+            "Mend 1 on the player");
+        Assert.That((heard!.Caster, heard.Target), Is.EqualTo((world.LocalEntity, healed)),
+            "the healed player heard it");
+        Assert.That(world.Target, Is.EqualTo(healed), "still selected");
+        Assert.That(other.MalformedMessages + other.UnexpectedMessages, Is.Zero, "the healed player's traffic");
     }
 
     private static string LocalBodyKey(GameClient client)

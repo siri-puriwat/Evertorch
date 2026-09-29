@@ -1,6 +1,7 @@
 using System;
 using System.Globalization;
 using Evertorch.Game;
+using Evertorch.Protocol;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -8,10 +9,11 @@ using UnityEngine.UI;
 namespace Evertorch.Client
 {
 /// <summary>
-///     The confirmed target (Prototype Content §2, §4): its name, its HP ratio as a bar, its distance, and whether it
-///     is dead. It shows only a target the server confirmed with <c>TargetChanged</c>, and the HP that the monster's
-///     own bar shows at that moment, so the frame never runs ahead of the hits on screen. It sits at the top centre, and
-///     narrower beside a window at the top left while one shows (finding 1 of the Milestone 7 review).
+///     The confirmed target (Prototype Content §2, §4): a monster's name, its HP ratio as a bar, its distance, and
+///     whether it is dead, or a selected player's job name alone, since players carry no name on the wire and others'
+///     HP is not shown. It shows only a target the server confirmed with <c>TargetChanged</c>, and the HP that the
+///     monster's own bar shows at that moment, so the frame never runs ahead of the hits on screen. It sits at the top
+///     centre, and narrower beside a window at the top left while one shows (finding 1 of the Milestone 7 review).
 /// </summary>
 public sealed class TargetFrame : MonoBehaviour
 {
@@ -40,6 +42,7 @@ public sealed class TargetFrame : MonoBehaviour
     private string? m_shownName;
     private int m_shownPermille = -1;
     private int m_shownTenths = -1;
+    private bool m_isShownPlayer;
     private bool m_shownDead;
     private RectTransform? m_panelRect;
     private bool m_isShownBeside;
@@ -69,6 +72,12 @@ public sealed class TargetFrame : MonoBehaviour
         }
 
         PlaceBeside(m_client.IsSideWindowOpen);
+        if (target.Kind == EntityKind.Player)
+        {
+            ShowPlayer(BuildMessages.JobName(m_client.Content, new JobDefinitionId(target.DefinitionId)));
+            return;
+        }
+
         float ratio = target.HealthPermille / 1000f;
         bool isDead = target.IsDead;
         CombatPresenter? combat = m_client.Combat;
@@ -124,10 +133,11 @@ public sealed class TargetFrame : MonoBehaviour
     public void ShowTarget(string name, float ratio, float? distanceMeters, bool isDead)
     {
         UiBuilder.SetActive(m_panel!, true);
-        if (!string.Equals(name, m_shownName, StringComparison.Ordinal))
+        ShowName(name);
+        if (m_isShownPlayer)
         {
-            m_shownName = name;
-            Write(m_name!, name);
+            m_isShownPlayer = false;
+            UiBuilder.SetActive(m_fill!.parent.gameObject, true);
         }
 
         int permille = isDead ? 0 : Mathf.RoundToInt(Mathf.Clamp01(ratio) * 1000f);
@@ -154,9 +164,37 @@ public sealed class TargetFrame : MonoBehaviour
         Write(m_detail!, detail);
     }
 
+    /// <summary>
+    ///     A selected player: <paramref name="jobName" /> alone, with neither bar nor distance.
+    /// </summary>
+    public void ShowPlayer(string jobName)
+    {
+        UiBuilder.SetActive(m_panel!, true);
+        ShowName(jobName);
+        if (m_isShownPlayer)
+        {
+            return;
+        }
+
+        m_isShownPlayer = true;
+        UiBuilder.SetActive(m_fill!.parent.gameObject, false);
+        m_shownTenths = -1;
+        m_shownDead = false;
+        Write(m_detail!, string.Empty);
+    }
+
     public void Hide()
     {
         UiBuilder.SetActive(m_panel!, false);
+    }
+
+    private void ShowName(string name)
+    {
+        if (!string.Equals(name, m_shownName, StringComparison.Ordinal))
+        {
+            m_shownName = name;
+            Write(m_name!, name);
+        }
     }
 
     private static string MonsterName(ClientContent? content, RemoteEntity target)

@@ -666,6 +666,35 @@ public sealed class ClientWorld
     }
 
     /// <summary>
+    ///     Appends the live players this client knows, at their drawn positions: what a click or tap selects for an ally
+    ///     skill. Cycling never visits them (Gameplay Systems §6).
+    /// </summary>
+    public void CollectPlayerCandidates(List<PickCandidate> candidates)
+    {
+        double renderTime = RemoteRenderTime;
+        foreach (RemoteEntity remote in m_remotes.Values)
+        {
+            if (remote.Kind == EntityKind.Player
+                && !remote.IsDead
+                && remote.Buffer.TrySample(renderTime, out WorldPosition position, out WorldDirection _))
+            {
+                candidates.Add(new PickCandidate(remote.Entity, position));
+            }
+        }
+    }
+
+    /// <summary>
+    ///     Whether <paramref name="entity" /> is another player this client knows, which may be selected but never
+    ///     attacked or struck.
+    /// </summary>
+    public bool IsPlayer(EntityId entity)
+    {
+        return entity != default
+            && m_remotes.TryGetValue(entity, out RemoteEntity? remote)
+            && remote.Kind == EntityKind.Player;
+    }
+
+    /// <summary>
     ///     Appends the drops this client knows, at their drawn positions: what a click or tap picks up.
     /// </summary>
     public void CollectDropCandidates(List<PickCandidate> candidates)

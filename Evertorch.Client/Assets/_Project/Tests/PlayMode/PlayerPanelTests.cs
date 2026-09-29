@@ -309,6 +309,12 @@ public sealed class PlayerPanelTests
         return button != null;
     }
 
+    private static bool IsBarShown(TargetFrame frame)
+    {
+        return frame.GetComponentsInChildren<RectTransform>(true).Single(rect => rect.name == "Bar").gameObject
+            .activeSelf;
+    }
+
     private static TMP_Text Label(Component panel, string objectName)
     {
         return panel.GetComponentsInChildren<TMP_Text>(true).Single(label => label.name == objectName);
@@ -842,6 +848,34 @@ public sealed class PlayerPanelTests
         Assert.That(dead, Is.EqualTo("Dead"), "no view to measure to, so no distance");
         Assert.That(deadRatio, Is.EqualTo(0f));
         Assert.That(frame.IsVisible, Is.False);
+    }
+
+    // A selected player shows by its job's name alone, with neither bar nor distance; a monster selected after it shows
+    // its bar again (Prototype Content §2).
+    [UnityTest]
+    public IEnumerator TargetFrame_ForASelectedPlayer_ShowsItsJobNameAlone()
+    {
+        GameClient client = CreateIdleClient();
+        ClientWorld world = GiveWorld(client);
+        GiveGuild(client);
+        var frame = TargetFrame.Create(client);
+        m_created.Add(frame.gameObject);
+        Spawn(world, 7, EntityKind.Player, Vanguard.Value, 400);
+        Spawn(world, 8, EntityKind.Monster, Slime, 600);
+
+        world.OnTargetChanged(new TargetChanged(Local, new EntityId(7)));
+        yield return null;
+        string name = Label(frame, "Name").text;
+        string detail = Label(frame, "Detail").text;
+        bool isBarShown = IsBarShown(frame);
+        world.OnTargetChanged(new TargetChanged(Local, new EntityId(8)));
+        yield return null;
+
+        Assert.That(frame.IsVisible, Is.True);
+        Assert.That((name, detail, isBarShown), Is.EqualTo(("Vanguard", string.Empty, false)), "the job's name alone");
+        Assert.That(Label(frame, "Name").text, Is.EqualTo(Slime));
+        Assert.That(IsBarShown(frame), Is.True, "the monster's bar back");
+        Assert.That(frame.ShownRatio, Is.EqualTo(0.6f).Within(0.001f));
     }
 
     [UnityTest]
