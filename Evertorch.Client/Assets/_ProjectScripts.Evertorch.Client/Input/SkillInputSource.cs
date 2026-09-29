@@ -68,6 +68,15 @@ public sealed class SkillInputSource : IDisposable
     }
 
     /// <summary>
+    ///     Out of the world: forgets the page and a turn asked for, so the next entry starts on slots 1 to 3.
+    /// </summary>
+    public void Reset()
+    {
+        m_isPageToggled = false;
+        IsOnOwnSkills = false;
+    }
+
+    /// <summary>
     ///     The slot asked for since the last call, numbered from 1; 0 for none.
     /// </summary>
     public int TakeSlot()

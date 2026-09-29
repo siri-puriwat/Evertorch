@@ -284,6 +284,7 @@ public sealed class GameClient : MonoBehaviour
             m_pointerSource?.TryTakeRequest(out Vector2 _);
             m_combatSource?.TakeRequest();
             m_skillSource?.TakeSlot();
+            m_skillSource?.Reset();
             m_windowSource?.TakeStatsToggle();
             m_windowSource?.TakeSkillsToggle();
             return;
@@ -1253,6 +1254,7 @@ public sealed class GameClient : MonoBehaviour
         {
             m_world.RemoteSpawned -= AddRemoteView;
             m_world.RemoteDespawned -= RemoveRemoteView;
+            m_world.LocalJobChanged -= ReplaceLocalBody;
         }
 
         m_combat?.Dispose();

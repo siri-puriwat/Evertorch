@@ -162,8 +162,10 @@ public sealed class FeedbackLines : MonoBehaviour
 
     private void OnRejected(CommandRejected rejected)
     {
-        uint equip = m_client != null && m_client.Connection != null ? m_client.Connection.LastEquipSequence : 0;
-        Add(RejectionMessages.Describe(rejected.Reason, equip != 0 && equip == rejected.CommandSequence));
+        bool isEquip = m_client != null
+            && m_client.Connection != null
+            && m_client.Connection.IsEquipSequence(rejected.CommandSequence);
+        Add(RejectionMessages.Describe(rejected.Reason, isEquip));
     }
 
     private void OnPickedUp(ItemPickedUp pickedUp)

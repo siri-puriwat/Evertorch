@@ -15,11 +15,15 @@ namespace Evertorch.Client
 public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink, ICombatCommandSink,
     IPickupCommandSink, ISkillCommandSink, IItemCommandSink
 {
+    // Far more equips than can be in flight at once; the set starts again past it.
+    private const int MaxEquipSequences = 64;
+
     private readonly IClientTransport m_transport;
     private readonly ClientConnectionSettings m_settings;
     private readonly IMapProvider m_maps;
     private readonly byte[] m_sendBuffer = new byte[ProtocolLimits.MaxClientPayloadBytes];
     private readonly Dictionary<QuestDefinitionId, NpcQuestOffer> m_questOffers = new();
+    private readonly HashSet<uint> m_equipSequences = new();
     private uint m_commandSequence;
 
     public ClientConnection(IClientTransport transport, ClientConnectionSettings settings, IMapProvider maps)
@@ -79,11 +83,6 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
     /// </summary>
     public bool IsOnCharacterList =>
         State == ClientConnectionState.SelectingCharacter || State == ClientConnectionState.EnteringWorld;
-
-    /// <summary>
-    ///     The command sequence of the last equip sent, 0 before any, so a refusal can say what it answers.
-    /// </summary>
-    public uint LastEquipSequence { get; private set; }
 
     void IClientTransportListener.OnConnected()
     {
@@ -416,7 +415,12 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
         uint sequence = NextCommandSequence();
         new EquipItem(inventoryItem, sequence).Write(m_sendBuffer);
         SendRouted(MessageOpcode.EquipItem, EquipItem.EncodedLength);
-        LastEquipSequence = sequence;
+        if (m_equipSequences.Count >= MaxEquipSequences)
+        {
+            m_equipSequences.Clear();
+        }
+
+        m_equipSequences.Add(sequence);
         return sequence;
     }
 
@@ -503,6 +507,15 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
         var message = new UseSkill(skill, target, sequence);
         SendRouted(MessageOpcode.UseSkill, message.Write(m_sendBuffer));
         return sequence;
+    }
+
+    /// <summary>
+    ///     Whether <paramref name="commandSequence" /> numbered an equip sent since the character entered, so a refusal
+    ///     can say what it answers.
+    /// </summary>
+    public bool IsEquipSequence(uint commandSequence)
+    {
+        return commandSequence != 0 && m_equipSequences.Contains(commandSequence);
     }
 
     /// <summary>
@@ -893,6 +906,10 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
 
         World = new ClientWorld(grid, entered, ServerTickRate);
         LastCreateOutcome = CreateCharacterOutcome.None;
+        if (!isMapChange)
+        {
+            m_equipSequences.Clear();
+        }
 
         // The command sequence belongs to the character, not the connection: after a reconnect it goes on from the
         // newest the server processed, or every command would look like a replay (Network Protocol §8). A map change

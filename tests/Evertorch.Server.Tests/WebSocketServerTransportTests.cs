@@ -718,6 +718,8 @@ public sealed class WebSocketServerTransportTests
         harness.Transport.Send(connection, Despawn());
         Assert.That(peer.Receive(), Is.Not.Null);
 
+        // The sender counts a frame once its send completes, which the peer may see before it.
+        Assert.That(harness.WaitUntil(() => harness.Transport.GetStatistics().PacketsSent >= 1), Is.True);
         TransportStatistics statistics = harness.Transport.GetStatistics();
 
         Assert.That(statistics.BytesReceived, Is.GreaterThanOrEqualTo(Hello().Length + 1));

@@ -1438,6 +1438,57 @@ public sealed class PlayerPanelTests
         Assert.That(window.Text, Does.EndWith("\nBecome a Vanguard"), "disarmed once asked");
     }
 
+    // A sheet that changes nothing the window shows, a kill's job experience or a status effect's end, keeps its buttons,
+    // so a press under way is never lost; a new job level writes them again (review of Milestone 10).
+    [UnityTest]
+    public IEnumerator NpcWindow_ForTheGuildmaster_KeepsItsRowsForASheetThatChangesNothingItShows()
+    {
+        GameClient client = CreateIdleClient();
+        ClientWorld world = GiveWorld(client);
+        GiveGuild(client);
+        world.OnCharacterSheet(Sheet(9, 0, 470));
+        Spawn(world, 15, EntityKind.Npc, Guildmaster, 1000);
+        DrawNpc(client, 15);
+        world.OnNpcServices(GuildmasterServices(15));
+        var window = NpcWindow.Create(client);
+        m_created.Add(window.gameObject);
+        window.Open(new EntityId(15));
+        yield return null;
+        int changes = window.TextChanges;
+
+        world.OnCharacterSheet(Sheet(9, 30, 440));
+        yield return null;
+        int changesAfterExperience = window.TextChanges;
+        world.OnCharacterSheet(Sheet(10, 0, 0));
+        yield return null;
+
+        Assert.That(changesAfterExperience, Is.EqualTo(changes), "the rows kept");
+        Assert.That(window.TextChanges, Is.GreaterThan(changes), "a new job level writes them again");
+        Assert.That(window.Text, Does.EndWith("\nBecome a Vanguard"));
+    }
+
+    // Two equips in flight: a refusal of either, for a requirement, is a weapon the job cannot wield; any other command's
+    // refusal is not (review of Milestone 10).
+    [UnityTest]
+    public IEnumerator FeedbackLines_ForARefusedEquip_SayTheJobCannotWieldIt_WhicheverEquipItAnswers()
+    {
+        GameClient client = CreateIdleClient();
+        (ClientWorld world, RecordingConnection recording) = GiveRecordedWorld(client);
+        var lines = FeedbackLines.Create(client);
+        m_created.Add(lines.gameObject);
+        uint first = recording.Connection.SendEquip(7);
+        uint second = recording.Connection.SendEquip(8);
+        uint learn = recording.Connection.SendLearnSkill(new SkillDefinitionId("skill.strike"));
+        yield return null;
+
+        world.OnCommandRejected(new CommandRejected(first, CommandRejectionReason.RequirementNotMet));
+        world.OnCommandRejected(new CommandRejected(learn, CommandRejectionReason.RequirementNotMet));
+        yield return null;
+
+        Assert.That(second, Is.GreaterThan(first));
+        Assert.That(lines.Text, Does.Contain("Your job cannot wield that.\nThat cannot be done."));
+    }
+
     // Below its base job's cap the change is not offered, only what it needs (Prototype Content §2).
     [UnityTest]
     public IEnumerator NpcWindow_ForTheGuildmaster_BelowTheCap_SaysWhatAChangeNeeds()

@@ -35,6 +35,7 @@ public sealed class Targeting
     public static bool IsSelectablePlayer(ClientSession session, EntityId target)
     {
         return session.Map != null
+            && target != session.Player?.Id
             && session.KnownEntities.Contains(target)
             && session.Map.TryGetPlayer(target, out PlayerEntity? player)
             && player != null

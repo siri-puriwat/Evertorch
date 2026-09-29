@@ -171,6 +171,27 @@ public sealed class SharedIntentPathTests : InputTestFixture
         Assert.That(asked, Is.EqualTo(new[] { 1, 6, 7, 8, 1, 6, 8 }));
     }
 
+    // Out of the world the page and a turn asked for there are forgotten, so the next entry starts on slots 1 to 3
+    // (review of Milestone 10).
+    [Test]
+    public void SkillSource_Reset_ForgetsThePageAndATurnAskedFor()
+    {
+        Gamepad gamepad = InputSystem.AddDevice<Gamepad>();
+        Rig rig = CreateRig();
+        SkillInputSource source = rig.CreateSkillSource();
+        source.IsOnOwnSkills = true;
+        Press(gamepad.dpad.left);
+        Release(gamepad.dpad.left);
+
+        source.Reset();
+        Press(gamepad.buttonSouth);
+        Release(gamepad.buttonSouth);
+
+        Assert.That(source.TakePageToggle(), Is.False);
+        Assert.That(source.IsOnOwnSkills, Is.False);
+        Assert.That(source.TakeSlot(), Is.EqualTo(1));
+    }
+
     [Test]
     public void TalkKeyAndDpadRight_AskToTalk()
     {

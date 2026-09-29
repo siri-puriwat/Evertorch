@@ -76,7 +76,8 @@ public sealed class NpcWindow : MonoBehaviour
     private bool m_isResetArmed;
     private float m_resetArmedUntil;
     private JobDefinitionId m_armedJob;
-    private CharacterSheet? m_shownSheet;
+    private JobDefinitionId m_shownJob;
+    private int m_shownJobLevel = -1;
 
     public bool IsOpen => m_panel != null && m_panel.activeSelf;
 
@@ -264,7 +265,8 @@ public sealed class NpcWindow : MonoBehaviour
         ClientInventory inventory = world.Inventory;
         bool hasContent = content != null;
         if (services == m_shownServices
-            && world.Sheet == m_shownSheet
+            && world.LocalJob == m_shownJob
+            && (world.Sheet?.JobLevel ?? -1) == m_shownJobLevel
             && world.Quests == m_shownQuests
             && inventory == m_shownInventory
             && inventory.IsCurrent == m_shownCurrent
@@ -275,7 +277,8 @@ public sealed class NpcWindow : MonoBehaviour
         }
 
         m_shownServices = services;
-        m_shownSheet = world.Sheet;
+        m_shownJob = world.LocalJob;
+        m_shownJobLevel = world.Sheet?.JobLevel ?? -1;
         m_shownQuests = world.Quests;
         m_shownInventory = inventory;
         m_shownCurrent = inventory.IsCurrent;

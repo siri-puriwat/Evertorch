@@ -132,7 +132,7 @@ public sealed class AdventurerBuildAcceptanceTests
         // Every kill gave as much job experience as base experience, so the job level kept pace (Gameplay Systems §2.1).
         CharacterSheet sheet = client.World.Sheet!;
         Assert.That(
-            ((ushort)sheet.JobLevel, sheet.JobExperience),
+            (sheet.JobLevel, sheet.JobExperience),
             Is.EqualTo((client.World.Level, client.World.Experience)),
             "fight: the job level keeps pace with the base level");
         Assert.That(stopped.JobLevel, Is.EqualTo(sheet.JobLevel), "fight: the console shows the job level");
