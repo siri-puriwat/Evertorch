@@ -114,6 +114,10 @@ public sealed class LiveServerSignInTests : InputTestFixture
         Assert.That(client.Connection?.State, Is.EqualTo(ClientConnectionState.SelectingCharacter), client.Status);
         client.CreateCharacter("WebLive1");
         yield return WaitUntil(() => client.Connection!.Characters.Count == 1, StartTimeoutSeconds);
+        Assert.That(
+            client.Connection!.Characters.Count,
+            Is.EqualTo(1),
+            $"the created character listed: {client.Status} {client.Connection.State} {m_server!.JoinOutput()}");
         client.EnterWorld(client.Connection!.Characters[0].Character);
         yield return WaitUntil(() => client.World?.Inventory.IsCurrent == true, StartTimeoutSeconds);
 
