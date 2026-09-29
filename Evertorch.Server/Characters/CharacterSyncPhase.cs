@@ -127,9 +127,9 @@ public sealed class CharacterSyncPhase : ITickPhase
     private SkillList CreateSkillList(PlayerEntity player, long now)
     {
         m_entries.Clear();
-        // The job's whole tree in its order, each skill at its learned level's values, or level 1's while not learned
-        // (Gameplay Systems §9).
-        IReadOnlyList<SkillDefinitionId> tree = m_content.Jobs[player.Job].Skills;
+        // The job's whole tree in its order, a first job's base tree first, each skill at its learned level's values, or
+        // level 1's while not learned (Gameplay Systems §9).
+        IReadOnlyList<SkillDefinitionId> tree = m_content.Jobs[player.Job].Tree;
         foreach (SkillDefinitionId id in tree)
         {
             player.Skills.TryGetValue(id, out int level);

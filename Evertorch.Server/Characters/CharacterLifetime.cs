@@ -23,6 +23,13 @@ public sealed class CharacterLifetime
             "Checkpoint {OperationId} of character {Character} on connection {Connection} could not be written; it "
             + "is retried once the database answers.");
 
+    private static readonly Action<ILogger, long, long, JobDefinitionId, ItemDefinitionId, Exception?>
+        LogWeaponNotWieldable = LoggerMessage.Define<long, long, JobDefinitionId, ItemDefinitionId>(
+            LogLevel.Warning,
+            new EventId(1016, "WeaponNotWieldable"),
+            "Character {Character} on connection {Connection} entered as {Job} wearing {Item}, a weapon its job cannot "
+            + "wield; it stays worn.");
+
     private readonly WorldSimulation m_world;
     private readonly CharacterBuilds m_builds;
     private readonly SessionRegistry m_sessions;
@@ -85,8 +92,32 @@ public sealed class CharacterLifetime
             Connection = owner,
             NextCheckpointTick = tick + m_checkpointIntervalTicks
         };
+        LogUnwieldableWeapon(character);
         m_sessions.AddCharacter(character);
         return character;
+    }
+
+    // Only changed content or a hand-edited row leaves a weapon the job cannot wield; taking it off here would be an
+    // inventory commit nobody asked for, so it stays worn and counts, and only a new equip is refused (Gameplay Systems
+    // §11.1).
+    private void LogUnwieldableWeapon(CharacterSession character)
+    {
+        PlayerEntity player = character.Player;
+        long worn = character.Inventory.WornIn(EquipmentSlot.Weapon);
+        if (worn == 0
+            || !character.Inventory.TryGetRow(worn, out InventoryEntry row)
+            || m_builds.CanWield(player, row.Item))
+        {
+            return;
+        }
+
+        LogWeaponNotWieldable(
+            m_logger,
+            character.Character.Value,
+            character.Connection?.Connection.Value ?? 0,
+            player.Job,
+            row.Item,
+            null);
     }
 
     /// <summary>

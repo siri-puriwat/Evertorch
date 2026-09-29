@@ -47,7 +47,10 @@ public sealed class PlayerEntity : WorldEntity
     /// </summary>
     public ConnectionId Owner { get; set; }
 
-    public JobDefinitionId Job { get; }
+    /// <summary>
+    ///     The job, which only a committed job change sets (Gameplay Systems §6.1); an observer draws the body it names.
+    /// </summary>
+    public JobDefinitionId Job { get; private set; }
 
     public int Level { get; set; }
 
@@ -145,6 +148,17 @@ public sealed class PlayerEntity : WorldEntity
         int count = m_statusEffects.Count;
         m_statusEffects.Clear();
         return count;
+    }
+
+    /// <summary>
+    ///     Makes the player a first job at job level 1 with job experience 0, keeping its base level, statistics, and
+    ///     learned skills (Gameplay Systems §2.1); the caller derives the statistics again.
+    /// </summary>
+    public void ChangeJob(JobDefinitionId job)
+    {
+        Job = job;
+        JobLevel = 1;
+        JobExperience = 0;
     }
 
     /// <summary>

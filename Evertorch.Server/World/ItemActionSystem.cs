@@ -130,7 +130,8 @@ public sealed class ItemActionSystem : ITickPhase
 
     /// <summary>
     ///     Checks an equip (Gameplay Systems §11.1) and, when it passes, queues its commit: the row goes into the slot its
-    ///     item fills, and a row the slot held comes out of it. The caller has already refused a dead or leaving
+    ///     item fills, and a row the slot held comes out of it. A weapon of a type the job cannot wield is refused with
+    ///     <see cref="CommandRejectionReason.RequirementNotMet" />. The caller has already refused a dead or leaving
     ///     character.
     /// </summary>
     public CommandRejectionReason TryEquip(ClientSession session, long inventoryItem, uint commandSequence)
@@ -148,11 +149,18 @@ public sealed class ItemActionSystem : ITickPhase
             return CommandRejectionReason.InvalidTarget;
         }
 
-        EquipmentSlot slot = m_content.Items[row.Item].Slot;
+        ItemDefinition item = m_content.Items[row.Item];
+        EquipmentSlot slot = item.Slot;
         long worn = character.Inventory.WornIn(slot);
         if (slot == EquipmentSlot.None || worn == inventoryItem)
         {
             return CommandRejectionReason.NotAllowedNow;
+        }
+
+        WeaponType? weaponType = item.Equipment?.WeaponType;
+        if (weaponType.HasValue && !m_content.Jobs[character.Player.Job].CanWield(weaponType.Value))
+        {
+            return CommandRejectionReason.RequirementNotMet;
         }
 
         var operation = new InventoryOperation(

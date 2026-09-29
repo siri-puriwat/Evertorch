@@ -86,6 +86,18 @@ public sealed class CharacterBuilds
     }
 
     /// <summary>
+    ///     Whether <paramref name="player" />'s job can wield <paramref name="item" />: anything but a weapon of a type
+    ///     its job does not list (Gameplay Systems §11.1).
+    /// </summary>
+    public bool CanWield(PlayerEntity player, ItemDefinitionId item)
+    {
+        WeaponType? weaponType = m_content.Items.TryGetValue(item, out ItemDefinition? definition)
+            ? definition.Equipment?.WeaponType
+            : null;
+        return !weaponType.HasValue || m_content.Jobs[player.Job].CanWield(weaponType.Value);
+    }
+
+    /// <summary>
     ///     Raises <paramref name="stat" /> by <paramref name="steps" /> with stat points, whole or not at all (Gameplay
     ///     Systems §2): refused with <see cref="CommandRejectionReason.RequirementNotMet" /> when a raise would pass the
     ///     cap, then with <see cref="CommandRejectionReason.NotEnoughPoints" /> when the points left do not cover them.
@@ -127,13 +139,13 @@ public sealed class CharacterBuilds
 
     /// <summary>
     ///     Learns one level of <paramref name="skill" /> with a skill point (Gameplay Systems §9): refused with
-    ///     <see cref="CommandRejectionReason.RequirementNotMet" /> for a skill outside the job's tree, at its maximum, or
-    ///     whose prerequisite is not met, then with <see cref="CommandRejectionReason.NotEnoughPoints" /> when no point
-    ///     is left. A cast under way keeps the level it began at.
+    ///     <see cref="CommandRejectionReason.RequirementNotMet" /> for a skill outside the job's whole tree, at its
+    ///     maximum, or whose prerequisite is not met, then with <see cref="CommandRejectionReason.NotEnoughPoints" />
+    ///     when no point is left. A cast under way keeps the level it began at.
     /// </summary>
     public CommandRejectionReason TryLearn(PlayerEntity player, ConnectionId connection, SkillDefinitionId skill)
     {
-        if (!Contains(m_content.Jobs[player.Job].Skills, skill))
+        if (!Contains(m_content.Jobs[player.Job].Tree, skill))
         {
             return CommandRejectionReason.RequirementNotMet;
         }
@@ -202,8 +214,9 @@ public sealed class CharacterBuilds
 
     /// <summary>
     ///     Whether <paramref name="player" />'s build spends more than its levels grant, holds a statistic below its job's
-    ///     start, or has learned a skill its job's tree lacks, above the skill's maximum, or without its prerequisite:
-    ///     what only a hand-edited row or changed content leaves.
+    ///     start, or has learned a skill its job's whole tree lacks, above the skill's maximum, or without its
+    ///     prerequisite: what only a hand-edited row or changed content leaves, such as a first job whose content lost
+    ///     its base job, with the carried points and the base tree (Persistence §6).
     /// </summary>
     public bool IsOverspent(PlayerEntity player)
     {
@@ -216,7 +229,7 @@ public sealed class CharacterBuilds
 
         foreach (KeyValuePair<SkillDefinitionId, int> learned in player.Skills)
         {
-            if (!Contains(job.Skills, learned.Key) || learned.Value > m_content.Skills[learned.Key].MaxLevel)
+            if (!Contains(job.Tree, learned.Key) || learned.Value > m_content.Skills[learned.Key].MaxLevel)
             {
                 return true;
             }
@@ -267,8 +280,8 @@ public sealed class CharacterBuilds
     }
 
     /// <summary>
-    ///     Returns every point: the primary statistics go back to the job's start and every skill to level 0, and the
-    ///     statistics are derived again.
+    ///     Returns every point: the primary statistics go back to the job's start and every skill of the whole tree to
+    ///     level 0, and the statistics are derived again; the job stays (Gameplay Systems §6.1).
     /// </summary>
     public void Reset(PlayerEntity player)
     {
