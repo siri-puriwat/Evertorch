@@ -41,7 +41,8 @@ public sealed class ClientContentParserTests
     private const string Skills =
         "{\"schemaVersion\":1,\"definitions\":[{\"id\":\"skill.first_aid\",\"displayName\":\"First Aid\","
         + "\"targetType\":\"self\",\"icon\":\"skill_first_aid\"},{\"id\":\"skill.strike\","
-        + "\"displayName\":\"Strike\",\"targetType\":\"enemy\",\"icon\":\"skill_strike\",\"description\":\"Hits hard.\"}]}";
+        + "\"displayName\":\"Strike\",\"targetType\":\"enemy\",\"icon\":\"skill_strike\",\"description\":\"Hits hard.\","
+        + "\"projectile\":\"projectile_strike\"}]}";
 
     private const string Npcs =
         "{\"schemaVersion\":1,\"definitions\":[{\"id\":\"npc.gate_warden\",\"displayName\":\"Gate Warden\","
@@ -215,6 +216,11 @@ public sealed class ClientContentParserTests
         "\"icon\":\"skill_strike\"",
         "\"icon\":\"Skills/Strike.png\"",
         "Skill 'skill.strike': icon is not a logical key")]
+    [TestCase(
+        ClientContentParser.SkillsFile,
+        "\"projectile\":\"projectile_strike\"",
+        "\"projectile\":\"Bolts/Strike.prefab\"",
+        "Skill 'skill.strike': projectile is not a logical key")]
     [TestCase(
         ClientContentParser.SkillsFile,
         "\"schemaVersion\":1",
@@ -479,9 +485,11 @@ public sealed class ClientContentParserTests
         Assert.That(strike.TargetType, Is.EqualTo(SkillTargetType.Enemy));
         Assert.That(strike.IconKey, Is.EqualTo("skill_strike"));
         Assert.That(strike.Description, Is.EqualTo("Hits hard."));
+        Assert.That(strike.ProjectileKey, Is.EqualTo("projectile_strike"));
         Assert.That(content.TryGetSkill(new SkillDefinitionId("skill.first_aid"), out ClientSkill? aid), Is.True);
         Assert.That(aid!.TargetType, Is.EqualTo(SkillTargetType.Self));
         Assert.That(aid.Description, Is.Empty, "a description is optional");
+        Assert.That(aid.ProjectileKey, Is.Empty, "a projectile is optional");
         Assert.That(content.Skills.Count(), Is.EqualTo(2));
         Assert.That(content.TryGetStatusEffect(new StatusDefinitionId("status.focus"), out ClientStatusEffect? focus),
             Is.True);

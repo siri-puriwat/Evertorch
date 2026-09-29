@@ -371,6 +371,14 @@ public static class ClientContentParser
                 return null;
             }
 
+            // The projectile is optional; JsonUtility reads an absent one as empty.
+            string projectile = skill.projectile ?? string.Empty;
+            if (projectile.Length > 0 && !IsLogicalKey(projectile))
+            {
+                error = $"Skill '{skill.id}': projectile is not a logical key.";
+                return null;
+            }
+
             skills.Add(
                 id,
                 new ClientSkill(
@@ -378,7 +386,8 @@ public static class ClientContentParser
                     skill.displayName ?? string.Empty,
                     targetType,
                     skill.icon,
-                    skill.description ?? string.Empty));
+                    skill.description ?? string.Empty,
+                    projectile));
         }
 
         return skills;
@@ -831,6 +840,7 @@ public static class ClientContentParser
         public string? targetType = string.Empty;
         public string? icon = string.Empty;
         public string? description = string.Empty;
+        public string? projectile = string.Empty;
     }
 
     [Serializable]

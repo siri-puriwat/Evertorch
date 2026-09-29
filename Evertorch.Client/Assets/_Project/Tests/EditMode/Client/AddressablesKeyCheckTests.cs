@@ -19,20 +19,28 @@ public sealed class AddressablesKeyCheckTests
         string monsterPrefab = "monster_training_slime",
         string itemModel = "pickup_slime_gel",
         string sceneKey = "map_training_ground",
-        string npcPrefab = "npc_quartermaster")
+        string npcPrefab = "npc_quartermaster",
+        string skillProjectile = "")
     {
         var map = new ClientMap(new MapDefinitionId("map.a"), "A", sceneKey, ClientTestGrids.CreateYard());
         var job = new ClientJob(new JobDefinitionId("job.a"), "A", jobPrefab);
         var monster = new ClientMonster(new MonsterDefinitionId("monster.a"), "A", monsterPrefab, "monster_icon");
         var item = new ClientItem(new ItemDefinitionId("item.a"), "A", ItemType.Material, itemModel, "item_icon");
         var npc = new ClientNpc(new NpcDefinitionId("npc.a"), "A", npcPrefab);
+        var skill = new ClientSkill(
+            new SkillDefinitionId("skill.a"),
+            "A",
+            SkillTargetType.Enemy,
+            "skill_icon",
+            string.Empty,
+            skillProjectile);
         return new ClientContent(
             "0000000000000000",
             new Dictionary<MapDefinitionId, ClientMap> { { map.Id, map } },
             new Dictionary<JobDefinitionId, ClientJob> { { job.Id, job } },
             new Dictionary<MonsterDefinitionId, ClientMonster> { { monster.Id, monster } },
             new Dictionary<ItemDefinitionId, ClientItem> { { item.Id, item } },
-            new Dictionary<SkillDefinitionId, ClientSkill>(),
+            new Dictionary<SkillDefinitionId, ClientSkill> { { skill.Id, skill } },
             new Dictionary<StatusDefinitionId, ClientStatusEffect>(),
             new Dictionary<NpcDefinitionId, ClientNpc> { { npc.Id, npc } });
     }
@@ -44,7 +52,8 @@ public sealed class AddressablesKeyCheckTests
             { "character_adventurer", typeof(GameObject) },
             { "monster_training_slime", typeof(GameObject) },
             { "pickup_slime_gel", typeof(GameObject) },
-            { "npc_quartermaster", typeof(GameObject) }
+            { "npc_quartermaster", typeof(GameObject) },
+            { "projectile_arcane_bolt", typeof(GameObject) }
         };
     }
 
@@ -52,6 +61,7 @@ public sealed class AddressablesKeyCheckTests
     [TestCase("monster")]
     [TestCase("item")]
     [TestCase("npc")]
+    [TestCase("skill")]
     public void Check_WhenARequiredKeyHasNoEntry_ReportsIt(string kind)
     {
         ClientContent content = kind switch
@@ -59,6 +69,7 @@ public sealed class AddressablesKeyCheckTests
             "job" => CreateContent("absent_key"),
             "monster" => CreateContent(monsterPrefab: "absent_key"),
             "npc" => CreateContent(npcPrefab: "absent_key"),
+            "skill" => CreateContent(skillProjectile: "absent_key"),
             _ => CreateContent(itemModel: "absent_key")
         };
 
@@ -109,6 +120,16 @@ public sealed class AddressablesKeyCheckTests
             result.MissingOptional.Any(entry => entry.Contains("monster.a projectile 'projectile_absent'")),
             Is.True,
             string.Join(" | ", result.MissingOptional));
+    }
+
+    [Test]
+    public void Check_WhenASkillsProjectileResolves_IsValid()
+    {
+        ClientContent content = CreateContent(skillProjectile: "projectile_arcane_bolt");
+
+        AddressablesKeyCheckResult result = AddressablesKeyCheck.Check(content, Prefabs(), EnabledScenes);
+
+        Assert.That(result.IsValid, Is.True, result.Describe());
     }
 
     [Test]

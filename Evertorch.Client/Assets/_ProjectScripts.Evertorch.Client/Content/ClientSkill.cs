@@ -4,8 +4,9 @@ using Evertorch.Game;
 namespace Evertorch.Client
 {
 /// <summary>
-///     The client-safe part of a skill definition: its name, whether it is used on an enemy or on the caster, the
-///     logical key of its icon, and its description for the player (Content Pipeline §5).
+///     The client-safe part of a skill definition: its name, whether it is used on an enemy, on the caster, or on an
+///     ally, the logical keys of its icon and of what it flies, and its description for the player (Content Pipeline
+///     §5).
 /// </summary>
 public sealed class ClientSkill
 {
@@ -14,13 +15,15 @@ public sealed class ClientSkill
         string displayName,
         SkillTargetType targetType,
         string iconKey,
-        string description = "")
+        string description = "",
+        string projectileKey = "")
     {
         Id = id;
         DisplayName = displayName ?? throw new ArgumentNullException(nameof(displayName));
         TargetType = targetType;
         IconKey = iconKey ?? throw new ArgumentNullException(nameof(iconKey));
         Description = description ?? throw new ArgumentNullException(nameof(description));
+        ProjectileKey = projectileKey ?? throw new ArgumentNullException(nameof(projectileKey));
     }
 
     public SkillDefinitionId Id { get; }
@@ -35,5 +38,10 @@ public sealed class ClientSkill
     ///     What the Skills window says the skill does; empty when the content writes none.
     /// </summary>
     public string Description { get; }
+
+    /// <summary>
+    ///     What the skill flies from its caster to its target; empty when it flies nothing.
+    /// </summary>
+    public string ProjectileKey { get; }
 }
 }

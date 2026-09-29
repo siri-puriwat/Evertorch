@@ -10,8 +10,8 @@ namespace Evertorch.Client.Editor
 {
 /// <summary>
 ///     Checks that every presentation key in the generated client package resolves in this Unity project: entity
-///     views as Addressables prefabs, map scenes as enabled build scenes. Icons are optional until a UI shows them, and
-///     projectiles, which fall back to a plain sphere.
+///     views and skills' projectiles as Addressables prefabs, map scenes as enabled build scenes. Icons are optional
+///     until a UI shows them, and monsters' projectiles, which fall back to a plain sphere.
 /// </summary>
 public static class AddressablesKeyCheck
 {
@@ -65,6 +65,15 @@ public static class AddressablesKeyCheck
         foreach (ClientNpc npc in content.Npcs)
         {
             RequirePrefab(addresses, npc.PrefabKey, $"{npc.Id.Value} prefab", missing);
+        }
+
+        // A player's skill names its projectile on purpose, so it must resolve (Content Pipeline §6).
+        foreach (ClientSkill skill in content.Skills)
+        {
+            if (skill.ProjectileKey.Length > 0)
+            {
+                RequirePrefab(addresses, skill.ProjectileKey, $"{skill.Id.Value} projectile", missing);
+            }
         }
 
         var scenes = new HashSet<string>(enabledScenes, StringComparer.Ordinal);
