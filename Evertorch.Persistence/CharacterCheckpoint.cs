@@ -5,15 +5,17 @@ using Evertorch.Game;
 namespace Evertorch.Persistence
 {
 /// <summary>
-///     The limited-rollback state of a character in the world (Persistence §6): its map, its position, its HP, where
-///     HP 0 records a character checkpointed dead, its SP, its level and experience and its job level and job
-///     experience, which a checkpoint never lowers, the progress of its active quests, which a checkpoint never lowers
-///     either, and its primary statistics and learned skills, which it writes whole.
+///     The limited-rollback state of a character in the world (Persistence §6): its job, its map, its position, its HP,
+///     where HP 0 records a character checkpointed dead, its SP, its level and experience and its job level and job
+///     experience, which a checkpoint never lowers, the job pair only while the stored job is the checkpoint's, the
+///     progress of its active quests, which a checkpoint never lowers either, and its primary statistics and learned
+///     skills, which it writes whole. It never writes the job itself: only a change's commit does.
 /// </summary>
 public sealed class CharacterCheckpoint
 {
     public CharacterCheckpoint(
         long characterId,
+        string job,
         MapDefinitionId map,
         WorldPosition position,
         int health,
@@ -22,13 +24,14 @@ public sealed class CharacterCheckpoint
         long experience,
         DateTime at,
         IReadOnlyList<StoredQuest>? quests = null,
-        bool isRewardInFlight = false,
+        bool isCommitInFlight = false,
         int jobLevel = 1,
         long jobExperience = 0,
         PrimaryStats? stats = null,
         IReadOnlyList<StoredSkill>? skills = null)
     {
         CharacterId = characterId;
+        Job = job ?? throw new ArgumentNullException(nameof(job));
         Map = map;
         Position = position;
         Health = health;
@@ -37,7 +40,7 @@ public sealed class CharacterCheckpoint
         Experience = experience;
         At = at;
         Quests = quests ?? Array.Empty<StoredQuest>();
-        IsRewardInFlight = isRewardInFlight;
+        IsCommitInFlight = isCommitInFlight;
         JobLevel = jobLevel;
         JobExperience = jobExperience;
         Stats = stats;
@@ -45,6 +48,12 @@ public sealed class CharacterCheckpoint
     }
 
     public long CharacterId { get; }
+
+    /// <summary>
+    ///     The job the character had when the checkpoint was taken; the job pair is written only while the stored job
+    ///     is this one, so a checkpoint taken before a change never undoes it (Persistence §6).
+    /// </summary>
+    public string Job { get; }
 
     public MapDefinitionId Map { get; }
 
@@ -69,13 +78,15 @@ public sealed class CharacterCheckpoint
     public IReadOnlyList<StoredQuest> Quests { get; }
 
     /// <summary>
-    ///     A quest's turn-in was in flight when the checkpoint was taken, so the level and experience it holds may not
-    ///     include the reward the turn-in commits; the checkpoint leaves them alone (Persistence §6).
+    ///     A quest's turn-in or a job change was in flight when the checkpoint was taken, so the levels and experience
+    ///     it holds may not include what that commit writes; the checkpoint leaves both pairs, the statistics, and the
+    ///     skills alone (Persistence §6).
     /// </summary>
-    public bool IsRewardInFlight { get; }
+    public bool IsCommitInFlight { get; }
 
     /// <summary>
-    ///     The job level, compared and replaced with <see cref="JobExperience" /> as a pair, never lowered.
+    ///     The job level, compared and replaced with <see cref="JobExperience" /> as a pair, never lowered, and only
+    ///     while the stored job is <see cref="Job" />.
     /// </summary>
     public int JobLevel { get; }
 

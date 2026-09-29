@@ -94,9 +94,10 @@ public interface IGameStore
 
     /// <summary>
     ///     Writes the checkpoint over the character's map, position, HP, and SP, and its level and experience unless
-    ///     they would go down or a turn-in was in flight; raises each active quest's progress, adding the quest when it
-    ///     has no row, but never lowers it or touches a completed quest; and records when the character was last played.
-    ///     One transaction.
+    ///     they would go down or a turn-in or a job change was in flight; its job level and job experience the same
+    ///     way, and only while the stored job is the checkpoint's; raises each active quest's progress, adding the quest
+    ///     when it has no row, but never lowers it or touches a completed quest; and records when the character was last
+    ///     played. One transaction.
     /// </summary>
     Task SaveCheckpointAsync(CharacterCheckpoint checkpoint, CancellationToken cancellationToken);
 
@@ -148,11 +149,34 @@ public interface IGameStore
     /// <summary>
     ///     Completes the quest and pays its reward in one transaction with a <c>quest_reward</c> ledger row, like
     ///     <see cref="CommitEquipAsync" />: the coins go up, the carried level and experience replace the stored ones
-    ///     unless they would go down, and the quest's row, added when a failed checkpoint left it missing, becomes
-    ///     completed. <see cref="InventoryStatus.Refused" /> when the quest is completed already, the carried progress
-    ///     falls short of the count, or the coins would pass their cap. The answer carries no row.
+    ///     unless they would go down, the carried job pair likewise while the stored job is the reward's, and the quest's
+    ///     row, added when a failed checkpoint left it missing, becomes completed. <see cref="InventoryStatus.Refused" />
+    ///     when the quest is completed already, the carried progress falls short of the count, or the coins would pass
+    ///     their cap. The answer carries no row.
     /// </summary>
     Task<InventoryResult> CommitQuestRewardAsync(QuestRewardCommit reward, CancellationToken cancellationToken);
+
+    /// <summary>
+    ///     Changes the character's job in one transaction (Persistence §5): under the character's lock, the stored job
+    ///     becomes <see cref="JobChangeCommit.ToJob" /> at job level 1 with job experience 0, and an item worn in the
+    ///     commit's slot comes out of it with an <c>unequip</c> ledger row under the operation ID and the inventory
+    ///     revision up by one; a change that takes nothing off keeps no ledger row. A stored job that is already the new
+    ///     one changes nothing and answers <see cref="InventoryStatus.Committed" />, from the ledger when the change took
+    ///     an item off; any stored job but <see cref="JobChangeCommit.FromJob" /> answers
+    ///     <see cref="InventoryStatus.Refused" />.
+    /// </summary>
+    Task<InventoryResult> CommitJobChangeAsync(JobChangeCommit change, CancellationToken cancellationToken);
+
+    /// <summary>
+    ///     What became of a job change whose answer was lost, settled from the stored job under the character's lock:
+    ///     null when the character's job is not <paramref name="job" />, else <see cref="InventoryStatus.Committed" />
+    ///     with the row the change took off, when the ledger holds one under <paramref name="operationId" />.
+    /// </summary>
+    Task<InventoryResult?> FindJobChangeAsync(
+        Guid operationId,
+        long characterId,
+        string job,
+        CancellationToken cancellationToken);
 
     /// <summary>
     ///     What became of an inventory operation whose commit may or may not have happened, looked up under the

@@ -90,7 +90,7 @@ public sealed class CharacterLifetime
     }
 
     /// <summary>
-    ///     Hands the character's current map, position, HP, SP, level and experience, job level and job experience,
+    ///     Hands the character's current job, map, position, HP, SP, level and experience, job level and job experience,
     ///     primary statistics, learned skills, and active quests to the writer, replacing any checkpoint of it still
     ///     waiting. <paramref name="onComplete" /> runs on the tick thread when it is
     ///     written or found unwritable.
@@ -101,6 +101,7 @@ public sealed class CharacterLifetime
         long id = character.Character.Value;
         var checkpoint = new CharacterCheckpoint(
             id,
+            player.Job.Value,
             character.Map.Definition.Id,
             player.Position,
             player.IsDead ? 0 : player.CurrentHealth,

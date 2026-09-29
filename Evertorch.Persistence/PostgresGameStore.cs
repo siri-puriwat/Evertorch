@@ -380,10 +380,11 @@ WHERE account_id = {account.Value} AND expires_at > {issuedAt} AND token_hash NO
                 int spirit = checkpoint.Spirit;
                 int level = checkpoint.Level;
                 long experience = checkpoint.Experience;
-                bool isRewardInFlight = checkpoint.IsRewardInFlight;
+                bool isCommitInFlight = checkpoint.IsCommitInFlight;
+                string job = checkpoint.Job;
                 int jobLevel = checkpoint.JobLevel;
                 long jobExperience = checkpoint.JobExperience;
-                bool writesStats = !isRewardInFlight && checkpoint.Stats.HasValue;
+                bool writesStats = !isCommitInFlight && checkpoint.Stats.HasValue;
                 PrimaryStats stats = checkpoint.Stats.GetValueOrDefault();
                 int str = stats.Str;
                 int agi = stats.Agi;
@@ -396,10 +397,12 @@ WHERE account_id = {account.Value} AND expires_at > {issuedAt} AND token_hash NO
                              await context.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false))
                 {
                     // Level and experience move only forward, compared as a pair, so a checkpoint can never take back
-                    // what a turn-in committed; while a turn-in is in flight they stay as they are, since the ones in
-                    // memory may not hold its reward yet (Persistence §6). The job pair follows the same rule, and the
-                    // statistics and skills, which spend the points those levels grant, wait with them, so a crash can
-                    // never store more points spent than earned.
+                    // what a turn-in committed; while a turn-in or a job change is in flight they stay as they are,
+                    // since the ones in memory may not hold what it commits yet (Persistence §6). The job pair follows
+                    // the same rule, and only while the stored job is the checkpoint's, so a checkpoint taken before a
+                    // change can never store a first job at its base job's level. The statistics and skills, which spend
+                    // the points those levels grant, wait with them, so a crash can never store more points spent than
+                    // earned.
                     int updated = await context.Characters
                         .Where(row => row.Id == checkpoint.CharacterId)
                         .ExecuteUpdateAsync(
@@ -412,28 +415,30 @@ WHERE account_id = {account.Value} AND expires_at > {issuedAt} AND token_hash NO
                                 .SetProperty(row => row.Sp, spirit)
                                 .SetProperty(
                                     row => row.BaseLevel,
-                                    row => !isRewardInFlight
+                                    row => !isCommitInFlight
                                         && (level > row.BaseLevel
                                             || (level == row.BaseLevel && experience >= row.BaseExp))
                                             ? level
                                             : row.BaseLevel)
                                 .SetProperty(
                                     row => row.BaseExp,
-                                    row => !isRewardInFlight
+                                    row => !isCommitInFlight
                                         && (level > row.BaseLevel
                                             || (level == row.BaseLevel && experience >= row.BaseExp))
                                             ? experience
                                             : row.BaseExp)
                                 .SetProperty(
                                     row => row.JobLevel,
-                                    row => !isRewardInFlight
+                                    row => !isCommitInFlight
+                                        && row.JobDefinitionId == job
                                         && (jobLevel > row.JobLevel
                                             || (jobLevel == row.JobLevel && jobExperience >= row.JobExp))
                                             ? jobLevel
                                             : row.JobLevel)
                                 .SetProperty(
                                     row => row.JobExp,
-                                    row => !isRewardInFlight
+                                    row => !isCommitInFlight
+                                        && row.JobDefinitionId == job
                                         && (jobLevel > row.JobLevel
                                             || (jobLevel == row.JobLevel && jobExperience >= row.JobExp))
                                             ? jobExperience
@@ -466,7 +471,7 @@ WHERE character_quests.state = {CharacterQuestRow.ActiveState} AND character_que
                             .ConfigureAwait(false);
                     }
 
-                    if (!isRewardInFlight && checkpoint.Skills != null && updated == 1)
+                    if (!isCommitInFlight && checkpoint.Skills != null && updated == 1)
                     {
                         await WriteSkillsAsync(context, checkpoint.CharacterId, checkpoint.Skills, cancellationToken)
                             .ConfigureAwait(false);
@@ -1004,8 +1009,9 @@ WHERE character_quests.state = {CharacterQuestRow.ActiveState} AND character_que
                         character.BaseExp = reward.Experience;
                     }
 
-                    if (reward.JobLevel > character.JobLevel
-                        || (reward.JobLevel == character.JobLevel && reward.JobExperience >= character.JobExp))
+                    if (character.JobDefinitionId == reward.Job
+                        && (reward.JobLevel > character.JobLevel
+                            || (reward.JobLevel == character.JobLevel && reward.JobExperience >= character.JobExp)))
                     {
                         character.JobLevel = reward.JobLevel;
                         character.JobExp = reward.JobExperience;
@@ -1029,6 +1035,103 @@ WHERE character_quests.state = {CharacterQuestRow.ActiveState} AND character_que
                             Array.Empty<long>(),
                             cancellationToken)
                         .ConfigureAwait(false);
+                }
+            },
+            cancellationToken);
+    }
+
+    public Task<InventoryResult> CommitJobChangeAsync(JobChangeCommit change, CancellationToken cancellationToken)
+    {
+        return RunAsync(
+            async context =>
+            {
+                await using (IDbContextTransaction transaction =
+                             await context.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false))
+                {
+                    CharacterRow character = await LockCharacterAsync(context, change.CharacterId, cancellationToken)
+                        .ConfigureAwait(false);
+                    if (character.JobDefinitionId == change.ToJob)
+                    {
+                        return await ChangedAsync(context, character, change.OperationId, cancellationToken)
+                            .ConfigureAwait(false);
+                    }
+
+                    if (character.JobDefinitionId != change.FromJob)
+                    {
+                        return Refused(character);
+                    }
+
+                    // The job is not value, so the change alone keeps no ledger row; an item it takes off does.
+                    character.JobDefinitionId = change.ToJob;
+                    character.JobLevel = StartingLevel;
+                    character.JobExp = 0;
+                    EquipmentRow? worn = change.UnequipSlot == null
+                        ? null
+                        : await context.Equipment
+                            .SingleOrDefaultAsync(
+                                slot => slot.CharacterId == change.CharacterId && slot.Slot == change.UnequipSlot,
+                                cancellationToken)
+                            .ConfigureAwait(false);
+                    if (worn == null)
+                    {
+                        character.Version++;
+                        await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+                        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+                        return new InventoryResult(
+                            InventoryStatus.Committed,
+                            (uint)character.InventoryRevision,
+                            character.Currency,
+                            Array.Empty<StoredItem>());
+                    }
+
+                    string? item = await context.InventoryItems
+                        .Where(row => row.Id == worn.InventoryItemId)
+                        .Select(row => row.ItemDefinitionId)
+                        .SingleOrDefaultAsync(cancellationToken)
+                        .ConfigureAwait(false);
+                    context.Equipment.Remove(worn);
+                    return await CommitOperationAsync(
+                            context,
+                            transaction,
+                            character,
+                            new LedgerRow
+                            {
+                                OperationId = change.OperationId,
+                                ActorCharacterId = change.CharacterId,
+                                OperationType = LedgerRow.UnequipOperation,
+                                ItemInstanceId = worn.InventoryItemId,
+                                ItemDefinitionId = item,
+                                CreatedAt = change.At
+                            },
+                            new[] { worn.InventoryItemId },
+                            Array.Empty<long>(),
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                }
+            },
+            cancellationToken);
+    }
+
+    public Task<InventoryResult?> FindJobChangeAsync(
+        Guid operationId,
+        long characterId,
+        string job,
+        CancellationToken cancellationToken)
+    {
+        return RunAsync(
+            async context =>
+            {
+                // As for an operation's lookup: waiting on the lock means a commit still in flight is seen settled.
+                await using (IDbContextTransaction transaction =
+                             await context.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false))
+                {
+                    CharacterRow character = await LockCharacterAsync(context, characterId, cancellationToken)
+                        .ConfigureAwait(false);
+                    InventoryResult? found = character.JobDefinitionId == job
+                        ? await ChangedAsync(context, character, operationId, cancellationToken).ConfigureAwait(false)
+                        : null;
+                    await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+                    return found;
                 }
             },
             cancellationToken);
@@ -1195,6 +1298,22 @@ WHERE character_skills.level <> EXCLUDED.level",
         return locked.Count == 1
             ? locked[0]
             : throw new InvalidOperationException($"Character {characterId} does not exist.");
+    }
+
+    // A job change that committed: the ledger's answer when it took an item off, else the character as it is.
+    private static async Task<InventoryResult> ChangedAsync(
+        EvertorchDbContext context,
+        CharacterRow character,
+        Guid operationId,
+        CancellationToken cancellationToken)
+    {
+        return await FindAsync(context, operationId, character.Id, Array.Empty<long>(), cancellationToken)
+                .ConfigureAwait(false)
+            ?? new InventoryResult(
+                InventoryStatus.Committed,
+                (uint)character.InventoryRevision,
+                character.Currency,
+                Array.Empty<StoredItem>());
     }
 
     private static InventoryResult Refused(CharacterRow character)

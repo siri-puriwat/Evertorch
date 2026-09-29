@@ -4,15 +4,15 @@ namespace Evertorch.Persistence
 {
 /// <summary>
 ///     One quest's turn-in to commit (Persistence §5): the reward's coins, and the level and experience and the job
-///     level and job experience the tick thread held with the reward's added, under a new operation ID. The progress is
-///     the one the tick thread
-///     held, which the last checkpoint may not have reached yet.
+///     level and job experience the tick thread held with the reward's added, in the job it held, under a new operation
+///     ID. The progress is the one the tick thread held, which the last checkpoint may not have reached yet.
 /// </summary>
 public sealed class QuestRewardCommit
 {
     public QuestRewardCommit(
         Guid operationId,
         long characterId,
+        string job,
         string questDefinitionId,
         int progress,
         int count,
@@ -32,6 +32,7 @@ public sealed class QuestRewardCommit
 
         OperationId = operationId;
         CharacterId = characterId;
+        Job = job ?? throw new ArgumentNullException(nameof(job));
         QuestDefinitionId = questDefinitionId ?? throw new ArgumentNullException(nameof(questDefinitionId));
         Progress = progress;
         Count = count;
@@ -46,6 +47,11 @@ public sealed class QuestRewardCommit
     public Guid OperationId { get; }
 
     public long CharacterId { get; }
+
+    /// <summary>
+    ///     The job the tick thread held; the job pair is written only while the stored job is this one.
+    /// </summary>
+    public string Job { get; }
 
     public string QuestDefinitionId { get; }
 

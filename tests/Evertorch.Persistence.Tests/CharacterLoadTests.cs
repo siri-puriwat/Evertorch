@@ -13,6 +13,8 @@ namespace Evertorch.Persistence.Tests
 [TestFixture]
 public sealed class CharacterLoadTests
 {
+    private const string Adventurer = "job.adventurer";
+
     private static readonly DateTime Now = new(2026, 9, 23, 12, 0, 0, DateTimeKind.Utc);
 
     private PostgresFixture m_database = null!;
@@ -67,6 +69,7 @@ public sealed class CharacterLoadTests
     {
         var checkpoint = new CharacterCheckpoint(
             character,
+            Adventurer,
             new MapDefinitionId("map.training_ground"),
             position,
             health,
@@ -83,10 +86,11 @@ public sealed class CharacterLoadTests
         long jobExperience,
         PrimaryStats? stats,
         IReadOnlyList<StoredSkill>? skills,
-        bool isRewardInFlight = false)
+        bool isCommitInFlight = false)
     {
         var checkpoint = new CharacterCheckpoint(
             character,
+            Adventurer,
             new MapDefinitionId("map.training_ground"),
             new WorldPosition(1f, 0f, 1f),
             50,
@@ -94,7 +98,7 @@ public sealed class CharacterLoadTests
             1,
             0,
             Now,
-            isRewardInFlight: isRewardInFlight,
+            isCommitInFlight: isCommitInFlight,
             jobLevel: jobLevel,
             jobExperience: jobExperience,
             stats: stats,

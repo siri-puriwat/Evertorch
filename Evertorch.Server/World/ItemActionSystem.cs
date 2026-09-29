@@ -413,6 +413,7 @@ public sealed class ItemActionSystem : ITickPhase
         var commit = new QuestRewardCommit(
             operation.OperationId,
             character.Character.Value,
+            character.Player.Job.Value,
             quest.Value,
             entry.Progress,
             definition.Count,

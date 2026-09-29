@@ -62,6 +62,16 @@ internal sealed class InMemoryGameStore : IGameStore
     public BuildSeed? SeedOnCreate { get; set; }
 
     /// <summary>
+    ///     Every job change asked of the store, in order, including repeats.
+    /// </summary>
+    public List<JobChangeCommit> JobChangeCommits { get; } = new();
+
+    /// <summary>
+    ///     How many job changes still to commit throw as if their answer was lost after the commit.
+    /// </summary>
+    public int AmbiguousJobChangeFailures { get; set; }
+
+    /// <summary>
     ///     Every login provisioned, in order, including repeats.
     /// </summary>
     public List<string> Logins { get; } = new();
@@ -397,7 +407,7 @@ internal sealed class InMemoryGameStore : IGameStore
                 row.Spirit = checkpoint.Spirit;
                 bool isNotLower = checkpoint.Level > row.Level
                     || (checkpoint.Level == row.Level && checkpoint.Experience >= row.Experience);
-                if (isNotLower && !checkpoint.IsRewardInFlight)
+                if (isNotLower && !checkpoint.IsCommitInFlight)
                 {
                     row.Level = checkpoint.Level;
                     row.Experience = checkpoint.Experience;
@@ -405,18 +415,18 @@ internal sealed class InMemoryGameStore : IGameStore
 
                 bool isJobNotLower = checkpoint.JobLevel > row.JobLevel
                     || (checkpoint.JobLevel == row.JobLevel && checkpoint.JobExperience >= row.JobExperience);
-                if (isJobNotLower && !checkpoint.IsRewardInFlight)
+                if (isJobNotLower && !checkpoint.IsCommitInFlight && checkpoint.Job == row.Job)
                 {
                     row.JobLevel = checkpoint.JobLevel;
                     row.JobExperience = checkpoint.JobExperience;
                 }
 
-                if (checkpoint.Stats.HasValue && !checkpoint.IsRewardInFlight)
+                if (checkpoint.Stats.HasValue && !checkpoint.IsCommitInFlight)
                 {
                     row.Stats = checkpoint.Stats.Value;
                 }
 
-                if (checkpoint.Skills != null && !checkpoint.IsRewardInFlight)
+                if (checkpoint.Skills != null && !checkpoint.IsCommitInFlight)
                 {
                     row.Skills.Clear();
                     foreach (StoredSkill skill in checkpoint.Skills)
@@ -538,6 +548,47 @@ internal sealed class InMemoryGameStore : IGameStore
             }
 
             return Task.FromResult(result);
+        }
+    }
+
+    public Task<InventoryResult> CommitJobChangeAsync(JobChangeCommit change, CancellationToken cancellationToken)
+    {
+        ThrowIfUnavailable();
+        lock (m_gate)
+        {
+            JobChangeCommits.Add(change);
+            Row row = m_characters[change.CharacterId];
+            InventoryResult result = row.Job == change.ToJob
+                ? Changed(change.OperationId, change.CharacterId, row)
+                : row.Job != change.FromJob
+                    ? Unchanged(InventoryStatus.Refused, row)
+                    : ChangeJob(change, row);
+            if (AmbiguousJobChangeFailures > 0 && result.Status == InventoryStatus.Committed)
+            {
+                AmbiguousJobChangeFailures--;
+                throw new StoreUnavailableException(new TimeoutException("scripted loss of the commit's answer"));
+            }
+
+            return Task.FromResult(result);
+        }
+    }
+
+    public Task<InventoryResult?> FindJobChangeAsync(
+        Guid operationId,
+        long characterId,
+        string job,
+        CancellationToken cancellationToken)
+    {
+        lock (m_gate)
+        {
+            Lookups.Add(operationId);
+        }
+
+        ThrowIfUnavailable();
+        lock (m_gate)
+        {
+            Row row = m_characters[characterId];
+            return Task.FromResult(row.Job == job ? Changed(operationId, characterId, row) : null);
         }
     }
 
@@ -762,8 +813,9 @@ internal sealed class InMemoryGameStore : IGameStore
             row.Experience = reward.Experience;
         }
 
-        if (reward.JobLevel > row.JobLevel
-            || (reward.JobLevel == row.JobLevel && reward.JobExperience >= row.JobExperience))
+        if (reward.Job == row.Job
+            && (reward.JobLevel > row.JobLevel
+                || (reward.JobLevel == row.JobLevel && reward.JobExperience >= row.JobExperience)))
         {
             row.JobLevel = reward.JobLevel;
             row.JobExperience = reward.JobExperience;
@@ -910,6 +962,31 @@ internal sealed class InMemoryGameStore : IGameStore
             row.InventoryRevision,
             row.Coins,
             changed.Select(row.Read).ToList());
+    }
+
+    // As the PostgreSQL store changes a job: job level 1 and job experience 0, and the worn item out of the named slot
+    // under the operation's ledger entry; a change that takes nothing off keeps no entry and no new revision.
+    private InventoryResult ChangeJob(JobChangeCommit change, Row row)
+    {
+        row.Job = change.ToJob;
+        row.JobLevel = 1;
+        row.JobExperience = 0;
+        if (change.UnequipSlot == null || !row.Equipment.TryGetValue(change.UnequipSlot, out long worn))
+        {
+            return Unchanged(InventoryStatus.Committed, row);
+        }
+
+        row.Equipment.Remove(change.UnequipSlot);
+        row.InventoryRevision = unchecked(row.InventoryRevision + 1);
+        StoredItem item = row.Read(worn);
+        m_ledger.Add(change.OperationId, new LedgerEntry(change.CharacterId, worn, item.ItemDefinitionId));
+        return new InventoryResult(InventoryStatus.Committed, row.InventoryRevision, row.Coins, new[] { item });
+    }
+
+    // A change that committed: the ledger's answer when it took an item off, else the character as it is.
+    private InventoryResult Changed(Guid operationId, long characterId, Row row)
+    {
+        return Find(operationId, characterId, Array.Empty<long>()) ?? Unchanged(InventoryStatus.Committed, row);
     }
 
     private InventoryResult Unequip(UnequipCommit unequip)

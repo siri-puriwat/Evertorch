@@ -305,7 +305,7 @@ public sealed class QuestTests
         hunter.Server.TickUntil(() => hunter.Character.Operation == null);
 
         CharacterCheckpoint during = hunter.Server.Store.Checkpoints.First();
-        Assert.That((during.IsRewardInFlight, during.Experience), Is.EqualTo((true, 25L)));
+        Assert.That((during.IsCommitInFlight, during.Experience), Is.EqualTo((true, 25L)));
         StoredCharacter stored = hunter.Server.Store.Stored(1);
         Assert.That((stored.BaseLevel, stored.Experience), Is.EqualTo((3, 70L)), "the reward's pair, durable");
         PlayerEntity player = hunter.Character.Player;

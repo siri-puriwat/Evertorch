@@ -16,6 +16,7 @@ namespace Evertorch.Persistence.Tests
 public sealed class QuestStoreTests
 {
     private const string Hunt = "quest.crawler_hunt";
+    private const string Adventurer = "job.adventurer";
     private const int Count = 5;
     private const int Reward = 100;
     private const long Cap = 1_000_000_000;
@@ -51,12 +52,13 @@ public sealed class QuestStoreTests
         long character,
         int level,
         long experience,
-        bool isRewardInFlight = false,
+        bool isCommitInFlight = false,
         params StoredQuest[] quests)
     {
         m_store.SaveCheckpointAsync(
                 new CharacterCheckpoint(
                     character,
+                    Adventurer,
                     new MapDefinitionId("map.training_ground"),
                     new WorldPosition(1f, 0f, 2f),
                     40,
@@ -65,7 +67,7 @@ public sealed class QuestStoreTests
                     experience,
                     Now,
                     quests,
-                    isRewardInFlight),
+                    isCommitInFlight),
                 CancellationToken.None)
             .GetAwaiter()
             .GetResult();
@@ -86,7 +88,17 @@ public sealed class QuestStoreTests
     private Task<InventoryResult> TurnInAsync(long character, int progress, int level, long experience, Guid operation)
     {
         return m_store.CommitQuestRewardAsync(
-            new QuestRewardCommit(operation, character, Hunt, progress, Count, Reward, level, experience, Now),
+            new QuestRewardCommit(
+                operation,
+                character,
+                Adventurer,
+                Hunt,
+                progress,
+                Count,
+                Reward,
+                level,
+                experience,
+                Now),
             CancellationToken.None);
     }
 
@@ -154,6 +166,7 @@ public sealed class QuestStoreTests
                 new QuestRewardCommit(
                     Guid.NewGuid(),
                     character,
+                    Adventurer,
                     Hunt,
                     Count,
                     Count,
