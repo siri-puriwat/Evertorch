@@ -161,12 +161,14 @@ public sealed class AutoAttackState
 
         m_controller.StopChase();
         // No swing begins while the player swings or casts (Gameplay Systems §6), so only a tick the swing's or the
-        // cast's hold does not cover counts toward a stall. The driver has already set this tick's hold.
+        // cast's hold does not cover counts toward a stall. The driver has already set this tick's hold. The server
+        // holds the swing back through the cast's after-cast delay too, so those ticks are not counted either
+        // (finding 3 of the Milestone 6 review).
         if (m_controller.IsLocked)
         {
             m_ticksInRangeWithoutSwing = 0;
         }
-        else if (++m_ticksInRangeWithoutSwing > m_stalledTicks)
+        else if (m_world.AfterCastDelayRemaining <= 0.0 && ++m_ticksInRangeWithoutSwing > m_stalledTicks)
         {
             // The server measures range against the target's own position, which the drawn one trails; come closer.
             m_isClosingIn = true;

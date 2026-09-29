@@ -212,6 +212,11 @@ public sealed class GameClient : MonoBehaviour
     }
 
     /// <summary>
+    ///     Whether the gamepad's skill buttons ask for slots 6 to 8, a first job's own skills, rather than 1 to 3.
+    /// </summary>
+    public bool IsGamepadOnOwnSkills => m_skillSource != null && m_skillSource.IsOnOwnSkills;
+
+    /// <summary>
     ///     Whether the NPC, Stats, or Skills window shows at the top left, which the target frame keeps clear of.
     /// </summary>
     public bool IsSideWindowOpen =>
@@ -314,6 +319,13 @@ public sealed class GameClient : MonoBehaviour
         if (m_windowSource != null && m_windowSource.TakeSkillsToggle())
         {
             ToggleSkills();
+        }
+
+        if (m_skillSource != null)
+        {
+            bool hasOwnSkills = SkillSlots.HasOwnSkills(m_world.Skills);
+            bool isTurned = m_skillSource.TakePageToggle();
+            m_skillSource.IsOnOwnSkills = hasOwnSkills && m_skillSource.IsOnOwnSkills != isTurned;
         }
 
         int slot = m_skillSource?.TakeSlot() ?? 0;
@@ -729,7 +741,7 @@ public sealed class GameClient : MonoBehaviour
             return;
         }
 
-        if (SkillSlots.TryGetSkill(slot, out SkillDefinitionId skill))
+        if (m_world != null && SkillSlots.TryGetSkill(m_world.Skills, slot, out SkillDefinitionId skill))
         {
             UseSkill(skill);
         }
@@ -999,7 +1011,7 @@ public sealed class GameClient : MonoBehaviour
 
         if (slots.Count == SkillSlots.Count)
         {
-            m_skillSource = new SkillInputSource(slots);
+            m_skillSource = new SkillInputSource(slots, actions?.FindAction("Player/SkillPage"));
         }
 
         InputAction? stats = actions?.FindAction("Player/Stats");

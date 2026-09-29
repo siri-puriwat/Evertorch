@@ -21,6 +21,13 @@ public sealed class InventoryWindow : MonoBehaviour
     private const int SortingOrder = 6;
     private const float Width = 300f;
     private const float Margin = 8f;
+
+    /// <summary>
+    ///     The window's left edge in canvas units, which the target frame beside the windows at the top left stops short
+    ///     of.
+    /// </summary>
+    public const float Left = ClientUI.CanvasWidth - Margin - Width;
+
     private const float StatusBarHeight = 56f;
     private const int Padding = 10;
     private const float RowHeight = 30f;
@@ -80,7 +87,7 @@ public sealed class InventoryWindow : MonoBehaviour
     {
         float top = canvasHeight - (StatusBarHeight + Margin);
         float height = Chrome + ListHeightFor(canvasHeight, rows, isTouchShown);
-        return new Rect(ClientUI.CanvasWidth - Margin - Width, top - height, Width, height);
+        return new Rect(Left, top - height, Width, height);
     }
 
     // A row under a touch button would take the taps meant for it, and a press of a row equips or drinks.

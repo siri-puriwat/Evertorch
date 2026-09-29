@@ -65,6 +65,7 @@ public sealed class NpcWindow : MonoBehaviour
     private LayoutElement? m_listLayout;
     private Transform? m_rows;
     private float m_listHeight = -1f;
+    private float m_left = Margin;
     private ClientWorld? m_world;
     private NpcServices? m_shownServices;
     private IReadOnlyList<QuestLogEntry>? m_shownQuests;
@@ -155,7 +156,25 @@ public sealed class NpcWindow : MonoBehaviour
     {
         float top = canvasHeight - (StatusBarHeight + Margin);
         float height = Chrome + ListHeightFor(canvasHeight, rows, isTouchShown);
-        return new Rect(Margin, top - height, Width, height);
+        return new Rect(LeftFor(isTouchShown), top - height, Width, height);
+    }
+
+    /// <summary>
+    ///     The left edge of the windows at the top left, this one, the Stats window, and the Skills window, in canvas
+    ///     units: beside the Dev, Stats, and Skills buttons while the touch controls show, so those stay pressable
+    ///     (finding C2 of the Milestone 9 review).
+    /// </summary>
+    public static float LeftFor(bool isTouchShown)
+    {
+        return isTouchShown ? TouchControls.WindowButtonsRight + Margin : Margin;
+    }
+
+    /// <summary>
+    ///     The right edge of the windows at the top left, in canvas units.
+    /// </summary>
+    public static float RightFor(bool isTouchShown)
+    {
+        return LeftFor(isTouchShown) + Width;
     }
 
     /// <summary>
@@ -559,11 +578,23 @@ public sealed class NpcWindow : MonoBehaviour
     {
         float canvasHeight = ((RectTransform)transform).rect.height;
         bool isTouchShown = m_client!.Touch != null && m_client.Touch.IsVisible;
+        PlaceLeft(isTouchShown);
         float height = ListHeightFor(canvasHeight, m_rowObjects.Count, isTouchShown);
         if (height != m_listHeight)
         {
             m_listHeight = height;
             m_listLayout!.preferredHeight = height;
+        }
+    }
+
+    private void PlaceLeft(bool isTouchShown)
+    {
+        float left = LeftFor(isTouchShown);
+        if (left != m_left)
+        {
+            m_left = left;
+            var panel = (RectTransform)m_panel!.transform;
+            panel.anchoredPosition = new Vector2(left, panel.anchoredPosition.y);
         }
     }
 

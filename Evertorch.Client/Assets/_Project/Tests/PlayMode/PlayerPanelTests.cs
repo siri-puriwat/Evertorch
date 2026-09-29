@@ -348,6 +348,41 @@ public sealed class PlayerPanelTests
         return new CharacterSheet(2, Adventurer, 0, 50, 0, skillPoints, stats, 10, 5, 2, 3, 182, 105, 11, 153);
     }
 
+    private static SkillList StrikeFirstAidAndFocus(uint strikeCooldownLeftMs)
+    {
+        return new SkillList(
+            new[]
+            {
+                new SkillListEntry(new SkillDefinitionId("skill.strike"), 1.5f, 8, 2000, 500, strikeCooldownLeftMs, 1,
+                    1, SkillListEntry.NoPrerequisite, 0),
+                new SkillListEntry(new SkillDefinitionId("skill.first_aid"), 0f, 3, 0, 0, 0, 1, 1,
+                    SkillListEntry.NoPrerequisite, 0),
+                new SkillListEntry(new SkillDefinitionId("skill.focus"), 0f, 15, 0, 0, 0, 0, 3, 0, 1)
+            });
+    }
+
+    // A Vanguard's list: the Adventurer's tree, then its own, Heavy Blow learned.
+    private static SkillList VanguardTree()
+    {
+        string[] ids =
+        {
+            "skill.strike", "skill.first_aid", "skill.focus", "skill.heavy_blow", "skill.war_cry", "skill.iron_guard"
+        };
+        return new SkillList(
+            ids.Select((id, index) => new SkillListEntry(
+                    new SkillDefinitionId(id),
+                    1.5f,
+                    8,
+                    0,
+                    0,
+                    0,
+                    (byte)(index == 3 ? 1 : 0),
+                    5,
+                    SkillListEntry.NoPrerequisite,
+                    0))
+                .ToArray());
+    }
+
     private static SkillList StrikeAndFirstAid(uint strikeCooldownLeftMs)
     {
         return new SkillList(
@@ -974,9 +1009,9 @@ public sealed class PlayerPanelTests
         m_created.Add(bar.gameObject);
         yield return null;
         bool isShownWithoutAList = bar.IsVisible;
-        string lockedStrike = SlotText(bar, 1);
+        bool isStrikeShown = Slot(bar, 1).activeSelf;
 
-        world.OnSkillList(StrikeAndFirstAid(1500));
+        world.OnSkillList(StrikeFirstAidAndFocus(1500));
         yield return null;
         string strike = SlotText(bar, 1);
         string firstAid = SlotText(bar, 2);
@@ -988,8 +1023,8 @@ public sealed class PlayerPanelTests
         world.Advance(1.5f);
         yield return null;
 
-        Assert.That(isShownWithoutAList, Is.True, "the skill slots show from entering");
-        Assert.That(lockedStrike, Is.EqualTo("skill.strike\nLocked"), "until the list says it is learned");
+        Assert.That(isShownWithoutAList, Is.False, "the slots follow the skill list, which has not come");
+        Assert.That(isStrikeShown, Is.False);
         Assert.That(strike, Is.EqualTo("skill.strike\n1.5 s"), "without content the bar names the definition");
         Assert.That(firstAid, Is.EqualTo("skill.first_aid\n2"), "a skill ready to use shows its key");
         Assert.That(focus, Is.EqualTo("skill.focus\nLocked"), "Focus is not learned");
@@ -999,6 +1034,41 @@ public sealed class PlayerPanelTests
         Assert.That(SlotText(bar, 1), Is.EqualTo("skill.strike\n1"));
         Assert.That(bar.IsVisible, Is.True);
         Assert.That(Slot(bar, 1).GetComponent<Button>().navigation.mode, Is.EqualTo(Navigation.Mode.None));
+    }
+
+    // A first job's own tree fills slots 6 to 8, and all eight narrow to 70 units; the keys the gamepad's first page
+    // reaches read in brackets (Prototype Content §2, §4).
+    [UnityTest]
+    public IEnumerator SkillBar_ForAFirstJob_ShowsEightNarrowSlots_TheOwnTreeOnSixToEight()
+    {
+        GameClient client = CreateIdleClient();
+        ClientWorld world = GiveWorld(client);
+        var bar = SkillBar.Create(client);
+        m_created.Add(bar.gameObject);
+        world.OnSkillList(StrikeFirstAidAndFocus(0));
+        yield return null;
+        float adventurerWidth = bar.ShownSlotWidth;
+        bool isSixShown = Slot(bar, 6).activeSelf;
+        string strike = SlotText(bar, 1);
+
+        world.OnSkillList(VanguardTree());
+        yield return null;
+        yield return null;
+
+        Assert.That((adventurerWidth, isSixShown, strike), Is.EqualTo((112f, false, "skill.strike\n1")));
+        Assert.That(bar.ShownSlotWidth, Is.EqualTo(70f));
+        Assert.That(
+            new[] { 1, 6, 7, 8 }.Select(slot => SlotText(bar, slot)),
+            Is.EqualTo(
+                new[]
+                {
+                    "skill.strike\nLocked", "skill.heavy_blow\n6", "skill.war_cry\nLocked", "skill.iron_guard\nLocked"
+                }));
+        Assert.That(Slot(bar, 6).GetComponent<Button>().interactable, Is.True, "Heavy Blow learned");
+        Assert.That(
+            Slot(bar, 6).GetComponent<LayoutElement>().preferredWidth,
+            Is.EqualTo(70f),
+            "all eight fit between the stick and the touch buttons");
     }
 
     [UnityTest]

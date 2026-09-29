@@ -58,6 +58,11 @@ public sealed class TouchControls : MonoBehaviour
     }
 
     /// <summary>
+    ///     The right edge of the Dev, Stats, and Skills buttons on the left edge, in canvas units.
+    /// </summary>
+    public static float WindowButtonsRight => ToggleSize.x;
+
+    /// <summary>
     ///     The column of target buttons in the bottom right corner of a canvas <paramref name="canvasWidth" /> units
     ///     wide, from its bottom-left corner.
     /// </summary>

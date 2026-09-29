@@ -44,6 +44,10 @@ public sealed class ClientProjectWiringTests
     [TestCase("Player/Slot3")]
     [TestCase("Player/Slot4")]
     [TestCase("Player/Slot5")]
+    [TestCase("Player/Slot6")]
+    [TestCase("Player/Slot7")]
+    [TestCase("Player/Slot8")]
+    [TestCase("Player/SkillPage")]
     [TestCase("Player/Talk")]
     [TestCase("Player/Stats")]
     [TestCase("Player/Skills")]
@@ -146,7 +150,11 @@ public sealed class ClientProjectWiringTests
         Assert.That(
             Paths(actions, "Player/Slot5"),
             Is.EquivalentTo(new[] { "<Keyboard>/5", "<Gamepad>/dpad/up" }));
-        Assert.That(SkillSlots.Count, Is.EqualTo(5), "one action per slot of the bar");
+        Assert.That(Paths(actions, "Player/Slot6"), Is.EquivalentTo(new[] { "<Keyboard>/6" }), "the page reaches it");
+        Assert.That(Paths(actions, "Player/Slot7"), Is.EquivalentTo(new[] { "<Keyboard>/7" }));
+        Assert.That(Paths(actions, "Player/Slot8"), Is.EquivalentTo(new[] { "<Keyboard>/8" }));
+        Assert.That(Paths(actions, "Player/SkillPage"), Is.EquivalentTo(new[] { "<Gamepad>/dpad/left" }));
+        Assert.That(SkillSlots.Count, Is.EqualTo(8), "one action per slot of the bar");
     }
 
     [Test]

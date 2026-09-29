@@ -9,6 +9,7 @@ using UnityEngine;
 using UnityEngine.Events;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
+using UnityEngine.InputSystem.Controls;
 using UnityEngine.InputSystem.LowLevel;
 using UnityEngine.TestTools;
 using UnityEngine.UI;
@@ -131,6 +132,43 @@ public sealed class SharedIntentPathTests : InputTestFixture
         Assert.That(fromKey, Is.EqualTo(CombatRequest.Pickup));
         Assert.That(fromButton, Is.EqualTo(CombatRequest.Pickup));
         Assert.That(source.TakeRequest(), Is.EqualTo(CombatRequest.None));
+    }
+
+    // D-pad left pages South and the triggers to slots 6 to 8 and back; the keys 1 to 8 always ask for their own slot
+    // (Prototype Content §4).
+    [Test]
+    public void DpadLeft_PagesTheGamepadsSkillButtons_ButNeverTheKeys()
+    {
+        Keyboard keyboard = InputSystem.AddDevice<Keyboard>();
+        Gamepad gamepad = InputSystem.AddDevice<Gamepad>();
+        Rig rig = CreateRig();
+        SkillInputSource source = rig.CreateSkillSource();
+        var asked = new List<int>();
+
+        Press(gamepad.buttonSouth);
+        Release(gamepad.buttonSouth);
+        asked.Add(source.TakeSlot());
+        Press(gamepad.dpad.left);
+        Release(gamepad.dpad.left);
+        bool isTurned = source.TakePageToggle();
+        source.IsOnOwnSkills = true;
+        foreach (ButtonControl button in new[] { gamepad.buttonSouth, gamepad.leftTrigger, gamepad.rightTrigger })
+        {
+            Press(button);
+            Release(button);
+            asked.Add(source.TakeSlot());
+        }
+
+        foreach (KeyControl key in new[] { keyboard.digit1Key, keyboard.digit6Key, keyboard.digit8Key })
+        {
+            Press(key);
+            Release(key);
+            asked.Add(source.TakeSlot());
+        }
+
+        Assert.That(isTurned, Is.True);
+        Assert.That(source.TakePageToggle(), Is.False, "taken once");
+        Assert.That(asked, Is.EqualTo(new[] { 1, 6, 7, 8, 1, 6, 8 }));
     }
 
     [Test]
@@ -657,6 +695,7 @@ public sealed class SharedIntentPathTests : InputTestFixture
         private readonly InputActionAsset m_actions;
         private CombatInputSource? m_combat;
         private WindowInputSource? m_windows;
+        private SkillInputSource? m_skills;
         private PointerMoveHandler m_handler;
         private uint m_tick;
 
@@ -750,6 +789,18 @@ public sealed class SharedIntentPathTests : InputTestFixture
             return m_combat;
         }
 
+        public SkillInputSource CreateSkillSource()
+        {
+            var slots = new List<InputAction>();
+            for (int slot = 1; slot <= SkillSlots.Count; slot++)
+            {
+                slots.Add(m_actions.FindAction($"Player/Slot{slot}", true));
+            }
+
+            m_skills = new SkillInputSource(slots, m_actions.FindAction("Player/SkillPage", true));
+            return m_skills;
+        }
+
         public WindowInputSource CreateWindowSource()
         {
             m_windows = new WindowInputSource(
@@ -813,6 +864,7 @@ public sealed class SharedIntentPathTests : InputTestFixture
             m_pointer.Dispose();
             m_combat?.Dispose();
             m_windows?.Dispose();
+            m_skills?.Dispose();
         }
 
         private static NavigationGrid CreateGrid()

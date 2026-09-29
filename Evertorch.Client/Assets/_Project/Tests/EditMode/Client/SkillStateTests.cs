@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Evertorch.Game;
 using Evertorch.Protocol;
 using NUnit.Framework;
@@ -124,6 +125,34 @@ public sealed class SkillStateTests
     {
         WorldPosition at = rig.World.Predictor.Position;
         return (float)Math.Sqrt(Math.Pow(at.X - (Start.X + 4f), 2) + Math.Pow(at.Z - Start.Z, 2));
+    }
+
+    private static SkillListEntry[] Entries(params string[] skills)
+    {
+        return skills
+            .Select(skill => new SkillListEntry(
+                new SkillDefinitionId(skill),
+                1.5f,
+                8,
+                0,
+                0,
+                0,
+                1,
+                1,
+                SkillListEntry.NoPrerequisite,
+                0))
+            .ToArray();
+    }
+
+    private static List<string> SlotsOf(IReadOnlyList<SkillListEntry> entries)
+    {
+        var skills = new List<string>();
+        for (int slot = 0; slot <= SkillSlots.Count + 1; slot++)
+        {
+            skills.Add(SkillSlots.TryGetSkill(entries, slot, out SkillDefinitionId skill) ? skill.Value : "-");
+        }
+
+        return skills;
     }
 
     // An ally skill goes to the selected player, walking within its range less the margin first (Gameplay Systems §9).
@@ -361,18 +390,35 @@ public sealed class SkillStateTests
         Assert.That(rig.Skill.SkillsSent, Is.EqualTo(1));
     }
 
+    // The slots follow the skill list: the base job's tree on 1 to 3 and a first job's own on 6 to 8 (Prototype
+    // Content §4).
     [Test]
-    public void SkillSlots_HoldStrikeFirstAidAndFocus_ByTheirKeys()
+    public void SkillSlots_FollowTheSkillList_TheBaseTreeOnOneToThree_AndTheOwnTreeOnSixToEight()
     {
-        var skills = new List<string>();
-        for (int slot = 0; slot <= SkillSlots.Count + 1; slot++)
-        {
-            skills.Add(SkillSlots.TryGetSkill(slot, out SkillDefinitionId skill) ? skill.Value : "-");
-        }
+        SkillListEntry[] adventurer = Entries("skill.strike", "skill.first_aid", "skill.focus");
+        SkillListEntry[] vanguard = Entries(
+            "skill.strike",
+            "skill.first_aid",
+            "skill.focus",
+            "skill.heavy_blow",
+            "skill.war_cry",
+            "skill.iron_guard");
 
         Assert.That(
-            skills,
-            Is.EqualTo(new[] { "-", "skill.strike", "skill.first_aid", "skill.focus", "-", "-", "-" }));
+            SlotsOf(adventurer),
+            Is.EqualTo(new[] { "-", "skill.strike", "skill.first_aid", "skill.focus", "-", "-", "-", "-", "-", "-" }));
+        Assert.That(
+            SlotsOf(vanguard),
+            Is.EqualTo(
+                new[]
+                {
+                    "-", "skill.strike", "skill.first_aid", "skill.focus", "-", "-", "skill.heavy_blow",
+                    "skill.war_cry", "skill.iron_guard", "-"
+                }));
+        Assert.That(
+            (SkillSlots.HasOwnSkills(adventurer), SkillSlots.HasOwnSkills(vanguard)),
+            Is.EqualTo((false, true)));
+        Assert.That(SkillSlots.Count, Is.EqualTo(8));
     }
 
     [Test]
@@ -389,7 +435,8 @@ public sealed class SkillStateTests
             Is.EqualTo(
                 new[]
                 {
-                    "-", "-", "-", "-", "item.consumable.minor_health", "item.consumable.minor_mana", "-"
+                    "-", "-", "-", "-", "item.consumable.minor_health", "item.consumable.minor_mana", "-", "-", "-",
+                    "-"
                 }));
     }
 

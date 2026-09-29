@@ -256,6 +256,48 @@ public sealed class AutoAttackStateTests
         Assert.That(direction, Is.EqualTo(default(WorldDirection)));
     }
 
+    // The server holds the next swing back through the player's after-cast delay too, so its ticks are no stall either
+    // (finding 3 of the Milestone 6 review): Heavy Blow's 800 ms would otherwise close in at a round trip above 200 ms.
+    [Test]
+    public void InRangeDuringOwnAfterCastDelay_IsNoStall_AndASecondWithoutASwingAfterItClosesIn()
+    {
+        WorldPosition start = ClientTestGrids.Center(1, 8);
+        var rig = new Rig(new WorldPosition(start.X + 1.2f, start.Y, start.Z));
+        var heavyBlow = new SkillDefinitionId("skill.heavy_blow");
+        rig.World.OnSkillList(
+            new SkillList(
+                new[]
+                {
+                    new SkillListEntry(heavyBlow, 1.5f, 12, 4000, 800, 0, 1, 5, SkillListEntry.NoPrerequisite, 0)
+                }));
+        rig.AutoAttack.Attack(Slime);
+        rig.World.OnSkillResolved(
+            new SkillResolved(ClientWorldFixture.LocalEntity, Slime, heavyBlow, SkillOutcome.Hit, 5, 1, 900));
+
+        // The delay lasts about 16 ticks, the last of which is free; then 20 more free ticks are one short of closing in.
+        int delayTicks = 0;
+        do
+        {
+            rig.World.Advance((float)TickSeconds);
+            rig.Tick();
+            delayTicks++;
+        } while (rig.World.AfterCastDelayRemaining > 0.0);
+
+        for (int index = 0; index < 20; index++)
+        {
+            rig.World.Advance((float)TickSeconds);
+            rig.Tick();
+        }
+
+        bool wasChasing = rig.Controller.IsChasing;
+        rig.World.Advance((float)TickSeconds);
+        rig.Tick();
+
+        Assert.That(delayTicks, Is.InRange(16, 17), "800 ms");
+        Assert.That(wasChasing, Is.False, "the after-cast delay held the swing back, so it was no stall");
+        Assert.That(rig.Controller.IsChasing, Is.True, "a second in range without a swing after it closes in");
+    }
+
     [Test]
     public void InRangeDuringOwnCast_IsNoStall_AndASecondWithoutASwingAfterItClosesIn()
     {

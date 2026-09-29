@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using Evertorch.Game;
+using Evertorch.Protocol;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -9,9 +11,11 @@ namespace Evertorch.Client
 {
 /// <summary>
 ///     The skill bar across the bottom centre while in the world (Prototype Content §2, §4): a button for each skill
-///     slot, with the slot's key or what is left of the skill's cooldown once the skill is learned and "Locked" until
-///     then, and for each potion slot while the inventory holds its potion, with how many and the key. It is text only,
-///     and a press asks for the slot exactly as its key does; a locked slot's press does nothing.
+///     slot the skill list fills, with the slot's key or what is left of the skill's cooldown once the skill is learned
+///     and "Locked" until then, and for each potion slot while the inventory holds its potion, with how many and the
+///     key. With a first job's own skills on 6 to 8 the slots narrow so all eight fit between the stick and the touch
+///     buttons, and the keys the gamepad's page reaches are shown in brackets. It is text only, and a press asks for
+///     the slot exactly as its key does; a locked slot's press does nothing.
 /// </summary>
 public sealed class SkillBar : MonoBehaviour
 {
@@ -30,6 +34,10 @@ public sealed class SkillBar : MonoBehaviour
     // Over the combat HUD and the stick, beside the status bar.
     private const int SortingOrder = 6;
     private const float SlotWidth = 112f;
+
+    // Eight slots of 70 with the padding and the spacing make 628, within the 636 between the stick and the buttons.
+    private const float NarrowSlotWidth = 70f;
+    private const int NarrowSlotCount = 6;
     private const float SlotHeight = 76f;
     private const float Spacing = 8f;
     private const int Padding = 6;
@@ -42,6 +50,7 @@ public sealed class SkillBar : MonoBehaviour
     private readonly Slot[] m_slots = new Slot[SkillSlots.Count];
     private GameClient? m_client;
     private GameObject? m_bar;
+    private float m_shownSlotWidth = SlotWidth;
 
     /// <summary>
     ///     How many times a slot's text was rewritten, which only a changed name, key, or tenth of a second may cause.
@@ -50,9 +59,18 @@ public sealed class SkillBar : MonoBehaviour
 
     public bool IsVisible => m_bar != null && m_bar.activeSelf;
 
+    /// <summary>
+    ///     The width of each slot's button, in canvas units.
+    /// </summary>
+    public float ShownSlotWidth => m_shownSlotWidth;
+
     private void Update()
     {
         ClientWorld? world = m_client != null ? m_client.World : null;
+        IReadOnlyList<SkillListEntry> skills = world != null ? world.Skills : Array.Empty<SkillListEntry>();
+        bool hasOwnSkills = SkillSlots.HasOwnSkills(skills);
+        bool isGamepadOnOwnSkills = m_client != null && m_client.IsGamepadOnOwnSkills;
+        FitSlots(hasOwnSkills ? NarrowSlotWidth : SlotWidth);
         bool isAnyShown = false;
         foreach (Slot slot in m_slots)
         {
@@ -68,10 +86,16 @@ public sealed class SkillBar : MonoBehaviour
             }
             else
             {
-                isShown = world != null;
+                SkillDefinitionId skill = default;
+                isShown = world != null && SkillSlots.TryGetSkill(skills, slot.Number, out skill);
                 if (isShown)
                 {
-                    Show(slot, world!.SkillLevel(slot.Skill) > 0, world.CooldownRemaining(slot.Skill));
+                    Assign(slot, skill);
+                    bool isOnPage = hasOwnSkills
+                        && (isGamepadOnOwnSkills
+                            ? slot.Number >= SkillSlots.FirstOwnSlot
+                            : slot.Number < SkillSlots.FirstOwnSlot);
+                    Show(slot, world!.SkillLevel(slot.Skill) > 0, world.CooldownRemaining(slot.Skill), isOnPage);
                 }
             }
 
@@ -93,11 +117,13 @@ public sealed class SkillBar : MonoBehaviour
     }
 
     /// <summary>
-    ///     The bar's width in canvas units while <paramref name="shownSlots" /> slots show.
+    ///     The bar's width in canvas units while <paramref name="shownSlots" /> slots show: a slot of 6 to 8 narrows them
+    ///     all.
     /// </summary>
     public static float WidthFor(int shownSlots)
     {
-        return 2 * Padding + shownSlots * SlotWidth + Math.Max(0, shownSlots - 1) * Spacing;
+        float slotWidth = shownSlots >= NarrowSlotCount ? NarrowSlotWidth : SlotWidth;
+        return 2 * Padding + shownSlots * slotWidth + Math.Max(0, shownSlots - 1) * Spacing;
     }
 
     /// <summary>
@@ -130,23 +156,53 @@ public sealed class SkillBar : MonoBehaviour
         TextChanges++;
     }
 
+    // A slot's skill follows the skill list; a new one is written out afresh.
+    private static void Assign(Slot slot, SkillDefinitionId skill)
+    {
+        if (slot.Skill != skill)
+        {
+            slot.Skill = skill;
+            slot.ShownName = null;
+        }
+    }
+
+    private void FitSlots(float width)
+    {
+        if (width == m_shownSlotWidth)
+        {
+            return;
+        }
+
+        m_shownSlotWidth = width;
+        foreach (Slot slot in m_slots)
+        {
+            slot.Button.GetComponent<LayoutElement>().preferredWidth = width;
+        }
+    }
+
     // Tenths of a second, rounded up, so a cooldown never reads 0.0 while it lasts.
-    private void Show(Slot slot, bool isLearned, double cooldownSeconds)
+    private void Show(Slot slot, bool isLearned, double cooldownSeconds, bool isOnPage)
     {
         int tenths = isLearned ? (int)Math.Ceiling(cooldownSeconds * 10.0) : LockedTenths;
         string name = BuildMessages.SkillName(m_client != null ? m_client.Content : null, slot.Skill);
-        if (tenths == slot.ShownTenths && string.Equals(name, slot.ShownName, StringComparison.Ordinal))
+        if (tenths == slot.ShownTenths
+            && isOnPage == slot.IsShownOnPage
+            && string.Equals(name, slot.ShownName, StringComparison.Ordinal))
         {
             return;
         }
 
         slot.ShownTenths = tenths;
         slot.ShownName = name;
+        slot.IsShownOnPage = isOnPage;
+        string key = slot.Number.ToString(CultureInfo.InvariantCulture);
         string detail = !isLearned
             ? "Locked"
             : tenths > 0
                 ? (tenths / 10.0).ToString("0.0", CultureInfo.InvariantCulture) + " s"
-                : slot.Number.ToString(CultureInfo.InvariantCulture);
+                : isOnPage
+                    ? $"[{key}]"
+                    : key;
         slot.Label.text = $"{name}\n{detail}";
         slot.Button.GetComponent<Button>().interactable = isLearned;
         TextChanges++;
@@ -178,7 +234,6 @@ public sealed class SkillBar : MonoBehaviour
         for (int index = 0; index < m_slots.Length; index++)
         {
             int number = index + 1;
-            SkillSlots.TryGetSkill(number, out SkillDefinitionId skill);
             SkillSlots.TryGetItem(number, out ItemDefinitionId item);
             GameObject button = Ui.CreateButton($"Slot {number}", m_bar.transform, () => UseSlot(number));
             button.GetComponent<LayoutElement>().preferredWidth = SlotWidth;
@@ -189,7 +244,7 @@ public sealed class SkillBar : MonoBehaviour
             label.enableAutoSizing = true;
             label.fontSizeMin = 12f;
             label.fontSizeMax = label.fontSize;
-            m_slots[index] = new Slot(number, skill, item, button, label);
+            m_slots[index] = new Slot(number, item, button, label);
         }
 
         m_bar.SetActive(false);
@@ -205,10 +260,9 @@ public sealed class SkillBar : MonoBehaviour
 
     private sealed class Slot
     {
-        public Slot(int number, SkillDefinitionId skill, ItemDefinitionId item, GameObject button, TMP_Text label)
+        public Slot(int number, ItemDefinitionId item, GameObject button, TMP_Text label)
         {
             Number = number;
-            Skill = skill;
             Item = item;
             Button = button;
             Label = label;
@@ -216,7 +270,8 @@ public sealed class SkillBar : MonoBehaviour
 
         public int Number { get; }
 
-        public SkillDefinitionId Skill { get; }
+        /// <summary>The skill the skill list puts in the slot; default for a potion's slot.</summary>
+        public SkillDefinitionId Skill { get; set; }
 
         /// <summary>The slot's potion; default for a skill's slot.</summary>
         public ItemDefinitionId Item { get; }
@@ -231,6 +286,9 @@ public sealed class SkillBar : MonoBehaviour
         public int ShownTenths { get; set; } = -1;
 
         public string? ShownName { get; set; }
+
+        /// <summary>Whether the key shown is one the gamepad's page reaches.</summary>
+        public bool IsShownOnPage { get; set; }
     }
 }
 }

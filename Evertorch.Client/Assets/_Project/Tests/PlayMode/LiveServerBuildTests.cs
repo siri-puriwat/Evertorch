@@ -36,6 +36,7 @@ public sealed class LiveServerBuildTests : InputTestFixture
     private const string ChangeClientName = "LiveBuildFive";
     private const string MendClientName = "LiveBuildSix";
     private const string MendedName = "LiveBuildSeven";
+    private const string BarClientName = "LiveBuildEight";
     private const string GuildmasterPrefab = "npc_guildmaster";
     private const float StartTimeoutSeconds = 30f;
     private const float FightTimeoutSeconds = 60f;
@@ -441,6 +442,71 @@ public sealed class LiveServerBuildTests : InputTestFixture
             "the healed player heard it");
         Assert.That(world.Target, Is.EqualTo(healed), "still selected");
         Assert.That(other.MalformedMessages + other.UnexpectedMessages, Is.Zero, "the healed player's traffic");
+    }
+
+    // A Vanguard with Heavy Blow 1 sees eight narrow slots, its own tree on 6 to 8; D-pad left turns the gamepad's page,
+    // which the brackets follow, and Tab then South cast Heavy Blow from slot 6 on a slime (Prototype Content §2, §4).
+    [UnityTest]
+    [Timeout(TestTimeoutMs)]
+    public IEnumerator SkillBar_OfAVanguard_PagesTheGamepadToSlotSix_AndCastsHeavyBlowFromIt()
+    {
+        string actionsPath = RequirePrerequisites();
+        yield return StartDatabaseAndServer();
+        LiveServer server = m_server!;
+        LiveDatabase database = m_database!;
+        Keyboard keyboard = InputSystem.AddDevice<Keyboard>();
+        Gamepad gamepad = InputSystem.AddDevice<Gamepad>();
+        GameClient client = CreateClient(actionsPath);
+        yield return EnterByName(
+            client,
+            BarClientName,
+            () => database.SeedJob(BarClientName, "job.vanguard", 1, ("skill.heavy_blow", 1)));
+        ClientWorld world = client.World!;
+        SkillBar bar = client.GetComponentsInChildren<SkillBar>(true).Single();
+        yield return WaitUntil(() => SlotLabel(bar, 6).text == "Heavy Blow\n6", StartTimeoutSeconds);
+
+        Assert.That(SlotLabel(bar, 6).text, Is.EqualTo("Heavy Blow\n6"), $"{client.Status} {server.JoinOutput()}");
+        Assert.That(
+            new[] { 1, 7, 8 }.Select(slot => SlotLabel(bar, slot).text),
+            Is.EqualTo(new[] { "Strike\nLocked", "War Cry\nLocked", "Iron Guard\nLocked" }));
+        Assert.That(bar.ShownSlotWidth, Is.EqualTo(70f), "eight slots narrow");
+
+        yield return Tap(gamepad.dpad.left);
+        yield return WaitUntil(() => SlotLabel(bar, 6).text == "Heavy Blow\n[6]", 2f);
+        Assert.That(client.IsGamepadOnOwnSkills, Is.True, "D-pad left turned the page");
+        Assert.That(SlotLabel(bar, 6).text, Is.EqualTo("Heavy Blow\n[6]"), "the bar shows the page");
+
+        SkillResolved? blow = null;
+        world.SkillResolvedReceived += resolved =>
+            blow = resolved.Caster == world.LocalEntity && resolved.Skill.Value == "skill.heavy_blow" ? resolved : blow;
+        float deadline = Time.realtimeSinceStartup + FightTimeoutSeconds;
+        while (blow == null && Time.realtimeSinceStartup < deadline)
+        {
+            if (world.Target == default)
+            {
+                yield return Tap(keyboard.tabKey);
+                yield return WaitUntil(() => world.Target != default, 2f);
+                if (world.Target != default)
+                {
+                    yield return Tap(gamepad.buttonSouth);
+                }
+            }
+            else
+            {
+                yield return null;
+            }
+        }
+
+        Assert.That(blow, Is.Not.Null,
+            $"South on the second page cast Heavy Blow: {world.LastRejection} {client.Status}");
+        Assert.That(blow!.Outcome, Is.Not.EqualTo(SkillOutcome.Healed));
+    }
+
+    private static TMP_Text SlotLabel(SkillBar bar, int slot)
+    {
+        return bar.GetComponentsInChildren<Button>(true)
+            .Single(button => button.name == $"Slot {slot}")
+            .GetComponentInChildren<TMP_Text>(true);
     }
 
     private static string LocalBodyKey(GameClient client)

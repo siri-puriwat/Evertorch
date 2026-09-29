@@ -46,6 +46,7 @@ public sealed class TargetFrame : MonoBehaviour
     private bool m_shownDead;
     private RectTransform? m_panelRect;
     private bool m_isShownBeside;
+    private bool m_isShownBesideTouch;
 
     /// <summary>
     ///     How many times a label was rewritten, which only a changed value may cause.
@@ -71,7 +72,7 @@ public sealed class TargetFrame : MonoBehaviour
             return;
         }
 
-        PlaceBeside(m_client.IsSideWindowOpen);
+        PlaceBeside(m_client.IsSideWindowOpen, m_client.Touch != null && m_client.Touch.IsVisible);
         if (target.Kind == EntityKind.Player)
         {
             ShowPlayer(BuildMessages.JobName(m_client.Content, new JobDefinitionId(target.DefinitionId)));
@@ -107,13 +108,18 @@ public sealed class TargetFrame : MonoBehaviour
     }
 
     /// <summary>
-    ///     The frame's left and right edges in canvas units: centred, or just right of the windows at the top left.
+    ///     The frame's left and right edges in canvas units: centred, or just right of the windows at the top left, which
+    ///     stand further right while the touch controls show, and then short of the inventory window's place.
     /// </summary>
-    public static Vector2 XRangeFor(bool isBesideAWindow)
+    public static Vector2 XRangeFor(bool isBesideAWindow, bool isTouchShown = false)
     {
-        return isBesideAWindow
-            ? new Vector2(NpcWindow.Right + Margin, NpcWindow.Right + Margin + BesideWidth)
-            : new Vector2((ClientUI.CanvasWidth - Width) / 2f, (ClientUI.CanvasWidth + Width) / 2f);
+        if (!isBesideAWindow)
+        {
+            return new Vector2((ClientUI.CanvasWidth - Width) / 2f, (ClientUI.CanvasWidth + Width) / 2f);
+        }
+
+        float left = NpcWindow.RightFor(isTouchShown) + Margin;
+        return new Vector2(left, Math.Min(left + BesideWidth, InventoryWindow.Left - Margin));
     }
 
     public static TargetFrame Create(GameClient client)
@@ -206,15 +212,16 @@ public sealed class TargetFrame : MonoBehaviour
                 : target.DefinitionId;
     }
 
-    private void PlaceBeside(bool isBeside)
+    private void PlaceBeside(bool isBeside, bool isTouchShown)
     {
-        if (isBeside == m_isShownBeside)
+        if (isBeside == m_isShownBeside && isTouchShown == m_isShownBesideTouch)
         {
             return;
         }
 
         m_isShownBeside = isBeside;
-        Vector2 range = XRangeFor(isBeside);
+        m_isShownBesideTouch = isTouchShown;
+        Vector2 range = XRangeFor(isBeside, isTouchShown);
         m_panelRect!.sizeDelta = new Vector2(range.y - range.x, m_panelRect.sizeDelta.y);
         m_panelRect.anchoredPosition = new Vector2(
             (range.x + range.y) / 2f - ClientUI.CanvasWidth / 2f,

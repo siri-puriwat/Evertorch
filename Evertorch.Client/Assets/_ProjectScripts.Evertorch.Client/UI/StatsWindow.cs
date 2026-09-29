@@ -50,6 +50,7 @@ public sealed class StatsWindow : MonoBehaviour
     private GameObject? m_list;
     private LayoutElement? m_listLayout;
     private float m_listHeight = -1f;
+    private float m_left = Margin;
     private ClientWorld? m_world;
     private CharacterSheet? m_shownSheet;
     private bool m_isShown;
@@ -102,7 +103,7 @@ public sealed class StatsWindow : MonoBehaviour
     {
         float top = canvasHeight - (StatusBarHeight + Margin);
         float height = Chrome + ListHeightFor(canvasHeight, isTouchShown);
-        return new Rect(Margin, top - height, Width, height);
+        return new Rect(NpcWindow.LeftFor(isTouchShown), top - height, Width, height);
     }
 
     /// <summary>
@@ -217,11 +218,24 @@ public sealed class StatsWindow : MonoBehaviour
     {
         float canvasHeight = ((RectTransform)transform).rect.height;
         bool isTouchShown = m_client!.Touch != null && m_client.Touch.IsVisible;
+        PlaceLeft(isTouchShown);
         float height = ListHeightFor(canvasHeight, isTouchShown);
         if (height != m_listHeight)
         {
             m_listHeight = height;
             m_listLayout!.preferredHeight = height;
+        }
+    }
+
+    // Beside the touch window buttons while they show, as the NPC window is (finding C2 of the Milestone 9 review).
+    private void PlaceLeft(bool isTouchShown)
+    {
+        float left = NpcWindow.LeftFor(isTouchShown);
+        if (left != m_left)
+        {
+            m_left = left;
+            var panel = (RectTransform)m_panel!.transform;
+            panel.anchoredPosition = new Vector2(left, panel.anchoredPosition.y);
         }
     }
 

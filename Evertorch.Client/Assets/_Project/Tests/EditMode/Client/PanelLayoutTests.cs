@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using NUnit.Framework;
 using UnityEngine;
 
@@ -53,6 +54,8 @@ public sealed class PanelLayoutTests
             FeedbackLines.Width,
             LinesHeight);
         Rect stick = TouchControls.StickBounds;
+        Assert.That(bar.width, Is.EqualTo(628f), "eight slots of 70 with the padding and the spacing");
+        Assert.That(SkillBar.WidthFor(5), Is.EqualTo(604f), "five keep their 112");
         Rect column = TouchControls.ButtonColumnBounds(width);
 
         Assert.That(bar.Overlaps(stick), Is.False, "the bar and the stick");
@@ -154,6 +157,37 @@ public sealed class PanelLayoutTests
         Assert.That(withTouch.Overlaps(lines), Is.False, "clear of the feedback lines");
         Assert.That(withTouch.Overlaps(TouchControls.StickBounds), Is.False, "clear of the stick");
         Assert.That(withTouch.height, Is.GreaterThanOrEqualTo(56f + 2 * 30f), "two rows show on the shortest screen");
+    }
+
+    // While the touch controls show, the windows at the top left stand beside the Dev, Stats, and Skills buttons, so a
+    // tap on those never lands on a window, and the target frame beside them still stops short of the inventory
+    // window (finding C2 of the Milestone 9 review).
+    [TestCase(486f)]
+    [TestCase(607.5f)]
+    [TestCase(1920f)]
+    public void SideWindows_WhileTheTouchControlsShow_StandBesideTheWindowButtons(float canvasHeight)
+    {
+        Rect[] buttons =
+        {
+            TouchControls.StatsButtonBounds(canvasHeight), TouchControls.SkillsButtonBounds(canvasHeight),
+            TouchControls.OverlayToggleBounds(canvasHeight)
+        };
+        Rect[] windows =
+        {
+            NpcWindow.BoundsFor(canvasHeight, 100, true), StatsWindow.BoundsFor(canvasHeight, true),
+            SkillsWindow.BoundsFor(canvasHeight, 11, true)
+        };
+        Vector2 beside = TargetFrame.XRangeFor(true, true);
+
+        Assert.That(
+            windows.SelectMany(window => buttons.Where(window.Overlaps)),
+            Is.Empty,
+            "no window over a button");
+        Assert.That(windows.Select(window => window.xMax), Is.All.EqualTo(NpcWindow.RightFor(true)));
+        Assert.That(NpcWindow.BoundsFor(canvasHeight, 100, false).xMin, Is.EqualTo(8f), "without them, at the margin");
+        Assert.That(beside.x, Is.GreaterThan(NpcWindow.RightFor(true)), "the frame clears the windows");
+        Assert.That(beside.y, Is.LessThan(InventoryWindow.Left), "and the inventory window");
+        Assert.That(beside.y - beside.x, Is.GreaterThanOrEqualTo(200f), "still wide enough for a name and a bar");
     }
 
     [Test]
