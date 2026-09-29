@@ -213,6 +213,56 @@ public sealed class ContentProjectionTests
         }
     }
 
+    // The first jobs give the client package only presentation (Milestone 10 verification): each of the six skills
+    // its name, target type, icon, and description, `ally` for Mend alone, and a projectile for Arcane Bolt alone.
+    [Test]
+    public void Build_ForRepositoryContent_GivesTheFirstJobsSkillsOnlyTheirPresentation()
+    {
+        string[] firstJobSkills =
+        {
+            "skill.heavy_blow", "skill.war_cry", "skill.iron_guard", "skill.arcane_bolt", "skill.clarity",
+            "skill.mend"
+        };
+        using (var workspace = new ContentWorkspace())
+        {
+            string skills = BuildRepositoryClientFiles(workspace)
+                .First(file => Path.GetFileName(file) == "skills.json");
+            using (var document = JsonDocument.Parse(File.ReadAllBytes(skills)))
+            {
+                JsonElement[] definitions = document.RootElement.GetProperty("definitions")
+                    .EnumerateArray()
+                    .Where(definition => firstJobSkills.Contains(definition.GetProperty("id").GetString()))
+                    .ToArray();
+
+                Assert.That(definitions, Has.Length.EqualTo(6));
+                foreach (JsonElement definition in definitions)
+                {
+                    string id = definition.GetProperty("id").GetString()!;
+                    Assert.That(
+                        definition.EnumerateObject().Select(property => property.Name),
+                        Is.SubsetOf(new[] { "id", "displayName", "targetType", "icon", "description", "projectile" }),
+                        id);
+                    Assert.That(definition.GetProperty("description").GetString(), Is.Not.Empty, id);
+                    Assert.That(definition.GetProperty("icon").GetString(), Is.EqualTo(id.Replace('.', '_')), id);
+                }
+
+                Assert.That(
+                    definitions.Select(definition => (definition.GetProperty("id").GetString(),
+                        definition.GetProperty("targetType").GetString(),
+                        definition.TryGetProperty("projectile", out JsonElement projectile)
+                            ? projectile.GetString()
+                            : "-")),
+                    Is.EquivalentTo(
+                        new[]
+                        {
+                            ("skill.heavy_blow", "enemy", "-"), ("skill.war_cry", "self", "-"),
+                            ("skill.iron_guard", "self", "-"), ("skill.arcane_bolt", "enemy", "projectile_arcane_bolt"),
+                            ("skill.clarity", "self", "-"), ("skill.mend", "ally", "-")
+                        }));
+            }
+        }
+    }
+
     [Test]
     public void Build_ForRepositoryContent_KeepsServerOnlyFieldNamesOutOfEveryClientFile()
     {

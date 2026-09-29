@@ -14,7 +14,8 @@ namespace Evertorch.Server.Tests
 ///     nothing. The observer hears what anyone near sees, and nothing of the actor's own target, health, progress,
 ///     skills, status effects, inventory, refusals, or new map. Milestone 7 adds the town: the actor's trades,
 ///     quest, and reward reach the observer as nothing more. Milestone 9 adds the build: the actor's raises, learned
-///     levels, and reset reach the observer as nothing at all.
+///     levels, and reset reach the observer as nothing at all. Milestone 10 adds the first jobs: another's change
+///     reaches the observer as its new body alone, and a Mend on the observer as the heal and its own health.
 /// </summary>
 [TestFixture]
 public sealed class ObserverOutputTests
@@ -149,6 +150,72 @@ public sealed class ObserverOutputTests
             observerHeard,
             Has.None.EqualTo(MessageOpcode.CharacterSheet).And.None.EqualTo(MessageOpcode.SkillList),
             "never another's sheet or skills");
+    }
+
+    // The first jobs (Milestone 10 verification): the actor, at the Adventurer's job level 10, becomes an Arcanist at
+    // the Guildmaster, selects the observer, and Mends it. The actor hears its sheet with the job, its skill list, and
+    // its selection; the observer hears the actor's new body as one replacement spawn and nothing of its sheet, its
+    // skills, or its selection, and of the heal what anyone near sees and its own health.
+    [Test]
+    public void AnotherPlayersJobChangeAndMend_ReachAnObserverAsItsNewBodyAndTheHealAlone()
+    {
+        var server = new TestServer(withNpcs: true, withAdventurerBuild: false);
+        ConnectionId actor = server.EnterWorld(Actor);
+        ConnectionId observer = server.EnterWorld(Observer);
+        server.PlayerOf(actor).JobLevel = 10;
+        NpcEntity guildmaster = server.NpcOf(Guildmaster);
+        server.Place(actor, guildmaster.Position.X + 2f, guildmaster.Position.Z);
+        server.Place(observer, guildmaster.Position.X + 3f, guildmaster.Position.Z);
+        server.Tick(2);
+        server.Transport.ClearSent();
+
+        server.SendChangeJob(actor, guildmaster.Id, "job.arcanist", 1);
+        Settle(server, actor);
+        server.Tick(2);
+        PlayerEntity arcanist = server.PlayerOf(actor);
+        PlayerEntity healed = server.PlayerOf(observer);
+        arcanist.SetSkillLevel(new SkillDefinitionId("skill.mend"), 1);
+        healed.CurrentHealth = 10;
+        server.SendTarget(actor, healed.Id);
+        server.Tick();
+        Cast(server, actor, "skill.mend", healed.Id, 2);
+
+        MessageOpcode[] actorHeard = server.Transport.SentTo(actor).Select(message => message.Opcode).ToArray();
+        MessageOpcode[] observerHeard = server.Transport.SentTo(observer).Select(message => message.Opcode).ToArray();
+        EntitySpawn[] spawns = Read(
+                server,
+                observer,
+                MessageOpcode.EntitySpawn,
+                payload => EntitySpawn.TryRead(payload, out EntitySpawn? spawn) ? spawn : null)
+            .Where(spawn => spawn.Entity == arcanist.Id)
+            .ToArray();
+        CharacterSheet sheet = Read(
+                server,
+                actor,
+                MessageOpcode.CharacterSheet,
+                payload => CharacterSheet.TryRead(payload, out CharacterSheet? read) ? read : null)
+            .Last();
+        Assert.That(arcanist.Job.Value, Is.EqualTo("job.arcanist"), "the change went through");
+        Assert.That(
+            actorHeard,
+            Is.SupersetOf(new[] { MessageOpcode.CharacterSheet, MessageOpcode.SkillList, MessageOpcode.TargetChanged }),
+            "the actor was told of its change and its selection");
+        Assert.That(sheet.Job.Value, Is.EqualTo("job.arcanist"));
+        Assert.That(
+            spawns.Select(spawn => (spawn.Kind, spawn.DefinitionId, spawn.StateFlags)),
+            Is.EqualTo(new[] { (EntityKind.Player, "job.arcanist", EntityStateFlags.None) }),
+            "one replacement spawn, the new job");
+        Assert.That(
+            observerHeard.Distinct(),
+            Is.SubsetOf(WhatAnyoneNearSees.Append(MessageOpcode.CharacterHealth)),
+            "what anyone near sees, and its own health");
+        Assert.That(
+            observerHeard,
+            Has.None.EqualTo(MessageOpcode.CharacterSheet)
+                .And.None.EqualTo(MessageOpcode.SkillList)
+                .And.None.EqualTo(MessageOpcode.TargetChanged),
+            "never another's sheet, skills, or selection");
+        Assert.That(healed.CurrentHealth, Is.GreaterThanOrEqualTo(50), "Mend 1 on the observer");
     }
 
     [Test]
