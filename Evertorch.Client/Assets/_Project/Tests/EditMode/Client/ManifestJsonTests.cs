@@ -139,6 +139,17 @@ public sealed class ManifestJsonTests
     }
 
     [Test]
+    public void ReadManifest_ForAMonsterOutsideAnyFolder_Throws()
+    {
+        string loose = Manifest.Replace(
+            "\"file\": \"Monsters/monster_a/monster_a.fbx\"",
+            "\"file\": \"monster_a.fbx\"");
+
+        Assert.That(loose, Does.Contain("\"file\": \"monster_a.fbx\""));
+        Assert.Throws<FormatException>(() => ArtManifest.Parse(loose));
+    }
+
+    [Test]
     public void ReadManifest_ForAMoveWithoutASpeedTheArtBriefGives_Throws()
     {
         string unknown = Manifest.Replace(@"""calibrationSpeedMetresPerSecond"": 4,", string.Empty);
@@ -155,6 +166,27 @@ public sealed class ManifestJsonTests
         var manifest = ArtManifest.Parse(crawler);
 
         Assert.That(manifest.Clips[0].CalibrationSpeed, Is.EqualTo(4.8f));
+    }
+
+    // A monster's clips belong to the deepest monster folder that holds them, and a monster whose model lies in no
+    // folder of its own claims no clip.
+    [Test]
+    public void ReadManifest_ForNestedMonsterFolders_GivesAClipToTheDeepest()
+    {
+        string nested = Manifest.Replace(
+                "      \"pickRadius\": 0.8\n    }\n  ],",
+                "      \"pickRadius\": 0.8\n    },\n    {\n      \"key\": \"monster_b\",\n"
+                + "      \"kind\": \"monster\",\n      \"file\": \"Monsters/monster_a/monster_b/monster_b.fbx\",\n"
+                + "      \"triangles\": 100,\n      \"bones\": 3,\n      \"materials\": [\"B\"],\n"
+                + "      \"textures\": [],\n      \"anchors\": {},\n      \"pickRadius\": 0.5\n    }\n  ],")
+            .Replace(
+                "Monsters/monster_a/Animations/monster_a@attack.fbx",
+                "Monsters/monster_a/monster_b/Animations/monster_b@attack.fbx");
+
+        var manifest = ArtManifest.Parse(nested);
+
+        Assert.That(manifest.Assets, Has.Count.EqualTo(2));
+        Assert.That(manifest.Clips.Select(clip => clip.Rig), Is.EqualTo(new[] { "monster_a", "monster_b" }));
     }
 
     [Test]

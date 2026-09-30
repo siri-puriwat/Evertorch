@@ -105,9 +105,14 @@ public sealed class ProjectilePresenter : IDisposable
 
             EntityView? from = ViewOf(flight.Source, local, remotes);
             EntityView? to = ViewOf(flight.Target, local, remotes);
-            ProjectileFlight timing = flight.IsAttack && from != null && from.TryGetAttackRelease(out double share)
-                ? flight.Timing.Released(share)
-                : flight.Timing;
+            // The release is read until the launch and kept from then on, so a body that finishes loading mid-flight
+            // does not move a projectile already in the air.
+            ProjectileFlight timing = flight.View == null
+                && flight.IsAttack
+                && from != null
+                && from.TryGetAttackRelease(out double share)
+                    ? flight.Timing.Released(share)
+                    : flight.Timing;
             if (from == null || to == null || !timing.TryGetProgress(now, out float progress))
             {
                 flight.Hide();
@@ -117,6 +122,7 @@ public sealed class ProjectilePresenter : IDisposable
             if (flight.View == null)
             {
                 flight.View = CreateView(flight.Key);
+                flight.Timing = timing;
                 Launched++;
             }
 
@@ -285,7 +291,7 @@ public sealed class ProjectilePresenter : IDisposable
 
         public EntityId Target { get; }
 
-        public ProjectileFlight Timing { get; }
+        public ProjectileFlight Timing { get; set; }
 
         /// <summary>
         ///     A basic attack's, which leaves at its thrower's release marker when its clip has one.

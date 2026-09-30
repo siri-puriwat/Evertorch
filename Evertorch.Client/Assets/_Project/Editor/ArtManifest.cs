@@ -122,14 +122,16 @@ public sealed class ArtManifest
     }
 
     // A monster's clips lie in its own folder; ArtDelivery-02 names their rig apart from the monster's key, so the folder
-    // decides which monster's body they drive.
+    // decides which monster's body they drive: the deepest that holds the clip, and never a model outside any folder.
     private static string? MonsterOf(string clipFile, IEnumerable<ArtManifestAsset> assets)
     {
         return assets
-            .Where(asset => asset.Kind == "monster")
-            .FirstOrDefault(asset => clipFile.StartsWith(asset.File.Substring(0, asset.File.LastIndexOf('/') + 1),
-                StringComparison.Ordinal))
-            ?.Key;
+            .Where(asset => asset.Kind == "monster" && asset.File.Contains("/"))
+            .Select(asset => (asset.Key, Folder: asset.File.Substring(0, asset.File.LastIndexOf('/') + 1)))
+            .Where(monster => clipFile.StartsWith(monster.Folder, StringComparison.Ordinal))
+            .OrderByDescending(monster => monster.Folder.Length)
+            .Select(monster => monster.Key)
+            .FirstOrDefault();
     }
 
     // The art brief's calibration speeds (§7), for a run or move whose manifest records none: the body's walk measured

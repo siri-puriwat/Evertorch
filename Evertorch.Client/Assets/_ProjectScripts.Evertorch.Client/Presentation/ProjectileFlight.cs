@@ -4,7 +4,8 @@ namespace Evertorch.Client
 {
 /// <summary>
 ///     When a projectile flies (Gameplay Systems §8): it arrives at the server's impact or resolution, and it is in the
-///     air for the last <see cref="MaxSeconds" /> before, or from the start when the attack or cast is shorter.
+///     air for the last <see cref="MaxSeconds" /> before, or from the start when the attack or cast is shorter; a
+///     thrower whose clip marks its release throws it there instead (<see cref="Released" />), however long before.
 /// </summary>
 public readonly struct ProjectileFlight
 {

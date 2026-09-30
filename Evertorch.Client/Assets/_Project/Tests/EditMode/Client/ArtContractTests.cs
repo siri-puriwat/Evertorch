@@ -286,6 +286,15 @@ public sealed class ArtContractTests
                 (animator.applyRootMotion, animator.runtimeAnimatorController == null),
                 Is.EqualTo((false, true)),
                 $"{path}: no root motion, no controller");
+            if (asset.Kind == "humanoid")
+            {
+                Avatar? avatar = animator.avatar;
+                Assert.That(
+                    avatar != null && avatar.isValid && avatar.isHuman,
+                    Is.True,
+                    $"{path}: a humanoid avatar its clips can move");
+            }
+
             Assert.That(prefab.TryGetComponent(out BodyAnimator bodyAnimator), Is.True, $"{path}: its BodyAnimator");
             string rig = asset.Kind == "humanoid" ? ArtPaths.HumanoidRig : asset.Key;
             Assert.That(
@@ -300,9 +309,13 @@ public sealed class ArtContractTests
         Assert.That(anchor, Is.Not.Null, $"{asset.Key}: {name}");
         Vector3 offset = prefab.transform.InverseTransformPoint(anchor!.position);
         Vector3 expected = asset.Anchors[name];
-        // ArtDelivery-02's manifest writes an anchor's sideways offset with its sign flipped, by at most 3.4 mm; the
-        // game reads the model's own anchor, so only a displacement that could show is refused.
-        Assert.That(Vector3.Distance(offset, expected), Is.LessThan(0.005f), $"{asset.Key}: {name} at {expected}");
+        // ArtDelivery-02's manifest writes an anchor's sideways offset with its sign flipped (by at most 3.4 mm); the
+        // game reads the model's own anchor, so either sign is taken, to the millimetre.
+        var mirrored = new Vector3(-expected.x, expected.y, expected.z);
+        Assert.That(
+            Mathf.Min(Vector3.Distance(offset, expected), Vector3.Distance(offset, mirrored)),
+            Is.LessThan(0.001f),
+            $"{asset.Key}: {name} at {expected}");
     }
 
     private static void AssertWeapon(ArtManifestAsset asset)
