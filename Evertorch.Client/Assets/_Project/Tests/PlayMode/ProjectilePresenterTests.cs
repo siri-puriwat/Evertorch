@@ -37,8 +37,15 @@ public sealed class ProjectilePresenterTests
         TimeSpan.FromMilliseconds(900),
         TimeSpan.FromMilliseconds(900));
 
+    // Interval 3.6 s, impact 1.8 s after the start.
+    private static readonly AttackTiming SlowTiming = new(
+        TimeSpan.FromMilliseconds(3600),
+        TimeSpan.FromMilliseconds(1200),
+        TimeSpan.FromMilliseconds(1800),
+        TimeSpan.FromMilliseconds(900));
+
     private readonly List<Object> m_created = new();
-    private readonly EntityViewCatalog m_catalog = new();
+    private EntityViewCatalog m_catalog = new();
     private ProjectilePresenter? m_presenter;
 
     [TearDown]
@@ -60,7 +67,10 @@ public sealed class ProjectilePresenterTests
         }
 
         m_created.Clear();
+
+        // One fixture runs every test, and a disposed catalog loads nothing more.
         m_catalog.Dispose();
+        m_catalog = new EntityViewCatalog();
     }
 
     private static GameObject[] Projectiles()
@@ -243,6 +253,38 @@ public sealed class ProjectilePresenterTests
         Assert.That(positions.Select(position => position.z), Has.Some.GreaterThan(2.5f), "one from the other player");
         Assert.That(presenter.Launched, Is.EqualTo(2));
         Assert.That(presenter.Pending, Is.Zero, "both landed at the resolution");
+    }
+
+    // The delivered wisp's attack clip marks its release at frame 13 of 24: its spark, in a swing from 0.1 s that lands
+    // at 1.9 s, leaves at 1.075 s rather than at 1.5 s, the last four tenths, and still lands at the impact (Gameplay
+    // Systems §8). The monsters are drawn 0.1 s behind the server time the world has reached.
+    [UnityTest]
+    public IEnumerator Attack_ByTheDeliveredWisp_LeavesAtItsClipsRelease()
+    {
+        ClientWorld world = CreateWorld();
+        Dictionary<EntityId, EntityView> remotes = CreateViews(out EntityView local);
+        var wisp = EntityView.Create("Delivered wisp", "monster_spark_wisp", m_catalog, null);
+        m_created.Add(wisp.gameObject);
+        wisp.transform.position = new Vector3(6.5f, 0f, 2.5f);
+        float deadline = Time.realtimeSinceStartup + 10f;
+        while (!wisp.HasBody && Time.realtimeSinceStartup < deadline)
+        {
+            yield return null;
+        }
+
+        remotes[Wisp] = wisp;
+        ProjectilePresenter presenter = CreatePresenter(world);
+
+        world.OnAttackStarted(new AttackStarted(Wisp, Local, 2, SlowTiming));
+        world.Advance(1.3f);
+        presenter.Present(local, remotes);
+        int launchedAtRelease = presenter.Launched;
+        world.Advance(0.8f);
+        presenter.Present(local, remotes);
+
+        Assert.That(wisp.HasClips, Is.True, "the delivered wisp");
+        Assert.That(launchedAtRelease, Is.EqualTo(1), "in the air at 1.2 s, after its release at 1.075 s");
+        Assert.That(presenter.Pending, Is.Zero, "it landed at the impact");
     }
 
     // The wisp's Spark Bolt names no projectile, so the wisp's own spark flies, and the wisp's release is timed by it;

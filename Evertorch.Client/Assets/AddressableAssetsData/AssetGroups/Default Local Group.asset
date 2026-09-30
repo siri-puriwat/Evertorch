@@ -15,11 +15,6 @@ MonoBehaviour:
   m_GroupName: Default Local Group
   m_GUID: 1ec1c596f20b4e54984a63d9557e2b1a
   m_SerializeEntries:
-  - m_GUID: 003ee851ef769dd4e8797fce61b80f1a
-    m_Address: monster_forest_crawler
-    m_ReadOnly: 0
-    m_SerializedLabels: []
-    FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 0502bb26f9301534a9ceda6ed1081d92
     m_Address: pickup_minor_mana
     m_ReadOnly: 0
@@ -35,18 +30,13 @@ MonoBehaviour:
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
-  - m_GUID: 1307bca8995fdd7418d2abd6d2e26a68
-    m_Address: npc_gate_warden
-    m_ReadOnly: 0
-    m_SerializedLabels: []
-    FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 181abfa4c4b28ae47afaffc821bd2baa
     m_Address: pickup_slime_gel
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
-  - m_GUID: 308c299ec2bf2ed4487c6150502da4f0
-    m_Address: monster_spark_wisp
+  - m_GUID: 1ffbee368e745204584b63636be25f48
+    m_Address: pickup_training_staff
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
@@ -55,23 +45,28 @@ MonoBehaviour:
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 3844e0cd56465e648a735610eef9f443
+    m_Address: npc_quartermaster
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 764d179efc210204cb1eb7a6c32062d4
     m_Address: character_adventurer
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
-  - m_GUID: 825b7ffe34d8bd04995b8804cb805148
-    m_Address: npc_quartermaster
+  - m_GUID: 79509aabe5d835c4195615c4895d4a37
+    m_Address: monster_spark_wisp
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
-  - m_GUID: 858fecc83e2ff5f4c877365b12e447e6
+  - m_GUID: 7d87561a144f6904b952db865405f409
+    m_Address: monster_forest_crawler
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 9625b086c8efbe34187040ae09439928
     m_Address: character_vanguard
-    m_ReadOnly: 0
-    m_SerializedLabels: []
-    FlaggedDuringContentUpdateRestriction: 0
-  - m_GUID: 9e9eeeb00664773449c2379d81204dc2
-    m_Address: character_arcanist
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
@@ -85,23 +80,33 @@ MonoBehaviour:
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: bbb71c61e5df68445831fad7ed475e0c
+    m_Address: npc_guildmaster
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: bc7df9ab80265c84c808c4439c2d041d
     m_Address: pickup_training_sword
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
-  - m_GUID: bed073ccf1453da479ef14dcc1f834dd
-    m_Address: npc_guildmaster
-    m_ReadOnly: 0
-    m_SerializedLabels: []
-    FlaggedDuringContentUpdateRestriction: 0
-  - m_GUID: c2001104896d7a74ca5ee1ba4cbecd1e
-    m_Address: pickup_training_staff
-    m_ReadOnly: 0
-    m_SerializedLabels: []
-    FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: cc3f63d610d425c49885fc064415450e
     m_Address: projectile_spark
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: d572cbfc7d0308442b9a5440ba514645
+    m_Address: character_arcanist
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: da8bc024bd0261040bfdea74df400725
+    m_Address: weapon_training_staff
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: dfc58b55fd710d84ca9b8bfb6653bd57
+    m_Address: npc_gate_warden
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0

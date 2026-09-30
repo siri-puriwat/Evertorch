@@ -60,7 +60,7 @@ public sealed class EntityViewCatalogTests
     public IEnumerator Create_ForAGrayboxBody_KeepsTodaysHeights_AndPosesAPivotAboveTheBody()
     {
         m_catalog = new EntityViewCatalog();
-        m_view = EntityView.Create("Vanguard", "character_vanguard", m_catalog, null);
+        m_view = EntityView.Create("Cloth", "pickup_cloth_armor", m_catalog, null);
 
         yield return WaitForBody(m_view);
 
@@ -106,6 +106,46 @@ public sealed class EntityViewCatalogTests
         m_view.SetCombatPose(1f, 1f, true);
         Assert.That(pose.localScale, Is.EqualTo(Vector3.one), "a body with clips is never flattened");
         Assert.That(pose.localPosition, Is.EqualTo(Vector3.zero), "nor lunged");
+    }
+
+    // ArtDelivery-02's bodies replace their graybox under the same keys: each plays its clips from its own anchors, the
+    // Arcanist's and the wisp's projectiles leave from their own points, and the staff on the ground picks like any
+    // drop (Prototype Content §2, §2.1).
+    [UnityTest]
+    public IEnumerator Create_ForEachRosterBody_DrawsItsDeliveredArt()
+    {
+        m_catalog = new EntityViewCatalog();
+        foreach (string key in new[]
+                 {
+                     "character_vanguard", "character_arcanist", "npc_quartermaster", "npc_gate_warden",
+                     "npc_guildmaster", "monster_forest_crawler", "monster_spark_wisp"
+                 })
+        {
+            m_view = EntityView.Create(key, key, m_catalog, null);
+            yield return WaitForBody(m_view);
+
+            Assert.That(m_view.IsPlaceholder, Is.False, key);
+            Assert.That(m_view.GetComponentsInChildren<SkinnedMeshRenderer>(), Is.Not.Empty, $"{key}: skinned");
+            Assert.That(m_view.HasClips, Is.True, $"{key}: plays clips");
+            Assert.That(m_view.PickRadius, Is.LessThanOrEqualTo(EntityBody.MaxPickRadius), key);
+            Assert.That(m_view.OverheadHeight, Is.GreaterThan(m_view.PickCenterHeight), key);
+            if (key is "character_arcanist" or "monster_spark_wisp")
+            {
+                Vector3 origin = m_view.transform.InverseTransformPoint(m_view.ProjectileOrigin());
+                Assert.That(origin.y, Is.EqualTo(key == "character_arcanist" ? 1.13f : 1.1f).Within(0.005f), key);
+            }
+
+            Object.DestroyImmediate(m_view.gameObject);
+            m_view = null;
+        }
+
+        m_view = EntityView.Create("Staff", "pickup_training_staff", m_catalog, null);
+        yield return WaitForBody(m_view);
+
+        Assert.That(m_view.IsPlaceholder, Is.False, "the delivered staff");
+        Assert.That(
+            (m_view.PickCenterHeight, m_view.PickRadius),
+            Is.EqualTo((EntityPicker.PickHeight, EntityPicker.PickRadius)));
     }
 
     // The sword on the ground is picked by the sphere every drop has, so a click on a monster standing over it still

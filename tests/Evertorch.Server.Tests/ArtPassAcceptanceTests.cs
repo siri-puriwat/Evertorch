@@ -18,7 +18,8 @@ namespace Evertorch.Server.Tests
 ///     code. A wearer at Adventurer job level 10 holding the training sword, unworn, enters beside an observer, which
 ///     sees it unarmed; the wearer equips the sword, and the observer sees it in its hand, told once and with no new
 ///     spawn; after a restart the observer's spawn of the wearer names the sword; the wearer becomes an Arcanist, who
-///     cannot wield it, and the observer's replacement spawn shows the Arcanist empty-handed.
+///     cannot wield it, and the observer's replacement spawn shows the Arcanist empty-handed; the Arcanist wears the
+///     training staff it also holds, and the observer sees it in its hand, told once.
 /// </summary>
 [TestFixture]
 [NonParallelizable]
@@ -29,6 +30,7 @@ public sealed class ArtPassAcceptanceTests
     private const string Arcanist = "job.arcanist";
     private const string Guildmaster = "npc.guildmaster";
     private const string TrainingSword = "item.weapon.training_sword";
+    private const string TrainingStaff = "item.weapon.training_staff";
     private const string WearerIdentity = "art-pass-wearer";
     private const string WearerName = "Wearer1";
     private const string ObserverIdentity = "art-pass-observer";
@@ -70,7 +72,8 @@ public sealed class ArtPassAcceptanceTests
         wearer.AfterCreate = () =>
         {
             BuildSeed.ReadyToChange.Apply(m_database.ConnectionString, WearerName);
-            StoreSword(WearerName);
+            StoreItem(WearerName, TrainingSword);
+            StoreItem(WearerName, TrainingStaff);
         };
         EnterTogether(port, wearer, observer);
 
@@ -125,6 +128,7 @@ public sealed class ArtPassAcceptanceTests
         AssertSees("restart", observer, wearer, Adventurer, TrainingSword);
 
         BecomeAnArcanist(wearer, observer);
+        WieldTheStaff(wearer, observer);
         AssertCleanTraffic("restart", wearer, observer);
     }
 
@@ -160,6 +164,27 @@ public sealed class ArtPassAcceptanceTests
             Is.True,
             $"{step}: the observer sees the Arcanist");
         Assert.That(observer.World.Remotes[entity].WornWeapon, Is.Empty, $"{step}: empty-handed");
+    }
+
+    // The Arcanist wears the staff: the observer sees it in its hand, told once (Prototype Content §2; Network
+    // Protocol §9).
+    private static void WieldTheStaff(SocketClient wearer, SocketClient observer)
+    {
+        const string step = "staff";
+        var changes = new List<string>();
+        observer.World.RemoteWornWeaponChanged += remote => changes.Add(remote.WornWeapon);
+        wearer.Connection.SendEquip(StaffOf(wearer).InventoryItem);
+        Assert.That(
+            SocketClients.PumpUntil(() => StaffOf(wearer).Slot == EquipmentSlot.Weapon, wearer, observer),
+            Is.True,
+            $"{step}: the staff worn; {wearer.World.LastRejection}");
+        AssertSees(step, observer, wearer, Arcanist, TrainingStaff);
+        Assert.That(changes, Is.EqualTo(new[] { TrainingStaff }), $"{step}: the observer told once");
+    }
+
+    private static InventoryEntry StaffOf(SocketClient client)
+    {
+        return client.World.Inventory.Rows.Single(row => row.Item.Value == TrainingStaff);
     }
 
     private static RemoteEntity? GuildmasterInView(ClientWorld world)
@@ -209,7 +234,7 @@ public sealed class ArtPassAcceptanceTests
         Assert.That((remote.Kind, remote.DefinitionId), Is.EqualTo((EntityKind.Player, job)), $"{step}: its job");
     }
 
-    private void StoreSword(string name)
+    private void StoreItem(string name, string item)
     {
         using var connection = new NpgsqlConnection(m_database.ConnectionString);
         connection.Open();
@@ -217,9 +242,9 @@ public sealed class ArtPassAcceptanceTests
             "INSERT INTO inventory_items (character_id, item_definition_id, quantity, refine_level, version) "
             + "SELECT id, @item, 1, 0, 0 FROM characters WHERE name = @name",
             connection);
-        insert.Parameters.AddWithValue("item", TrainingSword);
+        insert.Parameters.AddWithValue("item", item);
         insert.Parameters.AddWithValue("name", name);
-        Assert.That(insert.ExecuteNonQuery(), Is.EqualTo(1), "the sword stored, unworn");
+        Assert.That(insert.ExecuteNonQuery(), Is.EqualTo(1), $"{item} stored, unworn");
     }
 
     private static void AssertCleanTraffic(string step, params SocketClient[] clients)

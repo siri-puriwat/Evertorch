@@ -13,3 +13,4 @@ server:
 client:
   icon: item_training_staff
   model: pickup_training_staff
+  held: weapon_training_staff

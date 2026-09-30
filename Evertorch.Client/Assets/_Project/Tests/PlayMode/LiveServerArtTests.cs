@@ -30,6 +30,8 @@ public sealed class LiveServerArtTests : InputTestFixture
     private const string WatcherName = "LiveArtTwo";
     private const string OtherName = "LiveArtThree";
     private const string TrainingSword = "item.weapon.training_sword";
+    private const string TrainingStaff = "item.weapon.training_staff";
+    private const string ArcanistName = "LiveArtFour";
     private const float StartTimeoutSeconds = 30f;
     private const int TestTimeoutMs = 300_000;
 
@@ -217,6 +219,38 @@ public sealed class LiveServerArtTests : InputTestFixture
         Assert.That(world.Target, Is.EqualTo(default(EntityId)), "the click did not select the player beside it");
         Assert.That(client.Controller!.HasPath, Is.True, "it walks to the ground clicked");
         Assert.That(other.MalformedMessages + other.UnexpectedMessages, Is.Zero, "the other player's traffic");
+    }
+
+    // A character stored as an Arcanist wearing the training staff enters: the client draws the delivered Arcanist, with
+    // the delivered staff in its hand, swinging the staff's clip (Prototype Content §2, §2.1).
+    [UnityTest]
+    [Timeout(TestTimeoutMs)]
+    public IEnumerator Body_OfAnArcanistWearingTheStaff_HoldsTheDeliveredStaff()
+    {
+        string actionsPath = RequirePrerequisites();
+        yield return StartDatabaseAndServer();
+        LiveDatabase database = m_database!;
+        GameClient client = CreateClient(actionsPath);
+
+        yield return EnterByName(
+            client,
+            ArcanistName,
+            () =>
+            {
+                database.SeedJob(ArcanistName, "job.arcanist", 1);
+                database.SeedWornWeapon(ArcanistName, TrainingStaff);
+            });
+        yield return WaitUntil(() => LocalBody(client)?.HasBody == true, StartTimeoutSeconds);
+        EntityView body = LocalBody(client)!;
+        yield return WaitUntil(() => HeldBy(body) != null, StartTimeoutSeconds);
+
+        Assert.That((body.Key, body.IsPlaceholder), Is.EqualTo(("character_arcanist", false)), client.Status);
+        Assert.That(body.HasClips, Is.True, "the delivered Arcanist plays clips");
+        Assert.That(HeldBy(body), Is.Not.Null, "the staff in its hand");
+        Assert.That(
+            HeldBy(body)!.GetComponentsInChildren<HeldWeapon>(true).Single().Grip,
+            Is.EqualTo(WeaponGrip.Staff));
+        Assert.That(body.AttackClip, Is.EqualTo("attack_staff"), "a staff's grip swings the staff clip");
     }
 
     private static GameObject? HeldBy(EntityView body)

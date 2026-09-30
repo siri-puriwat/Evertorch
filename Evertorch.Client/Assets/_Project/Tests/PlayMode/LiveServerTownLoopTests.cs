@@ -192,6 +192,7 @@ public sealed class LiveServerTownLoopTests : InputTestFixture
             EntityView? view = NpcView(client, prefab);
             Assert.That(view, Is.Not.Null, $"{prefab}: drawn");
             Assert.That(view!.IsPlaceholder, Is.False, $"{prefab}: the body is its prefab, not the placeholder");
+            Assert.That(view.HasClips, Is.True, $"{prefab}: the delivered NPC plays clips");
             Assert.That(
                 view.transform.position.y,
                 Is.EqualTo(GrayboxMeshBuilder.NpcMarkerHeight).Within(1e-4f),
@@ -214,6 +215,8 @@ public sealed class LiveServerTownLoopTests : InputTestFixture
         Assert.That(window.ShownName, Is.EqualTo("Quartermaster"));
         Assert.That(town.Target, Is.EqualTo(default(EntityId)), "the click selected nothing");
         Assert.That(DistanceToDrawn(town, quartermaster), Is.LessThanOrEqualTo(TalkState.OpenDistance), "beside it");
+        yield return WaitUntil(() => quartermaster.BodyAnimator!.CurrentClip == "talk", StepTimeoutSeconds);
+        Assert.That(quartermaster.BodyAnimator!.CurrentClip, Is.EqualTo("talk"), "it talks while its window shows");
 
         // The console republishes what it reads once a second.
         yield return new WaitForSecondsRealtime(1.5f);

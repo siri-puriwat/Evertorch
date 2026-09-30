@@ -270,6 +270,7 @@ public sealed class LiveServerPrototypeTests : InputTestFixture
             StepTimeoutSeconds * 3f);
         Assert.That(client.Projectiles?.Launched, Is.GreaterThan(0), "the wisp's projectile flew");
         Assert.That(wasCastBarShown, Is.True, "a cast bar over the wisp");
+        Assert.That(client.RemoteViews[wisp.Entity].HasClips, Is.True, "the delivered wisp plays clips");
         Assert.That(client.Connection.MalformedMessages + client.Connection.UnexpectedMessages, Is.Zero);
     }
 
