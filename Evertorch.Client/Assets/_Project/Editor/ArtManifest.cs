@@ -43,7 +43,7 @@ public sealed class ArtManifest
             .Select(value => ReadAsset(AsObject(value, "an asset")))
             .ToList();
         var clips = AsArray(Field(root, "clips", "the manifest"), "clips")
-            .Select(value => ReadClip(AsObject(value, "a clip")))
+            .Select(value => ReadClip(AsObject(value, "a clip"), assets))
             .ToList();
         string delivery = Text(root, "delivery", "the manifest");
         RequireName(delivery, DeliveryName, "the delivery");
@@ -76,7 +76,6 @@ public sealed class ArtManifest
             RelativeFile(Text(asset, "file", key), key),
             (int)Number(asset, "triangles", key),
             (int)Number(asset, "bones", key),
-            (int)Number(asset, "maximumWeights", key),
             AsArray(Field(asset, "materials", key), $"{key}'s materials").Select(value => AsText(value, key)).ToList(),
             AsArray(Field(asset, "textures", key), $"{key}'s textures")
                 .Select(value => RelativeFile(AsText(value, key), key))
@@ -85,11 +84,18 @@ public sealed class ArtManifest
             (float)Number(asset, "pickRadius", key));
     }
 
-    private static ArtManifestClip ReadClip(Dictionary<string, object?> clip)
+    private static ArtManifestClip ReadClip(Dictionary<string, object?> clip, IReadOnlyList<ArtManifestAsset> assets)
     {
         string name = Text(clip, "name", "a clip");
         string rig = Text(clip, "rig", name);
         RequireName(rig, LogicalKey, "a clip's rig");
+        string file = RelativeFile(Text(clip, "file", $"{rig} {name}"), $"{rig} {name}");
+        if (rig != ArtPaths.HumanoidRig)
+        {
+            rig = MonsterOf(file, assets) ?? throw new FormatException(
+                $"Manifest: {rig} {name}'s file '{file}' lies in no monster's folder.");
+        }
+
         string what = $"{rig} {name}";
         var markers = new Dictionary<string, int>(StringComparer.Ordinal);
         foreach (KeyValuePair<string, object?> marker in AsObject(Field(clip, "markers", what), $"{what}'s markers"))
@@ -99,13 +105,13 @@ public sealed class ArtManifest
 
         double calibration = clip.TryGetValue("calibrationSpeedMetresPerSecond", out object? speed)
             ? AsNumber(speed, what)
-            : 0.0;
+            : BriefSpeed(rig, name);
         if (clip.TryGetValue("loop", out object? loop) && loop is bool isLoop)
         {
             return new ArtManifestClip(
                 rig,
                 name,
-                RelativeFile(Text(clip, "file", what), what),
+                file,
                 (int)Number(clip, "frames", what),
                 isLoop,
                 markers,
@@ -113,6 +119,33 @@ public sealed class ArtManifest
         }
 
         throw new FormatException($"Manifest: {what} needs a boolean loop.");
+    }
+
+    // A monster's clips lie in its own folder; ArtDelivery-02 names their rig apart from the monster's key, so the folder
+    // decides which monster's body they drive.
+    private static string? MonsterOf(string clipFile, IEnumerable<ArtManifestAsset> assets)
+    {
+        return assets
+            .Where(asset => asset.Kind == "monster")
+            .FirstOrDefault(asset => clipFile.StartsWith(asset.File.Substring(0, asset.File.LastIndexOf('/') + 1),
+                StringComparison.Ordinal))
+            ?.Key;
+    }
+
+    // The art brief's calibration speeds (§7), for a run or move whose manifest records none: the body's walk measured
+    // against a speed of 0 would freeze the clip at its first frame.
+    private static double BriefSpeed(string rig, string name)
+    {
+        return (rig, name) switch
+        {
+            (ArtPaths.HumanoidRig, "run") => 5.0,
+            ("monster_training_slime", "move") => 4.0,
+            ("monster_forest_crawler", "move") => 4.8,
+            ("monster_spark_wisp", "move") => 4.4,
+            (_, "run" or "move") => throw new FormatException(
+                $"Manifest: {rig} {name} has no calibrationSpeedMetresPerSecond, and the art brief gives none."),
+            _ => 0.0
+        };
     }
 
     private static void RequireName(string name, Regex pattern, string what)
@@ -191,7 +224,6 @@ public sealed class ArtManifestAsset
         string file,
         int triangles,
         int bones,
-        int maximumWeights,
         IReadOnlyList<string> materials,
         IReadOnlyList<string> textures,
         IReadOnlyDictionary<string, Vector3> anchors,
@@ -202,7 +234,6 @@ public sealed class ArtManifestAsset
         File = file;
         Triangles = triangles;
         Bones = bones;
-        MaximumWeights = maximumWeights;
         Materials = materials;
         Textures = textures;
         Anchors = anchors;
@@ -221,8 +252,6 @@ public sealed class ArtManifestAsset
     public int Triangles { get; }
 
     public int Bones { get; }
-
-    public int MaximumWeights { get; }
 
     public IReadOnlyList<string> Materials { get; }
 

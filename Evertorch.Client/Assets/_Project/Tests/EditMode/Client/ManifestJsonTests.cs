@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Evertorch.Client.Editor;
 using NUnit.Framework;
 using UnityEngine;
@@ -106,6 +107,16 @@ public sealed class ManifestJsonTests
     }
 
     [Test]
+    public void ReadManifest_ForAClipInNoMonstersFolder_Throws()
+    {
+        string moved = Manifest.Replace(
+            "Monsters/monster_a/Animations/monster_a@attack.fbx",
+            "Monsters/monster_b/Animations/monster_b@attack.fbx");
+
+        Assert.Throws<FormatException>(() => ArtManifest.Parse(moved));
+    }
+
+    [Test]
     public void ReadManifest_ForADelivery_ReadsItsAnchorsMarkersAndCalibration()
     {
         var manifest = ArtManifest.Parse(Manifest);
@@ -120,9 +131,44 @@ public sealed class ManifestJsonTests
     }
 
     [Test]
+    public void ReadManifest_ForAMonsterClipUnderAnotherRigName_GivesItToTheMonsterWhoseFolderHoldsIt()
+    {
+        var manifest = ArtManifest.Parse(Manifest.Replace(@"""rig"": ""monster_a""", @"""rig"": ""a"""));
+
+        Assert.That(manifest.Clips.Select(clip => clip.Rig), Is.EqualTo(new[] { "monster_a", "monster_a" }));
+    }
+
+    [Test]
+    public void ReadManifest_ForAMoveWithoutASpeedTheArtBriefGives_Throws()
+    {
+        string unknown = Manifest.Replace(@"""calibrationSpeedMetresPerSecond"": 4,", string.Empty);
+
+        Assert.Throws<FormatException>(() => ArtManifest.Parse(unknown));
+    }
+
+    [Test]
+    public void ReadManifest_ForAMoveWithoutItsSpeed_TakesTheArtBriefsSpeed()
+    {
+        string crawler = Manifest.Replace("monster_a", "monster_forest_crawler")
+            .Replace(@"""calibrationSpeedMetresPerSecond"": 4,", string.Empty);
+
+        var manifest = ArtManifest.Parse(crawler);
+
+        Assert.That(manifest.Clips[0].CalibrationSpeed, Is.EqualTo(4.8f));
+    }
+
+    [Test]
     public void ReadManifest_WhenItsRateIsNotThirty_Throws()
     {
         Assert.Throws<FormatException>(() => ArtManifest.Parse(Manifest.Replace(@"""fps"": 30", @"""fps"": 24")));
+    }
+
+    [Test]
+    public void ReadManifest_WithoutMaximumWeights_ReadsTheAsset()
+    {
+        var manifest = ArtManifest.Parse(Manifest.Replace(@"""maximumWeights"": 1,", string.Empty));
+
+        Assert.That(manifest.Assets[0].Key, Is.EqualTo("monster_a"));
     }
 }
 }

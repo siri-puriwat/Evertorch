@@ -191,6 +191,11 @@ public sealed class ArtContractTests
                 (entry.Frames, entry.Loop, entry.CalibrationSpeed),
                 Is.EqualTo((clip.Frames, clip.Loop, clip.CalibrationSpeed)),
                 $"{clip.Rig} {clip.Name}");
+            if (clip.Name is "run" or "move")
+            {
+                Assert.That(entry.CalibrationSpeed, Is.GreaterThan(0f), $"{clip.Rig} {clip.Name}'s calibration");
+            }
+
             Assert.That(
                 entry.Markers.Select(marker => (marker.Name, marker.Frame)),
                 Is.EquivalentTo(clip.Markers.Select(marker => (marker.Key, marker.Value))),
