@@ -63,7 +63,6 @@ Transform:
   m_Children:
   - {fileID: 3516359872559776272}
   - {fileID: 6751074816749391858}
-  - {fileID: 5470509318765568237}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!114 &690914775907148297
@@ -80,40 +79,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: Evertorch.Client::Evertorch.Client.EntityBody
   m_overhead: {fileID: 6751074816749391858}
   m_projectile: {fileID: 0}
-  m_pick: {fileID: 5470509318765568237}
-  m_pickRadius: 0.41569808
+  m_pick: {fileID: 0}
+  m_pickRadius: 0.7
   m_trimSlots: []
---- !u!1 &9038994990303609115
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 5470509318765568237}
-  m_Layer: 0
-  m_Name: Anchor_Pick
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!4 &5470509318765568237
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 9038994990303609115}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0.028129866, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 6579718559812047068}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1001 &3982914699273463291
 PrefabInstance:
   m_ObjectHideFlags: 0

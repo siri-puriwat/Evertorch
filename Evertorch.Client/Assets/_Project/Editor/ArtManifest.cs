@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Text.RegularExpressions;
 using UnityEngine;
 
 namespace Evertorch.Client.Editor
@@ -12,6 +13,11 @@ namespace Evertorch.Client.Editor
 /// </summary>
 public sealed class ArtManifest
 {
+    // The names that become folders and files in the project: a key or rig as the content writes its keys, a delivery
+    // as its folder is named. A file is a path inside the delivery, with forward slashes and no step up.
+    private static readonly Regex LogicalKey = new("^[a-z0-9_]+$");
+    private static readonly Regex DeliveryName = new("^[A-Za-z0-9_-]+$");
+
     private ArtManifest(string delivery, IReadOnlyList<ArtManifestAsset> assets, IReadOnlyList<ArtManifestClip> clips)
     {
         Delivery = delivery;
@@ -39,12 +45,15 @@ public sealed class ArtManifest
         var clips = AsArray(Field(root, "clips", "the manifest"), "clips")
             .Select(value => ReadClip(AsObject(value, "a clip")))
             .ToList();
-        return new ArtManifest(Text(root, "delivery", "the manifest"), assets, clips);
+        string delivery = Text(root, "delivery", "the manifest");
+        RequireName(delivery, DeliveryName, "the delivery");
+        return new ArtManifest(delivery, assets, clips);
     }
 
     private static ArtManifestAsset ReadAsset(Dictionary<string, object?> asset)
     {
         string key = Text(asset, "key", "an asset");
+        RequireName(key, LogicalKey, "an asset's key");
         Dictionary<string, object?> anchorValues = AsObject(Field(asset, "anchors", key), $"{key}'s anchors");
         var anchors = new Dictionary<string, Vector3>(StringComparer.Ordinal);
         foreach (KeyValuePair<string, object?> anchor in anchorValues)
@@ -64,12 +73,14 @@ public sealed class ArtManifest
         return new ArtManifestAsset(
             key,
             Text(asset, "kind", key),
-            Text(asset, "file", key),
+            RelativeFile(Text(asset, "file", key), key),
             (int)Number(asset, "triangles", key),
             (int)Number(asset, "bones", key),
             (int)Number(asset, "maximumWeights", key),
             AsArray(Field(asset, "materials", key), $"{key}'s materials").Select(value => AsText(value, key)).ToList(),
-            AsArray(Field(asset, "textures", key), $"{key}'s textures").Select(value => AsText(value, key)).ToList(),
+            AsArray(Field(asset, "textures", key), $"{key}'s textures")
+                .Select(value => RelativeFile(AsText(value, key), key))
+                .ToList(),
             anchors,
             (float)Number(asset, "pickRadius", key));
     }
@@ -78,6 +89,7 @@ public sealed class ArtManifest
     {
         string name = Text(clip, "name", "a clip");
         string rig = Text(clip, "rig", name);
+        RequireName(rig, LogicalKey, "a clip's rig");
         string what = $"{rig} {name}";
         var markers = new Dictionary<string, int>(StringComparer.Ordinal);
         foreach (KeyValuePair<string, object?> marker in AsObject(Field(clip, "markers", what), $"{what}'s markers"))
@@ -93,7 +105,7 @@ public sealed class ArtManifest
             return new ArtManifestClip(
                 rig,
                 name,
-                Text(clip, "file", what),
+                RelativeFile(Text(clip, "file", what), what),
                 (int)Number(clip, "frames", what),
                 isLoop,
                 markers,
@@ -101,6 +113,26 @@ public sealed class ArtManifest
         }
 
         throw new FormatException($"Manifest: {what} needs a boolean loop.");
+    }
+
+    private static void RequireName(string name, Regex pattern, string what)
+    {
+        if (!pattern.IsMatch(name))
+        {
+            throw new FormatException($"Manifest: {what} '{name}' is not a plain name.");
+        }
+    }
+
+    private static string RelativeFile(string file, string what)
+    {
+        string[] parts = file.Split('/');
+        if (file.Contains("\\") || file.Contains(":") ||
+            parts.Any(part => part.Length == 0 || part == "." || part == ".."))
+        {
+            throw new FormatException($"Manifest: {what}'s file '{file}' is not a path inside the delivery.");
+        }
+
+        return file;
     }
 
     private static object? Field(Dictionary<string, object?> owner, string name, string what)

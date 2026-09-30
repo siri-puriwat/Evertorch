@@ -173,9 +173,10 @@ public sealed class BodyAnimationTimingTests
             "within one tick, and one drawn frame, of frame 24");
     }
 
-    // The same swing drawn at 30 and at 144 frames a second stands in the same pose at the same timeline time.
+    // The same swing drawn at 30 and at 144 frames a second stands at the same clip time at the same timeline time;
+    // the clip's time is what the graph evaluates.
     [UnityTest]
-    public IEnumerator Attack_DrawnAtThirtyOrAHundredFortyFourFrames_IsTheSamePoseAtTheSameTime()
+    public IEnumerator Attack_DrawnAtThirtyOrAHundredFortyFourFrames_IsAtTheSameClipTimeAtTheSameTime()
     {
         EntityView slime = null!;
         yield return CreateSlimeView(view => slime = view);

@@ -84,7 +84,7 @@ ModelImporter:
     preserveHierarchy: 1
     skinWeightsMode: 1
     maxBonesPerVertex: 2
-    minBoneWeight: 0.000001
+    minBoneWeight: 0.001
     optimizeBones: 1
     generateMeshLods: 0
     meshLodGenerationFlags: 0

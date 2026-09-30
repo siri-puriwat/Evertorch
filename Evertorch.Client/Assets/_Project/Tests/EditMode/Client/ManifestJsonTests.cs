@@ -48,6 +48,17 @@ public sealed class ManifestJsonTests
   ]
 }";
 
+    [TestCase("\"key\": \"monster_a\"", "\"key\": \"../monster_a\"")]
+    [TestCase("\"rig\": \"monster_a\",\n      \"name\": \"move\"", "\"rig\": \"Monster A\",\n      \"name\": \"move\"")]
+    [TestCase("\"delivery\": \"ArtDelivery-99-Test\"", "\"delivery\": \"../Elsewhere\"")]
+    [TestCase("\"file\": \"Monsters/monster_a/monster_a.fbx\"", "\"file\": \"Monsters/../../monster_a.fbx\"")]
+    [TestCase("Textures/monster_a_BaseMap.png", "Textures\\\\monster_a_BaseMap.png")]
+    public void ReadManifest_WhenANameCouldLeaveTheArtFolder_Throws(string oldText, string newText)
+    {
+        Assert.That(Manifest, Does.Contain(oldText));
+        Assert.Throws<FormatException>(() => ArtManifest.Parse(Manifest.Replace(oldText, newText)));
+    }
+
     [Test]
     public void Parse_ForEscapesInAString_ReadsTheCharacters()
     {

@@ -90,6 +90,13 @@ public sealed class EntityViewCatalogTests
         Assert.That(m_view.OverheadHeight, Is.EqualTo(1.97f).Within(0.001f));
         Assert.That(m_view.PickCenterHeight, Is.EqualTo(0.85f).Within(0.001f));
         Assert.That(m_view.PickRadius, Is.EqualTo(EntityBody.MaxPickRadius), "1.1 m delivered, capped");
+        yield return null;
+        var dead = new BodyCue { IsDead = true, DeathSince = double.PositiveInfinity };
+        m_view.Animate(dead, 1.0, 0.02f);
+        Assert.That(
+            (m_view.BodyAnimator!.CurrentClip, m_view.BodyAnimator.CurrentWeight),
+            Is.EqualTo(("death", 1f)),
+            "a body first seen dead lies there at once, with no fade from its first idle");
         var cue = new BodyCue { HasSwing = true, SwingSince = 0.47, Impact = 0.47, AttackClip = m_view.AttackClip };
         m_view.Animate(cue, 0.0, 0.02f);
         BodyAnimator animator = m_view.BodyAnimator!;
@@ -99,6 +106,22 @@ public sealed class EntityViewCatalogTests
         m_view.SetCombatPose(1f, 1f, true);
         Assert.That(pose.localScale, Is.EqualTo(Vector3.one), "a body with clips is never flattened");
         Assert.That(pose.localPosition, Is.EqualTo(Vector3.zero), "nor lunged");
+    }
+
+    // The sword on the ground is picked by the sphere every drop has, so a click on a monster standing over it still
+    // takes the monster (Prototype Content §4).
+    [UnityTest]
+    public IEnumerator Create_ForTheSwordOnTheGround_PicksLikeAnyDrop()
+    {
+        m_catalog = new EntityViewCatalog();
+        m_view = EntityView.Create("Sword", "pickup_training_sword", m_catalog, null);
+
+        yield return WaitForBody(m_view);
+
+        Assert.That(m_view.IsPlaceholder, Is.False, "the delivered sword");
+        Assert.That(
+            (m_view.PickCenterHeight, m_view.PickRadius),
+            Is.EqualTo((EntityPicker.PickHeight, EntityPicker.PickRadius)));
     }
 
     private static IEnumerator WaitForBody(EntityView view)

@@ -40,6 +40,24 @@ public sealed class EntityViewTintTests
     }
 
     [Test]
+    public void ApplyTint_ForABodyHoldingAWeapon_LeavesTheWeaponItsOwnColour()
+    {
+        m_body = new GameObject("Graybox");
+        GameObject.CreatePrimitive(PrimitiveType.Capsule).transform.SetParent(m_body.transform, false);
+        var held = new GameObject("Held");
+        held.transform.SetParent(m_body.transform, false);
+        held.AddComponent<HeldWeapon>();
+        var blade = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        blade.transform.SetParent(held.transform, false);
+
+        EntityView.ApplyTint(m_body, null, Tint);
+
+        var block = new MaterialPropertyBlock();
+        blade.GetComponent<Renderer>().GetPropertyBlock(block);
+        Assert.That(block.isEmpty, Is.True, "a held weapon is never tinted");
+    }
+
+    [Test]
     public void ApplyTint_ForABodyWithoutTrimSlots_ColoursEveryRenderer()
     {
         m_body = new GameObject("Graybox");

@@ -350,6 +350,11 @@ public sealed class EntityView : MonoBehaviour
 
         foreach (Renderer part in body.GetComponentsInChildren<Renderer>(true))
         {
+            if (part.GetComponentInParent<HeldWeapon>(true) != null)
+            {
+                continue;
+            }
+
             part.GetPropertyBlock(block);
             block.SetColor(BaseColorId, tint);
             part.SetPropertyBlock(block);

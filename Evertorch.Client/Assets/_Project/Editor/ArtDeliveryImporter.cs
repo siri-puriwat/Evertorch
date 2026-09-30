@@ -171,7 +171,7 @@ public static class ArtDeliveryImporter
                 string path = ArtPaths.TexturePath(asset, texture);
                 var importer = (TextureImporter)AssetImporter.GetAtPath(path);
                 ArtImportSettings.ApplyTexture(importer, path);
-                SaveIfChanged(importer);
+                Reimport(importer);
             }
         }
 
@@ -265,8 +265,9 @@ public static class ArtDeliveryImporter
         File.Copy(source, target, true);
     }
 
-    // The importer writes its settings to the .meta file; an unchanged one leaves the file as it was.
-    private static void SaveIfChanged(AssetImporter importer)
+    // Every call reimports: the importer cannot tell whether a setting changed. Its .meta file is written as it was when
+    // nothing did, so a second run changes no file.
+    private static void Reimport(AssetImporter importer)
     {
         importer.SaveAndReimport();
     }
@@ -291,8 +292,9 @@ public static class ArtDeliveryImporter
         Texture2D? mask = Texture(asset, "_MaskMap");
         material.SetTexture("_MetallicGlossMap", mask);
         material.SetTexture("_OcclusionMap", mask);
-        material.SetFloat("_Metallic", 1f);
-        material.SetFloat("_Smoothness", 1f);
+        // With its mask, the map's channels decide; without one, a plain painted surface rather than a mirror.
+        material.SetFloat("_Metallic", mask != null ? 1f : 0f);
+        material.SetFloat("_Smoothness", mask != null ? 1f : 0.5f);
         material.SetFloat("_SmoothnessTextureChannel", 0f);
         SetKeyword(material, "_METALLICSPECGLOSSMAP", mask != null);
         SetKeyword(material, "_OCCLUSIONMAP", mask != null);
@@ -367,7 +369,7 @@ public static class ArtDeliveryImporter
                 break;
         }
 
-        SaveIfChanged(importer);
+        Reimport(importer);
     }
 
     // The bones by name, with no stretch, half twist, no feet spacing, and translation kept, as the delivery's own
@@ -433,7 +435,7 @@ public static class ArtDeliveryImporter
             importer.avatarSetup = ModelImporterAvatarSetup.CreateFromThisModel;
         }
 
-        SaveIfChanged(importer);
+        Reimport(importer);
         ModelImporterClipAnimation[] takes = importer.clipAnimations.Length > 0
             ? importer.clipAnimations
             : importer.defaultClipAnimations;
@@ -453,7 +455,7 @@ public static class ArtDeliveryImporter
         }
 
         importer.clipAnimations = takes;
-        SaveIfChanged(importer);
+        Reimport(importer);
     }
 
     public static AnimationClip? LoadClip(string path)
@@ -491,7 +493,6 @@ public static class ArtDeliveryImporter
 
     private static void BuildPrefabs(ArtManifestAsset asset, IReadOnlyDictionary<string, Material> materials)
     {
-        Directory.CreateDirectory(ArtPaths.StagedPrefabsRoot);
         GameObject model = AssetDatabase.LoadAssetAtPath<GameObject>(ArtPaths.ModelPath(asset));
         if (asset.Kind == "weapon")
         {
@@ -604,11 +605,13 @@ public static class ArtDeliveryImporter
             }
 
             bounds = BoundsOf(laid);
-            Transform overhead = NewAnchor(pickup, OverheadAnchor,
-                new Vector3(0f, bounds.max.y + PickupOverheadClearance, 0f));
-            Transform pick = NewAnchor(pickup, PickAnchor, bounds.center);
+            Transform overhead =
+                NewAnchor(pickup, OverheadAnchor, new Vector3(0f, bounds.max.y + PickupOverheadClearance, 0f));
+
+            // No pick point: a drop keeps the sphere every drop has, so a click on a monster standing over it still
+            // takes the monster (Prototype Content §4).
             EntityBody body = pickup.AddComponent<EntityBody>();
-            body.Configure(overhead, null, pick, bounds.extents.magnitude, Array.Empty<EntityBody.TrimSlot>());
+            body.Configure(overhead, null, null, EntityBody.MaxPickRadius, Array.Empty<EntityBody.TrimSlot>());
             PrefabUtility.SaveAsPrefabAsset(pickup, PrefabTarget(pickupKey));
         }
         finally
@@ -625,7 +628,13 @@ public static class ArtDeliveryImporter
         GameObject? existing = AssetDatabase.LoadAssetAtPath<GameObject>(addressed);
         bool isArt = existing != null
             && (existing.TryGetComponent(out EntityBody _) || existing.TryGetComponent(out HeldWeapon _));
-        return isArt ? addressed : ArtPaths.StagedPrefabPath(key);
+        if (isArt)
+        {
+            return addressed;
+        }
+
+        Directory.CreateDirectory(ArtPaths.StagedPrefabsRoot);
+        return ArtPaths.StagedPrefabPath(key);
     }
 
     private static Transform NewAnchor(GameObject owner, string name, Vector3 localPosition)

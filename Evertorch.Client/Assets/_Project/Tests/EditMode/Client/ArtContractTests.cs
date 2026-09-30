@@ -310,9 +310,8 @@ public sealed class ArtContractTests
         GameObject pickup = AssetDatabase.LoadAssetAtPath<GameObject>(FindPrefab(pickupKey));
         Assert.That(pickup, Is.Not.Null, pickupKey);
         Assert.That(pickup.TryGetComponent(out EntityBody body), Is.True, $"{pickupKey}: its EntityBody");
-        Assert.That(body.Pick, Is.Not.Null, $"{pickupKey}: its pick point");
-        Assert.That(body.Overhead!.localPosition.y, Is.GreaterThan(body.Pick!.localPosition.y), pickupKey);
-        Assert.That(body.PickRadius, Is.InRange(0.05f, EntityBody.MaxPickRadius), pickupKey);
+        Assert.That(body.Pick, Is.Null, $"{pickupKey}: picked by the sphere every drop has");
+        Assert.That(body.Overhead!.localPosition.y, Is.GreaterThan(0f), pickupKey);
     }
 
     [Test]

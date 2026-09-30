@@ -25,6 +25,7 @@ public sealed class BodyAnimator : MonoBehaviour
     private BodyClips? m_clips;
 
     private readonly Dictionary<string, AnimationClipPlayable> m_playables = new();
+    private readonly string[] m_wired = { string.Empty, string.Empty };
     private PlayableGraph m_graph;
     private AnimationMixerPlayable m_mixer;
     private string m_previous = string.Empty;
@@ -48,12 +49,20 @@ public sealed class BodyAnimator : MonoBehaviour
     /// </summary>
     public double CurrentTime { get; private set; }
 
+    /// <summary>
+    ///     How much of the pose <see cref="CurrentClip" /> gives this frame; below 1 while it fades in.
+    /// </summary>
+    public float CurrentWeight { get; private set; }
+
     public bool HasClips => m_clips != null && m_clips.Clips.Count > 0;
 
     private void Start()
     {
-        // The first pose is drawn at once, so no frame shows the model's bind pose.
+        // The first pose is drawn at once, so no frame shows the model's bind pose; the first real cue then shows at
+        // once too, rather than fading in from this stand-in idle.
         Animate(default, transform.position, 0.0, 0f);
+        CurrentClip = string.Empty;
+        m_previous = string.Empty;
     }
 
     private void OnDestroy()
@@ -110,18 +119,9 @@ public sealed class BodyAnimator : MonoBehaviour
             fade = 1.0;
         }
 
-        for (int input = 0; input < 2; input++)
-        {
-            if (m_mixer.GetInput(input).IsValid())
-            {
-                m_graph.Disconnect(m_mixer, input);
-            }
-
-            m_mixer.SetInputWeight(input, 0f);
-        }
-
-        Show(CurrentClip, CurrentTime, 0, (float)fade);
-        Show(m_previous, m_previousTime, 1, 1f - (float)fade);
+        CurrentWeight = (float)fade;
+        Show(0, CurrentClip, CurrentTime, (float)fade);
+        Show(1, m_previous, m_previousTime, 1f - (float)fade);
         m_graph.Evaluate(0f);
     }
 
@@ -165,14 +165,35 @@ public sealed class BodyAnimator : MonoBehaviour
         m_speed = Mathf.Lerp(m_speed, distance / deltaSeconds, blend);
     }
 
-    private void Show(string clip, double time, int input, float weight)
+    // A port is wired again only when its clip changes, since a change of the graph's wiring makes the next evaluation
+    // bind the animation again; a clip feeds one port at a time, so it leaves the other port first.
+    private void Show(int input, string clip, double time, float weight)
     {
         if (clip.Length == 0 || weight <= 0f || !TryGetPlayable(clip, out AnimationClipPlayable playable))
         {
+            m_mixer.SetInputWeight(input, 0f);
             return;
         }
 
-        m_graph.Connect(playable, 0, m_mixer, input);
+        if (m_wired[input] != clip)
+        {
+            int other = 1 - input;
+            if (m_wired[other] == clip)
+            {
+                m_graph.Disconnect(m_mixer, other);
+                m_mixer.SetInputWeight(other, 0f);
+                m_wired[other] = string.Empty;
+            }
+
+            if (m_mixer.GetInput(input).IsValid())
+            {
+                m_graph.Disconnect(m_mixer, input);
+            }
+
+            m_graph.Connect(playable, 0, m_mixer, input);
+            m_wired[input] = clip;
+        }
+
         playable.SetTime(time);
         m_mixer.SetInputWeight(input, weight);
     }
