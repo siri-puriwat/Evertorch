@@ -106,6 +106,18 @@ public sealed class PlayerEntity : WorldEntity
     public bool RespawnPending { get; set; }
 
     /// <summary>
+    ///     The item of the weapon the player wears, which everyone near sees in its hand; null while the weapon slot is
+    ///     empty (Gameplay Systems §11.1).
+    /// </summary>
+    public ItemDefinitionId? WornWeapon { get; private set; }
+
+    /// <summary>
+    ///     Set when <see cref="WornWeapon" /> changes: the next visibility pass tells every session that already sees the
+    ///     player, and clears the flag (Network Protocol §9).
+    /// </summary>
+    public bool AppearancePending { get; set; }
+
+    /// <summary>
     ///     When the next HP and SP regeneration steps fall due; <see cref="long.MinValue" /> until the regeneration
     ///     phase first sees the player.
     /// </summary>
@@ -121,6 +133,21 @@ public sealed class PlayerEntity : WorldEntity
     public override EntityKind Kind => EntityKind.Player;
 
     public override string DefinitionId => Job.Value;
+
+    /// <summary>
+    ///     Keeps the worn weapon's item; only a change of the item itself, never an armor or the same item again, is
+    ///     announced.
+    /// </summary>
+    public void SetWornWeapon(ItemDefinitionId? item)
+    {
+        if (Nullable.Equals(WornWeapon, item))
+        {
+            return;
+        }
+
+        WornWeapon = item;
+        AppearancePending = true;
+    }
 
     /// <summary>
     ///     Adds <paramref name="effect" />, or renews the active effect of the same status to its end. True when it was

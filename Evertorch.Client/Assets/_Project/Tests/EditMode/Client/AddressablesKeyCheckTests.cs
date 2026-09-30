@@ -20,12 +20,19 @@ public sealed class AddressablesKeyCheckTests
         string itemModel = "pickup_slime_gel",
         string sceneKey = "map_training_ground",
         string npcPrefab = "npc_quartermaster",
-        string skillProjectile = "")
+        string skillProjectile = "",
+        string itemHeld = "")
     {
         var map = new ClientMap(new MapDefinitionId("map.a"), "A", sceneKey, ClientTestGrids.CreateYard());
         var job = new ClientJob(new JobDefinitionId("job.a"), "A", jobPrefab);
         var monster = new ClientMonster(new MonsterDefinitionId("monster.a"), "A", monsterPrefab, "monster_icon");
-        var item = new ClientItem(new ItemDefinitionId("item.a"), "A", ItemType.Material, itemModel, "item_icon");
+        var item = new ClientItem(
+            new ItemDefinitionId("item.a"),
+            "A",
+            ItemType.Weapon,
+            itemModel,
+            "item_icon",
+            itemHeld);
         var npc = new ClientNpc(new NpcDefinitionId("npc.a"), "A", npcPrefab);
         var skill = new ClientSkill(
             new SkillDefinitionId("skill.a"),
@@ -62,6 +69,7 @@ public sealed class AddressablesKeyCheckTests
     [TestCase("item")]
     [TestCase("npc")]
     [TestCase("skill")]
+    [TestCase("held")]
     public void Check_WhenARequiredKeyHasNoEntry_ReportsIt(string kind)
     {
         ClientContent content = kind switch
@@ -70,6 +78,7 @@ public sealed class AddressablesKeyCheckTests
             "monster" => CreateContent(monsterPrefab: "absent_key"),
             "npc" => CreateContent(npcPrefab: "absent_key"),
             "skill" => CreateContent(skillProjectile: "absent_key"),
+            "held" => CreateContent(itemHeld: "absent_key"),
             _ => CreateContent(itemModel: "absent_key")
         };
 

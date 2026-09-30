@@ -56,6 +56,7 @@ public sealed class VisibilityPhase : ITickPhase
                 if (entity is PlayerEntity player)
                 {
                     player.RespawnPending = false;
+                    player.AppearancePending = false;
                 }
             }
         }
@@ -77,6 +78,14 @@ public sealed class VisibilityPhase : ITickPhase
                 if (entity is PlayerEntity { RespawnPending: true })
                 {
                     SendSpawn(session, entity);
+                }
+                else if (entity is PlayerEntity { AppearancePending: true } seen)
+                {
+                    // A weapon worn or taken off shows in the player's hand to those who see it; a replacement spawn
+                    // above already carries it (Network Protocol §9).
+                    m_sender.Send(
+                        session.Connection,
+                        new WornWeaponChanged(seen.Id, seen.WornWeapon?.Value ?? string.Empty));
                 }
 
                 continue;
@@ -126,7 +135,8 @@ public sealed class VisibilityPhase : ITickPhase
                 entity.Position,
                 entity.Facing,
                 entity.StateFlags,
-                entity.SharedHealthPermille));
+                entity.SharedHealthPermille,
+                entity is PlayerEntity player ? player.WornWeapon?.Value ?? string.Empty : string.Empty));
     }
 }
 }

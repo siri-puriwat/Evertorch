@@ -57,6 +57,11 @@ internal static class ClientProjection
             writer.WriteNumber("stackLimit", item.StackLimit);
             writer.WriteString("icon", authored.Icon);
             writer.WriteString("model", authored.Model);
+            if (authored.Held != null)
+            {
+                writer.WriteString("held", authored.Held);
+            }
+
             writer.WriteEndObject();
         }
 

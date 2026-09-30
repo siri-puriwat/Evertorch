@@ -37,6 +37,12 @@ public sealed class RemoteEntity
     /// </summary>
     public ushort HealthPermille { get; internal set; }
 
+    /// <summary>
+    ///     The item ID of the weapon a player wears, from its spawn and each change the server announces; empty when it
+    ///     wears none and for every other kind (Network Protocol §9).
+    /// </summary>
+    public string WornWeapon { get; internal set; } = string.Empty;
+
     public RemoteEntityBuffer Buffer { get; } = new();
 }
 }

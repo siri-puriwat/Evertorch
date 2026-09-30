@@ -66,6 +66,7 @@ public sealed class SharedLifecycleMessageTests
         0x00, 0x00, 0x80, 0x3F, 0x00, 0x00, 0x00, 0x3F, 0x00, 0x00, 0x00, 0xC0,
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80, 0x3F,
         0x01, 0x00,
+        0x00, 0x00,
         0x00, 0x00
     };
 
@@ -78,7 +79,16 @@ public sealed class SharedLifecycleMessageTests
         0x00, 0x00, 0x40, 0x41, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x41,
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80, 0x3F,
         0x00, 0x00,
-        0xE8, 0x03
+        0xE8, 0x03,
+        0x00, 0x00
+    };
+
+    // A player seen with the training sword in its hand (Network Protocol §6).
+    private static readonly byte[] WornWeaponChangedBytes =
+    {
+        0x20, 0x80,
+        0xEF, 0xCD, 0xAB, 0x89, 0x67, 0x45, 0x23, 0x01,
+        0x06, 0x00, 0x69, 0x74, 0x65, 0x6D, 0x2E, 0x61
     };
 
     private static readonly byte[] EntityDespawnBytes =
@@ -303,6 +313,20 @@ public sealed class SharedLifecycleMessageTests
         Assert.That(read.ExperienceToNextLevel, Is.EqualTo(0x1112131415161718UL));
         Assert.That(read.CurrentSpirit, Is.EqualTo(20u));
         Assert.That(read.MaximumSpirit, Is.EqualTo(24u));
+    }
+
+    [Test]
+    public void WornWeaponChanged_WriteAndRead_MatchGoldenBytes()
+    {
+        var message = new WornWeaponChanged(new EntityId(0x0123456789ABCDEF), "item.a");
+        byte[] buffer = new byte[message.GetEncodedLength()];
+        message.Write(buffer);
+
+        bool isRead = WornWeaponChanged.TryRead(WornWeaponChangedBytes, out WornWeaponChanged? read);
+
+        Assert.That(buffer, Is.EqualTo(WornWeaponChangedBytes));
+        Assert.That(isRead, Is.True);
+        Assert.That(read!.WornWeapon, Is.EqualTo("item.a"));
     }
 }
 }

@@ -46,7 +46,7 @@ public sealed class ContentProjectionTests
     private static readonly Dictionary<string, string[]> ReviewedClientFieldNames = new()
     {
         ["items.json"] = new[]
-            { "schemaVersion", "definitions", "id", "displayName", "type", "stackLimit", "icon", "model" },
+            { "schemaVersion", "definitions", "id", "displayName", "type", "stackLimit", "icon", "model", "held" },
         ["jobs.json"] = new[] { "schemaVersion", "definitions", "id", "displayName", "prefab" },
         ["manifest.json"] = new[] { "schemaVersion", "clientContentVersion", "files", "path", "sha256" },
         ["maps.json"] = new[]

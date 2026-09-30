@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Evertorch.Client;
@@ -14,8 +15,10 @@ namespace Evertorch.Server.Tests
 /// <summary>
 ///     The Milestone 11 art pass's server side end to end (ROADMAP §8): the composed server host on a real PostgreSQL
 ///     18, real UDP sockets on loopback, and two clients built from the client's production networking and gameplay
-///     code. A wearer holding the training sword, unworn, enters beside an observer, which sees it; the wearer equips
-///     the sword; both keep what they hold through a restart.
+///     code. A wearer at Adventurer job level 10 holding the training sword, unworn, enters beside an observer, which
+///     sees it unarmed; the wearer equips the sword, and the observer sees it in its hand, told once and with no new
+///     spawn; after a restart the observer's spawn of the wearer names the sword; the wearer becomes an Arcanist, who
+///     cannot wield it, and the observer's replacement spawn shows the Arcanist empty-handed.
 /// </summary>
 [TestFixture]
 [NonParallelizable]
@@ -23,6 +26,8 @@ public sealed class ArtPassAcceptanceTests
 {
     private const string TrainingGround = "map.training_ground";
     private const string Adventurer = "job.adventurer";
+    private const string Arcanist = "job.arcanist";
+    private const string Guildmaster = "npc.guildmaster";
     private const string TrainingSword = "item.weapon.training_sword";
     private const string WearerIdentity = "art-pass-wearer";
     private const string WearerName = "Wearer1";
@@ -62,11 +67,15 @@ public sealed class ArtPassAcceptanceTests
         int port = host.Services.GetRequiredService<LiteNetLibServerTransport>().LocalPort;
         using var wearer = new SocketClient(content, WearerIdentity, WearerName);
         using var observer = new SocketClient(content, ObserverIdentity, ObserverName);
-        wearer.AfterCreate = () => StoreSword(WearerName);
+        wearer.AfterCreate = () =>
+        {
+            BuildSeed.ReadyToChange.Apply(m_database.ConnectionString, WearerName);
+            StoreSword(WearerName);
+        };
         EnterTogether(port, wearer, observer);
 
         Assert.That(SwordOf(wearer).Slot, Is.EqualTo(EquipmentSlot.None), "enter: the sword held, not worn");
-        AssertSees("enter", observer, wearer);
+        AssertSees("enter", observer, wearer, Adventurer, string.Empty);
 
         EquipTheSword(wearer, observer);
 
@@ -82,17 +91,24 @@ public sealed class ArtPassAcceptanceTests
         AssertCleanTraffic("equip", wearer, observer);
     }
 
-    // The equip is committed and told to the wearer (Gameplay Systems §11.1).
+    // The equip is committed and told to the wearer; the observer sees the sword in its hand, told once, with no new
+    // spawn (Gameplay Systems §11.1; Network Protocol §9).
     private static void EquipTheSword(SocketClient wearer, SocketClient observer)
     {
         const string step = "equip";
         ClientWorld world = wearer.World;
+        var changes = new List<string>();
+        var spawns = new List<EntityId>();
+        observer.World.RemoteWornWeaponChanged += remote => changes.Add(remote.WornWeapon);
+        observer.World.RemoteSpawned += remote => spawns.Add(remote.Entity);
         wearer.Connection.SendEquip(SwordOf(wearer).InventoryItem);
         Assert.That(
             SocketClients.PumpUntil(() => SwordOf(wearer).Slot == EquipmentSlot.Weapon, wearer, observer),
             Is.True,
             $"{step}: the sword worn; {world.LastRejection}");
-        AssertSees(step, observer, wearer);
+        AssertSees(step, observer, wearer, Adventurer, TrainingSword);
+        Assert.That(changes, Is.EqualTo(new[] { TrainingSword }), $"{step}: the observer told once");
+        Assert.That(spawns, Is.Empty, $"{step}: no new spawn");
     }
 
     // After a clean stop and a second server on the same database, the wearer still wears the sword, and the observer
@@ -106,8 +122,50 @@ public sealed class ArtPassAcceptanceTests
         EnterTogether(port, wearer, observer);
 
         Assert.That(SwordOf(wearer).Slot, Is.EqualTo(EquipmentSlot.Weapon), "restart: the sword still worn");
-        AssertSees("restart", observer, wearer);
+        AssertSees("restart", observer, wearer, Adventurer, TrainingSword);
+
+        BecomeAnArcanist(wearer, observer);
         AssertCleanTraffic("restart", wearer, observer);
+    }
+
+    // The Arcanist cannot wield a sword, so the change takes it off; the observer's replacement spawn shows the new
+    // body empty-handed (Gameplay Systems §6.1; Network Protocol §9).
+    private static void BecomeAnArcanist(SocketClient wearer, SocketClient observer)
+    {
+        const string step = "change";
+        ClientWorld world = wearer.World;
+        Assert.That(
+            SocketClients.PumpUntil(() => GuildmasterInView(world) != null, wearer, observer),
+            Is.True,
+            $"{step}: the Guildmaster in view");
+        RemoteEntity guildmaster = GuildmasterInView(world)!;
+        int windows = wearer.NpcWindows.Count;
+        wearer.TalkTo(guildmaster.Entity);
+        Assert.That(
+            SocketClients.PumpUntil(() => wearer.NpcWindows.Count > windows, wearer, observer),
+            Is.True,
+            $"{step}: walked up to it");
+        wearer.Connection.SendChangeJob(guildmaster.Entity, new JobDefinitionId(Arcanist));
+        Assert.That(
+            SocketClients.PumpUntil(() => SwordOf(wearer).Slot == EquipmentSlot.None, wearer, observer),
+            Is.True,
+            $"{step}: the sword taken off; {world.LastRejection}");
+        EntityId entity = world.LocalEntity;
+        Assert.That(
+            SocketClients.PumpUntil(
+                () => observer.World.Remotes.TryGetValue(entity, out RemoteEntity? seen)
+                    && seen.DefinitionId == Arcanist,
+                wearer,
+                observer),
+            Is.True,
+            $"{step}: the observer sees the Arcanist");
+        Assert.That(observer.World.Remotes[entity].WornWeapon, Is.Empty, $"{step}: empty-handed");
+    }
+
+    private static RemoteEntity? GuildmasterInView(ClientWorld world)
+    {
+        return world.Remotes.Values.SingleOrDefault(candidate =>
+            candidate.Kind == EntityKind.Npc && candidate.DefinitionId == Guildmaster);
     }
 
     private static InventoryEntry SwordOf(SocketClient client)
@@ -135,17 +193,20 @@ public sealed class ArtPassAcceptanceTests
         }
     }
 
-    // The viewer has a spawn for the seen character, an Adventurer.
-    private static void AssertSees(string step, SocketClient viewer, SocketClient seen)
+    // The viewer has a spawn for the seen character, of the job given, with the weapon given in its hand.
+    private static void AssertSees(string step, SocketClient viewer, SocketClient seen, string job, string weapon)
     {
         EntityId entity = seen.World.LocalEntity;
         Assert.That(
             SocketClients.PumpUntil(() => viewer.World.Remotes.ContainsKey(entity), viewer, seen),
             Is.True,
             $"{step}: in view");
+        Assert.That(
+            SocketClients.PumpUntil(() => viewer.World.Remotes[entity].WornWeapon == weapon, viewer, seen),
+            Is.True,
+            $"{step}: '{weapon}' in its hand");
         RemoteEntity remote = viewer.World.Remotes[entity];
-        Assert.That((remote.Kind, remote.DefinitionId), Is.EqualTo((EntityKind.Player, Adventurer)),
-            $"{step}: its job");
+        Assert.That((remote.Kind, remote.DefinitionId), Is.EqualTo((EntityKind.Player, job)), $"{step}: its job");
     }
 
     private void StoreSword(string name)
@@ -171,7 +232,7 @@ public sealed class ArtPassAcceptanceTests
     }
 
     [Test]
-    public void WornWeapon_OverRealSocketsAndPostgres_IsEquippedAndKeptThroughARestart()
+    public void WornWeapon_OverRealSocketsAndPostgres_IsSeenByAnObserverAndKeptThroughARestart()
     {
         using var root = new TemporaryDirectory();
         PackageFixture.WriteTo(

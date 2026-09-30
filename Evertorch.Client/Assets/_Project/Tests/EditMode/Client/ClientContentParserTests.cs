@@ -173,6 +173,11 @@ public sealed class ClientContentParserTests
         "'monsters.json' is not readable or has an unsupported schema version")]
     [TestCase(
         ClientContentParser.ItemsFile,
+        "\"model\":\"pickup_slime_gel\"",
+        "\"model\":\"pickup_slime_gel\",\"held\":\"weapon_slime_gel\"",
+        "Item 'item.material.slime_gel': held is not a weapon's logical key")]
+    [TestCase(
+        ClientContentParser.ItemsFile,
         "\"id\":\"item.material.slime_gel\"",
         "\"id\":\"job.slime_gel\"",
         "invalid or repeated item ID")]

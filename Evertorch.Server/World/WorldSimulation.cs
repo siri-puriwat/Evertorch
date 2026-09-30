@@ -143,6 +143,7 @@ public sealed class WorldSimulation
         }
 
         ItemEquipment? weapon = null;
+        ItemDefinitionId? wornWeapon = null;
         ItemEquipment? armor = null;
         foreach (StoredItem item in stored.Items)
         {
@@ -164,6 +165,7 @@ public sealed class WorldSimulation
             if (slot == EquipmentSlot.Weapon)
             {
                 weapon = itemDefinition!.Equipment;
+                wornWeapon = itemId;
             }
             else if (slot == EquipmentSlot.Armor)
             {
@@ -218,6 +220,7 @@ public sealed class WorldSimulation
         // Equipment loads with the character and counts from its first tick (Gameplay Systems §11.1), so the stored
         // HP and SP are held to the maximums it gives.
         player.Weapon = weapon;
+        player.SetWornWeapon(wornWeapon);
         player.Armor = armor;
         m_stats.Recalculate(player, job);
         player.CurrentHealth = wasDead ? player.MaxHealth : Math.Min(stored.Health, player.MaxHealth);

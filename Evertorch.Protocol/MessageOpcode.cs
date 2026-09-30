@@ -58,6 +58,7 @@ public enum MessageOpcode : ushort
     StatusEffects = 0x801C,
     NpcServices = 0x801D,
     QuestLog = 0x801E,
-    CharacterSheet = 0x801F
+    CharacterSheet = 0x801F,
+    WornWeaponChanged = 0x8020
 }
 }

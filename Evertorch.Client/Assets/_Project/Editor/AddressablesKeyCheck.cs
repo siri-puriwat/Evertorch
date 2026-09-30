@@ -60,6 +60,12 @@ public static class AddressablesKeyCheck
         {
             RequirePrefab(addresses, item.ModelKey, $"{item.Id.Value} model", missing);
             NoteOptional(addresses, item.IconKey, $"{item.Id.Value} icon", missingOptional);
+
+            // A weapon names its model in a hand on purpose, so it must resolve (Content Pipeline §6).
+            if (item.HeldKey.Length > 0)
+            {
+                RequirePrefab(addresses, item.HeldKey, $"{item.Id.Value} held", missing);
+            }
         }
 
         foreach (ClientNpc npc in content.Npcs)

@@ -16,7 +16,8 @@ public sealed class EntitySpawn
         WorldPosition position,
         WorldDirection facing,
         EntityStateFlags stateFlags,
-        ushort healthPermille)
+        ushort healthPermille,
+        string wornWeapon = "")
     {
         Entity = entity;
         Kind = kind;
@@ -25,6 +26,7 @@ public sealed class EntitySpawn
         Facing = facing;
         StateFlags = stateFlags;
         HealthPermille = healthPermille;
+        WornWeapon = wornWeapon ?? throw new ArgumentNullException(nameof(wornWeapon));
     }
 
     public EntityId Entity { get; }
@@ -48,6 +50,12 @@ public sealed class EntitySpawn
     /// </summary>
     public ushort HealthPermille { get; }
 
+    /// <summary>
+    ///     The item ID of the weapon a player wears, which everyone near sees in its hand; empty when it wears none and
+    ///     for every other kind (Network Protocol §6).
+    /// </summary>
+    public string WornWeapon { get; }
+
     public static bool TryRead(ReadOnlySpan<byte> source, out EntitySpawn? message)
     {
         message = null;
@@ -60,6 +68,7 @@ public sealed class EntitySpawn
             || !reader.TryReadDirection(out WorldDirection facing)
             || !reader.TryReadUInt16(out ushort flagsValue)
             || !reader.TryReadUInt16(out ushort healthPermille)
+            || !reader.TryReadString(ProtocolLimits.MaxDefinitionIdBytes, out string wornWeapon)
             || !reader.IsAtEnd)
         {
             return false;
@@ -70,7 +79,8 @@ public sealed class EntitySpawn
         if (!WireEnums.IsDefined(kind)
             || !WireEnums.IsDefined(stateFlags)
             || !IsDefinitionOfKind(kind, definitionId)
-            || !IsHealthValid(kind, healthPermille))
+            || !IsHealthValid(kind, healthPermille)
+            || !IsWornWeaponValid(kind, wornWeapon))
         {
             return false;
         }
@@ -82,7 +92,8 @@ public sealed class EntitySpawn
             position,
             facing,
             stateFlags,
-            healthPermille);
+            healthPermille,
+            wornWeapon);
         return true;
     }
 
@@ -95,7 +106,8 @@ public sealed class EntitySpawn
             + 3 * sizeof(float)
             + 2 * sizeof(float)
             + sizeof(ushort)
-            + sizeof(ushort);
+            + sizeof(ushort)
+            + WireText.GetEncodedLength(WornWeapon, ProtocolLimits.MaxDefinitionIdBytes);
     }
 
     public int Write(Span<byte> destination)
@@ -109,12 +121,19 @@ public sealed class EntitySpawn
         writer.WriteDirection(Facing);
         writer.WriteUInt16((ushort)StateFlags);
         writer.WriteUInt16(HealthPermille);
+        writer.WriteString(WornWeapon, ProtocolLimits.MaxDefinitionIdBytes);
         return writer.Position;
     }
 
     private static bool IsHealthValid(EntityKind kind, ushort healthPermille)
     {
         return kind == EntityKind.Monster ? healthPermille <= HealthRatio.Full : healthPermille == 0;
+    }
+
+    private static bool IsWornWeaponValid(EntityKind kind, string wornWeapon)
+    {
+        return wornWeapon.Length == 0
+            || (kind == EntityKind.Player && ItemDefinitionId.TryCreate(wornWeapon, out ItemDefinitionId _));
     }
 
     private static bool IsDefinitionOfKind(EntityKind kind, string definitionId)

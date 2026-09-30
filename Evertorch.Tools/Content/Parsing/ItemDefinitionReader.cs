@@ -56,6 +56,18 @@ internal static class ItemDefinitionReader
         YamlFieldReader client = root.RequiredMapping("client");
         string icon = client.RequiredAssetKey("icon");
         string model = client.RequiredAssetKey("model");
+        string? held = null;
+        if (client.Has("held"))
+        {
+            if (type == ItemType.Weapon)
+            {
+                held = client.RequiredAssetKey("held");
+            }
+            else
+            {
+                client.ReportField("held", "is only for a weapon");
+            }
+        }
 
         root.ReportUnknownFields();
         if (diagnostics.Count != errorsBefore)
@@ -64,7 +76,7 @@ internal static class ItemDefinitionReader
         }
 
         var definition = new ItemDefinition(id, displayName, type, stackLimit, weight, sellPrice, equipment, effect);
-        return new AuthoredItem(root.ToSource(), definition, icon, model);
+        return new AuthoredItem(root.ToSource(), definition, icon, model, held);
     }
 
     // A weapon has an attack, an attack-speed penalty within the job's limit, and a type, armor a defense; either may

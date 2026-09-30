@@ -12,3 +12,4 @@ server:
 client:
   icon: item_training_sword
   model: pickup_training_sword
+  held: weapon_training_sword

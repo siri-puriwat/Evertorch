@@ -58,6 +58,18 @@ public sealed class EquipmentTests
         });
     }
 
+    private static string[] WornWeapons(TestServer server, ConnectionId player)
+    {
+        return Sent(server, player, MessageOpcode.WornWeaponChanged, (byte[] bytes, out WornWeaponChanged read) =>
+            {
+                bool isRead = WornWeaponChanged.TryRead(bytes, out WornWeaponChanged? message);
+                read = message!;
+                return isRead;
+            })
+            .Select(changed => changed.WornWeapon)
+            .ToArray();
+    }
+
     private static List<CharacterHealth> Healths(TestServer server, ConnectionId player)
     {
         return Sent(server, player, MessageOpcode.CharacterHealth, (byte[] bytes, out CharacterHealth read) =>
@@ -282,6 +294,7 @@ public sealed class EquipmentTests
         server.Tick(2);
 
         Assert.That(Changes(server, player), Is.Empty, "no answer yet, so nothing is told");
+        Assert.That(WornWeapons(server, other), Is.Empty, "nor does anyone near see the sword yet");
         Assert.That(server.PlayerOf(player).Weapon, Is.Null);
         Assert.That(CharacterOf(server, player).Operation!.Kind, Is.EqualTo(InventoryOperationKind.Equip));
 
@@ -291,7 +304,9 @@ public sealed class EquipmentTests
         InventoryChanged change = Changes(server, player).Single();
         Assert.That((change.PriorRevision, change.NewRevision), Is.EqualTo((Revision, Revision + 1u)));
         Assert.That(Rows(change), Is.EqualTo(new[] { (sword, 1u, EquipmentSlot.Weapon) }));
-        Assert.That(Changes(server, other), Is.Empty);
+        Assert.That(Changes(server, other), Is.Empty, "the inventory is the owner's alone");
+        Assert.That(WornWeapons(server, other), Is.EqualTo(new[] { Sword }), "everyone near sees the sword once");
+        Assert.That(WornWeapons(server, player), Is.Empty, "the owner learns it from its inventory");
         Assert.That(SlotOf(server, 1, sword), Is.EqualTo("Weapon"));
         Assert.That(server.Store.EquipmentCommits, Has.Count.EqualTo(1));
         Assert.That(CharacterOf(server, player).Inventory.WornIn(EquipmentSlot.Weapon), Is.EqualTo(sword));
@@ -491,13 +506,16 @@ public sealed class EquipmentTests
     {
         var server = new TestServer();
         ConnectionId player = EnterHolding(server, Staff);
+        ConnectionId other = server.EnterWorld(2);
         long staff = RowOf(server, 1, Staff);
         Equip(server, player, staff, 1);
         server.PlayerOf(player).CurrentSpirit = 26;
+        server.Tick();
         server.Transport.ClearSent();
 
         server.SendUnequip(player, EquipmentSlot.Weapon, 2);
         server.TickUntil(() => CharacterOf(server, player).Operation == null);
+        server.Tick();
 
         Assert.That(Rows(Changes(server, player).Single()), Is.EqualTo(new[] { (staff, 1u, EquipmentSlot.None) }));
         Assert.That(server.Store.Stored(1).Items.Select(item => (item.Id, item.EquippedSlot)),
@@ -507,6 +525,23 @@ public sealed class EquipmentTests
         Assert.That((entity.Stats.AttackSpeed, entity.MaxSpirit), Is.EqualTo((153, 24)));
         CharacterHealth health = Healths(server, player).Single();
         Assert.That((health.CurrentSpirit, health.MaximumSpirit), Is.EqualTo((24u, 24u)), "SP held to the new maximum");
+        Assert.That(WornWeapons(server, other), Is.EqualTo(new[] { string.Empty }), "others see an empty hand once");
+    }
+
+    [Test]
+    public void WornWeapon_IsToldToOthersOnlyWhenTheWeaponsItemChanges()
+    {
+        var server = new TestServer();
+        ConnectionId player = EnterHolding(server, Cloth);
+        ConnectionId other = server.EnterWorld(2);
+        server.Tick();
+        server.Transport.ClearSent();
+
+        Equip(server, player, RowOf(server, 1, Cloth), 1);
+        server.Tick(2);
+
+        Assert.That(server.PlayerOf(player).Armor, Is.Not.Null, "the armor is worn");
+        Assert.That(WornWeapons(server, other), Is.Empty, "an armor shows in no hand");
     }
 }
 }

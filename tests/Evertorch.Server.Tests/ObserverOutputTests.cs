@@ -38,7 +38,7 @@ public sealed class ObserverOutputTests
         MessageOpcode.EntitySpawn, MessageOpcode.EntityDespawn, MessageOpcode.EntitySnapshot,
         MessageOpcode.AttackStarted, MessageOpcode.Damage, MessageOpcode.EntityDied, MessageOpcode.EntityRevived,
         MessageOpcode.SkillCastStarted, MessageOpcode.SkillResolved, MessageOpcode.ItemDropped,
-        MessageOpcode.ItemPickedUp
+        MessageOpcode.ItemPickedUp, MessageOpcode.WornWeaponChanged
     };
 
     private static MapInstance GroundOf(TestServer server)

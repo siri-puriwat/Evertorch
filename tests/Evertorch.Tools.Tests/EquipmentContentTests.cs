@@ -84,6 +84,12 @@ public sealed class EquipmentContentTests
     [TestCase(Armor, "    defense: 8\n", "    attack: 8\n", "server.equipment.defense", "required field is missing")]
     [TestCase(
         Armor,
+        "  model: pickup_cloth_armor\n",
+        "  model: pickup_cloth_armor\n  held: weapon_training_sword\n",
+        "client.held",
+        "is only for a weapon")]
+    [TestCase(
+        Armor,
         "  equipment:\n    defense: 8\n",
         "",
         "server.equipment",
@@ -136,6 +142,27 @@ public sealed class EquipmentContentTests
             JsonElement client = Item(result.Packages.Client, "item.weapon.training_sword");
             Assert.That(client.TryGetProperty("equipment", out _), Is.False);
             Assert.That(client.GetProperty("type").GetString(), Is.EqualTo("weapon"));
+        }
+    }
+
+    [Test]
+    public void Build_WithAWeaponsHeldModel_WritesItForTheClientAlone()
+    {
+        using (var workspace = new ContentWorkspace())
+        {
+            workspace.Write(Sword, SwordText + "  held: weapon_training_sword\n");
+            workspace.Write(Armor, ArmorText);
+
+            ContentPipelineResult result = ContentPipeline.Run(workspace.ContentRoot);
+
+            Assert.That(result.Diagnostics, Is.Empty, Describe(result));
+            JsonElement sword = Item(result.Packages!.Client, "item.weapon.training_sword");
+            Assert.That(sword.GetProperty("held").GetString(), Is.EqualTo("weapon_training_sword"));
+            Assert.That(Item(result.Packages.Client, "item.armor.cloth").TryGetProperty("held", out _), Is.False);
+            Assert.That(
+                Item(result.Packages.Server, "item.weapon.training_sword").TryGetProperty("held", out _),
+                Is.False,
+                "a presentation key stays out of the server's package");
         }
     }
 

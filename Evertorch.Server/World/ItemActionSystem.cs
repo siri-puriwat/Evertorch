@@ -741,6 +741,7 @@ public sealed class ItemActionSystem : ITickPhase
         int maxSpirit = player.MaxSpirit;
         m_combat.InterruptCast(player);
         player.Weapon = EquipmentIn(character.Inventory, EquipmentSlot.Weapon);
+        player.SetWornWeapon(ItemIn(character.Inventory, EquipmentSlot.Weapon));
         player.Armor = EquipmentIn(character.Inventory, EquipmentSlot.Armor);
         m_builds.ChangeJob(
             player,
@@ -780,12 +781,18 @@ public sealed class ItemActionSystem : ITickPhase
         int maxHealth = player.MaxHealth;
         int maxSpirit = player.MaxSpirit;
         player.Weapon = EquipmentIn(character.Inventory, EquipmentSlot.Weapon);
+        player.SetWornWeapon(ItemIn(character.Inventory, EquipmentSlot.Weapon));
         player.Armor = EquipmentIn(character.Inventory, EquipmentSlot.Armor);
         m_stats.Recalculate(player, m_content.Jobs[player.Job]);
         if (player.MaxHealth != maxHealth || player.MaxSpirit != maxSpirit)
         {
             m_sender.SendHealth(player);
         }
+    }
+
+    private static ItemDefinitionId? ItemIn(CharacterInventory inventory, EquipmentSlot slot)
+    {
+        return inventory.TryGetRow(inventory.WornIn(slot), out InventoryEntry row) ? row.Item : null;
     }
 
     private ItemEquipment? EquipmentIn(CharacterInventory inventory, EquipmentSlot slot)

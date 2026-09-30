@@ -204,6 +204,11 @@ public sealed class ClientWorld
 
     public event Action<RemoteEntity>? RemoteDespawned;
 
+    /// <summary>
+    ///     A player this client sees now wears another weapon, or none.
+    /// </summary>
+    public event Action<RemoteEntity>? RemoteWornWeaponChanged;
+
     public event Action? TargetChanged;
 
     public event Action<AttackStarted>? AttackStartedReceived;
@@ -288,10 +293,27 @@ public sealed class ClientWorld
             spawn.Kind,
             spawn.DefinitionId,
             spawn.StateFlags,
-            spawn.HealthPermille);
+            spawn.HealthPermille) { WornWeapon = spawn.WornWeapon };
         remote.Buffer.Add(LatestServerTick * m_tickSeconds, spawn.Position, spawn.Facing);
         m_remotes.Add(spawn.Entity, remote);
         RemoteSpawned?.Invoke(remote);
+    }
+
+    public void OnWornWeaponChanged(WornWeaponChanged changed)
+    {
+        if (changed == null)
+        {
+            throw new ArgumentNullException(nameof(changed));
+        }
+
+        if (!m_remotes.TryGetValue(changed.Entity, out RemoteEntity? remote) || remote.Kind != EntityKind.Player)
+        {
+            UnknownEntityEvents++;
+            return;
+        }
+
+        remote.WornWeapon = changed.WornWeapon;
+        RemoteWornWeaponChanged?.Invoke(remote);
     }
 
     public void OnDespawn(EntityDespawn despawn)

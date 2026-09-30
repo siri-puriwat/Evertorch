@@ -334,7 +334,14 @@ public static class ClientContentParser
                 return null;
             }
 
-            items.Add(id, new ClientItem(id, item.displayName ?? string.Empty, type, item.model, item.icon));
+            string held = item.held ?? string.Empty;
+            if (held.Length > 0 && (type != ItemType.Weapon || !IsLogicalKey(held)))
+            {
+                error = $"Item '{item.id}': held is not a weapon's logical key.";
+                return null;
+            }
+
+            items.Add(id, new ClientItem(id, item.displayName ?? string.Empty, type, item.model, item.icon, held));
         }
 
         return items;
@@ -808,6 +815,7 @@ public static class ClientContentParser
         public string? type = string.Empty;
         public string? model = string.Empty;
         public string? icon = string.Empty;
+        public string? held = string.Empty;
     }
 
     [Serializable]

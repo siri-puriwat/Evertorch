@@ -86,6 +86,23 @@ public sealed class MessageFuzzTests
                     600)),
             payload => EntitySpawn.TryRead(payload, out EntitySpawn? message) ? Encode(message!) : null);
         yield return Case(
+            "EntitySpawn (armed)",
+            Encode(
+                new EntitySpawn(
+                    new EntityId(11),
+                    EntityKind.Player,
+                    "job.vanguard",
+                    new WorldPosition(1f, 2f, 3f),
+                    new WorldDirection(0f, 1f),
+                    EntityStateFlags.None,
+                    0,
+                    "item.weapon.training_sword")),
+            payload => EntitySpawn.TryRead(payload, out EntitySpawn? message) ? Encode(message!) : null);
+        yield return Case(
+            "WornWeaponChanged",
+            Encode(WornWeaponChangedTests.Golden),
+            payload => WornWeaponChanged.TryRead(payload, out WornWeaponChanged? message) ? Encode(message!) : null);
+        yield return Case(
             "AttackEntity",
             Encode(new AttackEntity(new EntityId(9), 3)),
             payload => AttackEntity.TryRead(payload, out AttackEntity message) ? Encode(message) : null);
@@ -749,6 +766,13 @@ public sealed class MessageFuzzTests
     }
 
     private static byte[] Encode(ChangeJob message)
+    {
+        byte[] buffer = new byte[message.GetEncodedLength()];
+        message.Write(buffer);
+        return buffer;
+    }
+
+    private static byte[] Encode(WornWeaponChanged message)
     {
         byte[] buffer = new byte[message.GetEncodedLength()];
         message.Write(buffer);

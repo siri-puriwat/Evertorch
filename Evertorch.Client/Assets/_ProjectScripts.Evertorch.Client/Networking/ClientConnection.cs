@@ -158,6 +158,9 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
             case MessageOpcode.EntityDespawn:
                 OnEntityDespawn(payload);
                 break;
+            case MessageOpcode.WornWeaponChanged:
+                OnWornWeaponChanged(payload);
+                break;
             case MessageOpcode.EntitySnapshot:
                 OnEntitySnapshot(payload);
                 break;
@@ -944,6 +947,22 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
         else
         {
             World.OnSpawn(spawn);
+        }
+    }
+
+    private void OnWornWeaponChanged(ReadOnlySpan<byte> payload)
+    {
+        if (!WornWeaponChanged.TryRead(payload, out WornWeaponChanged? changed) || changed == null)
+        {
+            MalformedMessages++;
+        }
+        else if (World == null)
+        {
+            UnexpectedMessages++;
+        }
+        else
+        {
+            World.OnWornWeaponChanged(changed);
         }
     }
 

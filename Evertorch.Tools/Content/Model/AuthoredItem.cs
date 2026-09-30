@@ -7,12 +7,18 @@ namespace Evertorch.Tools
 /// </summary>
 public sealed class AuthoredItem
 {
-    public AuthoredItem(DefinitionSource source, ItemDefinition definition, string icon, string model)
+    public AuthoredItem(
+        DefinitionSource source,
+        ItemDefinition definition,
+        string icon,
+        string model,
+        string? held = null)
     {
         Source = source;
         Definition = definition;
         Icon = icon;
         Model = model;
+        Held = held;
     }
 
     public DefinitionSource Source { get; }
@@ -22,5 +28,10 @@ public sealed class AuthoredItem
     public string Icon { get; }
 
     public string Model { get; }
+
+    /// <summary>
+    ///     A weapon's model in a hand (Content Pipeline §4); null when the item names none.
+    /// </summary>
+    public string? Held { get; }
 }
 }

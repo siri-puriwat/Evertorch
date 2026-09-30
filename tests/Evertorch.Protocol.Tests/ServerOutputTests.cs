@@ -45,7 +45,7 @@ public sealed class ServerOutputTests
         ["EntityRevived"] = new[] { "Entity", "Facing", "Position", "ServerTick" },
         ["EntitySnapshot"] = new[] { "Entities", "LastProcessedInputSequence", "ServerTick" },
         ["EntitySpawn"] = new[]
-            { "DefinitionId", "Entity", "Facing", "HealthPermille", "Kind", "Position", "StateFlags" },
+            { "DefinitionId", "Entity", "Facing", "HealthPermille", "Kind", "Position", "StateFlags", "WornWeapon" },
         ["EntityState"] = new[] { "Entity", "Facing", "Position", "StateFlags", "VelocityX", "VelocityY", "VelocityZ" },
         ["InventoryChanged"] = new[] { "Changes", "Coins", "NewRevision", "PriorRevision" },
         ["InventoryEntry"] = new[] { "InventoryItem", "Item", "Quantity", "Slot" },
@@ -92,7 +92,8 @@ public sealed class ServerOutputTests
             "Facing", "Job", "LastCommandSequence", "Level", "LocalEntity", "Map", "MapEpoch", "MapInstance",
             "MaximumHealth", "MaximumSpirit", "MovementSpeed", "Position", "ServerTick"
         },
-        ["WorldPosition"] = new[] { "X", "Y", "Z" }
+        ["WorldPosition"] = new[] { "X", "Y", "Z" },
+        ["WornWeaponChanged"] = new[] { "Entity", "WornWeapon" }
     };
 
     // An NPC's prices and a quest's terms travel on purpose, because the player must see them (Content Pipeline §5),

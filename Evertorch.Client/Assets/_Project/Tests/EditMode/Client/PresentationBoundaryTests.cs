@@ -24,10 +24,10 @@ public sealed class PresentationBoundaryTests
         + @"|\.ActionLock\b"
         + @"|\.On(Spawn|Despawn|Snapshot|TargetChanged|AttackStarted|Damage|EntityDied|EntityRevived|CommandRejected"
         + @"|ItemDropped|ItemPickedUp|CharacterHealth|CharacterProgress|SkillCastStarted|SkillResolved|SkillList"
-        + @"|StatusEffects|NpcServices|QuestLog|CharacterSheet|LocalCancel|Changed)\("
+        + @"|StatusEffects|NpcServices|QuestLog|CharacterSheet|LocalCancel|WornWeaponChanged|Changed)\("
         + @"|\.(Advance|CollectTargetCandidates|CollectPlayerCandidates|CollectDropCandidates|CollectNpcCandidates)\("
         + @"|\.(HealthPermille|StateFlags|CurrentHealth|Target|LastRejection|LocalHealth|LocalMaximumHealth|IsDead"
-        + @"|LocalSpirit|LocalMaximumSpirit|Level|Experience|ExperienceToNextLevel)\s*=(?![=>])");
+        + @"|LocalSpirit|LocalMaximumSpirit|Level|Experience|ExperienceToNextLevel|WornWeapon)\s*=(?![=>])");
 
     // UI may ask GameClient for anything a player can do, and read what it likes; it may not send, build a message,
     // drive movement or the client's ticks, or change what the client believes (Coding Standards §3). A method whose
@@ -47,10 +47,10 @@ public sealed class PresentationBoundaryTests
         + @"|[Pp]redictor\??\.Apply\(|\.Buffer\.(Add|Clear)\("
         + @"|\.On(Spawn|Despawn|Snapshot|TargetChanged|AttackStarted|Damage|EntityDied|EntityRevived|CommandRejected"
         + @"|ItemDropped|ItemPickedUp|CharacterHealth|CharacterProgress|SkillCastStarted|SkillResolved|SkillList"
-        + @"|StatusEffects|NpcServices|QuestLog|CharacterSheet|LocalCancel|Changed)\("
+        + @"|StatusEffects|NpcServices|QuestLog|CharacterSheet|LocalCancel|WornWeaponChanged|Changed)\("
         + @"|\.(Advance|CollectTargetCandidates|CollectPlayerCandidates|CollectDropCandidates|CollectNpcCandidates)\("
         + @"|\.(Target|LastRejection|LocalHealth|LocalMaximumHealth|HealthPermille|StateFlags|CurrentHealth|IsLocked"
-        + @"|IsDead|LocalSpirit|LocalMaximumSpirit|Level|Experience|ExperienceToNextLevel)\s*=(?![=>])");
+        + @"|IsDead|LocalSpirit|LocalMaximumSpirit|Level|Experience|ExperienceToNextLevel|WornWeapon)\s*=(?![=>])");
 
     private static readonly Regex UsesPresentation = new(
         @"\b(CombatAnimation|CombatTimeline|CombatPresenter|HitMark|FloatingNumber|HealthBar|CastBar|EntityView)\b"
@@ -104,11 +104,13 @@ public sealed class PresentationBoundaryTests
             "client.SellTo(npc, row.InventoryItem, 2);", "m_client.AcceptQuestFrom(npc, quest);",
             "client.TurnInQuestTo(npc, quest);", "m_client.RaiseStat(PrimaryStat.Agi);", "client.ToggleStats();",
             "m_client.LearnSkillLevel(skill);", "client.ToggleSkills();",
-            "m_client.ResetBuildAt(npc);", "m_client.ChangeJobAt(npc, job);"
+            "m_client.ResetBuildAt(npc);", "m_client.ChangeJobAt(npc, job);",
+            "m_world.OnWornWeaponChanged(changed);", "remote.WornWeapon = string.Empty;"
         };
         string[] allowed =
         {
-            "if (remote.HealthPermille == 0)", "m_world.SkillCastStartedReceived += OnSkillCastStarted;",
+            "if (remote.HealthPermille == 0)", "string held = remote.WornWeapon;",
+            "m_world.SkillCastStartedReceived += OnSkillCastStarted;",
             "EntityView? to = flight.Target == m_world.LocalEntity", "double now = m_world.RemoteRenderTime;",
             "bool isLocal = resolved.Target == m_world.LocalEntity;"
         };
