@@ -286,6 +286,12 @@ public sealed class ObserverOutputTests
                     SkillCastStarted.TryRead(payload, out SkillCastStarted? read) ? read : null)
                 .Select(cast => cast.Skill.Value),
             Is.EqualTo(new[] { Strike, FirstAid, Focus }));
+        Assert.That(
+            Read(server, observer, MessageOpcode.WornWeaponChanged, payload =>
+                    WornWeaponChanged.TryRead(payload, out WornWeaponChanged? read) ? read : null)
+                .Select(changed => (changed.Entity, changed.WornWeapon)),
+            Is.EqualTo(new[] { (server.PlayerOf(actor).Id, Sword) }),
+            "the sword in the actor's hand, told once; the armor taken off, never");
     }
 
     // The town's play (Milestone 7 verification line V4): the actor buys from the Quartermaster, sells to it, and

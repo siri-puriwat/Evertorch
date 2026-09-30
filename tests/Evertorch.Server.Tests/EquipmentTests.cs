@@ -532,16 +532,20 @@ public sealed class EquipmentTests
     public void WornWeapon_IsToldToOthersOnlyWhenTheWeaponsItemChanges()
     {
         var server = new TestServer();
-        ConnectionId player = EnterHolding(server, Cloth);
+        ConnectionId player = EnterHolding(server, Sword, Cloth);
         ConnectionId other = server.EnterWorld(2);
         server.Tick();
         server.Transport.ClearSent();
 
-        Equip(server, player, RowOf(server, 1, Cloth), 1);
+        Equip(server, player, RowOf(server, 1, Sword), 1);
+        server.Tick(2);
+        Assert.That(WornWeapons(server, other), Is.EqualTo(new[] { Sword }), "the sword, once");
+        server.Transport.ClearSent();
+        Equip(server, player, RowOf(server, 1, Cloth), 2);
         server.Tick(2);
 
         Assert.That(server.PlayerOf(player).Armor, Is.Not.Null, "the armor is worn");
-        Assert.That(WornWeapons(server, other), Is.Empty, "an armor shows in no hand");
+        Assert.That(WornWeapons(server, other), Is.Empty, "an armor, beside the same sword, shows in no hand anew");
     }
 }
 }
