@@ -228,7 +228,7 @@ public sealed class CombatPresenter : IDisposable
             if (m_content != null && m_content.TryGetSkill(skill, out ClientSkill? definition) && definition != null)
             {
                 cue.IsEnemySkill = definition.TargetType == SkillTargetType.Enemy;
-                cue.HasProjectile = definition.ProjectileKey.Length > 0;
+                cue.HasProjectile = ProjectilePresenter.TryGetCastProjectile(m_world, m_content, entity, skill, out _);
             }
         }
 

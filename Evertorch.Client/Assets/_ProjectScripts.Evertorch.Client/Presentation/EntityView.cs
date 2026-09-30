@@ -122,6 +122,18 @@ public sealed class EntityView : MonoBehaviour
     }
 
     /// <summary>
+    ///     Where in its swing the body's attack clip throws, as <see cref="BodyClipChoice.TryGetAttackRelease" />
+    ///     finds it; false for a body without clips.
+    /// </summary>
+    public bool TryGetAttackRelease(out double share)
+    {
+        share = 0.0;
+        return m_animator != null
+            && m_animator.Clips != null
+            && BodyClipChoice.TryGetAttackRelease(m_animator.Clips, AttackClip, out share);
+    }
+
+    /// <summary>
     ///     Where a projectile thrown at the body lands, turning with the body.
     /// </summary>
     public Vector3 ProjectileArrival()

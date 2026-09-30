@@ -12,13 +12,35 @@ public readonly struct ProjectileFlight
 
     public ProjectileFlight(double startSeconds, double impactSeconds)
     {
+        StartSeconds = startSeconds;
         ImpactSeconds = impactSeconds;
         LaunchSeconds = impactSeconds - Math.Max(0d, Math.Min(MaxSeconds, impactSeconds - startSeconds));
     }
 
+    private ProjectileFlight(double startSeconds, double launchSeconds, double impactSeconds)
+    {
+        StartSeconds = startSeconds;
+        LaunchSeconds = launchSeconds;
+        ImpactSeconds = impactSeconds;
+    }
+
+    public double StartSeconds { get; }
+
     public double LaunchSeconds { get; }
 
     public double ImpactSeconds { get; }
+
+    /// <summary>
+    ///     The same flight leaving where its thrower's clip marks the release: <paramref name="share" /> of the way from
+    ///     the start to the impact.
+    /// </summary>
+    public ProjectileFlight Released(double share)
+    {
+        return new ProjectileFlight(
+            StartSeconds,
+            StartSeconds + (ImpactSeconds - StartSeconds) * share,
+            ImpactSeconds);
+    }
 
     /// <summary>
     ///     How far the projectile has flown at <paramref name="now" />, 0 at the launch; false before the launch and

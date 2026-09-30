@@ -48,5 +48,16 @@ public sealed class ProjectileFlightTests
         Assert.That(halfway, Is.EqualTo(0.5f).Within(1e-4f));
         Assert.That(isAtImpact, Is.False, "it has landed");
     }
+
+    // A thrower whose attack clip marks its release leaves at that share of the time to the impact: the wisp's frame 13
+    // of 24, 0.4875 s into a 0.9 s swing, and lands at the impact as before.
+    [Test]
+    public void Released_LaunchesAtItsShareOfTheWayToTheImpact()
+    {
+        ProjectileFlight flight = new ProjectileFlight(10.0, 10.9).Released(13.0 / 24.0);
+
+        Assert.That(flight.LaunchSeconds, Is.EqualTo(10.4875).Within(1e-9));
+        Assert.That(flight.ImpactSeconds, Is.EqualTo(10.9));
+    }
 }
 }

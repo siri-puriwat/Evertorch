@@ -245,6 +245,24 @@ public sealed class ProjectilePresenterTests
         Assert.That(presenter.Pending, Is.Zero, "both landed at the resolution");
     }
 
+    // The wisp's Spark Bolt names no projectile, so the wisp's own spark flies, and the wisp's release is timed by it;
+    // the slime names none and Strike none; Arcane Bolt names its own from any caster.
+    [Test]
+    public void CastProjectile_IsTheSkillsOwn_OrElseItsMonsterCastersOwn()
+    {
+        ClientWorld world = CreateWorld();
+        ClientContent content = CreateContent();
+
+        bool isWispThrowing = ProjectilePresenter.TryGetCastProjectile(world, content, Wisp, SparkBolt, out string key);
+        bool isSlimeThrowing = ProjectilePresenter.TryGetCastProjectile(world, content, Slime, Strike, out string _);
+        bool isPlayerThrowing =
+            ProjectilePresenter.TryGetCastProjectile(world, content, OtherPlayer, ArcaneBolt, out string _);
+
+        Assert.That((isWispThrowing, key), Is.EqualTo((true, AbsentKey)));
+        Assert.That(isSlimeThrowing, Is.False);
+        Assert.That(isPlayerThrowing, Is.True);
+    }
+
     // A cast from tick 2 of 1,500 ms resolves at 1.6 s. Its wisp dies at tick 20 (1.0 s), before that, which ends
     // the flight. The other wisp's attack lands at 1.0 s, the moment the local player dies, and still flies: it is
     // the blow that killed.

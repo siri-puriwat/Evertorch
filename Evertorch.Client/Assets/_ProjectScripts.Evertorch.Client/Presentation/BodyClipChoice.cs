@@ -111,6 +111,28 @@ public static class BodyClipChoice
         return true;
     }
 
+    /// <summary>
+    ///     Where in a swing the body's attack clip lets its projectile go: its <c>release</c> marker's share of the way
+    ///     to its <c>impact</c>, since the swing is scaled to put the impact on the server's (Gameplay Systems §8); false
+    ///     when the clip marks no release.
+    /// </summary>
+    public static bool TryGetAttackRelease(BodyClips clips, string attackClip, out double share)
+    {
+        share = 0.0;
+        string name = clips.TryGet(attackClip, out _) ? attackClip : MonsterAttack;
+        if (!clips.TryGet(name, out BodyClips.Entry entry)
+            || !entry.TryGetMarker(ReleaseMarker, out int release)
+            || !entry.TryGetMarker(ImpactMarker, out int impact)
+            || release < 0
+            || release >= impact)
+        {
+            return false;
+        }
+
+        share = release / (double)impact;
+        return true;
+    }
+
     // A cast loops until its release, whose marker lands on the resolution, or on the launch of its projectile; an
     // instant skill starts at its marker, the moment it is shown.
     private static bool TrySkill(in BodyCue cue, BodyClips clips, out BodyClipPick pick)

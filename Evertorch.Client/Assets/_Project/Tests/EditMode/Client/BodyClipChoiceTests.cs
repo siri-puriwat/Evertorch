@@ -60,6 +60,16 @@ public sealed class BodyClipChoiceTests
         return clips;
     }
 
+    private BodyClips Thrower(string name, params BodyClips.Marker[] markers)
+    {
+        BodyClips clips = ScriptableObject.CreateInstance<BodyClips>();
+        m_created.Add(clips);
+        var clip = new AnimationClip { name = name };
+        m_created.Add(clip);
+        clips.Configure("test", new[] { new BodyClips.Entry(name, clip, 36, false, markers, 0f) });
+        return clips;
+    }
+
     private static BodyClipPick Choose(BodyCue cue, BodyClips clips)
     {
         Assert.That(BodyClipChoice.TryChoose(cue, clips, out BodyClipPick pick), Is.True);
@@ -98,6 +108,25 @@ public sealed class BodyClipChoiceTests
 
         Assert.That(pick.Clip, Is.EqualTo(expected));
         Assert.That(pick.Time * 30.0, Is.EqualTo(1.0).Within(0.0001), "frame 1 at the moment it is shown");
+    }
+
+    // The wisp's attack marks its release at frame 13 and its impact at 24, so its spark leaves 13/24 of the way to the
+    // impact; a monster's rig answers under its own attack's name, and a clip that marks no release throws nothing.
+    [Test]
+    public void AttackRelease_OfAClipThatMarksIt_IsItsShareOfTheImpact()
+    {
+        BodyClips wisp = Thrower(
+            BodyClipChoice.MonsterAttack,
+            new BodyClips.Marker(BodyClipChoice.ReleaseMarker, 13),
+            new BodyClips.Marker(BodyClipChoice.ImpactMarker, 24));
+        BodyClips slime = Thrower(BodyClipChoice.MonsterAttack, new BodyClips.Marker(BodyClipChoice.ImpactMarker, 24));
+
+        bool isWispThrowing = BodyClipChoice.TryGetAttackRelease(wisp, BodyClipChoice.AttackUnarmed, out double share);
+        bool isSlimeThrowing = BodyClipChoice.TryGetAttackRelease(slime, BodyClipChoice.AttackUnarmed, out double _);
+
+        Assert.That(isWispThrowing, Is.True);
+        Assert.That(share, Is.EqualTo(13.0 / 24.0).Within(1e-9));
+        Assert.That(isSlimeThrowing, Is.False);
     }
 
     [Test]

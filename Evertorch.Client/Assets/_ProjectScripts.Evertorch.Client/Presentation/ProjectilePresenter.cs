@@ -11,8 +11,9 @@ namespace Evertorch.Client
 /// <summary>
 ///     Flies a projectile for every attack and cast of a monster whose content names one, and for every cast of a skill
 ///     whose content names one, by any caster, the local player included (Gameplay Systems §8; Prototype Content §2),
-///     from 1 m above the caster to 1 m above its target, on the interpolated timeline, so that it lands when the impact
-///     or the resolution is drawn. The key's Addressables prefab flies when there is one, a plain sphere otherwise. Like
+///     from the caster's projectile origin to its target's arrival point, on the interpolated timeline, so that it lands
+///     when the impact or the resolution is drawn; an attack leaves at its thrower's release marker when its clip has
+///     one. The key's Addressables prefab flies when there is one, a plain sphere otherwise. Like
 ///     the combat presenter it only draws.
 /// </summary>
 public sealed class ProjectilePresenter : IDisposable
@@ -104,7 +105,10 @@ public sealed class ProjectilePresenter : IDisposable
 
             EntityView? from = ViewOf(flight.Source, local, remotes);
             EntityView? to = ViewOf(flight.Target, local, remotes);
-            if (from == null || to == null || !flight.Timing.TryGetProgress(now, out float progress))
+            ProjectileFlight timing = flight.IsAttack && from != null && from.TryGetAttackRelease(out double share)
+                ? flight.Timing.Released(share)
+                : flight.Timing;
+            if (from == null || to == null || !timing.TryGetProgress(now, out float progress))
             {
                 flight.Hide();
                 continue;
@@ -131,16 +135,33 @@ public sealed class ProjectilePresenter : IDisposable
                     key,
                     started.Attacker,
                     started.Target,
-                    new ProjectileFlight(start, start + started.Timing.Impact.TotalSeconds)));
+                    new ProjectileFlight(start, start + started.Timing.Impact.TotalSeconds),
+                    true));
         }
     }
 
-    // A skill that names its projectile flies it from any caster; otherwise a monster's own projectile flies.
+    /// <summary>
+    ///     The projectile a cast throws: the skill's own, from any caster, or else its monster caster's (Gameplay Systems
+    ///     §8). The combat presenter times the caster's release by it.
+    /// </summary>
+    public static bool TryGetCastProjectile(
+        ClientWorld world,
+        ClientContent content,
+        EntityId caster,
+        SkillDefinitionId skill,
+        out string key)
+    {
+        key = content.TryGetSkill(skill, out ClientSkill? definition) && definition != null
+            ? definition.ProjectileKey
+            : string.Empty;
+        return key.Length > 0 || TryGetMonsterProjectile(world, content, caster, out key);
+    }
+
     private void OnSkillCastStarted(SkillCastStarted started)
     {
         if (started.Target != default
             && started.Target != started.Caster
-            && (TryGetSkillProjectile(started.Skill, out string key) || TryGetProjectile(started.Caster, out key)))
+            && TryGetCastProjectile(m_world, m_content, started.Caster, started.Skill, out string key))
         {
             double start = started.StartTick * m_tickSeconds;
             m_flights.Add(
@@ -181,28 +202,29 @@ public sealed class ProjectilePresenter : IDisposable
         }
     }
 
-    // Only a monster the client draws flies a projectile, and only when its definition names one.
     private bool TryGetProjectile(EntityId attacker, out string key)
     {
+        return TryGetMonsterProjectile(m_world, m_content, attacker, out key);
+    }
+
+    // Only a monster the client draws flies a projectile, and only when its definition names one.
+    private static bool TryGetMonsterProjectile(
+        ClientWorld world,
+        ClientContent content,
+        EntityId attacker,
+        out string key)
+    {
         key = string.Empty;
-        if (!m_world.Remotes.TryGetValue(attacker, out RemoteEntity? remote)
+        if (!world.Remotes.TryGetValue(attacker, out RemoteEntity? remote)
             || remote.Kind != EntityKind.Monster
             || !MonsterDefinitionId.TryCreate(remote.DefinitionId, out MonsterDefinitionId id)
-            || !m_content.TryGetMonster(id, out ClientMonster? monster)
+            || !content.TryGetMonster(id, out ClientMonster? monster)
             || monster == null)
         {
             return false;
         }
 
         key = monster.ProjectileKey;
-        return key.Length > 0;
-    }
-
-    private bool TryGetSkillProjectile(SkillDefinitionId skill, out string key)
-    {
-        key = m_content.TryGetSkill(skill, out ClientSkill? definition) && definition != null
-            ? definition.ProjectileKey
-            : string.Empty;
         return key.Length > 0;
     }
 
@@ -248,12 +270,13 @@ public sealed class ProjectilePresenter : IDisposable
 
     private sealed class Flight
     {
-        public Flight(string key, EntityId source, EntityId target, ProjectileFlight timing)
+        public Flight(string key, EntityId source, EntityId target, ProjectileFlight timing, bool isAttack = false)
         {
             Key = key;
             Source = source;
             Target = target;
             Timing = timing;
+            IsAttack = isAttack;
         }
 
         public string Key { get; }
@@ -263,6 +286,11 @@ public sealed class ProjectilePresenter : IDisposable
         public EntityId Target { get; }
 
         public ProjectileFlight Timing { get; }
+
+        /// <summary>
+        ///     A basic attack's, which leaves at its thrower's release marker when its clip has one.
+        /// </summary>
+        public bool IsAttack { get; }
 
         public GameObject? View { get; set; }
 
