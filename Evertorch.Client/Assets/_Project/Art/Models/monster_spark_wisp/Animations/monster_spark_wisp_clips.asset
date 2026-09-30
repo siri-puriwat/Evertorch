@@ -1,0 +1,64 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ae4db3e46f4759a45b3ccdd9896fe4b9, type: 3}
+  m_Name: monster_spark_wisp_clips
+  m_EditorClassIdentifier: Evertorch.Client::Evertorch.Client.BodyClips
+  m_rig: monster_spark_wisp
+  m_clips:
+  - m_name: idle
+    m_clip: {fileID: -623603649343465320, guid: 8a8c92a4e5a9a3e4b8862575bb4183bc, type: 3}
+    m_frames: 60
+    m_loop: 1
+    m_markers: []
+    m_calibrationSpeed: 0
+  - m_name: move
+    m_clip: {fileID: -623603649343465320, guid: 9843c2c6838d2bd4d82308111266599b, type: 3}
+    m_frames: 30
+    m_loop: 1
+    m_markers: []
+    m_calibrationSpeed: 4.4
+  - m_name: attack
+    m_clip: {fileID: -623603649343465320, guid: 223301576bf6c97439b38f7b64a045de, type: 3}
+    m_frames: 36
+    m_loop: 0
+    m_markers:
+    - m_name: release
+      m_frame: 13
+    - m_name: impact
+      m_frame: 24
+    m_calibrationSpeed: 0
+  - m_name: hit
+    m_clip: {fileID: -623603649343465320, guid: 06f0f944106345e47bedffe70ca8e552, type: 3}
+    m_frames: 12
+    m_loop: 0
+    m_markers: []
+    m_calibrationSpeed: 0
+  - m_name: death
+    m_clip: {fileID: -623603649343465320, guid: 2b8dbd0667084d24ca7bceac9bfea758, type: 3}
+    m_frames: 30
+    m_loop: 0
+    m_markers: []
+    m_calibrationSpeed: 0
+  - m_name: cast_loop
+    m_clip: {fileID: -623603649343465320, guid: 7c99f741df8fe5249aed1a64db97297c, type: 3}
+    m_frames: 30
+    m_loop: 1
+    m_markers: []
+    m_calibrationSpeed: 0
+  - m_name: cast_release
+    m_clip: {fileID: -623603649343465320, guid: 1c80ad034e7dd3c4cae688558c466e91, type: 3}
+    m_frames: 15
+    m_loop: 0
+    m_markers:
+    - m_name: release
+      m_frame: 2
+    m_calibrationSpeed: 0

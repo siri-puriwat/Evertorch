@@ -1,0 +1,48 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ae4db3e46f4759a45b3ccdd9896fe4b9, type: 3}
+  m_Name: monster_forest_crawler_clips
+  m_EditorClassIdentifier: Evertorch.Client::Evertorch.Client.BodyClips
+  m_rig: monster_forest_crawler
+  m_clips:
+  - m_name: idle
+    m_clip: {fileID: -623603649343465320, guid: abee390100b94794ca25bdc2b36f525a, type: 3}
+    m_frames: 60
+    m_loop: 1
+    m_markers: []
+    m_calibrationSpeed: 0
+  - m_name: move
+    m_clip: {fileID: -623603649343465320, guid: 453a1499e0455e74b873d0b71366a8e7, type: 3}
+    m_frames: 12
+    m_loop: 1
+    m_markers: []
+    m_calibrationSpeed: 4.8
+  - m_name: attack
+    m_clip: {fileID: -623603649343465320, guid: ca9e475668f747741af778c8e1e234d1, type: 3}
+    m_frames: 36
+    m_loop: 0
+    m_markers:
+    - m_name: impact
+      m_frame: 24
+    m_calibrationSpeed: 0
+  - m_name: hit
+    m_clip: {fileID: -623603649343465320, guid: fdfde0f970d5d5244b2ee3c5222fca1f, type: 3}
+    m_frames: 12
+    m_loop: 0
+    m_markers: []
+    m_calibrationSpeed: 0
+  - m_name: death
+    m_clip: {fileID: -623603649343465320, guid: 36b856fe5117acd418a3173a6e14bad4, type: 3}
+    m_frames: 30
+    m_loop: 0
+    m_markers: []
+    m_calibrationSpeed: 0

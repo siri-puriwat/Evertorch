@@ -552,6 +552,13 @@ public static class ArtDeliveryImporter
             trimSlots.ToArray());
 
         body.TryGetComponent(out Animator? animator);
+        if (animator == null && asset.Kind == "humanoid")
+        {
+            // A model that copies another's avatar and carries no clips of its own is imported without an Animator.
+            animator = body.AddComponent<Animator>();
+            animator.avatar = HumanoidAvatar();
+        }
+
         string rig = asset.Kind == "humanoid" ? ArtPaths.HumanoidRig : asset.Key;
         BodyClips? clips = AssetDatabase.LoadAssetAtPath<BodyClips>(ArtPaths.ClipsAssetPath(rig));
         if (animator == null || clips == null)

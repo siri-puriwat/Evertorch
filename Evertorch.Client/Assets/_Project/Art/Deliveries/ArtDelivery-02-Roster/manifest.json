@@ -1,0 +1,357 @@
+{
+  "delivery": "ArtDelivery-02-Roster",
+  "fps": 30,
+  "assets": [
+    {
+      "key": "character_vanguard",
+      "kind": "humanoid",
+      "file": "Humanoid/character_vanguard.fbx",
+      "heightMetres": 1.6884008646011353,
+      "triangles": 3400,
+      "vertices": 3482,
+      "bones": 23,
+      "materials": [
+        "Body",
+        "Trim"
+      ],
+      "textures": [
+        "Humanoid/Textures/character_vanguard_BaseMap.png",
+        "Humanoid/Textures/character_vanguard_MaskMap.png"
+      ],
+      "anchors": {
+        "Anchor_Overhead": [
+          0.0,
+          1.9531816244125366,
+          -0.0
+        ],
+        "Anchor_Pick": [
+          -0.0016798973083496094,
+          0.8496145606040955,
+          0.0040572285652160645
+        ]
+      },
+      "pickRadius": 0.7
+    },
+    {
+      "key": "character_arcanist",
+      "kind": "humanoid",
+      "file": "Humanoid/character_arcanist.fbx",
+      "heightMetres": 1.7799072265625,
+      "triangles": 3398,
+      "vertices": 3746,
+      "bones": 23,
+      "materials": [
+        "Body",
+        "Trim"
+      ],
+      "textures": [
+        "Humanoid/Textures/character_arcanist_BaseMap.png",
+        "Humanoid/Textures/character_arcanist_MaskMap.png"
+      ],
+      "anchors": {
+        "Anchor_Overhead": [
+          0.0,
+          2.0369410514831543,
+          -0.0
+        ],
+        "Anchor_Pick": [
+          0.00016216933727264404,
+          0.8899715542793274,
+          0.027681775391101837
+        ],
+        "Anchor_Projectile": [
+          0.0,
+          1.1299999952316284,
+          0.27000001072883606
+        ]
+      },
+      "pickRadius": 0.7
+    },
+    {
+      "key": "npc_quartermaster",
+      "kind": "humanoid",
+      "file": "Humanoid/npc_quartermaster.fbx",
+      "heightMetres": 1.7021608352661133,
+      "triangles": 3399,
+      "vertices": 3781,
+      "bones": 23,
+      "materials": [
+        "Body"
+      ],
+      "textures": [
+        "Humanoid/Textures/npc_quartermaster_BaseMap.png",
+        "Humanoid/Textures/npc_quartermaster_MaskMap.png"
+      ],
+      "anchors": {
+        "Anchor_Overhead": [
+          0.0,
+          1.9559013843536377,
+          -0.0
+        ],
+        "Anchor_Pick": [
+          0.0013839304447174072,
+          0.8510228991508484,
+          0.02870076894760132
+        ]
+      },
+      "pickRadius": 0.7
+    },
+    {
+      "key": "npc_gate_warden",
+      "kind": "humanoid",
+      "file": "Humanoid/npc_gate_warden.fbx",
+      "heightMetres": 1.7110053300857544,
+      "triangles": 3400,
+      "vertices": 3567,
+      "bones": 23,
+      "materials": [
+        "Body"
+      ],
+      "textures": [
+        "Humanoid/Textures/npc_gate_warden_BaseMap.png",
+        "Humanoid/Textures/npc_gate_warden_MaskMap.png"
+      ],
+      "anchors": {
+        "Anchor_Overhead": [
+          0.0,
+          1.9663374423980713,
+          -0.0
+        ],
+        "Anchor_Pick": [
+          0.0005664825439453125,
+          0.8552657961845398,
+          -0.015137575566768646
+        ]
+      },
+      "pickRadius": 0.7
+    },
+    {
+      "key": "npc_guildmaster",
+      "kind": "humanoid",
+      "file": "Humanoid/npc_guildmaster.fbx",
+      "heightMetres": 1.6994943618774414,
+      "triangles": 3398,
+      "vertices": 3752,
+      "bones": 23,
+      "materials": [
+        "Body"
+      ],
+      "textures": [
+        "Humanoid/Textures/npc_guildmaster_BaseMap.png",
+        "Humanoid/Textures/npc_guildmaster_MaskMap.png"
+      ],
+      "anchors": {
+        "Anchor_Overhead": [
+          0.0,
+          1.9531816244125366,
+          -0.0
+        ],
+        "Anchor_Pick": [
+          0.0005664825439453125,
+          0.8495891690254211,
+          0.028928525745868683
+        ]
+      },
+      "pickRadius": 0.7
+    },
+    {
+      "key": "monster_forest_crawler",
+      "kind": "monster",
+      "file": "Monsters/monster_forest_crawler/monster_forest_crawler.fbx",
+      "heightMetres": 0.4828549921512604,
+      "triangles": 1799,
+      "vertices": 1783,
+      "bones": 16,
+      "materials": [
+        "Crawler"
+      ],
+      "textures": [
+        "Monsters/monster_forest_crawler/Textures/monster_forest_crawler_BaseMap.png",
+        "Monsters/monster_forest_crawler/Textures/monster_forest_crawler_MaskMap.png"
+      ],
+      "anchors": {
+        "Anchor_Overhead": [
+          0.0,
+          0.7424853444099426,
+          -0.0
+        ],
+        "Anchor_Pick": [
+          -0.0010748952627182007,
+          0.24865783751010895,
+          0.06444263458251953
+        ]
+      },
+      "pickRadius": 0.7
+    },
+    {
+      "key": "monster_spark_wisp",
+      "kind": "monster",
+      "file": "Monsters/monster_spark_wisp/monster_spark_wisp.fbx",
+      "heightMetres": 0.536710262298584,
+      "triangles": 976,
+      "vertices": 703,
+      "bones": 6,
+      "materials": [
+        "Wisp"
+      ],
+      "textures": [
+        "Monsters/monster_spark_wisp/Textures/monster_spark_wisp_BaseMap.png",
+        "Monsters/monster_spark_wisp/Textures/monster_spark_wisp_Emission.png",
+        "Monsters/monster_spark_wisp/Textures/monster_spark_wisp_MaskMap.png"
+      ],
+      "anchors": {
+        "Anchor_Overhead": [
+          0.0,
+          1.7313547134399414,
+          -0.0
+        ],
+        "Anchor_Pick": [
+          -0.0015863776206970215,
+          1.112999677658081,
+          0.003689020872116089
+        ],
+        "Anchor_Projectile": [
+          0.0,
+          1.100000023841858,
+          -0.0
+        ]
+      },
+      "pickRadius": 0.3624635636806488
+    },
+    {
+      "key": "weapon_training_staff",
+      "kind": "weapon",
+      "file": "Weapons/weapon_training_staff.fbx",
+      "heightMetres": 1.3999998569488525,
+      "triangles": 416,
+      "vertices": 502,
+      "bones": 0,
+      "materials": [
+        "Staff"
+      ],
+      "textures": [
+        "Weapons/Textures/weapon_training_staff_BaseMap.png",
+        "Weapons/Textures/weapon_training_staff_Emission.png",
+        "Weapons/Textures/weapon_training_staff_MaskMap.png"
+      ],
+      "anchors": {
+        "Anchor_Overhead": [
+          0.0,
+          1.0,
+          -0.0
+        ],
+        "Anchor_Pick": [
+          0.0,
+          0.05000000074505806,
+          -0.0
+        ]
+      },
+      "pickRadius": 0.7
+    }
+  ],
+  "clips": [
+    {
+      "rig": "crawler",
+      "name": "idle",
+      "file": "Monsters/monster_forest_crawler/Animations/monster_forest_crawler@idle.fbx",
+      "frames": 60,
+      "loop": true,
+      "markers": {}
+    },
+    {
+      "rig": "crawler",
+      "name": "move",
+      "file": "Monsters/monster_forest_crawler/Animations/monster_forest_crawler@move.fbx",
+      "frames": 12,
+      "loop": true,
+      "markers": {}
+    },
+    {
+      "rig": "crawler",
+      "name": "attack",
+      "file": "Monsters/monster_forest_crawler/Animations/monster_forest_crawler@attack.fbx",
+      "frames": 36,
+      "loop": false,
+      "markers": {
+        "impact": 24
+      }
+    },
+    {
+      "rig": "crawler",
+      "name": "hit",
+      "file": "Monsters/monster_forest_crawler/Animations/monster_forest_crawler@hit.fbx",
+      "frames": 12,
+      "loop": false,
+      "markers": {}
+    },
+    {
+      "rig": "crawler",
+      "name": "death",
+      "file": "Monsters/monster_forest_crawler/Animations/monster_forest_crawler@death.fbx",
+      "frames": 30,
+      "loop": false,
+      "markers": {}
+    },
+    {
+      "rig": "wisp",
+      "name": "idle",
+      "file": "Monsters/monster_spark_wisp/Animations/monster_spark_wisp@idle.fbx",
+      "frames": 60,
+      "loop": true,
+      "markers": {}
+    },
+    {
+      "rig": "wisp",
+      "name": "move",
+      "file": "Monsters/monster_spark_wisp/Animations/monster_spark_wisp@move.fbx",
+      "frames": 30,
+      "loop": true,
+      "markers": {}
+    },
+    {
+      "rig": "wisp",
+      "name": "attack",
+      "file": "Monsters/monster_spark_wisp/Animations/monster_spark_wisp@attack.fbx",
+      "frames": 36,
+      "loop": false,
+      "markers": {
+        "release": 13,
+        "impact": 24
+      }
+    },
+    {
+      "rig": "wisp",
+      "name": "hit",
+      "file": "Monsters/monster_spark_wisp/Animations/monster_spark_wisp@hit.fbx",
+      "frames": 12,
+      "loop": false,
+      "markers": {}
+    },
+    {
+      "rig": "wisp",
+      "name": "death",
+      "file": "Monsters/monster_spark_wisp/Animations/monster_spark_wisp@death.fbx",
+      "frames": 30,
+      "loop": false,
+      "markers": {}
+    },
+    {
+      "rig": "wisp",
+      "name": "cast_loop",
+      "file": "Monsters/monster_spark_wisp/Animations/monster_spark_wisp@cast_loop.fbx",
+      "frames": 30,
+      "loop": true,
+      "markers": {}
+    },
+    {
+      "rig": "wisp",
+      "name": "cast_release",
+      "file": "Monsters/monster_spark_wisp/Animations/monster_spark_wisp@cast_release.fbx",
+      "frames": 15,
+      "loop": false,
+      "markers": {
+        "release": 2
+      }
+    }
+  ]
+}
