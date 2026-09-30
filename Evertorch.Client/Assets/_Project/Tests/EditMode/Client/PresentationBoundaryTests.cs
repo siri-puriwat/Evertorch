@@ -53,7 +53,8 @@ public sealed class PresentationBoundaryTests
         + @"|IsDead|LocalSpirit|LocalMaximumSpirit|Level|Experience|ExperienceToNextLevel|WornWeapon)\s*=(?![=>])");
 
     private static readonly Regex UsesPresentation = new(
-        @"\b(CombatAnimation|CombatTimeline|CombatPresenter|HitMark|FloatingNumber|HealthBar|CastBar|EntityView)\b"
+        @"\b(CombatAnimation|CombatTimeline|CombatPresenter|HitMark|FloatingNumber|HealthBar|CastBar|EntityView"
+        + @"|EntityBody|BodyAnimator|BodyClips|BodyClipChoice|BodyCue|HeldWeapon)\b"
         + @"|\bAnimator\b|AnimationEvent");
 
     private static string ScriptsFolder(string folder)
@@ -119,6 +120,8 @@ public sealed class PresentationBoundaryTests
         Assert.That(allowed.Where(line => Forbidden.IsMatch(line)), Is.Empty, "reading is allowed");
         Assert.That(UsesPresentation.IsMatch("m_presenter = new CombatPresenter(world);"), Is.True);
         Assert.That(UsesPresentation.IsMatch("CastBar bar = CastBar.Create(back, fill);"), Is.True);
+        Assert.That(UsesPresentation.IsMatch("float radius = body.GetComponent<EntityBody>().PickRadius;"), Is.True);
+        Assert.That(UsesPresentation.IsMatch("var cue = new BodyCue { IsDead = true };"), Is.True);
     }
 
     [Test]
