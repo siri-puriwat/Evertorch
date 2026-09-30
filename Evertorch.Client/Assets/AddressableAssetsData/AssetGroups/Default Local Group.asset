@@ -30,6 +30,11 @@ MonoBehaviour:
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 12405b5885e1b834098262a2818217f0
+    m_Address: weapon_training_sword
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 1307bca8995fdd7418d2abd6d2e26a68
     m_Address: npc_gate_warden
     m_ReadOnly: 0
@@ -45,8 +50,13 @@ MonoBehaviour:
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
-  - m_GUID: 42ed3f3d476b9944bad4154918fd171c
-    m_Address: pickup_training_sword
+  - m_GUID: 3637a5e7e417b7e4aa9887a475cd0523
+    m_Address: monster_training_slime
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 764d179efc210204cb1eb7a6c32062d4
+    m_Address: character_adventurer
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
@@ -60,11 +70,6 @@ MonoBehaviour:
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
-  - m_GUID: 8b1c0ef3f6492fd4cbc1a99eef0933e7
-    m_Address: monster_training_slime
-    m_ReadOnly: 0
-    m_SerializedLabels: []
-    FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 9e9eeeb00664773449c2379d81204dc2
     m_Address: character_arcanist
     m_ReadOnly: 0
@@ -75,13 +80,13 @@ MonoBehaviour:
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
-  - m_GUID: a89a55f2e9f7d9549a8e8cb19096bc36
-    m_Address: character_adventurer
+  - m_GUID: b63a229da46225548bf10fbb8b6b57d1
+    m_Address: pickup_crawler_shell
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
-  - m_GUID: b63a229da46225548bf10fbb8b6b57d1
-    m_Address: pickup_crawler_shell
+  - m_GUID: bc7df9ab80265c84c808c4439c2d041d
+    m_Address: pickup_training_sword
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0

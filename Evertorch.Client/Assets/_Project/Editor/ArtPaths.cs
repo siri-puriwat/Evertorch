@@ -14,6 +14,7 @@ public static class ArtPaths
     public const string MaterialsRoot = ArtRoot + "/Materials";
     public const string DeliveriesRoot = ArtRoot + "/Deliveries";
     public const string StagedPrefabsRoot = ArtRoot + "/Prefabs";
+    public const string PrefabsRoot = "Assets/_Project/Prefabs";
     public const string HumanoidRig = "humanoid";
     public const string ManifestFile = "manifest.json";
     public const string HashesFile = "manifest.sha256";
@@ -76,6 +77,14 @@ public static class ArtPaths
     public static string StagedPrefabPath(string key)
     {
         return $"{StagedPrefabsRoot}/{key}.prefab";
+    }
+
+    /// <summary>
+    ///     Where an entity's body prefab lives once it is addressed under its key.
+    /// </summary>
+    public static string AddressedPrefabPath(string key)
+    {
+        return $"{PrefabsRoot}/{key}.prefab";
     }
 
     public static string DeliveryFolder(string delivery)

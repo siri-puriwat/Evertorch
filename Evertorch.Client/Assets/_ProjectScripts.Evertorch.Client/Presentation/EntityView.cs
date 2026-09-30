@@ -33,6 +33,7 @@ public sealed class EntityView : MonoBehaviour
 
     private Color? m_tint;
     private Transform? m_pose;
+    private BodyAnimator? m_animator;
     private Vector3 m_projectileOrigin = DefaultProjectilePoint;
     private Vector3 m_projectileArrival = DefaultProjectilePoint;
 
@@ -56,6 +57,18 @@ public sealed class EntityView : MonoBehaviour
     public float PickCenterHeight { get; private set; } = EntityPicker.PickHeight;
 
     public float PickRadius { get; private set; } = EntityPicker.PickRadius;
+
+    /// <summary>
+    ///     Whether the body plays clips rather than the procedural pose (Gameplay Systems §8).
+    /// </summary>
+    public bool HasClips => m_animator != null && m_animator.HasClips;
+
+    public BodyAnimator? BodyAnimator => m_animator;
+
+    /// <summary>
+    ///     The attack clip its held weapon's grip names; a monster's rig has its own.
+    /// </summary>
+    public string AttackClip { get; set; } = BodyClipChoice.AttackUnarmed;
 
     public static EntityView Create(string objectName, string key, EntityViewCatalog catalog, Color? tint)
     {
@@ -112,7 +125,8 @@ public sealed class EntityView : MonoBehaviour
     /// </summary>
     public void SetCombatPose(float lunge, float squash, bool isDead)
     {
-        if (m_pose == null)
+        // A body with clips shows its attack, its flinch, and its death through them, and never lies flattened.
+        if (m_pose == null || HasClips)
         {
             return;
         }
@@ -127,6 +141,17 @@ public sealed class EntityView : MonoBehaviour
         float widen = 1f + SquashWiden * squash;
         m_pose.localPosition = Vector3.forward * (LungeDistance * lunge);
         m_pose.localScale = new Vector3(widen, 1f - SquashFlatten * squash, widen);
+    }
+
+    /// <summary>
+    ///     Shows a rigged body's clips for this frame; a body without clips ignores it.
+    /// </summary>
+    public void Animate(BodyCue cue, double clock, float deltaSeconds)
+    {
+        if (m_animator != null)
+        {
+            m_animator.Animate(cue, transform.position, clock, deltaSeconds);
+        }
     }
 
     private void AttachBody(GameObject? prefab, EntityViewCatalog catalog)
@@ -166,6 +191,11 @@ public sealed class EntityView : MonoBehaviour
         if (anchors != null)
         {
             ReadAnchors(anchors);
+        }
+
+        if (body.TryGetComponent(out BodyAnimator animator) && animator.HasClips)
+        {
+            m_animator = animator;
         }
 
         if (!IsPlaceholder && m_tint != null)

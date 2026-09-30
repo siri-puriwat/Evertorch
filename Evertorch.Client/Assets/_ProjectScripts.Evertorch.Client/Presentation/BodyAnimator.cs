@@ -1,21 +1,199 @@
+using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Animations;
+using UnityEngine.Playables;
 
 namespace Evertorch.Client
 {
 /// <summary>
-///     Plays a rigged body's clips from the server's timing (Gameplay Systems §8). It holds the rig's
-///     <see cref="BodyClips" />; the art importer adds it beside the body's <see cref="Animator" />.
+///     Plays a rigged body's clips from the server's timing (Gameplay Systems §8). The combat presenter hands it a
+///     <see cref="BodyCue" /> every frame; it asks <see cref="BodyClipChoice" /> for the clip and the time, sets them,
+///     and evaluates the pose itself. Its graph runs by hand, so nothing advances it but the cue, and no animation
+///     event exists to call back.
 /// </summary>
+[RequireComponent(typeof(Animator))]
 public sealed class BodyAnimator : MonoBehaviour
 {
+    // A body cannot walk faster than this; a larger step between two frames is a teleport, a respawn, or a map
+    // change, and must not show as a burst of running.
+    private const float FastestStep = 12f;
+
+    // How quickly the shown speed follows the measured one, in seconds.
+    private const float SpeedSmoothing = 0.1f;
+
     [SerializeField]
     private BodyClips? m_clips;
 
+    private readonly Dictionary<string, AnimationClipPlayable> m_playables = new();
+    private PlayableGraph m_graph;
+    private AnimationMixerPlayable m_mixer;
+    private string m_previous = string.Empty;
+    private double m_previousTime;
+    private double m_fadeStarted;
+    private double m_fadeSeconds;
+    private Vector3 m_lastPosition;
+    private bool m_hasLastPosition;
+    private float m_speed;
+    private double m_travelled;
+
     public BodyClips? Clips => m_clips;
+
+    /// <summary>
+    ///     The clip shown last; empty before the first frame.
+    /// </summary>
+    public string CurrentClip { get; private set; } = string.Empty;
+
+    /// <summary>
+    ///     The time in <see cref="CurrentClip" />, in seconds.
+    /// </summary>
+    public double CurrentTime { get; private set; }
+
+    public bool HasClips => m_clips != null && m_clips.Clips.Count > 0;
+
+    private void Start()
+    {
+        // The first pose is drawn at once, so no frame shows the model's bind pose.
+        Animate(default, transform.position, 0.0, 0f);
+    }
+
+    private void OnDestroy()
+    {
+        if (m_graph.IsValid())
+        {
+            m_graph.Destroy();
+        }
+    }
 
     public void Configure(BodyClips clips)
     {
         m_clips = clips;
+    }
+
+    /// <summary>
+    ///     Shows the body for this frame. <paramref name="root" /> is where the view stands, from which the walk's speed
+    ///     is measured; <paramref name="clock" /> is real time in seconds.
+    /// </summary>
+    public void Animate(BodyCue cue, Vector3 root, double clock, float deltaSeconds)
+    {
+        if (m_clips == null || !EnsureGraph())
+        {
+            return;
+        }
+
+        MeasureWalk(root, deltaSeconds);
+        cue.Speed = m_speed;
+        cue.Travelled = m_travelled;
+        cue.Clock = clock;
+        if (!BodyClipChoice.TryChoose(cue, m_clips, out BodyClipPick pick))
+        {
+            return;
+        }
+
+        if (pick.Clip != CurrentClip)
+        {
+            if (CurrentClip.Length > 0)
+            {
+                m_previous = CurrentClip;
+                m_previousTime = CurrentTime;
+                m_fadeStarted = clock;
+                m_fadeSeconds = pick.FadeSeconds;
+            }
+
+            CurrentClip = pick.Clip;
+        }
+
+        CurrentTime = pick.Time;
+        double fade = m_fadeSeconds > 0.0 ? (clock - m_fadeStarted) / m_fadeSeconds : 1.0;
+        if (fade >= 1.0 || m_previous == CurrentClip)
+        {
+            m_previous = string.Empty;
+            fade = 1.0;
+        }
+
+        for (int input = 0; input < 2; input++)
+        {
+            if (m_mixer.GetInput(input).IsValid())
+            {
+                m_graph.Disconnect(m_mixer, input);
+            }
+
+            m_mixer.SetInputWeight(input, 0f);
+        }
+
+        Show(CurrentClip, CurrentTime, 0, (float)fade);
+        Show(m_previous, m_previousTime, 1, 1f - (float)fade);
+        m_graph.Evaluate(0f);
+    }
+
+    private bool EnsureGraph()
+    {
+        if (m_graph.IsValid())
+        {
+            return true;
+        }
+
+        if (!TryGetComponent(out Animator animator))
+        {
+            return false;
+        }
+
+        animator.applyRootMotion = false;
+        m_graph = PlayableGraph.Create($"{name} body");
+        m_graph.SetTimeUpdateMode(DirectorUpdateMode.Manual);
+        m_mixer = AnimationMixerPlayable.Create(m_graph, 2);
+        var output = AnimationPlayableOutput.Create(m_graph, "Body", animator);
+        output.SetSourcePlayable(m_mixer);
+        m_graph.Play();
+        return true;
+    }
+
+    private void MeasureWalk(Vector3 root, float deltaSeconds)
+    {
+        Vector3 step = root - m_lastPosition;
+        step.y = 0f;
+        float distance = m_hasLastPosition ? step.magnitude : 0f;
+        m_lastPosition = root;
+        m_hasLastPosition = true;
+        if (deltaSeconds <= 0f || distance > FastestStep * deltaSeconds)
+        {
+            m_speed = 0f;
+            return;
+        }
+
+        m_travelled += distance;
+        float blend = Mathf.Clamp01(deltaSeconds / SpeedSmoothing);
+        m_speed = Mathf.Lerp(m_speed, distance / deltaSeconds, blend);
+    }
+
+    private void Show(string clip, double time, int input, float weight)
+    {
+        if (clip.Length == 0 || weight <= 0f || !TryGetPlayable(clip, out AnimationClipPlayable playable))
+        {
+            return;
+        }
+
+        m_graph.Connect(playable, 0, m_mixer, input);
+        playable.SetTime(time);
+        m_mixer.SetInputWeight(input, weight);
+    }
+
+    private bool TryGetPlayable(string clip, out AnimationClipPlayable playable)
+    {
+        if (m_playables.TryGetValue(clip, out playable))
+        {
+            return true;
+        }
+
+        if (m_clips == null || !m_clips.TryGet(clip, out BodyClips.Entry entry) || entry.Clip == null)
+        {
+            return false;
+        }
+
+        playable = AnimationClipPlayable.Create(m_graph, entry.Clip);
+        playable.SetApplyFootIK(false);
+        playable.SetApplyPlayableIK(false);
+        m_playables.Add(clip, playable);
+        return true;
     }
 }
 }

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using Evertorch.Game;
 using Evertorch.Protocol;
 using UnityEngine;
 using EntityId = Evertorch.Game.EntityId;
@@ -31,6 +32,7 @@ public sealed class CombatPresenter : IDisposable
     private static readonly Color CastFillColor = new(0.3f, 0.55f, 1f);
 
     private readonly ClientWorld m_world;
+    private readonly ClientContent? m_content;
     private readonly double m_tickSeconds;
     private readonly Dictionary<EntityId, HealthBar> m_bars = new();
     private readonly Dictionary<EntityId, CastBar> m_castBars = new();
@@ -41,9 +43,10 @@ public sealed class CombatPresenter : IDisposable
     private readonly Material m_castBack;
     private readonly Material m_castFill;
 
-    public CombatPresenter(ClientWorld world, double tickSeconds, Material baseMaterial)
+    public CombatPresenter(ClientWorld world, double tickSeconds, Material baseMaterial, ClientContent? content = null)
     {
         m_world = world ?? throw new ArgumentNullException(nameof(world));
+        m_content = content;
         if (baseMaterial == null)
         {
             throw new ArgumentNullException(nameof(baseMaterial));
@@ -72,6 +75,11 @@ public sealed class CombatPresenter : IDisposable
     public CombatTimeline Timeline { get; } = new();
 
     public int NumbersShown { get; private set; }
+
+    /// <summary>
+    ///     The NPC whose window the local player has open, which talks while it shows; none otherwise.
+    /// </summary>
+    public EntityId TalkingNpc { get; set; }
 
     public void Dispose()
     {
@@ -135,10 +143,12 @@ public sealed class CombatPresenter : IDisposable
         if (local != null)
         {
             EntityId self = m_world.LocalEntity;
+            bool isLocalShownDead = Timeline.IsShownDead(self, m_world.IsLocalDead, localNow, remoteNow);
             local.SetCombatPose(
                 Timeline.Lunge(self, localNow, remoteNow),
                 Timeline.Squash(self, localNow, remoteNow),
-                Timeline.IsShownDead(self, m_world.IsLocalDead, localNow, remoteNow));
+                isLocalShownDead);
+            Animate(local, self, isLocalShownDead, localNow, remoteNow);
             PresentCastBar(self, local, localNow, remoteNow, camera);
         }
 
@@ -154,6 +164,7 @@ public sealed class CombatPresenter : IDisposable
                 Timeline.Lunge(pair.Key, localNow, remoteNow),
                 Timeline.Squash(pair.Key, localNow, remoteNow),
                 isShownDead);
+            Animate(pair.Value, pair.Key, isShownDead, localNow, remoteNow);
             if (remote.Kind == EntityKind.Monster)
             {
                 PresentHealthBar(remote, pair.Value, isShownDead, camera);
@@ -176,6 +187,58 @@ public sealed class CombatPresenter : IDisposable
             CombatResult.Critical => hit.Amount.ToString(CultureInfo.InvariantCulture) + "!",
             _ => hit.Amount.ToString(CultureInfo.InvariantCulture)
         };
+    }
+
+    // A rigged body plays its clips from the same moments the procedural pose follows (Gameplay Systems §8). The
+    // skill's target type comes from the client content, since a cast's target of 0 also means one the receiver does
+    // not know.
+    private void Animate(EntityView view, EntityId entity, bool isShownDead, double localNow, double remoteNow)
+    {
+        if (!view.HasClips)
+        {
+            return;
+        }
+
+        var cue = new BodyCue
+        {
+            IsDead = isShownDead,
+            DeathSince = Timeline.DeadSince(entity, localNow, remoteNow),
+            AttackClip = view.AttackClip,
+            IsTalking = entity != default && entity == TalkingNpc
+        };
+        if (Timeline.TryGetSwing(entity, localNow, remoteNow, out double swingSince, out AttackTiming timing))
+        {
+            cue.HasSwing = true;
+            cue.SwingSince = swingSince;
+            cue.Impact = timing.Impact.TotalSeconds;
+        }
+
+        if (Timeline.TryGetSkill(
+                entity,
+                localNow,
+                remoteNow,
+                out double skillSince,
+                out double castSeconds,
+                out SkillDefinitionId skill))
+        {
+            cue.HasSkill = true;
+            cue.SkillSince = skillSince;
+            cue.CastSeconds = castSeconds;
+            cue.IsEnemySkill = true;
+            if (m_content != null && m_content.TryGetSkill(skill, out ClientSkill? definition) && definition != null)
+            {
+                cue.IsEnemySkill = definition.TargetType == SkillTargetType.Enemy;
+                cue.HasProjectile = definition.ProjectileKey.Length > 0;
+            }
+        }
+
+        if (Timeline.TryGetLastHit(entity, localNow, remoteNow, out double hitSince))
+        {
+            cue.HasHit = true;
+            cue.HitSince = hitSince;
+        }
+
+        view.Animate(cue, Time.realtimeSinceStartupAsDouble, Time.unscaledDeltaTime);
     }
 
     private void PresentHealthBar(RemoteEntity monster, EntityView view, bool isShownDead, Camera? camera)
@@ -281,7 +344,7 @@ public sealed class CombatPresenter : IDisposable
     {
         bool isLocal = started.Caster == m_world.LocalEntity;
         double at = isLocal ? m_world.ServerTime.Now : started.StartTick * m_tickSeconds;
-        Timeline.BeginCast(started.Caster, started.Target, at, started.CastMs / 1000.0, isLocal);
+        Timeline.BeginCast(started.Caster, started.Target, at, started.CastMs / 1000.0, isLocal, started.Skill);
     }
 
     private void OnSkillResolved(SkillResolved resolved)
@@ -326,6 +389,7 @@ public sealed class CombatPresenter : IDisposable
         bool isLocal = died.Entity == m_world.LocalEntity;
         double at = isLocal ? m_world.ServerTime.Now : died.ServerTick * m_tickSeconds;
         Timeline.MarkDeath(died.Entity, at, isLocal);
+        Timeline.EndSwing(died.Entity);
         Timeline.EndCastsOf(died.Entity);
     }
 

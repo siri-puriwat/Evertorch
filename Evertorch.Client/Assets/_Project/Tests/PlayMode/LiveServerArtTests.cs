@@ -85,6 +85,22 @@ public sealed class LiveServerArtTests : InputTestFixture
             $"the sword worn: {server.JoinOutput()}");
         EntityView body = LocalBody(client)!;
         Assert.That((body.Key, body.IsPlaceholder), Is.EqualTo(("character_adventurer", false)), client.Status);
+        Assert.That(body.HasClips, Is.True, "the delivered Adventurer plays clips");
+        yield return WaitUntil(() => body.BodyAnimator!.CurrentClip == "idle", 2f);
+        Assert.That(body.BodyAnimator!.CurrentClip, Is.EqualTo("idle"), "standing");
+
+        // A walk plays the run, and the stop turns back to the idle (Gameplay Systems §8).
+        WorldPosition from = world.Predictor.Position;
+        Assert.That(
+            new[] { (4f, 0f), (-4f, 0f), (0f, 4f), (0f, -4f) }.Any(offset => client.Controller!.TryMoveTo(
+                from,
+                new WorldPosition(from.X + offset.Item1, from.Y, from.Z + offset.Item2))),
+            Is.True,
+            "a walkable spot 4 m away");
+        yield return WaitUntil(() => body.BodyAnimator!.CurrentClip == "run", StartTimeoutSeconds);
+        Assert.That(body.BodyAnimator!.CurrentClip, Is.EqualTo("run"), "walking");
+        yield return WaitUntil(() => body.BodyAnimator!.CurrentClip == "idle", StartTimeoutSeconds);
+        Assert.That(body.BodyAnimator!.CurrentClip, Is.EqualTo("idle"), "stopped");
     }
 
     private static EntityView? LocalBody(GameClient client)

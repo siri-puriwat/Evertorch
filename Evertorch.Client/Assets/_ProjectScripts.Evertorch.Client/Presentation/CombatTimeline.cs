@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using Evertorch.Game;
@@ -16,6 +17,7 @@ public sealed class CombatTimeline
     private readonly Dictionary<EntityId, Moment> m_impacts = new();
     private readonly Dictionary<EntityId, Moment> m_deaths = new();
     private readonly Dictionary<EntityId, Cast> m_casts = new();
+    private readonly Dictionary<EntityId, SkillUse> m_skills = new();
     private readonly List<HitMark> m_pending = new();
 
     public int PendingHits => m_pending.Count;
@@ -26,15 +28,18 @@ public sealed class CombatTimeline
     }
 
     /// <summary>
-    ///     A cast of <paramref name="castSeconds" /> began; one of no length is shown as none.
+    ///     A cast of <paramref name="castSeconds" /> began; one of no length shows no bar, though its caster's body still
+    ///     plays the skill (Gameplay Systems §8).
     /// </summary>
     public void BeginCast(
         EntityId caster,
         EntityId target,
         double startSeconds,
         double castSeconds,
-        bool isOnLocalClock)
+        bool isOnLocalClock,
+        SkillDefinitionId skill = default)
     {
+        m_skills[caster] = new SkillUse(new Moment(startSeconds, isOnLocalClock), Math.Max(castSeconds, 0.0), skill);
         if (castSeconds > 0.0)
         {
             m_casts[caster] = new Cast(new Moment(startSeconds, isOnLocalClock), castSeconds, target);
@@ -48,6 +53,7 @@ public sealed class CombatTimeline
     public void EndCast(EntityId caster)
     {
         m_casts.Remove(caster);
+        m_skills.Remove(caster);
     }
 
     /// <summary>
@@ -60,7 +66,75 @@ public sealed class CombatTimeline
         foreach (EntityId caster in casters)
         {
             m_casts.Remove(caster);
+            if (m_skills.TryGetValue(caster, out SkillUse use) && use.CastSeconds > 0.0)
+            {
+                m_skills.Remove(caster);
+            }
         }
+
+        m_skills.Remove(entity);
+    }
+
+    /// <summary>
+    ///     The entity's latest swing: how long ago it began, which is negative before its moment, and its timing.
+    /// </summary>
+    public bool TryGetSwing(EntityId entity, double localNow, double remoteNow, out double since,
+        out AttackTiming timing)
+    {
+        if (m_swings.TryGetValue(entity, out Swing swing))
+        {
+            since = swing.Start.Since(localNow, remoteNow);
+            timing = swing.Timing;
+            return true;
+        }
+
+        since = 0.0;
+        timing = default;
+        return false;
+    }
+
+    /// <summary>
+    ///     The entity's latest skill, cast or instant: how long ago it began, its cast time, and the skill.
+    /// </summary>
+    public bool TryGetSkill(
+        EntityId entity,
+        double localNow,
+        double remoteNow,
+        out double since,
+        out double castSeconds,
+        out SkillDefinitionId skill)
+    {
+        if (m_skills.TryGetValue(entity, out SkillUse use))
+        {
+            since = use.Start.Since(localNow, remoteNow);
+            castSeconds = use.CastSeconds;
+            skill = use.Skill;
+            return true;
+        }
+
+        since = 0.0;
+        castSeconds = 0.0;
+        skill = default;
+        return false;
+    }
+
+    /// <summary>
+    ///     How long ago the entity was last hit, a miss or a heal not counting.
+    /// </summary>
+    public bool TryGetLastHit(EntityId entity, double localNow, double remoteNow, out double since)
+    {
+        since = m_impacts.TryGetValue(entity, out Moment impact) ? impact.Since(localNow, remoteNow) : 0.0;
+        return m_impacts.ContainsKey(entity);
+    }
+
+    /// <summary>
+    ///     How long the entity has been shown dead: infinite when the client never saw it die.
+    /// </summary>
+    public double DeadSince(EntityId entity, double localNow, double remoteNow)
+    {
+        return m_deaths.TryGetValue(entity, out Moment death)
+            ? death.Since(localNow, remoteNow)
+            : double.PositiveInfinity;
     }
 
     /// <summary>
@@ -96,6 +170,14 @@ public sealed class CombatTimeline
     public void MarkDeath(EntityId entity, double atSeconds, bool isOnLocalClock)
     {
         m_deaths[entity] = new Moment(atSeconds, isOnLocalClock);
+    }
+
+    /// <summary>
+    ///     A body that died no longer swings: its clip turns to its death (Gameplay Systems §8).
+    /// </summary>
+    public void EndSwing(EntityId entity)
+    {
+        m_swings.Remove(entity);
     }
 
     public void ClearDeath(EntityId entity)
@@ -154,6 +236,7 @@ public sealed class CombatTimeline
         m_swings.Remove(entity);
         m_impacts.Remove(entity);
         m_deaths.Remove(entity);
+        m_skills.Remove(entity);
         EndCastsOf(entity);
         m_pending.RemoveAll(hit => hit.Target == entity);
     }
@@ -190,6 +273,22 @@ public sealed class CombatTimeline
         public double Seconds { get; }
 
         public EntityId Target { get; }
+    }
+
+    private readonly struct SkillUse
+    {
+        public SkillUse(Moment start, double castSeconds, SkillDefinitionId skill)
+        {
+            Start = start;
+            CastSeconds = castSeconds;
+            Skill = skill;
+        }
+
+        public Moment Start { get; }
+
+        public double CastSeconds { get; }
+
+        public SkillDefinitionId Skill { get; }
     }
 
     private readonly struct Swing

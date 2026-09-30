@@ -4,6 +4,8 @@ using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
 using UnityEditor;
+using UnityEditor.AddressableAssets;
+using UnityEditor.AddressableAssets.Settings;
 using UnityEngine;
 using Object = UnityEngine.Object;
 
@@ -69,6 +71,44 @@ public static class ArtDeliveryImporter
             Debug.LogException(exception);
             EditorApplication.Exit(1);
         }
+    }
+
+    /// <summary>
+    ///     Puts every staged body in its place under its key, in the default Addressables group, where the graybox body
+    ///     it replaces was (Content Pipeline §6); the graybox prefab and its entry go.
+    /// </summary>
+    [MenuItem("Evertorch/Art/Address Staged Bodies")]
+    public static void AddressStaged()
+    {
+        AddressableAssetSettings settings = AddressableAssetSettingsDefaultObject.Settings;
+        if (!Directory.Exists(ArtPaths.StagedPrefabsRoot))
+        {
+            return;
+        }
+
+        foreach (string staged in Directory.GetFiles(ArtPaths.StagedPrefabsRoot, "*.prefab").OrderBy(path => path))
+        {
+            string path = staged.Replace('\\', '/');
+            string key = Path.GetFileNameWithoutExtension(path);
+            string target = ArtPaths.AddressedPrefabPath(key);
+            if (File.Exists(target))
+            {
+                settings.RemoveAssetEntry(AssetDatabase.AssetPathToGUID(target));
+                AssetDatabase.DeleteAsset(target);
+            }
+
+            string error = AssetDatabase.MoveAsset(path, target);
+            if (error.Length > 0)
+            {
+                throw new InvalidOperationException($"{path} could not move to {target}: {error}");
+            }
+
+            AddressableAssetEntry entry =
+                settings.CreateOrMoveEntry(AssetDatabase.AssetPathToGUID(target), settings.DefaultGroup);
+            entry.address = key;
+        }
+
+        AssetDatabase.SaveAssets();
     }
 
     /// <summary>
@@ -466,7 +506,7 @@ public static class ArtDeliveryImporter
         {
             body.name = asset.Key;
             ConfigureBody(body, asset, materials);
-            PrefabUtility.SaveAsPrefabAsset(body, ArtPaths.StagedPrefabPath(asset.Key));
+            PrefabUtility.SaveAsPrefabAsset(body, PrefabTarget(asset.Key));
         }
         finally
         {
@@ -537,7 +577,7 @@ public static class ArtDeliveryImporter
             weapon.name = key;
             HeldWeapon held = weapon.AddComponent<HeldWeapon>();
             held.Configure(grip);
-            PrefabUtility.SaveAsPrefabAsset(weapon, ArtPaths.StagedPrefabPath(key));
+            PrefabUtility.SaveAsPrefabAsset(weapon, PrefabTarget(key));
         }
         finally
         {
@@ -569,12 +609,23 @@ public static class ArtDeliveryImporter
             Transform pick = NewAnchor(pickup, PickAnchor, bounds.center);
             EntityBody body = pickup.AddComponent<EntityBody>();
             body.Configure(overhead, null, pick, bounds.extents.magnitude, Array.Empty<EntityBody.TrimSlot>());
-            PrefabUtility.SaveAsPrefabAsset(pickup, ArtPaths.StagedPrefabPath(pickupKey));
+            PrefabUtility.SaveAsPrefabAsset(pickup, PrefabTarget(pickupKey));
         }
         finally
         {
             Object.DestroyImmediate(pickup);
         }
+    }
+
+    // A body already addressed as art is rebuilt where it is, keeping its address; anything else waits staged until
+    // it is addressed (Content Pipeline §6).
+    private static string PrefabTarget(string key)
+    {
+        string addressed = ArtPaths.AddressedPrefabPath(key);
+        GameObject? existing = AssetDatabase.LoadAssetAtPath<GameObject>(addressed);
+        bool isArt = existing != null
+            && (existing.TryGetComponent(out EntityBody _) || existing.TryGetComponent(out HeldWeapon _));
+        return isArt ? addressed : ArtPaths.StagedPrefabPath(key);
     }
 
     private static Transform NewAnchor(GameObject owner, string name, Vector3 localPosition)

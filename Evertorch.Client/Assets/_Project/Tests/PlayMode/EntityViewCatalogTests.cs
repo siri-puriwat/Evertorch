@@ -38,7 +38,7 @@ public sealed class EntityViewCatalogTests
 
         Assert.That(m_view.HasBody, Is.True);
         Assert.That(m_view.IsPlaceholder, Is.False);
-        Assert.That(m_view.GetComponentsInChildren<Renderer>(), Is.Not.Empty, "a mesh or a skinned mesh");
+        Assert.That(m_view.GetComponentsInChildren<SkinnedMeshRenderer>(), Is.Not.Empty, "the delivered slime");
         Assert.That(m_view.GetComponentsInChildren<Collider>(true), Is.Empty);
     }
 
@@ -76,6 +76,29 @@ public sealed class EntityViewCatalogTests
         Assert.That(body.parent.localPosition.z, Is.EqualTo(0.35f).Within(0.0001f), "the pivot lunges");
         m_view.SetCombatPose(0f, 0f, true);
         Assert.That(body.parent.localScale.y, Is.EqualTo(0.3f).Within(0.0001f), "the pivot lies flat");
+    }
+
+    [UnityTest]
+    public IEnumerator Create_ForTheAdventurer_ReadsItsAnchors_AndPlaysItsClips()
+    {
+        m_catalog = new EntityViewCatalog();
+        m_view = EntityView.Create("Adventurer", "character_adventurer", m_catalog, null);
+
+        yield return WaitForBody(m_view);
+
+        Assert.That(m_view.HasClips, Is.True, "the delivered body plays clips");
+        Assert.That(m_view.OverheadHeight, Is.EqualTo(1.97f).Within(0.001f));
+        Assert.That(m_view.PickCenterHeight, Is.EqualTo(0.85f).Within(0.001f));
+        Assert.That(m_view.PickRadius, Is.EqualTo(EntityBody.MaxPickRadius), "1.1 m delivered, capped");
+        var cue = new BodyCue { HasSwing = true, SwingSince = 0.47, Impact = 0.47, AttackClip = m_view.AttackClip };
+        m_view.Animate(cue, 0.0, 0.02f);
+        BodyAnimator animator = m_view.BodyAnimator!;
+        Assert.That(animator.CurrentClip, Is.EqualTo("attack_unarmed"));
+        Assert.That(animator.CurrentTime * BodyClips.FramesPerSecond, Is.EqualTo(24.0).Within(0.0001));
+        Transform pose = m_view.transform.Find("Pose");
+        m_view.SetCombatPose(1f, 1f, true);
+        Assert.That(pose.localScale, Is.EqualTo(Vector3.one), "a body with clips is never flattened");
+        Assert.That(pose.localPosition, Is.EqualTo(Vector3.zero), "nor lunged");
     }
 
     private static IEnumerator WaitForBody(EntityView view)

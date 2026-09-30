@@ -411,7 +411,12 @@ public sealed class GameClient : MonoBehaviour
             }
         }
 
-        m_combat?.Present(m_localView, m_remoteViews, Camera.main);
+        if (m_combat != null)
+        {
+            m_combat.TalkingNpc = m_npcWindow != null && m_npcWindow.IsOpen ? m_npcWindow.Npc : default;
+            m_combat.Present(m_localView, m_remoteViews, Camera.main);
+        }
+
         m_projectiles?.Present(m_localView, m_remoteViews);
     }
 
@@ -986,7 +991,7 @@ public sealed class GameClient : MonoBehaviour
         world.RemoteSpawned += AddRemoteView;
         world.RemoteDespawned += RemoveRemoteView;
         world.LocalJobChanged += ReplaceLocalBody;
-        m_combat = new CombatPresenter(world, 1.0 / Connection.ServerTickRate, material);
+        m_combat = new CombatPresenter(world, 1.0 / Connection.ServerTickRate, material, m_contentLoader.Content);
         m_projectiles = new ProjectilePresenter(
             world,
             m_contentLoader.Content,
