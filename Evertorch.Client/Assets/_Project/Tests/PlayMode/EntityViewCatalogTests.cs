@@ -38,7 +38,7 @@ public sealed class EntityViewCatalogTests
 
         Assert.That(m_view.HasBody, Is.True);
         Assert.That(m_view.IsPlaceholder, Is.False);
-        Assert.That(m_view.GetComponentsInChildren<MeshRenderer>(), Is.Not.Empty);
+        Assert.That(m_view.GetComponentsInChildren<Renderer>(), Is.Not.Empty, "a mesh or a skinned mesh");
         Assert.That(m_view.GetComponentsInChildren<Collider>(true), Is.Empty);
     }
 

@@ -85,9 +85,19 @@ public sealed class ManifestJsonTests
     }
 
     [Test]
+    public void ReadHashes_ForTheDeliveryFormat_KeysEachHashByItsPath()
+    {
+        IReadOnlyDictionary<string, string> hashes = ArtDeliveryImporter.ReadHashes(
+            new string('A', 64) + "  Humanoid/a.fbx\r\n" + new string('b', 64) + "  manifest.json\r\n");
+
+        Assert.That(hashes["Humanoid/a.fbx"], Is.EqualTo(new string('a', 64)));
+        Assert.That(hashes["manifest.json"], Is.EqualTo(new string('b', 64)));
+    }
+
+    [Test]
     public void ReadManifest_ForADelivery_ReadsItsAnchorsMarkersAndCalibration()
     {
-        ArtManifest manifest = ArtManifest.Parse(Manifest);
+        var manifest = ArtManifest.Parse(Manifest);
 
         Assert.That(manifest.Delivery, Is.EqualTo("ArtDelivery-99-Test"));
         ArtManifestAsset asset = manifest.Assets[0];
@@ -102,16 +112,6 @@ public sealed class ManifestJsonTests
     public void ReadManifest_WhenItsRateIsNotThirty_Throws()
     {
         Assert.Throws<FormatException>(() => ArtManifest.Parse(Manifest.Replace(@"""fps"": 30", @"""fps"": 24")));
-    }
-
-    [Test]
-    public void ReadHashes_ForTheDeliveryFormat_KeysEachHashByItsPath()
-    {
-        IReadOnlyDictionary<string, string> hashes = ArtDeliveryImporter.ReadHashes(
-            new string('A', 64) + "  Humanoid/a.fbx\r\n" + new string('b', 64) + "  manifest.json\r\n");
-
-        Assert.That(hashes["Humanoid/a.fbx"], Is.EqualTo(new string('a', 64)));
-        Assert.That(hashes["manifest.json"], Is.EqualTo(new string('b', 64)));
     }
 }
 }

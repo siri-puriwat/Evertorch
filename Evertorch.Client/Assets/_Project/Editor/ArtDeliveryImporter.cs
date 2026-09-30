@@ -5,6 +5,7 @@ using System.Linq;
 using System.Security.Cryptography;
 using UnityEditor;
 using UnityEngine;
+using Object = UnityEngine.Object;
 
 namespace Evertorch.Client.Editor
 {
@@ -46,8 +47,8 @@ public static class ArtDeliveryImporter
     }
 
     /// <summary>
-    ///     <c>-executeMethod Evertorch.Client.Editor.ArtDeliveryImporter.ImportFromCommandLine -artDelivery
-    ///     &lt;folder&gt;</c>, with the editor closed; exits 0 when the delivery was imported.
+    ///     The batch method, run with the editor closed and the delivery's folder after <c>-artDelivery</c>; it exits 0
+    ///     when the delivery was imported.
     /// </summary>
     public static void ImportFromCommandLine()
     {
@@ -96,7 +97,7 @@ public static class ArtDeliveryImporter
     {
         string folder = deliveryFolder.Replace('\\', '/').TrimEnd('/');
         string manifestText = File.ReadAllText($"{folder}/{ArtPaths.ManifestFile}");
-        ArtManifest manifest = ArtManifest.Parse(manifestText);
+        var manifest = ArtManifest.Parse(manifestText);
         IReadOnlyDictionary<string, string> hashes = ReadHashes(File.ReadAllText($"{folder}/{ArtPaths.HashesFile}"));
         IReadOnlyList<ArtCopy> copies = ArtPaths.Map(manifest);
         foreach (ArtCopy copy in copies)
@@ -164,7 +165,8 @@ public static class ArtDeliveryImporter
         }
 
         AssetDatabase.SaveAssets();
-        Debug.Log($"ArtDeliveryImported: {manifest.Delivery}, {manifest.Assets.Count} assets, {manifest.Clips.Count} clips");
+        Debug.Log(
+            $"ArtDeliveryImported: {manifest.Delivery}, {manifest.Assets.Count} assets, {manifest.Clips.Count} clips");
     }
 
     /// <summary>
@@ -237,7 +239,7 @@ public static class ArtDeliveryImporter
     private static Material MakeMaterial(ArtManifestAsset asset, string slot)
     {
         string path = ArtPaths.MaterialPath(asset.Key, slot);
-        var material = AssetDatabase.LoadAssetAtPath<Material>(path);
+        Material? material = AssetDatabase.LoadAssetAtPath<Material>(path);
         if (material == null)
         {
             material = new Material(Shader.Find(LitShader)) { name = Path.GetFileNameWithoutExtension(path) };
@@ -332,7 +334,7 @@ public static class ArtDeliveryImporter
     // validation set them; Unity's defaults would move the socket out of the hand and lift the dead off the ground.
     private static HumanDescription DescribeHuman(ModelImporter importer, string path)
     {
-        var model = AssetDatabase.LoadAssetAtPath<GameObject>(path);
+        GameObject model = AssetDatabase.LoadAssetAtPath<GameObject>(path);
         Transform[] transforms = model.GetComponentsInChildren<Transform>(true);
         HumanDescription description = importer.humanDescription;
         description.human = HumanTrait.BoneName
@@ -424,7 +426,7 @@ public static class ArtDeliveryImporter
     private static void WriteClips(string rig, IReadOnlyList<ArtManifestClip> clips)
     {
         string path = ArtPaths.ClipsAssetPath(rig);
-        var asset = AssetDatabase.LoadAssetAtPath<BodyClips>(path);
+        BodyClips? asset = AssetDatabase.LoadAssetAtPath<BodyClips>(path);
         if (asset == null)
         {
             asset = ScriptableObject.CreateInstance<BodyClips>();
@@ -450,7 +452,7 @@ public static class ArtDeliveryImporter
     private static void BuildPrefabs(ArtManifestAsset asset, IReadOnlyDictionary<string, Material> materials)
     {
         Directory.CreateDirectory(ArtPaths.StagedPrefabsRoot);
-        var model = AssetDatabase.LoadAssetAtPath<GameObject>(ArtPaths.ModelPath(asset));
+        GameObject model = AssetDatabase.LoadAssetAtPath<GameObject>(ArtPaths.ModelPath(asset));
         if (asset.Kind == "weapon")
         {
             TryGetWeapon(asset.Key, out WeaponGrip grip, out string pickupKey);
@@ -468,11 +470,12 @@ public static class ArtDeliveryImporter
         }
         finally
         {
-            UnityEngine.Object.DestroyImmediate(body);
+            Object.DestroyImmediate(body);
         }
     }
 
-    private static void ConfigureBody(GameObject body, ArtManifestAsset asset, IReadOnlyDictionary<string, Material> materials)
+    private static void ConfigureBody(GameObject body, ArtManifestAsset asset,
+        IReadOnlyDictionary<string, Material> materials)
     {
         foreach (SkinnedMeshRenderer skin in body.GetComponentsInChildren<SkinnedMeshRenderer>(true))
         {
@@ -509,7 +512,7 @@ public static class ArtDeliveryImporter
 
         body.TryGetComponent(out Animator? animator);
         string rig = asset.Kind == "humanoid" ? ArtPaths.HumanoidRig : asset.Key;
-        var clips = AssetDatabase.LoadAssetAtPath<BodyClips>(ArtPaths.ClipsAssetPath(rig));
+        BodyClips? clips = AssetDatabase.LoadAssetAtPath<BodyClips>(ArtPaths.ClipsAssetPath(rig));
         if (animator == null || clips == null)
         {
             return;
@@ -538,7 +541,7 @@ public static class ArtDeliveryImporter
         }
         finally
         {
-            UnityEngine.Object.DestroyImmediate(weapon);
+            Object.DestroyImmediate(weapon);
         }
     }
 
@@ -557,11 +560,12 @@ public static class ArtDeliveryImporter
                          .Where(child => child.name.StartsWith("Anchor_", StringComparison.Ordinal))
                          .ToList())
             {
-                UnityEngine.Object.DestroyImmediate(anchor.gameObject);
+                Object.DestroyImmediate(anchor.gameObject);
             }
 
             bounds = BoundsOf(laid);
-            Transform overhead = NewAnchor(pickup, OverheadAnchor, new Vector3(0f, bounds.max.y + PickupOverheadClearance, 0f));
+            Transform overhead = NewAnchor(pickup, OverheadAnchor,
+                new Vector3(0f, bounds.max.y + PickupOverheadClearance, 0f));
             Transform pick = NewAnchor(pickup, PickAnchor, bounds.center);
             EntityBody body = pickup.AddComponent<EntityBody>();
             body.Configure(overhead, null, pick, bounds.extents.magnitude, Array.Empty<EntityBody.TrimSlot>());
@@ -569,13 +573,13 @@ public static class ArtDeliveryImporter
         }
         finally
         {
-            UnityEngine.Object.DestroyImmediate(pickup);
+            Object.DestroyImmediate(pickup);
         }
     }
 
     private static Transform NewAnchor(GameObject owner, string name, Vector3 localPosition)
     {
-        var anchor = new GameObject(name).transform;
+        Transform anchor = new GameObject(name).transform;
         anchor.SetParent(owner.transform, false);
         anchor.localPosition = localPosition;
         return anchor;

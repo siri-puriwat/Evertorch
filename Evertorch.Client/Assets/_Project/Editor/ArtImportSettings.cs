@@ -10,7 +10,9 @@ namespace Evertorch.Client.Editor
 public static class ArtImportSettings
 {
     public const int MaxBoneWeights = 2;
-    public const float MinBoneWeight = 0.000001f;
+
+    // The delivery asked for 0.000001; Unity keeps no weight below 0.001, so that is what its validation had too.
+    public const float MinBoneWeight = 0.001f;
     public const int BodyTextureSize = 1024;
     public const int WeaponTextureSize = 512;
 

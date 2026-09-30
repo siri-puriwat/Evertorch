@@ -33,10 +33,10 @@ public sealed class ArtManifest
             throw new FormatException($"Manifest: fps must be {BodyClips.FramesPerSecond}.");
         }
 
-        List<ArtManifestAsset> assets = AsArray(Field(root, "assets", "the manifest"), "assets")
+        var assets = AsArray(Field(root, "assets", "the manifest"), "assets")
             .Select(value => ReadAsset(AsObject(value, "an asset")))
             .ToList();
-        List<ArtManifestClip> clips = AsArray(Field(root, "clips", "the manifest"), "clips")
+        var clips = AsArray(Field(root, "clips", "the manifest"), "clips")
             .Select(value => ReadClip(AsObject(value, "a clip")))
             .ToList();
         return new ArtManifest(Text(root, "delivery", "the manifest"), assets, clips);
@@ -138,7 +138,8 @@ public sealed class ArtManifest
 
     private static Dictionary<string, object?> AsObject(object? value, string what)
     {
-        return value as Dictionary<string, object?> ?? throw new FormatException($"Manifest: {what} must be an object.");
+        return value as Dictionary<string, object?> ??
+            throw new FormatException($"Manifest: {what} must be an object.");
     }
 
     private static List<object?> AsArray(object? value, string what)
