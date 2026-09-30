@@ -24,7 +24,11 @@ public sealed class EntityView : MonoBehaviour
     // The procedural attack pose (Gameplay Systems §8): how far the lunge reaches and how much a hit squashes.
     private const float LungeDistance = 0.35f;
     private const float SquashWiden = 0.25f;
+
     private const float SquashFlatten = 0.35f;
+
+    // The socket of the shared humanoid skeleton that a held weapon hangs from, at no offset (the art brief, §5).
+    private const string WeaponSocket = "RightHand_Weapon";
 
     private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
     private static readonly Vector3 PlaceholderScale = new(0.6f, 1.6f, 0.6f);
@@ -32,8 +36,14 @@ public sealed class EntityView : MonoBehaviour
     private static readonly Vector3 DefaultProjectilePoint = new(0f, DefaultProjectileHeight, 0f);
 
     private Color? m_tint;
+
     private Transform? m_pose;
+    private Transform? m_body;
     private BodyAnimator? m_animator;
+    private EntityViewCatalog? m_catalog;
+    private string m_heldKey = string.Empty;
+    private GameObject? m_heldPrefab;
+    private GameObject? m_held;
     private Vector3 m_projectileOrigin = DefaultProjectilePoint;
     private Vector3 m_projectileArrival = DefaultProjectilePoint;
 
@@ -80,6 +90,7 @@ public sealed class EntityView : MonoBehaviour
         var root = new GameObject(objectName);
         EntityView view = root.AddComponent<EntityView>();
         view.m_tint = tint;
+        view.m_catalog = catalog;
         view.Key = key;
         catalog.Request(key, prefab => view.AttachBody(prefab, catalog));
         return view;
@@ -154,6 +165,87 @@ public sealed class EntityView : MonoBehaviour
         }
     }
 
+    /// <summary>
+    ///     Draws the weapon the body holds (Prototype Content §2): the held model named by <paramref name="heldKey" /> at
+    ///     the hand's socket, whose grip picks the attack clip; empty holds nothing. A body without the socket, such as
+    ///     a graybox body, holds nothing either.
+    /// </summary>
+    public void Hold(string heldKey)
+    {
+        if (heldKey == m_heldKey)
+        {
+            return;
+        }
+
+        m_heldKey = heldKey;
+        m_heldPrefab = null;
+        if (m_held != null)
+        {
+            Destroy(m_held);
+            m_held = null;
+        }
+
+        AttackClip = BodyClipChoice.AttackUnarmed;
+        if (heldKey.Length > 0 && m_catalog != null)
+        {
+            m_catalog.Request(heldKey, prefab => TakeHeld(heldKey, prefab));
+        }
+    }
+
+    // A load that finishes after the weapon changed, or after the view went, is dropped.
+    private void TakeHeld(string heldKey, GameObject? prefab)
+    {
+        if (this == null || heldKey != m_heldKey || prefab == null)
+        {
+            return;
+        }
+
+        m_heldPrefab = prefab;
+        ShowHeld();
+    }
+
+    private void ShowHeld()
+    {
+        if (m_heldPrefab == null || m_body == null || m_held != null)
+        {
+            return;
+        }
+
+        Transform? socket = FindPart(m_body, WeaponSocket);
+        if (socket == null)
+        {
+            return;
+        }
+
+        GameObject held = Instantiate(m_heldPrefab, socket, false);
+        held.name = "Held";
+        held.transform.localPosition = Vector3.zero;
+        held.transform.localRotation = Quaternion.identity;
+        held.transform.localScale = Vector3.one;
+        foreach (Collider part in held.GetComponentsInChildren<Collider>(true))
+        {
+            DestroyImmediate(part);
+        }
+
+        m_held = held;
+        AttackClip = held.TryGetComponent(out HeldWeapon weapon) && weapon.Grip == WeaponGrip.Staff
+            ? BodyClipChoice.AttackStaff
+            : BodyClipChoice.AttackSword;
+    }
+
+    private static Transform? FindPart(Transform root, string name)
+    {
+        foreach (Transform part in root.GetComponentsInChildren<Transform>(true))
+        {
+            if (part.name == name)
+            {
+                return part;
+            }
+        }
+
+        return null;
+    }
+
     private void AttachBody(GameObject? prefab, EntityViewCatalog catalog)
     {
         // The load may finish after the entity has despawned.
@@ -180,6 +272,7 @@ public sealed class EntityView : MonoBehaviour
 
         body.name = "Body";
         body.transform.SetParent(m_pose, false);
+        m_body = body.transform;
 
         // Bodies must not catch the ground clicks meant for the map; entities are picked by their own test.
         foreach (Collider part in body.GetComponentsInChildren<Collider>(true))
@@ -197,6 +290,8 @@ public sealed class EntityView : MonoBehaviour
         {
             m_animator = animator;
         }
+
+        ShowHeld();
 
         if (!IsPlaceholder && m_tint != null)
         {

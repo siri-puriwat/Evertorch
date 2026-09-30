@@ -983,6 +983,7 @@ public sealed class GameClient : MonoBehaviour
             EntityViewKeys.ForJob(m_contentLoader.Content, world.LocalJob),
             m_viewCatalog,
             LocalColor);
+        m_localView.Hold(LocalHeldKey());
         foreach (RemoteEntity remote in world.Remotes.Values)
         {
             AddRemoteView(remote);
@@ -990,6 +991,8 @@ public sealed class GameClient : MonoBehaviour
 
         world.RemoteSpawned += AddRemoteView;
         world.RemoteDespawned += RemoveRemoteView;
+        world.RemoteWornWeaponChanged += HoldRemoteWeapon;
+        world.Inventory.Changed += HoldLocalWeapon;
         world.LocalJobChanged += ReplaceLocalBody;
         m_combat = new CombatPresenter(world, 1.0 / Connection.ServerTickRate, material, m_contentLoader.Content);
         m_projectiles = new ProjectilePresenter(
@@ -1409,6 +1412,8 @@ public sealed class GameClient : MonoBehaviour
         {
             m_world.RemoteSpawned -= AddRemoteView;
             m_world.RemoteDespawned -= RemoveRemoteView;
+            m_world.RemoteWornWeaponChanged -= HoldRemoteWeapon;
+            m_world.Inventory.Changed -= HoldLocalWeapon;
             m_world.LocalJobChanged -= ReplaceLocalBody;
         }
 
@@ -1483,6 +1488,58 @@ public sealed class GameClient : MonoBehaviour
         }
 
         m_remoteViews[remote.Entity] = view;
+        if (remote.Kind == EntityKind.Player)
+        {
+            view.Hold(HeldKeyOf(remote.WornWeapon));
+        }
+    }
+
+    // Others' weapons come from the server's spawn and each change it announces; the local player's from its own
+    // inventory (Prototype Content §2; Network Protocol §9).
+    private void HoldRemoteWeapon(RemoteEntity remote)
+    {
+        if (m_remoteViews.TryGetValue(remote.Entity, out EntityView? view))
+        {
+            view.Hold(HeldKeyOf(remote.WornWeapon));
+        }
+    }
+
+    private void HoldLocalWeapon()
+    {
+        if (m_localView != null)
+        {
+            m_localView.Hold(LocalHeldKey());
+        }
+    }
+
+    private string LocalHeldKey()
+    {
+        if (m_world == null)
+        {
+            return string.Empty;
+        }
+
+        foreach (InventoryEntry row in m_world.Inventory.Rows)
+        {
+            if (row.Slot == EquipmentSlot.Weapon)
+            {
+                return HeldKeyOf(row.Item.Value);
+            }
+        }
+
+        return string.Empty;
+    }
+
+    private string HeldKeyOf(string item)
+    {
+        ClientContent? content = m_contentLoader.Content;
+        return item.Length > 0
+            && content != null
+            && ItemDefinitionId.TryCreate(item, out ItemDefinitionId id)
+            && content.TryGetItem(id, out ClientItem? definition)
+            && definition != null
+                ? definition.HeldKey
+                : string.Empty;
     }
 
     private void RemoveRemoteView(RemoteEntity remote)
@@ -1524,6 +1581,7 @@ public sealed class GameClient : MonoBehaviour
             m_viewCatalog,
             LocalColor);
         m_localView.SetPose(m_world.Smoother.Sample(m_clock?.Alpha ?? 1f), m_world.Predictor.Facing);
+        m_localView.Hold(LocalHeldKey());
         if (m_camera != null && m_map != null)
         {
             m_camera.Follow(m_localView.transform, CameraState, m_map.GroundCollider);
