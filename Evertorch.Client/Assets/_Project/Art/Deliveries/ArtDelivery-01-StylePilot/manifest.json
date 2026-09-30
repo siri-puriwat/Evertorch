@@ -1,0 +1,306 @@
+{
+  "delivery": "ArtDelivery-01-StylePilot",
+  "stage": "final",
+  "status": "accepted by owner",
+  "approval": {
+    "owner": "Puriwat",
+    "message": "approve",
+    "scope": "final StylePilot delivery"
+  },
+  "fps": 30,
+  "assets": [
+    {
+      "key": "character_adventurer",
+      "kind": "humanoid",
+      "file": "Humanoid/character_adventurer.fbx",
+      "heightMetres": 1.6994589567184448,
+      "sizeMetres": {
+        "x": 1.4998598098754883,
+        "y": 1.6994589567184448,
+        "z": 0.40140771865844727
+      },
+      "triangles": 3599,
+      "vertices": 3668,
+      "bones": 23,
+      "maximumWeights": 2,
+      "materials": [
+        "Body",
+        "Trim"
+      ],
+      "textures": [
+        "Humanoid/Textures/character_adventurer_BaseMap.png",
+        "Humanoid/Textures/character_adventurer_MaskMap.png"
+      ],
+      "anchors": {
+        "Anchor_Overhead": [
+          0,
+          1.97,
+          0
+        ],
+        "Anchor_Pick": [
+          0,
+          0.85,
+          0
+        ]
+      },
+      "pickRadius": 1.1
+    },
+    {
+      "key": "monster_training_slime",
+      "kind": "monster",
+      "file": "Monsters/monster_training_slime/monster_training_slime.fbx",
+      "heightMetres": 0.6332815885543823,
+      "sizeMetres": {
+        "x": 0.965131402015686,
+        "y": 0.6332815885543823,
+        "z": 0.9678001403808594
+      },
+      "triangles": 1600,
+      "vertices": 1524,
+      "bones": 3,
+      "maximumWeights": 1,
+      "materials": [
+        "Slime"
+      ],
+      "textures": [
+        "Monsters/monster_training_slime/Textures/monster_training_slime_BaseMap.png",
+        "Monsters/monster_training_slime/Textures/monster_training_slime_MaskMap.png"
+      ],
+      "anchors": {
+        "Anchor_Overhead": [
+          0,
+          0.92,
+          0
+        ],
+        "Anchor_Pick": [
+          0,
+          0.28,
+          0
+        ]
+      },
+      "pickRadius": 0.8
+    },
+    {
+      "key": "weapon_training_sword",
+      "kind": "weapon",
+      "file": "Weapons/weapon_training_sword.fbx",
+      "heightMetres": 0.7999947667121887,
+      "sizeMetres": {
+        "x": 0.21923202276229858,
+        "y": 0.7999947667121887,
+        "z": 0.05625956505537033
+      },
+      "triangles": 600,
+      "vertices": 734,
+      "bones": 0,
+      "maximumWeights": 0,
+      "materials": [
+        "Sword"
+      ],
+      "textures": [
+        "Weapons/Textures/weapon_training_sword_BaseMap.png",
+        "Weapons/Textures/weapon_training_sword_MaskMap.png"
+      ],
+      "anchors": {
+        "Anchor_Overhead": [
+          0,
+          0.91,
+          0
+        ],
+        "Anchor_Pick": [
+          0,
+          0.26,
+          0
+        ]
+      },
+      "pickRadius": 0.55
+    }
+  ],
+  "clips": [
+    {
+      "rig": "humanoid",
+      "name": "idle",
+      "file": "Humanoid/Animations/humanoid@idle.fbx",
+      "frames": 60,
+      "fps": 30,
+      "loop": true,
+      "markers": {}
+    },
+    {
+      "rig": "humanoid",
+      "name": "run",
+      "file": "Humanoid/Animations/humanoid@run.fbx",
+      "frames": 20,
+      "fps": 30,
+      "loop": true,
+      "markers": {},
+      "calibrationSpeedMetresPerSecond": 5,
+      "contactFrameWindows": [
+        [
+          0,
+          4
+        ],
+        [
+          10,
+          14
+        ]
+      ]
+    },
+    {
+      "rig": "humanoid",
+      "name": "attack_unarmed",
+      "file": "Humanoid/Animations/humanoid@attack_unarmed.fbx",
+      "frames": 36,
+      "fps": 30,
+      "loop": false,
+      "markers": {
+        "impact": 24
+      }
+    },
+    {
+      "rig": "humanoid",
+      "name": "attack_sword",
+      "file": "Humanoid/Animations/humanoid@attack_sword.fbx",
+      "frames": 36,
+      "fps": 30,
+      "loop": false,
+      "markers": {
+        "impact": 24
+      }
+    },
+    {
+      "rig": "humanoid",
+      "name": "attack_staff",
+      "file": "Humanoid/Animations/humanoid@attack_staff.fbx",
+      "frames": 36,
+      "fps": 30,
+      "loop": false,
+      "markers": {
+        "impact": 24
+      }
+    },
+    {
+      "rig": "humanoid",
+      "name": "skill_melee",
+      "file": "Humanoid/Animations/humanoid@skill_melee.fbx",
+      "frames": 15,
+      "fps": 30,
+      "loop": false,
+      "markers": {
+        "impact": 1
+      }
+    },
+    {
+      "rig": "humanoid",
+      "name": "cast_loop",
+      "file": "Humanoid/Animations/humanoid@cast_loop.fbx",
+      "frames": 30,
+      "fps": 30,
+      "loop": true,
+      "markers": {}
+    },
+    {
+      "rig": "humanoid",
+      "name": "cast_release",
+      "file": "Humanoid/Animations/humanoid@cast_release.fbx",
+      "frames": 15,
+      "fps": 30,
+      "loop": false,
+      "markers": {
+        "release": 2
+      }
+    },
+    {
+      "rig": "humanoid",
+      "name": "buff",
+      "file": "Humanoid/Animations/humanoid@buff.fbx",
+      "frames": 15,
+      "fps": 30,
+      "loop": false,
+      "markers": {
+        "apply": 1
+      }
+    },
+    {
+      "rig": "humanoid",
+      "name": "hit",
+      "file": "Humanoid/Animations/humanoid@hit.fbx",
+      "frames": 12,
+      "fps": 30,
+      "loop": false,
+      "markers": {}
+    },
+    {
+      "rig": "humanoid",
+      "name": "death",
+      "file": "Humanoid/Animations/humanoid@death.fbx",
+      "frames": 36,
+      "fps": 30,
+      "loop": false,
+      "markers": {}
+    },
+    {
+      "rig": "humanoid",
+      "name": "talk",
+      "file": "Humanoid/Animations/humanoid@talk.fbx",
+      "frames": 60,
+      "fps": 30,
+      "loop": true,
+      "markers": {}
+    },
+    {
+      "rig": "monster_training_slime",
+      "name": "idle",
+      "file": "Monsters/monster_training_slime/Animations/monster_training_slime@idle.fbx",
+      "frames": 60,
+      "fps": 30,
+      "loop": true,
+      "markers": {}
+    },
+    {
+      "rig": "monster_training_slime",
+      "name": "move",
+      "file": "Monsters/monster_training_slime/Animations/monster_training_slime@move.fbx",
+      "frames": 18,
+      "fps": 30,
+      "loop": true,
+      "markers": {},
+      "calibrationSpeedMetresPerSecond": 4,
+      "contactFrameWindows": [
+        [
+          0,
+          2
+        ]
+      ]
+    },
+    {
+      "rig": "monster_training_slime",
+      "name": "attack",
+      "file": "Monsters/monster_training_slime/Animations/monster_training_slime@attack.fbx",
+      "frames": 36,
+      "fps": 30,
+      "loop": false,
+      "markers": {
+        "impact": 24
+      }
+    },
+    {
+      "rig": "monster_training_slime",
+      "name": "hit",
+      "file": "Monsters/monster_training_slime/Animations/monster_training_slime@hit.fbx",
+      "frames": 12,
+      "fps": 30,
+      "loop": false,
+      "markers": {}
+    },
+    {
+      "rig": "monster_training_slime",
+      "name": "death",
+      "file": "Monsters/monster_training_slime/Animations/monster_training_slime@death.fbx",
+      "frames": 30,
+      "fps": 30,
+      "loop": false,
+      "markers": {}
+    }
+  ]
+}

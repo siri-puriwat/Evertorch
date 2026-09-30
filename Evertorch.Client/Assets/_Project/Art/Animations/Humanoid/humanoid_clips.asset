@@ -1,0 +1,100 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ae4db3e46f4759a45b3ccdd9896fe4b9, type: 3}
+  m_Name: humanoid_clips
+  m_EditorClassIdentifier: Evertorch.Client::Evertorch.Client.BodyClips
+  m_rig: humanoid
+  m_clips:
+  - m_name: idle
+    m_clip: {fileID: -623603649343465320, guid: 9769a5ed75419334db59cf3c9453d5ca, type: 3}
+    m_frames: 60
+    m_loop: 1
+    m_markers: []
+    m_calibrationSpeed: 0
+  - m_name: run
+    m_clip: {fileID: -623603649343465320, guid: fde6071f51f870e44b429f46ee830193, type: 3}
+    m_frames: 20
+    m_loop: 1
+    m_markers: []
+    m_calibrationSpeed: 5
+  - m_name: attack_unarmed
+    m_clip: {fileID: -623603649343465320, guid: a9d256bb71a76da47b5cebe02c7ce08f, type: 3}
+    m_frames: 36
+    m_loop: 0
+    m_markers:
+    - m_name: impact
+      m_frame: 24
+    m_calibrationSpeed: 0
+  - m_name: attack_sword
+    m_clip: {fileID: -623603649343465320, guid: beba074bc971189429c392c54d03e2c0, type: 3}
+    m_frames: 36
+    m_loop: 0
+    m_markers:
+    - m_name: impact
+      m_frame: 24
+    m_calibrationSpeed: 0
+  - m_name: attack_staff
+    m_clip: {fileID: -623603649343465320, guid: 78195a182350415418fef167194a43b8, type: 3}
+    m_frames: 36
+    m_loop: 0
+    m_markers:
+    - m_name: impact
+      m_frame: 24
+    m_calibrationSpeed: 0
+  - m_name: skill_melee
+    m_clip: {fileID: -623603649343465320, guid: a58bc8fe0f0720a4bb4e125180b9f50c, type: 3}
+    m_frames: 15
+    m_loop: 0
+    m_markers:
+    - m_name: impact
+      m_frame: 1
+    m_calibrationSpeed: 0
+  - m_name: cast_loop
+    m_clip: {fileID: -623603649343465320, guid: c9e6f1848753b074c92d33fb3b7dc669, type: 3}
+    m_frames: 30
+    m_loop: 1
+    m_markers: []
+    m_calibrationSpeed: 0
+  - m_name: cast_release
+    m_clip: {fileID: -623603649343465320, guid: 7f4a3fdfaf1ead844aa5d261f7449317, type: 3}
+    m_frames: 15
+    m_loop: 0
+    m_markers:
+    - m_name: release
+      m_frame: 2
+    m_calibrationSpeed: 0
+  - m_name: buff
+    m_clip: {fileID: -623603649343465320, guid: b574ba4ca9fd27b4fb94543a2fdcfdef, type: 3}
+    m_frames: 15
+    m_loop: 0
+    m_markers:
+    - m_name: apply
+      m_frame: 1
+    m_calibrationSpeed: 0
+  - m_name: hit
+    m_clip: {fileID: -623603649343465320, guid: 1804038351d0a8e46ae1c0eacbf172f4, type: 3}
+    m_frames: 12
+    m_loop: 0
+    m_markers: []
+    m_calibrationSpeed: 0
+  - m_name: death
+    m_clip: {fileID: -623603649343465320, guid: a65fcf79f69849e4fbd92d2fcd6ea5d4, type: 3}
+    m_frames: 36
+    m_loop: 0
+    m_markers: []
+    m_calibrationSpeed: 0
+  - m_name: talk
+    m_clip: {fileID: -623603649343465320, guid: f376b811814e1ea428b8dc69c96e8a77, type: 3}
+    m_frames: 60
+    m_loop: 1
+    m_markers: []
+    m_calibrationSpeed: 0

@@ -1,0 +1,48 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ae4db3e46f4759a45b3ccdd9896fe4b9, type: 3}
+  m_Name: monster_training_slime_clips
+  m_EditorClassIdentifier: Evertorch.Client::Evertorch.Client.BodyClips
+  m_rig: monster_training_slime
+  m_clips:
+  - m_name: idle
+    m_clip: {fileID: -623603649343465320, guid: 76722908e3905bf4c8224cb0a63f6e02, type: 3}
+    m_frames: 60
+    m_loop: 1
+    m_markers: []
+    m_calibrationSpeed: 0
+  - m_name: move
+    m_clip: {fileID: -623603649343465320, guid: 6713b74eec690e741b8a393be11c256b, type: 3}
+    m_frames: 18
+    m_loop: 1
+    m_markers: []
+    m_calibrationSpeed: 4
+  - m_name: attack
+    m_clip: {fileID: -623603649343465320, guid: 9d4c2558c90b2864fb97f197d4864a0d, type: 3}
+    m_frames: 36
+    m_loop: 0
+    m_markers:
+    - m_name: impact
+      m_frame: 24
+    m_calibrationSpeed: 0
+  - m_name: hit
+    m_clip: {fileID: -623603649343465320, guid: 351de859ff0305e4aadda0829cea4d08, type: 3}
+    m_frames: 12
+    m_loop: 0
+    m_markers: []
+    m_calibrationSpeed: 0
+  - m_name: death
+    m_clip: {fileID: -623603649343465320, guid: ee978c9f30b5f01488ab20ed977bc3d9, type: 3}
+    m_frames: 30
+    m_loop: 0
+    m_markers: []
+    m_calibrationSpeed: 0
