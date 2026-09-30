@@ -319,6 +319,8 @@ public sealed class GameClient : MonoBehaviour
             m_pointerCandidates.Add(new PickCandidate(npc.Entity, OnPlinth(npc.Position)));
         }
 
+        ShapeCandidates(m_pointerCandidates);
+
         // A death, a reset, or a job change can take the waiting skill away.
         if (m_targeting.IsChoosing && (m_world.IsLocalDead || m_world.SkillLevel(m_targeting.Skill) == 0))
         {
@@ -328,6 +330,7 @@ public sealed class GameClient : MonoBehaviour
         // The caster is chosen where it was drawn last frame, which is what the click was aimed at.
         m_aimCandidates.Clear();
         m_targeting.CollectCandidates(m_world, m_world.Smoother.Sample(m_clock.Alpha), m_aimCandidates);
+        ShapeCandidates(m_aimCandidates);
 
         HandlePointerRequest();
         HandleCombatRequest();
@@ -1297,6 +1300,29 @@ public sealed class GameClient : MonoBehaviour
         m_statsWindow?.Close();
         m_skillsWindow?.Close();
         m_npcWindow?.Open(npc);
+    }
+
+    // Each candidate is picked by its own body's sphere (Prototype Content §4); one not drawn yet keeps the defaults.
+    private void ShapeCandidates(List<PickCandidate> candidates)
+    {
+        EntityId self = m_world!.LocalEntity;
+        for (int index = 0; index < candidates.Count; index++)
+        {
+            PickCandidate candidate = candidates[index];
+            EntityView? view = candidate.Entity == self
+                ? m_localView
+                : m_remoteViews.TryGetValue(candidate.Entity, out EntityView? remote)
+                    ? remote
+                    : null;
+            if (view != null)
+            {
+                candidates[index] = new PickCandidate(
+                    candidate.Entity,
+                    candidate.Position,
+                    view.PickCenterHeight,
+                    view.PickRadius);
+            }
+        }
     }
 
     // An NPC stands on the plinth drawn over its marker cell (Prototype Content §5).

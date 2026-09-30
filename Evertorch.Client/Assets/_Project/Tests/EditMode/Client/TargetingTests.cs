@@ -41,6 +41,20 @@ public sealed class TargetingTests
         Assert.That(EntityPicker.TryPick(eye, 0f, 0f, 1f, candidates, out EntityId _), Is.EqualTo(expected));
     }
 
+    [TestCase(0.25f, 0.3f, false)]
+    [TestCase(0.75f, 0.3f, true)]
+    [TestCase(1f, 0.3f, true)]
+    public void TryPick_ForACandidatesOwnSphere_UsesItsCentreAndRadius(float centerHeight, float radius, bool expected)
+    {
+        var candidates = new List<PickCandidate>
+        {
+            new(new EntityId(1), new WorldPosition(0f, 0f, 5f), centerHeight, radius)
+        };
+        var eye = new WorldPosition(0f, 1f, 0f);
+
+        Assert.That(EntityPicker.TryPick(eye, 0f, 0f, 1f, candidates, out EntityId _), Is.EqualTo(expected));
+    }
+
     [Test]
     public void Choose_ForEquallyNearCandidates_OrdersByEntityId()
     {
@@ -185,6 +199,19 @@ public sealed class TargetingTests
 
         Assert.That(EntityPicker.TryPick(eye, 0f, 0f, 1f, candidates, out EntityId _), Is.False);
         Assert.That(EntityPicker.TryPick(eye, 0f, 0f, 0f, candidates, out EntityId _), Is.False);
+    }
+
+    [Test]
+    public void TryPick_ForASphereEnteredFirstBesideANearerCentre_TakesTheNearerCentre()
+    {
+        // The first sphere is entered at 4.64 m with its centre 0.6 m off the ray; the second at 4.81 m, 0.1 m off.
+        var candidates = new List<PickCandidate> { Candidate(1, 0.6f, 5f), Candidate(2, 0.1f, 5.5f) };
+        var eye = new WorldPosition(0f, EntityPicker.PickHeight, 0f);
+
+        bool isPicked = EntityPicker.TryPick(eye, 0f, 0f, 1f, candidates, out EntityId picked);
+
+        Assert.That(isPicked, Is.True);
+        Assert.That(picked, Is.EqualTo(new EntityId(2)));
     }
 }
 }

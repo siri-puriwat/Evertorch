@@ -15,9 +15,9 @@ namespace Evertorch.Client
 /// </summary>
 public sealed class CombatPresenter : IDisposable
 {
-    private const float BarHeight = 1.2f;
-    private const float CastBarHeight = 1.45f;
-    private const float NumberHeight = 1.6f;
+    // Over the body's overhead point (Prototype Content §2): 1.45 and 1.6 m over a graybox body, as before anchors.
+    private const float CastBarLift = 0.25f;
+    private const float NumberLift = 0.4f;
     private const float CriticalScale = 1.4f;
 
     private static readonly Color HitColor = new(1f, 1f, 1f);
@@ -194,7 +194,7 @@ public sealed class CombatPresenter : IDisposable
 
         // The bar moves with the numbers, on the monster's own timeline, not when the message arrives.
         m_shownHealth.TryGetValue(monster.Entity, out ushort shown);
-        bar.Show(view.transform.position + Vector3.up * BarHeight, camera, shown);
+        bar.Show(view.OverheadPoint(0f), camera, shown);
     }
 
     private void PresentCastBar(EntityId caster, EntityView view, double localNow, double remoteNow, Camera? camera)
@@ -213,7 +213,7 @@ public sealed class CombatPresenter : IDisposable
 
         if (isCasting)
         {
-            bar.Show(view.transform.position + Vector3.up * CastBarHeight, camera, progress);
+            bar.Show(view.OverheadPoint(CastBarLift), camera, progress);
         }
         else
         {
@@ -244,7 +244,7 @@ public sealed class CombatPresenter : IDisposable
                 _ => isLocal ? LocalHitColor : HitColor
             };
         float scale = hit.Result == CombatResult.Critical ? CriticalScale : 1f;
-        FloatingNumber.Create(Describe(hit), color, scale, view.transform.position + Vector3.up * NumberHeight);
+        FloatingNumber.Create(Describe(hit), color, scale, view.OverheadPoint(NumberLift));
         NumbersShown++;
     }
 

@@ -17,7 +17,6 @@ namespace Evertorch.Client
 /// </summary>
 public sealed class ProjectilePresenter : IDisposable
 {
-    private const float Height = 1f;
     private const float SphereSize = 0.25f;
 
     private static readonly Color SphereColor = new(1f, 0.95f, 0.55f);
@@ -118,10 +117,7 @@ public sealed class ProjectilePresenter : IDisposable
             }
 
             flight.View.SetActive(true);
-            flight.View.transform.position = Vector3.Lerp(
-                from.transform.position + Vector3.up * Height,
-                to.transform.position + Vector3.up * Height,
-                progress);
+            flight.View.transform.position = Vector3.Lerp(from.ProjectileOrigin(), to.ProjectileArrival(), progress);
         }
     }
 

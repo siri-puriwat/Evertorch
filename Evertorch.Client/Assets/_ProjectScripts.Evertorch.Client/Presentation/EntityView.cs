@@ -10,6 +10,17 @@ namespace Evertorch.Client
 /// </summary>
 public sealed class EntityView : MonoBehaviour
 {
+    /// <summary>
+    ///     Where bars and numbers start over a body that names no overhead point: a graybox body, a placeholder, or a
+    ///     view whose body has not loaded (Prototype Content §2).
+    /// </summary>
+    public const float DefaultOverheadHeight = 1.2f;
+
+    /// <summary>
+    ///     Where a projectile leaves and lands on a body that names no point of its own.
+    /// </summary>
+    public const float DefaultProjectileHeight = 1f;
+
     // The procedural attack pose (Gameplay Systems §8): how far the lunge reaches and how much a hit squashes.
     private const float LungeDistance = 0.35f;
     private const float SquashWiden = 0.25f;
@@ -18,11 +29,12 @@ public sealed class EntityView : MonoBehaviour
     private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
     private static readonly Vector3 PlaceholderScale = new(0.6f, 1.6f, 0.6f);
     private static readonly Vector3 DeadScale = new(1.3f, 0.3f, 1.3f);
+    private static readonly Vector3 DefaultProjectilePoint = new(0f, DefaultProjectileHeight, 0f);
 
     private Color? m_tint;
-    private Transform? m_body;
-    private Vector3 m_bodyPosition;
-    private Vector3 m_bodyScale;
+    private Transform? m_pose;
+    private Vector3 m_projectileOrigin = DefaultProjectilePoint;
+    private Vector3 m_projectileArrival = DefaultProjectilePoint;
 
     /// <summary>
     ///     The Addressables key the body was requested with; empty when the content did not know the entity.
@@ -32,6 +44,18 @@ public sealed class EntityView : MonoBehaviour
     public bool HasBody { get; private set; }
 
     public bool IsPlaceholder { get; private set; }
+
+    /// <summary>
+    ///     The height over the view's feet where the health bar sits; the cast bar and the numbers stack above it.
+    /// </summary>
+    public float OverheadHeight { get; private set; } = DefaultOverheadHeight;
+
+    /// <summary>
+    ///     The height of the centre of the sphere a click picks the body by.
+    /// </summary>
+    public float PickCenterHeight { get; private set; } = EntityPicker.PickHeight;
+
+    public float PickRadius { get; private set; } = EntityPicker.PickRadius;
 
     public static EntityView Create(string objectName, string key, EntityViewCatalog catalog, Color? tint)
     {
@@ -58,26 +82,51 @@ public sealed class EntityView : MonoBehaviour
     }
 
     /// <summary>
+    ///     The point <paramref name="lift" /> metres over the body's overhead point.
+    /// </summary>
+    public Vector3 OverheadPoint(float lift)
+    {
+        return transform.position + Vector3.up * (OverheadHeight + lift);
+    }
+
+    /// <summary>
+    ///     Where a projectile the body throws leaves it, turning with the body.
+    /// </summary>
+    public Vector3 ProjectileOrigin()
+    {
+        return transform.TransformPoint(m_projectileOrigin);
+    }
+
+    /// <summary>
+    ///     Where a projectile thrown at the body lands, turning with the body.
+    /// </summary>
+    public Vector3 ProjectileArrival()
+    {
+        return transform.TransformPoint(m_projectileArrival);
+    }
+
+    /// <summary>
     ///     Poses the body for this frame: <paramref name="lunge" /> and <paramref name="squash" /> run from 0 to 1, and
-    ///     a dead body lies flat. Only the drawing changes.
+    ///     a dead body lies flat. Only the drawing changes, and only the pose pivot above the body moves, since a rigged
+    ///     body's own root belongs to its animation.
     /// </summary>
     public void SetCombatPose(float lunge, float squash, bool isDead)
     {
-        if (m_body == null)
+        if (m_pose == null)
         {
             return;
         }
 
         if (isDead)
         {
-            m_body.localPosition = Vector3.Scale(m_bodyPosition, new Vector3(1f, DeadScale.y, 1f));
-            m_body.localScale = Vector3.Scale(m_bodyScale, DeadScale);
+            m_pose.localPosition = Vector3.zero;
+            m_pose.localScale = DeadScale;
             return;
         }
 
         float widen = 1f + SquashWiden * squash;
-        m_body.localPosition = m_bodyPosition + Vector3.forward * (LungeDistance * lunge);
-        m_body.localScale = Vector3.Scale(m_bodyScale, new Vector3(widen, 1f - SquashFlatten * squash, widen));
+        m_pose.localPosition = Vector3.forward * (LungeDistance * lunge);
+        m_pose.localScale = new Vector3(widen, 1f - SquashFlatten * squash, widen);
     }
 
     private void AttachBody(GameObject? prefab, EntityViewCatalog catalog)
@@ -88,6 +137,8 @@ public sealed class EntityView : MonoBehaviour
             return;
         }
 
+        m_pose = new GameObject("Pose").transform;
+        m_pose.SetParent(transform, false);
         GameObject body;
         if (prefab == null)
         {
@@ -100,14 +151,10 @@ public sealed class EntityView : MonoBehaviour
         else
         {
             body = Instantiate(prefab);
-            ApplyTint(body);
         }
 
         body.name = "Body";
-        body.transform.SetParent(transform, false);
-        m_body = body.transform;
-        m_bodyPosition = m_body.localPosition;
-        m_bodyScale = m_body.localScale;
+        body.transform.SetParent(m_pose, false);
 
         // Bodies must not catch the ground clicks meant for the map; entities are picked by their own test.
         foreach (Collider part in body.GetComponentsInChildren<Collider>(true))
@@ -115,21 +162,71 @@ public sealed class EntityView : MonoBehaviour
             DestroyImmediate(part);
         }
 
+        EntityBody? anchors = body.TryGetComponent(out EntityBody found) ? found : null;
+        if (anchors != null)
+        {
+            ReadAnchors(anchors);
+        }
+
+        if (!IsPlaceholder && m_tint != null)
+        {
+            ApplyTint(body, anchors, m_tint.Value);
+        }
+
         HasBody = true;
     }
 
-    private void ApplyTint(GameObject body)
+    // Read once, as offsets from the view, so that neither a squash nor a death moves a bar or a number.
+    private void ReadAnchors(EntityBody anchors)
     {
-        if (m_tint == null)
+        if (anchors.Overhead != null)
         {
+            OverheadHeight = transform.InverseTransformPoint(anchors.Overhead.position).y;
+        }
+
+        if (anchors.Pick != null)
+        {
+            Vector3 pick = transform.InverseTransformPoint(anchors.Pick.position);
+            PickCenterHeight = pick.y;
+            PickRadius = anchors.PickRadius;
+            m_projectileArrival = pick;
+            m_projectileOrigin = pick;
+        }
+
+        if (anchors.Projectile != null)
+        {
+            m_projectileOrigin = transform.InverseTransformPoint(anchors.Projectile.position);
+        }
+    }
+
+    /// <summary>
+    ///     Colours a player's body with its identity tint: the material slots its <see cref="EntityBody" /> names as
+    ///     Trim, or, when it names none, every renderer, as a graybox body is coloured (Prototype Content §2).
+    /// </summary>
+    public static void ApplyTint(GameObject body, EntityBody? anchors, Color tint)
+    {
+        var block = new MaterialPropertyBlock();
+        if (anchors != null && anchors.TrimSlots.Length > 0)
+        {
+            foreach (EntityBody.TrimSlot slot in anchors.TrimSlots)
+            {
+                if (slot.Renderer == null)
+                {
+                    continue;
+                }
+
+                slot.Renderer.GetPropertyBlock(block, slot.MaterialIndex);
+                block.SetColor(BaseColorId, tint);
+                slot.Renderer.SetPropertyBlock(block, slot.MaterialIndex);
+            }
+
             return;
         }
 
-        var block = new MaterialPropertyBlock();
         foreach (Renderer part in body.GetComponentsInChildren<Renderer>(true))
         {
             part.GetPropertyBlock(block);
-            block.SetColor(BaseColorId, m_tint.Value);
+            block.SetColor(BaseColorId, tint);
             part.SetPropertyBlock(block);
         }
     }
