@@ -208,6 +208,7 @@ internal sealed class TestServer
             Combat,
             Pickups,
             Items,
+            new ChatSystem(Sessions, sender, Instruments),
             Time,
             simulation,
             Options.Create(network),
@@ -666,6 +667,36 @@ internal sealed class TestServer
     public void SendChangeJob(ConnectionId connection, EntityId npc, string job, uint commandSequence)
     {
         var message = new ChangeJob(npc, new JobDefinitionId(job), commandSequence);
+        byte[] payload = new byte[message.GetEncodedLength()];
+        message.Write(payload);
+        Inbound.OnPayload(connection, ProtocolChannel.Control, payload);
+    }
+
+    /// <summary>
+    ///     Every message and field value the server's loggers captured, for a check that nothing private was logged.
+    /// </summary>
+    public IEnumerable<string> AllLogText()
+    {
+        return Log.Entries
+            .Concat(BuildsLog.Entries)
+            .Concat(PersistenceLog.Entries)
+            .Concat(LifetimeLog.Entries)
+            .Concat(PickupLog.Entries)
+            .Concat(ItemActionLog.Entries)
+            .Concat(ProgressionLog.Entries)
+            .Concat(AuditLogger.Entries)
+            .SelectMany(entry => new[] { entry.Message }
+                .Concat(entry.Fields.Values.Select(value => value?.ToString() ?? string.Empty)));
+    }
+
+    public void SendChat(
+        ConnectionId connection,
+        ChatChannel channel,
+        string recipient,
+        string text,
+        uint commandSequence)
+    {
+        var message = new ChatSend(channel, recipient, text, commandSequence);
         byte[] payload = new byte[message.GetEncodedLength()];
         message.Write(payload);
         Inbound.OnPayload(connection, ProtocolChannel.Control, payload);

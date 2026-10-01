@@ -24,6 +24,7 @@ public sealed class ServerOutputTests
     {
         ["AttackStarted"] = new[] { "Attacker", "StartTick", "Target", "Timing" },
         ["AttackTiming"] = new[] { "Impact", "Interval", "Recovery", "Windup" },
+        ["ChatReceived"] = new[] { "Channel", "Name", "Speaker", "Text" },
         ["CharacterHealth"] = new[] { "Current", "CurrentSpirit", "Maximum", "MaximumSpirit" },
         ["CharacterId"] = new[] { "Value" },
         ["CharacterList"] = new[] { "Characters" },

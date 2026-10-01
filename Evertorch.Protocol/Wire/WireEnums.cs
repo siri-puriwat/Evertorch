@@ -52,6 +52,19 @@ internal static class WireEnums
         return value >= PrimaryStat.Str && value <= PrimaryStat.Luk;
     }
 
+    public static bool IsDefined(ChatChannel value)
+    {
+        return value >= ChatChannel.Nearby && value <= ChatChannel.WhisperSent;
+    }
+
+    /// <summary>
+    ///     A channel a client may send on; <see cref="ChatChannel.WhisperSent" /> is the server's alone.
+    /// </summary>
+    public static bool IsSendable(ChatChannel value)
+    {
+        return value >= ChatChannel.Nearby && value <= ChatChannel.Whisper;
+    }
+
     public static bool IsDefined(EntityStateFlags value)
     {
         return (value & ~KnownStateFlags) == 0;

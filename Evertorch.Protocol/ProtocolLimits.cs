@@ -18,6 +18,11 @@ public static class ProtocolLimits
     public const int MaxCharacterNameBytes = CharacterNames.MaxLength;
 
     /// <summary>
+    ///     A chat line: at most 150 characters, all printable ASCII under <see cref="ChatText" />.
+    /// </summary>
+    public const int MaxChatTextBytes = ChatText.MaxLength;
+
+    /// <summary>
     ///     The largest payload a client may send: a <see cref="ClientHello" /> with both strings at their limits.
     /// </summary>
     public const int MaxClientPayloadBytes = 556;

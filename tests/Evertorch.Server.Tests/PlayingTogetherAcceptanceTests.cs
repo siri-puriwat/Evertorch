@@ -1,7 +1,9 @@
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Evertorch.Game;
 using Evertorch.Persistence.Tests;
+using Evertorch.Protocol;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using NUnit.Framework;
@@ -12,9 +14,10 @@ namespace Evertorch.Server.Tests
 ///     The Milestone 12 "Playing together" exit criterion's server side end to end (ROADMAP §8): the composed server
 ///     host on a real PostgreSQL 18 and real UDP sockets on loopback, with three clients built from the client's
 ///     production networking and gameplay code. Three players entering the training ground together see each other,
-///     each by its name (line 3). Each later line of Milestone 12 adds its steps here: chat nearby and by whisper and
-///     in a party, the party's share of experience and quest credit, its members' health, and its survival of a
-///     restart.
+///     each by its name (line 3); a line said nearby reaches all three, a whisper reaches only its recipient and comes
+///     back to its speaker as sent, a whisper to no one is refused with 1, and party chat without a party with 3
+///     (line 4). Each later line of Milestone 12 adds its steps here: chat in a party, the party's share of experience
+///     and quest credit, its members' health, and its survival of a restart.
 /// </summary>
 [TestFixture]
 [NonParallelizable]
@@ -84,6 +87,53 @@ public sealed class PlayingTogetherAcceptanceTests
         Assert.That(viewer.World.Remotes[entity].Name, Is.EqualTo(name), $"{step}: by its name");
     }
 
+    // Anna says hello nearby; Bobby whispers to Cora; Anna whispers to no one and speaks to a party she does not have
+    // (Gameplay Systems §15).
+    private static void Chat(SocketClient anna, SocketClient bobby, SocketClient cora)
+    {
+        const string step = "chat";
+        var heard = new Dictionary<SocketClient, List<string>>();
+        foreach (SocketClient client in new[] { anna, bobby, cora })
+        {
+            var lines = new List<string>();
+            heard.Add(client, lines);
+            client.Connection.ChatLineReceived += line => lines.Add($"{line.Channel} {line.Name}: {line.Text}");
+        }
+
+        anna.Connection.SendChat(ChatChannel.Nearby, string.Empty, "hello all");
+        Assert.That(
+            SocketClients.PumpUntil(() => heard.Values.All(lines => lines.Count == 1), anna, bobby, cora),
+            Is.True,
+            $"{step}: said nearby, heard by all three");
+        Assert.That(heard.Values.Select(lines => lines[0]), Has.All.EqualTo($"Nearby {AnnaName}: hello all"));
+
+        bobby.Connection.SendChat(ChatChannel.Whisper, CoraName.ToLowerInvariant(), "psst");
+        Assert.That(
+            SocketClients.PumpUntil(() => heard[cora].Count == 2 && heard[bobby].Count == 2, anna, bobby, cora),
+            Is.True,
+            $"{step}: the whisper and its echo");
+        Assert.That(heard[cora][1], Is.EqualTo($"Whisper {BobbyName}: psst"));
+        Assert.That(heard[bobby][1], Is.EqualTo($"WhisperSent {CoraName}: psst"));
+
+        uint toNoOne = anna.Connection.SendChat(ChatChannel.Whisper, "Nobody1", "hello?");
+        Assert.That(
+            SocketClients.PumpUntil(() => anna.World.LastRejection != CommandRejectionReason.None, anna, bobby, cora),
+            Is.True,
+            $"{step}: the whisper to no one refused");
+        Assert.That(anna.World.LastRejection, Is.EqualTo(CommandRejectionReason.InvalidTarget), $"{step}: {toNoOne}");
+        uint toParty = anna.Connection.SendChat(ChatChannel.Party, string.Empty, "anyone?");
+        Assert.That(
+            SocketClients.PumpUntil(
+                () => anna.World.LastRejection == CommandRejectionReason.NotAllowedNow,
+                anna,
+                bobby,
+                cora),
+            Is.True,
+            $"{step}: party chat without a party refused, {toParty}");
+        Assert.That(heard[anna], Has.Count.EqualTo(1), $"{step}: Anna heard only her own line");
+        Assert.That(heard[bobby], Has.Count.EqualTo(2), $"{step}: nothing more reached Bobby");
+    }
+
     private static void AssertCleanTraffic(string step, params SocketClient[] clients)
     {
         foreach (SocketClient client in clients)
@@ -113,6 +163,9 @@ public sealed class PlayingTogetherAcceptanceTests
         AssertSees("enter", bobby, cora, CoraName);
         AssertSees("enter", cora, anna, AnnaName);
         AssertCleanTraffic("enter", anna, bobby, cora);
+
+        Chat(anna, bobby, cora);
+        AssertCleanTraffic("chat", anna, bobby, cora);
 
         host.StopAsync().GetAwaiter().GetResult();
     }

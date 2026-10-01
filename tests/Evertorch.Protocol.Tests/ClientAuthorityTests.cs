@@ -44,7 +44,8 @@ public sealed class ClientAuthorityTests
                 new[]
                 {
                     "ClientHello", "EnterWorldRequest", "MoveInput", "StopMovement", "TargetEntity",
-                    "AttackEntity", "CancelAction", "UseSkill", "PickupItem", "Respawn", "CreateCharacter", "Logout",
+                    "AttackEntity", "CancelAction", "UseSkill", "PickupItem", "ChatSend", "Respawn", "CreateCharacter",
+                    "Logout",
                     "InventoryResyncRequest", "EquipItem", "UnequipItem", "UseItem", "BuyItem", "SellItem",
                     "AcceptQuest", "CompleteQuest", "AllocateStat", "LearnSkill", "ResetBuild", "ChangeJob"
                 }),

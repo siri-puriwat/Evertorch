@@ -68,6 +68,14 @@ public sealed class AbuseOptions
     public int ResyncRequestBurst { get; set; } = 3;
 
     /// <summary>
+    ///     <c>ChatSend</c> per second, per connection: a typing pace (Network Protocol §11). The client keeps the same
+    ///     bucket, so an honest player is never scored for it.
+    /// </summary>
+    public int ChatCommandsPerSecond { get; set; } = 1;
+
+    public int ChatCommandBurst { get; set; } = 5;
+
+    /// <summary>
     ///     Violation score at which a connection is closed; each violation adds <see cref="ViolationScore.Points" />.
     /// </summary>
     public int ViolationThreshold { get; set; } = 100;
@@ -125,6 +133,8 @@ public sealed class AbuseOptionsValidator : IValidateOptions<AbuseOptions>
         AddRangeFailure(failures, "SessionCommandBurst", options.SessionCommandBurst, 1, 10000);
         AddRangeFailure(failures, "ResyncRequestsPerSecond", options.ResyncRequestsPerSecond, 1, 1000);
         AddRangeFailure(failures, "ResyncRequestBurst", options.ResyncRequestBurst, 1, 10000);
+        AddRangeFailure(failures, "ChatCommandsPerSecond", options.ChatCommandsPerSecond, 1, 1000);
+        AddRangeFailure(failures, "ChatCommandBurst", options.ChatCommandBurst, 1, 10000);
         AddRangeFailure(failures, "ViolationThreshold", options.ViolationThreshold, 1, 1000000);
         AddRangeFailure(failures, "ViolationDecayPerSecond", options.ViolationDecayPerSecond, 0, 1000000);
         AddRangeFailure(failures, "KickCooldownMs", options.KickCooldownMs, 0, 86400000);

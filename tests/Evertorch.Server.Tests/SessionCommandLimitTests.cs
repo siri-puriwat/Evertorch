@@ -175,7 +175,8 @@ public sealed class SessionCommandLimitTests
             [InboundEventKind.AllocateStat] = ServerInstruments.ItemCommandLimit,
             [InboundEventKind.LearnSkill] = ServerInstruments.ItemCommandLimit,
             [InboundEventKind.ResetBuild] = ServerInstruments.ItemCommandLimit,
-            [InboundEventKind.ChangeJob] = ServerInstruments.ItemCommandLimit
+            [InboundEventKind.ChangeJob] = ServerInstruments.ItemCommandLimit,
+            [InboundEventKind.Chat] = ServerInstruments.ChatCommandLimit
         };
         var limits = new SessionCommandLimits(Defaults, TestServer.TickRate, 0);
 

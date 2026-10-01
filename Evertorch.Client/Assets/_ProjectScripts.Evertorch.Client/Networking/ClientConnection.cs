@@ -161,6 +161,9 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
             case MessageOpcode.WornWeaponChanged:
                 OnWornWeaponChanged(payload);
                 break;
+            case MessageOpcode.ChatReceived:
+                OnChatReceived(payload);
+                break;
             case MessageOpcode.EntitySnapshot:
                 OnEntitySnapshot(payload);
                 break;
@@ -619,6 +622,29 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
     ///     world, else the command's sequence. The server answers after its commit with the skill list and the sheet,
     ///     which names the new job, or a refusal.
     /// </summary>
+    /// <summary>
+    ///     Says <paramref name="text" /> on <paramref name="channel" />, to <paramref name="recipient" /> for a whisper;
+    ///     0 while not in the world or for text or a name the server would read as malformed, else the command's
+    ///     sequence. Only a refusal answers it (Network Protocol §9).
+    /// </summary>
+    public uint SendChat(ChatChannel channel, string recipient, string text)
+    {
+        bool isWhisper = channel == ChatChannel.Whisper;
+        if (State != ClientConnectionState.InWorld
+            || channel < ChatChannel.Nearby
+            || channel > ChatChannel.Whisper
+            || !ChatText.IsValid(text)
+            || (isWhisper ? !CharacterNames.IsValid(recipient) : !string.IsNullOrEmpty(recipient)))
+        {
+            return 0;
+        }
+
+        uint sequence = NextCommandSequence();
+        var message = new ChatSend(channel, recipient ?? string.Empty, text, sequence);
+        SendRouted(MessageOpcode.ChatSend, message.Write(m_sendBuffer));
+        return sequence;
+    }
+
     public uint SendChangeJob(EntityId npc, JobDefinitionId job)
     {
         if (State != ClientConnectionState.InWorld)
@@ -746,6 +772,11 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
     ///     Raised after every character list, including the one that follows a creation.
     /// </summary>
     public event Action? CharactersChanged;
+
+    /// <summary>
+    ///     A chat line delivered while in the world, for the chat log, which outlives the world.
+    /// </summary>
+    public event Action<ChatReceived>? ChatLineReceived;
 
     public event Action<ClientWorld>? EnteredWorld;
 
@@ -947,6 +978,22 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
         else
         {
             World.OnSpawn(spawn);
+        }
+    }
+
+    private void OnChatReceived(ReadOnlySpan<byte> payload)
+    {
+        if (!ChatReceived.TryRead(payload, out ChatReceived? line) || line == null)
+        {
+            MalformedMessages++;
+        }
+        else if (World == null)
+        {
+            UnexpectedMessages++;
+        }
+        else
+        {
+            ChatLineReceived?.Invoke(line);
         }
     }
 

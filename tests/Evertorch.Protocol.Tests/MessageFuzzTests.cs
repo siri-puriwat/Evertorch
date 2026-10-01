@@ -106,6 +106,14 @@ public sealed class MessageFuzzTests
             Encode(WornWeaponChangedTests.Golden),
             payload => WornWeaponChanged.TryRead(payload, out WornWeaponChanged? message) ? Encode(message!) : null);
         yield return Case(
+            "ChatSend",
+            Encode(ChatMessageTests.SendGolden),
+            payload => ChatSend.TryRead(payload, out ChatSend? message) ? Encode(message!) : null);
+        yield return Case(
+            "ChatReceived",
+            Encode(ChatMessageTests.ReceivedGolden),
+            payload => ChatReceived.TryRead(payload, out ChatReceived? message) ? Encode(message!) : null);
+        yield return Case(
             "AttackEntity",
             Encode(new AttackEntity(new EntityId(9), 3)),
             payload => AttackEntity.TryRead(payload, out AttackEntity message) ? Encode(message) : null);
@@ -769,6 +777,20 @@ public sealed class MessageFuzzTests
     }
 
     private static byte[] Encode(ChangeJob message)
+    {
+        byte[] buffer = new byte[message.GetEncodedLength()];
+        message.Write(buffer);
+        return buffer;
+    }
+
+    private static byte[] Encode(ChatSend message)
+    {
+        byte[] buffer = new byte[message.GetEncodedLength()];
+        message.Write(buffer);
+        return buffer;
+    }
+
+    private static byte[] Encode(ChatReceived message)
     {
         byte[] buffer = new byte[message.GetEncodedLength()];
         message.Write(buffer);

@@ -139,6 +139,12 @@ public enum InboundEventKind
     ///     A request to the NPC <see cref="InboundEvent.Target" /> to change the character's job to
     ///     <see cref="InboundEvent.Job" />, carrying a command sequence.
     /// </summary>
-    ChangeJob = 27
+    ChangeJob = 27,
+
+    /// <summary>
+    ///     A chat line on <see cref="InboundEvent.Channel" />, to <see cref="InboundEvent.Name" /> for a whisper, with
+    ///     the words in <see cref="InboundEvent.Text" />, carrying a command sequence.
+    /// </summary>
+    Chat = 28
 }
 }

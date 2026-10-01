@@ -81,6 +81,7 @@ public sealed class SessionManager : ITickPhase
     private readonly CombatSystem m_combat;
     private readonly PickupSystem m_pickups;
     private readonly ItemActionSystem m_items;
+    private readonly ChatSystem m_chat;
     private readonly TimeProvider m_time;
     private readonly ServerInstruments m_instruments;
     private readonly AuditLog m_audit;
@@ -113,6 +114,7 @@ public sealed class SessionManager : ITickPhase
         CombatSystem combat,
         PickupSystem pickups,
         ItemActionSystem items,
+        ChatSystem chat,
         TimeProvider time,
         IOptions<SimulationOptions> simulation,
         IOptions<NetworkOptions> network,
@@ -143,6 +145,7 @@ public sealed class SessionManager : ITickPhase
         m_pickups = pickups;
         m_pickups.Settled += OnOperationSettled;
         m_items = items;
+        m_chat = chat;
         m_items.Settled += OnOperationSettled;
         m_time = time;
         m_instruments = instruments;
@@ -290,6 +293,7 @@ public sealed class SessionManager : ITickPhase
             case InboundEventKind.LearnSkill:
             case InboundEventKind.ResetBuild:
             case InboundEventKind.ChangeJob:
+            case InboundEventKind.Chat:
                 HandleCommand(session, inboundEvent, tick);
                 break;
             default:
@@ -913,6 +917,12 @@ public sealed class SessionManager : ITickPhase
         if (session.Character!.IsLoggingOut)
         {
             return CommandRejectionReason.NotAllowedNow;
+        }
+
+        // Chat is applied while dead (Network Protocol §11).
+        if (command.Kind == InboundEventKind.Chat)
+        {
+            return m_chat.TrySend(session, command.Channel, command.Name!, command.Text!);
         }
 
         if (player.IsDead)

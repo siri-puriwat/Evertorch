@@ -39,6 +39,7 @@ public sealed class MessageRoutingTests
     [TestCase(MessageOpcode.LearnSkill)]
     [TestCase(MessageOpcode.ResetBuild)]
     [TestCase(MessageOpcode.ChangeJob)]
+    [TestCase(MessageOpcode.ChatSend)]
     [TestCase(MessageOpcode.ServerHello)]
     [TestCase(MessageOpcode.WorldEntered)]
     [TestCase(MessageOpcode.EntitySpawn)]
@@ -67,6 +68,7 @@ public sealed class MessageRoutingTests
     [TestCase(MessageOpcode.CommandRejected)]
     [TestCase(MessageOpcode.InventorySnapshot)]
     [TestCase(MessageOpcode.InventoryChanged)]
+    [TestCase(MessageOpcode.ChatReceived)]
     public void TryGetRoute_ForSessionAndLifecycleMessages_IsReliableOrderedOnControl(MessageOpcode opcode)
     {
         MessageRouting.TryGetRoute(opcode, out ProtocolChannel channel, out MessageDelivery delivery);
@@ -112,6 +114,8 @@ public sealed class MessageRoutingTests
     [TestCase(MessageOpcode.LearnSkill, true)]
     [TestCase(MessageOpcode.ResetBuild, true)]
     [TestCase(MessageOpcode.ChangeJob, true)]
+    [TestCase(MessageOpcode.ChatSend, true)]
+    [TestCase(MessageOpcode.ChatReceived, false)]
     [TestCase(MessageOpcode.Respawn, true)]
     [TestCase(MessageOpcode.MoveInput, true)]
     [TestCase(MessageOpcode.StopMovement, true)]
@@ -152,7 +156,8 @@ public sealed class MessageRoutingTests
         {
             "None=0x0000", "ClientHello=0x0001", "EnterWorldRequest=0x0002", "MoveInput=0x0003",
             "StopMovement=0x0004", "TargetEntity=0x0005", "AttackEntity=0x0006", "CancelAction=0x0007",
-            "UseSkill=0x0008", "PickupItem=0x0009", "Respawn=0x000C", "CreateCharacter=0x000D", "Logout=0x000E",
+            "UseSkill=0x0008", "PickupItem=0x0009", "ChatSend=0x000A", "Respawn=0x000C", "CreateCharacter=0x000D",
+            "Logout=0x000E",
             "InventoryResyncRequest=0x000F", "EquipItem=0x0010", "UnequipItem=0x0011", "UseItem=0x0012",
             "BuyItem=0x0013", "SellItem=0x0014", "AcceptQuest=0x0015", "CompleteQuest=0x0016", "AllocateStat=0x0017",
             "LearnSkill=0x0018", "ResetBuild=0x0019", "ChangeJob=0x001A",
@@ -161,7 +166,7 @@ public sealed class MessageRoutingTests
             "AttackStarted=0x8008", "Damage=0x8009", "EntityDied=0x800A", "SkillCastStarted=0x800B",
             "SkillResolved=0x800C", "ItemDropped=0x800D",
             "ItemPickedUp=0x800E", "InventorySnapshot=0x800F",
-            "InventoryChanged=0x8010",
+            "InventoryChanged=0x8010", "ChatReceived=0x8011",
             "DisconnectNotice=0x8013",
             "CharacterHealth=0x8014", "EntityRevived=0x8015", "CharacterList=0x8016",
             "CreateCharacterResult=0x8017", "CommandRejected=0x8018",
@@ -188,9 +193,9 @@ public sealed class MessageRoutingTests
     }
 
     [Test]
-    public void ProtocolVersion_IsThirtyTwo()
+    public void ProtocolVersion_IsThirtyThree()
     {
-        Assert.That(ProtocolConstants.ProtocolVersion, Is.EqualTo(32));
+        Assert.That(ProtocolConstants.ProtocolVersion, Is.EqualTo(33));
     }
 
     [Test]

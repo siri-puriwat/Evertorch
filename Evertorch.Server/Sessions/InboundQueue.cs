@@ -342,6 +342,19 @@ public sealed class InboundQueue
 
                 decoded = InboundEvent.ForChangeJob(connection, change!.Npc, change.Job, change.CommandSequence);
                 return true;
+            case MessageOpcode.ChatSend:
+                if (!ChatSend.TryRead(payload, out ChatSend? chat))
+                {
+                    return false;
+                }
+
+                decoded = InboundEvent.ForChat(
+                    connection,
+                    chat!.Channel,
+                    chat.Recipient,
+                    chat.Text,
+                    chat.CommandSequence);
+                return true;
             case MessageOpcode.LearnSkill:
                 if (!LearnSkill.TryRead(payload, out LearnSkill? learn))
                 {

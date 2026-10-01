@@ -123,6 +123,38 @@ public sealed class InboundQueueTests
         return payload;
     }
 
+    private static byte[] ChatPayload(ChatChannel channel, string recipient, string text)
+    {
+        var message = new ChatSend(channel, recipient, text, 9);
+        byte[] payload = new byte[message.GetEncodedLength()];
+        message.Write(payload);
+        return payload;
+    }
+
+    // A chat line cut short, one byte too long, on a channel no client sends, naming someone for a line said nearby,
+    // or carrying a control character where the text rule allows none (Network Protocol §11).
+    private static IEnumerable<TestCaseData> MalformedChat()
+    {
+        byte[] nearby = ChatPayload(ChatChannel.Nearby, string.Empty, "hi");
+        byte[] whisper = ChatPayload(ChatChannel.Whisper, "Tester8", "hi");
+        yield return new TestCaseData(nearby.Take(nearby.Length - 1).ToArray()).SetName("ChatSend cut short");
+        yield return new TestCaseData(nearby.Concat(new byte[] { 0 }).ToArray()).SetName("ChatSend too long");
+        yield return new TestCaseData(With(nearby, 2, 1, 0x04)).SetName("ChatSend as a whisper sent");
+        yield return new TestCaseData(With(whisper, 2, 1, 0x01)).SetName("ChatSend nearby naming a recipient");
+        yield return new TestCaseData(With(nearby, 7, 1, 0x0A)).SetName("ChatSend with a line break");
+        yield return new TestCaseData(With(nearby, 7, 1, 0xC3)).SetName("ChatSend of broken UTF-8");
+    }
+
+    [TestCaseSource(nameof(MalformedChat))]
+    public void Chat_ThatIsMalformed_IsRejected(byte[] payload)
+    {
+        InboundQueue queue = CreateQueue(16);
+
+        queue.OnPayload(Peer, ProtocolChannel.Control, payload);
+
+        AssertOnlyMalformed(queue, 1);
+    }
+
     private static byte[] LearnSkillPayload()
     {
         var message = new LearnSkill(new SkillDefinitionId("skill.strike"), 9);
@@ -226,6 +258,19 @@ public sealed class InboundQueueTests
         {
             Assert.That(inboundEvent.Kind, Is.EqualTo(InboundEventKind.Malformed));
         }
+    }
+
+    [Test]
+    public void Chat_ThatIsWellFormed_IsQueuedWithItsChannelRecipientTextAndSequence()
+    {
+        InboundQueue queue = CreateQueue(16);
+
+        queue.OnPayload(Peer, ProtocolChannel.Control, ChatPayload(ChatChannel.Whisper, "Tester8", "hi there"));
+
+        Assert.That(queue.TryDequeue(out InboundEvent chat), Is.True);
+        Assert.That(
+            (chat.Kind, chat.Channel, chat.Name, chat.Text, chat.CommandSequence),
+            Is.EqualTo((InboundEventKind.Chat, ChatChannel.Whisper, "Tester8", "hi there", 9u)));
     }
 
     [Test]

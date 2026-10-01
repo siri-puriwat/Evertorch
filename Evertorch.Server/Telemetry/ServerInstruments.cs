@@ -27,6 +27,7 @@ public sealed class ServerInstruments
     public const string ItemCommandLimit = "session_item";
     public const string SessionCommandLimit = "session_session";
     public const string ResyncRequestLimit = "session_resync";
+    public const string ChatCommandLimit = "session_chat";
     public const string AdmissionLimit = "admission";
     public const string SignInAddressLimit = "sign_in_address";
     public const string SignInLoginLimit = "sign_in_login";
@@ -105,6 +106,7 @@ public sealed class ServerInstruments
     private readonly Counter<long> m_coins;
     private readonly Counter<long> m_quests;
     private readonly Counter<long> m_signIns;
+    private readonly Counter<long> m_chatMessages;
 
     public ServerInstruments(IMeterFactory meters)
     {
@@ -129,6 +131,10 @@ public sealed class ServerInstruments
             "evertorch.gateway.sign_ins",
             "{request}",
             "Sign-ins at the gateway, tagged by outcome.");
+        m_chatMessages = Meter.CreateCounter<long>(
+            "evertorch.chat.messages",
+            "{message}",
+            "Chat lines delivered, tagged by channel; the text is never recorded.");
         m_jobDuration = Meter.CreateHistogram<double>(
             "evertorch.persistence.job.duration",
             "ms",
@@ -239,6 +245,17 @@ public sealed class ServerInstruments
     public void RecordSignIn(string outcome)
     {
         m_signIns.Add(1, new KeyValuePair<string, object?>(OutcomeTag, outcome));
+    }
+
+    public void RecordChat(ChatChannel channel)
+    {
+        string name = channel switch
+        {
+            ChatChannel.Nearby => "nearby",
+            ChatChannel.Party => "party",
+            _ => "whisper"
+        };
+        m_chatMessages.Add(1, new KeyValuePair<string, object?>("channel", name));
     }
 
     /// <param name="operation">One of the fixed operation names of the persistence jobs.</param>

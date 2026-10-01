@@ -218,6 +218,26 @@ public sealed class ClientConnectionTests
     }
 
     [Test]
+    public void ChatReceived_InTheWorld_IsRaised_AndOutsideItIsUnexpected()
+    {
+        var line = new ChatReceived(ChatChannel.Whisper, default, "Anna", "psst");
+        var selecting = new Harness();
+        selecting.ConnectAndReceiveHello();
+        selecting.Deliver(ProtocolChannel.Control, Encode(line.GetEncodedLength(), line.Write));
+        int unexpected = selecting.Connection.UnexpectedMessages;
+        var harness = new Harness();
+        var lines = new List<string>();
+        harness.Connection.ChatLineReceived += received => lines.Add($"{received.Name}: {received.Text}");
+
+        harness.EnterWorld();
+        harness.Deliver(ProtocolChannel.Control, Encode(line.GetEncodedLength(), line.Write));
+
+        Assert.That(unexpected, Is.EqualTo(1), "no chat before the world");
+        Assert.That(lines, Is.EqualTo(new[] { "Anna: psst" }));
+        Assert.That(harness.Connection.MalformedMessages, Is.Zero);
+    }
+
+    [Test]
     public void CommandRejected_InTheWorld_ReachesTheWorldWithItsSequence()
     {
         var harness = new Harness();
@@ -812,6 +832,33 @@ public sealed class ClientConnectionTests
         Assert.That(ChangeJob.TryRead(sent.Payload, out ChangeJob? read), Is.True);
         Assert.That((read!.Npc, read.Job, read.CommandSequence), Is.EqualTo((npc, job, 5u)));
         Assert.That(sent.Channel, Is.EqualTo(ProtocolChannel.Control));
+    }
+
+    [Test]
+    public void SendChat_OnlyWhatTheServerReadsAsWellFormed_GoesOut()
+    {
+        var harness = new Harness();
+        harness.EnterWorld();
+        int before = harness.Transport.Sent.Count;
+
+        uint nearby = harness.Connection.SendChat(ChatChannel.Nearby, string.Empty, "hello");
+        uint whisper = harness.Connection.SendChat(ChatChannel.Whisper, "Bobby", "psst");
+        uint[] refused =
+        {
+            harness.Connection.SendChat(ChatChannel.Nearby, string.Empty, "   "),
+            harness.Connection.SendChat(ChatChannel.Nearby, string.Empty, "caf\u00E9"),
+            harness.Connection.SendChat(ChatChannel.Nearby, "Bobby", "hi"),
+            harness.Connection.SendChat(ChatChannel.Whisper, "Bo", "hi"),
+            harness.Connection.SendChat(ChatChannel.WhisperSent, "Bobby", "hi")
+        };
+
+        FakeClientTransport.SentMessage[] sent = harness.Transport.Sent.Skip(before).ToArray();
+        Assert.That((nearby, whisper), Is.EqualTo((1u, 2u)));
+        Assert.That(refused, Has.All.Zero);
+        Assert.That(sent, Has.Length.EqualTo(2));
+        Assert.That(ChatSend.TryRead(sent[1].Payload, out ChatSend? read), Is.True);
+        Assert.That((read!.Recipient, read.Text), Is.EqualTo(("Bobby", "psst")));
+        Assert.That(sent[1].Delivery, Is.EqualTo(MessageDelivery.ReliableOrdered));
     }
 
     [Test]

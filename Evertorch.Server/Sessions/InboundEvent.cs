@@ -26,7 +26,9 @@ public readonly struct InboundEvent
         uint quantity = 0,
         QuestDefinitionId quest = default,
         PrimaryStat stat = PrimaryStat.None,
-        JobDefinitionId job = default)
+        JobDefinitionId job = default,
+        ChatChannel channel = ChatChannel.None,
+        string? text = null)
     {
         Kind = kind;
         Connection = connection;
@@ -46,6 +48,8 @@ public readonly struct InboundEvent
         Quest = quest;
         Stat = stat;
         Job = job;
+        Channel = channel;
+        Text = text;
     }
 
     public InboundEventKind Kind { get; }
@@ -116,6 +120,16 @@ public readonly struct InboundEvent
     ///     For <see cref="InboundEventKind.ChangeJob" />, the first job to become.
     /// </summary>
     public JobDefinitionId Job { get; }
+
+    /// <summary>
+    ///     For <see cref="InboundEventKind.Chat" />, where the line goes.
+    /// </summary>
+    public ChatChannel Channel { get; }
+
+    /// <summary>
+    ///     For <see cref="InboundEventKind.Chat" />, the words, which are never logged.
+    /// </summary>
+    public string? Text { get; }
 
     public static InboundEvent Connected(ConnectionId connection)
     {
@@ -346,6 +360,25 @@ public readonly struct InboundEvent
             default,
             commandSequence: commandSequence,
             slot: slot);
+    }
+
+    public static InboundEvent ForChat(
+        ConnectionId connection,
+        ChatChannel channel,
+        string recipient,
+        string text,
+        uint commandSequence)
+    {
+        return new InboundEvent(
+            InboundEventKind.Chat,
+            connection,
+            null,
+            default,
+            default,
+            commandSequence: commandSequence,
+            name: recipient,
+            channel: channel,
+            text: text);
     }
 
     public static InboundEvent ForCreateCharacter(ConnectionId connection, string name)

@@ -39,6 +39,7 @@ public static class MessageRouting
             case MessageOpcode.LearnSkill:
             case MessageOpcode.ResetBuild:
             case MessageOpcode.ChangeJob:
+            case MessageOpcode.ChatSend:
             case MessageOpcode.ServerHello:
             case MessageOpcode.WorldEntered:
             case MessageOpcode.EntitySpawn:
@@ -67,6 +68,7 @@ public static class MessageRouting
             case MessageOpcode.CommandRejected:
             case MessageOpcode.InventorySnapshot:
             case MessageOpcode.InventoryChanged:
+            case MessageOpcode.ChatReceived:
                 return true;
             case MessageOpcode.MoveInput:
             case MessageOpcode.StopMovement:

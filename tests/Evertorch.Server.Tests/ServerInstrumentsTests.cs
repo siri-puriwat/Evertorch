@@ -323,6 +323,25 @@ public sealed class ServerInstrumentsTests
     }
 
     [Test]
+    public void ChatMessages_CountEachDeliveredLine_TaggedByChannel()
+    {
+        var server = new TestServer();
+        using var recorder = new MeterRecorder(server.Instruments.Meter);
+        ConnectionId speaker = server.EnterWorld(7);
+        server.EnterWorld(8);
+
+        server.SendChat(speaker, ChatChannel.Nearby, string.Empty, "hello", 1);
+        server.SendChat(speaker, ChatChannel.Whisper, "Tester8", "psst", 2);
+        server.SendChat(speaker, ChatChannel.Whisper, "Nobody1", "psst", 3);
+        server.SendChat(speaker, ChatChannel.Party, string.Empty, "anyone", 4);
+        server.Tick();
+
+        Assert.That(Tagged(recorder, "evertorch.chat.messages", "channel", "nearby"), Is.EqualTo(1));
+        Assert.That(Tagged(recorder, "evertorch.chat.messages", "channel", "whisper"), Is.EqualTo(1));
+        Assert.That(Named(recorder, "evertorch.chat.messages"), Has.Count.EqualTo(2), "refusals count nothing");
+    }
+
+    [Test]
     public void Coins_AreCountedByOperation_ForEachCommittedTrade()
     {
         var server = new TestServer(withNpcs: true);

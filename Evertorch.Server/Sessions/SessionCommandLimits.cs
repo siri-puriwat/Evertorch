@@ -12,6 +12,7 @@ public sealed class SessionCommandLimits
     private readonly TickBucket m_item;
     private readonly TickBucket m_session;
     private readonly TickBucket m_resync;
+    private readonly TickBucket m_chat;
 
     public SessionCommandLimits(AbuseOptions options, int tickRate, uint tick)
     {
@@ -20,6 +21,7 @@ public sealed class SessionCommandLimits
         m_item = new TickBucket(options.ItemCommandsPerSecond, options.ItemCommandBurst, tickRate, tick);
         m_session = new TickBucket(options.SessionCommandsPerSecond, options.SessionCommandBurst, tickRate, tick);
         m_resync = new TickBucket(options.ResyncRequestsPerSecond, options.ResyncRequestBurst, tickRate, tick);
+        m_chat = new TickBucket(options.ChatCommandsPerSecond, options.ChatCommandBurst, tickRate, tick);
     }
 
     /// <summary>
@@ -59,6 +61,9 @@ public sealed class SessionCommandLimits
             case InboundEventKind.InventoryResync:
                 limit = ServerInstruments.ResyncRequestLimit;
                 return m_resync.TryTake(tick);
+            case InboundEventKind.Chat:
+                limit = ServerInstruments.ChatCommandLimit;
+                return m_chat.TryTake(tick);
             default:
                 limit = string.Empty;
                 return true;
