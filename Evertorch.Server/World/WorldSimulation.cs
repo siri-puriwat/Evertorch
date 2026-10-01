@@ -206,6 +206,7 @@ public sealed class WorldSimulation
         player = new PlayerEntity(
             NextEntityId(),
             new CharacterId(stored.Id),
+            stored.Name,
             owner,
             job.Id,
             position,

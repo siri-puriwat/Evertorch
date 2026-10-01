@@ -188,9 +188,9 @@ public sealed class MessageRoutingTests
     }
 
     [Test]
-    public void ProtocolVersion_IsThirtyOne()
+    public void ProtocolVersion_IsThirtyTwo()
     {
-        Assert.That(ProtocolConstants.ProtocolVersion, Is.EqualTo(31));
+        Assert.That(ProtocolConstants.ProtocolVersion, Is.EqualTo(32));
     }
 
     [Test]

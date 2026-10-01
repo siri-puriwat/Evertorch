@@ -43,6 +43,11 @@ public sealed class RemoteEntity
     /// </summary>
     public string WornWeapon { get; internal set; } = string.Empty;
 
+    /// <summary>
+    ///     A player's character name from its spawn; empty for every other kind (Network Protocol §6).
+    /// </summary>
+    public string Name { get; internal set; } = string.Empty;
+
     public RemoteEntityBuffer Buffer { get; } = new();
 }
 }

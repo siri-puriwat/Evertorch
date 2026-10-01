@@ -11,10 +11,10 @@ namespace Evertorch.Server.Tests
 /// <summary>
 ///     The Milestone 12 "Playing together" exit criterion's server side end to end (ROADMAP §8): the composed server
 ///     host on a real PostgreSQL 18 and real UDP sockets on loopback, with three clients built from the client's
-///     production networking and gameplay code. Today's step is only that three players entering the training ground
-///     together see each other. Each later line of Milestone 12 adds its steps here: the names, chat nearby and by
-///     whisper and in a party, the party's share of experience and quest credit, its members' health, and its survival
-///     of a restart.
+///     production networking and gameplay code. Three players entering the training ground together see each other,
+///     each by its name (line 3). Each later line of Milestone 12 adds its steps here: chat nearby and by whisper and
+///     in a party, the party's share of experience and quest credit, its members' health, and its survival of a
+///     restart.
 /// </summary>
 [TestFixture]
 [NonParallelizable]
@@ -73,14 +73,15 @@ public sealed class PlayingTogetherAcceptanceTests
         }
     }
 
-    // The viewer has a spawn for the seen character.
-    private static void AssertSees(string step, SocketClient viewer, SocketClient seen)
+    // The viewer has a spawn for the seen character, which names it (Network Protocol §6).
+    private static void AssertSees(string step, SocketClient viewer, SocketClient seen, string name)
     {
         EntityId entity = seen.World.LocalEntity;
         Assert.That(
             SocketClients.PumpUntil(() => viewer.World.Remotes.ContainsKey(entity), viewer, seen),
             Is.True,
             $"{step}: in view");
+        Assert.That(viewer.World.Remotes[entity].Name, Is.EqualTo(name), $"{step}: by its name");
     }
 
     private static void AssertCleanTraffic(string step, params SocketClient[] clients)
@@ -108,9 +109,9 @@ public sealed class PlayingTogetherAcceptanceTests
         using var cora = new SocketClient(content, CoraIdentity, CoraName);
         EnterTogether(port, anna, bobby, cora);
 
-        AssertSees("enter", anna, bobby);
-        AssertSees("enter", anna, cora);
-        AssertSees("enter", bobby, cora);
+        AssertSees("enter", anna, bobby, BobbyName);
+        AssertSees("enter", bobby, cora, CoraName);
+        AssertSees("enter", cora, anna, AnnaName);
         AssertCleanTraffic("enter", anna, bobby, cora);
 
         host.StopAsync().GetAwaiter().GetResult();

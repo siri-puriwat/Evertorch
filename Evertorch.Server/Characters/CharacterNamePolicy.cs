@@ -1,33 +1,15 @@
+using Evertorch.Game;
+
 namespace Evertorch.Server
 {
 /// <summary>
-///     The naming policy (Persistence §4): 4 to 23 characters of A–Z, a–z, and 0–9. Uniqueness is by the lower-case
-///     form and is the database's to decide.
+///     The naming policy for a new character: the shared rule of <see cref="CharacterNames" />.
 /// </summary>
 public static class CharacterNamePolicy
 {
-    public const int MinLength = 4;
-    public const int MaxLength = 23;
-
     public static bool IsValid(string name)
     {
-        if (name.Length < MinLength || name.Length > MaxLength)
-        {
-            return false;
-        }
-
-        foreach (char character in name)
-        {
-            bool isAllowed = (character >= 'a' && character <= 'z')
-                || (character >= 'A' && character <= 'Z')
-                || (character >= '0' && character <= '9');
-            if (!isAllowed)
-            {
-                return false;
-            }
-        }
-
-        return true;
+        return CharacterNames.IsValid(name);
     }
 }
 }

@@ -239,7 +239,8 @@ public sealed class AdminConsole
         {
             output.WriteLine(
                 Format(
-                    "connection {0} character {1} entity {2} {3} at {4} rtt {5} ms inputs queued {6} stale {7} dropped {8}"
+                    "connection {0} character {1} {16} entity {2} {3} at {4} rtt {5} ms inputs queued {6} stale {7}"
+                    + " dropped {8}"
                     + " refused {9} level {10} as {15} job {14} exp {11} other epoch {12} coins {13}",
                     player.Connection,
                     player.Character.Value,
@@ -256,7 +257,8 @@ public sealed class AdminConsole
                     player.OtherEpochInputs,
                     player.Coins,
                     player.JobLevel,
-                    player.Job.Value));
+                    player.Job.Value,
+                    player.Name));
         }
     }
 

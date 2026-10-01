@@ -1145,7 +1145,9 @@ public sealed class ClientConnectionTests
             ClientTestGrids.Center(3, 8),
             new WorldDirection(0f, 1f),
             EntityStateFlags.None,
-            0);
+            0,
+            "",
+            "Other1");
         EntitySnapshot snapshot = ClientWorldFixture.Snapshot(
             5,
             0,
@@ -1155,11 +1157,13 @@ public sealed class ClientConnectionTests
         harness.Deliver(ProtocolChannel.Control, Encode(spawn.GetEncodedLength(), spawn.Write));
         harness.Deliver(ProtocolChannel.State, Encode(snapshot.GetEncodedLength(), snapshot.Write));
         bool wasKnown = harness.Connection.World!.Remotes.ContainsKey(other);
+        string name = harness.Connection.World.Remotes[other].Name;
         int states = harness.Connection.World.Remotes[other].Buffer.Count;
         var despawn = new EntityDespawn(other, DespawnReason.OutOfRange);
         harness.Deliver(ProtocolChannel.Control, Encode(EntityDespawn.EncodedLength, despawn.Write));
 
         Assert.That(wasKnown, Is.True);
+        Assert.That(name, Is.EqualTo("Other1"));
         Assert.That(states, Is.EqualTo(2));
         Assert.That(harness.Connection.World.Remotes.Count, Is.EqualTo(0));
         Assert.That(harness.Connection.MalformedMessages, Is.EqualTo(0));

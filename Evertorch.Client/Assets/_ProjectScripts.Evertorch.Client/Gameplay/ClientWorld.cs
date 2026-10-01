@@ -293,7 +293,7 @@ public sealed class ClientWorld
             spawn.Kind,
             spawn.DefinitionId,
             spawn.StateFlags,
-            spawn.HealthPermille) { WornWeapon = spawn.WornWeapon };
+            spawn.HealthPermille) { WornWeapon = spawn.WornWeapon, Name = spawn.Name };
         remote.Buffer.Add(LatestServerTick * m_tickSeconds, spawn.Position, spawn.Facing);
         m_remotes.Add(spawn.Entity, remote);
         RemoteSpawned?.Invoke(remote);

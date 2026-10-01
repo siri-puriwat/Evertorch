@@ -104,7 +104,8 @@ public sealed class TelemetryTests
 
         string[] lines = output.ToString().Split(new[] { Environment.NewLine }, StringSplitOptions.RemoveEmptyEntries);
         Assert.That(lines, Has.Length.EqualTo(2));
-        Assert.That(lines[0], Does.Contain("character 7").And.Contain("map.training_ground").And.Contain("rtt 42 ms"));
+        Assert.That(lines[0], Does.Contain("character 7 Tester7 entity").And.Contain("map.training_ground")
+            .And.Contain("rtt 42 ms"));
         Assert.That(lines[0], Does.EndWith(" other epoch 0 coins 250"), "input for another map, then the coins");
         Assert.That(lines[1], Does.Contain("character 8"));
         Assert.That(output.ToString(), Does.Not.Contain("dev:").And.Not.Contain("tester"));
@@ -175,6 +176,8 @@ public sealed class TelemetryTests
         Assert.That(log.Entries.Select(entry => entry.EventId.Name), Is.EqualTo(new[] { "TickOverrun" }));
     }
 
+    // The character name is the one text member: 4 to 23 letters and digits cannot hold a 43-character token or a
+    // "dev:" identity (CharacterNames).
     [Test]
     public void PlayerSummary_HasNoMemberThatCouldCarryAnIdentityOrToken()
     {
@@ -184,7 +187,7 @@ public sealed class TelemetryTests
             .Select(property => property.Name)
             .ToArray();
 
-        Assert.That(textMembers, Is.Empty);
+        Assert.That(textMembers, Is.EqualTo(new[] { nameof(PlayerSummary.Name) }));
     }
 
     [Test]

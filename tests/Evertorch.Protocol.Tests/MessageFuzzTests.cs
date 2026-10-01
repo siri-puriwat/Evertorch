@@ -71,7 +71,9 @@ public sealed class MessageFuzzTests
                     new WorldPosition(1f, 2f, 3f),
                     new WorldDirection(0f, 1f),
                     EntityStateFlags.Moving,
-                    0)),
+                    0,
+                    "",
+                    "Anna")),
             payload => EntitySpawn.TryRead(payload, out EntitySpawn? message) ? Encode(message!) : null);
         yield return Case(
             "EntitySpawn (monster)",
@@ -96,7 +98,8 @@ public sealed class MessageFuzzTests
                     new WorldDirection(0f, 1f),
                     EntityStateFlags.None,
                     0,
-                    "item.weapon.training_sword")),
+                    "item.weapon.training_sword",
+                    "Abcdefghijklmnopqrstuvw")),
             payload => EntitySpawn.TryRead(payload, out EntitySpawn? message) ? Encode(message!) : null);
         yield return Case(
             "WornWeaponChanged",

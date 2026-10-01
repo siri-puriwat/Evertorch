@@ -13,9 +13,9 @@ public static class ProtocolLimits
     public const int MaxNoticeMessageBytes = 128;
 
     /// <summary>
-    ///     A character name: at most 23 characters, all ASCII under the naming policy.
+    ///     A character name: at most 23 characters, all ASCII under <see cref="CharacterNames" />.
     /// </summary>
-    public const int MaxCharacterNameBytes = 23;
+    public const int MaxCharacterNameBytes = CharacterNames.MaxLength;
 
     /// <summary>
     ///     The largest payload a client may send: a <see cref="ClientHello" /> with both strings at their limits.

@@ -118,7 +118,8 @@ public sealed class StatusPublisher : ITickPhase
                     session.OtherEpochInputs,
                     session.Character?.Inventory.Coins ?? 0,
                     session.Player.JobLevel,
-                    session.Player.Job));
+                    session.Player.Job,
+                    session.Player.Name));
         }
 
         return new ServerStatus(

@@ -17,6 +17,7 @@ public sealed class PlayerEntity : WorldEntity
     public PlayerEntity(
         EntityId id,
         CharacterId character,
+        string name,
         ConnectionId owner,
         JobDefinitionId job,
         WorldPosition position,
@@ -30,6 +31,7 @@ public sealed class PlayerEntity : WorldEntity
         : base(id, position, facing, movementSpeed, stats.MaxHp, attackRange)
     {
         Character = character;
+        Name = name;
         Owner = owner;
         Job = job;
         Level = level;
@@ -41,6 +43,11 @@ public sealed class PlayerEntity : WorldEntity
     }
 
     public CharacterId Character { get; }
+
+    /// <summary>
+    ///     The character's name from its load, which everyone who sees the player reads (Network Protocol §6).
+    /// </summary>
+    public string Name { get; }
 
     /// <summary>
     ///     The connection that controls the player; default while none does.

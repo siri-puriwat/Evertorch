@@ -50,6 +50,7 @@ public sealed class InterestGridTests
         return new PlayerEntity(
             new EntityId(id),
             new CharacterId(id),
+            $"Player{id}",
             new ConnectionId(id),
             new JobDefinitionId("job.adventurer"),
             new WorldPosition(x, 0f, z),

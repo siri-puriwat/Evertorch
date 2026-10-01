@@ -126,6 +126,7 @@ public sealed class VisibilityPhase : ITickPhase
 
     private void SendSpawn(ClientSession session, WorldEntity entity)
     {
+        var player = entity as PlayerEntity;
         m_sender.Send(
             session.Connection,
             new EntitySpawn(
@@ -136,7 +137,8 @@ public sealed class VisibilityPhase : ITickPhase
                 entity.Facing,
                 entity.StateFlags,
                 entity.SharedHealthPermille,
-                entity is PlayerEntity player ? player.WornWeapon?.Value ?? string.Empty : string.Empty));
+                player?.WornWeapon?.Value ?? string.Empty,
+                player?.Name ?? string.Empty));
     }
 }
 }

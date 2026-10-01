@@ -23,7 +23,8 @@ public sealed class PlayerSummary
         long otherEpochInputs,
         long coins,
         int jobLevel = 1,
-        JobDefinitionId job = default)
+        JobDefinitionId job = default,
+        string name = "")
     {
         Connection = connection;
         Character = character;
@@ -41,6 +42,7 @@ public sealed class PlayerSummary
         Coins = coins;
         JobLevel = jobLevel;
         Job = job;
+        Name = name;
     }
 
     public ConnectionId Connection { get; }
@@ -92,5 +94,10 @@ public sealed class PlayerSummary
     ///     The player's job, which the console's players line names.
     /// </summary>
     public JobDefinitionId Job { get; }
+
+    /// <summary>
+    ///     The character's name, which the console's players line shows beside its number.
+    /// </summary>
+    public string Name { get; }
 }
 }

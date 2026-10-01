@@ -67,7 +67,8 @@ public sealed class SharedLifecycleMessageTests
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80, 0x3F,
         0x01, 0x00,
         0x00, 0x00,
-        0x00, 0x00
+        0x00, 0x00,
+        0x04, 0x00, 0x41, 0x6E, 0x6E, 0x61
     };
 
     private static readonly byte[] MonsterSpawnBytes =
@@ -80,6 +81,7 @@ public sealed class SharedLifecycleMessageTests
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80, 0x3F,
         0x00, 0x00,
         0xE8, 0x03,
+        0x00, 0x00,
         0x00, 0x00
     };
 
@@ -199,7 +201,9 @@ public sealed class SharedLifecycleMessageTests
             new WorldPosition(1f, 0.5f, -2f),
             new WorldDirection(0f, 1f),
             EntityStateFlags.Moving,
-            0);
+            0,
+            "",
+            "Anna");
         byte[] buffer = new byte[message.GetEncodedLength()];
         message.Write(buffer);
 
@@ -209,6 +213,7 @@ public sealed class SharedLifecycleMessageTests
         Assert.That(isRead, Is.True);
         Assert.That(read!.DefinitionId, Is.EqualTo("job.a"));
         Assert.That(read.StateFlags, Is.EqualTo(EntityStateFlags.Moving));
+        Assert.That(read.Name, Is.EqualTo("Anna"));
     }
 
     [Test]
