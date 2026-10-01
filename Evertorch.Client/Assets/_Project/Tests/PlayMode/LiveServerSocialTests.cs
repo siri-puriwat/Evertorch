@@ -226,7 +226,9 @@ public sealed class LiveServerSocialTests
             () =>
             {
                 other.Poll();
-                return heard.Contains($"[Party] {AnnName}: ready");
+                // The speaker's own copy reaches the client's log in its next frame, not with the other's poll.
+                return heard.Contains($"[Party] {AnnName}: ready")
+                    && client.ChatLog.Lines.Any(line => line.Text == $"[Party] {AnnName}: ready");
             },
             StartTimeoutSeconds);
         Assert.That(heard, Has.Member($"[Party] {AnnName}: ready"), server.JoinOutput());
