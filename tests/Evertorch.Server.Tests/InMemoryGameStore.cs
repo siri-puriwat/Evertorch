@@ -25,6 +25,7 @@ internal sealed class InMemoryGameStore : IGameStore
     private readonly Dictionary<long, Row> m_characters = new();
     private readonly Dictionary<Guid, LedgerEntry> m_ledger = new();
     private readonly Dictionary<long, PartyEntry> m_parties = new();
+    private long m_lastParty;
     private long m_lastAccount;
     private long m_lastCharacter;
     private long m_lastItem;
@@ -71,6 +72,16 @@ internal sealed class InMemoryGameStore : IGameStore
     ///     How many job changes still to commit throw as if their answer was lost after the commit.
     /// </summary>
     public int AmbiguousJobChangeFailures { get; set; }
+
+    /// <summary>
+    ///     Every party change asked of the store, in order, including repeats.
+    /// </summary>
+    public List<PartyChange> PartyChanges { get; } = new();
+
+    /// <summary>
+    ///     How many party changes still to commit throw as if their answer was lost after the commit.
+    /// </summary>
+    public int AmbiguousPartyFailures { get; set; }
 
     /// <summary>
     ///     Every login provisioned, in order, including repeats.
@@ -649,6 +660,171 @@ internal sealed class InMemoryGameStore : IGameStore
                 .ToList();
             return Task.FromResult(ids);
         }
+    }
+
+    public Task<PartyChangeResult> CommitPartyChangeAsync(PartyChange change, CancellationToken cancellationToken)
+    {
+        ThrowIfUnavailable();
+        lock (m_gate)
+        {
+            PartyChanges.Add(change);
+            PartyChangeResult result = change.Kind == PartyChangeKind.Create ? Create(change) : Change(change);
+            if (AmbiguousPartyFailures > 0 && result.Status == PartyChangeStatus.Committed)
+            {
+                AmbiguousPartyFailures--;
+                throw new StoreUnavailableException(new TimeoutException("scripted loss of the commit's answer"));
+            }
+
+            return Task.FromResult(result);
+        }
+    }
+
+    public Task<StoredParty?> FindPartyStateAsync(long characterId, CancellationToken cancellationToken)
+    {
+        return LoadPartyAsync(characterId, cancellationToken);
+    }
+
+    // The same rules as PostgresGameStore's (Persistence §5).
+    private PartyChangeResult Create(PartyChange change)
+    {
+        long? leaderParty = PartyOf(change.Actor);
+        long? inviteeParty = PartyOf(change.Target);
+        if (leaderParty != null && leaderParty == inviteeParty)
+        {
+            return Result(
+                m_parties[leaderParty.Value].Leader == change.Actor
+                    ? PartyChangeStatus.Committed
+                    : PartyChangeStatus.AlreadyInParty,
+                leaderParty);
+        }
+
+        if (leaderParty != null || inviteeParty != null)
+        {
+            return Result(PartyChangeStatus.AlreadyInParty, PartyOf(change.Actor));
+        }
+
+        if (m_characters[change.Actor].Account == m_characters[change.Target].Account)
+        {
+            return Result(PartyChangeStatus.SameAccount, null);
+        }
+
+        var party = new PartyEntry { Leader = change.Actor };
+        party.Members.Add((change.Actor, 1));
+        party.Members.Add((change.Target, 2));
+        m_parties.Add(++m_lastParty, party);
+        return Result(PartyChangeStatus.Committed, m_lastParty);
+    }
+
+    private PartyChangeResult Change(PartyChange change)
+    {
+        if (!m_parties.TryGetValue(change.PartyId, out PartyEntry? party))
+        {
+            bool isGone = change.Kind == PartyChangeKind.Leave || change.Kind == PartyChangeKind.Kick;
+            return Result(isGone ? PartyChangeStatus.Committed : PartyChangeStatus.NoSuchParty, null);
+        }
+
+        PartyChangeStatus status = change.Kind switch
+        {
+            PartyChangeKind.Join => Join(party, change),
+            PartyChangeKind.Leave => Remove(change.PartyId, party, change.Actor),
+            PartyChangeKind.Kick => party.Leader != change.Actor ? PartyChangeStatus.NotTheLeader
+                : change.Target == change.Actor ? PartyChangeStatus.NotAMember
+                : Remove(change.PartyId, party, change.Target),
+            _ => Lead(party, change)
+        };
+        return Result(status, m_parties.ContainsKey(change.PartyId) ? change.PartyId : null);
+    }
+
+    private PartyChangeStatus Join(PartyEntry party, PartyChange change)
+    {
+        if (party.Members.Any(member => member.Character == change.Target))
+        {
+            return PartyChangeStatus.Committed;
+        }
+
+        if (party.Leader != change.Actor)
+        {
+            return PartyChangeStatus.NotTheLeader;
+        }
+
+        if (PartyOf(change.Target) != null)
+        {
+            return PartyChangeStatus.AlreadyInParty;
+        }
+
+        if (party.Members.Count >= change.MaxMembers)
+        {
+            return PartyChangeStatus.PartyFull;
+        }
+
+        AccountId invitee = m_characters[change.Target].Account;
+        if (party.Members.Any(member => m_characters[member.Character].Account == invitee))
+        {
+            return PartyChangeStatus.SameAccount;
+        }
+
+        party.Members.Add((change.Target, party.Members.Max(member => member.JoinOrder) + 1));
+        return PartyChangeStatus.Committed;
+    }
+
+    private PartyChangeStatus Remove(long id, PartyEntry party, long character)
+    {
+        int index = party.Members.FindIndex(member => member.Character == character);
+        if (index < 0)
+        {
+            return PartyChangeStatus.Committed;
+        }
+
+        party.Members.RemoveAt(index);
+        if (party.Members.Count < 2)
+        {
+            m_parties.Remove(id);
+        }
+        else if (party.Leader == character)
+        {
+            party.Leader = party.Members.OrderBy(member => member.JoinOrder).First().Character;
+        }
+
+        return PartyChangeStatus.Committed;
+    }
+
+    private static PartyChangeStatus Lead(PartyEntry party, PartyChange change)
+    {
+        if (party.Leader == change.Target)
+        {
+            return PartyChangeStatus.Committed;
+        }
+
+        if (party.Leader != change.Actor)
+        {
+            return PartyChangeStatus.NotTheLeader;
+        }
+
+        if (party.Members.All(member => member.Character != change.Target))
+        {
+            return PartyChangeStatus.NotAMember;
+        }
+
+        party.Leader = change.Target;
+        return PartyChangeStatus.Committed;
+    }
+
+    private long? PartyOf(long character)
+    {
+        foreach (KeyValuePair<long, PartyEntry> party in m_parties)
+        {
+            if (party.Value.Members.Any(member => member.Character == character))
+            {
+                return party.Key;
+            }
+        }
+
+        return null;
+    }
+
+    private PartyChangeResult Result(PartyChangeStatus status, long? party)
+    {
+        return new PartyChangeResult(status, party == null ? null : ToStored(party.Value, m_parties[party.Value]));
     }
 
     private StoredParty ToStored(long id, PartyEntry party)

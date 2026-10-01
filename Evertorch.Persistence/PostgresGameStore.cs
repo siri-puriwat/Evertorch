@@ -1209,6 +1209,292 @@ WHERE character_quests.state = {CharacterQuestRow.ActiveState} AND character_que
             cancellationToken);
     }
 
+    public Task<PartyChangeResult> CommitPartyChangeAsync(PartyChange change, CancellationToken cancellationToken)
+    {
+        if (change == null)
+        {
+            throw new ArgumentNullException(nameof(change));
+        }
+
+        return RunAsync(
+            async context =>
+            {
+                await using (IDbContextTransaction transaction =
+                             await context.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false))
+                {
+                    PartyChangeResult result = change.Kind == PartyChangeKind.Create
+                        ? await CreatePartyAsync(context, change, cancellationToken).ConfigureAwait(false)
+                        : await ChangePartyAsync(context, change, cancellationToken).ConfigureAwait(false);
+                    await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+                    return result;
+                }
+            },
+            cancellationToken);
+    }
+
+    public Task<StoredParty?> FindPartyStateAsync(long characterId, CancellationToken cancellationToken)
+    {
+        return RunAsync(
+            async context =>
+            {
+                // A creation or a join in flight holds the character's lock and any other change the party's, so
+                // waiting on both sees every change for the character settled.
+                await using (IDbContextTransaction transaction =
+                             await context.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false))
+                {
+                    await LockCharacterAsync(context, characterId, cancellationToken).ConfigureAwait(false);
+                    long? partyId = await PartyOfAsync(context, characterId, cancellationToken).ConfigureAwait(false);
+                    if (partyId != null)
+                    {
+                        await LockPartyAsync(context, partyId.Value, cancellationToken).ConfigureAwait(false);
+                    }
+
+                    StoredParty? party = await ReadPartyAsync(context, characterId, cancellationToken)
+                        .ConfigureAwait(false);
+                    await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+                    return party;
+                }
+            },
+            cancellationToken);
+    }
+
+    // Both characters are locked in the order of their IDs, so two creations over the same pair queue rather than
+    // deadlock; the second of two characters accepting each other's invites then finds them in a party.
+    private static async Task<PartyChangeResult> CreatePartyAsync(
+        EvertorchDbContext context,
+        PartyChange change,
+        CancellationToken cancellationToken)
+    {
+        long first = Math.Min(change.Actor, change.Target);
+        long second = Math.Max(change.Actor, change.Target);
+        CharacterRow firstRow = await LockCharacterAsync(context, first, cancellationToken).ConfigureAwait(false);
+        CharacterRow secondRow = await LockCharacterAsync(context, second, cancellationToken).ConfigureAwait(false);
+        long? leaderParty = await PartyOfAsync(context, change.Actor, cancellationToken).ConfigureAwait(false);
+        long? inviteeParty = await PartyOfAsync(context, change.Target, cancellationToken).ConfigureAwait(false);
+        if (leaderParty != null && leaderParty == inviteeParty)
+        {
+            PartyRow existing = await context.Parties
+                .SingleAsync(row => row.Id == leaderParty.Value, cancellationToken)
+                .ConfigureAwait(false);
+            return existing.LeaderCharacterId == change.Actor
+                ? await ResultAsync(context, PartyChangeStatus.Committed, change.Actor, cancellationToken)
+                    .ConfigureAwait(false)
+                : await ResultAsync(context, PartyChangeStatus.AlreadyInParty, change.Actor, cancellationToken)
+                    .ConfigureAwait(false);
+        }
+
+        if (leaderParty != null || inviteeParty != null)
+        {
+            return await ResultAsync(context, PartyChangeStatus.AlreadyInParty, change.Actor, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        if (firstRow.AccountId == secondRow.AccountId)
+        {
+            return new PartyChangeResult(PartyChangeStatus.SameAccount, null);
+        }
+
+        var party = new PartyRow { LeaderCharacterId = change.Actor, CreatedAt = change.At, Version = 0 };
+        context.Parties.Add(party);
+        await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        context.PartyMembers.Add(
+            new PartyMemberRow { PartyId = party.Id, CharacterId = change.Actor, JoinedAt = change.At, JoinOrder = 1 });
+        context.PartyMembers.Add(
+            new PartyMemberRow
+                { PartyId = party.Id, CharacterId = change.Target, JoinedAt = change.At, JoinOrder = 2 });
+        await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        return await ResultAsync(context, PartyChangeStatus.Committed, change.Actor, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private static async Task<PartyChangeResult> ChangePartyAsync(
+        EvertorchDbContext context,
+        PartyChange change,
+        CancellationToken cancellationToken)
+    {
+        PartyRow? party = await LockPartyAsync(context, change.PartyId, cancellationToken).ConfigureAwait(false);
+        if (party == null)
+        {
+            // A departure or a removal of a party that is gone already holds.
+            bool isGone = change.Kind == PartyChangeKind.Leave || change.Kind == PartyChangeKind.Kick;
+            return new PartyChangeResult(isGone ? PartyChangeStatus.Committed : PartyChangeStatus.NoSuchParty, null);
+        }
+
+        List<PartyMemberRow> members = await context.PartyMembers
+            .Where(member => member.PartyId == party.Id)
+            .OrderBy(member => member.JoinOrder)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        PartyChangeStatus status = change.Kind switch
+        {
+            PartyChangeKind.Join => await JoinAsync(context, party, members, change, cancellationToken)
+                .ConfigureAwait(false),
+            PartyChangeKind.Leave => Remove(context, party, members, change.Actor),
+            PartyChangeKind.Kick => party.LeaderCharacterId != change.Actor ? PartyChangeStatus.NotTheLeader
+                : change.Target == change.Actor ? PartyChangeStatus.NotAMember
+                : Remove(context, party, members, change.Target),
+            _ => Lead(party, members, change)
+        };
+        await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        return new PartyChangeResult(
+            status,
+            await ReadPartyByIdAsync(context, party.Id, cancellationToken).ConfigureAwait(false));
+    }
+
+    private static async Task<PartyChangeStatus> JoinAsync(
+        EvertorchDbContext context,
+        PartyRow party,
+        List<PartyMemberRow> members,
+        PartyChange change,
+        CancellationToken cancellationToken)
+    {
+        if (members.Any(member => member.CharacterId == change.Target))
+        {
+            return PartyChangeStatus.Committed;
+        }
+
+        if (party.LeaderCharacterId != change.Actor)
+        {
+            return PartyChangeStatus.NotTheLeader;
+        }
+
+        CharacterRow invitee = await LockCharacterAsync(context, change.Target, cancellationToken)
+            .ConfigureAwait(false);
+        if (await PartyOfAsync(context, change.Target, cancellationToken).ConfigureAwait(false) != null)
+        {
+            return PartyChangeStatus.AlreadyInParty;
+        }
+
+        if (members.Count >= change.MaxMembers)
+        {
+            return PartyChangeStatus.PartyFull;
+        }
+
+        var memberIds = members.Select(member => member.CharacterId).ToList();
+        bool isSameAccount = await context.Characters
+            .AnyAsync(row => memberIds.Contains(row.Id) && row.AccountId == invitee.AccountId, cancellationToken)
+            .ConfigureAwait(false);
+        if (isSameAccount)
+        {
+            return PartyChangeStatus.SameAccount;
+        }
+
+        context.PartyMembers.Add(
+            new PartyMemberRow
+            {
+                PartyId = party.Id,
+                CharacterId = change.Target,
+                JoinedAt = change.At,
+                JoinOrder = members[members.Count - 1].JoinOrder + 1
+            });
+        party.Version++;
+        return PartyChangeStatus.Committed;
+    }
+
+    // A departure or a removal: the party disbands when one member would remain, and the lead passes to the earliest
+    // joined when the leader goes (Gameplay Systems §14). A member already gone is the end state.
+    private static PartyChangeStatus Remove(
+        EvertorchDbContext context,
+        PartyRow party,
+        List<PartyMemberRow> members,
+        long character)
+    {
+        PartyMemberRow? leaving = members.SingleOrDefault(member => member.CharacterId == character);
+        if (leaving == null)
+        {
+            return PartyChangeStatus.Committed;
+        }
+
+        context.PartyMembers.Remove(leaving);
+        members.Remove(leaving);
+        if (members.Count < 2)
+        {
+            context.Parties.Remove(party);
+            return PartyChangeStatus.Committed;
+        }
+
+        if (party.LeaderCharacterId == character)
+        {
+            party.LeaderCharacterId = members[0].CharacterId;
+        }
+
+        party.Version++;
+        return PartyChangeStatus.Committed;
+    }
+
+    private static PartyChangeStatus Lead(PartyRow party, List<PartyMemberRow> members, PartyChange change)
+    {
+        if (party.LeaderCharacterId == change.Target)
+        {
+            return PartyChangeStatus.Committed;
+        }
+
+        if (party.LeaderCharacterId != change.Actor)
+        {
+            return PartyChangeStatus.NotTheLeader;
+        }
+
+        if (members.All(member => member.CharacterId != change.Target))
+        {
+            return PartyChangeStatus.NotAMember;
+        }
+
+        party.LeaderCharacterId = change.Target;
+        party.Version++;
+        return PartyChangeStatus.Committed;
+    }
+
+    private static async Task<PartyChangeResult> ResultAsync(
+        EvertorchDbContext context,
+        PartyChangeStatus status,
+        long character,
+        CancellationToken cancellationToken)
+    {
+        return new PartyChangeResult(
+            status,
+            await ReadPartyAsync(context, character, cancellationToken).ConfigureAwait(false));
+    }
+
+    private static async Task<long?> PartyOfAsync(
+        EvertorchDbContext context,
+        long characterId,
+        CancellationToken cancellationToken)
+    {
+        return await context.PartyMembers
+            .Where(member => member.CharacterId == characterId)
+            .Select(member => (long?)member.PartyId)
+            .SingleOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private static async Task<PartyRow?> LockPartyAsync(
+        EvertorchDbContext context,
+        long partyId,
+        CancellationToken cancellationToken)
+    {
+        List<PartyRow> locked = await context.Parties
+            .FromSql($"SELECT * FROM parties WHERE id = {partyId} FOR UPDATE")
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        return locked.Count == 1 ? locked[0] : null;
+    }
+
+    private static async Task<StoredParty?> ReadPartyByIdAsync(
+        EvertorchDbContext context,
+        long partyId,
+        CancellationToken cancellationToken)
+    {
+        long? anyMember = await context.PartyMembers
+            .AsNoTracking()
+            .Where(member => member.PartyId == partyId)
+            .Select(member => (long?)member.CharacterId)
+            .FirstOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
+        return anyMember == null
+            ? null
+            : await ReadPartyAsync(context, anyMember.Value, cancellationToken).ConfigureAwait(false);
+    }
+
     private static async Task<StoredParty?> ReadPartyAsync(
         EvertorchDbContext context,
         long characterId,

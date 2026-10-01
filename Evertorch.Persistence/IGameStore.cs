@@ -99,6 +99,19 @@ public interface IGameStore
     Task<StoredParty?> LoadPartyAsync(long characterId, CancellationToken cancellationToken);
 
     /// <summary>
+    ///     Commits one party change in its own transaction under the party's lock (Persistence §5): every refusal
+    ///     is a status, and a change whose end state already holds is committed. A departure that leaves one member
+    ///     disbands the party, and a leader's departure passes the lead to the earliest joined. No ledger row.
+    /// </summary>
+    Task<PartyChangeResult> CommitPartyChangeAsync(PartyChange change, CancellationToken cancellationToken);
+
+    /// <summary>
+    ///     The party of <paramref name="characterId" /> once every change in flight for it has settled, which tells
+    ///     whether a change whose answer was lost took effect (Persistence §5).
+    /// </summary>
+    Task<StoredParty?> FindPartyStateAsync(long characterId, CancellationToken cancellationToken);
+
+    /// <summary>
     ///     Writes the checkpoint over the character's map, position, HP, and SP, and its level and experience unless
     ///     they would go down or a turn-in or a job change was in flight; its job level and job experience the same
     ///     way, and only while the stored job is the checkpoint's; raises each active quest's progress, adding the quest
