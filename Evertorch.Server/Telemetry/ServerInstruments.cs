@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics.Metrics;
 using Evertorch.Game;
+using Evertorch.Persistence;
 using Evertorch.Protocol;
 
 namespace Evertorch.Server
@@ -28,6 +29,7 @@ public sealed class ServerInstruments
     public const string SessionCommandLimit = "session_session";
     public const string ResyncRequestLimit = "session_resync";
     public const string ChatCommandLimit = "session_chat";
+    public const string PartyCommandLimit = "session_party";
     public const string AdmissionLimit = "admission";
     public const string SignInAddressLimit = "sign_in_address";
     public const string SignInLoginLimit = "sign_in_login";
@@ -107,6 +109,7 @@ public sealed class ServerInstruments
     private readonly Counter<long> m_quests;
     private readonly Counter<long> m_signIns;
     private readonly Counter<long> m_chatMessages;
+    private readonly Counter<long> m_partyChanges;
 
     public ServerInstruments(IMeterFactory meters)
     {
@@ -135,6 +138,10 @@ public sealed class ServerInstruments
             "evertorch.chat.messages",
             "{message}",
             "Chat lines delivered, tagged by channel; the text is never recorded.");
+        m_partyChanges = Meter.CreateCounter<long>(
+            "evertorch.party.changes",
+            "{change}",
+            "Party changes committed, tagged by kind.");
         m_jobDuration = Meter.CreateHistogram<double>(
             "evertorch.persistence.job.duration",
             "ms",
@@ -256,6 +263,19 @@ public sealed class ServerInstruments
             _ => "whisper"
         };
         m_chatMessages.Add(1, new KeyValuePair<string, object?>("channel", name));
+    }
+
+    public void RecordPartyChange(PartyChangeKind kind)
+    {
+        string name = kind switch
+        {
+            PartyChangeKind.Create => "create",
+            PartyChangeKind.Join => "join",
+            PartyChangeKind.Leave => "leave",
+            PartyChangeKind.Kick => "kick",
+            _ => "lead"
+        };
+        m_partyChanges.Add(1, new KeyValuePair<string, object?>("kind", name));
     }
 
     /// <param name="operation">One of the fixed operation names of the persistence jobs.</param>

@@ -13,6 +13,7 @@ public sealed class SessionCommandLimits
     private readonly TickBucket m_session;
     private readonly TickBucket m_resync;
     private readonly TickBucket m_chat;
+    private readonly TickBucket m_party;
 
     public SessionCommandLimits(AbuseOptions options, int tickRate, uint tick)
     {
@@ -22,6 +23,7 @@ public sealed class SessionCommandLimits
         m_session = new TickBucket(options.SessionCommandsPerSecond, options.SessionCommandBurst, tickRate, tick);
         m_resync = new TickBucket(options.ResyncRequestsPerSecond, options.ResyncRequestBurst, tickRate, tick);
         m_chat = new TickBucket(options.ChatCommandsPerSecond, options.ChatCommandBurst, tickRate, tick);
+        m_party = new TickBucket(options.PartyCommandsPerSecond, options.PartyCommandBurst, tickRate, tick);
     }
 
     /// <summary>
@@ -64,6 +66,13 @@ public sealed class SessionCommandLimits
             case InboundEventKind.Chat:
                 limit = ServerInstruments.ChatCommandLimit;
                 return m_chat.TryTake(tick);
+            case InboundEventKind.PartyInvite:
+            case InboundEventKind.PartyReply:
+            case InboundEventKind.PartyLeave:
+            case InboundEventKind.PartyKick:
+            case InboundEventKind.PartyLead:
+                limit = ServerInstruments.PartyCommandLimit;
+                return m_party.TryTake(tick);
             default:
                 limit = string.Empty;
                 return true;

@@ -104,6 +104,8 @@ public static class ServerHost
         builder.Services.AddSingleton<ITickPhase>(services => services.GetRequiredService<PickupSystem>());
         builder.Services.AddSingleton<ItemActionSystem>();
         builder.Services.AddSingleton<ChatSystem>();
+        builder.Services.AddSingleton<PartyRegistry>();
+        builder.Services.AddSingleton<ITickPhase>(services => services.GetRequiredService<PartyRegistry>());
         builder.Services.AddSingleton<ITickPhase>(services => services.GetRequiredService<ItemActionSystem>());
         builder.Services.AddSingleton<AddressThrottle>();
         builder.Services.AddSingleton<ConnectionRegistry>();

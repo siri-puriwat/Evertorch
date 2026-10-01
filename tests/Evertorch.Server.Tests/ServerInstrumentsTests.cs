@@ -520,6 +520,31 @@ public sealed class ServerInstrumentsTests
     }
 
     [Test]
+    public void PartyChanges_AreCountedByKind_OnceCommitted()
+    {
+        var server = new TestServer();
+        using var recorder = new MeterRecorder(server.Instruments.Meter);
+        ConnectionId seven = server.EnterWorld(7);
+        ConnectionId eight = server.EnterWorld(8);
+        server.Tick();
+
+        server.SendPartyInvite(seven, "Tester8", 1);
+        server.Tick();
+        server.SendPartyReply(eight, "Tester7", true, 1);
+        server.Tick(2);
+        server.SendPartyLead(seven, "Tester8", 2);
+        server.Tick(2);
+        server.SendPartyLeave(seven, 3);
+        server.SendPartyLeave(eight, 2);
+        server.Tick(2);
+
+        Assert.That(Tagged(recorder, "evertorch.party.changes", "kind", "create"), Is.EqualTo(1));
+        Assert.That(Tagged(recorder, "evertorch.party.changes", "kind", "lead"), Is.EqualTo(1));
+        Assert.That(Tagged(recorder, "evertorch.party.changes", "kind", "leave"), Is.EqualTo(1));
+        Assert.That(Named(recorder, "evertorch.party.changes"), Has.Count.EqualTo(3), "the second departure is busy");
+    }
+
+    [Test]
     public void PersistenceJobs_RecordDurationByOperationAndOutcome_AndCountFailuresAndRetries()
     {
         var server = new TestServer();

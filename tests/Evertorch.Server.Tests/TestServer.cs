@@ -192,6 +192,8 @@ internal sealed class TestServer
             Combat,
             Audit,
             ItemActionLog);
+        Parties = new PartyRegistry(Sessions, Lifetime, Persistence, sender, Time, simulation, Instruments, Audit,
+            PartyLog);
         SessionManager = new SessionManager(
             Inbound,
             Persistence,
@@ -209,6 +211,7 @@ internal sealed class TestServer
             Pickups,
             Items,
             new ChatSystem(Sessions, sender, Instruments),
+            Parties,
             Time,
             simulation,
             Options.Create(network),
@@ -258,7 +261,8 @@ internal sealed class TestServer
             new CheckpointScheduler(Sessions, Lifetime),
             AdminQueue,
             Pickups,
-            Items
+            Items,
+            Parties
         };
         if (withMonsterAi)
         {
@@ -288,6 +292,10 @@ internal sealed class TestServer
     public PickupSystem Pickups { get; }
 
     public ItemActionSystem Items { get; }
+
+    public PartyRegistry Parties { get; }
+
+    public CapturingLogger<PartyRegistry> PartyLog { get; } = new();
 
     public InMemoryServerTransport Transport { get; }
 
@@ -683,6 +691,7 @@ internal sealed class TestServer
             .Concat(LifetimeLog.Entries)
             .Concat(PickupLog.Entries)
             .Concat(ItemActionLog.Entries)
+            .Concat(PartyLog.Entries)
             .Concat(ProgressionLog.Entries)
             .Concat(AuditLogger.Entries)
             .SelectMany(entry => new[] { entry.Message }
@@ -697,6 +706,45 @@ internal sealed class TestServer
         uint commandSequence)
     {
         var message = new ChatSend(channel, recipient, text, commandSequence);
+        byte[] payload = new byte[message.GetEncodedLength()];
+        message.Write(payload);
+        Inbound.OnPayload(connection, ProtocolChannel.Control, payload);
+    }
+
+    public void SendPartyInvite(ConnectionId connection, string name, uint commandSequence)
+    {
+        var message = new PartyInvite(name, commandSequence);
+        byte[] payload = new byte[message.GetEncodedLength()];
+        message.Write(payload);
+        Inbound.OnPayload(connection, ProtocolChannel.Control, payload);
+    }
+
+    public void SendPartyReply(ConnectionId connection, string inviter, bool isAccepted, uint commandSequence)
+    {
+        var message = new PartyReply(inviter, isAccepted, commandSequence);
+        byte[] payload = new byte[message.GetEncodedLength()];
+        message.Write(payload);
+        Inbound.OnPayload(connection, ProtocolChannel.Control, payload);
+    }
+
+    public void SendPartyLeave(ConnectionId connection, uint commandSequence)
+    {
+        byte[] payload = new byte[PartyLeave.EncodedLength];
+        new PartyLeave(commandSequence).Write(payload);
+        Inbound.OnPayload(connection, ProtocolChannel.Control, payload);
+    }
+
+    public void SendPartyKick(ConnectionId connection, string member, uint commandSequence)
+    {
+        var message = new PartyKick(member, commandSequence);
+        byte[] payload = new byte[message.GetEncodedLength()];
+        message.Write(payload);
+        Inbound.OnPayload(connection, ProtocolChannel.Control, payload);
+    }
+
+    public void SendPartyLead(ConnectionId connection, string member, uint commandSequence)
+    {
+        var message = new PartyLead(member, commandSequence);
         byte[] payload = new byte[message.GetEncodedLength()];
         message.Write(payload);
         Inbound.OnPayload(connection, ProtocolChannel.Control, payload);

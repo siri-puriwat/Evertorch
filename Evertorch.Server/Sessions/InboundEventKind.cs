@@ -145,6 +145,34 @@ public enum InboundEventKind
     ///     A chat line on <see cref="InboundEvent.Channel" />, to <see cref="InboundEvent.Name" /> for a whisper, with
     ///     the words in <see cref="InboundEvent.Text" />, carrying a command sequence.
     /// </summary>
-    Chat = 28
+    Chat = 28,
+
+    /// <summary>
+    ///     An invite of the character named <see cref="InboundEvent.Name" /> to the sender's party, carrying a command
+    ///     sequence.
+    /// </summary>
+    PartyInvite = 29,
+
+    /// <summary>
+    ///     The answer, <see cref="InboundEvent.IsAccepted" />, to the invite of the character named
+    ///     <see cref="InboundEvent.Name" />, carrying a command sequence.
+    /// </summary>
+    PartyReply = 30,
+
+    /// <summary>
+    ///     A departure from the sender's party, carrying a command sequence.
+    /// </summary>
+    PartyLeave = 31,
+
+    /// <summary>
+    ///     The leader's removal of the member named <see cref="InboundEvent.Name" />, carrying a command sequence.
+    /// </summary>
+    PartyKick = 32,
+
+    /// <summary>
+    ///     The leader's passing of the lead to the member named <see cref="InboundEvent.Name" />, carrying a command
+    ///     sequence.
+    /// </summary>
+    PartyLead = 33
 }
 }

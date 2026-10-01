@@ -76,6 +76,13 @@ public sealed class AbuseOptions
     public int ChatCommandBurst { get; set; } = 5;
 
     /// <summary>
+    ///     The party's five commands per second, per connection (Network Protocol §11).
+    /// </summary>
+    public int PartyCommandsPerSecond { get; set; } = 2;
+
+    public int PartyCommandBurst { get; set; } = 5;
+
+    /// <summary>
     ///     Violation score at which a connection is closed; each violation adds <see cref="ViolationScore.Points" />.
     /// </summary>
     public int ViolationThreshold { get; set; } = 100;
@@ -135,6 +142,8 @@ public sealed class AbuseOptionsValidator : IValidateOptions<AbuseOptions>
         AddRangeFailure(failures, "ResyncRequestBurst", options.ResyncRequestBurst, 1, 10000);
         AddRangeFailure(failures, "ChatCommandsPerSecond", options.ChatCommandsPerSecond, 1, 1000);
         AddRangeFailure(failures, "ChatCommandBurst", options.ChatCommandBurst, 1, 10000);
+        AddRangeFailure(failures, "PartyCommandsPerSecond", options.PartyCommandsPerSecond, 1, 1000);
+        AddRangeFailure(failures, "PartyCommandBurst", options.PartyCommandBurst, 1, 10000);
         AddRangeFailure(failures, "ViolationThreshold", options.ViolationThreshold, 1, 1000000);
         AddRangeFailure(failures, "ViolationDecayPerSecond", options.ViolationDecayPerSecond, 0, 1000000);
         AddRangeFailure(failures, "KickCooldownMs", options.KickCooldownMs, 0, 86400000);

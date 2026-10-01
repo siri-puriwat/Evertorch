@@ -155,6 +155,73 @@ public sealed class InboundQueueTests
         AssertOnlyMalformed(queue, 1);
     }
 
+    private static byte[] Payload(int length, Func<byte[], int> write)
+    {
+        byte[] payload = new byte[length];
+        write(payload);
+        return payload;
+    }
+
+    private static IEnumerable<TestCaseData> PartyCommands()
+    {
+        var invite = new PartyInvite("Tester8", 9);
+        var reply = new PartyReply("Tester7", true, 9);
+        var kick = new PartyKick("Tester8", 9);
+        var lead = new PartyLead("Tester8", 9);
+        yield return new TestCaseData(
+            Payload(invite.GetEncodedLength(), bytes => invite.Write(bytes)),
+            InboundEventKind.PartyInvite,
+            "Tester8",
+            false).SetName("PartyInvite");
+        yield return new TestCaseData(
+            Payload(reply.GetEncodedLength(), bytes => reply.Write(bytes)),
+            InboundEventKind.PartyReply,
+            "Tester7",
+            true).SetName("PartyReply");
+        yield return new TestCaseData(
+            Payload(PartyLeave.EncodedLength, bytes => new PartyLeave(9).Write(bytes)),
+            InboundEventKind.PartyLeave,
+            string.Empty,
+            false).SetName("PartyLeave");
+        yield return new TestCaseData(
+            Payload(kick.GetEncodedLength(), bytes => kick.Write(bytes)),
+            InboundEventKind.PartyKick,
+            "Tester8",
+            false).SetName("PartyKick");
+        yield return new TestCaseData(
+            Payload(lead.GetEncodedLength(), bytes => lead.Write(bytes)),
+            InboundEventKind.PartyLead,
+            "Tester8",
+            false).SetName("PartyLead");
+    }
+
+    [TestCaseSource(nameof(PartyCommands))]
+    public void PartyCommand_ThatIsWellFormed_IsQueuedWithItsNameAnswerAndSequence(
+        byte[] payload,
+        InboundEventKind kind,
+        string name,
+        bool isAccepted)
+    {
+        InboundQueue queue = CreateQueue(16);
+
+        queue.OnPayload(Peer, ProtocolChannel.Control, payload);
+
+        Assert.That(queue.TryDequeue(out InboundEvent command), Is.True);
+        Assert.That(
+            (command.Kind, command.Name, command.IsAccepted, command.CommandSequence),
+            Is.EqualTo((kind, name, isAccepted, 9u)));
+    }
+
+    [TestCaseSource(nameof(PartyCommands))]
+    public void PartyCommand_CutShort_IsRejected(byte[] payload, InboundEventKind kind, string name, bool isAccepted)
+    {
+        InboundQueue queue = CreateQueue(16);
+
+        queue.OnPayload(Peer, ProtocolChannel.Control, payload.Take(payload.Length - 1).ToArray());
+
+        AssertOnlyMalformed(queue, 1);
+    }
+
     private static byte[] LearnSkillPayload()
     {
         var message = new LearnSkill(new SkillDefinitionId("skill.strike"), 9);

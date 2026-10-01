@@ -28,7 +28,8 @@ public readonly struct InboundEvent
         PrimaryStat stat = PrimaryStat.None,
         JobDefinitionId job = default,
         ChatChannel channel = ChatChannel.None,
-        string? text = null)
+        string? text = null,
+        bool isAccepted = false)
     {
         Kind = kind;
         Connection = connection;
@@ -50,6 +51,7 @@ public readonly struct InboundEvent
         Job = job;
         Channel = channel;
         Text = text;
+        IsAccepted = isAccepted;
     }
 
     public InboundEventKind Kind { get; }
@@ -130,6 +132,11 @@ public readonly struct InboundEvent
     ///     For <see cref="InboundEventKind.Chat" />, the words, which are never logged.
     /// </summary>
     public string? Text { get; }
+
+    /// <summary>
+    ///     For <see cref="InboundEventKind.PartyReply" />, whether the invite is accepted.
+    /// </summary>
+    public bool IsAccepted { get; }
 
     public static InboundEvent Connected(ConnectionId connection)
     {
@@ -379,6 +386,28 @@ public readonly struct InboundEvent
             name: recipient,
             channel: channel,
             text: text);
+    }
+
+    /// <summary>
+    ///     One of the party's commands: <paramref name="name" /> is the invitee, the inviter, or the member named, and
+    ///     empty for a departure.
+    /// </summary>
+    public static InboundEvent ForParty(
+        InboundEventKind kind,
+        ConnectionId connection,
+        string name,
+        uint commandSequence,
+        bool isAccepted = false)
+    {
+        return new InboundEvent(
+            kind,
+            connection,
+            null,
+            default,
+            default,
+            commandSequence: commandSequence,
+            name: name,
+            isAccepted: isAccepted);
     }
 
     public static InboundEvent ForCreateCharacter(ConnectionId connection, string name)

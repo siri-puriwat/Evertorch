@@ -176,7 +176,12 @@ public sealed class SessionCommandLimitTests
             [InboundEventKind.LearnSkill] = ServerInstruments.ItemCommandLimit,
             [InboundEventKind.ResetBuild] = ServerInstruments.ItemCommandLimit,
             [InboundEventKind.ChangeJob] = ServerInstruments.ItemCommandLimit,
-            [InboundEventKind.Chat] = ServerInstruments.ChatCommandLimit
+            [InboundEventKind.Chat] = ServerInstruments.ChatCommandLimit,
+            [InboundEventKind.PartyInvite] = ServerInstruments.PartyCommandLimit,
+            [InboundEventKind.PartyReply] = ServerInstruments.PartyCommandLimit,
+            [InboundEventKind.PartyLeave] = ServerInstruments.PartyCommandLimit,
+            [InboundEventKind.PartyKick] = ServerInstruments.PartyCommandLimit,
+            [InboundEventKind.PartyLead] = ServerInstruments.PartyCommandLimit
         };
         var limits = new SessionCommandLimits(Defaults, TestServer.TickRate, 0);
 

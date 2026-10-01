@@ -82,6 +82,7 @@ public sealed class SessionManager : ITickPhase
     private readonly PickupSystem m_pickups;
     private readonly ItemActionSystem m_items;
     private readonly ChatSystem m_chat;
+    private readonly PartyRegistry m_parties;
     private readonly TimeProvider m_time;
     private readonly ServerInstruments m_instruments;
     private readonly AuditLog m_audit;
@@ -115,6 +116,7 @@ public sealed class SessionManager : ITickPhase
         PickupSystem pickups,
         ItemActionSystem items,
         ChatSystem chat,
+        PartyRegistry parties,
         TimeProvider time,
         IOptions<SimulationOptions> simulation,
         IOptions<NetworkOptions> network,
@@ -146,6 +148,7 @@ public sealed class SessionManager : ITickPhase
         m_pickups.Settled += OnOperationSettled;
         m_items = items;
         m_chat = chat;
+        m_parties = parties;
         m_items.Settled += OnOperationSettled;
         m_time = time;
         m_instruments = instruments;
@@ -294,6 +297,11 @@ public sealed class SessionManager : ITickPhase
             case InboundEventKind.ResetBuild:
             case InboundEventKind.ChangeJob:
             case InboundEventKind.Chat:
+            case InboundEventKind.PartyInvite:
+            case InboundEventKind.PartyReply:
+            case InboundEventKind.PartyLeave:
+            case InboundEventKind.PartyKick:
+            case InboundEventKind.PartyLead:
                 HandleCommand(session, inboundEvent, tick);
                 break;
             default:
@@ -919,10 +927,21 @@ public sealed class SessionManager : ITickPhase
             return CommandRejectionReason.NotAllowedNow;
         }
 
-        // Chat is applied while dead (Network Protocol §11).
-        if (command.Kind == InboundEventKind.Chat)
+        // Chat and the party's commands are applied while dead (Network Protocol §11).
+        switch (command.Kind)
         {
-            return m_chat.TrySend(session, command.Channel, command.Name!, command.Text!);
+            case InboundEventKind.Chat:
+                return m_chat.TrySend(session, command.Channel, command.Name!, command.Text!);
+            case InboundEventKind.PartyInvite:
+                return m_parties.TryInvite(session, command.Name!);
+            case InboundEventKind.PartyReply:
+                return m_parties.TryReply(session, command.Name!, command.IsAccepted, command.CommandSequence);
+            case InboundEventKind.PartyLeave:
+                return m_parties.TryLeave(session, command.CommandSequence);
+            case InboundEventKind.PartyKick:
+                return m_parties.TryKick(session, command.Name!, command.CommandSequence);
+            case InboundEventKind.PartyLead:
+                return m_parties.TryLead(session, command.Name!, command.CommandSequence);
         }
 
         if (player.IsDead)

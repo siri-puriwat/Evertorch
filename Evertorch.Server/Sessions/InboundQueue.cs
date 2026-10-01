@@ -355,6 +355,61 @@ public sealed class InboundQueue
                     chat.Text,
                     chat.CommandSequence);
                 return true;
+            case MessageOpcode.PartyInvite:
+                if (!PartyInvite.TryRead(payload, out PartyInvite? invite))
+                {
+                    return false;
+                }
+
+                decoded = InboundEvent.ForParty(
+                    InboundEventKind.PartyInvite,
+                    connection,
+                    invite!.Name,
+                    invite.CommandSequence);
+                return true;
+            case MessageOpcode.PartyReply:
+                if (!PartyReply.TryRead(payload, out PartyReply? reply))
+                {
+                    return false;
+                }
+
+                decoded = InboundEvent.ForParty(
+                    InboundEventKind.PartyReply,
+                    connection,
+                    reply!.Inviter,
+                    reply.CommandSequence,
+                    reply.IsAccepted);
+                return true;
+            case MessageOpcode.PartyLeave:
+                if (!PartyLeave.TryRead(payload, out PartyLeave? leave))
+                {
+                    return false;
+                }
+
+                decoded = InboundEvent.ForParty(
+                    InboundEventKind.PartyLeave,
+                    connection,
+                    string.Empty,
+                    leave!.CommandSequence);
+                return true;
+            case MessageOpcode.PartyKick:
+                if (!PartyKick.TryRead(payload, out PartyKick? kick))
+                {
+                    return false;
+                }
+
+                decoded = InboundEvent.ForParty(InboundEventKind.PartyKick, connection, kick!.Member,
+                    kick.CommandSequence);
+                return true;
+            case MessageOpcode.PartyLead:
+                if (!PartyLead.TryRead(payload, out PartyLead? lead))
+                {
+                    return false;
+                }
+
+                decoded = InboundEvent.ForParty(InboundEventKind.PartyLead, connection, lead!.Member,
+                    lead.CommandSequence);
+                return true;
             case MessageOpcode.LearnSkill:
                 if (!LearnSkill.TryRead(payload, out LearnSkill? learn))
                 {

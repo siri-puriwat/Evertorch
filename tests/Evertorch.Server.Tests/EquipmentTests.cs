@@ -180,6 +180,8 @@ public sealed class EquipmentTests
         var server = new TestServer();
         ConnectionId player = EnterHolding(server, Sword);
         long sword = RowOf(server, 1, Sword);
+        // The party's load, queued on entry, is back before the outage begins.
+        server.Tick();
         server.Transport.ClearSent();
 
         server.SendEquip(player, sword, 1);
