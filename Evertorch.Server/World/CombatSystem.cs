@@ -465,7 +465,8 @@ public sealed class CombatSystem : ITickPhase
     }
 
     // Pays what the cast still owes, applies its effect, and starts its after-cast delay and cooldown. A target that
-    // is gone or dead by now leaves the cast interrupted.
+    // is gone or dead by now, or out of the skill's range or sight, leaves the cast interrupted before anything is paid
+    // (Gameplay Systems §9, finding R1), a monster's cast included.
     private void ResolveCast(MapInstance map, WorldEntity caster, long now, uint tick)
     {
         CombatState combat = caster.Combat;
@@ -474,7 +475,11 @@ public sealed class CombatSystem : ITickPhase
         SkillLevel values = skill.ValuesAt(level);
         WorldEntity? target = caster;
         if (combat.CastTarget != caster.Id
-            && (!map.TryGetEntity(combat.CastTarget, out target) || target == null || target.IsDead))
+            && (!map.TryGetEntity(combat.CastTarget, out target)
+                || target == null
+                || target.IsDead
+                || HorizontalDistance(caster.Position, target.Position) > skill.Range + m_rangeTolerance
+                || !map.Definition.Navigation.HasLineOfSight(caster.Position, target.Position)))
         {
             InterruptCast(caster);
             return;

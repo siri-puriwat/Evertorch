@@ -112,6 +112,30 @@ public sealed class SkillPipelineTests
         Assert.That(rig.Entity.CurrentSpirit, Is.EqualTo(24 - 3));
     }
 
+    // A monster's cast is checked again when it resolves too (finding R1): its target ran beyond the skill's range.
+    [Test]
+    public void MonsterCast_WhoseTargetRanOutOfRange_IsInterrupted()
+    {
+        var rig = new CombatRig(combatRandom: new SureHitRandom());
+        int health = rig.Entity.CurrentHealth;
+        rig.Server.AfterCommandsOnce(() => rig.Server.Combat.BeginMonsterCast(
+            rig.Map,
+            rig.Slime,
+            new SkillDefinitionId("skill.spark_bolt"),
+            rig.Entity,
+            rig.Server.CurrentTick));
+        rig.Server.Tick();
+        Assume.That(rig.Slime.Combat.IsCasting, Is.True);
+
+        rig.StandBeside(rig.Slime, 10f);
+        rig.Server.Tick(40);
+
+        Assert.That(rig.Slime.Combat.IsCasting, Is.False);
+        Assert.That(rig.Entity.CurrentHealth, Is.EqualTo(health));
+        Assert.That(rig.Slime.Combat.CooldownEndMs(new SkillDefinitionId("skill.spark_bolt")),
+            Is.EqualTo(long.MinValue));
+    }
+
     [Test]
     public void Refusals_FollowTheCheckOrder()
     {

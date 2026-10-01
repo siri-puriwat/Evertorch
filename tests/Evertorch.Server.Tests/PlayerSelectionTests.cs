@@ -165,6 +165,38 @@ public sealed class PlayerSelectionTests
         Assert.That(server.PlayerOf(mender).Combat.IsCasting, Is.EqualTo(expected == CommandRejectionReason.None));
     }
 
+    // Range and sight are checked again when the cast resolves (Gameplay Systems §9, finding R1): a target that walked
+    // beyond Mend's 6 m and the 0.5 m tolerance meanwhile leaves the cast interrupted, with nothing paid and no delay
+    // started; one still within the tolerance is healed.
+    [TestCase(8f, false, TestName = "Mend_WhoseTargetWalksOutOfRangeDuringTheCast_IsInterruptedAndPaysNothing")]
+    [TestCase(6.4f, true, TestName = "Mend_WhoseTargetStaysWithinTheToleranceDuringTheCast_Heals")]
+    public void Mend_IsCheckedForRangeAgainWhenItResolves(float distance, bool isHealed)
+    {
+        (TestServer server, ConnectionId mender, ConnectionId other) = EnterTwo();
+        PlayerEntity caster = server.PlayerOf(mender);
+        PlayerEntity target = server.PlayerOf(other);
+        target.CurrentHealth = 10;
+        StandAway(server, mender, other, 3f);
+        server.Tick();
+        int spirit = caster.CurrentSpirit;
+        server.SendUseSkill(mender, Mend, target.Id, 1);
+        server.Tick();
+        Assume.That(caster.Combat.IsCasting, Is.True);
+
+        StandAway(server, mender, other, distance);
+        server.Tick(30);
+
+        Assert.That(caster.Combat.IsCasting, Is.False);
+        Assert.That(Resolutions(server, mender).Any(), Is.EqualTo(isHealed));
+        Assert.That(target.CurrentHealth > 10, Is.EqualTo(isHealed));
+        Assert.That(caster.CurrentSpirit < spirit, Is.EqualTo(isHealed), "paid only when it resolves");
+        Assert.That(
+            caster.Combat.CooldownEndMs(new SkillDefinitionId(Mend)) == long.MinValue
+            && caster.Combat.DelayEndsMs == long.MinValue,
+            Is.EqualTo(!isHealed),
+            "no delay or cooldown after an interruption");
+    }
+
     [Test]
     public void Attack_OnAPlayer_IsRefusedAndNeverSelectsOrSwings()
     {
@@ -314,6 +346,55 @@ public sealed class PlayerSelectionTests
         Assert.That(Healths(server, other).Last().Current, Is.EqualTo((uint)target.CurrentHealth));
         Assert.That(caster.CurrentHealth, Is.LessThan(50), "the caster not healed");
         Assert.That(caster.CurrentSpirit, Is.LessThan(spirit), "the caster paid");
+    }
+
+    // A target that stepped behind a wall during the cast is out of sight when it resolves (finding R1).
+    [Test]
+    public void Mend_WhoseTargetStepsOutOfSightDuringTheCast_IsInterrupted()
+    {
+        (TestServer server, ConnectionId mender, ConnectionId other) = EnterTwo();
+        NavigationGrid grid = server.World.Maps.Single().Definition.Navigation;
+        WorldPosition? west = null;
+        WorldPosition? east = null;
+        WorldPosition? beside = null;
+        for (int row = 0; row < grid.Rows && west == null; row++)
+        {
+            for (int column = 1; column < grid.Columns - 1 && west == null; column++)
+            {
+                WorldPosition wall = grid.GetCellCenter(column, row);
+                float x = wall.X - 0.95f;
+                if (grid.GetCell(column, row).Surface == NavigationSurface.Wall
+                    && grid.CanOccupy(x, wall.Z)
+                    && grid.CanOccupy(wall.X + 0.95f, wall.Z)
+                    && grid.CanOccupy(x - 1f, wall.Z)
+                    && grid.TrySampleHeight(x, wall.Z, out float westHeight)
+                    && grid.TrySampleHeight(wall.X + 0.95f, wall.Z, out float eastHeight)
+                    && grid.TrySampleHeight(x - 1f, wall.Z, out float besideHeight))
+                {
+                    west = new WorldPosition(x, westHeight, wall.Z);
+                    east = new WorldPosition(wall.X + 0.95f, eastHeight, wall.Z);
+                    beside = new WorldPosition(x - 1f, besideHeight, wall.Z);
+                }
+            }
+        }
+
+        Assert.That(west, Is.Not.Null, "the training ground has a one-cell wall");
+        PlayerEntity caster = server.PlayerOf(mender);
+        PlayerEntity target = server.PlayerOf(other);
+        caster.Position = west!.Value;
+        target.Position = beside!.Value;
+        target.CurrentHealth = 10;
+        server.Tick();
+        server.SendUseSkill(mender, Mend, target.Id, 1);
+        server.Tick();
+        Assume.That(caster.Combat.IsCasting, Is.True);
+
+        target.Position = east!.Value;
+        server.Tick(30);
+
+        Assert.That(caster.Combat.IsCasting, Is.False);
+        Assert.That(Resolutions(server, mender), Is.Empty);
+        Assert.That(target.CurrentHealth, Is.EqualTo(10));
     }
 
     [Test]
