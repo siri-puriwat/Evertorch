@@ -61,6 +61,13 @@ public sealed class CombatState
     public long CastResolveMs { get; private set; }
 
     /// <summary>
+    ///     When the cast began: an instant cast resolves in the tick it began, a cast with a cast time later.
+    /// </summary>
+    public long CastBeganMs { get; private set; }
+
+    public bool HasCastTime => CastResolveMs > CastBeganMs;
+
+    /// <summary>
     ///     Whether the cast already paid its SP when it began.
     /// </summary>
     public bool IsCastPaid { get; private set; }
@@ -85,12 +92,14 @@ public sealed class CombatState
         SwingTarget = default;
     }
 
-    public void BeginCast(SkillDefinitionId skill, int level, EntityId target, long resolveMs, bool isPaid)
+    public void BeginCast(SkillDefinitionId skill, int level, EntityId target, long beganMs, long resolveMs,
+        bool isPaid)
     {
         IsCasting = true;
         CastSkill = skill;
         CastLevel = level;
         CastTarget = target;
+        CastBeganMs = beganMs;
         CastResolveMs = resolveMs;
         IsCastPaid = isPaid;
     }

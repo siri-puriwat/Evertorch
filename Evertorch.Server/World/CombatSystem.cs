@@ -160,7 +160,7 @@ public sealed class CombatSystem : ITickPhase
             m_sender.SendHealth(player);
         }
 
-        combat.BeginCast(skillId, level, resolvedOn.Id, now + timing.CastMs, isPaidNow);
+        combat.BeginCast(skillId, level, resolvedOn.Id, now, now + timing.CastMs, isPaidNow);
         AnnounceCastStarted(map, player, resolvedOn, skillId, tick, timing.CastMs);
         return CastRefusal.None;
     }
@@ -205,7 +205,8 @@ public sealed class CombatSystem : ITickPhase
         SkillDefinition skill = m_content.Skills[skillId];
         CastTiming timing = m_skillRules.CalculateCastTiming(new SkillContext(skill, 1, AttackerKind.Monster, 0));
         Face(monster, target);
-        monster.Combat.BeginCast(skillId, 1, target.Id, TickMilliseconds(tick) + timing.CastMs, true);
+        long now = TickMilliseconds(tick);
+        monster.Combat.BeginCast(skillId, 1, target.Id, now, now + timing.CastMs, true);
         AnnounceCastStarted(map, monster, target, skillId, tick, timing.CastMs);
     }
 
@@ -465,8 +466,15 @@ public sealed class CombatSystem : ITickPhase
     }
 
     // Pays what the cast still owes, applies its effect, and starts its after-cast delay and cooldown. A target that
-    // is gone or dead by now, or out of the skill's range or sight, leaves the cast interrupted before anything is paid
-    // (Gameplay Systems §9, finding R1), a monster's cast included.
+    // is gone or dead by now leaves the cast interrupted, and so does one out of the skill's range or sight after a
+    // cast time (Gameplay Systems §9, finding R1), a monster's cast included: an instant cast was checked as it began,
+    // and only this tick's movement lies between, which would cut short a strike at a target walking off.
+    private bool IsWithinReach(MapInstance map, WorldEntity caster, WorldEntity target, SkillDefinition skill)
+    {
+        return HorizontalDistance(caster.Position, target.Position) <= skill.Range + m_rangeTolerance
+            && map.Definition.Navigation.HasLineOfSight(caster.Position, target.Position);
+    }
+
     private void ResolveCast(MapInstance map, WorldEntity caster, long now, uint tick)
     {
         CombatState combat = caster.Combat;
@@ -478,8 +486,7 @@ public sealed class CombatSystem : ITickPhase
             && (!map.TryGetEntity(combat.CastTarget, out target)
                 || target == null
                 || target.IsDead
-                || HorizontalDistance(caster.Position, target.Position) > skill.Range + m_rangeTolerance
-                || !map.Definition.Navigation.HasLineOfSight(caster.Position, target.Position)))
+                || (combat.HasCastTime && !IsWithinReach(map, caster, target, skill))))
         {
             InterruptCast(caster);
             return;

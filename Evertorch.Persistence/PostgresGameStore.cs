@@ -1273,10 +1273,11 @@ WHERE character_quests.state = {CharacterQuestRow.ActiveState} AND character_que
         long? inviteeParty = await PartyOfAsync(context, change.Target, cancellationToken).ConfigureAwait(false);
         if (leaderParty != null && leaderParty == inviteeParty)
         {
-            PartyRow existing = await context.Parties
-                .SingleAsync(row => row.Id == leaderParty.Value, cancellationToken)
+            // A disband committed on another connection between the two reads leaves no party to read.
+            PartyRow? existing = await context.Parties
+                .SingleOrDefaultAsync(row => row.Id == leaderParty.Value, cancellationToken)
                 .ConfigureAwait(false);
-            return existing.LeaderCharacterId == change.Actor
+            return existing?.LeaderCharacterId == change.Actor
                 ? await ResultAsync(context, PartyChangeStatus.Committed, change.Actor, cancellationToken)
                     .ConfigureAwait(false)
                 : await ResultAsync(context, PartyChangeStatus.AlreadyInParty, change.Actor, cancellationToken)

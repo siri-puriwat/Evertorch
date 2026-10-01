@@ -112,6 +112,32 @@ public sealed class SkillPipelineTests
         Assert.That(rig.Entity.CurrentSpirit, Is.EqualTo(24 - 3));
     }
 
+    // An instant cast is checked as it begins and resolves in the same tick; the movement between, a target walking off
+    // or the caster stepping on, does not cut it short (finding R1 holds for a cast time alone).
+    [Test]
+    public void InstantStrike_WhoseTargetIsOutOfReachByItsResolution_StillResolves()
+    {
+        var rig = new CombatRig(combatRandom: new SureHitRandom());
+        rig.Entity.CurrentSpirit = rig.Entity.MaxSpirit;
+        CastRefusal refusal = CastRefusal.NotAllowedNow;
+        rig.Server.AfterCommandsOnce(() =>
+        {
+            refusal = rig.Server.Combat.TryBeginCast(
+                rig.Map,
+                rig.Entity,
+                new SkillDefinitionId(Strike),
+                rig.Slime.Id,
+                rig.Server.CurrentTick);
+            rig.StandBeside(rig.Slime, 3f);
+        });
+        rig.Server.Tick();
+
+        Assert.That(refusal, Is.EqualTo(CastRefusal.None));
+        Assert.That(rig.Entity.Combat.IsCasting, Is.False);
+        Assert.That(rig.Slime.CurrentHealth, Is.LessThan(rig.Slime.MaxHealth), "Strike landed");
+        Assert.That(rig.Entity.Combat.CooldownEndMs(new SkillDefinitionId(Strike)), Is.Not.EqualTo(long.MinValue));
+    }
+
     // A monster's cast is checked again when it resolves too (finding R1): its target ran beyond the skill's range.
     [Test]
     public void MonsterCast_WhoseTargetRanOutOfRange_IsInterrupted()

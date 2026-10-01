@@ -595,6 +595,10 @@ public sealed class GameClient : MonoBehaviour
             Connection.ChangedMap -= OnChangedMap;
             Connection.LeftWorld -= OnLeftWorld;
             Connection.Closed -= OnClosed;
+            Connection.ChatLineReceived -= OnChatLine;
+            Connection.PartyEventReceived -= OnPartyEvent;
+            Connection.PartyRosterReceived -= Party.Apply;
+            Connection.PartyMemberStatusReceived -= Party.Apply;
         }
 
         m_socket?.Dispose();
