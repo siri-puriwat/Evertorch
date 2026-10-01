@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Evertorch.Game;
+using Evertorch.Persistence;
 using Evertorch.Protocol;
 using Evertorch.Rules;
 using Microsoft.Extensions.Logging;
@@ -9,13 +10,20 @@ using Microsoft.Extensions.Options;
 namespace Evertorch.Server
 {
 /// <summary>
-///     Shares a dead monster's base and job experience among the characters that damaged it and levels them up
-///     (Gameplay Systems §2.1), and keeps their quests: acceptance, the kills that count, and the reward once a turn-in
+///     Shares a dead monster's base and job experience among the characters that damaged it, evenly within a party, and
+///     levels them up (Gameplay Systems §2.1), and keeps their quests: acceptance, the kills that count, and the reward
+///     once a turn-in
 ///     has committed
 ///     (Gameplay Systems §2.2). Tick thread only.
 /// </summary>
 public sealed class CharacterProgression
 {
+    /// <summary>
+    ///     A party's pooled share is split evenly only while its eligible members' base levels span at most this (owner
+    ///     decision 5 of the pre-Milestone-12 review).
+    /// </summary>
+    public const int PartyShareLevelSpan = 5;
+
     private const string QuestAccepted = "accepted";
     private const string QuestCompleted = "completed";
 
@@ -53,7 +61,13 @@ public sealed class CharacterProgression
     private readonly MessageSender m_sender;
     private readonly ServerInstruments m_instruments;
     private readonly ILogger<CharacterProgression> m_logger;
+    private readonly PartyRegistry m_parties;
     private readonly float m_npcReach;
+    private readonly List<KillShare> m_shares = new();
+    private readonly List<ServerParty> m_sharingParties = new();
+    private readonly List<CharacterSession> m_members = new();
+    private readonly List<CharacterSession> m_credited = new();
+    private readonly HashSet<long> m_creditedIds = new();
 
     public CharacterProgression(
         SessionRegistry sessions,
@@ -64,9 +78,11 @@ public sealed class CharacterProgression
         MessageSender sender,
         ServerInstruments instruments,
         IOptions<WorldOptions> world,
+        PartyRegistry parties,
         ILogger<CharacterProgression> logger)
     {
         m_sessions = sessions;
+        m_parties = parties;
         m_lifetime = lifetime;
         m_stats = stats;
         m_rules = rules;
@@ -108,8 +124,10 @@ public sealed class CharacterProgression
 
     /// <summary>
     ///     Awards <paramref name="monster" />'s base and job experience, which has just died on <paramref name="map" />:
-    ///     each character in its damage log that may share them gets its share of the whole log of each (Gameplay
-    ///     Systems §2.1).
+    ///     each character in its damage log that may share them gets its share of the whole log of each, and the shares
+    ///     of a party's members are pooled and split evenly among its members who may share, those that did not hurt the
+    ///     monster included, while their base levels span at most <see cref="PartyShareLevelSpan" /> (Gameplay Systems
+    ///     §2.1).
     /// </summary>
     public void AwardKill(MapInstance map, MonsterEntity monster)
     {
@@ -127,31 +145,111 @@ public sealed class CharacterProgression
             total += entry.Damage;
         }
 
+        m_shares.Clear();
+        m_sharingParties.Clear();
         foreach (DamageLogEntry entry in log)
         {
-            if (TryGetSharer(entry.Character, map, out CharacterSession? character))
+            if (!TryGetSharer(entry.Character, map, out CharacterSession? character))
             {
-                if (baseExperience > 0)
-                {
-                    Award(character!, m_rules.ShareExperience(baseExperience, entry.Damage, total));
-                }
+                continue;
+            }
 
-                if (jobExperience > 0)
-                {
-                    AwardJob(character!, m_rules.ShareExperience(jobExperience, entry.Damage, total));
-                }
+            m_parties.TryGetParty(character!.Character, out ServerParty? party);
+            if (party != null && !m_sharingParties.Contains(party))
+            {
+                m_sharingParties.Add(party);
+            }
+
+            m_shares.Add(
+                new KillShare(
+                    character,
+                    party,
+                    baseExperience > 0 ? m_rules.ShareExperience(baseExperience, entry.Damage, total) : 0,
+                    jobExperience > 0 ? m_rules.ShareExperience(jobExperience, entry.Damage, total) : 0));
+        }
+
+        // Every split is decided before anything is awarded, so a level gained from this kill changes no span.
+        foreach (ServerParty party in m_sharingParties)
+        {
+            SplitEvenly(map, party);
+        }
+
+        foreach (KillShare share in m_shares)
+        {
+            if (share.Base > 0)
+            {
+                Award(share.Character, share.Base);
+            }
+
+            if (share.Job > 0)
+            {
+                AwardJob(share.Character, share.Job);
+            }
+        }
+    }
+
+    // A party whose members who may share span at most the level gap pools its members' shares and splits the pool
+    // among them all; otherwise each keeps its own.
+    private void SplitEvenly(MapInstance map, ServerParty party)
+    {
+        CollectMembers(map, party);
+        int lowest = int.MaxValue;
+        int highest = int.MinValue;
+        foreach (CharacterSession member in m_members)
+        {
+            lowest = Math.Min(lowest, member.Player.Level);
+            highest = Math.Max(highest, member.Player.Level);
+        }
+
+        if (highest - lowest > PartyShareLevelSpan)
+        {
+            return;
+        }
+
+        long pooledBase = 0;
+        long pooledJob = 0;
+        for (int index = m_shares.Count - 1; index >= 0; index--)
+        {
+            if (ReferenceEquals(m_shares[index].Party, party))
+            {
+                pooledBase += m_shares[index].Base;
+                pooledJob += m_shares[index].Job;
+                m_shares.RemoveAt(index);
+            }
+        }
+
+        long eachBase = m_rules.SharePartyExperience(pooledBase, m_members.Count);
+        long eachJob = m_rules.SharePartyExperience(pooledJob, m_members.Count);
+        foreach (CharacterSession member in m_members)
+        {
+            m_shares.Add(new KillShare(member, party, eachBase, eachJob));
+        }
+    }
+
+    // The members of the party that may share a kill on the map, in the order they joined.
+    private void CollectMembers(MapInstance map, ServerParty party)
+    {
+        m_members.Clear();
+        foreach (StoredPartyMember member in party.Members)
+        {
+            if (TryGetSharer(new CharacterId(member.CharacterId), map, out CharacterSession? character))
+            {
+                m_members.Add(character!);
             }
         }
     }
 
     /// <summary>
     ///     Counts <paramref name="monster" />'s death, which has just happened on <paramref name="map" />, for every
-    ///     character in its damage log that may share its experience, whether or not it gives any (Gameplay Systems
-    ///     §2.2): each of its active quests after this monster gains one, up to the count. Reaching the count queues a
+    ///     character in its damage log that may share its experience, whether or not it gives any, and for every member
+    ///     of such a character's party that may share it, whatever their levels (Gameplay Systems §2.2): each of its
+    ///     active quests after this monster gains one, up to the count, once per kill. Reaching the count queues a
     ///     checkpoint, as a level-up does.
     /// </summary>
     public void CreditQuests(MapInstance map, MonsterEntity monster)
     {
+        m_credited.Clear();
+        m_creditedIds.Clear();
         foreach (DamageLogEntry entry in monster.DamageLog)
         {
             if (!TryGetSharer(entry.Character, map, out CharacterSession? character))
@@ -159,32 +257,58 @@ public sealed class CharacterProgression
                 continue;
             }
 
-            bool isAdvanced = false;
-            bool isReady = false;
-            foreach (CharacterQuest quest in character!.Quests.Entries)
+            AddCredited(character!);
+            if (m_parties.TryGetParty(character!.Character, out ServerParty? party))
             {
-                QuestDefinition definition = m_content.Quests[quest.Quest];
-                if (quest.IsCompleted
-                    || definition.Monster != monster.Definition.Id
-                    || quest.Progress >= definition.Count)
+                CollectMembers(map, party!);
+                foreach (CharacterSession member in m_members)
                 {
-                    continue;
+                    AddCredited(member);
                 }
-
-                quest.Progress++;
-                isAdvanced = true;
-                isReady |= quest.Progress == definition.Count;
             }
+        }
 
-            if (isAdvanced && character.Connection != null)
+        foreach (CharacterSession character in m_credited)
+        {
+            Credit(character, monster);
+        }
+    }
+
+    private void AddCredited(CharacterSession character)
+    {
+        if (m_creditedIds.Add(character.Character.Value))
+        {
+            m_credited.Add(character);
+        }
+    }
+
+    private void Credit(CharacterSession character, MonsterEntity monster)
+    {
+        bool isAdvanced = false;
+        bool isReady = false;
+        foreach (CharacterQuest quest in character.Quests.Entries)
+        {
+            QuestDefinition definition = m_content.Quests[quest.Quest];
+            if (quest.IsCompleted
+                || definition.Monster != monster.Definition.Id
+                || quest.Progress >= definition.Count)
             {
-                character.Connection.NeedsQuestLog = true;
+                continue;
             }
 
-            if (isReady)
-            {
-                m_lifetime.QueueCheckpoint(character);
-            }
+            quest.Progress++;
+            isAdvanced = true;
+            isReady |= quest.Progress == definition.Count;
+        }
+
+        if (isAdvanced && character.Connection != null)
+        {
+            character.Connection.NeedsQuestLog = true;
+        }
+
+        if (isReady)
+        {
+            m_lifetime.QueueCheckpoint(character);
         }
     }
 
@@ -369,6 +493,25 @@ public sealed class CharacterProgression
     private ExperienceTableDefinition JobTableOf(PlayerEntity player)
     {
         return m_content.ExperienceTables[m_content.Jobs[player.Job].JobExperienceTable];
+    }
+
+    private readonly struct KillShare
+    {
+        public KillShare(CharacterSession character, ServerParty? party, long baseShare, long jobShare)
+        {
+            Character = character;
+            Party = party;
+            Base = baseShare;
+            Job = jobShare;
+        }
+
+        public CharacterSession Character { get; }
+
+        public ServerParty? Party { get; }
+
+        public long Base { get; }
+
+        public long Job { get; }
     }
 }
 }

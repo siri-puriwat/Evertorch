@@ -23,6 +23,11 @@ public sealed class RenewalProgressionRules : IProgressionRules
         return Math.Max(1, share);
     }
 
+    public long SharePartyExperience(long pool, int count)
+    {
+        return pool <= 0 || count <= 0 ? 0 : pool / count;
+    }
+
     public LevelProgress AddExperience(ExperienceTableDefinition table, LevelProgress current, long experience)
     {
         int cap = table.Levels.Count + 1;

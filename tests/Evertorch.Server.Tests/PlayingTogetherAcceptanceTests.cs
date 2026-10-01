@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -17,8 +18,9 @@ namespace Evertorch.Server.Tests
 ///     each by its name (line 3); a line said nearby reaches all three, a whisper reaches only its recipient and comes
 ///     back to its speaker as sent, a whisper to no one is refused with 1, and party chat without a party with 3
 ///     (line 4). Anna invites Bobby and Cora, who accept; all three hear the roster of the party Anna leads and each
-///     other's health, and a line said to the party reaches all three (line 6). Each later line of Milestone 12 adds
-///     its steps here: the party's share of experience and quest credit, and its survival of a restart.
+///     other's health, and a line said to the party reaches all three (line 6). A slime only Anna fights gives each of
+///     the three a third of its experience (line 7). Each later line of Milestone 12 adds its steps here: the party's
+///     survival of a restart.
 /// </summary>
 [TestFixture]
 [NonParallelizable]
@@ -31,6 +33,8 @@ public sealed class PlayingTogetherAcceptanceTests
     private const string BobbyName = "Bobby";
     private const string CoraIdentity = "playing-together-cora";
     private const string CoraName = "Cora";
+    private const string TrainingSlime = "monster.training_slime";
+    private static readonly TimeSpan FightLimit = TimeSpan.FromSeconds(40);
 
     private PostgresFixture m_database = null!;
 
@@ -198,6 +202,29 @@ public sealed class PlayingTogetherAcceptanceTests
         Assert.That(lines.Values.Select(said => said[0]), Has.All.EqualTo($"Party {BobbyName}: ready"));
     }
 
+    // Anna alone fights a slime; its 10 base experience is pooled for the party and split evenly, so each of the three,
+    // all at level 1, gets 3 (Gameplay Systems §2.1).
+    private static void ShareAKill(SocketClient anna, SocketClient bobby, SocketClient cora)
+    {
+        const string step = "share";
+        SocketClient[] all = { anna, bobby, cora };
+        var deaths = new List<EntityId>();
+        anna.World.EntityDiedReceived += death => deaths.Add(death.Entity);
+        EntityId slime = anna.CycleTarget(true);
+        Assert.That(slime, Is.Not.EqualTo(default(EntityId)), $"{step}: Tab found a slime");
+        Assert.That(anna.World.Remotes[slime].DefinitionId, Is.EqualTo(TrainingSlime), step);
+        Assert.That(SocketClients.PumpUntil(() => anna.World.Target == slime, all), Is.True, $"{step}: targeted");
+        anna.AttackTarget();
+        Assert.That(
+            SocketClients.PumpUntil(() => deaths.Contains(slime), FightLimit, all),
+            Is.True,
+            $"{step}: the slime died");
+        Assert.That(
+            SocketClients.PumpUntil(() => all.All(client => client.World.Experience == 3), all),
+            Is.True,
+            $"{step}: each member got a third ({string.Join(", ", all.Select(client => client.World.Experience))})");
+    }
+
     private static void AssertCleanTraffic(string step, params SocketClient[] clients)
     {
         foreach (SocketClient client in clients)
@@ -233,6 +260,9 @@ public sealed class PlayingTogetherAcceptanceTests
 
         FormParty(anna, bobby, cora);
         AssertCleanTraffic("party", anna, bobby, cora);
+
+        ShareAKill(anna, bobby, cora);
+        AssertCleanTraffic("share", anna, bobby, cora);
 
         host.StopAsync().GetAwaiter().GetResult();
     }

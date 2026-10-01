@@ -16,6 +16,12 @@ public interface IProgressionRules
     long ShareExperience(long baseExperience, long damage, long totalDamage);
 
     /// <summary>
+    ///     Each of <paramref name="count" /> party members' even part of the <paramref name="pool" /> of their shares
+    ///     (Gameplay Systems §2.1): rounded down with no minimum, so a pool smaller than the count gives nothing.
+    /// </summary>
+    long SharePartyExperience(long pool, int count);
+
+    /// <summary>
     ///     <paramref name="current" /> after gaining <paramref name="experience" />, carried through as many levels as
     ///     it covers up to the cap of <paramref name="table" />.
     /// </summary>

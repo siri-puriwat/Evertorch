@@ -146,6 +146,8 @@ internal sealed class TestServer
             simulation,
             Audit,
             PickupLog);
+        Parties = new PartyRegistry(Sessions, Lifetime, Persistence, sender, Time, simulation, Instruments, Audit,
+            PartyLog);
         Progression = new CharacterProgression(
             Sessions,
             Lifetime,
@@ -155,6 +157,7 @@ internal sealed class TestServer
             sender,
             Instruments,
             Options.Create(world),
+            Parties,
             ProgressionLog);
         var tokens = new SessionTokenValidator(
             new DevelopmentTokenValidator(Options.Create(authentication), Time),
@@ -192,8 +195,6 @@ internal sealed class TestServer
             Combat,
             Audit,
             ItemActionLog);
-        Parties = new PartyRegistry(Sessions, Lifetime, Persistence, sender, Time, simulation, Instruments, Audit,
-            PartyLog);
         SessionManager = new SessionManager(
             Inbound,
             Persistence,

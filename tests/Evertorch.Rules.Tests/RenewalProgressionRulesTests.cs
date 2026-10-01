@@ -33,6 +33,18 @@ public sealed class RenewalProgressionRulesTests
         Assert.That(m_rules.ShareExperience(baseExperience, damage, totalDamage), Is.EqualTo(share));
     }
 
+    // The parties and chat research note's vectors.
+    [TestCase(10, 3, 3)]
+    [TestCase(2, 5, 0)]
+    [TestCase(0, 4, 0)]
+    [TestCase(9, 1, 9)]
+    [TestCase(-3, 2, 0)]
+    [TestCase(10, 0, 0)]
+    public void SharePartyExperience_ForResearchVector_SplitsThePoolEvenlyRoundedDown(long pool, int count, long each)
+    {
+        Assert.That(m_rules.SharePartyExperience(pool, count), Is.EqualTo(each));
+    }
+
     [TestCase(0)]
     [TestCase(-5)]
     public void ShareExperience_ForNoDamage_GivesNothing(long damage)
