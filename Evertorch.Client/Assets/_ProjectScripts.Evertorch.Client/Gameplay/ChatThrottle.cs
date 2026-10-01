@@ -5,7 +5,8 @@ namespace Evertorch.Client
 /// <summary>
 ///     The client's own chat bucket (Network Protocol §11): a throttled <c>ChatSend</c> scores a violation on the
 ///     server, so the client refuses a line itself before the server would. It is one line stricter than the server's
-///     burst of 5 at 1 a second, which absorbs lines that arrive bunched by up to about a second of network delay.
+///     burst of 5 at 1 a second, which absorbs lines that arrive bunched by up to about a second of network delay. The
+///     party's commands keep a bucket of the same size, stricter still than the server's 5 at 2 a second.
 /// </summary>
 public sealed class ChatThrottle
 {

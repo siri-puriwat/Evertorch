@@ -309,5 +309,20 @@ public sealed class PartyPanelTests
         Assert.That(frame.transform.Find("Panel/Bar").gameObject.activeSelf, Is.True);
         Assert.That(frame.ShownRatio, Is.EqualTo(0.4f).Within(1e-3f));
     }
+
+    // A throttled party command scores a violation on the server, so the client refuses past its own bucket of four
+    // (Network Protocol §11).
+    [Test]
+    public void PartyCommands_PastTheClientsBucket_AreRefusedByTheClient()
+    {
+        (GameClient client, RecordingConnection recording) = Enter();
+
+        uint[] sent = Enumerable.Range(0, ChatThrottle.Burst + 1).Select(_ => client.LeaveParty()).ToArray();
+
+        Assert.That(sent.Count(sequence => sequence != 0), Is.EqualTo(ChatThrottle.Burst));
+        Assert.That(sent.Last(), Is.Zero);
+        Assert.That(recording.SentOf(MessageOpcode.PartyLeave).Count(), Is.EqualTo(ChatThrottle.Burst));
+        Assert.That(client.ChatLog.Lines.Last().Text, Is.EqualTo("You are doing that too fast."));
+    }
 }
 }

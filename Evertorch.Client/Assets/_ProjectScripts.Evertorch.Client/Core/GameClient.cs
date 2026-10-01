@@ -64,6 +64,9 @@ public sealed class GameClient : MonoBehaviour
     private readonly TargetCycler m_targetCycler = new();
     private readonly UiHitTest m_uiHitTest = new();
     private readonly ChatThrottle m_chatThrottle = new();
+
+    // The party's commands are scored when throttled as chat is, so they go through a bucket of their own as strict.
+    private readonly ChatThrottle m_partyThrottle = new();
     private IClientTransport? m_socket;
     private ManualMoveSource? m_manualSource;
     private PointerMoveSource? m_pointerSource;
@@ -1502,7 +1505,20 @@ public sealed class GameClient : MonoBehaviour
             return 0;
         }
 
-        return Connection != null ? Connection.SendPartyInvite(name) : 0;
+        return Connection != null && TakePartyToken() ? Connection.SendPartyInvite(name) : 0;
+    }
+
+    // The server scores a throttled party command, so the client keeps a stricter bucket of its own (Network Protocol
+    // §11).
+    private bool TakePartyToken()
+    {
+        if (m_partyThrottle.TryTake(Time.realtimeSinceStartupAsDouble))
+        {
+            return true;
+        }
+
+        ChatLog.AddSystem("You are doing that too fast.");
+        return false;
     }
 
     /// <summary>
@@ -1511,7 +1527,7 @@ public sealed class GameClient : MonoBehaviour
     public uint AnswerPartyInvite(bool isAccepted)
     {
         string? inviter = Party.Inviter;
-        if (inviter == null || Connection == null)
+        if (inviter == null || Connection == null || !TakePartyToken())
         {
             return 0;
         }
@@ -1522,17 +1538,17 @@ public sealed class GameClient : MonoBehaviour
 
     public uint LeaveParty()
     {
-        return Connection != null ? Connection.SendPartyLeave() : 0;
+        return Connection != null && TakePartyToken() ? Connection.SendPartyLeave() : 0;
     }
 
     public uint KickFromParty(string member)
     {
-        return Connection != null ? Connection.SendPartyKick(member) : 0;
+        return Connection != null && TakePartyToken() ? Connection.SendPartyKick(member) : 0;
     }
 
     public uint MakePartyLeader(string member)
     {
-        return Connection != null ? Connection.SendPartyLead(member) : 0;
+        return Connection != null && TakePartyToken() ? Connection.SendPartyLead(member) : 0;
     }
 
     /// <summary>

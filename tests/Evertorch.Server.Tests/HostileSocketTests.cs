@@ -295,6 +295,95 @@ public sealed class HostileSocketTests
         AssertNoSecretIn(lines);
     }
 
+    // Milestone 12's commands from a player beside a bystander: lines said nearby and whispered, carrying words no log
+    // may repeat, delivered; a whisper and an invite to no one, party chat, a departure, and a removal without a party,
+    // each refused and audited; a burst of departures over the party bucket and of lines over the chat bucket; then
+    // malformed chat and party commands until the connection is closed. The identity carries such a word too.
+    [Test]
+    public void HostileChatAndPartyCommands_AreRefusedThrottledAndScored_AndLeaveNoSecretInTheLogs()
+    {
+        using var root = new TemporaryDirectory();
+        var logs = new CapturingLoggerProvider();
+        using IHost host = StartHost(root, logs);
+        int port = host.Services.GetRequiredService<LiteNetLibServerTransport>().LocalPort;
+        ServerContent content = host.Services.GetRequiredService<ServerContent>();
+        var abuse = new AbuseOptions();
+        int violationsToClose = abuse.ViolationThreshold / ViolationScore.Points;
+        byte[][] malformed =
+        {
+            // A line with a line break in it, an invite of a name with a "!", and an answer that is neither 0 nor 1.
+            new byte[] { 0x0A, 0x00, 0x01, 0x00, 0x00, 0x02, 0x00, (byte)'h', 0x0A, 0x01, 0x00, 0x00, 0x00 },
+            new byte[]
+            {
+                0x1B, 0x00, 0x05, 0x00, (byte)'A', (byte)'n', (byte)'n', (byte)'a', (byte)'!', 0x01, 0x00, 0x00, 0x00
+            },
+            new byte[]
+            {
+                0x1C, 0x00, 0x04, 0x00, (byte)'A', (byte)'n', (byte)'n', (byte)'a', 0x02, 0x01, 0x00, 0x00, 0x00
+            }
+        };
+
+        using var player = new SocketClient(content, "secret-social-identity", "Hostile12");
+        using var other = new SocketClient(content, "social-bystander", "Bystander12");
+        player.EnterWorld(port);
+        other.EnterWorld(port);
+        var heard = new List<string>();
+        other.Connection.ChatLineReceived += line => heard.Add(line.Text);
+        var refused = new List<CommandRejectionReason>();
+        player.World.CommandRejectedReceived += rejection => refused.Add(rejection.Reason);
+        player.Connection.SendChat(ChatChannel.Nearby, string.Empty, "secret nearby words");
+        player.Connection.SendChat(ChatChannel.Whisper, "Bystander12", "secret whispered words");
+        player.Connection.SendChat(ChatChannel.Whisper, "Nobody1", "secret lost words");
+        player.Connection.SendChat(ChatChannel.Party, string.Empty, "secret party words");
+        player.Connection.SendPartyInvite("Nobody1");
+        player.PumpFor(TimeSpan.FromMilliseconds(1100));
+        player.Connection.SendPartyLeave();
+        player.Connection.SendPartyKick("Bystander12");
+        SocketClients.PumpUntil(() => refused.Count >= 5 && heard.Count >= 2, player, other);
+        var firstRefusals = refused.ToList();
+        player.PumpFor(TimeSpan.FromMilliseconds(1100));
+        for (int index = 0; index <= abuse.PartyCommandBurst; index++)
+        {
+            player.Connection.SendPartyLeave();
+        }
+
+        for (int index = 0; index <= abuse.ChatCommandBurst; index++)
+        {
+            player.Connection.SendChat(ChatChannel.Nearby, string.Empty, "secret flood");
+        }
+
+        player.PumpFor(TimeSpan.FromMilliseconds(1100));
+        for (int index = 0; index < 2 * violationsToClose; index++)
+        {
+            player.Link.Send(ProtocolChannel.Control, MessageDelivery.ReliableOrdered,
+                malformed[index % malformed.Length]);
+        }
+
+        bool isClosed = player.PumpUntil(() => player.Connection.State == ClientConnectionState.Disconnected);
+        host.StopAsync().GetAwaiter().GetResult();
+
+        IReadOnlyList<string> lines = logs.Lines;
+        Assert.That(heard.Take(2), Is.EqualTo(new[] { "secret nearby words", "secret whispered words" }));
+        Assert.That(
+            firstRefusals,
+            Is.EqualTo(
+                new[]
+                {
+                    CommandRejectionReason.InvalidTarget, CommandRejectionReason.NotAllowedNow,
+                    CommandRejectionReason.InvalidTarget, CommandRejectionReason.NotAllowedNow,
+                    CommandRejectionReason.NotAllowedNow
+                }),
+            "a whisper and an invite to no one; party chat, a departure, and a removal without a party");
+        Assert.That(isClosed, Is.True, "the connection was closed");
+        Assert.That(player.Connection.Notice?.Reason, Is.EqualTo(DisconnectReason.Kicked));
+        Assert.That(lines.Any(line => line.Contains("had Chat refused")), Is.True, "the refused whisper audited");
+        Assert.That(lines.Any(line => line.Contains("had PartyInvite refused")), Is.True, "the refused invite audited");
+        Assert.That(lines.Any(line => line.Contains("sent PartyLeave over the session_party limit")), Is.True);
+        Assert.That(lines.Any(line => line.Contains("sent Chat over the session_chat limit")), Is.True);
+        Assert.That(lines.Any(line => line.Contains("ViolationDisconnect")), Is.True);
+        AssertNoSecretIn(lines);
+    }
+
     [Test]
     public void HostileInput_LeavesNoTokenIdentityOrConnectionStringInTheLogs()
     {
