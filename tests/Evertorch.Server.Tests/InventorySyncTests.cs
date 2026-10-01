@@ -120,8 +120,9 @@ public sealed class InventorySyncTests
                 Enumerable.Repeat(MessageOpcode.InventorySnapshot, 9)
                     .Append(MessageOpcode.SkillList)
                     .Append(MessageOpcode.StatusEffects)
-                    .Append(MessageOpcode.QuestLog)),
-            "the parts, then the skill list, the status effects, and the quests that end the baseline");
+                    .Append(MessageOpcode.QuestLog)
+                    .Append(MessageOpcode.PartyRoster)),
+            "the parts, then the skill list, the status effects, the quests, and the party that ends the baseline");
 
         InventorySnapshot[] parts = Snapshots(server, connection);
         Assert.That(parts, Has.Length.EqualTo(9));

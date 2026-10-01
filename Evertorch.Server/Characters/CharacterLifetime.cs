@@ -67,11 +67,6 @@ public sealed class CharacterLifetime
     public uint CheckpointIntervalTicks => m_checkpointIntervalTicks;
 
     /// <summary>
-    ///     A character came into the world from storage; an attach to one already there is not an entry.
-    /// </summary>
-    public event Action<CharacterSession>? Entered;
-
-    /// <summary>
     ///     A character left the world: after its logout, its removal, or the end of its reconnect grace.
     /// </summary>
     public event Action<CharacterSession>? Left;
@@ -104,7 +99,6 @@ public sealed class CharacterLifetime
         };
         LogUnwieldableWeapon(character);
         m_sessions.AddCharacter(character);
-        Entered?.Invoke(character);
         return character;
     }
 

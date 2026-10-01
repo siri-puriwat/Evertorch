@@ -343,7 +343,10 @@ public sealed class QuestTests
         server.SendEnterWorld(player, 1);
         server.TickUntil(() => server.SessionOf(player).State == SessionState.InWorld);
 
-        Assert.That(server.Transport.ControlOpcodesSentTo(player).Last(), Is.EqualTo(MessageOpcode.QuestLog));
+        Assert.That(
+            server.Transport.ControlOpcodesSentTo(player).TakeLast(2),
+            Is.EqualTo(new[] { MessageOpcode.QuestLog, MessageOpcode.PartyRoster }),
+            "the quests last of the character's own messages, before its party");
         Assert.That(LogsSentTo(server, player), Is.EqualTo(new[] { $"{Hunt} Active 3/5" }));
     }
 

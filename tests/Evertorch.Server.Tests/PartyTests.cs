@@ -52,85 +52,11 @@ public sealed class PartyTests
         return party!.LeaderCharacterId;
     }
 
-    // Each character's command sequence, and the steps of the party commands; every command ticks until answered.
-    private sealed class Rig
-    {
-        private readonly Dictionary<ConnectionId, uint> m_sequences = new();
-
-        public Rig(TestServer? server = null)
-        {
-            Server = server ?? new TestServer();
-        }
-
-        public TestServer Server { get; }
-
-        // One more tick brings back the party's load.
-        public ConnectionId Enter(long character)
-        {
-            ConnectionId connection = Server.EnterWorld(character);
-            m_sequences[connection] = 0;
-            Server.Tick();
-            return connection;
-        }
-
-        public uint Next(ConnectionId connection)
-        {
-            m_sequences.TryGetValue(connection, out uint sequence);
-            m_sequences[connection] = ++sequence;
-            return sequence;
-        }
-
-        public uint Invite(ConnectionId connection, string name)
-        {
-            uint sequence = Next(connection);
-            Server.SendPartyInvite(connection, name, sequence);
-            Server.Tick();
-            return sequence;
-        }
-
-        public uint Reply(ConnectionId connection, string inviter, bool isAccepted)
-        {
-            uint sequence = Next(connection);
-            Server.SendPartyReply(connection, inviter, isAccepted, sequence);
-            Server.Tick(2);
-            return sequence;
-        }
-
-        public uint Leave(ConnectionId connection)
-        {
-            uint sequence = Next(connection);
-            Server.SendPartyLeave(connection, sequence);
-            Server.Tick(2);
-            return sequence;
-        }
-
-        public uint Kick(ConnectionId connection, string name)
-        {
-            uint sequence = Next(connection);
-            Server.SendPartyKick(connection, name, sequence);
-            Server.Tick(2);
-            return sequence;
-        }
-
-        public uint Lead(ConnectionId connection, string name)
-        {
-            uint sequence = Next(connection);
-            Server.SendPartyLead(connection, name, sequence);
-            Server.Tick(2);
-            return sequence;
-        }
-
-        public void Join(ConnectionId leader, string leaderName, ConnectionId invitee, string inviteeName)
-        {
-            Invite(leader, inviteeName);
-            Reply(invitee, leaderName, true);
-        }
-    }
-
     [Test]
     public void ACommitWhoseAnswerIsLost_IsSettledFromTheStoredMembership()
     {
-        var rig = new Rig(new TestServer(persistence: new PersistenceOptions { MaxRetries = 0, RetryBaseDelayMs = 1 }));
+        var rig = new PartyRig(new TestServer(persistence: new PersistenceOptions
+            { MaxRetries = 0, RetryBaseDelayMs = 1 }));
         ConnectionId seven = rig.Enter(7);
         ConnectionId eight = rig.Enter(8);
         rig.Invite(seven, Eight);
@@ -148,7 +74,7 @@ public sealed class PartyTests
     [Test]
     public void AParty_IsDroppedWhenItsLastMemberLeavesTheWorld_AndLoadedAgainOnEntry()
     {
-        var rig = new Rig();
+        var rig = new PartyRig();
         ConnectionId seven = rig.Enter(7);
         ConnectionId eight = rig.Enter(8);
         rig.Join(seven, Seven, eight, Eight);
@@ -171,7 +97,7 @@ public sealed class PartyTests
     [Test]
     public void ASecondChange_WhileOneIsInFlight_IsRefusedWith7()
     {
-        var rig = new Rig();
+        var rig = new PartyRig();
         ConnectionId seven = rig.Enter(7);
         ConnectionId eight = rig.Enter(8);
         ConnectionId nine = rig.Enter(9);
@@ -193,7 +119,7 @@ public sealed class PartyTests
     [Test]
     public void Accept_FoundsAPartyLedByTheInviter_AndBothHearTheInviteeJoin()
     {
-        var rig = new Rig();
+        var rig = new PartyRig();
         ConnectionId seven = rig.Enter(7);
         ConnectionId eight = rig.Enter(8);
 
@@ -214,7 +140,7 @@ public sealed class PartyTests
     [Test]
     public void Accept_WithoutTheDatabase_IsRefusedWith6_AndTheInviteStays()
     {
-        var rig = new Rig();
+        var rig = new PartyRig();
         ConnectionId seven = rig.Enter(7);
         ConnectionId eight = rig.Enter(8);
         rig.Invite(seven, Eight);
@@ -232,7 +158,7 @@ public sealed class PartyTests
     [Test]
     public void AnotherInviteOfTheFounder_CarriesOverToTheNewParty_AndAnInviteesOwnInvitesEnd()
     {
-        var rig = new Rig();
+        var rig = new PartyRig();
         ConnectionId seven = rig.Enter(7);
         ConnectionId eight = rig.Enter(8);
         ConnectionId nine = rig.Enter(9);
@@ -251,7 +177,7 @@ public sealed class PartyTests
     [Test]
     public void Decline_TellsTheInviter_AndEndsTheInvite()
     {
-        var rig = new Rig();
+        var rig = new PartyRig();
         ConnectionId seven = rig.Enter(7);
         ConnectionId eight = rig.Enter(8);
         rig.Invite(seven, Eight);
@@ -267,7 +193,7 @@ public sealed class PartyTests
     [Test]
     public void Invite_EndsWhenItsInviterLeavesTheWorld()
     {
-        var rig = new Rig();
+        var rig = new PartyRig();
         ConnectionId seven = rig.Enter(7);
         ConnectionId eight = rig.Enter(8);
         rig.Invite(seven, Eight);
@@ -283,7 +209,7 @@ public sealed class PartyTests
     [Test]
     public void Invite_IntoAPartyOfFive_IsRefusedWith13()
     {
-        var rig = new Rig();
+        var rig = new PartyRig();
         ConnectionId leader = rig.Enter(7);
         for (long character = 8; character <= 11; character++)
         {
@@ -301,7 +227,7 @@ public sealed class PartyTests
     [Test]
     public void Invite_IsRefused_ForNoOneReachable_OneSelf_AnInviteePending_AMemberNotLeading_OrAnInviteeInAParty()
     {
-        var rig = new Rig();
+        var rig = new PartyRig();
         ConnectionId seven = rig.Enter(7);
         ConnectionId eight = rig.Enter(8);
         ConnectionId nine = rig.Enter(9);
@@ -337,7 +263,7 @@ public sealed class PartyTests
     [Test]
     public void Invite_ThatWaitsThirtySeconds_Expires_AndTheInviterHearsIt()
     {
-        var rig = new Rig();
+        var rig = new PartyRig();
         ConnectionId seven = rig.Enter(7);
         ConnectionId eight = rig.Enter(8);
         rig.Invite(seven, Eight);
@@ -354,7 +280,7 @@ public sealed class PartyTests
     [Test]
     public void Join_OfAThirdMember_IsHeardByEveryMember()
     {
-        var rig = new Rig();
+        var rig = new PartyRig();
         ConnectionId seven = rig.Enter(7);
         ConnectionId eight = rig.Enter(8);
         ConnectionId nine = rig.Enter(9);
@@ -372,7 +298,7 @@ public sealed class PartyTests
     [Test]
     public void KickAndLead_AreRefused_FromAMemberNotLeading_ForOneself_AndForANameNotInTheParty()
     {
-        var rig = new Rig();
+        var rig = new PartyRig();
         ConnectionId seven = rig.Enter(7);
         ConnectionId eight = rig.Enter(8);
         rig.Enter(9);
@@ -404,7 +330,7 @@ public sealed class PartyTests
     [Test]
     public void Kick_RemovesAMemberWhoIsOffline_ByName()
     {
-        var rig = new Rig();
+        var rig = new PartyRig();
         ConnectionId seven = rig.Enter(7);
         ConnectionId eight = rig.Enter(8);
         ConnectionId nine = rig.Enter(9);
@@ -423,7 +349,7 @@ public sealed class PartyTests
     [Test]
     public void Lead_PassesTheLead_AndEveryMemberHearsIt()
     {
-        var rig = new Rig();
+        var rig = new PartyRig();
         ConnectionId seven = rig.Enter(7);
         ConnectionId eight = rig.Enter(8);
         rig.Join(seven, Seven, eight, Eight);
@@ -438,7 +364,7 @@ public sealed class PartyTests
     [Test]
     public void Leave_OfAPartyOfTwo_DisbandsIt()
     {
-        var rig = new Rig();
+        var rig = new PartyRig();
         ConnectionId seven = rig.Enter(7);
         ConnectionId eight = rig.Enter(8);
         rig.Join(seven, Seven, eight, Eight);
@@ -456,7 +382,7 @@ public sealed class PartyTests
     [Test]
     public void Leave_OfTheLeader_IsHeardByAll_AndPassesTheLeadToTheEarliestJoined()
     {
-        var rig = new Rig();
+        var rig = new PartyRig();
         ConnectionId seven = rig.Enter(7);
         ConnectionId eight = rig.Enter(8);
         ConnectionId nine = rig.Enter(9);
@@ -480,7 +406,7 @@ public sealed class PartyTests
     [Test]
     public void MutualInvites_BothAccepted_FoundOneParty_AndTheSecondAcceptIsRefused()
     {
-        var rig = new Rig();
+        var rig = new PartyRig();
         ConnectionId seven = rig.Enter(7);
         ConnectionId eight = rig.Enter(8);
         rig.Invite(seven, Eight);
@@ -501,7 +427,7 @@ public sealed class PartyTests
     [Test]
     public void PartyChanges_AreLoggedByNumberOnly_WithTheirEvents()
     {
-        var rig = new Rig();
+        var rig = new PartyRig();
         ConnectionId seven = rig.Enter(7);
         ConnectionId eight = rig.Enter(8);
         ConnectionId nine = rig.Enter(9);
@@ -524,7 +450,7 @@ public sealed class PartyTests
     [Test]
     public void PartyCommands_AreAppliedWhileDead_AndRefusedWhileLoggingOut()
     {
-        var rig = new Rig();
+        var rig = new PartyRig();
         ConnectionId seven = rig.Enter(7);
         ConnectionId eight = rig.Enter(8);
         rig.Server.World.TryGetMap(new MapDefinitionId("map.training_ground"), out MapInstance? ground);
@@ -544,7 +470,7 @@ public sealed class PartyTests
     [Test]
     public void PartyCommands_PastTheirBurst_AreThrottledWith3_AndScored()
     {
-        var rig = new Rig(new TestServer(abuseOptions: new AbuseOptions()));
+        var rig = new PartyRig(new TestServer(abuseOptions: new AbuseOptions()));
         ConnectionId seven = rig.Enter(7);
         int burst = new AbuseOptions().PartyCommandBurst;
         var sent = new List<uint>();

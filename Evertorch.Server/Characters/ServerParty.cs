@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Evertorch.Persistence;
+using Evertorch.Protocol;
 
 namespace Evertorch.Server
 {
@@ -31,6 +32,11 @@ public sealed class ServerParty
     ///     A change of the party is being committed, or its lost answer settled; no other may start.
     /// </summary>
     public bool IsChanging { get; internal set; }
+
+    /// <summary>
+    ///     The roster its members in the world last heard; null before any did.
+    /// </summary>
+    public PartyRoster? LastRoster { get; internal set; }
 
     public bool HasMember(long characterId)
     {
@@ -74,6 +80,27 @@ public sealed class ServerParty
 
         member = null;
         return false;
+    }
+
+    // What a member who leaves the world last was, so the roster keeps showing it while it is away.
+    internal void Remember(long characterId, string jobDefinitionId, int baseLevel)
+    {
+        var members = new List<StoredPartyMember>(Members.Count);
+        foreach (StoredPartyMember member in Members)
+        {
+            members.Add(
+                member.CharacterId == characterId
+                    ? new StoredPartyMember(
+                        member.CharacterId,
+                        member.Name,
+                        jobDefinitionId,
+                        baseLevel,
+                        member.Account,
+                        member.JoinOrder)
+                    : member);
+        }
+
+        Members = members;
     }
 
     internal void Replace(StoredParty stored)

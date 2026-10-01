@@ -8,7 +8,8 @@ namespace Evertorch.Server.Tests
 /// <summary>
 ///     Chat on the server (Milestone 12 line 4; Gameplay Systems §15; Network Protocol §9, §11): nearby reaches the
 ///     speaker and those on its map that know it, a whisper reaches its recipient with the speaker's echo, party chat
-///     waits for the party, and chat is applied while dead and refused while logging out.
+///     without a party is refused (party chat itself is in PartySyncTests), and chat is applied while dead and refused
+///     while logging out.
 /// </summary>
 [TestFixture]
 public sealed class ChatTests

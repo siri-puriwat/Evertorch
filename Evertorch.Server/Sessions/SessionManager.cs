@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
 using Evertorch.Game;
 using Evertorch.Persistence;
 using Evertorch.Protocol;
@@ -566,12 +568,12 @@ public sealed class SessionManager : ITickPhase
         AccountId account = session.Account!.Value;
         ConnectionId connection = session.Connection;
         long character = request.Character.Value;
-        var load = new PersistenceJob<StoredCharacter?>(
+        var load = new PersistenceJob<(StoredCharacter? Character, StoredParty? Party)>(
             "load character",
             connection,
             character,
-            (store, cancellation) => store.LoadCharacterAsync(account, character, cancellation),
-            (outcome, stored) => CompleteLoad(connection, outcome, stored));
+            (store, cancellation) => LoadAsync(store, account, character, cancellation),
+            (outcome, stored) => CompleteLoad(connection, outcome, stored.Character, stored.Party));
         if (!m_persistence.TryEnqueueAdmission(load))
         {
             Refuse(session, DisconnectReason.ServerNotReady);
@@ -580,6 +582,21 @@ public sealed class SessionManager : ITickPhase
 
         session.State = SessionState.EnteringWorld;
         session.LoadingCharacter = request.Character;
+    }
+
+    // The party comes with the character, so the baseline carries it at once (Persistence §7).
+    private static async Task<(StoredCharacter? Character, StoredParty? Party)> LoadAsync(
+        IGameStore store,
+        AccountId account,
+        long character,
+        CancellationToken cancellation)
+    {
+        StoredCharacter? stored =
+            await store.LoadCharacterAsync(account, character, cancellation).ConfigureAwait(false);
+        StoredParty? party = stored == null
+            ? null
+            : await store.LoadPartyAsync(character, cancellation).ConfigureAwait(false);
+        return (stored, party);
     }
 
     private bool IsLoadingElsewhere(CharacterId character)
@@ -595,7 +612,11 @@ public sealed class SessionManager : ITickPhase
         return false;
     }
 
-    private void CompleteLoad(ConnectionId connection, PersistenceOutcome outcome, StoredCharacter? stored)
+    private void CompleteLoad(
+        ConnectionId connection,
+        PersistenceOutcome outcome,
+        StoredCharacter? stored,
+        StoredParty? party)
     {
         if (!m_sessions.TryGet(connection, out ClientSession? session)
             || session == null
@@ -636,6 +657,7 @@ public sealed class SessionManager : ITickPhase
         }
 
         session.Character = character;
+        m_parties.Enter(character, party);
         EnterAs(session, character, tick);
     }
 
@@ -665,6 +687,7 @@ public sealed class SessionManager : ITickPhase
         session.NeedsSkillList = true;
         session.NeedsStatusEffects = true;
         session.NeedsQuestLog = true;
+        session.NeedsPartyRoster = true;
         PlayerEntity player = character.Player;
         MapInstance map = character.Map;
         m_sender.Send(

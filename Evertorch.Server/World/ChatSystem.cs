@@ -1,21 +1,30 @@
+using Evertorch.Game;
+using Evertorch.Persistence;
 using Evertorch.Protocol;
 
 namespace Evertorch.Server
 {
 /// <summary>
 ///     Delivers chat (Gameplay Systems §15; Network Protocol §9): a line said nearby reaches the speaker and every
-///     session on its map that knows the speaker; a whisper reaches its recipient, and the speaker hears it back as
-///     sent. Nothing is stored and the text is never logged; only a count by channel is kept. Tick thread only.
+///     session on its map that knows the speaker; a line to the party reaches every reachable member, on any map; a
+///     whisper reaches its recipient, and the speaker hears it back as sent. Nothing is stored and the text is never
+///     logged; only a count by channel is kept. Tick thread only.
 /// </summary>
 public sealed class ChatSystem
 {
     private readonly SessionRegistry m_sessions;
     private readonly MessageSender m_sender;
     private readonly ServerInstruments m_instruments;
+    private readonly PartyRegistry m_parties;
 
-    public ChatSystem(SessionRegistry sessions, MessageSender sender, ServerInstruments instruments)
+    public ChatSystem(
+        SessionRegistry sessions,
+        MessageSender sender,
+        ServerInstruments instruments,
+        PartyRegistry parties)
     {
         m_sessions = sessions;
+        m_parties = parties;
         m_sender = sender;
         m_instruments = instruments;
     }
@@ -23,7 +32,7 @@ public sealed class ChatSystem
     /// <summary>
     ///     Delivers <paramref name="text" /> from <paramref name="speaker" />, which is in the world and not logging
     ///     out. Refused with <see cref="CommandRejectionReason.InvalidTarget" /> for a whisper that finds no one, and
-    ///     with <see cref="CommandRejectionReason.NotAllowedNow" /> for party chat, which waits for the party.
+    ///     with <see cref="CommandRejectionReason.NotAllowedNow" /> for party chat without a party.
     /// </summary>
     public CommandRejectionReason TrySend(ClientSession speaker, ChatChannel channel, string recipient, string text)
     {
@@ -34,6 +43,8 @@ public sealed class ChatSystem
                 return CommandRejectionReason.None;
             case ChatChannel.Whisper:
                 return Whisper(speaker, recipient, text);
+            case ChatChannel.Party:
+                return SayToParty(speaker, text);
             default:
                 return CommandRejectionReason.NotAllowedNow;
         }
@@ -55,6 +66,29 @@ public sealed class ChatSystem
         }
 
         m_instruments.RecordChat(ChatChannel.Nearby);
+    }
+
+    // A member in its reconnect grace is not reachable and misses the line.
+    private CommandRejectionReason SayToParty(ClientSession speaker, string text)
+    {
+        CharacterSession self = speaker.Character!;
+        if (!m_parties.TryGetParty(self.Character, out ServerParty? party))
+        {
+            return CommandRejectionReason.NotAllowedNow;
+        }
+
+        var line = new ChatReceived(ChatChannel.Party, default, self.Player.Name, text);
+        foreach (StoredPartyMember member in party!.Members)
+        {
+            if (m_sessions.TryGetCharacter(new CharacterId(member.CharacterId), out CharacterSession? listener)
+                && listener!.Connection?.State == SessionState.InWorld)
+            {
+                m_sender.Send(listener.Connection.Connection, line);
+            }
+        }
+
+        m_instruments.RecordChat(ChatChannel.Party);
+        return CommandRejectionReason.None;
     }
 
     private CommandRejectionReason Whisper(ClientSession speaker, string recipient, string text)

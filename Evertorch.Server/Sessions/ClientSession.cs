@@ -104,6 +104,12 @@ public sealed class ClientSession
     public bool NeedsQuestLog { get; set; }
 
     /// <summary>
+    ///     The owner is to hear of its party, and of each other member's health and SP, once its party is known: it
+    ///     entered, attached, or changed maps, or it left a party (Network Protocol §9).
+    /// </summary>
+    public bool NeedsPartyRoster { get; set; }
+
+    /// <summary>
     ///     The last <see cref="CharacterSheet" /> the owner was sent, which the next is compared with; null until the
     ///     baseline sends one.
     /// </summary>

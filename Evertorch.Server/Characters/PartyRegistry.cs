@@ -21,11 +21,10 @@ public sealed class PartyRegistry : ITickPhase
     public const int MaxMembers = 5;
     public const int InviteLifetimeMs = 30000;
     private const int MillisecondsPerSecond = 1000;
-    private const string LoadOperation = "party load";
     private const string LookupOperation = "party lookup";
 
-    // A load or lookup that failed for a reason other than an outage is asked again only after this long (Persistence
-    // §9), as the item actions do.
+    // A lookup that failed for a reason other than an outage is asked again only after this long (Persistence §9), as
+    // the item actions' are.
     private const int FailedJobDelayMs = 1000;
 
     private static readonly Action<ILogger, long, long, long, Exception?> LogCreated =
@@ -85,13 +84,9 @@ public sealed class PartyRegistry : ITickPhase
     // Every member of every party held, online or not.
     private readonly Dictionary<long, ServerParty> m_partyOf = new();
 
-    // The characters in the world whose party, or lack of one, is known.
-    private readonly HashSet<long> m_known = new();
-
     // Characters without a party in a creation being committed: one at a time each.
     private readonly HashSet<long> m_creating = new();
     private readonly Dictionary<long, PendingInvite> m_invites = new();
-    private readonly List<(CharacterSession Character, uint NotBefore)> m_loads = new();
     private readonly List<(PartyCommit Commit, uint NotBefore)> m_unsettled = new();
     private readonly List<PendingInvite> m_ended = new();
     private uint m_tick;
@@ -117,7 +112,6 @@ public sealed class PartyRegistry : ITickPhase
         int tickRate = simulation.Value.TickRate;
         m_inviteTicks = (uint)((long)InviteLifetimeMs * tickRate / MillisecondsPerSecond);
         m_failedJobDelayTicks = (uint)((long)FailedJobDelayMs * tickRate / MillisecondsPerSecond);
-        lifetime.Entered += OnEntered;
         lifetime.Left += OnLeft;
     }
 
@@ -125,24 +119,18 @@ public sealed class PartyRegistry : ITickPhase
 
     public int PendingInvites => m_invites.Count;
 
+    public IReadOnlyCollection<ServerParty> Parties => m_parties.Values;
+
+
     public TickPhase Phase => TickPhase.SchedulePersistence;
 
     /// <summary>
-    ///     Queues the party loads and lost-answer lookups that could not be queued before, and ends the invites whose
-    ///     time is up, telling their inviters.
+    ///     Queues the lost-answer lookups that could not be queued before, and ends the invites whose time is up,
+    ///     telling their inviters.
     /// </summary>
     public void Execute(in TickContext context)
     {
         m_tick = context.Tick;
-        for (int index = m_loads.Count - 1; index >= 0; index--)
-        {
-            (CharacterSession character, uint notBefore) = m_loads[index];
-            if (!IsInWorld(character) || (IsDue(notBefore) && TryQueueLoad(character)))
-            {
-                m_loads.RemoveAt(index);
-            }
-        }
-
         for (int index = m_unsettled.Count - 1; index >= 0; index--)
         {
             (PartyCommit commit, uint notBefore) = m_unsettled[index];
@@ -170,11 +158,6 @@ public sealed class PartyRegistry : ITickPhase
     public CommandRejectionReason TryInvite(ClientSession session, string name)
     {
         CharacterSession inviter = session.Character!;
-        if (!m_known.Contains(IdOf(inviter)))
-        {
-            return NotYetKnown();
-        }
-
         if (!m_sessions.TryGetReachable(name, out CharacterSession? invitee))
         {
             return CommandRejectionReason.InvalidTarget;
@@ -183,7 +166,6 @@ public sealed class PartyRegistry : ITickPhase
         ServerParty? party = PartyOf(inviter);
         if (ReferenceEquals(invitee, inviter)
             || (party != null && party.LeaderCharacterId != IdOf(inviter))
-            || !m_known.Contains(IdOf(invitee!))
             || PartyOf(invitee!) != null
             || m_invites.ContainsKey(IdOf(invitee!)))
         {
@@ -274,11 +256,6 @@ public sealed class PartyRegistry : ITickPhase
     public CommandRejectionReason TryLeave(ClientSession session, uint commandSequence)
     {
         CharacterSession member = session.Character!;
-        if (!m_known.Contains(IdOf(member)))
-        {
-            return NotYetKnown();
-        }
-
         ServerParty? party = PartyOf(member);
         if (party == null)
         {
@@ -358,11 +335,6 @@ public sealed class PartyRegistry : ITickPhase
         CharacterSession leader = session.Character!;
         party = PartyOf(leader);
         member = null;
-        if (!m_known.Contains(IdOf(leader)))
-        {
-            return NotYetKnown();
-        }
-
         if (party == null || party.LeaderCharacterId != IdOf(leader))
         {
             return CommandRejectionReason.NotAllowedNow;
@@ -379,12 +351,6 @@ public sealed class PartyRegistry : ITickPhase
         }
 
         return party.IsChanging ? CommandRejectionReason.Busy : CommandRejectionReason.None;
-    }
-
-    // Until its load is back the character's party is unknown, so nothing about it may change yet.
-    private CommandRejectionReason NotYetKnown()
-    {
-        return m_persistence.IsAvailable ? CommandRejectionReason.Busy : CommandRejectionReason.ServiceUnavailable;
     }
 
     private CommandRejectionReason TryCommit(PartyCommit commit)
@@ -594,17 +560,33 @@ public sealed class PartyRegistry : ITickPhase
             Remove(party);
             LogDisbanded(m_logger, party.Id, null);
             TellMembers(before, new PartyEvent(PartyEventKind.Disbanded, commit.Name));
+            foreach (StoredPartyMember member in before)
+            {
+                OweRoster(member.CharacterId);
+            }
+
             return;
         }
 
         long leader = party.LeaderCharacterId;
         Replace(party, after);
+        OweRoster(change.Target);
         TellMembers(before, new PartyEvent(isKick ? PartyEventKind.Kicked : PartyEventKind.Left, commit.Name));
         if (after.LeaderCharacterId != leader)
         {
             LogLeaderChanged(m_logger, after.LeaderCharacterId, party.Id, null);
             TellMembers(after.Members,
                 new PartyEvent(PartyEventKind.LeaderChanged, NameOf(after, after.LeaderCharacterId)));
+        }
+    }
+
+    // One who is no longer a member hears the roster of no party; members hear theirs when it changes.
+    private void OweRoster(long characterId)
+    {
+        if (m_sessions.TryGetCharacter(new CharacterId(characterId), out CharacterSession? character)
+            && character!.Connection != null)
+        {
+            character.Connection.NeedsPartyRoster = true;
         }
     }
 
@@ -688,64 +670,25 @@ public sealed class PartyRegistry : ITickPhase
         }
     }
 
-    private void OnEntered(CharacterSession character)
+    /// <summary>
+    ///     A character came into the world with <paramref name="stored" />, the party its load read, if any (Persistence
+    ///     §7). Every change of a party goes through the copy held here once it is held, so that copy is never older than
+    ///     a load; a party nobody holds has no change in flight, so its load is current.
+    /// </summary>
+    public void Enter(CharacterSession character, StoredParty? stored)
     {
-        long id = IdOf(character);
-        if (m_partyOf.ContainsKey(id))
-        {
-            m_known.Add(id);
-            return;
-        }
-
-        if (!TryQueueLoad(character))
-        {
-            m_loads.Add((character, m_tick));
-        }
-    }
-
-    private bool TryQueueLoad(CharacterSession character)
-    {
-        long id = IdOf(character);
-        var load = new PersistenceJob<StoredParty?>(
-            LoadOperation,
-            ConnectionOf(character),
-            id,
-            (store, cancellation) => store.LoadPartyAsync(id, cancellation),
-            (outcome, stored) => CompleteLoad(character, outcome, stored));
-        return m_persistence.TryEnqueue(load);
-    }
-
-    // Every change of a party goes through the copy held here once it is held, so that copy is never older than a
-    // load; a party nobody holds has no change in flight, so its load is current.
-    private void CompleteLoad(CharacterSession character, PersistenceOutcome outcome, StoredParty? stored)
-    {
-        if (!IsInWorld(character))
-        {
-            return;
-        }
-
-        if (outcome != PersistenceOutcome.Succeeded)
-        {
-            m_loads.Add((character, outcome == PersistenceOutcome.Failed ? m_tick + m_failedJobDelayTicks : m_tick));
-            return;
-        }
-
-        long id = IdOf(character);
-        if (!m_partyOf.ContainsKey(id) && stored != null && !m_parties.ContainsKey(stored.Id))
+        if (!m_partyOf.ContainsKey(IdOf(character)) && stored != null && !m_parties.ContainsKey(stored.Id))
         {
             var party = new ServerParty(stored);
             m_parties.Add(party.Id, party);
             Map(party);
         }
-
-        m_known.Add(id);
     }
 
     // Its invites end with it; its party is dropped once no member is left in the world.
     private void OnLeft(CharacterSession character)
     {
         long id = IdOf(character);
-        m_known.Remove(id);
         m_invites.Remove(id);
         m_ended.Clear();
         foreach (PendingInvite invite in m_invites.Values)
@@ -763,6 +706,8 @@ public sealed class PartyRegistry : ITickPhase
 
         if (m_partyOf.TryGetValue(id, out ServerParty? party))
         {
+            PlayerEntity player = character.Player;
+            party.Remember(id, player.Job.Value, player.Level);
             DropIfIdle(party);
         }
     }

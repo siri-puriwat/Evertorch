@@ -16,8 +16,9 @@ namespace Evertorch.Server.Tests
 ///     production networking and gameplay code. Three players entering the training ground together see each other,
 ///     each by its name (line 3); a line said nearby reaches all three, a whisper reaches only its recipient and comes
 ///     back to its speaker as sent, a whisper to no one is refused with 1, and party chat without a party with 3
-///     (line 4). Each later line of Milestone 12 adds its steps here: chat in a party, the party's share of experience
-///     and quest credit, its members' health, and its survival of a restart.
+///     (line 4). Anna invites Bobby and Cora, who accept; all three hear the roster of the party Anna leads and each
+///     other's health, and a line said to the party reaches all three (line 6). Each later line of Milestone 12 adds
+///     its steps here: the party's share of experience and quest credit, and its survival of a restart.
 /// </summary>
 [TestFixture]
 [NonParallelizable]
@@ -134,6 +135,69 @@ public sealed class PlayingTogetherAcceptanceTests
         Assert.That(heard[bobby], Has.Count.EqualTo(2), $"{step}: nothing more reached Bobby");
     }
 
+    // Anna invites Bobby, then Cora; each accepts, and the three hear the roster of three that Anna leads, each other's
+    // health and SP, and Bobby's line to the party (Gameplay Systems §14, §15).
+    private static void FormParty(SocketClient anna, SocketClient bobby, SocketClient cora)
+    {
+        const string step = "party";
+        SocketClient[] all = { anna, bobby, cora };
+        var heard = new Dictionary<SocketClient, List<string>>();
+        var rosters = new Dictionary<SocketClient, PartyRoster>();
+        var statuses = new Dictionary<SocketClient, HashSet<string>>();
+        var lines = new Dictionary<SocketClient, List<string>>();
+        foreach (SocketClient client in all)
+        {
+            var events = new List<string>();
+            var named = new HashSet<string>();
+            var said = new List<string>();
+            heard.Add(client, events);
+            statuses.Add(client, named);
+            lines.Add(client, said);
+            client.Connection.PartyEventReceived += partyEvent => events.Add($"{partyEvent.Kind} {partyEvent.Name}");
+            client.Connection.PartyRosterReceived += roster => rosters[client] = roster;
+            client.Connection.PartyMemberStatusReceived += status => named.Add(status.Name);
+            client.Connection.ChatLineReceived += line => said.Add($"{line.Channel} {line.Name}: {line.Text}");
+        }
+
+        foreach ((SocketClient invitee, string name) in new[] { (bobby, BobbyName), (cora, CoraName) })
+        {
+            anna.Connection.SendPartyInvite(name);
+            Assert.That(
+                SocketClients.PumpUntil(() => heard[invitee].Contains($"Invited {AnnaName}"), all),
+                Is.True,
+                $"{step}: {name} invited");
+            invitee.Connection.SendPartyReply(AnnaName, true);
+            Assert.That(
+                SocketClients.PumpUntil(() => heard[anna].Contains($"Joined {name}"), all),
+                Is.True,
+                $"{step}: {name} joined");
+        }
+
+        Assert.That(
+            SocketClients.PumpUntil(
+                () => all.All(client => rosters.TryGetValue(client, out PartyRoster? roster)
+                    && roster.Members.Count == 3
+                    && statuses[client].Count == 2),
+                all),
+            Is.True,
+            $"{step}: every member heard the roster of three and the other two's health");
+        foreach (SocketClient client in all)
+        {
+            Assert.That(
+                rosters[client].Members.Select(member => member.Name),
+                Is.EqualTo(new[] { AnnaName, BobbyName, CoraName }),
+                $"{step}: the members in the order they joined");
+            Assert.That(rosters[client].LeaderIndex, Is.Zero, $"{step}: Anna leads");
+        }
+
+        bobby.Connection.SendChat(ChatChannel.Party, string.Empty, "ready");
+        Assert.That(
+            SocketClients.PumpUntil(() => all.All(client => lines[client].Count == 1), all),
+            Is.True,
+            $"{step}: said to the party, heard by all three");
+        Assert.That(lines.Values.Select(said => said[0]), Has.All.EqualTo($"Party {BobbyName}: ready"));
+    }
+
     private static void AssertCleanTraffic(string step, params SocketClient[] clients)
     {
         foreach (SocketClient client in clients)
@@ -166,6 +230,9 @@ public sealed class PlayingTogetherAcceptanceTests
 
         Chat(anna, bobby, cora);
         AssertCleanTraffic("chat", anna, bobby, cora);
+
+        FormParty(anna, bobby, cora);
+        AssertCleanTraffic("party", anna, bobby, cora);
 
         host.StopAsync().GetAwaiter().GetResult();
     }

@@ -263,7 +263,7 @@ public sealed class MapTransferTests
                 new[]
                 {
                     MessageOpcode.InventorySnapshot, MessageOpcode.SkillList, MessageOpcode.StatusEffects,
-                    MessageOpcode.QuestLog
+                    MessageOpcode.QuestLog, MessageOpcode.PartyRoster
                 }),
             "the whole baseline of the new map");
         WorldEntered entered = WorldEnteredOf(server, player).Single();

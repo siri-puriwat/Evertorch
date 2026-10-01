@@ -150,7 +150,7 @@ public sealed class VisibilityTests
             MessageOpcode.ServerHello, MessageOpcode.CharacterList, MessageOpcode.CreateCharacterResult,
             MessageOpcode.CharacterList, MessageOpcode.WorldEntered, MessageOpcode.CharacterSheet,
             MessageOpcode.EntitySpawn, MessageOpcode.InventorySnapshot, MessageOpcode.SkillList,
-            MessageOpcode.StatusEffects, MessageOpcode.QuestLog
+            MessageOpcode.StatusEffects, MessageOpcode.QuestLog, MessageOpcode.PartyRoster
         };
         Assert.That(server.Transport.ControlOpcodesSentTo(second), Is.EqualTo(expected));
         Assert.That(server.Transport.ControlSentTo(second).Select(message => message.Channel),

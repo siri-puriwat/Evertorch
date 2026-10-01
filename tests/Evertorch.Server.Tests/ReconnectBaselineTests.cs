@@ -117,12 +117,12 @@ public sealed class ReconnectBaselineTests
         Assert.That(baseline.Skip(2).TakeWhile(opcode => opcode == MessageOpcode.EntitySpawn).Count(),
             Is.GreaterThanOrEqualTo(1), "the observer is spawned afresh");
         Assert.That(
-            baseline.TakeLast(4),
+            baseline.TakeLast(5),
             Is.EqualTo(
                 new[]
                 {
                     MessageOpcode.InventorySnapshot, MessageOpcode.SkillList, MessageOpcode.StatusEffects,
-                    MessageOpcode.QuestLog
+                    MessageOpcode.QuestLog, MessageOpcode.PartyRoster
                 }));
         InventorySnapshot snapshot = Snapshots(server, second).Single();
         Assert.That(snapshot.Revision, Is.EqualTo(1u));
