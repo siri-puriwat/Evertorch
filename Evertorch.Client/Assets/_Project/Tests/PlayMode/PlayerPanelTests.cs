@@ -548,12 +548,12 @@ public sealed class PlayerPanelTests
     }
 
     [UnityTest]
-    public IEnumerator LoginPanelAndFeedbackLines_ThroughAMapChange_TheLoginStaysHidden_AndTheLinesAreCleared()
+    public IEnumerator LoginPanelAndChat_ThroughAMapChange_TheLoginStaysHidden_AndTheLogStays()
     {
         GameClient client = CreateIdleClient();
         GiveWorld(client);
         var login = LoginPanel.Create(client);
-        var lines = FeedbackLines.Create(client);
+        var lines = ChatPanel.Create(client);
         m_created.Add(login.gameObject);
         m_created.Add(lines.gameObject);
         yield return null;
@@ -566,15 +566,18 @@ public sealed class PlayerPanelTests
         Assert.That(wasShown, Is.True);
         Assert.That(client.IsInWorld, Is.True);
         Assert.That(login.IsVisible, Is.False, "no login panel while the next map loads");
-        Assert.That((lines.Text, lines.IsVisible), Is.EqualTo((string.Empty, false)), "a map change clears the lines");
+        Assert.That(
+            (lines.Text, lines.IsVisible),
+            Is.EqualTo(("Picked up Slime Gel x 1", true)),
+            "the log outlives a map change (Prototype Content §2)");
     }
 
     [UnityTest]
-    public IEnumerator FeedbackLines_SayLevelUp_OnlyWhenTheLevelRises()
+    public IEnumerator ChatLog_SaysLevelUp_OnlyWhenTheLevelRises()
     {
         GameClient client = CreateIdleClient();
         ClientWorld world = GiveWorld(client);
-        var lines = FeedbackLines.Create(client);
+        var lines = ChatPanel.Create(client);
         m_created.Add(lines.gameObject);
         yield return null;
 
@@ -706,11 +709,11 @@ public sealed class PlayerPanelTests
     }
 
     [UnityTest]
-    public IEnumerator FeedbackLines_SayALearnedSkillLevel_AndNothingForTheFirstList()
+    public IEnumerator ChatLog_SaysALearnedSkillLevel_AndNothingForTheFirstList()
     {
         GameClient client = CreateIdleClient();
         ClientWorld world = GiveWorld(client);
-        var lines = FeedbackLines.Create(client);
+        var lines = ChatPanel.Create(client);
         m_created.Add(lines.gameObject);
         yield return null;
 
@@ -793,9 +796,9 @@ public sealed class PlayerPanelTests
         Assert.That(window.IsOpen, Is.False);
     }
 
-    // Stopped above the feedback lines on this screen, the rows that do not fit scroll (Prototype Content §2).
+    // Stopped above the chat on this screen, the rows that do not fit scroll (Prototype Content §2).
     [UnityTest]
-    public IEnumerator StatsWindow_StopsAboveTheFeedbackLines_AndKeepsEveryRow()
+    public IEnumerator StatsWindow_StopsAboveTheChat_AndKeepsEveryRow()
     {
         GameClient client = CreateIdleClient();
         ClientWorld world = GiveWorld(client);
@@ -813,8 +816,8 @@ public sealed class PlayerPanelTests
 
         Assert.That(
             shown.yMin,
-            Is.GreaterThanOrEqualTo((FeedbackLines.TopFor(canvasHeight) + 8f) * unitsToPixels - 0.5f),
-            "above the feedback lines");
+            Is.GreaterThanOrEqualTo((ChatPanel.TopFor(canvasHeight, false) + 8f) * unitsToPixels - 0.5f),
+            "above the chat");
         Assert.That(
             window.GetComponentsInChildren<Button>(true),
             Has.Length.EqualTo(6 + 1),
@@ -822,11 +825,11 @@ public sealed class PlayerPanelTests
     }
 
     [UnityTest]
-    public IEnumerator FeedbackLines_SayARaisedStatistic_WithItsNewValue()
+    public IEnumerator ChatLog_SaysARaisedStatistic_WithItsNewValue()
     {
         GameClient client = CreateIdleClient();
         ClientWorld world = GiveWorld(client);
-        var lines = FeedbackLines.Create(client);
+        var lines = ChatPanel.Create(client);
         m_created.Add(lines.gameObject);
         yield return null;
 
@@ -841,11 +844,11 @@ public sealed class PlayerPanelTests
     }
 
     [UnityTest]
-    public IEnumerator FeedbackLines_SayTheJobLevel_OnlyWhenTheSheetRaisesIt()
+    public IEnumerator ChatLog_SaysTheJobLevel_OnlyWhenTheSheetRaisesIt()
     {
         GameClient client = CreateIdleClient();
         ClientWorld world = GiveWorld(client);
-        var lines = FeedbackLines.Create(client);
+        var lines = ChatPanel.Create(client);
         m_created.Add(lines.gameObject);
         yield return null;
 
@@ -951,11 +954,11 @@ public sealed class PlayerPanelTests
     }
 
     [UnityTest]
-    public IEnumerator FeedbackLines_SayWhatWasRefusedAndWhatThePlayerPickedUp_ThenFade()
+    public IEnumerator ChatLog_SaysWhatWasRefusedAndWhatThePlayerPickedUp_AsSystemLinesThatStay()
     {
         GameClient client = CreateIdleClient();
         ClientWorld world = GiveWorld(client);
-        var lines = FeedbackLines.Create(client);
+        var lines = ChatPanel.Create(client);
         m_created.Add(lines.gameObject);
         Spawn(world, 8, EntityKind.ItemDrop, Gel, 1000);
         Spawn(world, 9, EntityKind.ItemDrop, Gel, 1000);
@@ -966,20 +969,21 @@ public sealed class PlayerPanelTests
         world.OnItemPickedUp(new ItemPickedUp(new EntityId(9), new EntityId(55), new ItemDefinitionId(Gel), 1));
         string shown = lines.Text;
         bool isVisible = lines.IsVisible;
-        for (int index = 0; index < FeedbackLines.MaxLines; index++)
+        for (int index = 0; index < ChatPanel.DesktopLines; index++)
         {
             world.OnCommandRejected(new CommandRejected(4, CommandRejectionReason.OutOfRange));
         }
 
         string full = lines.Text;
-        yield return new WaitForSecondsRealtime(FeedbackLines.LineSeconds + 0.2f);
+        yield return null;
 
         Assert.That(shown, Is.EqualTo($"Your inventory is full.\nPicked up {Gel} x 2"),
             "another player's pickup is not this player's news");
         Assert.That(isVisible, Is.True);
-        Assert.That(full.Split('\n'), Is.EqualTo(Enumerable.Repeat("That is too far away.", FeedbackLines.MaxLines)));
-        Assert.That(lines.Text, Is.Empty);
-        Assert.That(lines.IsVisible, Is.False);
+        Assert.That(full.Split('\n'), Is.EqualTo(Enumerable.Repeat("That is too far away.", ChatPanel.DesktopLines)));
+        Assert.That(lines.Text, Is.EqualTo(full), "the log keeps its lines");
+        Assert.That(client.ChatLog.Lines, Has.Count.EqualTo(2 + ChatPanel.DesktopLines));
+        Assert.That(client.ChatLog.Lines.Select(line => line.Kind), Has.All.EqualTo(ChatLineKind.System));
     }
 
     [UnityTest]
@@ -1106,7 +1110,7 @@ public sealed class PlayerPanelTests
         world.OnSkillList(StrikeFirstAidAndFocus(0));
         var bar = SkillBar.Create(client);
         m_created.Add(bar.gameObject);
-        var lines = FeedbackLines.Create(client);
+        var lines = ChatPanel.Create(client);
         m_created.Add(lines.gameObject);
         yield return null;
         int changes = bar.TextChanges;
@@ -1182,21 +1186,22 @@ public sealed class PlayerPanelTests
     }
 
     [UnityTest]
-    public IEnumerator SkillBarAndFeedbackLines_AtThisScreenSize_ClearEachOtherTheStickAndTheTouchButtons()
+    public IEnumerator SkillBarAndChat_AtThisScreenSize_ClearEachOtherTheStickAndTheTouchButtons()
     {
         GameClient client = CreateIdleClient();
         ClientWorld world = GiveWorld(client);
         var touch = TouchControls.Create();
         m_created.Add(touch.gameObject);
         touch.SetVisible(true);
+        typeof(GameClient).GetProperty(nameof(GameClient.Touch))!.SetValue(client, touch);
         var bar = SkillBar.Create(client);
         m_created.Add(bar.gameObject);
-        var lines = FeedbackLines.Create(client);
+        var lines = ChatPanel.Create(client);
         m_created.Add(lines.gameObject);
         yield return null;
 
         world.OnSkillList(StrikeAndFirstAid(0));
-        for (int index = 0; index < FeedbackLines.MaxLines; index++)
+        for (int index = 0; index < ChatPanel.TouchLines; index++)
         {
             world.OnCommandRejected(new CommandRejected(3, CommandRejectionReason.OutOfRange));
         }
@@ -1214,8 +1219,8 @@ public sealed class PlayerPanelTests
         Debug.Log($"Panels at {Screen.width} x {Screen.height}: bar {shownBar}, lines {shownLines}");
 
         Assert.That(lines.IsVisible, Is.True);
-        Assert.That(shownLines.yMin - shownBar.yMax, Is.GreaterThanOrEqualTo(16f * unitsToPixels - 0.5f));
-        Assert.That(shownLines.yMin, Is.GreaterThanOrEqualTo(0.2f * Screen.height - 0.5f));
+        Assert.That(shownLines.yMin - shownBar.yMax, Is.GreaterThanOrEqualTo(8f * unitsToPixels - 0.5f));
+        Assert.That(shownLines.yMin, Is.EqualTo(ChatPanel.TouchBounds.yMin * unitsToPixels).Within(1f));
         Assert.That(covered.Where(rect => rect.Overlaps(shownBar)), Is.Empty, "the bar is clear of the touch controls");
         Assert.That(covered.Where(rect => rect.Overlaps(shownLines)), Is.Empty, "the lines are too");
     }
@@ -1551,11 +1556,11 @@ public sealed class PlayerPanelTests
     // Two equips in flight: a refusal of either, for a requirement, is a weapon the job cannot wield; any other command's
     // refusal is not (review of Milestone 10).
     [UnityTest]
-    public IEnumerator FeedbackLines_ForARefusedEquip_SayTheJobCannotWieldIt_WhicheverEquipItAnswers()
+    public IEnumerator ChatPanel_ForARefusedEquip_SayTheJobCannotWieldIt_WhicheverEquipItAnswers()
     {
         GameClient client = CreateIdleClient();
         (ClientWorld world, RecordingConnection recording) = GiveRecordedWorld(client);
-        var lines = FeedbackLines.Create(client);
+        var lines = ChatPanel.Create(client);
         m_created.Add(lines.gameObject);
         uint first = recording.Connection.SendEquip(7);
         uint second = recording.Connection.SendEquip(8);
@@ -1711,7 +1716,7 @@ public sealed class PlayerPanelTests
 
     // A row over a skill slot would take the presses meant for it, and a press of a row buys or sells.
     [UnityTest]
-    public IEnumerator NpcWindow_WithMoreRowsThanFit_StopsAboveTheFeedbackLines_AndKeepsEveryRow()
+    public IEnumerator NpcWindow_WithMoreRowsThanFit_StopsAboveTheChat_AndKeepsEveryRow()
     {
         NpcWindow window = OpenShop(
             out ClientWorld _,
@@ -1726,8 +1731,8 @@ public sealed class PlayerPanelTests
         float canvasHeight = Screen.height / unitsToPixels;
         Assert.That(
             shown.yMin,
-            Is.GreaterThanOrEqualTo((FeedbackLines.TopFor(canvasHeight) + 8f) * unitsToPixels - 0.5f),
-            "above the feedback lines, and so the bar");
+            Is.GreaterThanOrEqualTo((ChatPanel.TopFor(canvasHeight, false) + 8f) * unitsToPixels - 0.5f),
+            "above the chat, and so the bar");
         Assert.That(
             window.GetComponentsInChildren<Button>(true),
             Has.Length.EqualTo(2 + 100 + 1),
@@ -1736,12 +1741,12 @@ public sealed class PlayerPanelTests
 
     // Purchases and sales come from each committed change's coins and rows (Prototype Content §2).
     [UnityTest]
-    public IEnumerator FeedbackLines_SayWhatWasBoughtAndSold_FromTheCommittedChanges()
+    public IEnumerator ChatLog_SaysWhatWasBoughtAndSold_FromTheCommittedChanges()
     {
         GameClient client = CreateIdleClient();
         ClientWorld world = GiveWorld(client);
         GiveShop(client);
-        var lines = FeedbackLines.Create(client);
+        var lines = ChatPanel.Create(client);
         m_created.Add(lines.gameObject);
         world.Inventory.OnSnapshot(
             new InventorySnapshot(4, 100, 0, 1, new[] { new InventoryEntry(1, new ItemDefinitionId(Gel), 12) }));
@@ -1846,12 +1851,12 @@ public sealed class PlayerPanelTests
 
     // The first quest log of a world is its baseline, not news; each later one says what changed (Prototype Content §2).
     [UnityTest]
-    public IEnumerator FeedbackLines_SayWhatEachQuestLogChanged_ButNotTheBaseline()
+    public IEnumerator ChatLog_SaysWhatEachQuestLogChanged_ButNotTheBaseline()
     {
         GameClient client = CreateIdleClient();
         ClientWorld world = GiveWorld(client);
         GiveQuest(client);
-        var lines = FeedbackLines.Create(client);
+        var lines = ChatPanel.Create(client);
         m_created.Add(lines.gameObject);
         yield return null;
 

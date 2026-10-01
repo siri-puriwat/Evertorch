@@ -7,7 +7,7 @@ namespace Evertorch.Client
 {
 /// <summary>
 ///     The client's words for a quest (Prototype Content §2), composed from display names and the values on the wire:
-///     the NPC window's lines, the status bar's part, and the feedback lines. No text comes from content.
+///     the NPC window's lines, the status bar's part, and the chat's system lines. No text comes from content.
 /// </summary>
 public static class QuestMessages
 {
@@ -48,7 +48,7 @@ public static class QuestMessages
     }
 
     /// <summary>
-    ///     The feedback line for one quest between two quest logs, or null when nothing a player would notice changed:
+    ///     The chat's system line for one quest between two quest logs, or null when nothing a player would notice changed:
     ///     "Accepted Crawler Hunt.", "Crawler Hunt: Forest Crawler 3/5.", "Crawler Hunt is ready to turn in.", or
     ///     "Completed Crawler Hunt: 150 base experience, 150 job experience, 100 coins."
     /// </summary>

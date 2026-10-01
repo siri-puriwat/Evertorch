@@ -300,7 +300,7 @@ public sealed class LiveServerTownLoopTests : InputTestFixture
             });
         ClientWorld town = client.World!;
         NpcWindow window = client.GetComponentsInChildren<NpcWindow>(true).Single();
-        FeedbackLines lines = client.GetComponentsInChildren<FeedbackLines>(true).Single();
+        ChatPanel lines = client.GetComponentsInChildren<ChatPanel>(true).Single();
         yield return WalkUpTo(client, mouse, window, QuartermasterPrefab);
         yield return WaitUntil(() => window.CoinsText == "Coins: 100", StepTimeoutSeconds);
         Assert.That(window.CoinsText, Is.EqualTo("Coins: 100"), window.Text);
@@ -374,7 +374,7 @@ public sealed class LiveServerTownLoopTests : InputTestFixture
         yield return EnterByName(client, QuestClientName);
         NpcWindow window = client.GetComponentsInChildren<NpcWindow>(true).Single();
         StatusBar bar = client.GetComponentsInChildren<StatusBar>(true).Single();
-        FeedbackLines lines = client.GetComponentsInChildren<FeedbackLines>(true).Single();
+        ChatPanel lines = client.GetComponentsInChildren<ChatPanel>(true).Single();
         InventoryWindow inventory = client.GetComponentsInChildren<InventoryWindow>(true).Single();
         yield return WalkNearTheGateWarden(client);
         yield return WalkUpTo(client, mouse, window, GateWardenPrefab);

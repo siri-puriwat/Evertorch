@@ -7,7 +7,8 @@ namespace Evertorch.Client
 {
 /// <summary>
 ///     The client's words for a character's build (Prototype Content §2), composed from the values of
-///     <see cref="CharacterSheet" /> and <see cref="SkillList" />: the Stats and Skills windows' rows and the feedback
+///     <see cref="CharacterSheet" /> and <see cref="SkillList" />: the Stats and Skills windows' rows and the chat's
+///     system
 ///     lines for what a new sheet or skill list raised.
 /// </summary>
 public static class BuildMessages
@@ -55,7 +56,7 @@ public static class BuildMessages
     }
 
     /// <summary>
-    ///     The feedback lines for what <paramref name="after" /> raised over <paramref name="before" />: "Job level 3."
+    ///     The chat's system lines for what <paramref name="after" /> raised over <paramref name="before" />: "Job level 3."
     ///     and "AGI 6.", each statistic that rose with its new value, or "Every point returned." for the Guildmaster's
     ///     reset, the only change that lowers a statistic or gives skill points back without a job level. A world's
     ///     first sheet, with no <paramref name="before" />, is its baseline and says nothing.
@@ -152,7 +153,7 @@ public static class BuildMessages
     }
 
     /// <summary>
-    ///     The feedback lines for what <paramref name="after" /> raised over <paramref name="before" />: "Strike Lv 2."
+    ///     The chat's system lines for what <paramref name="after" /> raised over <paramref name="before" />: "Strike Lv 2."
     ///     for each skill whose level rose. A world's first list, with no <paramref name="before" />, says nothing.
     /// </summary>
     public static IReadOnlyList<string> DescribeSkills(

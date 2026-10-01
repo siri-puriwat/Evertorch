@@ -163,7 +163,7 @@ public sealed class LiveServerBuildTests : InputTestFixture
             () => database.Execute($"UPDATE characters SET base_level = 3 WHERE name = '{StatsClientName}'"));
         ClientWorld world = client.World!;
         StatsWindow window = client.GetComponentsInChildren<StatsWindow>(true).Single();
-        FeedbackLines lines = client.GetComponentsInChildren<FeedbackLines>(true).Single();
+        ChatPanel lines = client.GetComponentsInChildren<ChatPanel>(true).Single();
         yield return WaitUntil(() => world.Sheet != null, StartTimeoutSeconds);
         Assert.That(world.Sheet?.StatPoints, Is.EqualTo((ushort)6), $"base level 3: {server.JoinOutput()}");
 
@@ -205,7 +205,7 @@ public sealed class LiveServerBuildTests : InputTestFixture
         ClientWorld world = client.World!;
         SkillsWindow window = client.GetComponentsInChildren<SkillsWindow>(true).Single();
         SkillBar bar = client.GetComponentsInChildren<SkillBar>(true).Single();
-        FeedbackLines lines = client.GetComponentsInChildren<FeedbackLines>(true).Single();
+        ChatPanel lines = client.GetComponentsInChildren<ChatPanel>(true).Single();
         TMP_Text slot = bar.GetComponentsInChildren<Button>(true)
             .Single(button => button.name == "Slot 1")
             .GetComponentInChildren<TMP_Text>(true);
@@ -256,7 +256,7 @@ public sealed class LiveServerBuildTests : InputTestFixture
                 $"UPDATE characters SET base_level = 3, agi = 7 WHERE name = '{ResetClientName}'"));
         ClientWorld world = client.World!;
         NpcWindow window = client.GetComponentsInChildren<NpcWindow>(true).Single();
-        FeedbackLines lines = client.GetComponentsInChildren<FeedbackLines>(true).Single();
+        ChatPanel lines = client.GetComponentsInChildren<ChatPanel>(true).Single();
         yield return WaitUntil(() => world.Sheet != null, StartTimeoutSeconds);
         Assert.That(
             (world.Sheet!.Stats[1].Value, world.Sheet.StatPoints),
@@ -324,7 +324,7 @@ public sealed class LiveServerBuildTests : InputTestFixture
         Assert.That(LocalBodyKey(client), Is.EqualTo("character_adventurer"));
 
         NpcWindow window = client.GetComponentsInChildren<NpcWindow>(true).Single();
-        FeedbackLines lines = client.GetComponentsInChildren<FeedbackLines>(true).Single();
+        ChatPanel lines = client.GetComponentsInChildren<ChatPanel>(true).Single();
         yield return WaitUntil(() => NpcView(client, GuildmasterPrefab)?.HasBody == true, StartTimeoutSeconds);
         EntityView guildmaster = NpcView(client, GuildmasterPrefab)!;
         ClickAt(mouse,

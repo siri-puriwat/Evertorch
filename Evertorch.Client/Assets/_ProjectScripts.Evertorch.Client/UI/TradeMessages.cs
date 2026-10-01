@@ -5,12 +5,12 @@ namespace Evertorch.Client
 {
 /// <summary>
 ///     The client's words for a trade (Prototype Content §2), composed from display names and the values the server
-///     committed: a feedback line for a purchase or a sale, and the coins as the NPC window shows them.
+///     committed: a system line for a purchase or a sale, and the coins as the NPC window shows them.
 /// </summary>
 public static class TradeMessages
 {
     /// <summary>
-    ///     The feedback line for a committed change that bought or sold one kind of item, told apart by which way the
+    ///     The system line for a committed change that bought or sold one kind of item, told apart by which way the
     ///     coins and the units moved; null for any other change.
     /// </summary>
     public static string? Describe(InventoryDelta delta, ClientContent? content)

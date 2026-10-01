@@ -1,4 +1,3 @@
-using System;
 using System.Linq;
 using NUnit.Framework;
 using UnityEngine;
@@ -6,27 +5,13 @@ using UnityEngine;
 namespace Evertorch.Client.Tests.EditMode
 {
 /// <summary>
-///     Where the skill bar, the feedback lines, and the windows sit (Prototype Content §2, owner decision 10), in canvas
-///     units, which are 1,080 wide on every screen: the lines clear the bar, neither covers the stick or the touch
+///     Where the skill bar, the chat, and the windows sit (Prototype Content §2, owner decisions 10 and 13), in canvas
+///     units, which are 1,080 wide on every screen: the chat clears the bar, neither covers the stick or the touch
 ///     buttons, and no window row lies over a control.
 /// </summary>
 [TestFixture]
 public sealed class PanelLayoutTests
 {
-    // Three lines of 24-point text with the panel's padding and spacing.
-    private const float LinesHeight = FeedbackLines.MaxHeight;
-
-    [TestCase(607.5f, TestName = "Landscape 1920 x 1080")]
-    [TestCase(1920f, TestName = "Portrait 1080 x 1920")]
-    public void FeedbackLines_SitAboutAFifthUp_RaisedToClearTheSkillBar(float canvasHeight)
-    {
-        float bottom = FeedbackLines.BottomFor(canvasHeight);
-
-        Assert.That(bottom, Is.EqualTo(Math.Max(0.2f * canvasHeight, SkillBar.Top + 16f)).Within(1e-3f));
-        Assert.That(bottom - SkillBar.Top, Is.GreaterThanOrEqualTo(16f));
-        Assert.That(bottom + LinesHeight, Is.LessThan(canvasHeight * 0.6f), "the lines stay in the lower part");
-    }
-
     [TestCase(486f, TestName = "Landscape 20:9")]
     [TestCase(607.5f, TestName = "Landscape 16:9")]
     [TestCase(1920f, TestName = "Portrait 9:16")]
@@ -44,15 +29,11 @@ public sealed class PanelLayoutTests
 
     [TestCase(607.5f)]
     [TestCase(1920f)]
-    public void SkillBarAndFeedbackLines_NeverCoverTheStickOrTheTouchButtons(float canvasHeight)
+    public void SkillBarAndChat_NeverCoverTheStickOrTheTouchButtons(float canvasHeight)
     {
         const float width = ClientUI.CanvasWidth;
         Rect bar = SkillBar.BoundsFor(width, SkillSlots.Count);
-        var lines = new Rect(
-            (width - FeedbackLines.Width) / 2f,
-            FeedbackLines.BottomFor(canvasHeight),
-            FeedbackLines.Width,
-            LinesHeight);
+        Rect lines = ChatPanel.BoundsFor(true);
         Rect stick = TouchControls.StickBounds;
         Assert.That(bar.width, Is.EqualTo(628f), "eight slots of 70 with the padding and the spacing");
         Assert.That(SkillBar.WidthFor(5), Is.EqualTo(604f), "five keep their 112");
@@ -60,63 +41,51 @@ public sealed class PanelLayoutTests
 
         Assert.That(bar.Overlaps(stick), Is.False, "the bar and the stick");
         Assert.That(bar.Overlaps(column), Is.False, "the bar and the touch buttons");
-        Assert.That(lines.Overlaps(bar), Is.False, "the lines and the bar");
-        Assert.That(lines.Overlaps(stick), Is.False, "the lines and the stick");
-        Assert.That(lines.Overlaps(column), Is.False, "the lines and the touch buttons");
+        Assert.That(lines.Overlaps(bar), Is.False, "the log and the bar");
+        Assert.That(lines.Overlaps(stick), Is.False, "the log and the stick");
+        Assert.That(lines.Overlaps(column), Is.False, "the log and the touch buttons");
+        Assert.That(ChatPanel.BoundsFor(false).Overlaps(bar), Is.False, "the desktop chat and the bar");
         Assert.That(bar.xMin, Is.GreaterThan(stick.xMax));
         Assert.That(bar.xMax, Is.LessThan(column.xMin));
     }
 
-    // A row over a skill slot, the stick, or the feedback lines would hide them or take the presses meant for them, and
-    // a press of a row buys or sells (Milestone 7 review finding 1).
+    // A row over a skill slot, the stick, or the chat would hide them or take the presses meant for them, and a press of
+    // a row buys or sells (Milestone 7 review finding 1).
     [TestCase(486f)]
     [TestCase(607.5f)]
     [TestCase(1920f)]
-    public void NpcWindow_HangsBelowTheStatusBar_AndStopsAboveTheFeedbackLinesTheSkillBarAndTheStick(float canvasHeight)
+    public void NpcWindow_HangsBelowTheStatusBar_AndStopsAboveTheChatTheSkillBarAndTheStick(float canvasHeight)
     {
         const float width = ClientUI.CanvasWidth;
         Rect bar = SkillBar.BoundsFor(width, SkillSlots.Count);
-        var lines = new Rect(
-            (width - FeedbackLines.Width) / 2f,
-            FeedbackLines.BottomFor(canvasHeight),
-            FeedbackLines.Width,
-            LinesHeight);
+        Rect lines = ChatPanel.BoundsFor(true);
         Rect withTouch = NpcWindow.BoundsFor(canvasHeight, 100, true);
         Rect withoutTouch = NpcWindow.BoundsFor(canvasHeight, 100, false);
 
         Assert.That(withTouch.yMax, Is.EqualTo(canvasHeight - 64f).Within(1e-3f), "below the status bar");
         Assert.That(withTouch.Overlaps(TouchControls.StickBounds), Is.False, "no row over the stick");
         Assert.That(withTouch.Overlaps(bar), Is.False, "nor over the skill bar");
-        Assert.That(withTouch.Overlaps(lines), Is.False, "nor over the feedback lines");
-        Assert.That(
-            withoutTouch.yMin,
-            Is.EqualTo(FeedbackLines.TopFor(canvasHeight) + 8f).Within(1e-3f),
-            "without the stick, to the lines");
+        Assert.That(withTouch.Overlaps(lines), Is.False, "nor over the chat");
+        Assert.That(withoutTouch.Overlaps(ChatPanel.BoundsFor(false)), Is.False, "the desktop chat");
+        Assert.That(withoutTouch.yMin, Is.EqualTo(270f).Within(1e-3f), "without the stick, to y 270 over the chat");
         Assert.That(withTouch.height, Is.GreaterThan(56f + 2 * 30f + 6f), "two rows show on the shortest screen");
     }
 
-    // The Stats window shares the NPC window's place and stops above the feedback lines, which it would otherwise
-    // hide (Prototype Content §2; Milestone 7 review finding 1).
+    // The Stats window shares the NPC window's place and stops above the chat, which it would otherwise hide
+    // (Prototype Content §2; Milestone 7 review finding 1).
     [TestCase(486f)]
     [TestCase(607.5f)]
     [TestCase(1920f)]
-    public void StatsWindow_HangsBelowTheStatusBar_AndStopsAboveTheFeedbackLinesAndTheStick(float canvasHeight)
+    public void StatsWindow_HangsBelowTheStatusBar_AndStopsAboveTheChatAndTheStick(float canvasHeight)
     {
-        const float width = ClientUI.CanvasWidth;
-        var lines = new Rect(
-            (width - FeedbackLines.Width) / 2f,
-            FeedbackLines.BottomFor(canvasHeight),
-            FeedbackLines.Width,
-            LinesHeight);
         Rect withTouch = StatsWindow.BoundsFor(canvasHeight, true);
         Rect withoutTouch = StatsWindow.BoundsFor(canvasHeight, false);
 
-        Assert.That(LinesHeight, Is.EqualTo(124f), "three lines of 32 with 4 between and 10 around");
         Assert.That(withTouch.yMax, Is.EqualTo(canvasHeight - 64f).Within(1e-3f), "below the status bar");
-        Assert.That(withTouch.Overlaps(lines), Is.False, "clear of the feedback lines");
+        Assert.That(withTouch.Overlaps(ChatPanel.BoundsFor(true)), Is.False, "clear of the chat");
         Assert.That(withTouch.Overlaps(TouchControls.StickBounds), Is.False, "clear of the stick");
-        Assert.That(withoutTouch.Overlaps(lines), Is.False);
-        Assert.That(withTouch.yMin, Is.GreaterThanOrEqualTo(FeedbackLines.TopFor(canvasHeight) + 8f - 1e-3f));
+        Assert.That(withoutTouch.Overlaps(ChatPanel.BoundsFor(false)), Is.False);
+        Assert.That(withTouch.yMin, Is.GreaterThanOrEqualTo(ChatPanel.TopFor(canvasHeight, true) + 8f - 1e-3f));
         Assert.That(withTouch.height, Is.GreaterThanOrEqualTo(56f + 2 * 30f), "two rows show on the shortest screen");
     }
 
@@ -143,18 +112,14 @@ public sealed class PanelLayoutTests
     [TestCase(486f)]
     [TestCase(607.5f)]
     [TestCase(1920f)]
-    public void SkillsWindow_HangsBelowTheStatusBar_AndStopsAboveTheFeedbackLinesAndTheStick(float canvasHeight)
+    public void SkillsWindow_HangsBelowTheStatusBar_AndStopsAboveTheChatAndTheStick(float canvasHeight)
     {
-        const float width = ClientUI.CanvasWidth;
-        var lines = new Rect(
-            (width - FeedbackLines.Width) / 2f,
-            FeedbackLines.BottomFor(canvasHeight),
-            FeedbackLines.Width,
-            LinesHeight);
         Rect withTouch = SkillsWindow.BoundsFor(canvasHeight, 11, true);
+        Rect withoutTouch = SkillsWindow.BoundsFor(canvasHeight, 11, false);
 
         Assert.That(withTouch.yMax, Is.EqualTo(canvasHeight - 64f).Within(1e-3f), "below the status bar");
-        Assert.That(withTouch.Overlaps(lines), Is.False, "clear of the feedback lines");
+        Assert.That(withTouch.Overlaps(ChatPanel.BoundsFor(true)), Is.False, "clear of the chat");
+        Assert.That(withoutTouch.Overlaps(ChatPanel.BoundsFor(false)), Is.False, "clear of the desktop chat");
         Assert.That(withTouch.Overlaps(TouchControls.StickBounds), Is.False, "clear of the stick");
         Assert.That(withTouch.height, Is.GreaterThanOrEqualTo(56f + 2 * 30f), "two rows show on the shortest screen");
     }
@@ -188,6 +153,20 @@ public sealed class PanelLayoutTests
         Assert.That(beside.x, Is.GreaterThan(NpcWindow.RightFor(true)), "the frame clears the windows");
         Assert.That(beside.y, Is.LessThan(InventoryWindow.Left), "and the inventory window");
         Assert.That(beside.y - beside.x, Is.GreaterThanOrEqualTo(200f), "still wide enough for a name and a bar");
+    }
+
+    // The layout table of Prototype Content §2: x 8 to 540 and y 128 to 262 on the desktop, x 226 to 762 and y 128 to
+    // 200 with the touch controls.
+    [Test]
+    public void Chat_StandsWhereTheLayoutPutsIt_AboveTheSkillBar()
+    {
+        Rect desktop = ChatPanel.BoundsFor(false);
+        Rect touch = ChatPanel.BoundsFor(true);
+
+        Assert.That((desktop.xMin, desktop.xMax, desktop.yMin, desktop.yMax), Is.EqualTo((8f, 540f, 128f, 262f)));
+        Assert.That((touch.xMin, touch.xMax, touch.yMin, touch.yMax), Is.EqualTo((226f, 762f, 128f, 200f)));
+        Assert.That(desktop.yMin - SkillBar.Top, Is.GreaterThanOrEqualTo(8f), "clear of the bar");
+        Assert.That(ChatPanel.TopFor(607.5f, false), Is.EqualTo(262f), "the windows stop above it");
     }
 
     [Test]

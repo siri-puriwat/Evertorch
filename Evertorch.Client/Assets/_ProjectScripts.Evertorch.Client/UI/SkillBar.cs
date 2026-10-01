@@ -28,7 +28,7 @@ public sealed class SkillBar : MonoBehaviour
     public const float Height = SlotHeight + 2 * Padding;
 
     /// <summary>
-    ///     The bar's top edge in canvas units, which the feedback lines keep clear of.
+    ///     The bar's top edge in canvas units, which the chat keeps clear of.
     /// </summary>
     public const float Top = BottomInset + Height;
 

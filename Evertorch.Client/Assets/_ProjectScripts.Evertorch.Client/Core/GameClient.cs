@@ -97,7 +97,8 @@ public sealed class GameClient : MonoBehaviour
     private StatsWindow? m_statsWindow;
     private SkillsWindow? m_skillsWindow;
     private SkillBar? m_skillBar;
-    private FeedbackLines? m_feedback;
+    private ChatPanel? m_chat;
+    private PlayerInputGate? m_inputGate;
     private CombatPresenter? m_combat;
     private NamePlatePresenter? m_namePlates;
     private ProjectilePresenter? m_projectiles;
@@ -166,6 +167,16 @@ public sealed class GameClient : MonoBehaviour
     public bool IsInWorld => m_world != null || m_isChangingMap;
 
     public CombatPresenter? Combat => m_combat;
+
+    /// <summary>
+    ///     The chat log, which outlives every world and connection of this client (Prototype Content §2).
+    /// </summary>
+    public ChatLog ChatLog { get; } = new();
+
+    /// <summary>
+    ///     Whether the chat input has focus, which shuts every gameplay key (Prototype Content §4).
+    /// </summary>
+    public bool IsTyping => m_inputGate != null && m_inputGate.IsShut;
 
     public NamePlatePresenter? NamePlates => m_namePlates;
 
@@ -269,8 +280,8 @@ public sealed class GameClient : MonoBehaviour
         m_skillsWindow.transform.SetParent(transform, false);
         m_skillBar = SkillBar.Create(this);
         m_skillBar.transform.SetParent(transform, false);
-        m_feedback = FeedbackLines.Create(this);
-        m_feedback.transform.SetParent(transform, false);
+        m_chat = ChatPanel.Create(this);
+        m_chat.transform.SetParent(transform, false);
         m_login = LoginPanel.Create(this);
         m_login.transform.SetParent(transform, false);
 
@@ -585,6 +596,7 @@ public sealed class GameClient : MonoBehaviour
         Connection.ChangedMap += OnChangedMap;
         Connection.LeftWorld += OnLeftWorld;
         Connection.Closed += OnClosed;
+        Connection.ChatLineReceived += ChatLog.Add;
         Status = $"Connecting to {session.Host}:{session.Port}";
         Connection.Connect(session.Host, session.Port);
     }
@@ -842,7 +854,7 @@ public sealed class GameClient : MonoBehaviour
         if (definition.TargetType == SkillTargetType.Enemy
             && (m_world!.Target == default || m_world.IsPlayer(m_world.Target)))
         {
-            m_feedback?.Add("Choose a target first.");
+            ChatLog.AddSystem("Choose a target first.");
             return;
         }
 
@@ -1269,7 +1281,7 @@ public sealed class GameClient : MonoBehaviour
         // A selected player is only ever healed: the attack key or button does nothing to it (Gameplay Systems §6).
         if (m_world != null && m_world.IsPlayer(target))
         {
-            m_feedback?.Add("Players cannot be attacked.");
+            ChatLog.AddSystem("Players cannot be attacked.");
             return;
         }
 
@@ -1406,6 +1418,31 @@ public sealed class GameClient : MonoBehaviour
         if (MapSceneResolver.IsMapScene(SceneManager.GetActiveScene().name))
         {
             SceneManager.LoadScene(BootstrapRedirect.MainMenuScene);
+        }
+    }
+
+    /// <summary>
+    ///     Says <paramref name="text" /> on <paramref name="channel" />, to <paramref name="recipient" /> for a whisper;
+    ///     the chat panel's request. 0 when nothing was sent, else the command's sequence.
+    /// </summary>
+    public uint Say(ChatChannel channel, string recipient, string text)
+    {
+        return Connection != null ? Connection.SendChat(channel, recipient, text) : 0;
+    }
+
+    /// <summary>
+    ///     Shuts the gameplay keys while the chat input has focus, and opens them again when it closes.
+    /// </summary>
+    public void SetTyping(bool isTyping)
+    {
+        m_inputGate ??= new PlayerInputGate(m_inputActions != null ? m_inputActions : InputSystem.actions);
+        if (isTyping)
+        {
+            m_inputGate.Shut();
+        }
+        else
+        {
+            m_inputGate.Open();
         }
     }
 

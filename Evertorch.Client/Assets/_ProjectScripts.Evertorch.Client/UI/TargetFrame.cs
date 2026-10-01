@@ -17,7 +17,7 @@ namespace Evertorch.Client
 /// </summary>
 public sealed class TargetFrame : MonoBehaviour
 {
-    // With the status bar, under the feedback lines and the login panel.
+    // With the status bar, under the chat and the login panel.
     private const int SortingOrder = 6;
     private const float Width = 420f;
 

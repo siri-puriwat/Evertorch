@@ -158,7 +158,7 @@ public sealed class LiveServerPrototypeTests : InputTestFixture
         yield return EnterByName(client, ClientName);
         ClientWorld ground = client.World!;
         LoginPanel login = client.GetComponentInChildren<LoginPanel>();
-        FeedbackLines lines = client.GetComponentInChildren<FeedbackLines>();
+        ChatPanel lines = client.GetComponentInChildren<ChatPanel>();
         lines.Add("Before the crossing");
 
         Assert.That(
@@ -177,7 +177,7 @@ public sealed class LiveServerPrototypeTests : InputTestFixture
         Assert.That(field.Map.Value, Is.EqualTo("map.training_field"), $"{client.Status} {server.JoinOutput()}");
         Assert.That(SceneManager.GetActiveScene().name, Is.EqualTo(FieldScene));
         Assert.That(wasLoginShown, Is.False, "the login panel never showed through the change");
-        Assert.That(lines.Text, Is.Empty, "the crossing cleared the feedback lines");
+        Assert.That(lines.Text, Does.Contain("Before the crossing"), "the log outlives the crossing");
         Assert.That(client.Status, Is.EqualTo("In Training Field"));
         Assert.That(client.Connection!.MapEpoch, Is.EqualTo(1));
         Assert.That(

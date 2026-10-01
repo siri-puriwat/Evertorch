@@ -82,6 +82,45 @@ public sealed class SharedIntentPathTests : InputTestFixture
         Assert.That(intent.DirectionZ, Is.EqualTo(0.7071f).Within(1e-3f));
     }
 
+    // While the chat input has focus no gameplay key acts: W, A, S, D, 1, and 2 do nothing, and once it closes they act
+    // again (Prototype Content §4; critique finding 16 of the pre-Milestone-12 review).
+    [Test]
+    public void GameplayKeys_WhileTheChatGateIsShut_DoNothing_AndActOnceItOpens()
+    {
+        Keyboard keyboard = InputSystem.AddDevice<Keyboard>();
+        Rig rig = CreateRig();
+        SkillInputSource skills = rig.CreateSkillSource();
+        var gate = new PlayerInputGate(rig.Actions);
+
+        gate.Shut();
+        foreach (Key key in new[] { Key.W, Key.A, Key.S, Key.D })
+        {
+            SetKeys(keyboard, key);
+            rig.Tick();
+            SetKeys(keyboard);
+        }
+
+        Press(keyboard.digit1Key);
+        Release(keyboard.digit1Key);
+        Press(keyboard.digit2Key);
+        Release(keyboard.digit2Key);
+        int slotWhileShut = skills.TakeSlot();
+        int sentWhileShut = rig.Sent.Count;
+        WorldPosition stood = rig.World.Predictor.Position;
+        gate.Open();
+        SetKeys(keyboard, Key.W);
+        rig.Tick();
+        SetKeys(keyboard);
+        Press(keyboard.digit2Key);
+        Release(keyboard.digit2Key);
+
+        Assert.That(gate.IsShut, Is.False);
+        Assert.That((sentWhileShut, slotWhileShut), Is.EqualTo((0, 0)), "nothing moved and no slot was asked for");
+        Assert.That(stood, Is.EqualTo(new WorldPosition(2.5f, 0f, 5.5f)));
+        Assert.That(rig.Sent, Has.Count.EqualTo(1), "W walks again");
+        Assert.That(skills.TakeSlot(), Is.EqualTo(2), "2 asks for its slot again");
+    }
+
     [Test]
     public void Keyboard_WhileDead_ProducesNoMovement()
     {
@@ -814,6 +853,8 @@ public sealed class SharedIntentPathTests : InputTestFixture
         public MovementController Controller { get; }
 
         public ClientWorld World => m_world;
+
+        public InputActionAsset Actions => m_actions;
 
         public List<MoveIntent> Sent { get; } = new();
 

@@ -352,7 +352,7 @@ public sealed class LiveServerCombatTests : InputTestFixture
         Assert.That(held, Is.GreaterThan(0u), $"last refusal {world.LastRejection}, status {client.Status}");
         Assert.That(pickedUp.Any(picked => picked.Recipient == world.LocalEntity), Is.True);
         uint revision = world.Inventory.Revision;
-        FeedbackLines feedback = client.GetComponentsInChildren<FeedbackLines>(true).Single();
+        ChatPanel feedback = client.GetComponentsInChildren<ChatPanel>(true).Single();
         InventoryWindow inventory = client.GetComponentsInChildren<InventoryWindow>(true).Single();
         yield return WaitUntil(() => inventory.Text == $"Slime Gel x {held}", 5f);
         Assert.That(feedback.Text, Does.Contain("Picked up Slime Gel x "), "the pickup is announced by name");
@@ -628,7 +628,7 @@ public sealed class LiveServerCombatTests : InputTestFixture
             yield return null;
         }
 
-        FeedbackLines lines = client.GetComponentsInChildren<FeedbackLines>(true).Single();
+        ChatPanel lines = client.GetComponentsInChildren<ChatPanel>(true).Single();
         var skill = (SkillState?)typeof(GameClient)
             .GetField("m_skill", BindingFlags.NonPublic | BindingFlags.Instance)!
             .GetValue(client);

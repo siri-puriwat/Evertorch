@@ -18,7 +18,7 @@ namespace Evertorch.Client
 /// </summary>
 public sealed class SkillsWindow : MonoBehaviour
 {
-    // With the NPC window, under the feedback lines and the login panel.
+    // With the NPC window, under the chat and the login panel.
     private const int SortingOrder = 6;
     private const float Width = 420f;
     private const float Margin = 8f;
@@ -101,7 +101,7 @@ public sealed class SkillsWindow : MonoBehaviour
     /// <summary>
     ///     Where the window sits on a canvas <paramref name="canvasHeight" /> units tall with <paramref name="skills" />
     ///     skills in its tree, in canvas units from the bottom-left corner: below the status bar, down to the top of the
-    ///     feedback lines, the skill bar, or the stick while the touch controls show, whichever is highest. Rows beyond
+    ///     chat, the skill bar, or the stick while the touch controls show, whichever is highest. Rows beyond
     ///     that scroll.
     /// </summary>
     public static Rect BoundsFor(float canvasHeight, int skills, bool isTouchShown)
@@ -140,12 +140,12 @@ public sealed class SkillsWindow : MonoBehaviour
         UiBuilder.SetActive(m_panel!, false);
     }
 
-    // A row over a skill slot, the stick, or the feedback lines would hide them or take the presses meant for them.
+    // A row over a skill slot, the stick, or the chat would hide them or take the presses meant for them.
     private static float ListHeightFor(float canvasHeight, int rows, bool isTouchShown)
     {
         float needed = rows * RowHeight + Math.Max(0, rows - 1) * RowSpacing;
         float floor = Math.Max(
-                Math.Max(SkillBar.Top, FeedbackLines.TopFor(canvasHeight)),
+                Math.Max(SkillBar.Top, ChatPanel.TopFor(canvasHeight, isTouchShown)),
                 isTouchShown ? TouchControls.StickBounds.yMax : 0f)
             + Margin;
         float room = canvasHeight - (StatusBarHeight + Margin) - Chrome - floor;

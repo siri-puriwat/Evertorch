@@ -166,13 +166,13 @@ public sealed class SkillTargetingTests
     public void PromptFor_SaysWhatToClickOrTap_AndHowToCancel()
     {
         Assert.That(
-            FeedbackLines.PromptFor("Arcane Bolt", SkillTargetType.Enemy, false),
+            ChatPanel.PromptFor("Arcane Bolt", SkillTargetType.Enemy, false),
             Is.EqualTo("Arcane Bolt: click a target. Esc cancels."));
         Assert.That(
-            FeedbackLines.PromptFor("Mend", SkillTargetType.Ally, false),
+            ChatPanel.PromptFor("Mend", SkillTargetType.Ally, false),
             Is.EqualTo("Mend: click a player or yourself. Esc cancels."));
         Assert.That(
-            FeedbackLines.PromptFor("Arcane Bolt", SkillTargetType.Enemy, true),
+            ChatPanel.PromptFor("Arcane Bolt", SkillTargetType.Enemy, true),
             Is.EqualTo("Arcane Bolt: tap a target. Clear cancels."));
     }
 }
