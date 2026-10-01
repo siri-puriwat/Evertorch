@@ -20,6 +20,39 @@ public sealed class RejectionMessagesTests
         Assert.That(RejectionMessages.Describe(reason), Is.EqualTo(expected));
     }
 
+    // A party command's refusal is worded by the command and the name it carried (Prototype Content §2); reason 7
+    // means the party's last change is in flight, where for a pickup it means the drop is being picked up.
+    [TestCase(PartyCommand.Invite, CommandRejectionReason.InvalidTarget, "Bobby is not online.")]
+    [TestCase(PartyCommand.Invite, CommandRejectionReason.NotAllowedNow, "Bobby cannot be invited now.")]
+    [TestCase(
+        PartyCommand.Invite,
+        CommandRejectionReason.RequirementNotMet,
+        "Bobby cannot join: your party is full or holds a character of the same account.")]
+    [TestCase(PartyCommand.Reply, CommandRejectionReason.InvalidTarget, "Bobby's invite is no longer open.")]
+    [TestCase(PartyCommand.Reply, CommandRejectionReason.NotAllowedNow, "You cannot join Bobby's party now.")]
+    [TestCase(
+        PartyCommand.Reply,
+        CommandRejectionReason.RequirementNotMet,
+        "Bobby's party is full, or holds a character of your account.")]
+    [TestCase(PartyCommand.Leave, CommandRejectionReason.NotAllowedNow, "You are not in a party.")]
+    [TestCase(PartyCommand.Kick, CommandRejectionReason.InvalidTarget, "Bobby is not in your party.")]
+    [TestCase(PartyCommand.Lead, CommandRejectionReason.NotAllowedNow, "Only the party's leader can do that.")]
+    [TestCase(
+        PartyCommand.Kick,
+        CommandRejectionReason.Busy,
+        "Your party's last change is still going through. Try again in a moment.")]
+    [TestCase(
+        PartyCommand.Invite,
+        CommandRejectionReason.ServiceUnavailable,
+        "The server cannot save right now. Try again in a moment.")]
+    public void DescribeParty_WordsTheRefusalByItsCommandAndName(
+        PartyCommand command,
+        CommandRejectionReason reason,
+        string expected)
+    {
+        Assert.That(RejectionMessages.DescribeParty(command, "Bobby", reason), Is.EqualTo(expected));
+    }
+
     [Test]
     public void Describe_AReasonThisClientDoesNotKnow_StillSaysTheServerRefused()
     {

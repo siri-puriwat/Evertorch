@@ -5,7 +5,7 @@ public static class ProtocolConstants
     /// <summary>
     ///     Raised whenever a field's meaning, order, width, or required semantics change. Client and server must match.
     /// </summary>
-    public const ushort ProtocolVersion = 33;
+    public const ushort ProtocolVersion = 34;
 
     /// <summary>
     ///     The build a client reports in its hello, and the one a server admits unless configured otherwise

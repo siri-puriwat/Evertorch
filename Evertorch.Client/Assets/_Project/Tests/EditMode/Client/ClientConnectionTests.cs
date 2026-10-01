@@ -659,6 +659,37 @@ public sealed class ClientConnectionTests
     }
 
     [Test]
+    public void PartyMessages_InTheWorld_AreRaised_AndPartyCommandsRememberWhatTheyNamed()
+    {
+        var harness = new Harness();
+        harness.EnterWorld();
+        var heard = new List<string>();
+        harness.Connection.PartyEventReceived += message => heard.Add($"{message.Kind} {message.Name}");
+        harness.Connection.PartyRosterReceived += message => heard.Add($"roster {message.Members.Count}");
+        harness.Connection.PartyMemberStatusReceived += message => heard.Add($"status {message.HealthPermille}");
+        var invited = new PartyEvent(PartyEventKind.Invited, "Bobby");
+        var roster = new PartyRoster(0, Array.Empty<PartyRosterEntry>());
+        var status = new PartyMemberStatus("Bobby", 500, 1000);
+        int before = harness.Transport.Sent.Count;
+
+        harness.Deliver(ProtocolChannel.Control, Encode(invited.GetEncodedLength(), invited.Write));
+        harness.Deliver(ProtocolChannel.Control, Encode(roster.GetEncodedLength(), roster.Write));
+        harness.Deliver(ProtocolChannel.Control, Encode(status.GetEncodedLength(), status.Write));
+        uint reply = harness.Connection.SendPartyReply("Bobby", true);
+        uint leave = harness.Connection.SendPartyLeave();
+        uint refused = harness.Connection.SendPartyInvite("Bo");
+
+        Assert.That(heard, Is.EqualTo(new[] { "Invited Bobby", "roster 0", "status 500" }));
+        Assert.That(refused, Is.Zero, "a name that breaks the rule is not sent");
+        Assert.That(harness.Transport.Sent.Count - before, Is.EqualTo(2));
+        Assert.That(harness.Connection.TryGetPartySequence(reply, out PartyCommand command, out string name), Is.True);
+        Assert.That((command, name), Is.EqualTo((PartyCommand.Reply, "Bobby")));
+        Assert.That(harness.Connection.TryGetPartySequence(leave, out PartyCommand left, out _), Is.True);
+        Assert.That(left, Is.EqualTo(PartyCommand.Leave));
+        Assert.That(harness.Connection.MalformedMessages + harness.Connection.UnexpectedMessages, Is.Zero);
+    }
+
+    [Test]
     public void Payload_OnTheWrongChannel_IsCountedAndIgnored()
     {
         var harness = new Harness();

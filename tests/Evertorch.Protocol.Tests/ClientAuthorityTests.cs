@@ -47,7 +47,8 @@ public sealed class ClientAuthorityTests
                     "AttackEntity", "CancelAction", "UseSkill", "PickupItem", "ChatSend", "Respawn", "CreateCharacter",
                     "Logout",
                     "InventoryResyncRequest", "EquipItem", "UnequipItem", "UseItem", "BuyItem", "SellItem",
-                    "AcceptQuest", "CompleteQuest", "AllocateStat", "LearnSkill", "ResetBuild", "ChangeJob"
+                    "AcceptQuest", "CompleteQuest", "AllocateStat", "LearnSkill", "ResetBuild", "ChangeJob",
+                    "PartyInvite", "PartyReply", "PartyLeave", "PartyKick", "PartyLead"
                 }),
             "a new client message must be checked against the rules below before it joins this list");
     }

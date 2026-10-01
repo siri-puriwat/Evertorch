@@ -40,6 +40,11 @@ public static class MessageRouting
             case MessageOpcode.ResetBuild:
             case MessageOpcode.ChangeJob:
             case MessageOpcode.ChatSend:
+            case MessageOpcode.PartyInvite:
+            case MessageOpcode.PartyReply:
+            case MessageOpcode.PartyLeave:
+            case MessageOpcode.PartyKick:
+            case MessageOpcode.PartyLead:
             case MessageOpcode.ServerHello:
             case MessageOpcode.WorldEntered:
             case MessageOpcode.EntitySpawn:
@@ -69,6 +74,9 @@ public static class MessageRouting
             case MessageOpcode.InventorySnapshot:
             case MessageOpcode.InventoryChanged:
             case MessageOpcode.ChatReceived:
+            case MessageOpcode.PartyEvent:
+            case MessageOpcode.PartyRoster:
+            case MessageOpcode.PartyMemberStatus:
                 return true;
             case MessageOpcode.MoveInput:
             case MessageOpcode.StopMovement:

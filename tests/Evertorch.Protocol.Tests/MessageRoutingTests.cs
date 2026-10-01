@@ -40,6 +40,11 @@ public sealed class MessageRoutingTests
     [TestCase(MessageOpcode.ResetBuild)]
     [TestCase(MessageOpcode.ChangeJob)]
     [TestCase(MessageOpcode.ChatSend)]
+    [TestCase(MessageOpcode.PartyInvite)]
+    [TestCase(MessageOpcode.PartyReply)]
+    [TestCase(MessageOpcode.PartyLeave)]
+    [TestCase(MessageOpcode.PartyKick)]
+    [TestCase(MessageOpcode.PartyLead)]
     [TestCase(MessageOpcode.ServerHello)]
     [TestCase(MessageOpcode.WorldEntered)]
     [TestCase(MessageOpcode.EntitySpawn)]
@@ -69,6 +74,9 @@ public sealed class MessageRoutingTests
     [TestCase(MessageOpcode.InventorySnapshot)]
     [TestCase(MessageOpcode.InventoryChanged)]
     [TestCase(MessageOpcode.ChatReceived)]
+    [TestCase(MessageOpcode.PartyEvent)]
+    [TestCase(MessageOpcode.PartyRoster)]
+    [TestCase(MessageOpcode.PartyMemberStatus)]
     public void TryGetRoute_ForSessionAndLifecycleMessages_IsReliableOrderedOnControl(MessageOpcode opcode)
     {
         MessageRouting.TryGetRoute(opcode, out ProtocolChannel channel, out MessageDelivery delivery);
@@ -116,6 +124,8 @@ public sealed class MessageRoutingTests
     [TestCase(MessageOpcode.ChangeJob, true)]
     [TestCase(MessageOpcode.ChatSend, true)]
     [TestCase(MessageOpcode.ChatReceived, false)]
+    [TestCase(MessageOpcode.PartyLead, true)]
+    [TestCase(MessageOpcode.PartyMemberStatus, false)]
     [TestCase(MessageOpcode.Respawn, true)]
     [TestCase(MessageOpcode.MoveInput, true)]
     [TestCase(MessageOpcode.StopMovement, true)]
@@ -161,6 +171,7 @@ public sealed class MessageRoutingTests
             "InventoryResyncRequest=0x000F", "EquipItem=0x0010", "UnequipItem=0x0011", "UseItem=0x0012",
             "BuyItem=0x0013", "SellItem=0x0014", "AcceptQuest=0x0015", "CompleteQuest=0x0016", "AllocateStat=0x0017",
             "LearnSkill=0x0018", "ResetBuild=0x0019", "ChangeJob=0x001A",
+            "PartyInvite=0x001B", "PartyReply=0x001C", "PartyLeave=0x001D", "PartyKick=0x001E", "PartyLead=0x001F",
             "ServerHello=0x8001", "WorldEntered=0x8003",
             "EntitySpawn=0x8004", "EntityDespawn=0x8005", "EntitySnapshot=0x8006", "TargetChanged=0x8007",
             "AttackStarted=0x8008", "Damage=0x8009", "EntityDied=0x800A", "SkillCastStarted=0x800B",
@@ -172,7 +183,7 @@ public sealed class MessageRoutingTests
             "CreateCharacterResult=0x8017", "CommandRejected=0x8018",
             "LogoutComplete=0x8019", "CharacterProgress=0x801A", "SkillList=0x801B",
             "StatusEffects=0x801C", "NpcServices=0x801D", "QuestLog=0x801E", "CharacterSheet=0x801F",
-            "WornWeaponChanged=0x8020"
+            "WornWeaponChanged=0x8020", "PartyEvent=0x8021", "PartyRoster=0x8022", "PartyMemberStatus=0x8023"
         };
 
         string[] actual = ((MessageOpcode[])Enum.GetValues(typeof(MessageOpcode)))
@@ -193,9 +204,9 @@ public sealed class MessageRoutingTests
     }
 
     [Test]
-    public void ProtocolVersion_IsThirtyThree()
+    public void ProtocolVersion_IsThirtyFour()
     {
-        Assert.That(ProtocolConstants.ProtocolVersion, Is.EqualTo(33));
+        Assert.That(ProtocolConstants.ProtocolVersion, Is.EqualTo(34));
     }
 
     [Test]

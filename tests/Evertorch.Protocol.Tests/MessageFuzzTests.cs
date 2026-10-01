@@ -110,6 +110,54 @@ public sealed class MessageFuzzTests
             Encode(ChatMessageTests.SendGolden),
             payload => ChatSend.TryRead(payload, out ChatSend? message) ? Encode(message!) : null);
         yield return Case(
+            "PartyInvite",
+            Encode(PartyMessageTests.InviteGolden.GetEncodedLength(), PartyMessageTests.InviteGolden.Write),
+            payload => PartyInvite.TryRead(payload, out PartyInvite? message)
+                ? Encode(message!.GetEncodedLength(), message.Write)
+                : null);
+        yield return Case(
+            "PartyReply",
+            Encode(PartyMessageTests.ReplyGolden.GetEncodedLength(), PartyMessageTests.ReplyGolden.Write),
+            payload => PartyReply.TryRead(payload, out PartyReply? message)
+                ? Encode(message!.GetEncodedLength(), message.Write)
+                : null);
+        yield return Case(
+            "PartyLeave",
+            Encode(PartyLeave.EncodedLength, PartyMessageTests.LeaveGolden.Write),
+            payload => PartyLeave.TryRead(payload, out PartyLeave? message)
+                ? Encode(PartyLeave.EncodedLength, message!.Write)
+                : null);
+        yield return Case(
+            "PartyKick",
+            Encode(PartyMessageTests.KickGolden.GetEncodedLength(), PartyMessageTests.KickGolden.Write),
+            payload => PartyKick.TryRead(payload, out PartyKick? message)
+                ? Encode(message!.GetEncodedLength(), message.Write)
+                : null);
+        yield return Case(
+            "PartyLead",
+            Encode(PartyMessageTests.LeadGolden.GetEncodedLength(), PartyMessageTests.LeadGolden.Write),
+            payload => PartyLead.TryRead(payload, out PartyLead? message)
+                ? Encode(message!.GetEncodedLength(), message.Write)
+                : null);
+        yield return Case(
+            "PartyEvent",
+            Encode(PartyMessageTests.EventGolden.GetEncodedLength(), PartyMessageTests.EventGolden.Write),
+            payload => PartyEvent.TryRead(payload, out PartyEvent? message)
+                ? Encode(message!.GetEncodedLength(), message.Write)
+                : null);
+        yield return Case(
+            "PartyRoster",
+            Encode(PartyMessageTests.RosterGolden.GetEncodedLength(), PartyMessageTests.RosterGolden.Write),
+            payload => PartyRoster.TryRead(payload, out PartyRoster? message)
+                ? Encode(message!.GetEncodedLength(), message.Write)
+                : null);
+        yield return Case(
+            "PartyMemberStatus",
+            Encode(PartyMessageTests.StatusGolden.GetEncodedLength(), PartyMessageTests.StatusGolden.Write),
+            payload => PartyMemberStatus.TryRead(payload, out PartyMemberStatus? message)
+                ? Encode(message!.GetEncodedLength(), message.Write)
+                : null);
+        yield return Case(
             "ChatReceived",
             Encode(ChatMessageTests.ReceivedGolden),
             payload => ChatReceived.TryRead(payload, out ChatReceived? message) ? Encode(message!) : null);
@@ -780,6 +828,15 @@ public sealed class MessageFuzzTests
     {
         byte[] buffer = new byte[message.GetEncodedLength()];
         message.Write(buffer);
+        return buffer;
+    }
+
+    private delegate int SpanWriter(Span<byte> destination);
+
+    private static byte[] Encode(int length, SpanWriter write)
+    {
+        byte[] buffer = new byte[length];
+        write(buffer);
         return buffer;
     }
 

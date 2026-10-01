@@ -25,6 +25,7 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
     private readonly Dictionary<QuestDefinitionId, NpcQuestOffer> m_questOffers = new();
     private readonly HashSet<uint> m_equipSequences = new();
     private readonly Dictionary<uint, (ChatChannel Channel, string Recipient)> m_chatSequences = new();
+    private readonly Dictionary<uint, (PartyCommand Command, string Name)> m_partySequences = new();
     private uint m_commandSequence;
 
     public ClientConnection(IClientTransport transport, ClientConnectionSettings settings, IMapProvider maps)
@@ -164,6 +165,15 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
                 break;
             case MessageOpcode.ChatReceived:
                 OnChatReceived(payload);
+                break;
+            case MessageOpcode.PartyEvent:
+                OnPartyEvent(payload);
+                break;
+            case MessageOpcode.PartyRoster:
+                OnPartyRoster(payload);
+                break;
+            case MessageOpcode.PartyMemberStatus:
+                OnPartyMemberStatus(payload);
                 break;
             case MessageOpcode.EntitySnapshot:
                 OnEntitySnapshot(payload);
@@ -664,6 +674,99 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
         return sequence;
     }
 
+    /// <summary>
+    ///     Invites the character named <paramref name="name" />; 0 while not in the world or for a name that breaks the
+    ///     rule, else the command's sequence.
+    /// </summary>
+    public uint SendPartyInvite(string name)
+    {
+        return SendParty(PartyCommand.Invite, name, sequence => new PartyInvite(name, sequence).Write(m_sendBuffer));
+    }
+
+    /// <summary>
+    ///     Accepts or declines the invite from <paramref name="inviter" />; 0 when nothing was sent.
+    /// </summary>
+    public uint SendPartyReply(string inviter, bool isAccepted)
+    {
+        return SendParty(
+            PartyCommand.Reply,
+            inviter,
+            sequence => new PartyReply(inviter, isAccepted, sequence).Write(m_sendBuffer));
+    }
+
+    public uint SendPartyLeave()
+    {
+        if (State != ClientConnectionState.InWorld)
+        {
+            return 0;
+        }
+
+        uint sequence = NextCommandSequence();
+        SendRouted(MessageOpcode.PartyLeave, new PartyLeave(sequence).Write(m_sendBuffer));
+        Remember(sequence, PartyCommand.Leave, string.Empty);
+        return sequence;
+    }
+
+    public uint SendPartyKick(string member)
+    {
+        return SendParty(PartyCommand.Kick, member, sequence => new PartyKick(member, sequence).Write(m_sendBuffer));
+    }
+
+    public uint SendPartyLead(string member)
+    {
+        return SendParty(PartyCommand.Lead, member, sequence => new PartyLead(member, sequence).Write(m_sendBuffer));
+    }
+
+    /// <summary>
+    ///     The party command <paramref name="commandSequence" /> numbered and the name it carried, so a refusal can
+    ///     say what was refused.
+    /// </summary>
+    public bool TryGetPartySequence(uint commandSequence, out PartyCommand command, out string name)
+    {
+        bool isParty = m_partySequences.TryGetValue(commandSequence, out (PartyCommand Command, string Name) sent);
+        command = isParty ? sent.Command : PartyCommand.None;
+        name = isParty ? sent.Name : string.Empty;
+        return isParty;
+    }
+
+    private uint SendParty(PartyCommand command, string name, Func<uint, int> write)
+    {
+        if (State != ClientConnectionState.InWorld || !CharacterNames.IsValid(name))
+        {
+            return 0;
+        }
+
+        uint sequence = NextCommandSequence();
+        SendRouted(OpcodeOf(command), write(sequence));
+        Remember(sequence, command, name);
+        return sequence;
+    }
+
+    private static MessageOpcode OpcodeOf(PartyCommand command)
+    {
+        switch (command)
+        {
+            case PartyCommand.Invite:
+                return MessageOpcode.PartyInvite;
+            case PartyCommand.Reply:
+                return MessageOpcode.PartyReply;
+            case PartyCommand.Kick:
+                return MessageOpcode.PartyKick;
+            default:
+                return MessageOpcode.PartyLead;
+        }
+    }
+
+    private void Remember(uint sequence, PartyCommand command, string name)
+    {
+        if (m_partySequences.Count >= MaxEquipSequences)
+        {
+            m_partySequences.Clear();
+        }
+
+        m_partySequences[sequence] = (command, name);
+    }
+
     public uint SendChangeJob(EntityId npc, JobDefinitionId job)
     {
         if (State != ClientConnectionState.InWorld)
@@ -796,6 +899,15 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
     ///     A chat line delivered while in the world, for the chat log, which outlives the world.
     /// </summary>
     public event Action<ChatReceived>? ChatLineReceived;
+
+    /// <summary>
+    ///     An invite, or something that happened to the party, while in the world; the party's model outlives the world.
+    /// </summary>
+    public event Action<PartyEvent>? PartyEventReceived;
+
+    public event Action<PartyRoster>? PartyRosterReceived;
+
+    public event Action<PartyMemberStatus>? PartyMemberStatusReceived;
 
     public event Action<ClientWorld>? EnteredWorld;
 
@@ -963,6 +1075,7 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
         {
             m_equipSequences.Clear();
             m_chatSequences.Clear();
+            m_partySequences.Clear();
         }
 
         // The command sequence belongs to the character, not the connection: after a reconnect it goes on from the
@@ -998,6 +1111,54 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
         else
         {
             World.OnSpawn(spawn);
+        }
+    }
+
+    private void OnPartyEvent(ReadOnlySpan<byte> payload)
+    {
+        if (!PartyEvent.TryRead(payload, out PartyEvent? message) || message == null)
+        {
+            MalformedMessages++;
+        }
+        else if (World == null)
+        {
+            UnexpectedMessages++;
+        }
+        else
+        {
+            PartyEventReceived?.Invoke(message);
+        }
+    }
+
+    private void OnPartyRoster(ReadOnlySpan<byte> payload)
+    {
+        if (!PartyRoster.TryRead(payload, out PartyRoster? message) || message == null)
+        {
+            MalformedMessages++;
+        }
+        else if (World == null)
+        {
+            UnexpectedMessages++;
+        }
+        else
+        {
+            PartyRosterReceived?.Invoke(message);
+        }
+    }
+
+    private void OnPartyMemberStatus(ReadOnlySpan<byte> payload)
+    {
+        if (!PartyMemberStatus.TryRead(payload, out PartyMemberStatus? message) || message == null)
+        {
+            MalformedMessages++;
+        }
+        else if (World == null)
+        {
+            UnexpectedMessages++;
+        }
+        else
+        {
+            PartyMemberStatusReceived?.Invoke(message);
         }
     }
 

@@ -14,6 +14,41 @@ public static class RejectionMessages
     }
 
     /// <summary>
+    ///     The words for a refused party command (Prototype Content §2): what it asked of <paramref name="name" />, the
+    ///     character it named, decides what the reason means; any reason without its own words reads as any refusal.
+    /// </summary>
+    public static string DescribeParty(PartyCommand command, string name, CommandRejectionReason reason)
+    {
+        switch (command, reason)
+        {
+            case (PartyCommand.Invite, CommandRejectionReason.InvalidTarget):
+                return $"{name} is not online.";
+            case (PartyCommand.Invite, CommandRejectionReason.NotAllowedNow):
+                return $"{name} cannot be invited now.";
+            case (PartyCommand.Invite, CommandRejectionReason.RequirementNotMet):
+                return $"{name} cannot join: your party is full or holds a character of the same account.";
+            case (PartyCommand.Reply, CommandRejectionReason.InvalidTarget):
+                return $"{name}'s invite is no longer open.";
+            case (PartyCommand.Reply, CommandRejectionReason.NotAllowedNow):
+                return $"You cannot join {name}'s party now.";
+            case (PartyCommand.Reply, CommandRejectionReason.RequirementNotMet):
+                return $"{name}'s party is full, or holds a character of your account.";
+            case (PartyCommand.Leave, CommandRejectionReason.NotAllowedNow):
+                return "You are not in a party.";
+            case (PartyCommand.Kick, CommandRejectionReason.InvalidTarget):
+            case (PartyCommand.Lead, CommandRejectionReason.InvalidTarget):
+                return $"{name} is not in your party.";
+            case (PartyCommand.Kick, CommandRejectionReason.NotAllowedNow):
+            case (PartyCommand.Lead, CommandRejectionReason.NotAllowedNow):
+                return "Only the party's leader can do that.";
+            case (_, CommandRejectionReason.Busy):
+                return "Your party's last change is still going through. Try again in a moment.";
+            default:
+                return Describe(reason);
+        }
+    }
+
+    /// <summary>
     ///     The words for <paramref name="reason" />; an equip refused for a requirement is a weapon the character's job
     ///     cannot wield (Gameplay Systems §11.1).
     /// </summary>

@@ -52,6 +52,11 @@ internal static class WireEnums
         return value >= PrimaryStat.Str && value <= PrimaryStat.Luk;
     }
 
+    public static bool IsDefined(PartyEventKind value)
+    {
+        return value >= PartyEventKind.Invited && value <= PartyEventKind.Disbanded;
+    }
+
     public static bool IsDefined(ChatChannel value)
     {
         return value >= ChatChannel.Nearby && value <= ChatChannel.WhisperSent;

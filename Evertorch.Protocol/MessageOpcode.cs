@@ -32,6 +32,11 @@ public enum MessageOpcode : ushort
     LearnSkill = 0x0018,
     ResetBuild = 0x0019,
     ChangeJob = 0x001A,
+    PartyInvite = 0x001B,
+    PartyReply = 0x001C,
+    PartyLeave = 0x001D,
+    PartyKick = 0x001E,
+    PartyLead = 0x001F,
     ServerHello = 0x8001,
     WorldEntered = 0x8003,
     EntitySpawn = 0x8004,
@@ -61,6 +66,9 @@ public enum MessageOpcode : ushort
     NpcServices = 0x801D,
     QuestLog = 0x801E,
     CharacterSheet = 0x801F,
-    WornWeaponChanged = 0x8020
+    WornWeaponChanged = 0x8020,
+    PartyEvent = 0x8021,
+    PartyRoster = 0x8022,
+    PartyMemberStatus = 0x8023
 }
 }
