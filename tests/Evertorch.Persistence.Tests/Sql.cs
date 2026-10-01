@@ -1,4 +1,5 @@
 using System;
+using System.Text;
 using Npgsql;
 
 namespace Evertorch.Persistence.Tests
@@ -95,6 +96,32 @@ internal sealed class Sql
     {
         return "INSERT INTO equipment (character_id, slot, inventory_item_id, version) "
             + $"VALUES ({character}, '{slot}', {item}, 0)";
+    }
+
+    /// <summary>
+    ///     A party led by <paramref name="leader" /> with <paramref name="members" /> in that joining order, written
+    ///     in one statement, so the leader's deferred key is checked at its end; returns the party's ID.
+    /// </summary>
+    public static string PartyInsert(long leader, params long[] members)
+    {
+        var rows = new StringBuilder();
+        for (int index = 0; index < members.Length; index++)
+        {
+            rows.Append(index == 0 ? string.Empty : ", ").Append($"({members[index]}, {index + 1})");
+        }
+
+        return "WITH party AS (INSERT INTO parties (leader_character_id, created_at, version) "
+            + $"VALUES ({leader}, now(), 0) RETURNING id), "
+            + "members AS (INSERT INTO party_members (party_id, character_id, joined_at, join_order) "
+            + $"SELECT party.id, m.character_id, now(), m.join_order FROM party, (VALUES {rows}) "
+            + "AS m(character_id, join_order) RETURNING party_id) "
+            + "SELECT id FROM party";
+    }
+
+    public static string PartyMemberInsert(long party, long character, int joinOrder)
+    {
+        return "INSERT INTO party_members (party_id, character_id, joined_at, join_order) "
+            + $"VALUES ({party}, {character}, now(), {joinOrder})";
     }
 
     public static string SkillInsert(long character, string skill, int level)

@@ -24,6 +24,7 @@ internal sealed class InMemoryGameStore : IGameStore
     private readonly Dictionary<string, TokenEntry> m_tokens = new(StringComparer.Ordinal);
     private readonly Dictionary<long, Row> m_characters = new();
     private readonly Dictionary<Guid, LedgerEntry> m_ledger = new();
+    private readonly Dictionary<long, PartyEntry> m_parties = new();
     private long m_lastAccount;
     private long m_lastCharacter;
     private long m_lastItem;
@@ -393,6 +394,24 @@ internal sealed class InMemoryGameStore : IGameStore
         }
     }
 
+    public Task<StoredParty?> LoadPartyAsync(long characterId, CancellationToken cancellationToken)
+    {
+        ThrowIfUnavailable();
+        lock (m_gate)
+        {
+            StoredParty? stored = null;
+            foreach (KeyValuePair<long, PartyEntry> party in m_parties)
+            {
+                if (party.Value.Members.Any(member => member.Character == characterId))
+                {
+                    stored = ToStored(party.Key, party.Value);
+                }
+            }
+
+            return Task.FromResult(stored);
+        }
+    }
+
     public Task SaveCheckpointAsync(CharacterCheckpoint checkpoint, CancellationToken cancellationToken)
     {
         ThrowIfUnavailable();
@@ -630,6 +649,27 @@ internal sealed class InMemoryGameStore : IGameStore
                 .ToList();
             return Task.FromResult(ids);
         }
+    }
+
+    private StoredParty ToStored(long id, PartyEntry party)
+    {
+        return new StoredParty(
+            id,
+            party.Leader,
+            party.Members
+                .OrderBy(member => member.JoinOrder)
+                .Select(member =>
+                {
+                    Row row = m_characters[member.Character];
+                    return new StoredPartyMember(
+                        member.Character,
+                        row.Name,
+                        row.Job,
+                        row.Level,
+                        row.Account,
+                        member.JoinOrder);
+                })
+                .ToList());
     }
 
     /// <summary>
@@ -1102,6 +1142,14 @@ internal sealed class InMemoryGameStore : IGameStore
         ///     The item the entry names, which an emptied row is reported under, as the PostgreSQL store's ledger does.
         /// </summary>
         public string ItemDefinition { get; }
+    }
+
+    // A party as stored: its leader and each member's character with its place in the joining order.
+    private sealed class PartyEntry
+    {
+        public long Leader { get; set; }
+
+        public List<(long Character, int JoinOrder)> Members { get; } = new();
     }
 
     private sealed class Row

@@ -18,6 +18,7 @@ public sealed class SchemaTests
     private const string ForeignKeyViolation = "23503";
     private const string RestrictViolation = "23001";
     private const string ValueTooLong = "22001";
+    private const string AddCharacterSkills = "20260928181417_AddCharacterSkills";
 
     private PostgresFixture m_database = null!;
     private Sql m_sql = null!;
@@ -224,6 +225,34 @@ public sealed class SchemaTests
         AssertFailsWith(RestrictViolation, $"DELETE FROM accounts WHERE id = {account}");
     }
 
+    // AddParties runs down and up again (Persistence §11): no ledger row refers to a party, so the down migration
+    // only drops the two tables and the leader's key.
+    [Test]
+    public void AddParties_Down_DropsItsTables_AndUpRestoresThem()
+    {
+        using var database = PostgresFixture.Start();
+        var sql = new Sql(database.ConnectionString);
+        long account = sql.InsertAccount();
+        long leader = sql.InsertCharacter(account, Sql.UniqueName("Dn"));
+        long member = sql.InsertCharacter(sql.InsertAccount(), Sql.UniqueName("Dn"));
+        sql.Scalar(Sql.PartyInsert(leader, leader, member));
+        const string tables = "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public' "
+            + "AND table_name IN ('parties', 'party_members')";
+
+        EvertorchDatabase.ApplyMigrationsAsync(database.ConnectionString, AddCharacterSkills, CancellationToken.None)
+            .GetAwaiter()
+            .GetResult();
+        long afterDown = sql.Scalar(tables);
+        long characters = sql.Scalar($"SELECT count(*) FROM characters WHERE id IN ({leader}, {member})");
+        EvertorchDatabase.ApplyMigrationsAsync(database.ConnectionString, CancellationToken.None)
+            .GetAwaiter()
+            .GetResult();
+
+        Assert.That((afterDown, characters), Is.EqualTo((0L, 2L)), "the tables gone, the characters kept");
+        Assert.That(sql.Scalar(tables), Is.EqualTo(2));
+        Assert.That(sql.Scalar(Sql.PartyInsert(leader, leader, member)), Is.Positive, "and usable again");
+    }
+
     [Test]
     public void CharacterQuest_ActiveOrCompleted_IsStoredOncePerCharacterAndQuest()
     {
@@ -277,6 +306,15 @@ public sealed class SchemaTests
         long id = m_sql.Scalar(Sql.CharacterInsert(account, name, name.ToLowerInvariant(), uint.MaxValue));
 
         Assert.That(id, Is.Positive);
+    }
+
+    [Test]
+    public void Character_InAParty_CannotBeDeleted()
+    {
+        long leader = NewCharacter();
+        m_sql.Scalar(Sql.PartyInsert(leader, leader, NewCharacter()));
+
+        AssertFailsWith(RestrictViolation, $"DELETE FROM characters WHERE id = {leader}");
     }
 
     [Test]
@@ -364,6 +402,24 @@ public sealed class SchemaTests
         AssertFailsWith(ForeignKeyViolation, Sql.ItemInsert(long.MaxValue, 1));
     }
 
+    // The lead passes in the same transaction as the leader's departure, or the departure is refused at the commit.
+    [Test]
+    public void Leader_Leaving_IsRejectedUnlessTheLeadPassesInTheSameTransaction()
+    {
+        long leader = NewCharacter();
+        long next = NewCharacter();
+        long last = NewCharacter();
+        long party = m_sql.Scalar(Sql.PartyInsert(leader, leader, next, last));
+
+        AssertFailsWith(ForeignKeyViolation, $"DELETE FROM party_members WHERE character_id = {leader}");
+        m_sql.Execute(
+            $"UPDATE parties SET leader_character_id = {next}, version = version + 1 WHERE id = {party}; "
+            + $"DELETE FROM party_members WHERE character_id = {leader}");
+
+        Assert.That(m_sql.Scalar($"SELECT leader_character_id FROM parties WHERE id = {party}"), Is.EqualTo(next));
+        Assert.That(m_sql.Scalar($"SELECT count(*) FROM party_members WHERE party_id = {party}"), Is.EqualTo(2));
+    }
+
     [Test]
     public void Ledger_RowDelete_IsRejected()
     {
@@ -424,8 +480,63 @@ public sealed class SchemaTests
             m_sql.Scalar(
                 "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name IN "
                 + "('accounts', 'characters', 'inventory_items', 'equipment', 'economy_ledger', 'character_quests', "
-                + "'session_tokens', 'character_skills')"),
-            Is.EqualTo(8));
+                + "'session_tokens', 'character_skills', 'parties', 'party_members')"),
+            Is.EqualTo(10));
+    }
+
+    [Test]
+    public void PartyMember_InASecondParty_OrOfNoCharacter_OrWithoutAPlace_IsRejected()
+    {
+        long leader = NewCharacter();
+        long member = NewCharacter();
+        long party = m_sql.Scalar(Sql.PartyInsert(leader, leader, member));
+        long otherLeader = NewCharacter();
+        long other = m_sql.Scalar(Sql.PartyInsert(otherLeader, otherLeader, NewCharacter()));
+
+        AssertFailsWith(UniqueViolation, Sql.PartyMemberInsert(other, member, 2));
+        AssertFailsWith(ForeignKeyViolation, Sql.PartyMemberInsert(party, long.MaxValue, 3));
+        AssertFailsWith(CheckViolation, Sql.PartyMemberInsert(party, NewCharacter(), 0));
+    }
+
+    [Test]
+    public void Party_Deleted_TakesItsMembersWithIt()
+    {
+        long leader = NewCharacter();
+        long member = NewCharacter();
+        long party = m_sql.Scalar(Sql.PartyInsert(leader, leader, member));
+
+        m_sql.Execute($"DELETE FROM parties WHERE id = {party}");
+
+        Assert.That(
+            m_sql.Scalar($"SELECT count(*) FROM party_members WHERE character_id IN ({leader}, {member})"),
+            Is.Zero);
+    }
+
+    // A party and its first members are written in one transaction; its leader is one of them (Persistence §4).
+    [Test]
+    public void Party_LedByOneOfItsMembers_IsStored_AndAMemberJoinsLater()
+    {
+        long leader = NewCharacter();
+        long first = NewCharacter();
+        long later = NewCharacter();
+
+        long party = m_sql.Scalar(Sql.PartyInsert(leader, leader, first));
+        m_sql.Execute(Sql.PartyMemberInsert(party, later, 3));
+
+        Assert.That(
+            m_sql.Text(
+                "SELECT string_agg(character_id || ':' || join_order, ',' ORDER BY join_order) FROM party_members "
+                + $"WHERE party_id = {party}"),
+            Is.EqualTo($"{leader}:1,{first}:2,{later}:3"));
+        Assert.That(m_sql.Scalar($"SELECT leader_character_id FROM parties WHERE id = {party}"), Is.EqualTo(leader));
+    }
+
+    [Test]
+    public void Party_WhoseLeaderIsNotAMember_IsRejectedAtTheCommit()
+    {
+        long outsider = NewCharacter();
+
+        AssertFailsWith(ForeignKeyViolation, Sql.PartyInsert(outsider, NewCharacter(), NewCharacter()));
     }
 
     [Test]

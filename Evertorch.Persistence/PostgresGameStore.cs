@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Data;
 using System.Linq;
 using System.Text.Json;
 using System.Threading;
@@ -1112,6 +1113,26 @@ WHERE character_quests.state = {CharacterQuestRow.ActiveState} AND character_que
             cancellationToken);
     }
 
+    public Task<StoredParty?> LoadPartyAsync(long characterId, CancellationToken cancellationToken)
+    {
+        return RunAsync(
+            async context =>
+            {
+                // One snapshot for the party and its members, so a change committed between two reads is never half
+                // seen.
+                await using (IDbContextTransaction transaction = await context.Database
+                                 .BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken)
+                                 .ConfigureAwait(false))
+                {
+                    StoredParty? party = await ReadPartyAsync(context, characterId, cancellationToken)
+                        .ConfigureAwait(false);
+                    await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+                    return party;
+                }
+            },
+            cancellationToken);
+    }
+
     public Task<InventoryResult?> FindJobChangeAsync(
         Guid operationId,
         long characterId,
@@ -1186,6 +1207,54 @@ WHERE character_quests.state = {CharacterQuestRow.ActiveState} AND character_que
                     .ToList();
             },
             cancellationToken);
+    }
+
+    private static async Task<StoredParty?> ReadPartyAsync(
+        EvertorchDbContext context,
+        long characterId,
+        CancellationToken cancellationToken)
+    {
+        PartyRow? party = await context.PartyMembers
+            .AsNoTracking()
+            .Where(member => member.CharacterId == characterId)
+            .Join(context.Parties.AsNoTracking(), member => member.PartyId, row => row.Id, (_, row) => row)
+            .SingleOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
+        if (party == null)
+        {
+            return null;
+        }
+
+        var members = await context.PartyMembers
+            .AsNoTracking()
+            .Where(member => member.PartyId == party.Id)
+            .Join(
+                context.Characters.AsNoTracking(),
+                member => member.CharacterId,
+                character => character.Id,
+                (member, character) => new
+                {
+                    member.CharacterId,
+                    character.Name,
+                    character.JobDefinitionId,
+                    character.BaseLevel,
+                    character.AccountId,
+                    member.JoinOrder
+                })
+            .OrderBy(member => member.JoinOrder)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        return new StoredParty(
+            party.Id,
+            party.LeaderCharacterId,
+            members.Select(member => new StoredPartyMember(
+                    member.CharacterId,
+                    member.Name,
+                    member.JobDefinitionId,
+                    member.BaseLevel,
+                    new AccountId(member.AccountId),
+                    member.JoinOrder))
+                .ToList());
     }
 
     // Written whole: each learned skill is inserted or moved to its level, and a stored skill left out is forgotten, so

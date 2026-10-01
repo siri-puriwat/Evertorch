@@ -93,6 +93,12 @@ public interface IGameStore
     Task<StoredCharacter?> LoadCharacterAsync(AccountId account, long characterId, CancellationToken cancellationToken);
 
     /// <summary>
+    ///     The party of <paramref name="characterId" />, if it has one: its leader and every member's name, job, base
+    ///     level, and account, read in one snapshot (Persistence §7).
+    /// </summary>
+    Task<StoredParty?> LoadPartyAsync(long characterId, CancellationToken cancellationToken);
+
+    /// <summary>
     ///     Writes the checkpoint over the character's map, position, HP, and SP, and its level and experience unless
     ///     they would go down or a turn-in or a job change was in flight; its job level and job experience the same
     ///     way, and only while the stored job is the checkpoint's; raises each active quest's progress, adding the quest

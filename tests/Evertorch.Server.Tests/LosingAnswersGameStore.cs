@@ -105,6 +105,11 @@ internal sealed class LosingAnswersGameStore : IGameStore
         return m_inner.LoadCharacterAsync(account, characterId, cancellationToken);
     }
 
+    public Task<StoredParty?> LoadPartyAsync(long characterId, CancellationToken cancellationToken)
+    {
+        return m_inner.LoadPartyAsync(characterId, cancellationToken);
+    }
+
     public Task SaveCheckpointAsync(CharacterCheckpoint checkpoint, CancellationToken cancellationToken)
     {
         return m_inner.SaveCheckpointAsync(checkpoint, cancellationToken);

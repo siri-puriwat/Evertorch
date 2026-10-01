@@ -49,6 +49,10 @@ internal sealed class EvertorchDbContext : DbContext
 
     public DbSet<CharacterSkillRow> CharacterSkills => Set<CharacterSkillRow>();
 
+    public DbSet<PartyRow> Parties => Set<PartyRow>();
+
+    public DbSet<PartyMemberRow> PartyMembers => Set<PartyMemberRow>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         ConfigureAccounts(modelBuilder.Entity<AccountRow>());
@@ -59,6 +63,8 @@ internal sealed class EvertorchDbContext : DbContext
         ConfigureQuests(modelBuilder.Entity<CharacterQuestRow>());
         ConfigureSessionTokens(modelBuilder.Entity<SessionTokenRow>());
         ConfigureSkills(modelBuilder.Entity<CharacterSkillRow>());
+        ConfigureParties(modelBuilder.Entity<PartyRow>());
+        ConfigurePartyMembers(modelBuilder.Entity<PartyMemberRow>());
 
         foreach (IMutableEntityType entity in modelBuilder.Model.GetEntityTypes())
         {
@@ -228,6 +234,37 @@ internal sealed class EvertorchDbContext : DbContext
             .HasForeignKey(row => row.CharacterId)
             .OnDelete(DeleteBehavior.Restrict)
             .HasConstraintName("fk_character_skills_characters");
+    }
+
+    // The leader's own key, (id, leader_character_id) to party_members, is declared in the AddParties migration's raw
+    // SQL, deferrable to the commit; in the model it would close a cycle between the two tables.
+    private static void ConfigureParties(EntityTypeBuilder<PartyRow> party)
+    {
+        party.ToTable("parties");
+        party.HasKey(row => row.Id).HasName("pk_parties");
+        party.Property(row => row.Id).UseIdentityAlwaysColumn();
+        party.Property(row => row.Version).IsConcurrencyToken();
+    }
+
+    private static void ConfigurePartyMembers(EntityTypeBuilder<PartyMemberRow> member)
+    {
+        member.ToTable("party_members", table => table.HasCheckConstraint(
+            "ck_party_members_join_order",
+            "join_order >= 1"));
+        member.HasKey(row => row.CharacterId).HasName("pk_party_members");
+        member.HasIndex(row => new { row.PartyId, row.CharacterId })
+            .IsUnique()
+            .HasDatabaseName("ux_party_members_party_id_character_id");
+        member.HasOne<PartyRow>()
+            .WithMany()
+            .HasForeignKey(row => row.PartyId)
+            .OnDelete(DeleteBehavior.Cascade)
+            .HasConstraintName("fk_party_members_parties");
+        member.HasOne<CharacterRow>()
+            .WithMany()
+            .HasForeignKey(row => row.CharacterId)
+            .OnDelete(DeleteBehavior.Restrict)
+            .HasConstraintName("fk_party_members_characters");
     }
 
     private static void ConfigureSessionTokens(EntityTypeBuilder<SessionTokenRow> token)
