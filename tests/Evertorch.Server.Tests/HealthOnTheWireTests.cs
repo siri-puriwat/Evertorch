@@ -16,6 +16,39 @@ public sealed class HealthOnTheWireTests
             .ToArray();
     }
 
+    // Another player's HP travels only to its party, in thousandths (Network Protocol §9, Milestone 12): a member
+    // hears it, a player beside it outside the party hears nothing of it, and the owner's own numbers stay its own.
+    [Test]
+    public void AWoundedPlayersHealth_ReachesItsPartyAsThousandths_AndNoOneElse()
+    {
+        var rig = new PartyRig();
+        ConnectionId seven = rig.Enter(7);
+        ConnectionId eight = rig.Enter(8);
+        ConnectionId nine = rig.Enter(9);
+        rig.Join(seven, "Tester7", eight, "Tester8");
+        rig.Server.Tick(TestServer.TickRate);
+        rig.Server.Transport.ClearSent();
+        PlayerEntity wounded = rig.Server.PlayerOf(seven);
+
+        int half = wounded.MaxHealth / 2;
+        wounded.CurrentHealth = half;
+        rig.Server.Tick(TestServer.TickRate);
+
+        PartyMemberStatus heard = rig.Server.Transport.ControlSentTo(eight)
+            .Where(message => message.Opcode == MessageOpcode.PartyMemberStatus)
+            .Select(message =>
+                PartyMemberStatus.TryRead(message.Payload, out PartyMemberStatus? status) ? status! : null!)
+            .Single();
+        Assert.That(
+            (heard.Name, (int)heard.HealthPermille),
+            Is.EqualTo(("Tester7", half * 1000 / wounded.MaxHealth)));
+        Assert.That(rig.Server.Transport.ControlOpcodesSentTo(eight), Has.No.Member(MessageOpcode.CharacterHealth));
+        Assert.That(
+            rig.Server.Transport.ControlOpcodesSentTo(nine),
+            Has.No.Member(MessageOpcode.PartyMemberStatus).And.No.Member(MessageOpcode.CharacterHealth),
+            "nothing for a player outside the party");
+    }
+
     [Test]
     public void EntitySpawn_ForAMonster_CarriesItsHealthRatioAndForAPlayerNone()
     {

@@ -16,6 +16,7 @@ namespace Evertorch.Server.Tests
 ///     quest, and reward reach the observer as nothing more. Milestone 9 adds the build: the actor's raises, learned
 ///     levels, and reset reach the observer as nothing at all. Milestone 10 adds the first jobs: another's change
 ///     reaches the observer as its new body alone, and a Mend on the observer as the heal and its own health.
+///     Milestone 12 adds the party: another's party, its health, and its lines reach an observer outside it as nothing.
 /// </summary>
 [TestFixture]
 public sealed class ObserverOutputTests
@@ -216,6 +217,35 @@ public sealed class ObserverOutputTests
                 .And.None.EqualTo(MessageOpcode.TargetChanged),
             "never another's sheet, skills, or selection");
         Assert.That(healed.CurrentHealth, Is.GreaterThanOrEqualTo(50), "Mend 1 on the observer");
+    }
+
+    // The party (Milestone 12 verification): the actor and a third player form a party, the actor is wounded, speaks to
+    // the party, passes the lead, and leaves, while the observer stands beside it outside the party. The observer
+    // hears none of the party's messages, no party line, and nothing of the actor's health.
+    [Test]
+    public void AnotherPlayersParty_ReachesAnObserverOutsideItAsNothing()
+    {
+        var rig = new PartyRig();
+        ConnectionId actor = rig.Enter(Actor);
+        ConnectionId observer = rig.Enter(Observer);
+        ConnectionId member = rig.Enter(3);
+        rig.Server.Transport.ClearSent();
+
+        rig.Join(actor, "Tester1", member, "Tester3");
+        rig.Server.PlayerOf(actor).CurrentHealth /= 2;
+        rig.Server.SendChat(actor, ChatChannel.Party, string.Empty, "members only", rig.Next(actor));
+        rig.Server.Tick(TestServer.TickRate + 1);
+        rig.Lead(actor, "Tester3");
+        rig.Leave(actor);
+
+        MessageOpcode[] observerHeard =
+            rig.Server.Transport.SentTo(observer).Select(message => message.Opcode).ToArray();
+        Assert.That(
+            rig.Server.Transport.SentTo(member).Select(message => message.Opcode),
+            Is.SupersetOf(
+                new[] { MessageOpcode.PartyEvent, MessageOpcode.PartyRoster, MessageOpcode.PartyMemberStatus }),
+            "the member heard the party");
+        Assert.That(observerHeard.Distinct(), Is.SubsetOf(WhatAnyoneNearSees));
     }
 
     [Test]
