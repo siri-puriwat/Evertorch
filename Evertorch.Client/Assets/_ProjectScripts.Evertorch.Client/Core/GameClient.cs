@@ -1037,7 +1037,12 @@ public sealed class GameClient : MonoBehaviour
         world.RemoteWornWeaponChanged += HoldRemoteWeapon;
         world.Inventory.Changed += HoldLocalWeapon;
         world.LocalJobChanged += ReplaceLocalBody;
-        m_combat = new CombatPresenter(world, 1.0 / Connection.ServerTickRate, material, m_contentLoader.Content);
+        m_combat = new CombatPresenter(
+            world,
+            1.0 / Connection.ServerTickRate,
+            material,
+            m_contentLoader.Content,
+            Party);
         m_namePlates = new NamePlatePresenter(world, m_contentLoader.Content, PlayedCharacter?.Name ?? string.Empty);
         m_bubbles = new ChatBubblePresenter(world.LocalEntity);
         m_projectiles = new ProjectilePresenter(
@@ -1528,6 +1533,46 @@ public sealed class GameClient : MonoBehaviour
     public uint MakePartyLeader(string member)
     {
         return Connection != null ? Connection.SendPartyLead(member) : 0;
+    }
+
+    /// <summary>
+    ///     A press on the party list's row of <paramref name="name" />: a member the client sees becomes the selection,
+    ///     as a click on its body would, or takes the skill waiting for its target, Mend's among them (Prototype
+    ///     Content §2, §4). A member the client does not see is left alone.
+    /// </summary>
+    public void PressPartyMember(string name)
+    {
+        if (m_world == null)
+        {
+            return;
+        }
+
+        EntityId entity = string.Equals(name, PlayedCharacter?.Name, StringComparison.OrdinalIgnoreCase)
+            ? m_world.LocalEntity
+            : default;
+        foreach (RemoteEntity remote in m_world.Remotes.Values)
+        {
+            if (remote.Kind == EntityKind.Player &&
+                string.Equals(remote.Name, name, StringComparison.OrdinalIgnoreCase))
+            {
+                entity = remote.Entity;
+                break;
+            }
+        }
+
+        if (entity == default)
+        {
+            return;
+        }
+
+        if (m_targeting.IsChoosing)
+        {
+            AimAt(PointerMoveResult.Entity, entity);
+        }
+        else if (entity != m_world.LocalEntity)
+        {
+            SelectPlayer(entity);
+        }
     }
 
     // What happened to the party joins the log as a grey line; an invite also asks its question (Prototype Content

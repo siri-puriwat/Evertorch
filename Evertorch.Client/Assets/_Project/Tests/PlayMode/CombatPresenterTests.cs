@@ -117,6 +117,59 @@ public sealed class CombatPresenterTests
         return m_presenter;
     }
 
+    // Over a player only a party member's bar shows, at the member's last status (Network Protocol §9; Prototype Content
+    // §2).
+    [Test]
+    public void APlayer_ShowsABarOverhead_OnlyWhileAMemberWithAStatus()
+    {
+        ClientWorld world = CreateWorld();
+        var bobby = new EntityId(301_000);
+        world.OnSpawn(
+            new EntitySpawn(
+                bobby,
+                EntityKind.Player,
+                "job.adventurer",
+                new WorldPosition(3.5f, 0f, 2.5f),
+                new WorldDirection(0f, 1f),
+                EntityStateFlags.None,
+                1000,
+                string.Empty,
+                "Bobby"));
+        Dictionary<EntityId, EntityView> remotes = CreateViews(out EntityView local);
+        var bobbyObject = new GameObject("Bobby");
+        m_created.Add(bobbyObject);
+        remotes.Add(bobby, bobbyObject.AddComponent<EntityView>());
+        var party = new ClientParty();
+        var material = new Material(Shader.Find("Universal Render Pipeline/Lit"));
+        m_created.Add(material);
+        m_presenter = new CombatPresenter(world, 0.05, material, null, party);
+
+        m_presenter.Present(local, remotes, null);
+        bool hasBarAsAStranger = m_presenter.TryGetHealthBar(bobby, out HealthBar? _);
+        party.Apply(
+            new PartyRoster(
+                0,
+                new[]
+                {
+                    new PartyRosterEntry("Ann0", new JobDefinitionId("job.adventurer"), 1,
+                        new MapDefinitionId("map.training_ground")),
+                    new PartyRosterEntry("Bobby", new JobDefinitionId("job.adventurer"), 1,
+                        new MapDefinitionId("map.training_ground"))
+                }));
+        m_presenter.Present(local, remotes, null);
+        bool hasBarWithoutStatus = m_presenter.TryGetHealthBar(bobby, out HealthBar? _);
+        party.Apply(new PartyMemberStatus("Bobby", 300, 1000));
+        m_presenter.Present(local, remotes, null);
+
+        Assert.That((hasBarAsAStranger, hasBarWithoutStatus), Is.EqualTo((false, false)));
+        Assert.That(m_presenter.TryGetHealthBar(bobby, out HealthBar? bar), Is.True);
+        Assert.That(bar!.gameObject.activeSelf, Is.True);
+        Assert.That(bar.ShownRatio, Is.EqualTo(0.3f).Within(1e-3f));
+        party.Apply(new PartyRoster(0, Array.Empty<PartyRosterEntry>()));
+        m_presenter.Present(local, remotes, null);
+        Assert.That(bar.gameObject.activeSelf, Is.False, "no longer a member");
+    }
+
     [Test]
     public void Damage_ToAMonster_ShowsItsNumberAndMovesItsBarWhenItsMomentIsDrawn()
     {

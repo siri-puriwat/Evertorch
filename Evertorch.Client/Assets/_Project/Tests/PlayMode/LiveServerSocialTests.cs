@@ -12,6 +12,7 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
+using UnityEngine.UI;
 using EntityId = Evertorch.Game.EntityId;
 using Object = UnityEngine.Object;
 
@@ -141,6 +142,95 @@ public sealed class LiveServerSocialTests
             StartTimeoutSeconds);
         Assert.That(client.ChatLog.Lines.Select(line => line.Text), Has.Member("Nobody1 is not online."));
         Assert.That(client.IsTyping, Is.False);
+        Assert.That(other.MalformedMessages + other.UnexpectedMessages, Is.Zero, "the other player's traffic");
+    }
+
+    // The party through the real panels against the real server (Prototype Content §2): the other player invites; the
+    // prompt asks and Accept answers; the list shows both with the other's bars; a press on its row selects it, and its
+    // bar shows in the target frame and over its body; a line typed "/p ready" reaches it as party chat.
+    [UnityTest]
+    [Timeout(TestTimeoutMs)]
+    public IEnumerator Party_ThroughTheRealPanels_IsJoined_Listed_Selected_AndSpokenTo()
+    {
+        string actionsPath = RequirePrerequisites();
+        yield return StartDatabaseAndServer();
+        LiveServer server = m_server!;
+        Assert.That(server.TryReadListeningPort(out int port), Is.True, server.JoinOutput());
+        GameClient client = CreateClient(actionsPath);
+        yield return EnterByName(client, AnnName);
+        ClientWorld world = client.World!;
+        yield return EnterTheOther(client, port);
+        ClientConnection other = m_other!;
+        EntityId seen = other.World!.LocalEntity;
+        var heard = new List<string>();
+        other.ChatLineReceived += line => heard.Add(ChatLog.Describe(line));
+        yield return WaitUntil(
+            () =>
+            {
+                other.Poll();
+                return world.Remotes.ContainsKey(seen);
+            },
+            StartTimeoutSeconds);
+
+        other.SendPartyInvite(AnnName);
+        PartyInvitePrompt prompt = client.InvitePrompt!;
+        yield return WaitUntil(
+            () =>
+            {
+                other.Poll();
+                return prompt.IsVisible;
+            },
+            StartTimeoutSeconds);
+        Assert.That(prompt.Text, Is.EqualTo($"{BobName} invites you to a party."), server.JoinOutput());
+        prompt.GetComponentsInChildren<Button>().Single(button => button.name == PartyInvitePrompt.Accept).onClick
+            .Invoke();
+        PartyList list = client.PartyList!;
+        yield return WaitUntil(
+            () =>
+            {
+                other.Poll();
+                return list.IsVisible
+                    && client.Party.Members.Count == 2
+                    && client.Party.TryGetMember(BobName, out PartyMember? bob)
+                    && bob!.HealthPermille == 1000;
+            },
+            StartTimeoutSeconds);
+        yield return null;
+        Assert.That(
+            list.Text.Split('\n'),
+            Is.EqualTo(new[] { $"{BobName} (L)  Lv 1 Adventurer", $"{AnnName}  Lv 1 Adventurer" }),
+            server.JoinOutput());
+        Assert.That(list.transform.Find("Panel/Row1/Bars").gameObject.activeSelf, Is.True, "the other's bars");
+
+        list.transform.Find("Panel/Row1").GetComponent<Button>().onClick.Invoke();
+        TargetFrame frame = client.GetComponentsInChildren<TargetFrame>(true).Single();
+        yield return WaitUntil(
+            () =>
+            {
+                other.Poll();
+                return world.Target == seen && frame.IsVisible;
+            },
+            StartTimeoutSeconds);
+        yield return null;
+        Assert.That(world.Target, Is.EqualTo(seen), "the row's press selected the member");
+        Assert.That(frame.transform.Find("Panel/Bar").gameObject.activeSelf, Is.True, "its bar in the frame");
+        Assert.That(frame.ShownRatio, Is.EqualTo(1f).Within(1e-3f));
+        Assert.That(client.Combat!.TryGetHealthBar(seen, out HealthBar? overhead), Is.True, "its bar overhead");
+        Assert.That(overhead!.gameObject.activeSelf, Is.True);
+
+        ChatPanel panel = client.GetComponentsInChildren<ChatPanel>(true).Single();
+        panel.HandleKeys(world, true, false);
+        panel.Input!.text = "/p ready";
+        panel.HandleKeys(world, true, false);
+        yield return WaitUntil(
+            () =>
+            {
+                other.Poll();
+                return heard.Contains($"[Party] {AnnName}: ready");
+            },
+            StartTimeoutSeconds);
+        Assert.That(heard, Has.Member($"[Party] {AnnName}: ready"), server.JoinOutput());
+        Assert.That(client.ChatLog.Lines.Select(line => line.Text), Has.Member($"[Party] {AnnName}: ready"));
         Assert.That(other.MalformedMessages + other.UnexpectedMessages, Is.Zero, "the other player's traffic");
     }
 

@@ -11,9 +11,10 @@ namespace Evertorch.Client
 {
 /// <summary>
 ///     The party list under the status bar at the left (Prototype Content §2): a row per member with its name, level,
-///     and job, "(L)" for the leader, and "Offline" or the map's name when it is not beside the player. It offers
-///     Leave, and the leader Kick and Lead on each other member's row, each armed by a first press. It hides while a
-///     side window shows, and outside a party.
+///     and job, "(L)" for the leader, its HP and SP bars once its status has come and it is beside the player, or
+///     "Offline" or the map's name. It offers Leave, and the leader Kick and Lead on each other member's row, each armed
+///     by a first press; a press on a row selects a member the client sees. It hides while a side window shows, and
+///     outside a party.
 /// </summary>
 public sealed class PartyList : MonoBehaviour
 {
@@ -44,6 +45,9 @@ public sealed class PartyList : MonoBehaviour
     private const float Inset = 4f;
 
     private static readonly Color AwayColor = new(0.55f, 0.57f, 0.6f);
+    private static readonly Color BarBackColor = new(0.12f, 0.12f, 0.14f);
+    private static readonly Color HealthColor = new(0.85f, 0.2f, 0.2f);
+    private static readonly Color SpiritColor = new(0.25f, 0.5f, 0.95f);
     private static readonly UiBuilder Ui = new(FontSize, HeaderHeight, 0f, 0f);
 
     private readonly List<Row> m_rows = new();
@@ -263,6 +267,14 @@ public sealed class PartyList : MonoBehaviour
             UiBuilder.SetText(row.Name, name);
             UiBuilder.SetText(row.Where, where);
             row.Name.color = member.IsInWorld ? UiBuilder.TextColor : AwayColor;
+            bool hasBars = where.Length == 0 && member.HealthPermille.HasValue && member.SpiritPermille.HasValue;
+            UiBuilder.SetActive(row.Bars, hasBars);
+            if (hasBars)
+            {
+                row.Health.anchorMax = new Vector2(member.HealthPermille!.Value / 1000f, 1f);
+                row.Spirit.anchorMax = new Vector2(member.SpiritPermille!.Value / 1000f, 1f);
+            }
+
             bool isOther = !string.Equals(member.Name, own, StringComparison.OrdinalIgnoreCase);
             bool hasActions = isLeader && isOther;
             UiBuilder.SetActive(row.Kick, hasActions);
@@ -286,6 +298,14 @@ public sealed class PartyList : MonoBehaviour
     {
         GameObject root = UiBuilder.CreateUiObject($"Row{index + 1}", m_panel!.transform);
         var row = new Row(root);
+
+        // The row's press selects its member; the Kick and Lead buttons over it take their own presses.
+        Image background = root.AddComponent<Image>();
+        background.color = Color.clear;
+        Button press = root.AddComponent<Button>();
+        press.targetGraphic = background;
+        press.navigation = new Navigation { mode = Navigation.Mode.None };
+        press.onClick.AddListener(() => m_client!.PressPartyMember(row.Member));
         row.Name = Ui.CreateLabel("Name", root.transform);
         row.Name.richText = false;
         row.Name.textWrappingMode = TextWrappingModes.NoWrap;
@@ -297,6 +317,12 @@ public sealed class PartyList : MonoBehaviour
         row.Where.textWrappingMode = TextWrappingModes.NoWrap;
         row.Where.overflowMode = TextOverflowModes.Ellipsis;
         StretchBottom(row.Where.rectTransform, Inset, Width - 2f * ActionWidth - Inset);
+        row.Bars = UiBuilder.CreateUiObject("Bars", root.transform);
+        StretchBottom((RectTransform)row.Bars.transform, Inset, Width - 2f * ActionWidth - Inset);
+        row.Health = UiBuilder.CreateBar("Health", row.Bars.transform, BarBackColor, HealthColor);
+        Band((RectTransform)row.Health.parent, 0.45f, 0.9f);
+        row.Spirit = UiBuilder.CreateBar("Spirit", row.Bars.transform, BarBackColor, SpiritColor);
+        Band((RectTransform)row.Spirit.parent, 0.1f, 0.4f);
         row.Kick = Ui.CreateButton(Kick, root.transform, () => Press(Kick, row.Member));
         row.KickLabel = row.Kick.GetComponentInChildren<TMP_Text>();
         row.Lead = Ui.CreateButton(Lead, root.transform, () => Press(Lead, row.Member));
@@ -304,6 +330,15 @@ public sealed class PartyList : MonoBehaviour
         StretchRight((RectTransform)row.Kick.transform, 2f * ActionWidth);
         StretchRight((RectTransform)row.Lead.transform, ActionWidth);
         return row;
+    }
+
+    // A bar across its parent between two heights, as fractions from the bottom.
+    private static void Band(RectTransform bar, float bottom, float top)
+    {
+        bar.anchorMin = new Vector2(0f, bottom);
+        bar.anchorMax = new Vector2(1f, top);
+        bar.offsetMin = Vector2.zero;
+        bar.offsetMax = Vector2.zero;
     }
 
     // A child from the panel's top-left corner, x and width across, top and height down.
@@ -358,6 +393,12 @@ public sealed class PartyList : MonoBehaviour
         public TMP_Text Name { get; set; } = null!;
 
         public TMP_Text Where { get; set; } = null!;
+
+        public GameObject Bars { get; set; } = null!;
+
+        public RectTransform Health { get; set; } = null!;
+
+        public RectTransform Spirit { get; set; } = null!;
 
         public GameObject Kick { get; set; } = null!;
 

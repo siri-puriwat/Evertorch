@@ -145,7 +145,8 @@ public sealed class PartyPanelTests
         client.Party.Apply(Roster(1, ("Ann0", Ground), ("Bobby", Ground)));
         yield return null;
 
-        Assert.That(list.GetComponentsInChildren<Button>().Select(button => button.name),
+        Assert.That(
+            list.GetComponentsInChildren<Button>().Select(button => button.name).Where(name => !name.StartsWith("Row")),
             Is.EqualTo(new[] { "Leave" }));
     }
 
@@ -227,6 +228,86 @@ public sealed class PartyPanelTests
             client.ChatLog.Lines.Select(line => line.Text),
             Is.EqualTo(new[] { "You cannot invite yourself.", "x is not online." }));
         Assert.That(recording.SentOf(MessageOpcode.PartyInvite), Is.Empty);
+    }
+
+    private void SpawnBobby(ClientWorld world)
+    {
+        world.OnSpawn(
+            new EntitySpawn(
+                new EntityId(7),
+                EntityKind.Player,
+                Adventurer.Value,
+                new WorldPosition(2.5f, 0f, 2.5f),
+                new WorldDirection(0f, 1f),
+                EntityStateFlags.None,
+                1000,
+                string.Empty,
+                "Bobby"));
+    }
+
+    // A member beside the player shows its HP and SP bars once its status has come; one elsewhere shows the map's
+    // name instead (Prototype Content §2).
+    [UnityTest]
+    public IEnumerator ARow_ShowsItsMembersBars_OnceItsStatusHasCome()
+    {
+        (GameClient client, _) = Enter();
+        PartyList list = Track(PartyList.Create(client));
+        client.Party.Apply(Roster(0, ("Ann0", Ground), ("Bobby", Ground), ("Cora", Field)));
+        yield return null;
+        bool isShownEarly = list.transform.Find("Panel/Row2/Bars").gameObject.activeSelf;
+
+        client.Party.Apply(new PartyMemberStatus("Bobby", 250, 800));
+        client.Party.Apply(new PartyMemberStatus("Cora", 500, 500));
+        yield return null;
+
+        Assert.That(isShownEarly, Is.False, "no status, no bars");
+        Transform bars = list.transform.Find("Panel/Row2/Bars");
+        Assert.That(bars.gameObject.activeSelf, Is.True);
+        Assert.That(((RectTransform)bars.Find("Health/Fill")).anchorMax.x, Is.EqualTo(0.25f).Within(1e-4f));
+        Assert.That(((RectTransform)bars.Find("Spirit/Fill")).anchorMax.x, Is.EqualTo(0.8f).Within(1e-4f));
+        Assert.That(list.transform.Find("Panel/Row3/Bars").gameObject.activeSelf, Is.False, "elsewhere, the map");
+    }
+
+    // A press on a member's row selects it as a click on its body would; one the client does not see is left alone
+    // (Prototype Content §2, §4).
+    [UnityTest]
+    public IEnumerator ARowsPress_SelectsAMemberTheClientSees()
+    {
+        (GameClient client, RecordingConnection recording) = Enter();
+        PartyList list = Track(PartyList.Create(client));
+        SpawnBobby(client.World!);
+        client.Party.Apply(Roster(0, ("Ann0", Ground), ("Bobby", Ground), ("Cora", null)));
+        yield return null;
+
+        Assert.That(Click(list, "Row3"), Is.True);
+        int afterAway = recording.SentOf(MessageOpcode.TargetEntity).Count();
+        Assert.That(Click(list, "Row2"), Is.True);
+
+        Assert.That(afterAway, Is.Zero, "Cora is not seen");
+        byte[] target = recording.SentOf(MessageOpcode.TargetEntity).Single();
+        Assert.That(TargetEntity.TryRead(target, out TargetEntity read), Is.True);
+        Assert.That(read.Target, Is.EqualTo(new EntityId(7)));
+    }
+
+    // A member's HP shows in the target frame, and over its body (Prototype Content §2).
+    [UnityTest]
+    public IEnumerator AMembersHealth_ShowsInTheTargetFrame()
+    {
+        (GameClient client, _) = Enter();
+        TargetFrame frame = Track(TargetFrame.Create(client));
+        ClientWorld world = client.World!;
+        SpawnBobby(world);
+        world.OnTargetChanged(new TargetChanged(Local, new EntityId(7)));
+        yield return null;
+        bool isBarForAStranger = frame.transform.Find("Panel/Bar").gameObject.activeSelf;
+
+        client.Party.Apply(Roster(0, ("Ann0", Ground), ("Bobby", Ground)));
+        client.Party.Apply(new PartyMemberStatus("Bobby", 400, 1000));
+        yield return null;
+
+        Assert.That(isBarForAStranger, Is.False, "others' HP is not shown");
+        Assert.That(frame.transform.Find("Panel/Bar").gameObject.activeSelf, Is.True);
+        Assert.That(frame.ShownRatio, Is.EqualTo(0.4f).Within(1e-3f));
     }
 }
 }

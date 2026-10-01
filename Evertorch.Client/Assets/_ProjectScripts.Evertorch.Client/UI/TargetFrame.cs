@@ -10,8 +10,8 @@ namespace Evertorch.Client
 {
 /// <summary>
 ///     The confirmed target (Prototype Content §2, §4): a monster's name, its HP ratio as a bar, its distance, and
-///     whether it is dead, or a selected player's name and job, "Ann · Vanguard", since others' HP is not shown, with
-///     Invite while the player could join the party (Prototype Content §2). It
+///     whether it is dead, or a selected player's name and job, "Ann · Vanguard", with its HP bar only for a party
+///     member, since others' HP is not shown, and Invite while the player could join the party (Prototype Content §2). It
 ///     shows only a target the server confirmed with <c>TargetChanged</c>, and the HP that the monster's own bar
 ///     shows at that moment, so the frame never runs ahead of the hits on screen. It sits at the top
 ///     centre, and narrower beside a window at the top left while one shows (finding 1 of the Milestone 7 review).
@@ -87,9 +87,13 @@ public sealed class TargetFrame : MonoBehaviour
         PlaceBeside(m_client.IsSideWindowOpen, m_client.Touch != null && m_client.Touch.IsVisible);
         if (target.Kind == EntityKind.Player)
         {
-            ShowPlayer(PlayerLabel(
-                target.Name,
-                BuildMessages.JobName(m_client.Content, new JobDefinitionId(target.DefinitionId))));
+            int? health = m_client.Party.TryGetMember(target.Name, out PartyMember? member)
+                ? member!.HealthPermille
+                : null;
+            ShowPlayer(
+                PlayerLabel(target.Name,
+                    BuildMessages.JobName(m_client.Content, new JobDefinitionId(target.DefinitionId))),
+                health / 1000f);
             m_targetName = target.Name;
             UiBuilder.SetActive(m_invite!, CanInvite(m_client, target.Name));
             return;
@@ -220,19 +224,30 @@ public sealed class TargetFrame : MonoBehaviour
     }
 
     /// <summary>
-    ///     A selected player: <paramref name="label" /> alone, with neither bar nor distance.
+    ///     A selected player: <paramref name="label" />, without a distance, and with the HP bar at
+    ///     <paramref name="ratio" /> for a party member whose status has come, or no bar.
     /// </summary>
-    public void ShowPlayer(string label)
+    public void ShowPlayer(string label, float? ratio = null)
     {
         UiBuilder.SetActive(m_panel!, true);
         ShowName(label);
+        UiBuilder.SetActive(m_fill!.parent.gameObject, ratio.HasValue);
+        if (ratio.HasValue)
+        {
+            int permille = Mathf.RoundToInt(Mathf.Clamp01(ratio.Value) * 1000f);
+            if (permille != m_shownPermille)
+            {
+                m_shownPermille = permille;
+                m_fill.anchorMax = new Vector2(permille / 1000f, 1f);
+            }
+        }
+
         if (m_isShownPlayer)
         {
             return;
         }
 
         m_isShownPlayer = true;
-        UiBuilder.SetActive(m_fill!.parent.gameObject, false);
         m_shownTenths = -1;
         m_shownDead = false;
         Write(m_detail!, string.Empty);

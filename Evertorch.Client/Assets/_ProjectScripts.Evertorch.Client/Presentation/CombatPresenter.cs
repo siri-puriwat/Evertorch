@@ -33,6 +33,7 @@ public sealed class CombatPresenter : IDisposable
 
     private readonly ClientWorld m_world;
     private readonly ClientContent? m_content;
+    private readonly ClientParty? m_party;
     private readonly double m_tickSeconds;
     private readonly Dictionary<EntityId, HealthBar> m_bars = new();
     private readonly Dictionary<EntityId, CastBar> m_castBars = new();
@@ -43,10 +44,16 @@ public sealed class CombatPresenter : IDisposable
     private readonly Material m_castBack;
     private readonly Material m_castFill;
 
-    public CombatPresenter(ClientWorld world, double tickSeconds, Material baseMaterial, ClientContent? content = null)
+    public CombatPresenter(
+        ClientWorld world,
+        double tickSeconds,
+        Material baseMaterial,
+        ClientContent? content = null,
+        ClientParty? party = null)
     {
         m_world = world ?? throw new ArgumentNullException(nameof(world));
         m_content = content;
+        m_party = party;
         if (baseMaterial == null)
         {
             throw new ArgumentNullException(nameof(baseMaterial));
@@ -169,6 +176,10 @@ public sealed class CombatPresenter : IDisposable
             {
                 PresentHealthBar(remote, pair.Value, isShownDead, camera);
             }
+            else if (remote.Kind == EntityKind.Player)
+            {
+                PresentMemberBar(remote, pair.Value, isShownDead, camera);
+            }
 
             PresentCastBar(pair.Key, pair.Value, localNow, remoteNow, camera);
         }
@@ -258,6 +269,36 @@ public sealed class CombatPresenter : IDisposable
         // The bar moves with the numbers, on the monster's own timeline, not when the message arrives.
         m_shownHealth.TryGetValue(monster.Entity, out ushort shown);
         bar.Show(view.OverheadPoint(0f), camera, shown);
+    }
+
+    // A party member's health reaches its party alone, so only a member's bar shows over a player (Network Protocol
+    // §9); it follows the member's status, at most once a second.
+    private void PresentMemberBar(RemoteEntity player, EntityView view, bool isShownDead, Camera? camera)
+    {
+        int? health = null;
+        if (m_party != null && m_party.TryGetMember(player.Name, out PartyMember? member))
+        {
+            health = member!.HealthPermille;
+        }
+
+        if (!m_bars.TryGetValue(player.Entity, out HealthBar? bar))
+        {
+            if (health == null)
+            {
+                return;
+            }
+
+            bar = HealthBar.Create(m_barBack, m_barFill);
+            m_bars.Add(player.Entity, bar);
+        }
+
+        if (health == null || isShownDead)
+        {
+            bar.Hide();
+            return;
+        }
+
+        bar.Show(view.OverheadPoint(0f), camera, health.Value);
     }
 
     private void PresentCastBar(EntityId caster, EntityView view, double localNow, double remoteNow, Camera? camera)
