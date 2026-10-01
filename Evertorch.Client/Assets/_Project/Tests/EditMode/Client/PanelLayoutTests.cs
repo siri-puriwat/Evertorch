@@ -12,6 +12,29 @@ namespace Evertorch.Client.Tests.EditMode
 [TestFixture]
 public sealed class PanelLayoutTests
 {
+    // The touch Chat button has a place of its own: clear of the log, the skill bar, the stick, the target buttons, the
+    // window buttons, and every side window (Prototype Content §2).
+    [TestCase(486f)]
+    [TestCase(607.5f)]
+    [TestCase(1920f)]
+    public void ChatButton_WithTheTouchControls_OverlapsNothing(float canvasHeight)
+    {
+        const float width = ClientUI.CanvasWidth;
+        Rect chat = TouchControls.ChatButtonBounds;
+        Rect[] others =
+        {
+            ChatPanel.BoundsFor(true), SkillBar.BoundsFor(width, SkillSlots.Count), TouchControls.StickBounds,
+            TouchControls.ButtonColumnBounds(width), TouchControls.StatsButtonBounds(canvasHeight),
+            TouchControls.SkillsButtonBounds(canvasHeight), TouchControls.OverlayToggleBounds(canvasHeight),
+            NpcWindow.BoundsFor(canvasHeight, 100, true), StatsWindow.BoundsFor(canvasHeight, true),
+            SkillsWindow.BoundsFor(canvasHeight, 11, true), InventoryWindow.BoundsFor(canvasHeight, 60, true)
+        };
+
+        Assert.That(others.Where(chat.Overlaps), Is.Empty);
+        Assert.That(chat.xMax, Is.LessThanOrEqualTo(width));
+        Assert.That(chat.size, Is.EqualTo(new Vector2(80f, 72f)), "as tall as the log beside it");
+    }
+
     [TestCase(486f, TestName = "Landscape 20:9")]
     [TestCase(607.5f, TestName = "Landscape 16:9")]
     [TestCase(1920f, TestName = "Portrait 9:16")]

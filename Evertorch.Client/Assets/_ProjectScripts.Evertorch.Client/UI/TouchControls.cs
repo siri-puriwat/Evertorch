@@ -38,6 +38,7 @@ public sealed class TouchControls : MonoBehaviour
     private GameObject? m_stickRoot;
     private GameObject? m_targetButtons;
     private GameObject? m_windowButtons;
+    private GameObject? m_chatButton;
 
     public bool IsVisible => m_stickRoot != null && m_stickRoot.activeSelf;
 
@@ -61,6 +62,12 @@ public sealed class TouchControls : MonoBehaviour
     ///     The right edge of the Dev, Stats, and Skills buttons on the left edge, in canvas units.
     /// </summary>
     public static float WindowButtonsRight => ToggleSize.x;
+
+    /// <summary>
+    ///     The Chat button, between the chat log and the target buttons, from the canvas's bottom-left corner
+    ///     (Prototype Content §2, §4).
+    /// </summary>
+    public static Rect ChatButtonBounds => new(770f, 128f, 80f, 72f);
 
     /// <summary>
     ///     The column of target buttons in the bottom right corner of a canvas <paramref name="canvasWidth" /> units
@@ -99,11 +106,12 @@ public sealed class TouchControls : MonoBehaviour
     }
 
     /// <param name="toggleOverlay">What the Dev button does; without it there is no Dev button.</param>
-    public static TouchControls Create(UnityAction? toggleOverlay = null)
+    /// <param name="openChat">What the Chat button does; without it there is no Chat button.</param>
+    public static TouchControls Create(UnityAction? toggleOverlay = null, UnityAction? openChat = null)
     {
         var root = new GameObject("TouchControls");
         TouchControls controls = root.AddComponent<TouchControls>();
-        controls.Build(toggleOverlay);
+        controls.Build(toggleOverlay, openChat);
         return controls;
     }
 
@@ -128,9 +136,14 @@ public sealed class TouchControls : MonoBehaviour
         {
             m_windowButtons.SetActive(isVisible);
         }
+
+        if (m_chatButton != null)
+        {
+            m_chatButton.SetActive(isVisible);
+        }
     }
 
-    private void Build(UnityAction? toggleOverlay)
+    private void Build(UnityAction? toggleOverlay, UnityAction? openChat)
     {
         ClientUI.EnsureEventSystem(transform);
 
@@ -168,6 +181,28 @@ public sealed class TouchControls : MonoBehaviour
         {
             CreateOverlayToggle(canvasObject.transform, toggleOverlay);
         }
+
+        if (openChat != null)
+        {
+            m_chatButton = CreateChatButton(canvasObject.transform, openChat);
+        }
+    }
+
+    // A tap opens the chat input, and with it the device's keyboard; the gamepad only reads the log.
+    private static GameObject CreateChatButton(Transform parent, UnityAction openChat)
+    {
+        Rect bounds = ChatButtonBounds;
+        GameObject chat = CreateImage("Chat", parent, bounds.size, AreaColor);
+        var rect = (RectTransform)chat.transform;
+        rect.anchorMin = Vector2.zero;
+        rect.anchorMax = Vector2.zero;
+        rect.pivot = Vector2.zero;
+        rect.anchoredPosition = bounds.position;
+        Button button = chat.AddComponent<Button>();
+        button.navigation = new Navigation { mode = Navigation.Mode.None };
+        button.onClick.AddListener(openChat);
+        AddLabel("Chat", chat.transform);
+        return chat;
     }
 
     // A column in the bottom right corner, Clear at the bottom, under the right thumb.

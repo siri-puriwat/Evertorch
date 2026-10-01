@@ -24,6 +24,7 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
     private readonly byte[] m_sendBuffer = new byte[ProtocolLimits.MaxClientPayloadBytes];
     private readonly Dictionary<QuestDefinitionId, NpcQuestOffer> m_questOffers = new();
     private readonly HashSet<uint> m_equipSequences = new();
+    private readonly Dictionary<uint, (ChatChannel Channel, string Recipient)> m_chatSequences = new();
     private uint m_commandSequence;
 
     public ClientConnection(IClientTransport transport, ClientConnectionSettings settings, IMapProvider maps)
@@ -525,6 +526,18 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
     }
 
     /// <summary>
+    ///     The channel and recipient of the chat line <paramref name="commandSequence" /> numbered, so a refusal can say
+    ///     which whisper found no one.
+    /// </summary>
+    public bool TryGetChatSequence(uint commandSequence, out ChatChannel channel, out string recipient)
+    {
+        bool isChat = m_chatSequences.TryGetValue(commandSequence, out (ChatChannel Channel, string Recipient) sent);
+        channel = isChat ? sent.Channel : ChatChannel.None;
+        recipient = isChat ? sent.Recipient : string.Empty;
+        return isChat;
+    }
+
+    /// <summary>
     ///     Asks to buy <paramref name="quantity" /> of <paramref name="item" /> from <paramref name="npc" />; 0 while not
     ///     in the world, else the command's sequence.
     /// </summary>
@@ -642,6 +655,12 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
         uint sequence = NextCommandSequence();
         var message = new ChatSend(channel, recipient ?? string.Empty, text, sequence);
         SendRouted(MessageOpcode.ChatSend, message.Write(m_sendBuffer));
+        if (m_chatSequences.Count >= MaxEquipSequences)
+        {
+            m_chatSequences.Clear();
+        }
+
+        m_chatSequences[sequence] = (channel, message.Recipient);
         return sequence;
     }
 
@@ -943,6 +962,7 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
         if (!isMapChange)
         {
             m_equipSequences.Clear();
+            m_chatSequences.Clear();
         }
 
         // The command sequence belongs to the character, not the connection: after a reconnect it goes on from the

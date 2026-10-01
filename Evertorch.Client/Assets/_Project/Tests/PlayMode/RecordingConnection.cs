@@ -110,7 +110,7 @@ internal sealed class RecordingConnection : IClientTransport, IMapProvider
         return Sent.Where(payload => payload.Length >= 2 && BitConverter.ToUInt16(payload, 0) == (ushort)opcode);
     }
 
-    private void Deliver(byte[] payload)
+    public void Deliver(byte[] payload)
     {
         m_events.Enqueue(listener => listener.OnPayload(ProtocolChannel.Control, payload));
         Connection.Poll();

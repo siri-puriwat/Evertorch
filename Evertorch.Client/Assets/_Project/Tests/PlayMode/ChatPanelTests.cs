@@ -129,19 +129,88 @@ public sealed class ChatPanelTests
         panel.HandleKeys(client.World, true, false);
         bool isTypingAfterSending = panel.IsTyping;
         panel.HandleKeys(client.World, true, false);
+        bool isReopenedByTheSameEnter = panel.IsTyping;
+        yield return null;
+        panel.HandleKeys(client.World, true, false);
         panel.Input.text = "   ";
         panel.HandleKeys(client.World, true, false);
+        yield return null;
         panel.HandleKeys(client.World, true, false);
         panel.HandleKeys(null, false, false);
         yield return null;
 
         byte[][] sent = recording.SentOf(MessageOpcode.ChatSend).ToArray();
         Assert.That(isTypingAfterSending, Is.False, "the Enter that sends closes the input");
+        Assert.That(isReopenedByTheSameEnter, Is.False, "and the field hearing it too does not open it again");
         Assert.That(panel.IsTyping, Is.False, "leaving the world closes it");
         Assert.That(client.IsTyping, Is.False);
         Assert.That(sent, Has.Length.EqualTo(1), "only spaces are not sent");
         Assert.That(ChatSend.TryRead(sent[0], out ChatSend? line), Is.True);
         Assert.That((line!.Channel, line.Recipient, line.Text), Is.EqualTo((ChatChannel.Nearby, "", "hello all")));
+    }
+
+    private static IEnumerator Type(ChatPanel panel, GameClient client, string typed)
+    {
+        panel.HandleKeys(client.World, true, false);
+        panel.Input!.text = typed;
+        panel.HandleKeys(client.World, true, false);
+        yield return null;
+    }
+
+    [UnityTest]
+    public IEnumerator Commands_WhisperAndSpeakToTheParty_AndARefusedWhisperNamesWhoWasNotOnline()
+    {
+        (GameClient client, RecordingConnection recording, InputActionAsset _) = CreateClientInTheWorld();
+        ChatPanel panel = CreatePanel(client);
+        yield return null;
+
+        yield return Type(panel, client, "/w Bobby psst");
+        yield return Type(panel, client, "/p ready");
+        yield return Type(panel, client, "/w Ann0 hi");
+        uint whisper = ChatSend.TryRead(recording.SentOf(MessageOpcode.ChatSend).First(), out ChatSend? first)
+            ? first!.CommandSequence
+            : 0;
+        uint party = recording.SentOf(MessageOpcode.ChatSend)
+            .Select(payload => ChatSend.TryRead(payload, out ChatSend? line) ? line! : null!)
+            .Single(line => line.Channel == ChatChannel.Party)
+            .CommandSequence;
+        foreach (uint refused in new[] { whisper, party })
+        {
+            var rejection = new CommandRejected(
+                refused,
+                refused == whisper ? CommandRejectionReason.InvalidTarget : CommandRejectionReason.NotAllowedNow);
+            byte[] payload = new byte[CommandRejected.EncodedLength];
+            rejection.Write(payload);
+            recording.Deliver(payload);
+        }
+
+        yield return null;
+
+        Assert.That(
+            recording.SentOf(MessageOpcode.ChatSend)
+                .Select(payload =>
+                    ChatSend.TryRead(payload, out ChatSend? line) ? (line!.Channel, line.Recipient) : default),
+            Is.EqualTo(new[] { (ChatChannel.Whisper, "Bobby"), (ChatChannel.Party, "") }),
+            "a whisper to oneself is not sent");
+        Assert.That(
+            client.ChatLog.Lines.Select(line => line.Text),
+            Is.EqualTo(new[] { "You cannot whisper to yourself.", "Bobby is not online.", "You are not in a party." }));
+    }
+
+    [UnityTest]
+    public IEnumerator TypingFasterThanTheBucket_IsRefusedByTheClient_AndNotSent()
+    {
+        (GameClient client, RecordingConnection recording, InputActionAsset _) = CreateClientInTheWorld();
+        ChatPanel panel = CreatePanel(client);
+        yield return null;
+
+        for (int line = 1; line <= ChatThrottle.Burst + 1; line++)
+        {
+            yield return Type(panel, client, $"line {line}");
+        }
+
+        Assert.That(recording.SentOf(MessageOpcode.ChatSend).Count(), Is.EqualTo(ChatThrottle.Burst));
+        Assert.That(client.ChatLog.Lines.Select(line => line.Text), Is.EqualTo(new[] { "You are typing too fast." }));
     }
 
     [UnityTest]

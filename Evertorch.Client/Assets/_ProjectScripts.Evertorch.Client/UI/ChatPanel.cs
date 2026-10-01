@@ -56,6 +56,7 @@ public sealed class ChatPanel : MonoBehaviour
     private RectTransform? m_panelRect;
     private TMP_InputField? m_input;
     private bool m_isLogChanged = true;
+    private int m_closedAtFrame = -1;
     private bool? m_isTouchLayout;
     private string? m_prompt;
 
@@ -187,6 +188,7 @@ public sealed class ChatPanel : MonoBehaviour
         }
 
         IsTyping = false;
+        m_closedAtFrame = Time.frameCount;
         m_input.DeactivateInputField();
         m_input.text = string.Empty;
         UiBuilder.SetActive(m_input.gameObject, false);
@@ -211,8 +213,8 @@ public sealed class ChatPanel : MonoBehaviour
     }
 
     /// <summary>
-    ///     Enter opens the input and sends; the Enter that sends does not open it again. Esc closes it, and so does
-    ///     leaving the world.
+    ///     Enter opens the input and sends; the Enter that sends does not open it again, even when the field heard it
+    ///     too. Esc closes it, and so does leaving the world.
     /// </summary>
     public void HandleKeys(ClientWorld? world, bool isEnter, bool isEscape)
     {
@@ -227,19 +229,49 @@ public sealed class ChatPanel : MonoBehaviour
                 Submit();
             }
         }
-        else if (isEnter && world != null)
+        else if (isEnter && world != null && Time.frameCount != m_closedAtFrame)
         {
             Open();
         }
     }
 
+    /// <summary>
+    ///     The words for a chat line the server refused: a whisper that found no one, party chat without a party, or
+    ///     else the refusal's own words.
+    /// </summary>
+    public static string DescribeRefusal(ChatChannel channel, string recipient, CommandRejectionReason reason)
+    {
+        if (channel == ChatChannel.Whisper && reason == CommandRejectionReason.InvalidTarget)
+        {
+            return $"{recipient} is not online.";
+        }
+
+        if (channel == ChatChannel.Party && reason == CommandRejectionReason.NotAllowedNow)
+        {
+            return "You are not in a party.";
+        }
+
+        return RejectionMessages.Describe(reason);
+    }
+
     private void Submit()
     {
-        string text = m_input != null ? m_input.text : string.Empty;
-        Close();
-        if (ChatText.IsValid(text))
+        if (!IsTyping)
         {
-            m_client?.Say(ChatChannel.Nearby, string.Empty, text);
+            return;
+        }
+
+        string typed = m_input != null ? m_input.text : string.Empty;
+        Close();
+        string? own = m_client != null ? m_client.PlayedCharacter?.Name : null;
+        ChatRequest request = ChatCommands.Parse(typed, m_log?.LastWhisperer, own);
+        if (request.Refusal != null)
+        {
+            Add(request.Refusal);
+        }
+        else if (request.Channel != ChatChannel.None)
+        {
+            m_client?.Say(request.Channel, request.Recipient, request.Text);
         }
     }
 
@@ -286,6 +318,17 @@ public sealed class ChatPanel : MonoBehaviour
 
     private void OnRejected(CommandRejected rejected)
     {
+        if (m_client != null
+            && m_client.Connection != null
+            && m_client.Connection.TryGetChatSequence(
+                rejected.CommandSequence,
+                out ChatChannel channel,
+                out string recipient))
+        {
+            Add(DescribeRefusal(channel, recipient, rejected.Reason));
+            return;
+        }
+
         bool isEquip = m_client != null
             && m_client.Connection != null
             && m_client.Connection.IsEquipSequence(rejected.CommandSequence);
@@ -418,6 +461,9 @@ public sealed class ChatPanel : MonoBehaviour
         }
 
         m_input = CreateInput(ui, panel.transform);
+
+        // A touch keyboard's Done reaches only the field.
+        m_input.onSubmit.AddListener(_ => Submit());
         UiBuilder.SetActive(m_input.gameObject, false);
         Place(false);
         m_panel.SetActive(false);

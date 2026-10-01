@@ -63,6 +63,7 @@ public sealed class GameClient : MonoBehaviour
     private readonly SkillTargeting m_targeting = new();
     private readonly TargetCycler m_targetCycler = new();
     private readonly UiHitTest m_uiHitTest = new();
+    private readonly ChatThrottle m_chatThrottle = new();
     private IClientTransport? m_socket;
     private ManualMoveSource? m_manualSource;
     private PointerMoveSource? m_pointerSource;
@@ -101,6 +102,7 @@ public sealed class GameClient : MonoBehaviour
     private PlayerInputGate? m_inputGate;
     private CombatPresenter? m_combat;
     private NamePlatePresenter? m_namePlates;
+    private ChatBubblePresenter? m_bubbles;
     private ProjectilePresenter? m_projectiles;
     private Material? m_runtimeMaterial;
     private string m_leaveReason = string.Empty;
@@ -180,6 +182,8 @@ public sealed class GameClient : MonoBehaviour
 
     public NamePlatePresenter? NamePlates => m_namePlates;
 
+    public ChatBubblePresenter? Bubbles => m_bubbles;
+
     public ProjectilePresenter? Projectiles => m_projectiles;
 
     public IReadOnlyDictionary<EntityId, EntityView> RemoteViews => m_remoteViews;
@@ -210,15 +214,16 @@ public sealed class GameClient : MonoBehaviour
     {
         get
         {
-            IReadOnlyList<CharacterListEntry>? characters = m_world != null ? Connection?.Characters : null;
-            if (characters == null)
+            ClientWorld? world = m_world;
+            IReadOnlyList<CharacterListEntry>? characters = world != null ? Connection?.Characters : null;
+            if (world == null || characters == null)
             {
                 return null;
             }
 
             for (int index = 0; index < characters.Count; index++)
             {
-                if (characters[index].Character == m_lastCharacter)
+                if (characters[index].Character == world.Character)
                 {
                     return characters[index];
                 }
@@ -261,7 +266,7 @@ public sealed class GameClient : MonoBehaviour
         m_overlay.transform.SetParent(transform, false);
         // The Dev button is for a device without a keyboard; everywhere else F1 shows the overlay.
         UnityAction? toggleOverlay = Application.isMobilePlatform ? m_overlay.Toggle : null;
-        Touch = TouchControls.Create(toggleOverlay);
+        Touch = TouchControls.Create(toggleOverlay, () => m_chat?.Open());
         Touch.transform.SetParent(transform, false);
         Touch.SetVisible(Application.isMobilePlatform);
         m_hud = CombatHud.Create(this);
@@ -433,6 +438,7 @@ public sealed class GameClient : MonoBehaviour
 
         m_projectiles?.Present(m_localView, m_remoteViews);
         m_namePlates?.Present(m_localView, m_remoteViews, Camera.main);
+        m_bubbles?.Present(m_localView, m_remoteViews, Camera.main, Time.unscaledTime);
     }
 
     private void OnDestroy()
@@ -596,7 +602,7 @@ public sealed class GameClient : MonoBehaviour
         Connection.ChangedMap += OnChangedMap;
         Connection.LeftWorld += OnLeftWorld;
         Connection.Closed += OnClosed;
-        Connection.ChatLineReceived += ChatLog.Add;
+        Connection.ChatLineReceived += OnChatLine;
         Status = $"Connecting to {session.Host}:{session.Port}";
         Connection.Connect(session.Host, session.Port);
     }
@@ -1012,6 +1018,7 @@ public sealed class GameClient : MonoBehaviour
         world.LocalJobChanged += ReplaceLocalBody;
         m_combat = new CombatPresenter(world, 1.0 / Connection.ServerTickRate, material, m_contentLoader.Content);
         m_namePlates = new NamePlatePresenter(world, m_contentLoader.Content, PlayedCharacter?.Name ?? string.Empty);
+        m_bubbles = new ChatBubblePresenter(world.LocalEntity);
         m_projectiles = new ProjectilePresenter(
             world,
             m_contentLoader.Content,
@@ -1427,7 +1434,30 @@ public sealed class GameClient : MonoBehaviour
     /// </summary>
     public uint Say(ChatChannel channel, string recipient, string text)
     {
-        return Connection != null ? Connection.SendChat(channel, recipient, text) : 0;
+        if (Connection == null || Connection.State != ClientConnectionState.InWorld)
+        {
+            return 0;
+        }
+
+        // The server scores a throttled line, so the client keeps a stricter bucket of its own (Network Protocol
+        // §11).
+        if (!m_chatThrottle.TryTake(Time.realtimeSinceStartupAsDouble))
+        {
+            ChatLog.AddSystem("You are typing too fast.");
+            return 0;
+        }
+
+        return Connection.SendChat(channel, recipient, text);
+    }
+
+    // A line said nearby also shows over its speaker (Prototype Content §2).
+    private void OnChatLine(ChatReceived line)
+    {
+        ChatLog.Add(line);
+        if (line.Channel == ChatChannel.Nearby)
+        {
+            m_bubbles?.Say(line.Speaker, line.Text, Time.unscaledTime);
+        }
     }
 
     /// <summary>
@@ -1463,6 +1493,8 @@ public sealed class GameClient : MonoBehaviour
         m_combat = null;
         m_namePlates?.Dispose();
         m_namePlates = null;
+        m_bubbles?.Dispose();
+        m_bubbles = null;
         m_projectiles?.Dispose();
         m_projectiles = null;
         m_world = null;
