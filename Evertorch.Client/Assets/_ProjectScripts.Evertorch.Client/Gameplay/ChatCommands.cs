@@ -9,12 +9,13 @@ namespace Evertorch.Client
 /// </summary>
 public readonly struct ChatRequest
 {
-    private ChatRequest(ChatChannel channel, string recipient, string text, string? refusal)
+    private ChatRequest(ChatChannel channel, string recipient, string text, string? refusal, string? invitee = null)
     {
         Channel = channel;
         Recipient = recipient;
         Text = text;
         Refusal = refusal;
+        Invitee = invitee;
     }
 
     /// <summary>
@@ -31,6 +32,11 @@ public readonly struct ChatRequest
     /// </summary>
     public string? Refusal { get; }
 
+    /// <summary>
+    ///     The player to invite to the party; null unless the line was <c>/invite Name</c>.
+    /// </summary>
+    public string? Invitee { get; }
+
     public static ChatRequest Send(ChatChannel channel, string recipient, string text)
     {
         return new ChatRequest(channel, recipient, text, null);
@@ -42,16 +48,22 @@ public readonly struct ChatRequest
     }
 
     public static ChatRequest Nothing => new(ChatChannel.None, string.Empty, string.Empty, null);
+
+    public static ChatRequest Invite(string name)
+    {
+        return new ChatRequest(ChatChannel.None, string.Empty, string.Empty, null, name);
+    }
 }
 
 /// <summary>
 ///     The chat input's commands (Prototype Content §2): <c>/w Name text</c> whispers, <c>/r text</c> answers the last
-///     whisper, <c>/p text</c> speaks to the party, and anything else is said nearby. The client checks the name and
+///     whisper, <c>/p text</c> speaks to the party, <c>/invite Name</c> invites to it, and anything else is said
+///     nearby. The client checks the name and
 ///     the text rules itself, so an honest player is never scored for a malformed line (Network Protocol §11).
 /// </summary>
 public static class ChatCommands
 {
-    public const string Usage = "Commands: /w Name text, /r text, /p text.";
+    public const string Usage = "Commands: /w Name text, /r text, /p text, /invite Name.";
 
     public static ChatRequest Parse(string typed, string? lastWhisperer, string? ownName)
     {
@@ -82,6 +94,12 @@ public static class ChatCommands
         if (string.Equals(command, "/p", StringComparison.OrdinalIgnoreCase))
         {
             return Line(ChatChannel.Party, string.Empty, rest);
+        }
+
+        if (string.Equals(command, "/invite", StringComparison.OrdinalIgnoreCase))
+        {
+            string name = FirstWord(rest, out _);
+            return name.Length == 0 ? ChatRequest.Refuse("Invite with /invite Name.") : ChatRequest.Invite(name);
         }
 
         return ChatRequest.Refuse(Usage);

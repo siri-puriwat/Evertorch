@@ -269,6 +269,10 @@ public sealed class ChatPanel : MonoBehaviour
         {
             Add(request.Refusal);
         }
+        else if (request.Invitee != null)
+        {
+            m_client?.InviteToParty(request.Invitee);
+        }
         else if (request.Channel != ChatChannel.None)
         {
             m_client?.Say(request.Channel, request.Recipient, request.Text);
@@ -326,6 +330,17 @@ public sealed class ChatPanel : MonoBehaviour
                 out string recipient))
         {
             Add(DescribeRefusal(channel, recipient, rejected.Reason));
+            return;
+        }
+
+        if (m_client != null
+            && m_client.Connection != null
+            && m_client.Connection.TryGetPartySequence(
+                rejected.CommandSequence,
+                out PartyCommand command,
+                out string name))
+        {
+            Add(RejectionMessages.DescribeParty(command, name, rejected.Reason));
             return;
         }
 

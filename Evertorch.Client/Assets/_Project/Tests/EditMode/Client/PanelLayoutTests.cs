@@ -7,7 +7,7 @@ namespace Evertorch.Client.Tests.EditMode
 /// <summary>
 ///     Where the skill bar, the chat, and the windows sit (Prototype Content §2, owner decisions 10 and 13), in canvas
 ///     units, which are 1,080 wide on every screen: the chat clears the bar, neither covers the stick or the touch
-///     buttons, and no window row lies over a control.
+///     buttons, no window row lies over a control, and the party list and the invite's question stand clear of them all.
 /// </summary>
 [TestFixture]
 public sealed class PanelLayoutTests
@@ -178,6 +178,44 @@ public sealed class PanelLayoutTests
         Assert.That(beside.y - beside.x, Is.GreaterThanOrEqualTo(200f), "still wide enough for a name and a bar");
     }
 
+    // The party list hangs under the status bar at the left and the invite's question stands beside the chat, or
+    // over the touch log: neither lies over the chat, the skill bar, the stick, a touch button, or the target frame,
+    // nor over each other, on every screen (Prototype Content §2).
+    [TestCase(486f, false)]
+    [TestCase(607.5f, false)]
+    [TestCase(1920f, false)]
+    [TestCase(486f, true)]
+    [TestCase(607.5f, true)]
+    [TestCase(1920f, true)]
+    public void PartyListAndInvitePrompt_OverlapNothing(float canvasHeight, bool isTouch)
+    {
+        const float width = ClientUI.CanvasWidth;
+        Rect list = PartyList.BoundsFor(canvasHeight, isTouch);
+        Rect prompt = PartyInvitePrompt.BoundsFor(isTouch);
+        Vector2 frame = TargetFrame.XRangeFor(false);
+        var target = new Rect(
+            frame.x,
+            TargetFrame.BottomFor(canvasHeight),
+            frame.y - frame.x,
+            TargetFrame.TallestHeight);
+        Rect[] others = isTouch
+            ? new[]
+            {
+                ChatPanel.BoundsFor(true), SkillBar.BoundsFor(width, SkillSlots.Count), TouchControls.StickBounds,
+                TouchControls.ButtonColumnBounds(width), TouchControls.StatsButtonBounds(canvasHeight),
+                TouchControls.SkillsButtonBounds(canvasHeight), TouchControls.OverlayToggleBounds(canvasHeight),
+                TouchControls.ChatButtonBounds, target
+            }
+            : new[] { ChatPanel.BoundsFor(false), SkillBar.BoundsFor(width, SkillSlots.Count), target };
+
+        Assert.That(others.Where(list.Overlaps), Is.Empty, "the list");
+        Assert.That(others.Where(prompt.Overlaps), Is.Empty, "the prompt");
+        Assert.That(list.Overlaps(prompt), Is.False, "the list and the prompt");
+        Assert.That(list.yMax, Is.EqualTo(canvasHeight - 64f).Within(1e-3f), "under the status bar");
+        Assert.That(prompt.xMax, Is.LessThanOrEqualTo(InventoryWindow.Left), "short of the inventory window");
+        Assert.That(PartyList.RowHeightFor(canvasHeight, isTouch), Is.GreaterThanOrEqualTo(24f), "a row stays legible");
+    }
+
     // The layout table of Prototype Content §2: x 8 to 540 and y 128 to 262 on the desktop, x 226 to 762 and y 128 to
     // 200 with the touch controls.
     [Test]
@@ -206,6 +244,19 @@ public sealed class PanelLayoutTests
         Rect three = NpcWindow.BoundsFor(1920f, 3, true);
 
         Assert.That(three.height, Is.EqualTo(56f + 3 * 30f + 2 * 6f).Within(1e-3f));
+    }
+
+    // The layout table's place: x 8 to 188 from y 543.5 down to 339.5 on the desktop, x 118 to 298 with touch.
+    [Test]
+    public void PartyList_StandsWhereTheLayoutPutsIt()
+    {
+        Rect desktop = PartyList.BoundsFor(607.5f, false);
+        Rect touch = PartyList.BoundsFor(607.5f, true);
+
+        Assert.That((desktop.xMin, desktop.xMax, desktop.yMin, desktop.yMax), Is.EqualTo((8f, 188f, 339.5f, 543.5f)));
+        Assert.That((touch.xMin, touch.xMax), Is.EqualTo((118f, 298f)));
+        Assert.That(touch.xMin, Is.GreaterThan(TouchControls.WindowButtonsRight), "clear of the window buttons");
+        Assert.That(PartyList.BoundsFor(607.5f, false, 2).height, Is.EqualTo(24f + 2 * 36f), "as tall as its rows");
     }
 
     [Test]

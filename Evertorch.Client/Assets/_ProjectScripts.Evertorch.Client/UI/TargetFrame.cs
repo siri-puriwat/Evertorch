@@ -10,13 +10,21 @@ namespace Evertorch.Client
 {
 /// <summary>
 ///     The confirmed target (Prototype Content §2, §4): a monster's name, its HP ratio as a bar, its distance, and
-///     whether it is dead, or a selected player's name and job, "Ann · Vanguard", since others' HP is not shown. It
+///     whether it is dead, or a selected player's name and job, "Ann · Vanguard", since others' HP is not shown, with
+///     Invite while the player could join the party (Prototype Content §2). It
 ///     shows only a target the server confirmed with <c>TargetChanged</c>, and the HP that the monster's own bar
 ///     shows at that moment, so the frame never runs ahead of the hits on screen. It sits at the top
 ///     centre, and narrower beside a window at the top left while one shows (finding 1 of the Milestone 7 review).
 /// </summary>
 public sealed class TargetFrame : MonoBehaviour
 {
+    public const string Invite = "Invite";
+
+    /// <summary>
+    ///     The frame at its tallest, a selected player's name, its empty detail line, and Invite, in canvas units.
+    /// </summary>
+    public const float TallestHeight = 2 * Padding + 3 * RowHeight + 2 * Spacing;
+
     // With the status bar, under the chat and the login panel.
     private const int SortingOrder = 6;
     private const float Width = 420f;
@@ -27,18 +35,22 @@ public sealed class TargetFrame : MonoBehaviour
     private const float StatusBarHeight = 56f;
     private const float BarHeight = 14f;
     private const int Padding = 10;
+    private const float RowHeight = 30f;
+    private const float Spacing = 6f;
 
     // The colours of the bar over the monster.
     private static readonly Color BarBackColor = new(0.15f, 0.05f, 0.05f);
     private static readonly Color BarFillColor = new(0.85f, 0.2f, 0.2f);
 
-    private static readonly UiBuilder Ui = new(22f, 30f, 0f, 6f);
+    private static readonly UiBuilder Ui = new(22f, RowHeight, 0f, Spacing);
 
     private GameClient? m_client;
     private GameObject? m_panel;
     private TMP_Text? m_name;
     private RectTransform? m_fill;
     private TMP_Text? m_detail;
+    private GameObject? m_invite;
+    private string m_targetName = string.Empty;
     private string? m_shownName;
     private int m_shownPermille = -1;
     private int m_shownTenths = -1;
@@ -78,8 +90,12 @@ public sealed class TargetFrame : MonoBehaviour
             ShowPlayer(PlayerLabel(
                 target.Name,
                 BuildMessages.JobName(m_client.Content, new JobDefinitionId(target.DefinitionId))));
+            m_targetName = target.Name;
+            UiBuilder.SetActive(m_invite!, CanInvite(m_client, target.Name));
             return;
         }
+
+        UiBuilder.SetActive(m_invite!, false);
 
         float ratio = target.HealthPermille / 1000f;
         bool isDead = target.IsDead;
@@ -122,6 +138,29 @@ public sealed class TargetFrame : MonoBehaviour
 
         float left = NpcWindow.RightFor(isTouchShown) + Margin;
         return new Vector2(left, Math.Min(left + BesideWidth, InventoryWindow.Left - Margin));
+    }
+
+    /// <summary>
+    ///     The lowest the frame at its tallest reaches on a canvas <paramref name="canvasHeight" /> units tall, from the
+    ///     bottom.
+    /// </summary>
+    public static float BottomFor(float canvasHeight)
+    {
+        return canvasHeight - (StatusBarHeight + Margin) - TallestHeight;
+    }
+
+    /// <summary>
+    ///     Whether Invite shows for the player named <paramref name="name" />: someone else, not already a member, while
+    ///     the player has no party or leads it.
+    /// </summary>
+    public static bool CanInvite(GameClient client, string name)
+    {
+        string? own = client.PlayedCharacter?.Name;
+        ClientParty party = client.Party;
+        return CharacterNames.IsValid(name)
+            && !string.Equals(name, own, StringComparison.OrdinalIgnoreCase)
+            && !party.TryGetMember(name, out _)
+            && (!party.IsInParty || party.IsLeader(own));
     }
 
     public static TargetFrame Create(GameClient client)
@@ -260,6 +299,8 @@ public sealed class TargetFrame : MonoBehaviour
 
         m_detail = Ui.CreateLabel("Detail", panel);
         m_detail.alignment = TextAlignmentOptions.Center;
+        m_invite = Ui.CreateButton(Invite, panel, () => client.InviteToParty(m_targetName));
+        m_invite.SetActive(false);
         m_panel.SetActive(false);
     }
 

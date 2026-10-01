@@ -61,6 +61,18 @@ public sealed class ChatCommandsTests
     }
 
     [Test]
+    public void SlashInvite_AsksToInviteTheNamedPlayer_OrSaysHow()
+    {
+        ChatRequest invite = ChatCommands.Parse("/invite Bobby", null, "Anna");
+
+        Assert.That((invite.Invitee, invite.Channel, invite.Refusal),
+            Is.EqualTo(("Bobby", ChatChannel.None, (string?)null)));
+        Assert.That(ChatCommands.Parse("/INVITE   Cora now", null, "Anna").Invitee, Is.EqualTo("Cora"));
+        Assert.That(ChatCommands.Parse("/invite", null, "Anna").Refusal, Is.EqualTo("Invite with /invite Name."));
+        Assert.That(ChatCommands.Parse("/p hi", null, "Anna").Invitee, Is.Null);
+    }
+
+    [Test]
     public void SlashP_SpeaksToTheParty()
     {
         Assert.That(Parse("/p on my way"), Is.EqualTo((ChatChannel.Party, "", "on my way", (string?)null)));

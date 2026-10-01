@@ -99,6 +99,8 @@ public sealed class GameClient : MonoBehaviour
     private SkillsWindow? m_skillsWindow;
     private SkillBar? m_skillBar;
     private ChatPanel? m_chat;
+    private PartyList? m_partyList;
+    private PartyInvitePrompt? m_invitePrompt;
     private PlayerInputGate? m_inputGate;
     private CombatPresenter? m_combat;
     private NamePlatePresenter? m_namePlates;
@@ -174,6 +176,16 @@ public sealed class GameClient : MonoBehaviour
     ///     The chat log, which outlives every world and connection of this client (Prototype Content §2).
     /// </summary>
     public ChatLog ChatLog { get; } = new();
+
+    /// <summary>
+    ///     The player's party and the invite waiting for an answer, which outlive every world and connection of the
+    ///     character (Prototype Content §2).
+    /// </summary>
+    public ClientParty Party { get; } = new();
+
+    public PartyList? PartyList => m_partyList;
+
+    public PartyInvitePrompt? InvitePrompt => m_invitePrompt;
 
     /// <summary>
     ///     Whether the chat input has focus, which shuts every gameplay key (Prototype Content §4).
@@ -287,6 +299,10 @@ public sealed class GameClient : MonoBehaviour
         m_skillBar.transform.SetParent(transform, false);
         m_chat = ChatPanel.Create(this);
         m_chat.transform.SetParent(transform, false);
+        m_partyList = PartyList.Create(this);
+        m_partyList.transform.SetParent(transform, false);
+        m_invitePrompt = PartyInvitePrompt.Create(this);
+        m_invitePrompt.transform.SetParent(transform, false);
         m_login = LoginPanel.Create(this);
         m_login.transform.SetParent(transform, false);
 
@@ -603,6 +619,9 @@ public sealed class GameClient : MonoBehaviour
         Connection.LeftWorld += OnLeftWorld;
         Connection.Closed += OnClosed;
         Connection.ChatLineReceived += OnChatLine;
+        Connection.PartyEventReceived += OnPartyEvent;
+        Connection.PartyRosterReceived += Party.Apply;
+        Connection.PartyMemberStatusReceived += Party.Apply;
         Status = $"Connecting to {session.Host}:{session.Port}";
         Connection.Connect(session.Host, session.Port);
     }
@@ -946,6 +965,8 @@ public sealed class GameClient : MonoBehaviour
 
     private void OnLeftWorld()
     {
+        // Another character may enter next: none of this party is its.
+        Party.Clear();
         LeaveWorld();
         Status = "Logged out: choose or create a character";
     }
@@ -1448,6 +1469,77 @@ public sealed class GameClient : MonoBehaviour
         }
 
         return Connection.SendChat(channel, recipient, text);
+    }
+
+    /// <summary>
+    ///     Invites the player named <paramref name="name" />, the chat's <c>/invite</c> and the target frame's Invite.
+    ///     The client refuses what the server would, in the same words, so nothing is sent for it. 0 when nothing was
+    ///     sent, else the command's sequence.
+    /// </summary>
+    public uint InviteToParty(string name)
+    {
+        string? own = PlayedCharacter?.Name;
+        if (!CharacterNames.IsValid(name))
+        {
+            ChatLog.AddSystem($"{name} is not online.");
+            return 0;
+        }
+
+        if (string.Equals(name, own, StringComparison.OrdinalIgnoreCase))
+        {
+            ChatLog.AddSystem("You cannot invite yourself.");
+            return 0;
+        }
+
+        if (Party.IsInParty && !Party.IsLeader(own))
+        {
+            ChatLog.AddSystem("Only the party's leader can do that.");
+            return 0;
+        }
+
+        return Connection != null ? Connection.SendPartyInvite(name) : 0;
+    }
+
+    /// <summary>
+    ///     Answers the invite waiting, the prompt's Accept or Decline.
+    /// </summary>
+    public uint AnswerPartyInvite(bool isAccepted)
+    {
+        string? inviter = Party.Inviter;
+        if (inviter == null || Connection == null)
+        {
+            return 0;
+        }
+
+        Party.EndInvite();
+        return Connection.SendPartyReply(inviter, isAccepted);
+    }
+
+    public uint LeaveParty()
+    {
+        return Connection != null ? Connection.SendPartyLeave() : 0;
+    }
+
+    public uint KickFromParty(string member)
+    {
+        return Connection != null ? Connection.SendPartyKick(member) : 0;
+    }
+
+    public uint MakePartyLeader(string member)
+    {
+        return Connection != null ? Connection.SendPartyLead(member) : 0;
+    }
+
+    // What happened to the party joins the log as a grey line; an invite also asks its question (Prototype Content
+    // §2).
+    private void OnPartyEvent(PartyEvent message)
+    {
+        if (message.Kind == PartyEventKind.Invited)
+        {
+            Party.Invite(message.Name, Time.realtimeSinceStartupAsDouble);
+        }
+
+        ChatLog.AddSystem(PartyMessages.Describe(message.Kind, message.Name, PlayedCharacter?.Name));
     }
 
     // A line said nearby also shows over its speaker (Prototype Content §2).
