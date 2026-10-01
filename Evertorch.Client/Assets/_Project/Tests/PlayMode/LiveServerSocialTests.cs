@@ -6,6 +6,7 @@ using System.Reflection;
 using System.Threading.Tasks;
 using Evertorch.Protocol;
 using NUnit.Framework;
+using TMPro;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.SceneManagement;
@@ -67,10 +68,11 @@ public sealed class LiveServerSocialTests
         }
     }
 
-    // Another player entering the training ground is seen by the real client; today's step is only that presence.
+    // Another player entering the training ground is seen by the real client, its name under its feet as the client's
+    // own is under its own; selected, the target frame names it and its job (Prototype Content §2).
     [UnityTest]
     [Timeout(TestTimeoutMs)]
-    public IEnumerator OtherPlayer_Entering_IsSeenByTheRealClient()
+    public IEnumerator OtherPlayer_Entering_IsDrawnWithItsName_AndNamedInTheTargetFrame()
     {
         string actionsPath = RequirePrerequisites();
         yield return StartDatabaseAndServer();
@@ -122,6 +124,31 @@ public sealed class LiveServerSocialTests
             StartTimeoutSeconds);
 
         Assert.That(world.Remotes.ContainsKey(seen), Is.True, $"{client.Status} {server.JoinOutput()}");
+        NamePlatePresenter plates = client.NamePlates!;
+        yield return WaitUntil(
+            () =>
+            {
+                other.Poll();
+                return plates.TryGetPlate(seen, out NamePlate? plate) && plate!.Text == BobName;
+            },
+            StartTimeoutSeconds);
+        Assert.That(plates.TryGetPlate(seen, out NamePlate? shown) ? shown!.Text : null, Is.EqualTo(BobName));
+        Assert.That(plates.LocalPlate?.Text, Is.EqualTo(AnnName), "its own name under its own feet");
+
+        TargetFrame frame = client.GetComponentsInChildren<TargetFrame>(true).Single();
+        client.Connection!.SendTarget(seen);
+        yield return WaitUntil(
+            () =>
+            {
+                other.Poll();
+                return world.Target == seen && frame.IsVisible;
+            },
+            StartTimeoutSeconds);
+        yield return null;
+        Assert.That(
+            frame.GetComponentsInChildren<TMP_Text>(true).Single(label => label.name == "Name").text,
+            Is.EqualTo($"{BobName} \u00B7 Adventurer"),
+            "the frame names the player and its job");
         Assert.That(other.MalformedMessages + other.UnexpectedMessages, Is.Zero, "the other player's traffic");
     }
 

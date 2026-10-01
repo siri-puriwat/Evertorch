@@ -99,6 +99,7 @@ public sealed class GameClient : MonoBehaviour
     private SkillBar? m_skillBar;
     private FeedbackLines? m_feedback;
     private CombatPresenter? m_combat;
+    private NamePlatePresenter? m_namePlates;
     private ProjectilePresenter? m_projectiles;
     private Material? m_runtimeMaterial;
     private string m_leaveReason = string.Empty;
@@ -165,6 +166,8 @@ public sealed class GameClient : MonoBehaviour
     public bool IsInWorld => m_world != null || m_isChangingMap;
 
     public CombatPresenter? Combat => m_combat;
+
+    public NamePlatePresenter? NamePlates => m_namePlates;
 
     public ProjectilePresenter? Projectiles => m_projectiles;
 
@@ -418,6 +421,7 @@ public sealed class GameClient : MonoBehaviour
         }
 
         m_projectiles?.Present(m_localView, m_remoteViews);
+        m_namePlates?.Present(m_localView, m_remoteViews, Camera.main);
     }
 
     private void OnDestroy()
@@ -995,6 +999,7 @@ public sealed class GameClient : MonoBehaviour
         world.Inventory.Changed += HoldLocalWeapon;
         world.LocalJobChanged += ReplaceLocalBody;
         m_combat = new CombatPresenter(world, 1.0 / Connection.ServerTickRate, material, m_contentLoader.Content);
+        m_namePlates = new NamePlatePresenter(world, m_contentLoader.Content, PlayedCharacter?.Name ?? string.Empty);
         m_projectiles = new ProjectilePresenter(
             world,
             m_contentLoader.Content,
@@ -1419,6 +1424,8 @@ public sealed class GameClient : MonoBehaviour
 
         m_combat?.Dispose();
         m_combat = null;
+        m_namePlates?.Dispose();
+        m_namePlates = null;
         m_projectiles?.Dispose();
         m_projectiles = null;
         m_world = null;

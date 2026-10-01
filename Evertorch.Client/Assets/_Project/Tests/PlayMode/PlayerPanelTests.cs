@@ -290,7 +290,13 @@ public sealed class PlayerPanelTests
         return window;
     }
 
-    private static void Spawn(ClientWorld world, long entity, EntityKind kind, string definition, ushort healthPermille)
+    private static void Spawn(
+        ClientWorld world,
+        long entity,
+        EntityKind kind,
+        string definition,
+        ushort healthPermille,
+        string name = "")
     {
         world.OnSpawn(
             new EntitySpawn(
@@ -300,7 +306,9 @@ public sealed class PlayerPanelTests
                 new WorldPosition(2.5f, 0f, 2.5f),
                 new WorldDirection(0f, 1f),
                 EntityStateFlags.None,
-                healthPermille));
+                healthPermille,
+                string.Empty,
+                name));
     }
 
     private static bool Press(Component window, string name)
@@ -886,17 +894,17 @@ public sealed class PlayerPanelTests
         Assert.That(frame.IsVisible, Is.False);
     }
 
-    // A selected player shows by its job's name alone, with neither bar nor distance; a monster selected after it shows
-    // its bar again (Prototype Content §2).
+    // A selected player shows by its name and its job's name, with neither bar nor distance; a monster selected after
+    // it shows its bar again (Prototype Content §2).
     [UnityTest]
-    public IEnumerator TargetFrame_ForASelectedPlayer_ShowsItsJobNameAlone()
+    public IEnumerator TargetFrame_ForASelectedPlayer_ShowsItsNameAndJob()
     {
         GameClient client = CreateIdleClient();
         ClientWorld world = GiveWorld(client);
         GiveGuild(client);
         var frame = TargetFrame.Create(client);
         m_created.Add(frame.gameObject);
-        Spawn(world, 7, EntityKind.Player, Vanguard.Value, 400);
+        Spawn(world, 7, EntityKind.Player, Vanguard.Value, 0, "Anna");
         Spawn(world, 8, EntityKind.Monster, Slime, 600);
 
         world.OnTargetChanged(new TargetChanged(Local, new EntityId(7)));
@@ -908,7 +916,10 @@ public sealed class PlayerPanelTests
         yield return null;
 
         Assert.That(frame.IsVisible, Is.True);
-        Assert.That((name, detail, isBarShown), Is.EqualTo(("Vanguard", string.Empty, false)), "the job's name alone");
+        Assert.That(
+            (name, detail, isBarShown),
+            Is.EqualTo(("Anna \u00B7 Vanguard", string.Empty, false)),
+            "the name and the job");
         Assert.That(Label(frame, "Name").text, Is.EqualTo(Slime));
         Assert.That(IsBarShown(frame), Is.True, "the monster's bar back");
         Assert.That(frame.ShownRatio, Is.EqualTo(0.6f).Within(0.001f));

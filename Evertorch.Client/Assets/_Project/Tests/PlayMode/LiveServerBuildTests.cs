@@ -421,8 +421,8 @@ public sealed class LiveServerBuildTests : InputTestFixture
         TMP_Text[] labels = frame.GetComponentsInChildren<TMP_Text>(true);
         Assert.That(
             (labels.Single(label => label.name == "Name").text, labels.Single(label => label.name == "Detail").text),
-            Is.EqualTo(("Adventurer", string.Empty)),
-            "the frame names the job alone");
+            Is.EqualTo(($"{MendedName} \u00B7 Adventurer", string.Empty)),
+            "the frame names the player and its job");
 
         // Esc clears the selection, and a walk apart keeps the caster's own body from lying under the click, since both
         // entered on the same spawn point.

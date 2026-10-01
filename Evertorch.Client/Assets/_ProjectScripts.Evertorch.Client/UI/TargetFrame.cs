@@ -10,9 +10,9 @@ namespace Evertorch.Client
 {
 /// <summary>
 ///     The confirmed target (Prototype Content §2, §4): a monster's name, its HP ratio as a bar, its distance, and
-///     whether it is dead, or a selected player's job name alone, since players carry no name on the wire and others'
-///     HP is not shown. It shows only a target the server confirmed with <c>TargetChanged</c>, and the HP that the
-///     monster's own bar shows at that moment, so the frame never runs ahead of the hits on screen. It sits at the top
+///     whether it is dead, or a selected player's name and job, "Ann · Vanguard", since others' HP is not shown. It
+///     shows only a target the server confirmed with <c>TargetChanged</c>, and the HP that the monster's own bar
+///     shows at that moment, so the frame never runs ahead of the hits on screen. It sits at the top
 ///     centre, and narrower beside a window at the top left while one shows (finding 1 of the Milestone 7 review).
 /// </summary>
 public sealed class TargetFrame : MonoBehaviour
@@ -75,7 +75,9 @@ public sealed class TargetFrame : MonoBehaviour
         PlaceBeside(m_client.IsSideWindowOpen, m_client.Touch != null && m_client.Touch.IsVisible);
         if (target.Kind == EntityKind.Player)
         {
-            ShowPlayer(BuildMessages.JobName(m_client.Content, new JobDefinitionId(target.DefinitionId)));
+            ShowPlayer(PlayerLabel(
+                target.Name,
+                BuildMessages.JobName(m_client.Content, new JobDefinitionId(target.DefinitionId))));
             return;
         }
 
@@ -171,12 +173,20 @@ public sealed class TargetFrame : MonoBehaviour
     }
 
     /// <summary>
-    ///     A selected player: <paramref name="jobName" /> alone, with neither bar nor distance.
+    ///     A selected player's name and job, "Ann · Vanguard"; the job alone if the player has no name.
     /// </summary>
-    public void ShowPlayer(string jobName)
+    public static string PlayerLabel(string name, string jobName)
+    {
+        return string.IsNullOrEmpty(name) ? jobName : $"{name} \u00B7 {jobName}";
+    }
+
+    /// <summary>
+    ///     A selected player: <paramref name="label" /> alone, with neither bar nor distance.
+    /// </summary>
+    public void ShowPlayer(string label)
     {
         UiBuilder.SetActive(m_panel!, true);
-        ShowName(jobName);
+        ShowName(label);
         if (m_isShownPlayer)
         {
             return;
