@@ -3,18 +3,15 @@ using System;
 namespace Evertorch.Game
 {
 /// <summary>
-///     A percentage added to each primary statistic, as a status effect grants it (Gameplay Systems §9.1). The rules
-///     apply it to the character's statistics before equipment bonuses.
+///     A percentage added to each primary statistic, as a status effect grants it, or taken away, as a debuff does
+///     (Gameplay Systems §9.1). The rules apply it to the character's statistics before equipment bonuses; content
+///     keeps each effect's within <see cref="ContentLimits.MinStatPercent" /> and
+///     <see cref="ContentLimits.MaxStatPercent" />, and the effects together may go further.
 /// </summary>
 public readonly struct StatPercentages : IEquatable<StatPercentages>
 {
     public StatPercentages(int str, int agi, int vit, int @int, int dex, int luk)
     {
-        if (str < 0 || agi < 0 || vit < 0 || @int < 0 || dex < 0 || luk < 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(str), "A status effect's percentages cannot be negative.");
-        }
-
         Str = str;
         Agi = agi;
         Vit = vit;

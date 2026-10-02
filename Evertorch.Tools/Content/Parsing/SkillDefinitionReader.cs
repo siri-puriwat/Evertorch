@@ -52,19 +52,14 @@ internal static class SkillDefinitionReader
             root.ReportField("damageType", "is required for a damage effect");
         }
 
-        // A status effect is only ever the caster's own (Gameplay Systems §9.1).
-        if (kind == SkillEffectKind.Status && targetType != SkillTargetType.Self)
-        {
-            root.ReportField("targetType", "must be self for a status effect");
-        }
-
         // Damage lands on an enemy; the server has no hit of a player on itself to resolve.
         if (kind == SkillEffectKind.Damage && targetType != SkillTargetType.Enemy)
         {
             root.ReportField("targetType", "must be enemy for a damage effect");
         }
 
-        // Another player may only be healed: there is no PvP (Gameplay Systems §6, §9).
+        // Another player may only be healed: there is no PvP (Gameplay Systems §6, §9). A status effect lands on its
+        // caster or, cast by a monster, on the player it fights (§9.1).
         if (targetType == SkillTargetType.Ally && kind != SkillEffectKind.Heal)
         {
             root.ReportField("targetType", "may be ally only for a heal effect");
@@ -226,7 +221,9 @@ internal static class SkillDefinitionReader
 
     private static int OptionalPercent(YamlFieldReader reader, string key)
     {
-        return reader.Has(key) ? reader.RequiredInt(key, 0, ContentLimits.MaxStatPercent) : 0;
+        return reader.Has(key)
+            ? reader.RequiredInt(key, ContentLimits.MinStatPercent, ContentLimits.MaxStatPercent)
+            : 0;
     }
 }
 }

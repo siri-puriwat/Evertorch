@@ -27,6 +27,11 @@ public static class ContentLimits
     /// </summary>
     public const int MaxSkillLevel = 5;
 
+    /// <summary>
+    ///     A status level's percentage of a statistic (Gameplay Systems §9.1): a debuff takes away at most 99 %.
+    /// </summary>
+    public const int MinStatPercent = -99;
+
     public const int MaxStatPercent = 1000;
     public const int MaxAttackSpeedPenalty = 200;
     public const int MaxDamageRatioPercent = 10_000;

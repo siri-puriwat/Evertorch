@@ -148,6 +148,12 @@ public sealed class RenewalCharacterRulesTests
     [TestCase(99, 150, 247)]
     [TestCase(5, 0, 5)]
     [TestCase(0, 1000, 0)]
+    [TestCase(30, -40, 18)]
+    [TestCase(7, -40, 5)]
+    [TestCase(1, -99, 1)]
+    [TestCase(3, -99, 1)]
+    [TestCase(0, -40, 0)]
+    [TestCase(10, -150, 1)]
     public void ApplyStatPercent_FloorsWhatEachStatisticGains(int stat, int percent, int expected)
     {
         var stats = new PrimaryStats(stat, stat, stat, stat, stat, stat);
@@ -280,6 +286,24 @@ public sealed class RenewalCharacterRulesTests
         Assert.That(focused, Is.EqualTo(new PrimaryStats(5, 10, 5, 5, 10, 5)));
         Assert.That((before.AttackSpeed, after.AttackSpeed), Is.EqualTo((153, 154)));
         Assert.That((before.Hit, after.Hit), Is.EqualTo((182, 187)));
+    }
+
+    // Numbed takes 40 % of AGI (Gameplay Systems §9.1): from 50 to 30 the flee falls by 20 and the attack speed from
+    // 160 to 157; with Focus at +100 % the two add up to +60 %.
+    [Test]
+    public void ApplyStatPercent_ForNumbed_SlowsTheAttackAndTheDodge_AndAddsUpWithFocus()
+    {
+        var rules = new RenewalCharacterRules();
+        var stats = new PrimaryStats(5, 50, 5, 5, 5, 5);
+
+        PrimaryStats numbed = rules.ApplyStatPercent(stats, new StatPercentages(0, -40, 0, 0, 0, 0));
+        PrimaryStats both = rules.ApplyStatPercent(stats, new StatPercentages(0, 60, 0, 0, 100, 0));
+        DerivedStats before = Calculate(1, stats);
+        DerivedStats after = Calculate(1, numbed);
+
+        Assert.That(numbed, Is.EqualTo(new PrimaryStats(5, 30, 5, 5, 5, 5)));
+        Assert.That((before.Flee - after.Flee, before.AttackSpeed, after.AttackSpeed), Is.EqualTo((20, 160, 157)));
+        Assert.That(both, Is.EqualTo(new PrimaryStats(5, 80, 5, 5, 10, 5)));
     }
 
     [Test]

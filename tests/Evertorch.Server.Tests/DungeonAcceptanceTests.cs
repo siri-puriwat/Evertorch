@@ -18,9 +18,9 @@ namespace Evertorch.Server.Tests
 ///     (<see cref="DungeonPackage" />), with three clients built from the client's production networking and gameplay
 ///     code. Three players enter the training ground together, Aldo invites Bree and Cora into a party, and the party
 ///     walks through the ground's portal onto the training field, then through the field's east portal into the Umbral
-///     Grotto, where a pack of Grotto Crawlers links when Aldo attacks one. Each later line of Milestone 13 adds its
-///     steps here: the wisp's debuff, the boss with its slam and its announcement, the most valuable player's prize,
-///     the quests, and a restart.
+///     Grotto, where a pack of Grotto Crawlers links when Aldo attacks one and a Gloom Wisp numbs Bree. Each later
+///     line of Milestone 13 adds its steps here: the boss with its slam and its announcement, the most valuable
+///     player's prize, the quests, and a restart.
 /// </summary>
 [TestFixture]
 [NonParallelizable]
@@ -30,6 +30,7 @@ public sealed class DungeonAcceptanceTests
     private const string TrainingField = "map.training_field";
     private const string UmbralGrotto = "map.umbral_grotto";
     private const string GrottoCrawler = "monster.grotto_crawler";
+    private const string GloomWisp = "monster.gloom_wisp";
     private const string AldoIdentity = "dungeon-aldo";
     private const string AldoName = "Aldo";
     private const string BreeIdentity = "dungeon-bree";
@@ -38,6 +39,8 @@ public sealed class DungeonAcceptanceTests
     private const string CoraName = "Cora";
 
     private static readonly TimeSpan FightLimit = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan WalkLimit = TimeSpan.FromSeconds(30);
+    private static readonly StatusDefinitionId Numbed = new("status.numbed");
 
     private PostgresFixture m_database = null!;
 
@@ -195,7 +198,8 @@ public sealed class DungeonAcceptanceTests
 
     // The party walks up the corridor to the crawler hall, and Aldo attacks the nearest Grotto Crawler: it strikes
     // back, and its kin within 11 m that see it answer its call, so more than one crawler swings at the party
-    // (Gameplay Systems §10). The test package disarms the crawlers, so the party lives on.
+    // (Gameplay Systems §10). The test package disarms the crawlers, so the party lives on, and takes their dodge away,
+    // which no level-1 character's hit could beat.
     private static void MeetThePackThatLinks(SocketClient aldo, params SocketClient[] party)
     {
         const string step = "the pack";
@@ -225,12 +229,81 @@ public sealed class DungeonAcceptanceTests
         EntityId crawler = aldo.CycleTarget(true);
         Assert.That(IsGrottoCrawler(aldo.World, crawler), Is.True, $"{step}: Tab found a Grotto Crawler");
         Assert.That(SocketClients.PumpUntil(() => aldo.World.Target == crawler, party), Is.True, $"{step}: targeted");
+        int hits = 0;
+        aldo.World.DamageReceived += damage =>
+            hits += damage.Source == aldo.World.LocalEntity && damage.Result != CombatResult.Miss ? 1 : 0;
         aldo.AttackTarget();
         Assert.That(
             SocketClients.PumpUntil(() => swingers.Count >= 2, FightLimit, party),
             Is.True,
-            $"{step}: more than one crawler swung at the party ({swingers.Count})");
+            $"{step}: more than one crawler swung at the party ({swingers.Count}, after {hits} hits by Aldo)");
         aldo.AutoAttack.OnWalkRequested();
+    }
+
+    // The party walks back down the corridor and east into the wisp gallery, and Bree attacks a Gloom Wisp: it keeps
+    // its distance and casts Numbing Spark at Bree, whose client hears of the numbing and whose sheet's attack speed
+    // and flee fall (Gameplay Systems §9.1). The test package disarms the wisps, takes their dodge away, and has them
+    // cast at every decision they may.
+    private static void MeetTheWispThatNumbs(SocketClient bree, params SocketClient[] party)
+    {
+        const string step = "the wisp";
+        var gallery = new WorldPosition(6f, 0f, -20f);
+        foreach (SocketClient client in party)
+        {
+            Assert.That(
+                client.Controller.TryMoveTo(client.World.Predictor.Position, gallery),
+                Is.True,
+                $"{step}: a way to the wisp gallery");
+        }
+
+        Assert.That(
+            SocketClients.PumpUntil(() => party.All(client => !client.Controller.HasPath), WalkLimit, party),
+            Is.True,
+            $"{step}: in the wisp gallery");
+        CharacterSheet before = bree.World.Sheet!;
+        EntityId wisp = default;
+        for (int tries = 0; tries < 8 && !IsGloomWisp(bree.World, wisp); tries++)
+        {
+            EntityId next = bree.CycleTarget(true);
+            SocketClients.PumpUntil(() => bree.World.Target == next, party);
+            wisp = bree.World.Target;
+        }
+
+        Assert.That(IsGloomWisp(bree.World, wisp), Is.True, $"{step}: Tab found a Gloom Wisp");
+        // A hit provokes the wisp, and a miss does not; Bree then stands, so it keeps its distance and casts rather
+        // than walking away.
+        bool hasHit = false;
+        bree.World.DamageReceived += damage =>
+            hasHit |= damage.Source == bree.World.LocalEntity
+                && damage.Target == wisp
+                && damage.Result != CombatResult.Miss;
+        int misses = 0;
+        bree.World.DamageReceived += damage =>
+            misses += damage.Source == bree.World.LocalEntity && damage.Result == CombatResult.Miss ? 1 : 0;
+        bree.AttackTarget();
+        Assert.That(
+            SocketClients.PumpUntil(() => hasHit, FightLimit, party),
+            Is.True,
+            $"{step}: Bree hit the wisp (after {misses} misses)");
+        bree.AutoAttack.OnWalkRequested();
+        Assert.That(
+            SocketClients.PumpUntil(
+                () => bree.World.StatusEffects.Any(effect => effect.Status == Numbed),
+                FightLimit,
+                party),
+            Is.True,
+            $"{step}: Bree heard of the numbing");
+        Assert.That(
+            SocketClients.PumpUntil(
+                () => bree.World.Sheet!.AttackSpeed < before.AttackSpeed && bree.World.Sheet.Flee < before.Flee,
+                party),
+            Is.True,
+            $"{step}: Bree's attacks and dodge slowed");
+    }
+
+    private static bool IsGloomWisp(ClientWorld world, EntityId entity)
+    {
+        return world.Remotes.TryGetValue(entity, out RemoteEntity? remote) && remote.DefinitionId == GloomWisp;
     }
 
     private static void AssertCleanTraffic(string step, params SocketClient[] clients)
@@ -248,7 +321,12 @@ public sealed class DungeonAcceptanceTests
         using var root = new TemporaryDirectory();
         PackageFixture.WriteTo(
             Path.Combine(root.Path, "content", "server"),
-            DungeonPackage.Build(DungeonPackage.Disarm(GrottoCrawler)));
+            DungeonPackage.Build(
+                DungeonPackage.Disarm(GrottoCrawler),
+                DungeonPackage.Expose(GrottoCrawler),
+                DungeonPackage.Disarm(GloomWisp),
+                DungeonPackage.Expose(GloomWisp),
+                DungeonPackage.AlwaysCast(GloomWisp)));
 
         using IHost host = StartHost(root.Path);
         ServerContent content = host.Services.GetRequiredService<ServerContent>();
@@ -270,6 +348,9 @@ public sealed class DungeonAcceptanceTests
 
         MeetThePackThatLinks(aldo, aldo, bree, cora);
         AssertCleanTraffic("the pack", aldo, bree, cora);
+
+        MeetTheWispThatNumbs(bree, aldo, bree, cora);
+        AssertCleanTraffic("the wisp", aldo, bree, cora);
 
         host.StopAsync().GetAwaiter().GetResult();
     }

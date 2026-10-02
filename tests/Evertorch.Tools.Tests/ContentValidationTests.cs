@@ -131,7 +131,7 @@ public sealed class ContentValidationTests
         "        damage: { ratio: 1319 }\n        heal: { hp: 5 }",
         "server.levels[0].effect.damage",
         "exactly one of damage, heal, or status")]
-    [TestCase(Focus, "targetType: self", "targetType: enemy", "targetType", "must be self for a status effect")]
+    [TestCase(Focus, "targetType: self", "targetType: ally", "targetType", "may be ally only for a heal effect")]
     [TestCase(Strike, "targetType: enemy", "targetType: self", "targetType", "must be enemy for a damage effect")]
     [TestCase(
         Focus,
@@ -143,8 +143,8 @@ public sealed class ContentValidationTests
         "between 1 and")]
     [TestCase(Focus, "status: status.focus", "status: skill.focus", "server.levels[0].effect.status.status",
         "expected 'status.'")]
-    [TestCase(Focus, "agi: 137", "agi: 1001", "server.levels[0].effect.status.statPercent.agi", "between 0 and")]
-    [TestCase(Focus, "agi: 137", "agi: -1", "server.levels[0].effect.status.statPercent.agi", "between 0 and")]
+    [TestCase(Focus, "agi: 137", "agi: 1001", "server.levels[0].effect.status.statPercent.agi", "between -99 and")]
+    [TestCase(Focus, "agi: 137", "agi: -100", "server.levels[0].effect.status.statPercent.agi", "between -99 and")]
     [TestCase(
         FocusStatus,
         "displayName: Focus\n",

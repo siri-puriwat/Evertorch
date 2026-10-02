@@ -43,6 +43,17 @@ public sealed class DungeonPackageTests
     }
 
     [Test]
+    public void Build_WithAWispExposedAndAlwaysCasting_LoadsItSo()
+    {
+        const string wisp = "monster.gloom_wisp";
+        ServerContent content = ServerContentLoader.Load(
+            DungeonPackage.Build(DungeonPackage.Expose(wisp), DungeonPackage.AlwaysCast(wisp)));
+
+        MonsterDefinition definition = content.Monsters[new MonsterDefinitionId(wisp)];
+        Assert.That((definition.Flee, definition.Skills[0].Chance), Is.EqualTo((0, 1d)));
+    }
+
+    [Test]
     public void Build_WithNoEdit_IsTheRepositoryPackage()
     {
         Dictionary<string, byte[]> repository = PackageFixture.BuildRepositoryPackage();

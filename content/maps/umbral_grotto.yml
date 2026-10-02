@@ -11,6 +11,12 @@ server:
       radius: 5.0
       count: 6
       respawnMs: 20000
+    # The wisp gallery's wisps, which keep their distance and numb whoever fights them.
+    - monster: monster.gloom_wisp
+      center: { x: 16.0, y: 0.0, z: -19.5 }
+      radius: 6.0
+      count: 5
+      respawnMs: 20000
   portals:
     # In front of the west gate; arrivals on the field face west beside its east gate.
     - center: { x: -30.5, y: 0.0, z: -22.0 }

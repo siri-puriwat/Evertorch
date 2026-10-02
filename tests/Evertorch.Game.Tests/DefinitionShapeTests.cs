@@ -432,13 +432,14 @@ public sealed class DefinitionShapeTests
     }
 
     [Test]
-    public void StatPercentages_OfTwoEffects_AddUp_AndNeverGoNegative()
+    public void StatPercentages_OfTwoEffects_AddUp_ADebuffsTakingAway()
     {
         StatPercentages sum = new StatPercentages(1, 2, 3, 4, 5, 6).Plus(new StatPercentages(10, 0, 0, 0, 10, 0));
-        Action negative = () => _ = new StatPercentages(0, -1, 0, 0, 0, 0);
+        StatPercentages focusedAndNumbed =
+            new StatPercentages(0, 100, 0, 0, 100, 0).Plus(new StatPercentages(0, -40, 0, 0, 0, 0));
 
         Assert.That(sum, Is.EqualTo(new StatPercentages(11, 2, 3, 4, 15, 6)));
-        Assert.That(negative, Throws.InstanceOf<ArgumentOutOfRangeException>());
+        Assert.That(focusedAndNumbed, Is.EqualTo(new StatPercentages(0, 60, 0, 0, 100, 0)));
     }
 
     [Test]

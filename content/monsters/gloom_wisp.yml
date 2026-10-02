@@ -1,0 +1,46 @@
+id: monster.gloom_wisp
+displayName: Gloom Wisp
+level: 16
+stats:
+  hp: 700
+  physicalAttack: 30
+  physicalDefense: 10
+  hit: 240
+  flee: 190
+  magicAttack: 70
+movement:
+  baseSpeed: 4.4
+combat:
+  # A ranged basic attack; it walks away from anyone nearer than ai.keepDistance.
+  attackRange: 6.0
+  attackIntervalMs: 1800
+ai:
+  behavior: passive
+  perceptionRadius: 6.0
+  leashRadius: 14.0
+  roamRadius: 4.0
+  idlePauseMs: { min: 4000, max: 5000 }
+  scanIntervalMs: 100
+  keepDistance: 3.5
+skills:
+  - skill: skill.numbing_spark
+    chance: 0.15
+drops:
+  - item: item.material.gloom_dust
+    chance: 0.60
+    amount: { min: 1, max: 2 }
+  - item: item.weapon.ash_staff
+    chance: 0.05
+    amount: { min: 1, max: 1 }
+  - item: item.consumable.minor_mana
+    chance: 0.30
+    amount: { min: 1, max: 2 }
+rewards:
+  baseExperience: 150
+  jobExperience: 110
+client:
+  # The spark wisp's body, in violet.
+  prefab: monster_spark_wisp
+  icon: monster_spark_wisp_icon
+  projectile: projectile_spark
+  tint: "#6A4C9C"

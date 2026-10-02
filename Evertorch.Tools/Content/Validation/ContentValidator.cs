@@ -433,8 +433,8 @@ public static class ContentValidator
         }
     }
 
-    // A basic attack needs its damage type; every other skill a job lists needs an effect to resolve, and a first
-    // job's whole tree fits one skill list (Content Pipeline §7).
+    // A basic attack needs its damage type; every other skill a job lists needs an effect to resolve and keeps its
+    // statuses to its caster, and a first job's whole tree fits one skill list (Content Pipeline §7).
     private static void RequireJobSkills(
         AuthoredJob job,
         HashSet<string> knownSkills,
@@ -469,6 +469,14 @@ public static class ContentValidator
             if (skillsById.TryGetValue(skill, out SkillDefinition? definition) && !definition.HasEffect)
             {
                 Report(job.Source, fieldPath, $"names skill '{skill}', which has no effect", diagnostics);
+            }
+            else if (definition != null && IsStatusOnAnEnemy(definition))
+            {
+                Report(
+                    job.Source,
+                    fieldPath,
+                    $"names skill '{skill}', which puts a status on an enemy; a job's statuses are its own",
+                    diagnostics);
             }
 
             if (definition?.Requires != null)
@@ -535,6 +543,13 @@ public static class ContentValidator
 
             next = step.Requires;
         }
+    }
+
+    private static bool IsStatusOnAnEnemy(SkillDefinition skill)
+    {
+        return skill.TargetType == SkillTargetType.Enemy
+            && skill.Levels.Count > 0
+            && skill.Levels[0].Effect.Kind == SkillEffectKind.Status;
     }
 
     // A monster casts through the skill pipeline at the player it fights, so each skill it lists must resolve to

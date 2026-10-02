@@ -515,7 +515,8 @@ public sealed class CombatSystem : ITickPhase
 
         if (values.Effect.Kind == SkillEffectKind.Status)
         {
-            // Effects are players' alone this milestone; the content keeps them to skills on the caster (§9.1).
+            // Effects are players' alone: a job's status skill lands on its caster, a monster's on the player it
+            // fights (§9.1), with no roll to resist it.
             if (target is PlayerEntity affected)
             {
                 m_statusEffects.Apply(

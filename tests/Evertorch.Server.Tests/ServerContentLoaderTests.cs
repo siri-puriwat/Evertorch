@@ -500,6 +500,18 @@ public sealed class ServerContentLoaderTests
     }
 
     [Test]
+    public void Load_WhenAJobKnowsAStatusCastAtAnEnemy_Fails()
+    {
+        Dictionary<string, byte[]> files = PackageFixture.BuildRepositoryPackage();
+        PackageFixture.SetValue(files, Skills, "skill.focus", "targetType", "\"enemy\"");
+        PackageFixture.RewriteManifest(files);
+
+        Assert.That(
+            ProblemsOf(files),
+            Does.Contain("jobs.json: job.adventurer: knows skill 'skill.focus', which puts a status on an enemy"));
+    }
+
+    [Test]
     public void Load_WhenAJobKnowsMoreSkillsThanASkillListCarries_Fails()
     {
         Dictionary<string, byte[]> files = PackageFixture.BuildFixturePackage();
@@ -543,7 +555,7 @@ public sealed class ServerContentLoaderTests
     }
 
     [Test]
-    public void Load_WhenASkillAppliesAnUnknownStatusEffect_OrAppliesOneToAnEnemy_Fails()
+    public void Load_WhenASkillAppliesAnUnknownStatusEffect_Fails_ButOneOnAnEnemyLoads()
     {
         Dictionary<string, byte[]> unknown = PackageFixture.BuildFixturePackage();
         MakeTheBasicAttackApply(unknown, "status.none", "self");
@@ -554,9 +566,7 @@ public sealed class ServerContentLoaderTests
         Assert.That(
             ProblemsOf(unknown),
             Is.EqualTo(new[] { "skills.json: skill.basic_attack: applies unknown status effect 'status.none'" }));
-        Assert.That(
-            ProblemsOf(enemy),
-            Is.EqualTo(new[] { "skills.json: definitions[0].targetType: must be self for a status effect" }));
+        Assert.That(ProblemsOf(enemy), Is.Empty, "a monster's status lands on the player it fights");
     }
 
     [Test]
@@ -569,6 +579,18 @@ public sealed class ServerContentLoaderTests
         Assert.That(
             ProblemsOf(files),
             Is.EqualTo(new[] { "skills.json: definitions[0].levels[0].effect.statPercent.agi: must be at most 1000" }));
+    }
+
+    [Test]
+    public void Load_WhenASkillLevelsStatusTakesMoreThan99Percent_Fails()
+    {
+        Dictionary<string, byte[]> files = PackageFixture.BuildFixturePackage();
+        AddFocus(files);
+        MakeTheBasicAttackApply(files, "status.focus", "self", "-100");
+
+        Assert.That(
+            ProblemsOf(files),
+            Is.EqualTo(new[] { "skills.json: definitions[0].levels[0].effect.statPercent.agi: must be at least -99" }));
     }
 
     [Test]

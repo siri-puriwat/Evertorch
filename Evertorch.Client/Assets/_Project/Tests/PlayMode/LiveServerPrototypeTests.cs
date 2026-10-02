@@ -239,8 +239,11 @@ public sealed class LiveServerPrototypeTests : InputTestFixture
             .FirstOrDefault();
         Assert.That(wisp, Is.Not.Null, "the client draws a wisp");
 
+        // A miss does not turn a passive monster on its attacker (Gameplay Systems §10), so only a hit counts.
         bool isHit = false;
-        field.DamageReceived += damage => isHit |= damage.Source == field.LocalEntity && damage.Target == wisp!.Entity;
+        field.DamageReceived += damage => isHit |= damage.Source == field.LocalEntity
+            && damage.Target == wisp!.Entity
+            && damage.Result != CombatResult.Miss;
         client.Connection!.SendAttack(wisp!.Entity);
         float deadline = Time.realtimeSinceStartup + StepTimeoutSeconds * 2f;
         while (!isHit && Time.realtimeSinceStartup < deadline)

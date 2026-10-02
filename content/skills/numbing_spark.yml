@@ -1,0 +1,15 @@
+id: skill.numbing_spark
+displayName: Numbing Spark
+targetType: enemy
+server:
+  range: 6.0
+  # A debuff on the player it hits: AGI 40 % lower for 15 s, so it swings later and dodges less, but walks as fast.
+  # A recast replaces the effect rather than stacking.
+  levels:
+    - castTimeMs: { fixed: 800 }
+      cooldownMs: 8000
+      effect:
+        status: { status: status.numbed, durationMs: 15000, statPercent: { agi: -40 } }
+client:
+  icon: skill_numbing_spark
+  projectile: projectile_spark

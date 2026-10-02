@@ -650,18 +650,14 @@ public static class ServerContentLoader
             entry.Report("damageType", "is required for a damage effect");
         }
 
-        if (kind == SkillEffectKind.Status && targetType != SkillTargetType.Self)
-        {
-            entry.Report("targetType", "must be self for a status effect");
-        }
-
         // A player's hit on itself has no hit context to resolve (CombatSystem).
         if (kind == SkillEffectKind.Damage && targetType != SkillTargetType.Enemy)
         {
             entry.Report("targetType", "must be enemy for a damage effect");
         }
 
-        // Another player may only be healed: there is no PvP (Gameplay Systems §6, §9).
+        // Another player may only be healed: there is no PvP (Gameplay Systems §6, §9). A status effect lands on its
+        // caster or, cast by a monster, on the player it fights (§9.1).
         if (targetType == SkillTargetType.Ally && kind != SkillEffectKind.Heal)
         {
             entry.Report("targetType", "may be ally only for a heal effect");
@@ -740,7 +736,10 @@ public static class ServerContentLoader
             string[] names = { "str", "agi", "vit", "int", "dex", "luk" };
             for (int index = 0; index < names.Length; index++)
             {
-                values[index] = percent.RequiredInt(names[index], 0, ContentLimits.MaxStatPercent);
+                values[index] = percent.RequiredInt(
+                    names[index],
+                    ContentLimits.MinStatPercent,
+                    ContentLimits.MaxStatPercent);
             }
 
             percent.ReportUnexpectedProperties();
@@ -1410,6 +1409,13 @@ public static class ServerContentLoader
                 else if (skills.TryGetValue(skill, out SkillDefinition? known) && !known.HasEffect)
                 {
                     problems.Add($"{JobsFile}: {job.Id}: knows skill '{skill}', which has no effect");
+                }
+                else if (known != null
+                         && known.TargetType == SkillTargetType.Enemy
+                         && known.Levels[0].Effect.Kind == SkillEffectKind.Status)
+                {
+                    // A job's statuses are its own; only a monster puts one on the player it fights.
+                    problems.Add($"{JobsFile}: {job.Id}: knows skill '{skill}', which puts a status on an enemy");
                 }
             }
 

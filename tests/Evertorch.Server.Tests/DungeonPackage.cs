@@ -40,6 +40,18 @@ internal static class DungeonPackage
         return files => PackageFixture.SetValue(files, Monsters, monster, "physicalAttack", Number(0));
     }
 
+    /// <summary>A monster that never dodges, so even a level-1 character's swing at it lands.</summary>
+    public static Action<Dictionary<string, byte[]>> Expose(string monster)
+    {
+        return files => PackageFixture.SetValue(files, Monsters, monster, "flee", Number(0));
+    }
+
+    /// <summary>A monster that casts its first skill at every decision it may.</summary>
+    public static Action<Dictionary<string, byte[]>> AlwaysCast(string monster)
+    {
+        return files => PackageFixture.SetValue(files, Monsters, monster, "skills[0].chance", Number(1));
+    }
+
     public static Action<Dictionary<string, byte[]>> Respawn(string map, string monster, int respawnMs)
     {
         return files => PackageFixture.SetValue(

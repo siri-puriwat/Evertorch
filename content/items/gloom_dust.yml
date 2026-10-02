@@ -1,0 +1,11 @@
+id: item.material.gloom_dust
+displayName: Gloom Dust
+type: material
+stackLimit: 999
+server:
+  weight: 1
+  sellPrice: 14
+client:
+  # The slime gel's look until art for the grotto's materials arrives.
+  icon: item_slime_gel
+  model: pickup_slime_gel

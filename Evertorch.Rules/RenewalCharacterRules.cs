@@ -69,17 +69,22 @@ public sealed class RenewalCharacterRules : ICharacterRules
         return new Regeneration(health, HealthRegenerationIntervalMs, spirit, SpiritRegenerationIntervalMs);
     }
 
-    // Each statistic gains its percentage of itself, floored; the effects' percentages add up first (Gameplay
-    // Systems §9.1).
+    // Each statistic gains or loses its percentage of itself, truncated; the effects' percentages add up first, and a
+    // loss leaves at least 1 of a statistic that had any (Gameplay Systems §9.1).
     public PrimaryStats ApplyStatPercent(PrimaryStats stats, StatPercentages percent)
     {
         return new PrimaryStats(
-            stats.Str + ScaleByPercent(stats.Str, percent.Str),
-            stats.Agi + ScaleByPercent(stats.Agi, percent.Agi),
-            stats.Vit + ScaleByPercent(stats.Vit, percent.Vit),
-            stats.Int + ScaleByPercent(stats.Int, percent.Int),
-            stats.Dex + ScaleByPercent(stats.Dex, percent.Dex),
-            stats.Luk + ScaleByPercent(stats.Luk, percent.Luk));
+            Adjust(stats.Str, percent.Str),
+            Adjust(stats.Agi, percent.Agi),
+            Adjust(stats.Vit, percent.Vit),
+            Adjust(stats.Int, percent.Int),
+            Adjust(stats.Dex, percent.Dex),
+            Adjust(stats.Luk, percent.Luk));
+    }
+
+    private static int Adjust(int value, int percent)
+    {
+        return Math.Max(Math.Min(value, 1), value + ScaleByPercent(value, percent));
     }
 
     private static int ScaleByPercent(long value, int percent)
