@@ -188,6 +188,43 @@ public sealed class CharacterProgression
         }
     }
 
+    /// <summary>
+    ///     The most valuable player of a boss that has just died on <paramref name="map" /> (Gameplay Systems §10): of
+    ///     the characters in its MVP log that may share its experience, the one with the most damage dealt and taken
+    ///     together, the earlier in the log on a tie; none when nobody may.
+    /// </summary>
+    public CharacterSession? ChooseMostValuable(MapInstance map, MonsterEntity boss)
+    {
+        CharacterSession? chosen = null;
+        long most = -1;
+        foreach (MvpLogEntry entry in boss.MvpLog)
+        {
+            if (entry.Total > most && TryGetSharer(entry.Character, map, out CharacterSession? character))
+            {
+                chosen = character;
+                most = entry.Total;
+            }
+        }
+
+        return chosen;
+    }
+
+    /// <summary>
+    ///     Gives the most valuable player a boss's MVP experience, its own and never pooled with its party (Gameplay
+    ///     Systems §2.1), and returns what it gained, which the base level's cap may cut to 0.
+    /// </summary>
+    public long AwardMostValuable(CharacterSession character, long experience)
+    {
+        if (experience <= 0)
+        {
+            return 0;
+        }
+
+        long before = HeldExperience(character.Player);
+        Award(character, experience);
+        return HeldExperience(character.Player) - before;
+    }
+
     // A party whose members who may share span at most the level gap pools its members' shares and splits the pool
     // among them all; otherwise each keeps its own.
     private void SplitEvenly(MapInstance map, ServerParty party)
@@ -396,6 +433,20 @@ public sealed class CharacterProgression
             && !character.Player.IsDead
             && !character.IsLoggingOut
             && !character.IsExpelled;
+    }
+
+    // Every point of base experience the character holds from level 1, so an award's gain counts past a level-up and
+    // stops at the cap.
+    private long HeldExperience(PlayerEntity player)
+    {
+        IReadOnlyList<int> levels = TableOf(player).Levels;
+        long held = player.Experience;
+        for (int level = 1; level < player.Level && level <= levels.Count; level++)
+        {
+            held += levels[level - 1];
+        }
+
+        return held;
     }
 
     private void Award(CharacterSession character, long experience)

@@ -31,6 +31,9 @@ public sealed class LiveServerDungeonTests
     private const string GrottoScene = "12_UmbralGrotto";
     private const string Unlit = "Universal Render Pipeline/Unlit";
     private const string Monarch = "monster.slime_monarch";
+
+    // The client's character dealt the boss its only damage, so it is the most valuable player.
+    private const string Fallen = "The Slime Monarch has fallen. MVP: " + ClientName + ".";
     private const float StartTimeoutSeconds = 30f;
     private const float StepTimeoutSeconds = 20f;
     private const int TestTimeoutMs = 300_000;
@@ -218,7 +221,7 @@ public sealed class LiveServerDungeonTests
 
         client.Connection!.SendAttack(monarch.Entity);
         float deadline = Time.realtimeSinceStartup + StepTimeoutSeconds;
-        while (!HasLine(client, "The Slime Monarch has fallen.") && Time.realtimeSinceStartup < deadline)
+        while (!HasLine(client, Fallen) && Time.realtimeSinceStartup < deadline)
         {
             if (client.RemoteViews.TryGetValue(monarch.Entity, out EntityView? view) && view != null)
             {
@@ -229,7 +232,7 @@ public sealed class LiveServerDungeonTests
             yield return new WaitForSecondsRealtime(0.5f);
         }
 
-        Assert.That(HasLine(client, "The Slime Monarch has fallen."), Is.True, server.JoinOutput());
+        Assert.That(HasLine(client, Fallen), Is.True, server.JoinOutput());
         server.ClearOutput();
         server.SendCommand("boss respawn");
         yield return WaitUntil(() => HasLine(client, "The Slime Monarch has appeared."), StepTimeoutSeconds);

@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using Evertorch.Protocol;
 using Microsoft.Extensions.Logging;
 
@@ -45,11 +46,20 @@ public sealed class BossAnnouncer
         Tell(map, new BossAnnouncement(BossAnnouncementKind.Appeared, boss.Definition.Id, string.Empty));
     }
 
-    public void Fell(MapInstance map, MonsterEntity boss)
+    // The log names the most valuable player by its character's number alone; the players hear its name.
+    public void Fell(MapInstance map, MonsterEntity boss, MostValuablePlayer? mostValuable)
     {
         m_instruments.RecordBossKill(boss.Definition.Id);
-        LogDefeated(m_logger, boss.Definition.Id.Value, boss.Id.Value, "none", null);
-        Tell(map, new BossAnnouncement(BossAnnouncementKind.Fell, boss.Definition.Id, string.Empty));
+        string character = mostValuable != null
+            ? mostValuable.Character.Character.Value.ToString(CultureInfo.InvariantCulture)
+            : "none";
+        LogDefeated(m_logger, boss.Definition.Id.Value, boss.Id.Value, character, null);
+        Tell(
+            map,
+            new BossAnnouncement(
+                BossAnnouncementKind.Fell,
+                boss.Definition.Id,
+                mostValuable?.Character.Player.Name ?? string.Empty));
     }
 
     // Every player with a connection in the world on the boss's map hears it, wherever on the map it stands.

@@ -521,6 +521,22 @@ public sealed class ServerContentLoaderTests
     }
 
     [Test]
+    public void Load_ForTheSlimeMonarch_ReadsItsMvpExperienceAndPrizes_AndNoOtherMonsterHasThem()
+    {
+        ServerContent content = ServerContentLoader.Load(PackageFixture.BuildRepositoryPackage());
+
+        MonsterDefinition monarch = content.Monsters[new MonsterDefinitionId("monster.slime_monarch")];
+        Assert.That(monarch.MvpExperience, Is.EqualTo(3000));
+        Assert.That(
+            monarch.MvpDrops.Select(prize => (prize.Item.Value, prize.Chance, prize.Amount)),
+            Is.EqualTo(new[] { ("item.armor.monarch_mantle", 0.3, 1), ("item.material.monarch_jelly", 1d, 5) }));
+        Assert.That(
+            content.Monsters.Values.Where(monster => !monster.IsBoss)
+                .Select(monster => (monster.MvpExperience, monster.MvpDrops.Count)),
+            Is.All.EqualTo((0, 0)));
+    }
+
+    [Test]
     public void Load_Result_CannotBeMutated()
     {
         ServerContent content = ServerContentLoader.Load(PackageFixture.BuildFixturePackage());
@@ -557,6 +573,47 @@ public sealed class ServerContentLoaderTests
             problems,
             Is.EqualTo(new[]
                 { "jobs.json: definitions[0].skills: lists more than the 11 skills a skill list carries" }));
+    }
+
+    // A boss alone has a most valuable player, whose prize exists and fits one row (Content Pipeline §4, §7).
+    [Test]
+    public void Load_WhenAMonsterNoBossHasAPrize_OrAPrizeIsUnknownOrTooMany_Fails()
+    {
+        Dictionary<string, byte[]> noBoss = PackageFixture.BuildRepositoryPackage();
+        string field = PackageFixture.SetValue(noBoss, Monsters, "monster.slime_monarch", "boss", "false");
+        Dictionary<string, byte[]> unknown = PackageFixture.BuildRepositoryPackage();
+        PackageFixture.SetValue(
+            unknown,
+            Monsters,
+            "monster.slime_monarch",
+            "mvpDrops[0].item",
+            "\"item.armor.missing\"");
+        Dictionary<string, byte[]> tooMany = PackageFixture.BuildRepositoryPackage();
+        PackageFixture.SetValue(tooMany, Monsters, "monster.slime_monarch", "mvpDrops[0].amount", "2");
+        string noBossField = field.Replace(".boss", ".mvpDrops");
+
+        Assert.That(
+            ProblemsOf(noBoss),
+            Is.EqualTo(
+                new[]
+                {
+                    $"{Monsters}: {noBossField}: a monster that is no boss gives no MVP experience or prize"
+                }));
+        Assert.That(
+            ProblemsOf(unknown),
+            Is.EqualTo(
+                new[]
+                {
+                    $"{Monsters}: monster.slime_monarch: gives its MVP unknown item 'item.armor.missing'"
+                }));
+        Assert.That(
+            ProblemsOf(tooMany),
+            Is.EqualTo(
+                new[]
+                {
+                    $"{Monsters}: monster.slime_monarch: gives its MVP 2 of 'item.armor.monarch_mantle', more than "
+                    + "its stack limit of 1"
+                }));
     }
 
     [Test]

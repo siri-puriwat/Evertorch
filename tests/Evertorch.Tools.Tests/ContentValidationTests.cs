@@ -258,6 +258,36 @@ public sealed class ContentValidationTests
         "icon: monster_training_slime_icon\n  projectile: Projectiles/Spark.prefab",
         "client.projectile",
         "logical asset key")]
+    [TestCase(
+        Monster,
+        "rewards:\n  baseExperience: 77173",
+        "rewards:\n  mvpExperience: 5\n  baseExperience: 77173",
+        "rewards.mvpExperience",
+        "is only for a boss")]
+    [TestCase(
+        Monster,
+        "drops:",
+        "mvpDrops:\n  - item: item.material.slime_gel\n    chance: 0.5\n    amount: 1\ndrops:",
+        "mvpDrops",
+        "is only for a boss")]
+    [TestCase(
+        Monster,
+        "drops:",
+        "boss: true\nmvpDrops:\n  - item: item.material.missing\n    chance: 0.5\n    amount: 1\ndrops:",
+        "mvpDrops[0].item",
+        "references unknown item 'item.material.missing'")]
+    [TestCase(
+        Monster,
+        "drops:",
+        "boss: true\nmvpDrops:\n  - item: item.consumable.minor_health\n    chance: 0.5\n    amount: 51\ndrops:",
+        "mvpDrops[0].amount",
+        "exceeds the stack limit 50 of item 'item.consumable.minor_health'")]
+    [TestCase(
+        Monster,
+        "drops:",
+        "boss: true\nmvpDrops:\n  - item: item.material.slime_gel\n    chance: 1.5\n    amount: 1\ndrops:",
+        "mvpDrops[0].chance",
+        "between 0 and 1")]
     [TestCase(Monster, "drops:", "skills:\n  - skill: skill.strike\n    chance: 1.5\ndrops:", "skills[0].chance",
         "between 0 and 1")]
     [TestCase(Monster, "drops:", "skills:\n  - skill: skill.none\n    chance: 0.5\ndrops:", "skills[0].skill",

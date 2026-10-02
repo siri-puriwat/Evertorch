@@ -38,9 +38,19 @@ drops:
   - item: item.armor.leather
     chance: 0.25
     amount: { min: 1, max: 1 }
+# Its most valuable player's prize, rolled in order with the first success kept: the Mantle at 30 %, else five
+# Monarch Jelly; it goes straight into that player's bag.
+mvpDrops:
+  - item: item.armor.monarch_mantle
+    chance: 0.3
+    amount: 1
+  - item: item.material.monarch_jelly
+    chance: 1.0
+    amount: 5
 rewards:
   baseExperience: 6000
   jobExperience: 3000
+  mvpExperience: 3000
 client:
   # The training slime's body at 2.6 times its size (1.65 m tall, 2.5 m wide), in royal gold.
   prefab: monster_training_slime

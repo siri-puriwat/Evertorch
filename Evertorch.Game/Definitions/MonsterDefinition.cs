@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 
 namespace Evertorch.Game
@@ -31,7 +32,9 @@ public sealed class MonsterDefinition
         IReadOnlyList<MonsterSkill> skills,
         bool isBoss = false,
         bool assists = false,
-        double assistRadius = 0d)
+        double assistRadius = 0d,
+        int mvpExperience = 0,
+        IReadOnlyList<MvpDrop>? mvpDrops = null)
     {
         Id = id;
         DisplayName = displayName;
@@ -60,6 +63,8 @@ public sealed class MonsterDefinition
         IsBoss = isBoss;
         Assists = assists;
         AssistRadius = assistRadius;
+        MvpExperience = mvpExperience;
+        MvpDrops = mvpDrops ?? Array.Empty<MvpDrop>();
     }
 
     public MonsterDefinitionId Id { get; }
@@ -141,5 +146,17 @@ public sealed class MonsterDefinition
 
     /// <summary>How far its call reaches; 0 for a monster that does not assist.</summary>
     public double AssistRadius { get; }
+
+    /// <summary>
+    ///     The base experience a boss gives its most valuable player alone, never shared (Gameplay Systems §2.1); 0
+    ///     for any other monster.
+    /// </summary>
+    public int MvpExperience { get; }
+
+    /// <summary>
+    ///     A boss's prizes for its most valuable player, rolled in order until one is kept; empty for any other
+    ///     monster.
+    /// </summary>
+    public IReadOnlyList<MvpDrop> MvpDrops { get; }
 }
 }

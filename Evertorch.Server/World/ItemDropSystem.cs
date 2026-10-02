@@ -90,6 +90,23 @@ public sealed class ItemDropSystem : ITickPhase
     }
 
     /// <summary>
+    ///     Rolls a boss's prizes for its most valuable player in order and keeps the first that succeeds, or none
+    ///     (Gameplay Systems §10). The rolls draw from the drops' own source, as the drops' rolls do.
+    /// </summary>
+    public MvpDrop? RollPrize(MonsterDefinition boss)
+    {
+        foreach (MvpDrop prize in boss.MvpDrops)
+        {
+            if (IsDropped(m_random.Next(RollScale), prize.Chance))
+            {
+                return prize;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
     ///     Rolls every entry of the monster's drop table in order: its chance, then its amount when it drops. The
     ///     drops belong first to <paramref name="killer" />, or to nobody when no character killed the monster.
     /// </summary>

@@ -40,7 +40,7 @@ public sealed class ContentProjectionTests
         "attack", "attackSpeedPenalty", "defense", "bonus", "sp", "shop", "price", "npcs", "npc", "giver", "objective",
         "kill", "monster", "count", "currency", "jobExperienceTable", "jobExperience", "guild", "reset", "maxLevel",
         "requires", "baseJob", "weapons", "weaponType", "jobChange", "assist", "assistRadius", "respawnVarianceMs",
-        "areaRadius"
+        "areaRadius", "mvpExperience", "mvpDrops"
     };
 
     // The client package's allow-list (Content Pipeline §5), by file: a name not reviewed here fails.

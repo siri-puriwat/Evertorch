@@ -225,6 +225,10 @@ public sealed class DungeonContentTests
             (spawn.Center.X, spawn.Center.Z, spawn.Radius, spawn.Count),
             Is.EqualTo((18f, 18f, 0d, 1)));
         Assert.That((spawn.RespawnMs, spawn.RespawnVarianceMs), Is.EqualTo((3_600_000, 600_000)));
+        Assert.That(definition.MvpExperience, Is.EqualTo(3000));
+        Assert.That(
+            definition.MvpDrops.Select(prize => (prize.Item.Value, prize.Chance, prize.Amount)),
+            Is.EqualTo(new[] { ("item.armor.monarch_mantle", 0.3, 1), ("item.material.monarch_jelly", 1d, 5) }));
     }
 }
 }

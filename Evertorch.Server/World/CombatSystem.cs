@@ -316,13 +316,28 @@ public sealed class CombatSystem : ITickPhase
             // Before the award, which returns early for a monster that gives no experience (Gameplay Systems §2.2).
             m_progression.CreditQuests(map, monster);
             m_progression.AwardKill(map, monster);
+            MostValuablePlayer? mostValuable = monster.Definition.IsBoss ? AwardMostValuable(map, monster) : null;
             CharacterId killer = source is PlayerEntity player ? player.Character : default;
             m_drops.DropLoot(map, monster, killer, tick);
             if (monster.Definition.IsBoss)
             {
-                m_bosses.Fell(map, monster);
+                m_bosses.Fell(map, monster, mostValuable);
             }
         }
+    }
+
+    // A boss's most valuable player gains its MVP experience alone, and its prize is rolled from the drops' source
+    // before the drops are (Gameplay Systems §10).
+    private MostValuablePlayer? AwardMostValuable(MapInstance map, MonsterEntity boss)
+    {
+        CharacterSession? character = m_progression.ChooseMostValuable(map, boss);
+        if (character == null)
+        {
+            return null;
+        }
+
+        long gained = m_progression.AwardMostValuable(character, boss.Definition.MvpExperience);
+        return new MostValuablePlayer(character, gained, m_drops.RollPrize(boss.Definition));
     }
 
     private static float HorizontalDistance(WorldPosition a, WorldPosition b)
@@ -435,6 +450,13 @@ public sealed class CombatSystem : ITickPhase
             target.CurrentHealth = Math.Max(0, target.CurrentHealth - amount);
         }
 
+        // What a boss's basic attacks deal counts toward its most valuable player; its skills do not (Gameplay Systems
+        // §10).
+        if (attacker is MonsterEntity boss && boss.Definition.IsBoss && target is PlayerEntity victim && amount > 0)
+        {
+            boss.LogMvpTaken(victim.Character, amount);
+        }
+
         foreach (ClientSession session in SessionsOn(map))
         {
             if (session.Knows(target.Id))
@@ -457,6 +479,10 @@ public sealed class CombatSystem : ITickPhase
         {
             // The whole roll counts toward the experience share, a killing blow's overkill included.
             damaged.LogDamage(damager.Character, amount);
+            if (damaged.Definition.IsBoss)
+            {
+                damaged.LogMvpDealt(damager.Character, amount);
+            }
         }
 
         if (target is MonsterEntity monster && amount > 0 && monster.Brain.State != MonsterAiState.ReturnHome)

@@ -119,6 +119,19 @@ public static class ContentValidator
                     diagnostics);
                 RequireWithinStackLimit(monster, index, stackLimits, diagnostics);
             }
+
+            for (int index = 0; index < monster.Definition.MvpDrops.Count; index++)
+            {
+                string fieldPath = string.Format(CultureInfo.InvariantCulture, "mvpDrops[{0}].item", index);
+                RequireReference(
+                    items,
+                    monster.Definition.MvpDrops[index].Item.Value,
+                    "item",
+                    monster.Source,
+                    fieldPath,
+                    diagnostics);
+                RequirePrizeWithinStackLimit(monster, index, stackLimits, diagnostics);
+            }
         }
 
         var mapsById = new Dictionary<string, MapDefinition>(StringComparer.Ordinal);
@@ -658,6 +671,32 @@ public static class ContentValidator
                     "exceeds the stack limit {0} of item '{1}'",
                     stackLimit,
                     drop.Item.Value)));
+    }
+
+    // A prize goes into one row of the bag, or lies on the ground whole (Gameplay Systems §10, §11).
+    private static void RequirePrizeWithinStackLimit(
+        AuthoredMonster monster,
+        int index,
+        Dictionary<string, int> stackLimits,
+        List<ContentDiagnostic> diagnostics)
+    {
+        MvpDrop prize = monster.Definition.MvpDrops[index];
+        if (!stackLimits.TryGetValue(prize.Item.Value, out int stackLimit) || prize.Amount <= stackLimit)
+        {
+            return;
+        }
+
+        string fieldPath = string.Format(CultureInfo.InvariantCulture, "mvpDrops[{0}].amount", index);
+        diagnostics.Add(
+            new ContentDiagnostic(
+                monster.Source.File,
+                fieldPath,
+                monster.Source.LineOf(fieldPath),
+                string.Format(
+                    CultureInfo.InvariantCulture,
+                    "exceeds the stack limit {0} of item '{1}'",
+                    stackLimit,
+                    prize.Item.Value)));
     }
 
     private static void RequireReference(

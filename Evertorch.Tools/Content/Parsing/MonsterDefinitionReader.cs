@@ -73,6 +73,7 @@ internal static class MonsterDefinitionReader
 
         int baseExperience = 0;
         int jobExperience = 0;
+        int mvpExperience = 0;
         if (root.Has("rewards"))
         {
             YamlFieldReader rewards = root.RequiredMapping("rewards");
@@ -80,6 +81,24 @@ internal static class MonsterDefinitionReader
             jobExperience = rewards.Has("jobExperience")
                 ? rewards.RequiredInt("jobExperience", 0, ContentLimits.MaxExperience)
                 : 0;
+            mvpExperience = rewards.Has("mvpExperience")
+                ? rewards.RequiredInt("mvpExperience", 0, ContentLimits.MaxExperience)
+                : 0;
+            if (rewards.Has("mvpExperience") && !isBoss)
+            {
+                rewards.ReportField("mvpExperience", "is only for a boss");
+            }
+        }
+
+        var mvpDrops = new List<MvpDrop>();
+        foreach (YamlFieldReader drop in root.OptionalMappingSequence("mvpDrops"))
+        {
+            mvpDrops.Add(ReadMvpDrop(drop));
+        }
+
+        if (root.Has("mvpDrops") && !isBoss)
+        {
+            root.ReportField("mvpDrops", "is only for a boss");
         }
 
         var drops = new List<MonsterDrop>();
@@ -147,8 +166,21 @@ internal static class MonsterDefinitionReader
             skills,
             isBoss,
             assists,
-            assistRadius);
+            assistRadius,
+            mvpExperience,
+            mvpDrops);
         return new AuthoredMonster(root.ToSource(), definition, prefab, icon, projectile, scale, tint);
+    }
+
+    private static MvpDrop ReadMvpDrop(YamlFieldReader drop)
+    {
+        ItemDefinitionId item = drop.RequiredId<ItemDefinitionId>(
+            "item",
+            ItemDefinitionId.TryCreate,
+            ItemDefinitionId.KindPrefix);
+        double chance = drop.RequiredDouble("chance", 0d, 1d, false);
+        int amount = drop.RequiredInt("amount", 1, ContentLimits.MaxStack);
+        return new MvpDrop(item, chance, amount);
     }
 
     private static MonsterDrop ReadDrop(YamlFieldReader drop)

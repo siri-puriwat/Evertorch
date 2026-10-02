@@ -86,6 +86,8 @@ public sealed class ServerContentBoundsTests
     [TestCase(Monsters, Slime, "scanIntervalMs", "86400001", AtMostADay)]
     [TestCase(Monsters, Slime, "baseExperience", "1000000001", AtMostABillion)]
     [TestCase(Monsters, Slime, "drops[0].maxAmount", "1000001", AtMostAMillion)]
+    [TestCase(Monsters, "monster.slime_monarch", "mvpExperience", "1000000001", AtMostABillion)]
+    [TestCase(Monsters, "monster.slime_monarch", "mvpDrops[1].amount", "1000001", AtMostAMillion)]
     [TestCase(Skills, "skill.strike", "range", "10001", AtMostADistance)]
     [TestCase(Skills, "skill.quake_slam", "areaRadius", "10001", AtMostADistance)]
     [TestCase(Skills, "skill.strike", "levels[0].spCost", "100000001", "must be at most 100000000")]

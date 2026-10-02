@@ -157,6 +157,7 @@ public sealed class BossTests
         player.Position = new WorldPosition(monarch.Home.X - 5f, 0f, monarch.Home.Z);
         monarch.CurrentHealth -= 5000;
         monarch.LogDamage(player.Character, 5000);
+        monarch.LogMvpDealt(player.Character, 5000);
         server.Tick(TestServer.TickRate);
         bool wasNoticed = monarch.Target == player.Id;
 
@@ -174,7 +175,7 @@ public sealed class BossTests
         Assert.That(wasNoticed, Is.True, "the aggressive boss took the player within its 6 m");
         Assert.That((hasLeashed, isHome), Is.EqualTo((true, true)), "it walked home from its leash");
         Assert.That(monarch.CurrentHealth, Is.EqualTo(monarch.MaxHealth));
-        Assert.That(monarch.DamageLog, Is.Empty);
+        Assert.That((monarch.DamageLog.Count, monarch.MvpLog.Count), Is.EqualTo((0, 0)));
     }
 
     [Test]

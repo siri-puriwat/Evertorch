@@ -10,6 +10,7 @@ namespace Evertorch.Server
 public sealed class MonsterEntity : WorldEntity
 {
     private readonly List<DamageLogEntry> m_damageLog = new();
+    private readonly List<MvpLogEntry> m_mvpLog = new();
 
     public MonsterEntity(
         EntityId id,
@@ -37,17 +38,34 @@ public sealed class MonsterEntity : WorldEntity
     /// </summary>
     public IReadOnlyList<DamageLogEntry> DamageLog => m_damageLog;
 
+    /// <summary>
+    ///     A boss's second log, one entry per character it fought, in the order they first met (Gameplay Systems §10);
+    ///     empty for any other monster.
+    /// </summary>
+    public IReadOnlyList<MvpLogEntry> MvpLog => m_mvpLog;
+
     public override EntityKind Kind => EntityKind.Monster;
 
     public override string DefinitionId => Definition.Id.Value;
 
     /// <summary>
-    ///     Forgets every character that damaged the monster, as a boss does once home from its leash (Gameplay Systems
-    ///     §10).
+    ///     Forgets every character that damaged the monster or that a boss fought, as a boss does once home from its
+    ///     leash (Gameplay Systems §10).
     /// </summary>
     public void ClearDamageLog()
     {
         m_damageLog.Clear();
+        m_mvpLog.Clear();
+    }
+
+    public void LogMvpDealt(CharacterId character, int damage)
+    {
+        LogMvp(character, damage, 0);
+    }
+
+    public void LogMvpTaken(CharacterId character, int damage)
+    {
+        LogMvp(character, 0, damage);
     }
 
     public void LogDamage(CharacterId character, int damage)
@@ -62,6 +80,21 @@ public sealed class MonsterEntity : WorldEntity
         }
 
         m_damageLog.Add(new DamageLogEntry(character, damage));
+    }
+
+    private void LogMvp(CharacterId character, int dealt, int taken)
+    {
+        for (int index = 0; index < m_mvpLog.Count; index++)
+        {
+            MvpLogEntry entry = m_mvpLog[index];
+            if (entry.Character == character)
+            {
+                m_mvpLog[index] = new MvpLogEntry(character, entry.Dealt + dealt, entry.Taken + taken);
+                return;
+            }
+        }
+
+        m_mvpLog.Add(new MvpLogEntry(character, dealt, taken));
     }
 }
 }

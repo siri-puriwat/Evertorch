@@ -521,6 +521,27 @@ public static class ServerContentLoader
 
         int baseExperience = entry.RequiredInt("baseExperience", 0, ContentLimits.MaxExperience);
         int jobExperience = entry.RequiredInt("jobExperience", 0, ContentLimits.MaxExperience);
+        int mvpExperience = entry.RequiredInt("mvpExperience", 0, ContentLimits.MaxExperience);
+        var mvpDrops = new List<MvpDrop>();
+        foreach (PackageObjectReader prize in entry.RequiredObjectArray("mvpDrops"))
+        {
+            ItemDefinitionId item = prize.RequiredId<ItemDefinitionId>("item", ItemDefinitionId.TryCreate);
+            double chance = prize.RequiredDouble("chance");
+            if (chance < 0d || chance > 1d)
+            {
+                prize.Report("chance", "must be between 0 and 1");
+            }
+
+            int amount = prize.RequiredInt("amount", 1, ContentLimits.MaxStack);
+            prize.ReportUnexpectedProperties();
+            mvpDrops.Add(new MvpDrop(item, chance, amount));
+        }
+
+        // Only a boss has a most valuable player (Gameplay Systems §10).
+        if (!isBoss && (mvpExperience > 0 || mvpDrops.Count > 0))
+        {
+            entry.Report("mvpDrops", "a monster that is no boss gives no MVP experience or prize");
+        }
 
         var drops = new List<MonsterDrop>();
         foreach (PackageObjectReader drop in entry.RequiredObjectArray("drops"))
@@ -596,7 +617,9 @@ public static class ServerContentLoader
             skills.AsReadOnly(),
             isBoss,
             assists,
-            assistRadius);
+            assistRadius,
+            mvpExperience,
+            mvpDrops.AsReadOnly());
     }
 
     private static SkillDefinition? ReadSkill(PackageObjectReader entry, SkillDefinitionId id, List<string> problems)
@@ -1359,6 +1382,21 @@ public static class ServerContentLoader
                     // A pickup is all or nothing (Gameplay Systems §11), so a larger drop could never be picked up.
                     problems.Add(
                         $"{MonstersFile}: {monster.Id}: drops up to {drop.MaxAmount} of '{drop.Item}', more than its "
+                        + $"stack limit of {item.StackLimit}");
+                }
+            }
+
+            foreach (MvpDrop prize in monster.MvpDrops)
+            {
+                if (!declaredItems.Contains(prize.Item))
+                {
+                    problems.Add($"{MonstersFile}: {monster.Id}: gives its MVP unknown item '{prize.Item}'");
+                }
+                else if (items.TryGetValue(prize.Item, out ItemDefinition? item) && prize.Amount > item.StackLimit)
+                {
+                    // A prize goes into one row of the bag, or lies on the ground whole.
+                    problems.Add(
+                        $"{MonstersFile}: {monster.Id}: gives its MVP {prize.Amount} of '{prize.Item}', more than its "
                         + $"stack limit of {item.StackLimit}");
                 }
             }

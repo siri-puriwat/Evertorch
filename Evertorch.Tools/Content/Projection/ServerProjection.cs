@@ -307,6 +307,18 @@ internal static class ServerProjection
             writer.WriteNumber("assistRadius", monster.AssistRadius);
             writer.WriteNumber("baseExperience", monster.BaseExperience);
             writer.WriteNumber("jobExperience", monster.JobExperience);
+            writer.WriteNumber("mvpExperience", monster.MvpExperience);
+            writer.WriteStartArray("mvpDrops");
+            foreach (MvpDrop prize in monster.MvpDrops)
+            {
+                writer.WriteStartObject();
+                writer.WriteString("item", prize.Item.Value);
+                writer.WriteNumber("chance", prize.Chance);
+                writer.WriteNumber("amount", prize.Amount);
+                writer.WriteEndObject();
+            }
+
+            writer.WriteEndArray();
             writer.WriteStartArray("drops");
             foreach (MonsterDrop drop in monster.Drops)
             {
