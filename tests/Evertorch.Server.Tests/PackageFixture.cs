@@ -114,6 +114,15 @@ internal static class PackageFixture
 
     public static void RewriteManifest(Dictionary<string, byte[]> files)
     {
+        RewriteManifest(files, "0123456789abcdef");
+    }
+
+    /// <summary>
+    ///     Re-signs the manifest with <paramref name="clientContentVersion" />: a server-only edit keeps the client
+    ///     package's version, so the real client still connects to a server loading the edited package.
+    /// </summary>
+    public static void RewriteManifest(Dictionary<string, byte[]> files, string clientContentVersion)
+    {
         string[] dataFiles = files.Keys
             .Where(name => name != ServerContentLoader.ManifestFile)
             .OrderBy(name => name, StringComparer.Ordinal)
@@ -134,9 +143,15 @@ internal static class PackageFixture
         var manifest = new StringBuilder();
         manifest.Append("{\"schemaVersion\":1,");
         manifest.Append("\"serverContentVersion\":\"").Append(serverVersion).Append("\",");
-        manifest.Append("\"clientContentVersion\":\"0123456789abcdef\",");
+        manifest.Append("\"clientContentVersion\":\"").Append(clientContentVersion).Append("\",");
         manifest.Append("\"files\":[").Append(string.Join(",", entries)).Append("]}");
         files[ServerContentLoader.ManifestFile] = Encoding.UTF8.GetBytes(manifest.ToString());
+    }
+
+    public static string ClientContentVersionOf(IReadOnlyDictionary<string, byte[]> files)
+    {
+        return (string?)ReadTree(files[ServerContentLoader.ManifestFile])["clientContentVersion"]
+            ?? throw new InvalidOperationException("The manifest names no client content version.");
     }
 
     public static void WriteTo(string directory, IReadOnlyDictionary<string, byte[]> files)
