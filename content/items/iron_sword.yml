@@ -1,0 +1,17 @@
+id: item.weapon.iron_sword
+displayName: Iron Sword
+type: weapon
+stackLimit: 1
+server:
+  # The second tier, which only the Umbral Grotto drops; the shop buys it back but never sells it.
+  weight: 80
+  sellPrice: 60
+  equipment:
+    attack: 38
+    attackSpeedPenalty: 50
+    weaponType: sword
+client:
+  # The training sword's look until art for the second tier arrives.
+  icon: item_training_sword
+  model: pickup_training_sword
+  held: weapon_training_sword

@@ -29,7 +29,9 @@ public sealed class MonsterDefinition
         int jobExperience,
         IReadOnlyList<MonsterDrop> drops,
         IReadOnlyList<MonsterSkill> skills,
-        bool isBoss = false)
+        bool isBoss = false,
+        bool assists = false,
+        double assistRadius = 0d)
     {
         Id = id;
         DisplayName = displayName;
@@ -56,6 +58,8 @@ public sealed class MonsterDefinition
         Drops = drops;
         Skills = skills;
         IsBoss = isBoss;
+        Assists = assists;
+        AssistRadius = assistRadius;
     }
 
     public MonsterDefinitionId Id { get; }
@@ -128,5 +132,14 @@ public sealed class MonsterDefinition
     ///     most valuable player.
     /// </summary>
     public bool IsBoss { get; }
+
+    /// <summary>
+    ///     Whether it answers the call of its kind: when one begins a swing, its idle kin within
+    ///     <see cref="AssistRadius" /> that see it take its target (Gameplay Systems §10).
+    /// </summary>
+    public bool Assists { get; }
+
+    /// <summary>How far its call reaches; 0 for a monster that does not assist.</summary>
+    public double AssistRadius { get; }
 }
 }

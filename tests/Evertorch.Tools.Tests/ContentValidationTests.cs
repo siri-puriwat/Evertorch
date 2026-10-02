@@ -339,6 +339,20 @@ public sealed class ContentValidationTests
         "must not be the zero direction")]
     [TestCase(Map, "    - npc: npc.quartermaster", "    - npc: Npc.Quartermaster", "server.npcs[0].npc",
         "not a valid ID")]
+    [TestCase(Monster, "scanIntervalMs: 139", "scanIntervalMs: 139\n  assist: yes", "ai.assist", "true or false")]
+    [TestCase(Monster, "scanIntervalMs: 139", "scanIntervalMs: 139\n  assist: true", "ai.assistRadius", "required")]
+    [TestCase(
+        Monster,
+        "scanIntervalMs: 139",
+        "scanIntervalMs: 139\n  assist: true\n  assistRadius: 0",
+        "ai.assistRadius",
+        "greater than 0")]
+    [TestCase(
+        Monster,
+        "scanIntervalMs: 139",
+        "scanIntervalMs: 139\n  assistRadius: 11.0",
+        "ai.assistRadius",
+        "only for a monster with assist: true")]
     public void Run_WhenOneFieldIsBroken_ReportsThatFileFieldAndLine(
         string file,
         string oldText,

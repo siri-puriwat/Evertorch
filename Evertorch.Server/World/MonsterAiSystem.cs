@@ -134,7 +134,56 @@ public sealed class MonsterAiSystem : ITickPhase
             Decide(map, monster, now, tick);
         }
 
+        // The combat phase, which runs before this one, began the swing this tick.
+        if (monster.Definition.Assists && monster.Combat.IsSwinging && monster.Combat.SwingStartTick == tick)
+        {
+            CallKin(map, monster, now);
+        }
+
         Steer(map, monster, stepDistance);
+    }
+
+    /// <summary>
+    ///     An assisting monster's call to its kind (Gameplay Systems §10; monster AI research note): at most once a
+    ///     second, every other live monster of its definition with no target, not walking home, that has not answered
+    ///     in the last second, within the assist radius, and in sight of the caller takes the caller's target and
+    ///     chases it. Returns how many answered.
+    /// </summary>
+    public int CallKin(MapInstance map, MonsterEntity caller, long now)
+    {
+        PlayerEntity? target = LivePlayer(map, caller.Target);
+        if (target == null || now < caller.Brain.NextCallMs)
+        {
+            return 0;
+        }
+
+        caller.Brain.NextCallMs = now + MillisecondsPerSecond;
+        int answered = 0;
+        foreach (MonsterEntity kin in map.Monsters)
+        {
+            MonsterBrain brain = kin.Brain;
+            if (kin == caller
+                || kin.IsDead
+                || kin.Definition.Id != caller.Definition.Id
+                || kin.Target != default
+                || brain.State == MonsterAiState.ReturnHome
+                || now < brain.NextAnswerMs
+                || HorizontalDistance(caller.Position, kin.Position) > caller.Definition.AssistRadius
+                || !map.Definition.Navigation.HasLineOfSight(caller.Position, kin.Position))
+            {
+                continue;
+            }
+
+            brain.NextAnswerMs = now + MillisecondsPerSecond;
+            kin.Target = target.Id;
+            kin.Combat.IsAutoAttacking = true;
+            brain.State = MonsterAiState.Chase;
+            brain.Path.Cancel();
+            m_instruments.RecordAssist(kin.Definition.Id);
+            answered++;
+        }
+
+        return answered;
     }
 
     private void Decide(MapInstance map, MonsterEntity monster, long now, uint tick)

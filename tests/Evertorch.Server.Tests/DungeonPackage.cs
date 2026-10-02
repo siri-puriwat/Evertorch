@@ -34,6 +34,12 @@ internal static class DungeonPackage
         return files => PackageFixture.SetValue(files, Monsters, monster, "hp", Number(hp));
     }
 
+    /// <summary>A monster that still swings, but for no damage: a party meets it and lives.</summary>
+    public static Action<Dictionary<string, byte[]>> Disarm(string monster)
+    {
+        return files => PackageFixture.SetValue(files, Monsters, monster, "physicalAttack", Number(0));
+    }
+
     public static Action<Dictionary<string, byte[]>> Respawn(string map, string monster, int respawnMs)
     {
         return files => PackageFixture.SetValue(

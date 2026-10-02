@@ -1,0 +1,14 @@
+id: item.armor.leather
+displayName: Leather Armor
+type: armor
+stackLimit: 1
+server:
+  # The second tier, which only the Umbral Grotto drops; the shop buys it back but never sells it.
+  weight: 90
+  sellPrice: 45
+  equipment:
+    defense: 15
+client:
+  # The cloth armor's look until art for the second tier arrives.
+  icon: item_cloth_armor
+  model: pickup_cloth_armor

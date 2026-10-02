@@ -126,6 +126,9 @@ public sealed class ServerContentLoaderTests
         "\"maxAmount\": 1000",
         "monster.training_slime: drops up to 1000 of 'item.material.slime_gel', more than its stack limit of 999")]
     [TestCase(Monsters, "\"keepDistance\": 0", "\"keepDistance\": 1.5", "keepDistance: must be below attackRange")]
+    [TestCase(Monsters, "\"assist\": false", "\"assist\": \"yes\"", "assist: must be true or false")]
+    [TestCase(Monsters, "\"assist\": false", "\"assist\": true", "assistRadius: must be above 0")]
+    [TestCase(Monsters, "\"assistRadius\": 0", "\"assistRadius\": 11", "assistRadius: must be above 0")]
     [TestCase(Monsters, "\"boss\": false", "\"boss\": 1", "boss: must be true or false")]
     [TestCase(Monsters, "\"magicAttack\": 0", "\"magicAttack\": -1", "magicAttack: must be at least 0")]
     [TestCase(

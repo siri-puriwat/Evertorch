@@ -60,6 +60,35 @@ public sealed class DungeonContentTests
         Assert.That(isReachable, Is.True, room);
     }
 
+    // The second tier: the shop buys it back but sells none of it, and only the grotto's monsters drop it.
+    [Test]
+    public void Run_ForRepositoryContent_DropsTheSecondTierInTheGrottoAlone_AndNoShopSellsIt()
+    {
+        ContentPipelineResult result = RepositoryContent();
+        string[] tier = { "item.weapon.iron_sword", "item.weapon.ash_staff", "item.armor.leather" };
+
+        var sold = result.Content.Npcs
+            .SelectMany(npc => npc.Definition.Shop)
+            .Select(entry => entry.Item.Value)
+            .ToList();
+        var dropping = result.Content.Monsters
+            .Where(monster => monster.Definition.Drops.Any(drop => tier.Contains(drop.Item.Value)))
+            .Select(monster => monster.Definition.Id)
+            .ToList();
+        var spawnedOutside = result.Content.Maps
+            .Where(map => map.Definition.Id.Value != Grotto)
+            .SelectMany(map => map.Definition.MonsterSpawns)
+            .Select(spawn => spawn.Monster)
+            .ToList();
+        Assert.That(
+            tier.Select(id => result.Content.Items.Single(item => item.Definition.Id.Value == id).Definition.SellPrice),
+            Is.All.GreaterThan(0),
+            "the shop buys it back");
+        Assert.That(sold.Intersect(tier), Is.Empty, "no shop sells it");
+        Assert.That(dropping, Is.Not.Empty);
+        Assert.That(dropping.Intersect(spawnedOutside), Is.Empty, "no monster outside the grotto drops it");
+    }
+
     // Each step grows by ten more than the one before, from 30 at level 1 to 3,020 at level 24; a table of n entries
     // caps its jobs at level n + 1.
     [Test]
@@ -81,6 +110,37 @@ public sealed class DungeonContentTests
             result.Content.Jobs.Select(job => job.Definition.ExperienceTable.Value),
             Is.All.EqualTo("experience.adventurer"),
             "every job takes the Adventurer's base table");
+    }
+
+    [Test]
+    public void Run_ForRepositoryContent_PlacesALinkingPackOfGrottoCrawlersInTheCrawlerHall()
+    {
+        ContentPipelineResult result = RepositoryContent();
+
+        AuthoredMonster crawler = result.Content.Monsters
+            .Single(monster => monster.Definition.Id.Value == "monster.grotto_crawler");
+        MonsterDefinition definition = crawler.Definition;
+        Assert.That(
+            (definition.Level, definition.Behavior, definition.Assists, definition.AssistRadius),
+            Is.EqualTo((14, MonsterBehavior.Passive, true, 11d)));
+        Assert.That(
+            (crawler.Prefab, crawler.Scale, crawler.Tint),
+            Is.EqualTo(("monster_forest_crawler", (double?)1.2, "#4B6B3C")));
+        Assert.That(
+            definition.Drops.Select(drop => (drop.Item.Value, drop.Chance)),
+            Is.EqualTo(
+                new[]
+                {
+                    ("item.material.grotto_carapace", 0.6), ("item.weapon.iron_sword", 0.05),
+                    ("item.armor.leather", 0.05), ("item.consumable.minor_health", 0.25)
+                }));
+        MonsterSpawn spawn = MapOf(result, Grotto).MonsterSpawns
+            .Single(candidate => candidate.Monster == definition.Id);
+        Assert.That(spawn.Count, Is.EqualTo(6));
+        Assert.That(spawn.Center.X - spawn.Radius, Is.GreaterThanOrEqualTo(-30d), "inside the crawler hall");
+        Assert.That(spawn.Center.X + spawn.Radius, Is.LessThanOrEqualTo(-7d));
+        Assert.That(spawn.Center.Z - spawn.Radius, Is.GreaterThanOrEqualTo(2d));
+        Assert.That(spawn.Center.Z + spawn.Radius, Is.LessThanOrEqualTo(29d));
     }
 }
 }

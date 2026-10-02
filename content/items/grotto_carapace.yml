@@ -1,0 +1,11 @@
+id: item.material.grotto_carapace
+displayName: Grotto Carapace
+type: material
+stackLimit: 999
+server:
+  weight: 2
+  sellPrice: 12
+client:
+  # The crawler shell's look until art for the grotto's materials arrives.
+  icon: item_crawler_shell
+  model: pickup_crawler_shell

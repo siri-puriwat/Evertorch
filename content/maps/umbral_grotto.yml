@@ -4,6 +4,13 @@ server:
   spawnPoint:
     position: { x: -29.0, y: 0.0, z: -22.0 }
     facing: { x: 1.0, z: 0.0 }
+  monsterSpawns:
+    # The crawler hall's pack, near enough to one another that a swing brings the rest.
+    - monster: monster.grotto_crawler
+      center: { x: -18.5, y: 0.0, z: 16.5 }
+      radius: 5.0
+      count: 6
+      respawnMs: 20000
   portals:
     # In front of the west gate; arrivals on the field face west beside its east gate.
     - center: { x: -30.5, y: 0.0, z: -22.0 }

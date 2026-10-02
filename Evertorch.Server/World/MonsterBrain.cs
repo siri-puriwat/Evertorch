@@ -37,6 +37,14 @@ public sealed class MonsterBrain
     public PathFollower Path { get; } = new();
 
     /// <summary>
+    ///     When the monster may next call its kin, and when it may next answer a call: each at most once a second
+    ///     (Gameplay Systems §10).
+    /// </summary>
+    public long NextCallMs { get; set; } = long.MinValue;
+
+    public long NextAnswerMs { get; set; } = long.MinValue;
+
+    /// <summary>
     ///     Whether <see cref="Path" /> leads away from a target that came too close, which the monster walks although
     ///     the target is in reach (Gameplay Systems §10).
     /// </summary>

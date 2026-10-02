@@ -62,6 +62,15 @@ internal static class MonsterDefinitionReader
             ai.ReportField("keepDistance", "must be below combat.attackRange");
         }
 
+        bool assists = ai.Has("assist") && ai.RequiredBool("assist");
+        double assistRadius = assists || ai.Has("assistRadius")
+            ? ai.RequiredDouble("assistRadius", 0d, ContentLimits.MaxDistance, true)
+            : 0d;
+        if (!assists && ai.Has("assistRadius"))
+        {
+            ai.ReportField("assistRadius", "is only for a monster with assist: true");
+        }
+
         int baseExperience = 0;
         int jobExperience = 0;
         if (root.Has("rewards"))
@@ -136,7 +145,9 @@ internal static class MonsterDefinitionReader
             jobExperience,
             drops,
             skills,
-            isBoss);
+            isBoss,
+            assists,
+            assistRadius);
         return new AuthoredMonster(root.ToSource(), definition, prefab, icon, projectile, scale, tint);
     }
 

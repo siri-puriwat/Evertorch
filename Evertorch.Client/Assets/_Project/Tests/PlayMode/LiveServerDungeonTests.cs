@@ -40,6 +40,12 @@ public sealed class LiveServerDungeonTests
     private static readonly WorldPosition FieldEastPortal = new(22.2f, 0f, -8f);
     private static readonly WorldPosition EntranceHall = new(-24f, 0f, -22f);
 
+    // The crawler hall's south end, from where the pack in its middle is in view.
+    private static readonly WorldPosition CrawlerHall = new(-22f, 0f, 4f);
+
+    // The Grotto Crawler's tint in the content, "#4B6B3C".
+    private static readonly Color CrawlerTint = new Color32(0x4B, 0x6B, 0x3C, 0xFF);
+
     private LiveDatabase? m_database;
     private LiveServer? m_server;
     private GameObject? m_client;
@@ -127,7 +133,34 @@ public sealed class LiveServerDungeonTests
             "the graybox in the grotto's colours");
 
         yield return WalkTo(client, grotto, EntranceHall, "in the entrance hall");
+
+        // The Grotto Crawler is the forest crawler's body at 1.2 times its size, in the content's tint.
+        yield return WalkTo(client, grotto, CrawlerHall, "in the crawler hall");
+        EntityView? crawler = null;
+        yield return WaitUntil(
+            () => (crawler = CrawlerView(client)) != null && crawler.HasBody,
+            StepTimeoutSeconds);
+        Assert.That(crawler, Is.Not.Null, "a Grotto Crawler in view");
+        Assert.That((crawler!.Key, crawler.Scale), Is.EqualTo(("monster_forest_crawler", 1.2f)));
+        var block = new MaterialPropertyBlock();
+        foreach (Renderer part in crawler.GetComponentsInChildren<Renderer>())
+        {
+            part.GetPropertyBlock(block);
+            Assert.That(
+                block.GetColor("_BaseColor"),
+                Is.EqualTo(CrawlerTint).Using(new ColorEqualityComparer(1e-4f)),
+                part.name);
+        }
+
         Assert.That(client.Connection!.MalformedMessages + client.Connection.UnexpectedMessages, Is.Zero);
+    }
+
+    private static EntityView? CrawlerView(GameClient client)
+    {
+        ClientWorld? world = client.World;
+        RemoteEntity? remote = world?.Remotes.Values
+            .FirstOrDefault(entity => entity.DefinitionId == "monster.grotto_crawler");
+        return remote != null && client.RemoteViews.TryGetValue(remote.Entity, out EntityView? view) ? view : null;
     }
 
     // The renderers of every health bar, the target ring, and the move marker.

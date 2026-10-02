@@ -856,10 +856,29 @@ internal sealed class TestServer
         m_afterCommands.Clear();
     }
 
+    /// <summary>
+    ///     Walks the player into the ground's portal and, a second after it arrives on the field, into the field's east
+    ///     portal, which leads it into the Umbral Grotto; the server must load every map and the grotto.
+    /// </summary>
+    public void CrossIntoTheGrotto(ConnectionId connection)
+    {
+        PlayerEntity player = PlayerOf(connection);
+        player.Position = PortalOf("map.training_ground", "map.training_field").Center;
+        Tick(TickRate + 1);
+        player.Position = PortalOf("map.training_field", "map.umbral_grotto").Center;
+        Tick();
+    }
+
     public void Place(ConnectionId connection, float x, float z)
     {
         PlayerEntity player = PlayerOf(connection);
         player.Position = new WorldPosition(x, player.Position.Y, z);
+    }
+
+    private MapPortal PortalOf(string from, string to)
+    {
+        World.TryGetMap(new MapDefinitionId(from), out MapInstance? map);
+        return map!.Definition.Portals.Single(portal => portal.DestinationMap == new MapDefinitionId(to));
     }
 
     private static float Distance(WorldPosition from, WorldPosition to)

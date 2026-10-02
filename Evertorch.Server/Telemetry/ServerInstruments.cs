@@ -105,6 +105,7 @@ public sealed class ServerInstruments
     private readonly Counter<long> m_otherEpochInputs;
     private readonly Counter<long> m_acquisitions;
     private readonly Counter<long> m_retreats;
+    private readonly Counter<long> m_assists;
     private readonly Counter<long> m_coins;
     private readonly Counter<long> m_quests;
     private readonly Counter<long> m_signIns;
@@ -214,6 +215,10 @@ public sealed class ServerInstruments
             "evertorch.ai.retreats",
             "{retreat}",
             "Walks away from a target that came nearer than the monster's keep distance, by monster.");
+        m_assists = Meter.CreateCounter<long>(
+            "evertorch.ai.assists",
+            "{assist}",
+            "Monsters that answered their kin's call and took its target, by monster.");
         m_coins = Meter.CreateCounter<long>(
             "evertorch.economy.coins",
             "{coin}",
@@ -360,6 +365,11 @@ public sealed class ServerInstruments
     public void RecordRetreat(MonsterDefinitionId monster)
     {
         m_retreats.Add(1, new KeyValuePair<string, object?>("monster", monster.Value));
+    }
+
+    public void RecordAssist(MonsterDefinitionId monster)
+    {
+        m_assists.Add(1, new KeyValuePair<string, object?>("monster", monster.Value));
     }
 
     /// <param name="operation">What moved them: <c>buy</c>, <c>sell</c>, or <c>quest reward</c>.</param>

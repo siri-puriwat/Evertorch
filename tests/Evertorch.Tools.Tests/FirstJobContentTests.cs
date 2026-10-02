@@ -408,7 +408,8 @@ public sealed class FirstJobContentTests
             Is.EquivalentTo(
                 new (string, WeaponType?)[]
                 {
-                    ("item.weapon.training_sword", WeaponType.Sword), ("item.weapon.training_staff", WeaponType.Staff)
+                    ("item.weapon.training_sword", WeaponType.Sword), ("item.weapon.training_staff", WeaponType.Staff),
+                    ("item.weapon.iron_sword", WeaponType.Sword), ("item.weapon.ash_staff", WeaponType.Staff)
                 }));
     }
 

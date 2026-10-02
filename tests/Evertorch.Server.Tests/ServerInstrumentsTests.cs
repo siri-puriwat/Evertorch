@@ -175,6 +175,35 @@ public sealed class ServerInstrumentsTests
     }
 
     [Test]
+    public void Assists_AreCountedByMonster_OncePerKinThatAnswers()
+    {
+        var server = new TestServer(withEveryMap: true, withGrotto: true, withMonsters: true);
+        using var recorder = new MeterRecorder(server.Instruments.Meter);
+        ConnectionId player = server.EnterWorld(1);
+        server.CrossIntoTheGrotto(player);
+        server.World.TryGetMap(new MapDefinitionId("map.umbral_grotto"), out MapInstance? grotto);
+        MonsterEntity[] crawlers = grotto!.Monsters
+            .Where(monster => monster.Definition.Id.Value == "monster.grotto_crawler")
+            .ToArray();
+        foreach (MonsterEntity crawler in crawlers)
+        {
+            crawler.Position = new WorldPosition(-28f, 0f, 27f);
+        }
+
+        crawlers[0].Position = new WorldPosition(-20f, 0f, 10f);
+        crawlers[0].Target = server.PlayerOf(player).Id;
+        crawlers[1].Position = new WorldPosition(-17f, 0f, 10f);
+        crawlers[2].Position = new WorldPosition(-20f, 0f, 7f);
+
+        int answered = server.Phases.OfType<MonsterAiSystem>().Single().CallKin(grotto, crawlers[0], 100_000);
+
+        Assert.That(answered, Is.EqualTo(2));
+        Assert.That(
+            SumTagged(recorder, "evertorch.ai.assists", "monster", "monster.grotto_crawler"),
+            Is.EqualTo(2));
+    }
+
+    [Test]
     public void AuthenticationFailure_IsCountedOnceAndPublished()
     {
         var server = new TestServer();

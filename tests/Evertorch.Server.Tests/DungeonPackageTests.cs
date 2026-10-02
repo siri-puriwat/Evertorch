@@ -16,6 +16,14 @@ public sealed class DungeonPackageTests
     private const string Ground = "map.training_ground";
 
     [Test]
+    public void Build_WithADisarmedMonster_LoadsItWithNoAttack()
+    {
+        ServerContent content = ServerContentLoader.Load(DungeonPackage.Build(DungeonPackage.Disarm(Slime)));
+
+        Assert.That(content.Monsters[new MonsterDefinitionId(Slime)].PhysicalAttack, Is.Zero);
+    }
+
+    [Test]
     public void Build_WithAWeakerMonsterAndAShorterRespawn_LoadsThemAndKeepsTheClientVersion()
     {
         Dictionary<string, byte[]> repository = PackageFixture.BuildRepositoryPackage();

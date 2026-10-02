@@ -512,6 +512,13 @@ public static class ServerContentLoader
             entry.Report("keepDistance", "must be below attackRange");
         }
 
+        bool assists = entry.RequiredBool("assist");
+        double assistRadius = RequiredNonNegative(entry, "assistRadius", ContentLimits.MaxDistance);
+        if (assists != assistRadius > 0d)
+        {
+            entry.Report("assistRadius", "must be above 0 for a monster that assists, and 0 otherwise");
+        }
+
         int baseExperience = entry.RequiredInt("baseExperience", 0, ContentLimits.MaxExperience);
         int jobExperience = entry.RequiredInt("jobExperience", 0, ContentLimits.MaxExperience);
 
@@ -587,7 +594,9 @@ public static class ServerContentLoader
             jobExperience,
             drops.AsReadOnly(),
             skills.AsReadOnly(),
-            isBoss);
+            isBoss,
+            assists,
+            assistRadius);
     }
 
     private static SkillDefinition? ReadSkill(PackageObjectReader entry, SkillDefinitionId id, List<string> problems)

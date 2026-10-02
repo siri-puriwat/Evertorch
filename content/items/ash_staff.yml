@@ -1,0 +1,18 @@
+id: item.weapon.ash_staff
+displayName: Ash Staff
+type: weapon
+stackLimit: 1
+server:
+  # The second tier, which only the Umbral Grotto drops; the shop buys it back but never sells it.
+  weight: 50
+  sellPrice: 60
+  equipment:
+    attack: 15
+    attackSpeedPenalty: 54
+    weaponType: staff
+    bonus: { int: 18 }
+client:
+  # The training staff's look until art for the second tier arrives.
+  icon: item_training_staff
+  model: pickup_training_staff
+  held: weapon_training_staff

@@ -302,6 +302,8 @@ internal static class ServerProjection
             writer.WriteNumber("idlePauseMaxMs", monster.IdlePauseMaxMs);
             writer.WriteNumber("scanIntervalMs", monster.ScanIntervalMs);
             writer.WriteNumber("keepDistance", monster.KeepDistance);
+            writer.WriteBoolean("assist", monster.Assists);
+            writer.WriteNumber("assistRadius", monster.AssistRadius);
             writer.WriteNumber("baseExperience", monster.BaseExperience);
             writer.WriteNumber("jobExperience", monster.JobExperience);
             writer.WriteStartArray("drops");
