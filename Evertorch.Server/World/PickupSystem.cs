@@ -48,7 +48,7 @@ public sealed class PickupSystem : ITickPhase
     private readonly AuditLog m_audit;
     private readonly ILogger<PickupSystem> m_logger;
     private readonly float m_reach;
-    private readonly uint m_priorityTicks;
+    private readonly int m_tickRate;
     private readonly uint m_failedLookupDelayTicks;
     private readonly List<(CharacterSession Character, uint NotBefore)> m_unsettled = new();
     private uint m_tick;
@@ -74,7 +74,7 @@ public sealed class PickupSystem : ITickPhase
         m_audit = audit;
         m_logger = logger;
         m_reach = worldOptions.Value.PickupRange + worldOptions.Value.AttackRangeTolerance;
-        m_priorityTicks = (uint)((long)LootPriorityMs * simulation.Value.TickRate / MillisecondsPerSecond);
+        m_tickRate = simulation.Value.TickRate;
         m_failedLookupDelayTicks =
             (uint)((long)FailedLookupDelayMs * simulation.Value.TickRate / MillisecondsPerSecond);
     }
@@ -112,9 +112,9 @@ public sealed class PickupSystem : ITickPhase
         CharacterSession character = session.Character!;
         // One inventory operation at a time per character keeps its inventory changes in commit order. Reason 7 keeps
         // its meaning for a pickup's own business; another operation in flight is reason 9 (Network Protocol §11).
-        if (character.Operation != null)
+        if (character.HasInventoryWork)
         {
-            return character.Operation.Kind == InventoryOperationKind.Pickup
+            return character.Operation?.Kind == InventoryOperationKind.Pickup
                 ? CommandRejectionReason.Busy
                 : CommandRejectionReason.ItemActionInFlight;
         }
@@ -134,7 +134,7 @@ public sealed class PickupSystem : ITickPhase
 
         if (drop.Priority != default
             && drop.Priority != character.Character
-            && tick - drop.DroppedTick < m_priorityTicks)
+            && tick - drop.DroppedTick < (uint)((long)drop.PriorityMs * m_tickRate / MillisecondsPerSecond))
         {
             return CommandRejectionReason.LootPriority;
         }

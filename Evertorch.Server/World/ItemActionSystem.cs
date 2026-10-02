@@ -148,7 +148,7 @@ public sealed class ItemActionSystem : ITickPhase
         CharacterSession character = session.Character!;
         // First: only a settled inventory answers for the database, and one operation at a time keeps the changes in
         // commit order (Persistence §7).
-        if (character.Operation != null)
+        if (character.HasInventoryWork)
         {
             return CommandRejectionReason.ItemActionInFlight;
         }
@@ -194,7 +194,7 @@ public sealed class ItemActionSystem : ITickPhase
     public CommandRejectionReason TryUnequip(ClientSession session, EquipmentSlot slot, uint commandSequence)
     {
         CharacterSession character = session.Character!;
-        if (character.Operation != null)
+        if (character.HasInventoryWork)
         {
             return CommandRejectionReason.ItemActionInFlight;
         }
@@ -220,7 +220,7 @@ public sealed class ItemActionSystem : ITickPhase
     public CommandRejectionReason TryUse(ClientSession session, long inventoryItem, uint commandSequence)
     {
         CharacterSession character = session.Character!;
-        if (character.Operation != null)
+        if (character.HasInventoryWork)
         {
             return CommandRejectionReason.ItemActionInFlight;
         }
@@ -260,7 +260,7 @@ public sealed class ItemActionSystem : ITickPhase
         uint commandSequence)
     {
         CharacterSession character = session.Character!;
-        if (character.Operation != null)
+        if (character.HasInventoryWork)
         {
             return CommandRejectionReason.ItemActionInFlight;
         }
@@ -327,7 +327,7 @@ public sealed class ItemActionSystem : ITickPhase
         uint commandSequence)
     {
         CharacterSession character = session.Character!;
-        if (character.Operation != null)
+        if (character.HasInventoryWork)
         {
             return CommandRejectionReason.ItemActionInFlight;
         }
@@ -389,7 +389,7 @@ public sealed class ItemActionSystem : ITickPhase
         uint commandSequence)
     {
         CharacterSession character = session.Character!;
-        if (character.Operation != null)
+        if (character.HasInventoryWork)
         {
             return CommandRejectionReason.ItemActionInFlight;
         }
@@ -459,7 +459,7 @@ public sealed class ItemActionSystem : ITickPhase
         uint commandSequence)
     {
         CharacterSession character = session.Character!;
-        if (character.Operation != null)
+        if (character.HasInventoryWork)
         {
             return CommandRejectionReason.ItemActionInFlight;
         }

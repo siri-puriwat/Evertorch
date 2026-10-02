@@ -272,6 +272,34 @@ public sealed class ServerInstrumentsTests
     }
 
     [Test]
+    public void BossRewards_AreCountedByWhereThePrizeWent()
+    {
+        var server = new TestServer();
+        using var recorder = new MeterRecorder(server.Instruments.Meter);
+        ConnectionId roomy = server.EnterWorld(1);
+        ConnectionId full = server.Connect();
+        server.SignInWithCharacter(full, 2);
+        server.Store.GiveItems(2, "item.material.slime_gel", PickupSystem.MaxInventoryRows, 1, 0);
+        server.SendEnterWorld(full, 2);
+        server.TickUntil(() => server.SessionOf(full).State == SessionState.InWorld);
+        CharacterSession[] winners = { server.SessionOf(roomy).Character!, server.SessionOf(full).Character! };
+
+        foreach (CharacterSession winner in winners)
+        {
+            winner.PendingGrants.Enqueue(new BossGrant(
+                new MonsterDefinitionId("monster.slime_monarch"),
+                new ItemDefinitionId("item.armor.monarch_mantle"),
+                1,
+                3000));
+        }
+
+        server.TickUntil(() => winners.All(winner => !winner.HasInventoryWork));
+
+        Assert.That(Tagged(recorder, "evertorch.boss.rewards", "placed", "bag"), Is.EqualTo(1));
+        Assert.That(Tagged(recorder, "evertorch.boss.rewards", "placed", "feet"), Is.EqualTo(1));
+    }
+
+    [Test]
     public void BuildChanges_CountAJobChange_TaggedJob()
     {
         var server = new TestServer(withNpcs: true);

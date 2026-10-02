@@ -107,6 +107,7 @@ public sealed class ServerInstruments
     private readonly Counter<long> m_retreats;
     private readonly Counter<long> m_assists;
     private readonly Counter<long> m_bossKills;
+    private readonly Counter<long> m_bossRewards;
     private readonly Counter<long> m_coins;
     private readonly Counter<long> m_quests;
     private readonly Counter<long> m_signIns;
@@ -224,6 +225,10 @@ public sealed class ServerInstruments
             "evertorch.boss.kills",
             "{kill}",
             "Bosses that died, by monster.");
+        m_bossRewards = Meter.CreateCounter<long>(
+            "evertorch.boss.rewards",
+            "{reward}",
+            "Boss prizes that reached their most valuable player, by where: the bag, or the feet.");
         m_coins = Meter.CreateCounter<long>(
             "evertorch.economy.coins",
             "{coin}",
@@ -380,6 +385,12 @@ public sealed class ServerInstruments
     public void RecordBossKill(MonsterDefinitionId monster)
     {
         m_bossKills.Add(1, new KeyValuePair<string, object?>("monster", monster.Value));
+    }
+
+    /// <param name="placed">Where the prize went: <c>bag</c>, or <c>feet</c> when the bag could not take it.</param>
+    public void RecordBossReward(string placed)
+    {
+        m_bossRewards.Add(1, new KeyValuePair<string, object?>("placed", placed));
     }
 
     /// <param name="operation">What moved them: <c>buy</c>, <c>sell</c>, or <c>quest reward</c>.</param>

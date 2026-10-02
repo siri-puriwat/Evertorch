@@ -117,6 +117,7 @@ public sealed class SessionManager : ITickPhase
         CombatSystem combat,
         PickupSystem pickups,
         ItemActionSystem items,
+        BossRewardSystem rewards,
         ChatSystem chat,
         PartyRegistry parties,
         TimeProvider time,
@@ -152,6 +153,7 @@ public sealed class SessionManager : ITickPhase
         m_chat = chat;
         m_parties = parties;
         m_items.Settled += OnOperationSettled;
+        rewards.Settled += OnOperationSettled;
         m_time = time;
         m_instruments = instruments;
         m_logger = logger;
@@ -768,7 +770,7 @@ public sealed class SessionManager : ITickPhase
             return;
         }
 
-        if (player.IsDead || character.IsLoggingOut || character.IsExpelled || character.Operation != null)
+        if (player.IsDead || character.IsLoggingOut || character.IsExpelled || character.HasInventoryWork)
         {
             return;
         }
@@ -1027,7 +1029,7 @@ public sealed class SessionManager : ITickPhase
     private CommandRejectionReason ResetBuild(ClientSession session, EntityId npc)
     {
         CharacterSession character = session.Character!;
-        if (character.Operation != null)
+        if (character.HasInventoryWork)
         {
             return CommandRejectionReason.ItemActionInFlight;
         }
@@ -1106,7 +1108,7 @@ public sealed class SessionManager : ITickPhase
         m_combat.InterruptCast(character.Player);
         // Moves queued before the logout must not walk the character away from the checkpoint it is about to write.
         session.Input!.Halt();
-        if (character.Operation == null)
+        if (!character.HasInventoryWork)
         {
             QueueLogoutCheckpoint(session, character);
         }
@@ -1114,9 +1116,13 @@ public sealed class SessionManager : ITickPhase
         return CommandRejectionReason.None;
     }
 
+    // A logout waits for the last of the character's inventory work, a boss's prize included.
     private void OnOperationSettled(CharacterSession character)
     {
-        if (character.IsLoggingOut && character.LogoutCheckpoint == null && character.Connection != null)
+        if (character.IsLoggingOut
+            && character.LogoutCheckpoint == null
+            && character.Connection != null
+            && !character.HasInventoryWork)
         {
             QueueLogoutCheckpoint(character.Connection, character);
         }

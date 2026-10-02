@@ -20,6 +20,12 @@ public enum InventoryOperationKind
     /// <summary>
     ///     A job change, which takes a weapon the new job cannot wield off with the job (Persistence §5).
     /// </summary>
-    JobChange = 8
+    JobChange = 8,
+
+    /// <summary>
+    ///     A boss's prize for its most valuable player, which the server starts without a command (Gameplay Systems
+    ///     §11).
+    /// </summary>
+    BossReward = 9
 }
 }

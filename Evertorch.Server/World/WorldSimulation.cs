@@ -277,12 +277,22 @@ public sealed class WorldSimulation
         WorldPosition position,
         uint tick,
         long expiresAtMs,
-        CharacterId priority)
+        CharacterId priority,
+        Guid? dropId = null,
+        int priorityMs = PickupSystem.LootPriorityMs)
     {
         // Not from the seeded random: a drop's identity must be unique across restarts, and drawing it from the
         // gameplay random would change every roll after it.
-        var drop = new ItemDropEntity(NextEntityId(), Guid.NewGuid(), item, amount, position, tick, expiresAtMs,
-            priority);
+        var drop = new ItemDropEntity(
+            NextEntityId(),
+            dropId ?? Guid.NewGuid(),
+            item,
+            amount,
+            position,
+            tick,
+            expiresAtMs,
+            priority,
+            priorityMs);
         map.Add(drop);
         return drop;
     }

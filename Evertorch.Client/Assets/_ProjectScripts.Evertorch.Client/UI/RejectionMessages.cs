@@ -73,7 +73,7 @@ public static class RejectionMessages
             case CommandRejectionReason.NotEnoughSp:
                 return "Not enough SP.";
             case CommandRejectionReason.ItemActionInFlight:
-                return "Your last item action is still going through. Try again in a moment.";
+                return "An item change is still going through.";
             case CommandRejectionReason.NotEnoughCoins:
                 return "You do not have enough coins.";
             case CommandRejectionReason.CoinCapReached:

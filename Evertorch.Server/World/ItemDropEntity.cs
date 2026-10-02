@@ -21,11 +21,13 @@ public sealed class ItemDropEntity : WorldEntity
         WorldPosition position,
         uint droppedTick,
         long expiresAtMs,
-        CharacterId priority)
+        CharacterId priority,
+        int priorityMs = PickupSystem.LootPriorityMs)
         : base(id, position, DropFacing, 0f, 0, 0f)
     {
         DropId = dropId;
         Priority = priority;
+        PriorityMs = priorityMs;
         Item = item;
         Amount = amount;
         DroppedTick = droppedTick;
@@ -41,6 +43,12 @@ public sealed class ItemDropEntity : WorldEntity
     ///     The character whose hit killed the monster, who alone may pick the drop up for a while; default for none.
     /// </summary>
     public CharacterId Priority { get; }
+
+    /// <summary>
+    ///     How long <see cref="Priority" /> alone may pick the drop up: a kill's loot for 3 s, a boss's prize at its
+    ///     most valuable player's feet for 10 s.
+    /// </summary>
+    public int PriorityMs { get; }
 
     /// <summary>
     ///     The character whose pickup of this drop is being committed; default while none is. A reserved drop does

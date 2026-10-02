@@ -192,8 +192,9 @@ public sealed class CharacterLifetime
     /// </summary>
     public void CheckpointAndRemove(CharacterSession character)
     {
-        // An inventory operation in flight still needs its character when its result comes back (Persistence §7).
-        if (character.Operation != null)
+        // An inventory operation in flight still needs its character when its result comes back, and a boss's prize
+        // waiting needs it to reach its bag (Persistence §7).
+        if (character.HasInventoryWork)
         {
             Release(character);
             character.GraceEndsTick = null;

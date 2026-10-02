@@ -207,6 +207,18 @@ internal sealed class TestServer
             Combat,
             Audit,
             ItemActionLog);
+        Rewards = new BossRewardSystem(
+            Sessions,
+            Persistence,
+            sender,
+            Lifetime,
+            World,
+            Content,
+            Time,
+            Instruments,
+            Options.Create(world),
+            simulation,
+            RewardLog);
         SessionManager = new SessionManager(
             Inbound,
             Persistence,
@@ -223,6 +235,7 @@ internal sealed class TestServer
             Combat,
             Pickups,
             Items,
+            Rewards,
             new ChatSystem(Sessions, sender, Instruments, Parties),
             Parties,
             Time,
@@ -277,6 +290,7 @@ internal sealed class TestServer
             AdminQueue,
             Pickups,
             Items,
+            Rewards,
             Parties
         };
         if (withMonsterAi)
@@ -316,6 +330,10 @@ internal sealed class TestServer
     public PickupSystem Pickups { get; }
 
     public ItemActionSystem Items { get; }
+
+    public BossRewardSystem Rewards { get; }
+
+    public CapturingLogger<BossRewardSystem> RewardLog { get; } = new();
 
     public PartyRegistry Parties { get; }
 

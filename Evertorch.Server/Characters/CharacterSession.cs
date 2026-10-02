@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Evertorch.Game;
 using Evertorch.Persistence;
 
@@ -97,6 +98,18 @@ public sealed class CharacterSession
     ///     Logout, removal, and a map transfer wait for it (Persistence §7).
     /// </summary>
     public InventoryOperation? Operation { get; set; }
+
+    /// <summary>
+    ///     The boss's prizes waiting to reach the character's bag, one at a time, the first while it is committed
+    ///     (Gameplay Systems §11).
+    /// </summary>
+    public Queue<BossGrant> PendingGrants { get; } = new();
+
+    /// <summary>
+    ///     Whether an inventory operation is in flight or a prize waits: every other inventory command, a logout, a
+    ///     removal, and a map transfer wait for both (Persistence §7).
+    /// </summary>
+    public bool HasInventoryWork => Operation != null || PendingGrants.Count > 0;
 
     /// <summary>
     ///     The character was to leave the world while an inventory operation was in flight; it leaves once the

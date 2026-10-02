@@ -74,6 +74,16 @@ public sealed class RejectionMessagesTests
             "any other reason keeps its words");
     }
 
+    // A boss's prize on its way to the bag refuses item commands too, so the words name no action of the player's
+    // (Network Protocol §11).
+    [Test]
+    public void Describe_AnItemChangeInFlight_BlamesNoActionOfThePlayers()
+    {
+        Assert.That(
+            RejectionMessages.Describe(CommandRejectionReason.ItemActionInFlight),
+            Is.EqualTo("An item change is still going through."));
+    }
+
     [Test]
     public void Describe_EverySentReason_HasItsOwnWordsNotItsCodeName()
     {

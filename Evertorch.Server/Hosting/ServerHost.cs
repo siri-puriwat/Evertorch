@@ -107,6 +107,8 @@ public static class ServerHost
         builder.Services.AddSingleton<PartyRegistry>();
         builder.Services.AddSingleton<ITickPhase>(services => services.GetRequiredService<PartyRegistry>());
         builder.Services.AddSingleton<ITickPhase>(services => services.GetRequiredService<ItemActionSystem>());
+        builder.Services.AddSingleton<BossRewardSystem>();
+        builder.Services.AddSingleton<ITickPhase>(services => services.GetRequiredService<BossRewardSystem>());
         builder.Services.AddSingleton<AddressThrottle>();
         builder.Services.AddSingleton<ConnectionRegistry>();
         builder.Services.AddSingleton<LiteNetLibServerTransport>();

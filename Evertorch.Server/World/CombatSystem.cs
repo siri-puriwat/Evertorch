@@ -337,7 +337,15 @@ public sealed class CombatSystem : ITickPhase
         }
 
         long gained = m_progression.AwardMostValuable(character, boss.Definition.MvpExperience);
-        return new MostValuablePlayer(character, gained, m_drops.RollPrize(boss.Definition));
+        MvpDrop? prize = m_drops.RollPrize(boss.Definition);
+
+        // Only data: the grant system takes it into the bag on its own pass (Gameplay Systems §11).
+        if (prize != null)
+        {
+            character.PendingGrants.Enqueue(new BossGrant(boss.Definition.Id, prize.Item, prize.Amount, gained));
+        }
+
+        return new MostValuablePlayer(character, gained, prize);
     }
 
     private static float HorizontalDistance(WorldPosition a, WorldPosition b)
