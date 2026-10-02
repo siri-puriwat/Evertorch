@@ -11,7 +11,7 @@ namespace Evertorch.Server.Tests
 {
 /// <summary>
 ///     A share that covers the next level recalculates the statistics and restores HP and SP in full (Gameplay
-///     Systems §2, §2.1). The adventurer's table needs 30 from level 1 and caps at level 15.
+///     Systems §2, §2.1). The adventurer's table needs 30 from level 1 and caps at level 25.
 /// </summary>
 [TestFixture]
 public sealed class LevelUpTests
@@ -55,17 +55,31 @@ public sealed class LevelUpTests
         Assert.That(player.CurrentSpirit, Is.EqualTo(AdventurerAt(1).MaxSp));
     }
 
+    // The cap is the table's: past level 15 a character levels on toward 25 (Gameplay Systems §2.1).
+    [Test]
+    public void Kill_AtLevel15_LevelsOnTowardTheCapOf25()
+    {
+        (TestServer server, ConnectionId connection, MonsterEntity slime) = Arrange();
+        PlayerEntity player = server.PlayerOf(connection);
+        player.Level = 15;
+        player.Experience = 1215;
+
+        Kill(server, slime);
+
+        Assert.That((player.Level, player.Experience), Is.EqualTo((16, 5L)), "1,220 to level 16");
+    }
+
     [Test]
     public void Kill_AtTheCap_KeepsTheLevelAndNoExperience()
     {
         (TestServer server, ConnectionId connection, MonsterEntity slime) = Arrange();
         PlayerEntity player = server.PlayerOf(connection);
-        player.Level = 15;
+        player.Level = 25;
         server.Transport.ClearSent();
 
         Kill(server, slime);
 
-        Assert.That(player.Level, Is.EqualTo(15));
+        Assert.That(player.Level, Is.EqualTo(25));
         Assert.That(player.Experience, Is.Zero);
         Assert.That(
             server.Transport.ControlOpcodesSentTo(connection),

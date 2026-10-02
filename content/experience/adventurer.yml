@@ -1,2 +1,5 @@
+# The Adventurer's base levels, 1 to 25, the base table of every job. Each step grows by ten more than the one
+# before.
 id: experience.adventurer
-levels: [30, 50, 80, 120, 170, 230, 300, 380, 470, 570, 680, 800, 930, 1070]
+levels: [30, 50, 80, 120, 170, 230, 300, 380, 470, 570, 680, 800, 930, 1070,
+         1220, 1380, 1550, 1730, 1920, 2120, 2330, 2550, 2780, 3020]

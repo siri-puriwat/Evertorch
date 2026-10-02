@@ -30,10 +30,14 @@ internal sealed class TestServer
     private static readonly Lazy<ServerContent> RepositoryContent =
         new(() => ServerContentLoader.Load(PackageFixture.BuildRepositoryPackage()));
 
+    private static readonly MapDefinitionId GrottoMap = new("map.umbral_grotto");
+
     // Most server tests are about players on the starting map; without the other maps, monsters, and NPCs their
-    // message counts and entity IDs stay exact. Each combination is built once.
-    private static readonly ConcurrentDictionary<(bool EveryMap, bool Monsters, bool Npcs), ServerContent> Contents =
-        new();
+    // message counts and entity IDs stay exact. Every map leaves the grotto out unless it is asked for: its monsters
+    // draw from the one random source, which would shift every seeded test on the other maps. Each combination is
+    // built once.
+    private static readonly ConcurrentDictionary<(bool EveryMap, bool Grotto, bool Monsters, bool Npcs), ServerContent>
+        Contents = new();
 
     private readonly TickPipeline m_pipeline;
     private readonly List<Action> m_afterCommands = new();
@@ -61,12 +65,17 @@ internal sealed class TestServer
         bool isAbuseControlEnabled = true,
         AbuseOptions? abuseOptions = null,
         bool withEveryMap = false,
+        bool withGrotto = false,
         bool withNpcs = false,
         bool withAdventurerBuild = true)
     {
         Content = Contents.GetOrAdd(
-            (withEveryMap, withMonsters, withNpcs),
-            key => Copy(RepositoryContent.Value, key.EveryMap ? _ => true : IsStartingMap, key.Monsters, key.Npcs));
+            (withEveryMap, withGrotto, withMonsters, withNpcs),
+            key => Copy(
+                RepositoryContent.Value,
+                map => map.Id == GrottoMap ? key.Grotto : key.EveryMap || IsStartingMap(map),
+                key.Monsters,
+                key.Npcs));
 
         var network = new NetworkOptions
         {

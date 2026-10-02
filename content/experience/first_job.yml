@@ -1,5 +1,5 @@
 # The first jobs' job levels, 1 to 10, shared by the Vanguard and the Arcanist. They sum to 4,050, the Adventurer's
 # base table from level 10 to 15, so with job experience equal to base experience a first job's levels keep near
-# those base levels.
+# those base levels; from base level 15 to the cap of 25 a first job stays at job level 10.
 id: experience.first_job
 levels: [250, 300, 350, 400, 450, 500, 550, 600, 650]

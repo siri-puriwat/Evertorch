@@ -15,6 +15,7 @@ public sealed class MapTransferTests
 {
     private static readonly MapDefinitionId Ground = new("map.training_ground");
     private static readonly MapDefinitionId Field = new("map.training_field");
+    private static readonly MapDefinitionId Grotto = new("map.umbral_grotto");
 
     private static MapInstance MapOf(TestServer server, MapDefinitionId id)
     {
@@ -22,9 +23,9 @@ public sealed class MapTransferTests
         return map!;
     }
 
-    private static MapPortal PortalOf(TestServer server, MapDefinitionId id)
+    private static MapPortal PortalOf(TestServer server, MapDefinitionId from, MapDefinitionId to)
     {
-        return MapOf(server, id).Definition.Portals.Single();
+        return MapOf(server, from).Definition.Portals.Single(portal => portal.DestinationMap == to);
     }
 
     private static void StandIn(TestServer server, ConnectionId player, MapPortal portal)
@@ -52,11 +53,11 @@ public sealed class MapTransferTests
     {
         var server = new TestServer(withEveryMap: true);
         ConnectionId player = server.EnterWorld(1);
-        StandIn(server, player, PortalOf(server, Ground));
+        StandIn(server, player, PortalOf(server, Ground, Field));
         server.Tick();
         Assert.That(CharacterOf(server, player).Map.Definition.Id, Is.EqualTo(Field), "crossed");
 
-        StandIn(server, player, PortalOf(server, Field));
+        StandIn(server, player, PortalOf(server, Field, Ground));
         server.Tick(TestServer.TickRate - 2);
         MapDefinitionId held = CharacterOf(server, player).Map.Definition.Id;
         server.Tick(2);
@@ -77,7 +78,7 @@ public sealed class MapTransferTests
         server.Tick(2);
         Assert.That(entity.Target, Is.EqualTo(slime.Id));
 
-        StandIn(server, player, PortalOf(server, Ground));
+        StandIn(server, player, PortalOf(server, Ground, Field));
         server.Tick(2);
 
         Assert.That(CharacterOf(server, player).Map.Definition.Id, Is.EqualTo(Field));
@@ -93,7 +94,7 @@ public sealed class MapTransferTests
         ConnectionId traveller = server.EnterWorld(1);
         ConnectionId onGround = server.EnterWorld(2);
         ConnectionId onField = server.EnterWorld(3);
-        MapPortal toField = PortalOf(server, Ground);
+        MapPortal toField = PortalOf(server, Ground, Field);
         StandIn(server, onField, toField);
         server.Tick(3);
         server.PlayerOf(onGround).Position = new WorldPosition(toField.Center.X - 3f, 0f, toField.Center.Z);
@@ -115,6 +116,33 @@ public sealed class MapTransferTests
         Assert.That(server.SessionOf(onField).KnownEntities, Does.Contain(travellerEntity), "the field saw it arrive");
     }
 
+    // The field's east gate leads into the grotto, and the grotto's west gate back (Gameplay Systems §4.2).
+    [Test]
+    public void Crossing_TheFieldsEastGate_LeadsIntoTheGrottoAndBack()
+    {
+        var server = new TestServer(withEveryMap: true, withGrotto: true);
+        ConnectionId player = server.EnterWorld(1);
+        StandIn(server, player, PortalOf(server, Ground, Field));
+        server.Tick(TestServer.TickRate + 1);
+        MapPortal toGrotto = PortalOf(server, Field, Grotto);
+
+        StandIn(server, player, toGrotto);
+        server.Tick();
+        MapDefinitionId inside = CharacterOf(server, player).Map.Definition.Id;
+        WorldPosition arrival = server.PlayerOf(player).Position;
+        server.Tick(TestServer.TickRate);
+        MapPortal toField = PortalOf(server, Grotto, Field);
+        StandIn(server, player, toField);
+        server.Tick();
+
+        Assert.That(inside, Is.EqualTo(Grotto), "into the grotto");
+        Assert.That(arrival, Is.EqualTo(MapOf(server, Grotto).Definition.SpawnPosition), "by its west gate");
+        Assert.That(CharacterOf(server, player).Map.Definition.Id, Is.EqualTo(Field), "back on the field");
+        Assert.That(server.PlayerOf(player).Position, Is.EqualTo(toField.DestinationPosition));
+        Assert.That(MapOf(server, Field).Definition.IsInPortal(toField.DestinationPosition), Is.False);
+        Assert.That(server.SessionOf(player).MapEpoch, Is.EqualTo(3));
+    }
+
     [Test]
     public void Crossing_WaitsForAPickupInFlight_AndNeverTakesTheDeadOrTheLeaving()
     {
@@ -122,7 +150,7 @@ public sealed class MapTransferTests
         ConnectionId waiting = server.EnterWorld(1);
         ConnectionId dead = server.EnterWorld(2);
         ConnectionId leaving = server.EnterWorld(3);
-        MapPortal portal = PortalOf(server, Ground);
+        MapPortal portal = PortalOf(server, Ground, Field);
         MapInstance ground = MapOf(server, Ground);
         ItemDropEntity drop = server.World.SpawnItemDrop(
             ground,
@@ -158,7 +186,7 @@ public sealed class MapTransferTests
     {
         var server = new TestServer(withEveryMap: true);
         ConnectionId player = server.EnterWorld(1);
-        StandIn(server, player, PortalOf(server, Ground));
+        StandIn(server, player, PortalOf(server, Ground, Field));
         server.Tick(2);
         PlayerEntity entity = server.PlayerOf(player);
         entity.Position = new WorldPosition(0f, 0f, 0f);
@@ -179,7 +207,7 @@ public sealed class MapTransferTests
         var server = new TestServer(withEveryMap: true);
         ConnectionId player = server.EnterWorld(1);
         server.Tick(2);
-        StandIn(server, player, PortalOf(server, Ground));
+        StandIn(server, player, PortalOf(server, Ground, Field));
         server.Tick(2);
         PlayerEntity entity = server.PlayerOf(player);
         WorldPosition arrived = entity.Position;
@@ -242,7 +270,7 @@ public sealed class MapTransferTests
         ConnectionId player = server.EnterWorld(1);
         server.Tick(2);
         server.Transport.ClearSent();
-        MapPortal portal = PortalOf(server, Ground);
+        MapPortal portal = PortalOf(server, Ground, Field);
 
         StandIn(server, player, portal);
         server.Tick();

@@ -621,11 +621,18 @@ public sealed class TownLoopAcceptanceTests
         Assert.That(isAgreed, Is.True, $"{step}: the server holds the same level and coins");
     }
 
+    // The field's portal back to the ground; the other leads on to the grotto.
+    private static MapPortal PortalToTown(ServerContent content)
+    {
+        MapDefinition field = content.Maps[new MapDefinitionId(TrainingField)];
+        return field.Portals.Single(portal => portal.DestinationMap == new MapDefinitionId(TrainingGround));
+    }
+
     // The player walks into the field's portal and follows its character back to the ground, where it arrives by the
     // Gate Warden.
     private static void CrossBack(string step, ServerContent content, SocketClient client)
     {
-        MapPortal portal = content.Maps[new MapDefinitionId(TrainingField)].Portals.Single();
+        MapPortal portal = PortalToTown(content);
         Assert.That(
             client.Controller.TryMoveTo(
                 client.World.Predictor.Position,
@@ -792,7 +799,7 @@ public sealed class TownLoopAcceptanceTests
     {
         const string step = "return";
         var ground = new MapDefinitionId(TrainingGround);
-        MapPortal portal = content.Maps[new MapDefinitionId(TrainingField)].Portals.Single();
+        MapPortal portal = PortalToTown(content);
         Assert.That(portal.DestinationMap, Is.EqualTo(ground), step);
         Assert.That(
             client.Controller.TryMoveTo(

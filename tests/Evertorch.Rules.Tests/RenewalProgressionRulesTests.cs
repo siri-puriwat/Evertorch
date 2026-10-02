@@ -93,12 +93,14 @@ public sealed class RenewalProgressionRulesTests
     [TestCase(10, 5)]
     [TestCase(14, 5)]
     [TestCase(15, 6)]
+    [TestCase(24, 7)]
+    [TestCase(25, 8)]
     public void StatPointsForLevel_ForBaseLevel_GrantsThreePlusAFifth(int level, int points)
     {
         Assert.That(m_rules.StatPointsForLevel(level), Is.EqualTo(points));
     }
 
-    // In all: 9 by level 4, 29 by level 9, 54 by level 14, and 60 at the cap of 15.
+    // In all: 9 by level 4, 29 by level 9, 54 by level 14, 60 by level 15, and 127 at the cap of 25.
     [TestCase(0, 0)]
     [TestCase(1, 0)]
     [TestCase(2, 3)]
@@ -108,6 +110,8 @@ public sealed class RenewalProgressionRulesTests
     [TestCase(10, 34)]
     [TestCase(14, 54)]
     [TestCase(15, 60)]
+    [TestCase(20, 91)]
+    [TestCase(25, 127)]
     public void StatPointsGranted_UpToBaseLevel_SumsEveryLevelFromTwo(int level, int points)
     {
         Assert.That(m_rules.StatPointsGranted(level), Is.EqualTo(points));

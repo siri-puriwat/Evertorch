@@ -57,10 +57,11 @@ public sealed class NpcTests
         return told.ToArray();
     }
 
-    private static void StandIn(TestServer server, ConnectionId player, MapDefinitionId map)
+    private static void StandIn(TestServer server, ConnectionId player, MapDefinitionId from, MapDefinitionId to)
     {
-        server.World.TryGetMap(map, out MapInstance? instance);
-        server.PlayerOf(player).Position = instance!.Definition.Portals.Single().Center;
+        server.World.TryGetMap(from, out MapInstance? instance);
+        server.PlayerOf(player).Position =
+            instance!.Definition.Portals.Single(portal => portal.DestinationMap == to).Center;
     }
 
     private static CommandRejected[] Rejections(TestServer server, ConnectionId player)
@@ -82,14 +83,14 @@ public sealed class NpcTests
     {
         var server = new TestServer(withEveryMap: true, withNpcs: true);
         ConnectionId player = server.EnterWorld(1);
-        StandIn(server, player, Ground);
+        StandIn(server, player, Ground, Field);
         server.Tick();
         Assert.That(server.SessionOf(player).Character!.Map.Definition.Id, Is.EqualTo(Field), "crossed");
         server.Tick(TestServer.TickRate);
         Assert.That(NpcsToldTo(server, player).Length, Is.EqualTo(3), "all three were told before the crossing");
         server.Transport.ClearSent();
 
-        StandIn(server, player, Field);
+        StandIn(server, player, Field, Ground);
         server.Tick(TestServer.TickRate);
         string[] onArrival = NpcsToldTo(server, player);
         server.Transport.ClearSent();

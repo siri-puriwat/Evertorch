@@ -366,6 +366,26 @@ public sealed class ServerContentLoaderTests
     }
 
     [Test]
+    public void Load_ForRepositoryContent_JoinsTheFieldAndTheGrottoBothWays()
+    {
+        ServerContent content = ServerContentLoader.Load(PackageFixture.BuildRepositoryPackage());
+        MapDefinition field = content.Maps[new MapDefinitionId("map.training_field")];
+        MapDefinition grotto = content.Maps[new MapDefinitionId("map.umbral_grotto")];
+
+        MapPortal toGrotto = field.Portals.Single(portal => portal.DestinationMap == grotto.Id);
+        MapPortal toField = grotto.Portals.Single();
+
+        Assert.That(toField.DestinationMap, Is.EqualTo(field.Id));
+        Assert.That(toGrotto.DestinationPosition, Is.EqualTo(grotto.SpawnPosition), "arrivals by the grotto's gate");
+        Assert.That(grotto.IsInPortal(toGrotto.DestinationPosition), Is.False);
+        Assert.That(field.IsInPortal(toField.DestinationPosition), Is.False);
+        Assert.That(grotto.IsInPortal(grotto.SpawnPosition), Is.False);
+        Assert.That((toGrotto.DestinationFacing.X, toField.DestinationFacing.X), Is.EqualTo((1f, -1f)));
+        Assert.That(GateBeside(field, toGrotto.Center, 1f), Is.True, "the field's portal lies before its east gate");
+        Assert.That(GateBeside(grotto, toField.Center, -1f), Is.True, "the grotto's lies before its west gate");
+    }
+
+    [Test]
     public void Load_ForRepositoryContent_JoinsTheGroundAndTheFieldBothWays()
     {
         ServerContent content = ServerContentLoader.Load(PackageFixture.BuildRepositoryPackage());
@@ -373,7 +393,7 @@ public sealed class ServerContentLoaderTests
         MapDefinition field = content.Maps[new MapDefinitionId("map.training_field")];
 
         MapPortal toField = ground.Portals.Single();
-        MapPortal toGround = field.Portals.Single();
+        MapPortal toGround = field.Portals.Single(portal => portal.DestinationMap == ground.Id);
 
         Assert.That(toField.DestinationMap, Is.EqualTo(field.Id));
         Assert.That(toGround.DestinationMap, Is.EqualTo(ground.Id));
