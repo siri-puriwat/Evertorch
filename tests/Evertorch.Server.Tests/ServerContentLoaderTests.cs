@@ -284,6 +284,26 @@ public sealed class ServerContentLoaderTests
             && map.Navigation.GetCell(column, row).Surface == NavigationSurface.Gate;
     }
 
+    // A spread keeps every respawn at least a second after the death (Content Pipeline §4).
+    [TestCase(19_000, false)]
+    [TestCase(19_001, true)]
+    public void Load_WhenASpawnSpreadsFurtherThanItsRespawnLessASecond_Fails(int spread, bool isRefused)
+    {
+        Dictionary<string, byte[]> files = PackageFixture.BuildRepositoryPackage();
+        string field = PackageFixture.SetValue(
+            files,
+            Maps,
+            "map.umbral_grotto",
+            "monsterSpawns[0].respawnVarianceMs",
+            spread.ToString(CultureInfo.InvariantCulture));
+
+        Assert.That(
+            ProblemsOf(files),
+            isRefused
+                ? Is.EqualTo(new[] { $"{Maps}: {field}: must be at most respawnMs less 1000" })
+                : Is.Empty);
+    }
+
     [Test]
     public void LoadFromDirectory_ForWrittenPackage_Loads()
     {
@@ -488,6 +508,19 @@ public sealed class ServerContentLoaderTests
     }
 
     [Test]
+    public void Load_ForTheSlimeMonarch_ReadsItsAreaAndItsSpread()
+    {
+        ServerContent content = ServerContentLoader.Load(PackageFixture.BuildRepositoryPackage());
+
+        SkillDefinition slam = content.Skills[new SkillDefinitionId("skill.quake_slam")];
+        MonsterSpawn spawn = content.Maps[new MapDefinitionId("map.umbral_grotto")].MonsterSpawns
+            .Single(entry => entry.Monster == new MonsterDefinitionId("monster.slime_monarch"));
+        Assert.That((slam.TargetType, slam.AreaRadius, slam.HasArea), Is.EqualTo((SkillTargetType.Self, 4d, true)));
+        Assert.That(content.Skills.Values.Count(skill => skill.HasArea), Is.EqualTo(1));
+        Assert.That((spawn.RespawnMs, spawn.RespawnVarianceMs), Is.EqualTo((3_600_000, 600_000)));
+    }
+
+    [Test]
     public void Load_Result_CannotBeMutated()
     {
         ServerContent content = ServerContentLoader.Load(PackageFixture.BuildFixturePackage());
@@ -543,14 +576,18 @@ public sealed class ServerContentLoaderTests
 
         Assert.That(
             ProblemsOf(selfDamage),
-            Is.EqualTo(new[] { "skills.json: definitions[0].targetType: must be enemy for a damage effect" }));
+            Is.EqualTo(
+                new[]
+                {
+                    "skills.json: definitions[0].targetType: must be enemy for a damage effect, or self with an area"
+                }));
         Assert.That(
             ProblemsOf(castForItself),
             Is.EqualTo(
                 new[]
                 {
-                    "monsters.json: monster.training_slime: casts skill 'skill.basic_attack', which is not cast at an "
-                    + "enemy"
+                    "monsters.json: monster.training_slime: casts skill 'skill.basic_attack', which is neither cast at "
+                    + "an enemy nor around the monster"
                 }));
     }
 
@@ -604,6 +641,25 @@ public sealed class ServerContentLoaderTests
             "\"definitions\": [ { \"id\": \"status.focus\", \"displayName\": \"Focus\", \"statPercent\": {} } ]");
 
         Assert.That(ProblemsOf(files), Has.Some.Contains("statPercent"));
+    }
+
+    // An area belongs to a damage skill its caster casts on itself, and only a monster casts one (Content Pipeline
+    // §4, §7).
+    [Test]
+    public void Load_WhenAnAreaIsOnAnotherKindOfSkill_OrAJobKnowsOne_Fails()
+    {
+        Dictionary<string, byte[]> onAnEnemy = PackageFixture.BuildRepositoryPackage();
+        string field = PackageFixture.SetValue(onAnEnemy, Skills, "skill.strike", "areaRadius", "2.5");
+        Dictionary<string, byte[]> known = PackageFixture.BuildRepositoryPackage();
+        PackageFixture.SetValue(known, Skills, "skill.strike", "targetType", "\"self\"");
+        PackageFixture.SetValue(known, Skills, "skill.strike", "areaRadius", "2.5");
+
+        Assert.That(
+            ProblemsOf(onAnEnemy),
+            Is.EqualTo(new[] { $"{Skills}: {field}: is only for a damage skill cast on its caster" }));
+        Assert.That(
+            ProblemsOf(known),
+            Is.EqualTo(new[] { "jobs.json: job.adventurer: knows skill 'skill.strike', which strikes an area" }));
     }
 
     [Test]

@@ -4,8 +4,9 @@ using System.Collections.Generic;
 namespace Evertorch.Game
 {
 /// <summary>
-///     A skill (Gameplay Systems §9): how it targets, its range, when its SP is paid, what each of its levels does, and
-///     the skill it may require. A job's basic attack has no levels, since swings do not go through skills.
+///     A skill (Gameplay Systems §9): how it targets, its range or the area it strikes, when its SP is paid, what each
+///     of its levels does, and the skill it may require. A job's basic attack has no levels, since swings do not go
+///     through skills.
 /// </summary>
 public sealed class SkillDefinition
 {
@@ -17,7 +18,8 @@ public sealed class SkillDefinition
         double range,
         SkillPaymentPoint spPaidAt,
         IReadOnlyList<SkillLevel> levels,
-        SkillRequirement? requires = null)
+        SkillRequirement? requires = null,
+        double areaRadius = 0d)
     {
         Id = id;
         DisplayName = displayName;
@@ -27,6 +29,7 @@ public sealed class SkillDefinition
         SpPaidAt = spPaidAt;
         Levels = levels ?? throw new ArgumentNullException(nameof(levels));
         Requires = requires;
+        AreaRadius = areaRadius;
     }
 
     public SkillDefinitionId Id { get; }
@@ -42,6 +45,14 @@ public sealed class SkillDefinition
 
     /// <summary>World units.</summary>
     public double Range { get; }
+
+    /// <summary>
+    ///     The radius around its caster within which a damage skill cast on itself strikes every player in sight
+    ///     (Gameplay Systems §9); 0 for a skill with no area.
+    /// </summary>
+    public double AreaRadius { get; }
+
+    public bool HasArea => AreaRadius > 0d;
 
     public SkillPaymentPoint SpPaidAt { get; }
 

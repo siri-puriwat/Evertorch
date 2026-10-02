@@ -17,6 +17,13 @@ server:
       radius: 6.0
       count: 5
       respawnMs: 20000
+    # The Slime Monarch alone at the heart of its chamber, back an hour after its death, give or take ten minutes.
+    - monster: monster.slime_monarch
+      center: { x: 18.0, y: 0.0, z: 18.0 }
+      radius: 0.0
+      count: 1
+      respawnMs: 3600000
+      respawnVarianceMs: 600000
   portals:
     # In front of the west gate; arrivals on the field face west beside its east gate.
     - center: { x: -30.5, y: 0.0, z: -22.0 }

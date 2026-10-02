@@ -470,6 +470,14 @@ public static class ContentValidator
             {
                 Report(job.Source, fieldPath, $"names skill '{skill}', which has no effect", diagnostics);
             }
+            else if (definition != null && definition.HasArea)
+            {
+                Report(
+                    job.Source,
+                    fieldPath,
+                    $"names skill '{skill}', which strikes an area; only a monster casts one",
+                    diagnostics);
+            }
             else if (definition != null && IsStatusOnAnEnemy(definition))
             {
                 Report(
@@ -553,7 +561,7 @@ public static class ContentValidator
     }
 
     // A monster casts through the skill pipeline at the player it fights, so each skill it lists must resolve to
-    // something and be cast at an enemy (Content Pipeline §7).
+    // something and be cast at an enemy, or strike the area around the monster (Content Pipeline §7).
     private static void RequireMonsterSkills(
         AuthoredMonster monster,
         HashSet<string> knownSkills,
@@ -574,9 +582,13 @@ public static class ContentValidator
             {
                 Report(monster.Source, fieldPath, $"names skill '{skill}', which has no effect", diagnostics);
             }
-            else if (definition.TargetType != SkillTargetType.Enemy)
+            else if (definition.TargetType != SkillTargetType.Enemy && !definition.HasArea)
             {
-                Report(monster.Source, fieldPath, $"names skill '{skill}', which is not cast at an enemy", diagnostics);
+                Report(
+                    monster.Source,
+                    fieldPath,
+                    $"names skill '{skill}', which is neither cast at an enemy nor around the monster",
+                    diagnostics);
             }
         }
     }

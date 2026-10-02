@@ -608,6 +608,7 @@ public static class ServerContentLoader
             ? entry.RequiredEnum<SkillDamageType>("damageType")
             : null;
         double range = RequiredNonNegative(entry, "range", ContentLimits.MaxDistance);
+        double areaRadius = RequiredNonNegative(entry, "areaRadius", ContentLimits.MaxDistance);
         SkillPaymentPoint spPaidAt = entry.RequiredEnum<SkillPaymentPoint>("spPaidAt");
         int maxLevel = entry.RequiredInt("maxLevel", 0, ContentLimits.MaxSkillLevel);
         var levels = new List<SkillLevel>();
@@ -650,10 +651,17 @@ public static class ServerContentLoader
             entry.Report("damageType", "is required for a damage effect");
         }
 
-        // A player's hit on itself has no hit context to resolve (CombatSystem).
-        if (kind == SkillEffectKind.Damage && targetType != SkillTargetType.Enemy)
+        // A player's hit on itself has no hit context to resolve (CombatSystem); an area strikes around its caster.
+        bool isOnCaster = targetType == SkillTargetType.Self;
+        bool hasArea = areaRadius > 0d;
+        if (kind == SkillEffectKind.Damage && targetType != SkillTargetType.Enemy && !(isOnCaster && hasArea))
         {
-            entry.Report("targetType", "must be enemy for a damage effect");
+            entry.Report("targetType", "must be enemy for a damage effect, or self with an area");
+        }
+
+        if (hasArea && (kind != SkillEffectKind.Damage || !isOnCaster))
+        {
+            entry.Report("areaRadius", "is only for a damage skill cast on its caster");
         }
 
         // Another player may only be healed: there is no PvP (Gameplay Systems §6, §9). A status effect lands on its
@@ -673,7 +681,8 @@ public static class ServerContentLoader
                 range,
                 spPaidAt,
                 levels.AsReadOnly(),
-                requires)
+                requires,
+                areaRadius)
             : null;
     }
 
@@ -1148,9 +1157,19 @@ public static class ServerContentLoader
             WorldPosition center = ReadPosition(spawn.RequiredObject("center"));
             double radius = RequiredNonNegative(spawn, "radius", ContentLimits.MaxDistance);
             int count = spawn.RequiredInt("count", 1, ContentLimits.MaxSpawnCount);
+            int respawnProblems = problems.Count;
             int respawnMs = spawn.RequiredInt("respawnMs", 0, ContentLimits.MaxDurationMs);
+            int respawnVarianceMs = spawn.RequiredInt("respawnVarianceMs", 0, ContentLimits.MaxDurationMs);
+
+            // Held to the respawn only once both were read within their bounds, so one broken number is one problem.
+            if (problems.Count == respawnProblems
+                && respawnVarianceMs > MonsterSpawn.MaxRespawnVarianceMs(respawnMs))
+            {
+                spawn.Report("respawnVarianceMs", "must be at most respawnMs less 1000");
+            }
+
             spawn.ReportUnexpectedProperties();
-            monsterSpawns.Add(new MonsterSpawn(monster, center, radius, count, respawnMs));
+            monsterSpawns.Add(new MonsterSpawn(monster, center, radius, count, respawnMs, respawnVarianceMs));
         }
 
         var npcs = new List<NpcPlacement>();
@@ -1354,11 +1373,13 @@ public static class ServerContentLoader
                 {
                     problems.Add($"{MonstersFile}: {monster.Id}: casts skill '{tried.Skill}', which has no effect");
                 }
-                else if (known != null && known.TargetType != SkillTargetType.Enemy)
+                else if (known != null && known.TargetType != SkillTargetType.Enemy && !known.HasArea)
                 {
-                    // A monster casts at the player it fights, so a skill for its caster would land on that player.
+                    // A monster casts at the player it fights, so a skill for its caster would land on that player;
+                    // an area strikes around the monster instead.
                     problems.Add(
-                        $"{MonstersFile}: {monster.Id}: casts skill '{tried.Skill}', which is not cast at an enemy");
+                        $"{MonstersFile}: {monster.Id}: casts skill '{tried.Skill}', which is neither cast at an "
+                        + "enemy nor around the monster");
                 }
             }
         }
@@ -1409,6 +1430,10 @@ public static class ServerContentLoader
                 else if (skills.TryGetValue(skill, out SkillDefinition? known) && !known.HasEffect)
                 {
                     problems.Add($"{JobsFile}: {job.Id}: knows skill '{skill}', which has no effect");
+                }
+                else if (known != null && known.HasArea)
+                {
+                    problems.Add($"{JobsFile}: {job.Id}: knows skill '{skill}', which strikes an area");
                 }
                 else if (known != null
                          && known.TargetType == SkillTargetType.Enemy

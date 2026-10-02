@@ -41,6 +41,15 @@ public sealed class MonsterEntity : WorldEntity
 
     public override string DefinitionId => Definition.Id.Value;
 
+    /// <summary>
+    ///     Forgets every character that damaged the monster, as a boss does once home from its leash (Gameplay Systems
+    ///     §10).
+    /// </summary>
+    public void ClearDamageLog()
+    {
+        m_damageLog.Clear();
+    }
+
     public void LogDamage(CharacterId character, int damage)
     {
         for (int index = 0; index < m_damageLog.Count; index++)

@@ -1,0 +1,14 @@
+id: item.armor.monarch_mantle
+displayName: Monarch Mantle
+type: armor
+stackLimit: 1
+server:
+  # The Slime Monarch's rare prize for its most valuable player: it sells for nothing, so no shop trades it.
+  weight: 70
+  sellPrice: 0
+  equipment:
+    defense: 22
+client:
+  # The cloth armor's look until art arrives.
+  icon: item_cloth_armor
+  model: pickup_cloth_armor

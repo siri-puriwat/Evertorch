@@ -183,6 +183,7 @@ internal static class ServerProjection
                 writer.WriteNumber("radius", spawn.Radius);
                 writer.WriteNumber("count", spawn.Count);
                 writer.WriteNumber("respawnMs", spawn.RespawnMs);
+                writer.WriteNumber("respawnVarianceMs", spawn.RespawnVarianceMs);
                 writer.WriteEndObject();
             }
 
@@ -350,6 +351,7 @@ internal static class ServerProjection
             }
 
             writer.WriteNumber("range", skill.Range);
+            writer.WriteNumber("areaRadius", skill.AreaRadius);
             writer.WriteString("spPaidAt", EnumText.Of(skill.SpPaidAt));
             writer.WriteNumber("maxLevel", skill.MaxLevel);
             if (skill.Requires != null)

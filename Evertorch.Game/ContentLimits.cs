@@ -47,6 +47,12 @@ public static class ContentLimits
     public const int MaxKillCount = 1000;
     public const int MaxExperience = 1_000_000_000;
     public const int MaxDurationMs = 86_400_000;
+
+    /// <summary>
+    ///     The soonest a dead monster returns, whatever its spawn's respawn (Gameplay Systems §10).
+    /// </summary>
+    public const int MinRespawnMs = 1000;
+
     public const int MaxSpawnCount = 1000;
     public const double MaxDistance = 10_000d;
     public const double MaxCoordinate = 100_000d;

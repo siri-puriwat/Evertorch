@@ -33,6 +33,7 @@ public sealed class CombatSystem : ITickPhase
     private readonly float m_rangeTolerance;
     private readonly List<WorldEntity> m_due = new();
     private readonly List<WorldEntity> m_attackers = new();
+    private readonly List<PlayerEntity> m_struck = new();
 
     public CombatSystem(
         WorldSimulation world,
@@ -167,8 +168,9 @@ public sealed class CombatSystem : ITickPhase
 
     /// <summary>
     ///     Whether <paramref name="monster" /> could begin a cast of <paramref name="skillId" /> at
-    ///     <paramref name="target" /> now (Gameplay Systems §10): it is free, not swinging, casting, or in an after-cast
-    ///     delay, the skill's cooldown is over, and the target is alive within the skill's range with sight.
+    ///     <paramref name="target" /> now (Gameplay Systems §9, §10): it is free, not swinging, casting, or in an
+    ///     after-cast delay, the skill's cooldown is over, and the target is alive and in sight, within the skill's
+    ///     range, or within its area for a skill that strikes around the monster.
     /// </summary>
     public bool CanMonsterCast(
         MapInstance map,
@@ -187,13 +189,14 @@ public sealed class CombatSystem : ITickPhase
             && !combat.IsSwinging
             && now >= combat.DelayEndsMs
             && now >= combat.CooldownEndMs(skillId)
-            && HorizontalDistance(monster.Position, target.Position) <= skill.Range
+            && HorizontalDistance(monster.Position, target.Position) <= (skill.HasArea ? skill.AreaRadius : skill.Range)
             && map.Definition.Navigation.HasLineOfSight(monster.Position, target.Position);
     }
 
     /// <summary>
     ///     Begins a cast <see cref="CanMonsterCast" /> allowed. A monster casts at level 1, pays no SP, and its cast
-    ///     time is the level's fixed and variable time together.
+    ///     time is the level's fixed and variable time together. A skill on itself, such as an area around it, names
+    ///     the monster as its target, so neither the death nor the walk of the player it fights ends the cast.
     /// </summary>
     public void BeginMonsterCast(
         MapInstance map,
@@ -205,9 +208,10 @@ public sealed class CombatSystem : ITickPhase
         SkillDefinition skill = m_content.Skills[skillId];
         CastTiming timing = m_skillRules.CalculateCastTiming(new SkillContext(skill, 1, AttackerKind.Monster, 0));
         Face(monster, target);
+        WorldEntity castOn = skill.TargetType == SkillTargetType.Self ? monster : target;
         long now = TickMilliseconds(tick);
-        monster.Combat.BeginCast(skillId, 1, target.Id, now, now + timing.CastMs, true);
-        AnnounceCastStarted(map, monster, target, skillId, tick, timing.CastMs);
+        monster.Combat.BeginCast(skillId, 1, castOn.Id, now, now + timing.CastMs, true);
+        AnnounceCastStarted(map, monster, castOn, skillId, tick, timing.CastMs);
     }
 
     /// <summary>
@@ -530,6 +534,12 @@ public sealed class CombatSystem : ITickPhase
             return;
         }
 
+        if (skill.HasArea)
+        {
+            ResolveArea(map, caster, skill, level, tick);
+            return;
+        }
+
         SkillResolution resolution = m_skillRules.Resolve(
             CreateSkillContext(caster, target, skill, level, values.Effect.Kind == SkillEffectKind.Damage));
         if (resolution.Result == SkillResult.Healed)
@@ -548,6 +558,33 @@ public sealed class CombatSystem : ITickPhase
         SkillOutcome outcome = resolution.Result == SkillResult.Hit ? SkillOutcome.Hit : SkillOutcome.Miss;
         AnnounceResolved(map, caster, target, skill.Id, outcome, resolution.Amount, tick);
         AfterDamage(map, caster, target, resolution.Amount, tick);
+    }
+
+    // Every live player within the area and in its caster's sight takes its own roll, in order of entity ID, since the
+    // map keeps its players unordered (Gameplay Systems §9). One that stepped out takes nothing, and a strike that
+    // reaches nobody is told to nobody.
+    private void ResolveArea(MapInstance map, WorldEntity caster, SkillDefinition skill, int level, uint tick)
+    {
+        m_struck.Clear();
+        foreach (PlayerEntity player in map.Players)
+        {
+            if (!player.IsDead
+                && HorizontalDistance(caster.Position, player.Position) <= skill.AreaRadius
+                && map.Definition.Navigation.HasLineOfSight(caster.Position, player.Position))
+            {
+                m_struck.Add(player);
+            }
+        }
+
+        m_struck.Sort((left, right) => left.Id.Value.CompareTo(right.Id.Value));
+        foreach (PlayerEntity player in m_struck)
+        {
+            SkillResolution resolution = m_skillRules.Resolve(CreateSkillContext(caster, player, skill, level, true));
+            player.CurrentHealth = Math.Max(0, player.CurrentHealth - resolution.Amount);
+            SkillOutcome outcome = resolution.Result == SkillResult.Hit ? SkillOutcome.Hit : SkillOutcome.Miss;
+            AnnounceResolved(map, caster, player, skill.Id, outcome, resolution.Amount, tick);
+            AfterDamage(map, caster, player, resolution.Amount, tick);
+        }
     }
 
     // To every client that knows the caster; one that does not know the target is told 0 (Network Protocol §9).

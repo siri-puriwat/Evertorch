@@ -1,0 +1,49 @@
+id: monster.slime_monarch
+displayName: Slime Monarch
+level: 25
+boss: true
+stats:
+  hp: 40000
+  physicalAttack: 120
+  physicalDefense: 40
+  hit: 300
+  flee: 160
+  magicAttack: 150
+movement:
+  baseSpeed: 4.0
+combat:
+  attackRange: 2.0
+  attackIntervalMs: 2000
+ai:
+  # Its chamber keeps every walkable cell outside it beyond its spawn's radius, roam, and perception together.
+  behavior: aggressive
+  perceptionRadius: 6.0
+  leashRadius: 16.0
+  roamRadius: 2.0
+  idlePauseMs: { min: 5000, max: 8000 }
+  scanIntervalMs: 100
+skills:
+  - skill: skill.quake_slam
+    chance: 0.25
+drops:
+  - item: item.material.monarch_jelly
+    chance: 1.0
+    amount: { min: 1, max: 3 }
+  - item: item.weapon.iron_sword
+    chance: 0.25
+    amount: { min: 1, max: 1 }
+  - item: item.weapon.ash_staff
+    chance: 0.25
+    amount: { min: 1, max: 1 }
+  - item: item.armor.leather
+    chance: 0.25
+    amount: { min: 1, max: 1 }
+rewards:
+  baseExperience: 6000
+  jobExperience: 3000
+client:
+  # The training slime's body at 2.6 times its size (1.65 m tall, 2.5 m wide), in royal gold.
+  prefab: monster_training_slime
+  icon: monster_training_slime_icon
+  scale: 2.6
+  tint: "#C9A227"

@@ -30,6 +30,10 @@ internal static class SkillDefinitionReader
         SkillDamageType? damageType = root.Has("damageType")
             ? root.RequiredEnum<SkillDamageType>("damageType")
             : null;
+        bool hasArea = root.Has("area");
+        double areaRadius = hasArea
+            ? root.RequiredMapping("area").RequiredDouble("radius", 0d, ContentLimits.MaxDistance, true)
+            : 0d;
 
         YamlFieldReader server = root.RequiredMapping("server");
         double range = server.RequiredDouble("range", 0d, ContentLimits.MaxDistance, false);
@@ -52,10 +56,17 @@ internal static class SkillDefinitionReader
             root.ReportField("damageType", "is required for a damage effect");
         }
 
-        // Damage lands on an enemy; the server has no hit of a player on itself to resolve.
-        if (kind == SkillEffectKind.Damage && targetType != SkillTargetType.Enemy)
+        // Damage lands on an enemy, or on every player around a caster that casts it on itself; the server has no hit
+        // of a player on itself to resolve (Gameplay Systems §9).
+        bool isOnCaster = targetType == SkillTargetType.Self;
+        if (kind == SkillEffectKind.Damage && targetType != SkillTargetType.Enemy && !(isOnCaster && hasArea))
         {
-            root.ReportField("targetType", "must be enemy for a damage effect");
+            root.ReportField("targetType", "must be enemy for a damage effect, or self with an area");
+        }
+
+        if (hasArea && (kind != SkillEffectKind.Damage || !isOnCaster))
+        {
+            root.ReportField("area", "is only for a damage skill cast on its caster");
         }
 
         // Another player may only be healed: there is no PvP (Gameplay Systems §6, §9). A status effect lands on its
@@ -84,7 +95,8 @@ internal static class SkillDefinitionReader
             range,
             spPaidAt,
             levels.AsReadOnly(),
-            requires);
+            requires,
+            areaRadius);
         return new AuthoredSkill(root.ToSource(), definition, icon, description, projectile);
     }
 

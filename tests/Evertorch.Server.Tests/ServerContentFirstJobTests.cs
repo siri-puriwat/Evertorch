@@ -200,7 +200,7 @@ public sealed class ServerContentFirstJobTests
             Is.EquivalentTo(
                 new[]
                 {
-                    $"{Skills}: {path}: must be enemy for a damage effect",
+                    $"{Skills}: {path}: must be enemy for a damage effect, or self with an area",
                     $"{Skills}: {path}: may be ally only for a heal effect"
                 }));
     }

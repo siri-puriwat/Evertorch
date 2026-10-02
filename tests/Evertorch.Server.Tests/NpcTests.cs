@@ -190,7 +190,7 @@ public sealed class NpcTests
                     ("item.armor.cloth", 40u, 20u), ("item.armor.leather", 0u, 45u),
                     ("item.consumable.minor_health", 20u, 10u), ("item.consumable.minor_mana", 30u, 15u),
                     ("item.material.crawler_shell", 0u, 5u), ("item.material.gloom_dust", 0u, 14u),
-                    ("item.material.grotto_carapace", 0u, 12u),
+                    ("item.material.grotto_carapace", 0u, 12u), ("item.material.monarch_jelly", 0u, 40u),
                     ("item.material.slime_gel", 0u, 2u), ("item.weapon.ash_staff", 0u, 60u),
                     ("item.weapon.iron_sword", 0u, 60u), ("item.weapon.training_staff", 50u, 25u),
                     ("item.weapon.training_sword", 50u, 25u)
@@ -219,7 +219,7 @@ public sealed class NpcTests
         Assert.That(shop.JobChanges.Concat(warden.JobChanges), Is.Empty, "only the Guildmaster changes jobs");
         Assert.That(
             (shop.GetEncodedLength(), warden.GetEncodedLength(), guildmaster.GetEncodedLength()),
-            Is.EqualTo((420, 80, 78)));
+            Is.EqualTo((457, 80, 78)));
     }
 
     [Test]

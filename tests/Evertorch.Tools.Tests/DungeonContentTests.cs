@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -15,6 +16,12 @@ namespace Evertorch.Tools.Tests
 public sealed class DungeonContentTests
 {
     private const string Grotto = "map.umbral_grotto";
+    private const string Monarch = "monster.slime_monarch";
+
+    // The boss chamber in the north-east, from 6 m to 30 m on both axes; its one way in is the corridor from the
+    // crawler hall.
+    private const double ChamberMin = 6d;
+    private const double ChamberMax = 30d;
 
     // The path budget of the client's movement and of the monsters: a map of at most this many cells can always be
     // crossed in one path.
@@ -112,6 +119,45 @@ public sealed class DungeonContentTests
             "every job takes the Adventurer's base table");
     }
 
+    // Acquisition has no sight test (Gameplay Systems §10), so no walkable cell outside the chamber may come within the
+    // boss spawn's radius, roam, and perception together: the boss never notices a player in the next hall.
+    [Test]
+    public void Run_ForRepositoryContent_KeepsEveryCellOutsideTheChamberBeyondTheSlimeMonarchsNotice()
+    {
+        ContentPipelineResult result = RepositoryContent();
+        MapDefinition grotto = MapOf(result, Grotto);
+        MonsterDefinition definition = result.Content.Monsters
+            .Single(monster => monster.Definition.Id.Value == Monarch)
+            .Definition;
+        MonsterSpawn spawn = grotto.MonsterSpawns.Single(candidate => candidate.Monster == definition.Id);
+        double notice = spawn.Radius + definition.RoamRadius + definition.PerceptionRadius;
+        NavigationGrid grid = grotto.Navigation;
+        double half = grid.CellSize / 2d;
+
+        var noticed = new List<string>();
+        for (int row = 0; row < grid.Rows; row++)
+        {
+            for (int column = 0; column < grid.Columns; column++)
+            {
+                WorldPosition center = grid.GetCellCenter(column, row);
+                bool isInChamber = center.X - half >= ChamberMin
+                    && center.X + half <= ChamberMax
+                    && center.Z - half >= ChamberMin
+                    && center.Z + half <= ChamberMax;
+                // The cell's nearest point to the spawn's center.
+                double dx = Math.Max(0d, Math.Abs(center.X - spawn.Center.X) - half);
+                double dz = Math.Max(0d, Math.Abs(center.Z - spawn.Center.Z) - half);
+                if (grid.GetCell(column, row).IsWalkable && !isInChamber && Math.Sqrt(dx * dx + dz * dz) <= notice)
+                {
+                    noticed.Add($"({center.X}, {center.Z})");
+                }
+            }
+        }
+
+        Assert.That(notice, Is.EqualTo(8d));
+        Assert.That(noticed, Is.Empty);
+    }
+
     [Test]
     public void Run_ForRepositoryContent_PlacesALinkingPackOfGrottoCrawlersInTheCrawlerHall()
     {
@@ -141,6 +187,44 @@ public sealed class DungeonContentTests
         Assert.That(spawn.Center.X + spawn.Radius, Is.LessThanOrEqualTo(-7d));
         Assert.That(spawn.Center.Z - spawn.Radius, Is.GreaterThanOrEqualTo(2d));
         Assert.That(spawn.Center.Z + spawn.Radius, Is.LessThanOrEqualTo(29d));
+    }
+
+    [Test]
+    public void Run_ForRepositoryContent_PlacesTheSlimeMonarchAloneInItsChamber_BackAboutAnHourAfterItsDeath()
+    {
+        ContentPipelineResult result = RepositoryContent();
+
+        AuthoredMonster monarch = result.Content.Monsters.Single(monster => monster.Definition.Id.Value == Monarch);
+        MonsterDefinition definition = monarch.Definition;
+        SkillDefinition slam = result.Content.Skills
+            .Single(skill => skill.Definition.Id.Value == "skill.quake_slam")
+            .Definition;
+        MonsterSpawn spawn = MapOf(result, Grotto).MonsterSpawns
+            .Single(candidate => candidate.Monster == definition.Id);
+        Assert.That(
+            (definition.Level, definition.IsBoss, definition.Behavior, definition.Hp),
+            Is.EqualTo((25, true, MonsterBehavior.Aggressive, 40_000)));
+        Assert.That(
+            (monarch.Prefab, monarch.Scale, monarch.Tint),
+            Is.EqualTo(("monster_training_slime", (double?)2.6, "#C9A227")));
+        Assert.That(
+            definition.Skills.Select(entry => (entry.Skill.Value, entry.Chance)),
+            Is.EqualTo(new[] { ("skill.quake_slam", 0.25) }));
+        Assert.That(
+            definition.Drops.Select(drop => (drop.Item.Value, drop.Chance)),
+            Is.EqualTo(
+                new[]
+                {
+                    ("item.material.monarch_jelly", 1d), ("item.weapon.iron_sword", 0.25),
+                    ("item.weapon.ash_staff", 0.25), ("item.armor.leather", 0.25)
+                }));
+        Assert.That(
+            (slam.TargetType, slam.DamageType, slam.AreaRadius, slam.Levels.Single().FixedCastMs),
+            Is.EqualTo((SkillTargetType.Self, (SkillDamageType?)SkillDamageType.Magical, 4d, 1500)));
+        Assert.That(
+            (spawn.Center.X, spawn.Center.Z, spawn.Radius, spawn.Count),
+            Is.EqualTo((18f, 18f, 0d, 1)));
+        Assert.That((spawn.RespawnMs, spawn.RespawnVarianceMs), Is.EqualTo((3_600_000, 600_000)));
     }
 }
 }

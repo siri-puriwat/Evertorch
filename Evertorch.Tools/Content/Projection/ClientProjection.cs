@@ -183,6 +183,13 @@ internal static class ClientProjection
             writer.WriteString("id", skill.Id.Value);
             writer.WriteString("displayName", skill.DisplayName);
             writer.WriteString("targetType", EnumText.Of(skill.TargetType));
+
+            // The player sees an area's reach as the telegraph of its cast (Content Pipeline §5).
+            if (skill.HasArea)
+            {
+                writer.WriteNumber("area", skill.AreaRadius);
+            }
+
             writer.WriteString("icon", authored.Icon);
             if (authored.Description != null)
             {

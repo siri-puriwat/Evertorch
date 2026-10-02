@@ -16,7 +16,6 @@ public sealed class MonsterAiSystem : ITickPhase
 {
     public const float HomeArrivalDistance = 0.5f;
     public const float ChaseRepathDistance = 1f;
-    public const int MinimumRespawnMs = 1000;
 
     /// <summary>A skill's try draws below this; its chance is the share of it that casts.</summary>
     public const int TryScale = 1_000_000;
@@ -107,6 +106,18 @@ public sealed class MonsterAiSystem : ITickPhase
         return draw < chance * TryScale;
     }
 
+    /// <summary>
+    ///     How long after a death the next monster of <paramref name="spawn" /> appears (Gameplay Systems §10): its
+    ///     respawn, moved by up to its spread either way, and at least <see cref="ContentLimits.MinRespawnMs" />.
+    ///     Only a spread draws, so a spawn with none leaves a seeded run's draws as they were.
+    /// </summary>
+    public static long RespawnDelay(MonsterSpawn spawn, IRandomSource random)
+    {
+        int spread = spawn.RespawnVarianceMs;
+        long delay = spread > 0 ? spawn.RespawnMs - spread + random.Next(2 * spread + 1) : spawn.RespawnMs;
+        return Math.Max(ContentLimits.MinRespawnMs, delay);
+    }
+
     private void Update(MapInstance map, MonsterEntity monster, long now, uint tick, float stepDistance)
     {
         MonsterBrain brain = monster.Brain;
@@ -193,7 +204,7 @@ public sealed class MonsterAiSystem : ITickPhase
         {
             if (HorizontalDistance(monster.Position, monster.Home) <= HomeArrivalDistance || !brain.Path.IsActive)
             {
-                BecomeIdle(monster, now);
+                ArriveHome(monster, now);
             }
 
             return;
@@ -405,6 +416,19 @@ public sealed class MonsterAiSystem : ITickPhase
         }
     }
 
+    // A boss home from its leash recovers all its HP and forgets who hurt it (Gameplay Systems §10); any other monster
+    // keeps its wounds.
+    private void ArriveHome(MonsterEntity monster, long now)
+    {
+        if (monster.Definition.IsBoss)
+        {
+            monster.CurrentHealth = monster.MaxHealth;
+            monster.ClearDamageLog();
+        }
+
+        BecomeIdle(monster, now);
+    }
+
     private void BecomeIdle(MonsterEntity monster, long now)
     {
         MonsterBrain brain = monster.Brain;
@@ -429,8 +453,7 @@ public sealed class MonsterAiSystem : ITickPhase
             brain.DiedAtMs = now;
             brain.Path.Cancel();
             brain.DesiredDirection = default;
-            long delay = Math.Max(MinimumRespawnMs, monster.Spawn.RespawnMs);
-            m_respawns.Add(new PendingRespawn(map, monster.Spawn, now + delay));
+            m_respawns.Add(new PendingRespawn(map, monster.Spawn, now + RespawnDelay(monster.Spawn, m_random)));
         }
 
         if (now >= brain.DiedAtMs + m_corpseMs)

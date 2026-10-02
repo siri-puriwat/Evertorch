@@ -39,7 +39,8 @@ public sealed class ContentProjectionTests
         "keepDistance", "skill", "equipment",
         "attack", "attackSpeedPenalty", "defense", "bonus", "sp", "shop", "price", "npcs", "npc", "giver", "objective",
         "kill", "monster", "count", "currency", "jobExperienceTable", "jobExperience", "guild", "reset", "maxLevel",
-        "requires", "baseJob", "weapons", "weaponType", "jobChange", "assist", "assistRadius"
+        "requires", "baseJob", "weapons", "weaponType", "jobChange", "assist", "assistRadius", "respawnVarianceMs",
+        "areaRadius"
     };
 
     // The client package's allow-list (Content Pipeline §5), by file: a name not reviewed here fails.
@@ -58,13 +59,14 @@ public sealed class ContentProjectionTests
         ["monsters.json"] = new[]
         {
             "schemaVersion", "definitions", "id", "displayName", "level", "prefab", "icon", "projectile",
-            "scale", "tint"
+            "scale", "tint", "boss"
         },
         ["npcs.json"] = new[] { "schemaVersion", "definitions", "id", "displayName", "prefab" },
         ["quests.json"] = new[] { "schemaVersion", "definitions", "id", "displayName" },
         ["skills.json"] = new[]
         {
-            "schemaVersion", "definitions", "id", "displayName", "targetType", "icon", "description", "projectile"
+            "schemaVersion", "definitions", "id", "displayName", "targetType", "area", "icon", "description",
+            "projectile"
         },
         ["status-effects.json"] = new[] { "schemaVersion", "definitions", "id", "displayName", "icon" }
     };

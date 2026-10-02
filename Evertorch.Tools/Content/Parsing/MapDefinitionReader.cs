@@ -298,8 +298,15 @@ internal static class MapDefinitionReader
         double radius = spawn.RequiredDouble("radius", 0d, ContentLimits.MaxDistance, false);
         int count = spawn.RequiredInt("count", 1, ContentLimits.MaxSpawnCount);
         int respawnMs = spawn.RequiredInt("respawnMs", 0, ContentLimits.MaxDurationMs);
+        int respawnVarianceMs = spawn.Has("respawnVarianceMs")
+            ? spawn.RequiredInt("respawnVarianceMs", 0, ContentLimits.MaxDurationMs)
+            : 0;
+        if (respawnVarianceMs > MonsterSpawn.MaxRespawnVarianceMs(respawnMs))
+        {
+            spawn.ReportField("respawnVarianceMs", "must be at most respawnMs less 1000");
+        }
 
-        return new MonsterSpawn(monster, center, radius, count, respawnMs);
+        return new MonsterSpawn(monster, center, radius, count, respawnMs, respawnVarianceMs);
     }
 
     private static WorldPosition ReadPosition(YamlFieldReader position)

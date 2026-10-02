@@ -1,0 +1,16 @@
+id: skill.quake_slam
+displayName: Quake Slam
+targetType: self
+damageType: magical
+# A slam around its caster: every player within the area and in its sight takes it when the cast ends, each with its
+# own roll and none of it split, so the only way out is to step out before then.
+area: { radius: 4.0 }
+server:
+  range: 0
+  levels:
+    - castTimeMs: { fixed: 1500 }
+      cooldownMs: 12000
+      effect:
+        damage: { ratio: 120 }
+client:
+  icon: skill_quake_slam

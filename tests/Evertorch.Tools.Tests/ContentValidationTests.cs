@@ -134,6 +134,19 @@ public sealed class ContentValidationTests
     [TestCase(Focus, "targetType: self", "targetType: ally", "targetType", "may be ally only for a heal effect")]
     [TestCase(Strike, "targetType: enemy", "targetType: self", "targetType", "must be enemy for a damage effect")]
     [TestCase(
+        Strike,
+        "targetType: enemy",
+        "targetType: enemy\narea: { radius: 2.5 }",
+        "area",
+        "is only for a damage skill cast on its caster")]
+    [TestCase(
+        Focus,
+        "targetType: self",
+        "targetType: self\narea: { radius: 2.5 }",
+        "area",
+        "is only for a damage skill cast on its caster")]
+    [TestCase(Strike, "targetType: enemy", "targetType: self\narea: { radius: 0 }", "area.radius", "greater than 0")]
+    [TestCase(
         Focus,
         "status: status.focus",
         "status: status.missing",
@@ -230,6 +243,12 @@ public sealed class ContentValidationTests
         "server.spawnPoint.position",
         "lies inside a portal")]
     [TestCase(Map, "radius: 1.1875", "radius: 0", "server.portals[0].radius", "greater than 0")]
+    [TestCase(
+        Map,
+        "respawnMs: 86421",
+        "respawnMs: 86421\n      respawnVarianceMs: 85422",
+        "server.monsterSpawns[0].respawnVarianceMs",
+        "must be at most respawnMs less 1000")]
     [TestCase(Monster, "scanIntervalMs: 139", "scanIntervalMs: 139\n  keepDistance: 1.5625", "ai.keepDistance",
         "must be below combat.attackRange")]
     [TestCase(Monster, "hit: 1553", "hit: 1553\n  magicAttack: -1", "stats.magicAttack", "between 0 and")]
@@ -246,7 +265,7 @@ public sealed class ContentValidationTests
     [TestCase(Monster, "drops:", "skills:\n  - skill: skill.basic_attack\n    chance: 0.5\ndrops:",
         "skills[0].skill", "which has no effect")]
     [TestCase(Monster, "drops:", "skills:\n  - skill: skill.focus\n    chance: 0.5\ndrops:", "skills[0].skill",
-        "which is not cast at an enemy")]
+        "which is neither cast at an enemy nor around the monster")]
     [TestCase(
         Monster,
         "drops:",
