@@ -446,7 +446,7 @@ public sealed class GameClient : MonoBehaviour
             if (m_remoteViews.TryGetValue(m_world.Target, out EntityView? target))
             {
                 Vector3 at = target.transform.position;
-                m_targetMarker.Show(new WorldPosition(at.x, at.y, at.z));
+                m_targetMarker.Show(new WorldPosition(at.x, at.y, at.z), target.Scale);
             }
             else
             {
@@ -1722,11 +1722,14 @@ public sealed class GameClient : MonoBehaviour
             return;
         }
 
+        ClientMonster? monster = EntityViewKeys.MonsterOf(m_contentLoader.Content, remote.Kind, remote.DefinitionId);
         var view = EntityView.Create(
             $"Remote {remote.Entity.Value}",
             EntityViewKeys.ForEntity(m_contentLoader.Content, remote.Kind, remote.DefinitionId),
             m_viewCatalog,
-            remote.Kind == EntityKind.Player ? RemoteColor : null);
+            remote.Kind == EntityKind.Player ? RemoteColor : null,
+            monster?.Scale ?? 1f,
+            monster?.Tint);
         if (remote.Buffer.TrySample(double.MinValue, out WorldPosition position, out WorldDirection facing))
         {
             view.SetPose(position, facing);

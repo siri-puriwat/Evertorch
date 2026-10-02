@@ -884,7 +884,7 @@ public sealed class LiveServerCombatTests : InputTestFixture
         }
     }
 
-    // The frame follows the confirmed target: the slime by its display name, and how far away it is.
+    // The frame follows the confirmed target: the slime by its display name and its level, and how far away it is.
     private static IEnumerator ExpectTargetFrame(GameClient client)
     {
         TargetFrame frame = client.GetComponentsInChildren<TargetFrame>(true).Single();
@@ -892,7 +892,7 @@ public sealed class LiveServerCombatTests : InputTestFixture
         TMP_Text detail = frame.GetComponentsInChildren<TMP_Text>(true).Single(label => label.name == "Detail");
         yield return WaitUntil(() => frame.IsVisible && detail.text.EndsWith(" m", StringComparison.Ordinal), 2f);
         Assert.That(frame.IsVisible, Is.True, "the frame shows the confirmed target");
-        Assert.That(name.text, Is.EqualTo("Training Slime"));
+        Assert.That(name.text, Is.EqualTo("Training Slime \u00B7 Lv 1"));
         Assert.That(detail.text, Does.EndWith(" m"), "the frame gives the distance to the target");
     }
 

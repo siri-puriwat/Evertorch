@@ -16,17 +16,27 @@ public static class EntityViewKeys
             : string.Empty;
     }
 
+    /// <summary>
+    ///     The monster the content knows by <paramref name="definitionId" />, whose body's size and colour its view
+    ///     takes (Prototype Content §2); null for any other entity, or a monster the content does not know.
+    /// </summary>
+    public static ClientMonster? MonsterOf(ClientContent? content, EntityKind kind, string definitionId)
+    {
+        return kind == EntityKind.Monster
+            && content != null
+            && MonsterDefinitionId.TryCreate(definitionId, out MonsterDefinitionId id)
+            && content.TryGetMonster(id, out ClientMonster? monster)
+                ? monster
+                : null;
+    }
+
     public static string ForEntity(ClientContent? content, EntityKind kind, string definitionId)
     {
         switch (kind)
         {
             case EntityKind.Player when JobDefinitionId.TryCreate(definitionId, out JobDefinitionId job):
                 return ForJob(content, job);
-            case EntityKind.Monster
-                when content != null
-                && MonsterDefinitionId.TryCreate(definitionId, out MonsterDefinitionId id)
-                && content.TryGetMonster(id, out ClientMonster? monster)
-                && monster != null:
+            case EntityKind.Monster when MonsterOf(content, kind, definitionId) is ClientMonster monster:
                 return monster.PrefabKey;
             case EntityKind.ItemDrop
                 when content != null

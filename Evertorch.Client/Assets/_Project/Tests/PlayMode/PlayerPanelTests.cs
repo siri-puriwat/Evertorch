@@ -897,6 +897,37 @@ public sealed class PlayerPanelTests
         Assert.That(frame.IsVisible, Is.False);
     }
 
+    // A monster the content knows shows with its level, and a boss as one (Prototype Content §2).
+    [UnityTest]
+    public IEnumerator TargetFrame_ForAKnownMonster_ShowsItsLevel_AndABossAsOne()
+    {
+        GameClient client = CreateIdleClient();
+        ClientWorld world = GiveWorld(client);
+        var crawler = new MonsterDefinitionId("monster.grotto_crawler");
+        var monarch = new MonsterDefinitionId("monster.slime_monarch");
+        GiveContent(
+            client,
+            new ClientItem[0],
+            monsters: new Dictionary<MonsterDefinitionId, ClientMonster>
+            {
+                [crawler] = new(crawler, "Grotto Crawler", "monster_forest_crawler", "crawler", level: 14),
+                [monarch] = new(monarch, "Slime Monarch", "monster_training_slime", "slime", level: 25, isBoss: true)
+            });
+        var frame = TargetFrame.Create(client);
+        m_created.Add(frame.gameObject);
+        Spawn(world, 7, EntityKind.Monster, crawler.Value, 1000);
+        Spawn(world, 8, EntityKind.Monster, monarch.Value, 1000);
+
+        world.OnTargetChanged(new TargetChanged(Local, new EntityId(7)));
+        yield return null;
+        string crawlerName = Label(frame, "Name").text;
+        world.OnTargetChanged(new TargetChanged(Local, new EntityId(8)));
+        yield return null;
+
+        Assert.That(crawlerName, Is.EqualTo("Grotto Crawler \u00B7 Lv 14"));
+        Assert.That(Label(frame, "Name").text, Is.EqualTo("Slime Monarch \u00B7 Lv 25 \u00B7 Boss"));
+    }
+
     // A selected player shows by its name and its job's name, with neither bar nor distance; a monster selected after
     // it shows its bar again (Prototype Content §2).
     [UnityTest]

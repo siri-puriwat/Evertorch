@@ -66,5 +66,18 @@ public sealed class EntityViewKeysTests
     {
         Assert.That(EntityViewKeys.ForEntity(CreateContent(), EntityKind.Player, "job.a"), Is.EqualTo("character_a"));
     }
+
+    [Test]
+    public void MonsterOf_AKnownMonster_IsItsDefinition_AndAnyOtherEntityNone()
+    {
+        ClientContent content = CreateContent();
+
+        Assert.That(
+            EntityViewKeys.MonsterOf(content, EntityKind.Monster, "monster.a")?.Id,
+            Is.EqualTo(new MonsterDefinitionId("monster.a")));
+        Assert.That(EntityViewKeys.MonsterOf(content, EntityKind.Monster, "monster.unknown"), Is.Null);
+        Assert.That(EntityViewKeys.MonsterOf(content, EntityKind.Npc, "monster.a"), Is.Null);
+        Assert.That(EntityViewKeys.MonsterOf(null, EntityKind.Monster, "monster.a"), Is.Null);
+    }
 }
 }

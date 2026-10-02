@@ -37,9 +37,14 @@ public sealed class HealthBar : MonoBehaviour
         return bar;
     }
 
-    public void Show(Vector3 position, Camera? facing, int healthPermille)
+    /// <summary>
+    ///     Shows the bar at <paramref name="position" />, turned to <paramref name="facing" />, <paramref name="widthScale" />
+    ///     times its 1 m width.
+    /// </summary>
+    public void Show(Vector3 position, Camera? facing, int healthPermille, float widthScale = 1f)
     {
         transform.position = position;
+        transform.localScale = new Vector3(widthScale, 1f, 1f);
         if (facing != null)
         {
             transform.rotation = facing.transform.rotation;

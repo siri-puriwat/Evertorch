@@ -10,6 +10,9 @@ namespace Evertorch.Client
 /// </summary>
 public sealed class TargetMarker : MonoBehaviour
 {
+    private const float RingDiameter = 1.4f;
+    private const float RingThickness = 0.02f;
+
     private static readonly Color RingColor = new(0.95f, 0.8f, 0.2f);
 
     private Material? m_material;
@@ -33,7 +36,7 @@ public sealed class TargetMarker : MonoBehaviour
         var ring = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
         ring.name = "TargetMarker";
         DestroyImmediate(ring.GetComponent<Collider>());
-        ring.transform.localScale = new Vector3(1.4f, 0.02f, 1.4f);
+        ring.transform.localScale = new Vector3(RingDiameter, RingThickness, RingDiameter);
         TargetMarker marker = ring.AddComponent<TargetMarker>();
         marker.m_material = new Material(baseMaterial) { color = RingColor };
         marker.m_renderer = ring.GetComponent<MeshRenderer>();
@@ -42,9 +45,14 @@ public sealed class TargetMarker : MonoBehaviour
         return marker;
     }
 
-    public void Show(WorldPosition position)
+    /// <summary>
+    ///     Shows the ring under <paramref name="position" />, <paramref name="scale" /> times its size under a body drawn
+    ///     that much larger.
+    /// </summary>
+    public void Show(WorldPosition position, float scale = 1f)
     {
         transform.position = new Vector3(position.X, position.Y + 0.02f, position.Z);
+        transform.localScale = new Vector3(RingDiameter * scale, RingThickness, RingDiameter * scale);
         if (m_renderer != null)
         {
             m_renderer.enabled = true;

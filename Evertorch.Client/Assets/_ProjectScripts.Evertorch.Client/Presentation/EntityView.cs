@@ -36,6 +36,8 @@ public sealed class EntityView : MonoBehaviour
     private static readonly Vector3 DefaultProjectilePoint = new(0f, DefaultProjectileHeight, 0f);
 
     private Color? m_tint;
+    private Color? m_bodyTint;
+    private float m_scale = 1f;
 
     private Transform? m_pose;
     private Transform? m_body;
@@ -80,16 +82,46 @@ public sealed class EntityView : MonoBehaviour
     /// </summary>
     public string AttackClip { get; set; } = BodyClipChoice.AttackUnarmed;
 
-    public static EntityView Create(string objectName, string key, EntityViewCatalog catalog, Color? tint)
+    /// <summary>
+    ///     How many times its model's size the body is drawn (Prototype Content §2).
+    /// </summary>
+    public float Scale => m_scale;
+
+    /// <summary>
+    ///     Creates the view and requests its body by <paramref name="key" />. <paramref name="tint" /> is a player's
+    ///     identity tint, on its Trim slots; a variant monster's <paramref name="scale" /> sizes its body and
+    ///     <paramref name="bodyTint" /> colours the whole of it.
+    /// </summary>
+    public static EntityView Create(
+        string objectName,
+        string key,
+        EntityViewCatalog catalog,
+        Color? tint,
+        float scale = 1f,
+        Color? bodyTint = null)
     {
         if (catalog == null)
         {
             throw new ArgumentNullException(nameof(catalog));
         }
 
+        if (!(scale > 0f))
+        {
+            throw new ArgumentOutOfRangeException(nameof(scale), scale, "must be positive");
+        }
+
         var root = new GameObject(objectName);
         EntityView view = root.AddComponent<EntityView>();
         view.m_tint = tint;
+        view.m_bodyTint = bodyTint;
+        view.m_scale = scale;
+
+        // A body without anchors, or one still loading, keeps these defaults, sized with it.
+        view.OverheadHeight = DefaultOverheadHeight * scale;
+        view.PickCenterHeight = EntityPicker.PickHeight * scale;
+        view.PickRadius = EntityPicker.PickRadius * scale;
+        view.m_projectileOrigin = DefaultProjectilePoint * scale;
+        view.m_projectileArrival = DefaultProjectilePoint * scale;
         view.m_catalog = catalog;
         view.Key = key;
         catalog.Request(key, prefab => view.AttachBody(prefab, catalog));
@@ -268,6 +300,13 @@ public sealed class EntityView : MonoBehaviour
 
         m_pose = new GameObject("Pose").transform;
         m_pose.SetParent(transform, false);
+
+        // The scale has a node of its own between the pose and the body: the combat pose rewrites only the pose, and a
+        // rigged body's clips only the body's own bones, so nothing else writes it. It is set before the anchors are
+        // read, so the overhead point, the projectile points, and the pick follow it.
+        Transform scale = new GameObject("Scale").transform;
+        scale.SetParent(m_pose, false);
+        scale.localScale = Vector3.one * m_scale;
         GameObject body;
         if (prefab == null)
         {
@@ -283,7 +322,7 @@ public sealed class EntityView : MonoBehaviour
         }
 
         body.name = "Body";
-        body.transform.SetParent(m_pose, false);
+        body.transform.SetParent(scale, false);
         m_body = body.transform;
 
         // Bodies must not catch the ground clicks meant for the map; entities are picked by their own test.
@@ -310,6 +349,11 @@ public sealed class EntityView : MonoBehaviour
             ApplyTint(body, anchors, m_tint.Value);
         }
 
+        if (!IsPlaceholder && m_bodyTint != null)
+        {
+            ApplyBodyTint(body, m_bodyTint.Value);
+        }
+
         HasBody = true;
     }
 
@@ -325,7 +369,7 @@ public sealed class EntityView : MonoBehaviour
         {
             Vector3 pick = transform.InverseTransformPoint(anchors.Pick.position);
             PickCenterHeight = pick.y;
-            PickRadius = anchors.PickRadius;
+            PickRadius = anchors.PickRadius * m_scale;
             m_projectileArrival = pick;
             m_projectileOrigin = pick;
         }
@@ -360,6 +404,16 @@ public sealed class EntityView : MonoBehaviour
             return;
         }
 
+        ApplyBodyTint(body, tint);
+    }
+
+    /// <summary>
+    ///     Colours every renderer of the body but a held weapon's, Trim slots or not: a variant monster's tint
+    ///     (Prototype Content §2).
+    /// </summary>
+    public static void ApplyBodyTint(GameObject body, Color tint)
+    {
+        var block = new MaterialPropertyBlock();
         foreach (Renderer part in body.GetComponentsInChildren<Renderer>(true))
         {
             if (part.GetComponentInParent<HeldWeapon>(true) != null)

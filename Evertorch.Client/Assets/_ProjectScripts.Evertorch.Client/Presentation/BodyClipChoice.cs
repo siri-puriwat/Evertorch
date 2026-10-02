@@ -73,8 +73,10 @@ public static class BodyClipChoice
             return true;
         }
 
-        if (isMoving &&
-            (TryCycle(clips, Run, cue.Travelled, out pick) || TryCycle(clips, Move, cue.Travelled, out pick)))
+        double bodyScale = cue.BodyScale > 0f ? cue.BodyScale : 1.0;
+        if (isMoving
+            && (TryCycle(clips, Run, cue.Travelled, bodyScale, out pick)
+                || TryCycle(clips, Move, cue.Travelled, bodyScale, out pick)))
         {
             return true;
         }
@@ -217,8 +219,14 @@ public static class BodyClipChoice
         return true;
     }
 
-    // A movement cycle's phase follows the ground covered, so its planted feet keep pace at any speed.
-    private static bool TryCycle(BodyClips clips, string name, double travelled, out BodyClipPick pick)
+    // A movement cycle's phase follows the ground covered, so its planted feet keep pace at any speed; a body drawn
+    // larger takes longer strides.
+    private static bool TryCycle(
+        BodyClips clips,
+        string name,
+        double travelled,
+        double bodyScale,
+        out BodyClipPick pick)
     {
         pick = default;
         if (!clips.TryGet(name, out BodyClips.Entry entry) || entry.Seconds <= 0.0)
@@ -226,7 +234,7 @@ public static class BodyClipChoice
             return false;
         }
 
-        double stride = entry.CalibrationSpeed > 0f ? entry.CalibrationSpeed * entry.Seconds : 0.0;
+        double stride = entry.CalibrationSpeed > 0f ? entry.CalibrationSpeed * entry.Seconds * bodyScale : 0.0;
         double cycles = stride > 0.0 ? travelled / stride : 0.0;
         pick = new BodyClipPick(name, Repeat(cycles, 1.0) * entry.Seconds, LongestFade);
         return true;

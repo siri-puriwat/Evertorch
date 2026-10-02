@@ -126,7 +126,13 @@ public sealed class TargetFrame : MonoBehaviour
             distance = new Vector2(at.x - self.X, at.z - self.Z).magnitude;
         }
 
-        ShowTarget(MonsterName(m_client.Content, target), ratio, distance, isDead);
+        ShowTarget(
+            MonsterLabel(
+                EntityViewKeys.MonsterOf(m_client.Content, target.Kind, target.DefinitionId),
+                target.DefinitionId),
+            ratio,
+            distance,
+            isDead);
     }
 
     /// <summary>
@@ -267,13 +273,19 @@ public sealed class TargetFrame : MonoBehaviour
         }
     }
 
-    private static string MonsterName(ClientContent? content, RemoteEntity target)
+    /// <summary>
+    ///     A selected monster's name and level, "Grotto Crawler · Lv 14", and a boss named one, "Slime Monarch · Lv 25 ·
+    ///     Boss"; the definition ID when the content does not know the monster.
+    /// </summary>
+    public static string MonsterLabel(ClientMonster? monster, string definitionId)
     {
-        return content != null
-            && content.TryGetMonster(new MonsterDefinitionId(target.DefinitionId), out ClientMonster? monster)
-            && monster != null
-                ? monster.DisplayName
-                : target.DefinitionId;
+        if (monster == null)
+        {
+            return definitionId;
+        }
+
+        string label = $"{monster.DisplayName} \u00B7 Lv {monster.Level.ToString(CultureInfo.InvariantCulture)}";
+        return monster.IsBoss ? $"{label} \u00B7 Boss" : label;
     }
 
     private void PlaceBeside(bool isBeside, bool isTouchShown)

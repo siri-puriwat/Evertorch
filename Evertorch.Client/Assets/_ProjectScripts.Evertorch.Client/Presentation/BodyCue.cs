@@ -51,6 +51,12 @@ public struct BodyCue
     public double Travelled;
 
     /// <summary>
+    ///     How many times its model's size the body is drawn (Prototype Content §2); its stride grows with it. 0, a
+    ///     cue's default, stands for 1.
+    /// </summary>
+    public float BodyScale;
+
+    /// <summary>
     ///     Real seconds, for the loops that follow no server moment.
     /// </summary>
     public double Clock;

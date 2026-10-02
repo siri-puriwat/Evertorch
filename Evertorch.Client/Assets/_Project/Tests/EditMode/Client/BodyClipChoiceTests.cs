@@ -214,6 +214,18 @@ public sealed class BodyClipChoiceTests
     }
 
     [Test]
+    public void Choose_ForAWalkOfALargerBody_TakesLongerStrides()
+    {
+        // At twice the size one run cycle covers 6.67 m, so 3.33 m is half of it.
+        var cue = new BodyCue { Speed = 5f, Travelled = 10.0 / 3.0, BodyScale = 2f };
+
+        BodyClipPick pick = Choose(cue, m_humanoid);
+
+        Assert.That(pick.Clip, Is.EqualTo("run"));
+        Assert.That(pick.Time, Is.EqualTo(10.0 / 30.0).Within(0.0001));
+    }
+
+    [Test]
     public void Choose_ForAWalk_FollowsTheGroundCovered()
     {
         // One run cycle covers 5 m/s × 20/30 s = 3.33 m; half of it is half the clip.

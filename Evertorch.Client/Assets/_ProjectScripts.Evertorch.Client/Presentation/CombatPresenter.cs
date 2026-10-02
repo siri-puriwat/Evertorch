@@ -21,6 +21,9 @@ public sealed class CombatPresenter : IDisposable
     private const float NumberLift = 0.4f;
     private const float CriticalScale = 1.4f;
 
+    // A monster's bar widens with its body (Prototype Content §2), to twice its 1 m at most.
+    private const float MaxBarWidthScale = 2f;
+
     private static readonly Color HitColor = new(1f, 1f, 1f);
     private static readonly Color CriticalColor = new(1f, 0.85f, 0.2f);
     private static readonly Color MissColor = new(0.7f, 0.7f, 0.75f);
@@ -212,6 +215,7 @@ public sealed class CombatPresenter : IDisposable
 
         var cue = new BodyCue
         {
+            BodyScale = view.Scale,
             IsDead = isShownDead,
             DeathSince = Timeline.DeadSince(entity, localNow, remoteNow),
             AttackClip = view.AttackClip,
@@ -268,7 +272,7 @@ public sealed class CombatPresenter : IDisposable
 
         // The bar moves with the numbers, on the monster's own timeline, not when the message arrives.
         m_shownHealth.TryGetValue(monster.Entity, out ushort shown);
-        bar.Show(view.OverheadPoint(0f), camera, shown);
+        bar.Show(view.OverheadPoint(0f), camera, shown, Mathf.Min(view.Scale, MaxBarWidthScale));
     }
 
     // A party member's health reaches its party alone, so only a member's bar shows over a player (Network Protocol
