@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Evertorch.Game;
 using UnityEngine;
 
@@ -40,7 +41,12 @@ public sealed class GrayboxMap : MonoBehaviour
         }
     }
 
-    public static GrayboxMap Create(NavigationGrid grid, Material baseMaterial)
+    /// <summary>
+    ///     Builds the map's mesh and collider, each surface coloured from <paramref name="palette" /> (a scene's
+    ///     <see cref="MapLook" />), in <see cref="GrayboxSurface" /> order; a surface the palette has no colour for keeps
+    ///     the default one.
+    /// </summary>
+    public static GrayboxMap Create(NavigationGrid grid, Material baseMaterial, IReadOnlyList<Color>? palette = null)
     {
         if (baseMaterial == null)
         {
@@ -53,7 +59,8 @@ public sealed class GrayboxMap : MonoBehaviour
         map.m_materials = new Material[GrayboxMeshBuilder.SubMeshCount];
         for (int index = 0; index < map.m_materials.Length; index++)
         {
-            map.m_materials[index] = new Material(baseMaterial) { color = Palette[index] };
+            Color color = palette != null && index < palette.Count ? palette[index] : Palette[index];
+            map.m_materials[index] = new Material(baseMaterial) { color = color };
         }
 
         root.AddComponent<MeshFilter>().sharedMesh = map.m_mesh;

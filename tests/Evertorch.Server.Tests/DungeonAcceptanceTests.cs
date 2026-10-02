@@ -15,9 +15,9 @@ namespace Evertorch.Server.Tests
 ///     server host on a real PostgreSQL 18 and real UDP sockets on loopback, loading the server-only test package
 ///     (<see cref="DungeonPackage" />), with three clients built from the client's production networking and gameplay
 ///     code. Three players enter the training ground together, Aldo invites Bree and Cora into a party, and the party
-///     walks through the ground's portal onto the training field together. Each later line of Milestone 13 adds its
-///     steps here: the grotto, the pack that links, the wisp's debuff, the boss with its slam and its announcement, the
-///     most valuable player's prize, the quests, and a restart.
+///     walks through the ground's portal onto the training field, then through the field's east portal into the Umbral
+///     Grotto. Each later line of Milestone 13 adds its steps here: the pack that links, the wisp's debuff, the boss
+///     with its slam and its announcement, the most valuable player's prize, the quests, and a restart.
 /// </summary>
 [TestFixture]
 [NonParallelizable]
@@ -25,6 +25,7 @@ public sealed class DungeonAcceptanceTests
 {
     private const string TrainingGround = "map.training_ground";
     private const string TrainingField = "map.training_field";
+    private const string UmbralGrotto = "map.umbral_grotto";
     private const string AldoIdentity = "dungeon-aldo";
     private const string AldoName = "Aldo";
     private const string BreeIdentity = "dungeon-bree";
@@ -147,6 +148,40 @@ public sealed class DungeonAcceptanceTests
             $"{step}: every member followed its character to the field");
     }
 
+    // The party walks on into the portal before the field's east gate, and each follows its character into the grotto,
+    // where it stands by the grotto's west gate (Gameplay Systems §4.2).
+    private static void CrossIntoTheGrotto(ServerContent content, params SocketClient[] party)
+    {
+        const string step = "into the grotto";
+        var grotto = new MapDefinitionId(UmbralGrotto);
+        MapPortal portal = content.Maps[new MapDefinitionId(TrainingField)].Portals
+            .Single(candidate => candidate.DestinationMap == grotto);
+        foreach (SocketClient client in party)
+        {
+            Assert.That(
+                client.Controller.TryMoveTo(
+                    client.World.Predictor.Position,
+                    new WorldPosition(portal.Center.X - 0.3f, 0f, portal.Center.Z)),
+                Is.True,
+                $"{step}: a way into the portal");
+        }
+
+        Assert.That(
+            SocketClients.PumpUntil(
+                () => party.All(client => client.Connection.World?.Map == grotto
+                    && client.Connection.World.Inventory.IsCurrent),
+                party),
+            Is.True,
+            $"{step}: every member followed its character into the grotto");
+        foreach (SocketClient client in party)
+        {
+            Assert.That(
+                client.World.Predictor.Position,
+                Is.EqualTo(content.Maps[grotto].SpawnPosition),
+                $"{step}: by the west gate");
+        }
+    }
+
     private static void AssertCleanTraffic(string step, params SocketClient[] clients)
     {
         foreach (SocketClient client in clients)
@@ -157,7 +192,7 @@ public sealed class DungeonAcceptanceTests
     }
 
     [Test]
-    public void AParty_OverRealSocketsAndPostgres_CrossesTheFieldTowardTheGrotto()
+    public void AParty_OverRealSocketsAndPostgres_CrossesTheFieldIntoTheGrotto()
     {
         using var root = new TemporaryDirectory();
         PackageFixture.WriteTo(Path.Combine(root.Path, "content", "server"), DungeonPackage.Build());
@@ -176,6 +211,9 @@ public sealed class DungeonAcceptanceTests
 
         CrossToTheField(content, aldo, bree, cora);
         AssertCleanTraffic("to the field", aldo, bree, cora);
+
+        CrossIntoTheGrotto(content, aldo, bree, cora);
+        AssertCleanTraffic("into the grotto", aldo, bree, cora);
 
         host.StopAsync().GetAwaiter().GetResult();
     }

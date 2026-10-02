@@ -91,5 +91,4 @@ navigation:
     - "################################################################"
     - "################################################################"
 client:
-  # TODO: the grotto's own dark scene, map_umbral_grotto (Milestone 13, line 3).
-  scene: map_training_field
+  scene: map_umbral_grotto

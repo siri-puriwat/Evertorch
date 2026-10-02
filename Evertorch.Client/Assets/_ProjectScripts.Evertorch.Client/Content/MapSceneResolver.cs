@@ -7,6 +7,7 @@ public static class MapSceneResolver
 {
     private const string TrainingGroundScene = "10_TrainingGround";
     private const string TrainingFieldScene = "11_TrainingField";
+    private const string UmbralGrottoScene = "12_UmbralGrotto";
 
     public static bool TryResolve(string sceneKey, out string sceneName)
     {
@@ -18,6 +19,9 @@ public static class MapSceneResolver
             case "map_training_field":
                 sceneName = TrainingFieldScene;
                 return true;
+            case "map_umbral_grotto":
+                sceneName = UmbralGrottoScene;
+                return true;
             default:
                 sceneName = string.Empty;
                 return false;
@@ -26,7 +30,7 @@ public static class MapSceneResolver
 
     public static bool IsMapScene(string sceneName)
     {
-        return sceneName == TrainingGroundScene || sceneName == TrainingFieldScene;
+        return sceneName == TrainingGroundScene || sceneName == TrainingFieldScene || sceneName == UmbralGrottoScene;
     }
 }
 }

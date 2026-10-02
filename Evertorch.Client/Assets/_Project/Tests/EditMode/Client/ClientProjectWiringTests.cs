@@ -21,6 +21,8 @@ public sealed class ClientProjectWiringTests
     [TestCase("10_TrainingGround", true, false)]
     [TestCase("11_TrainingField", false, true)]
     [TestCase("11_TrainingField", true, false)]
+    [TestCase("12_UmbralGrotto", false, true)]
+    [TestCase("12_UmbralGrotto", true, false)]
     [TestCase("01_MainMenu", false, true)]
     [TestCase("01_MainMenu", true, false)]
     [TestCase("00_Bootstrap", false, false)]
@@ -78,6 +80,7 @@ public sealed class ClientProjectWiringTests
 
     [TestCase("map_training_ground", "10_TrainingGround")]
     [TestCase("map_training_field", "11_TrainingField")]
+    [TestCase("map_umbral_grotto", "12_UmbralGrotto")]
     public void MapSceneResolver_KnownKey_NamesItsMapScene(string sceneKey, string expected)
     {
         bool found = MapSceneResolver.TryResolve(sceneKey, out string sceneName);
@@ -85,6 +88,21 @@ public sealed class ClientProjectWiringTests
         Assert.That(found, Is.True);
         Assert.That(sceneName, Is.EqualTo(expected));
         Assert.That(MapSceneResolver.IsMapScene(sceneName), Is.True);
+    }
+
+    // The bars and rings over the map are drawn unlit, so a dark map leaves them readable. The material is an asset the
+    // scene holds, so a player build keeps its shader, which the runtime fallback's Shader.Find would not.
+    [Test]
+    public void BootstrapScene_GivesTheClientAnUnlitOverlayMaterial()
+    {
+        string scene = File.ReadAllText(Path.Combine(Application.dataPath, "_Project/Scenes/00_Bootstrap.unity"));
+        Match field = Regex.Match(scene, @"m_overlayMaterial: \{fileID: 2100000, guid: ([0-9a-f]{32}), type: 2\}");
+
+        Assert.That(field.Success, Is.True, "the bootstrap's GameClient holds an overlay material");
+        string path = AssetDatabase.GUIDToAssetPath(field.Groups[1].Value);
+        Material material = AssetDatabase.LoadAssetAtPath<Material>(path);
+        Assert.That(material, Is.Not.Null, path);
+        Assert.That(material.shader.name, Is.EqualTo("Universal Render Pipeline/Unlit"));
     }
 
     [Test]
@@ -262,7 +280,7 @@ public sealed class ClientProjectWiringTests
     }
 
     [Test]
-    public void MapScenes_FollowOneAnotherInTheBuild_TheFieldAfterTheGround()
+    public void MapScenes_FollowOneAnotherInTheBuild_TheFieldAfterTheGround_AndTheGrottoAfterTheField()
     {
         string[] buildScenes = EditorBuildSettings.scenes
             .Where(scene => scene.enabled)
@@ -271,7 +289,9 @@ public sealed class ClientProjectWiringTests
 
         int ground = Array.IndexOf(buildScenes, "10_TrainingGround");
         Assert.That(ground, Is.GreaterThan(1));
-        Assert.That(buildScenes[ground + 1], Is.EqualTo("11_TrainingField"));
+        Assert.That(
+            buildScenes.Skip(ground).Take(3),
+            Is.EqualTo(new[] { "10_TrainingGround", "11_TrainingField", "12_UmbralGrotto" }));
     }
 }
 }

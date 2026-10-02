@@ -28,6 +28,10 @@ public sealed class GameClient : MonoBehaviour
     [SerializeField]
     private Material? m_grayboxMaterial;
 
+    // Unlit, so the bars and rings drawn over the map read the same in a dark map as in daylight.
+    [SerializeField]
+    private Material? m_overlayMaterial;
+
     [SerializeField]
     private InputActionAsset? m_inputActions;
 
@@ -110,6 +114,7 @@ public sealed class GameClient : MonoBehaviour
     private ChatBubblePresenter? m_bubbles;
     private ProjectilePresenter? m_projectiles;
     private Material? m_runtimeMaterial;
+    private Material? m_runtimeOverlayMaterial;
     private string m_leaveReason = string.Empty;
     private CharacterId m_lastCharacter;
     private CharacterId m_reconnectCharacter;
@@ -474,6 +479,11 @@ public sealed class GameClient : MonoBehaviour
         if (m_runtimeMaterial != null)
         {
             Destroy(m_runtimeMaterial);
+        }
+
+        if (m_runtimeOverlayMaterial != null)
+        {
+            Destroy(m_runtimeOverlayMaterial);
         }
     }
 
@@ -1025,9 +1035,11 @@ public sealed class GameClient : MonoBehaviour
         m_isChangingMap = false;
         m_world = world;
         Material material = ResolveMaterial();
-        m_map = GrayboxMap.Create(world.Grid, material);
-        m_marker = MoveMarker.Create(material);
-        m_targetMarker = TargetMarker.Create(material);
+        Material overlay = ResolveOverlayMaterial();
+        MapLook? look = FindFirstObjectByType<MapLook>();
+        m_map = GrayboxMap.Create(world.Grid, material, look != null ? look.Palette : null);
+        m_marker = MoveMarker.Create(overlay);
+        m_targetMarker = TargetMarker.Create(overlay);
         m_localView = EntityView.Create(
             "LocalPlayer",
             EntityViewKeys.ForJob(m_contentLoader.Content, world.LocalJob),
@@ -1047,7 +1059,7 @@ public sealed class GameClient : MonoBehaviour
         m_combat = new CombatPresenter(
             world,
             1.0 / Connection.ServerTickRate,
-            material,
+            overlay,
             m_contentLoader.Content,
             Party);
         m_namePlates = new NamePlatePresenter(world, m_contentLoader.Content, PlayedCharacter?.Name ?? string.Empty);
@@ -1797,6 +1809,21 @@ public sealed class GameClient : MonoBehaviour
         }
 
         return m_runtimeMaterial;
+    }
+
+    private Material ResolveOverlayMaterial()
+    {
+        if (m_overlayMaterial != null)
+        {
+            return m_overlayMaterial;
+        }
+
+        if (m_runtimeOverlayMaterial == null)
+        {
+            m_runtimeOverlayMaterial = new Material(Shader.Find("Universal Render Pipeline/Unlit"));
+        }
+
+        return m_runtimeOverlayMaterial;
     }
 
     // A job change draws the new job's body where the old one stood, and the camera follows it (Prototype Content §2).

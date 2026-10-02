@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -10,6 +11,7 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
+using UnityEngine.TestTools.Utils;
 using Object = UnityEngine.Object;
 
 namespace Evertorch.Client.Tests.PlayMode
@@ -26,12 +28,17 @@ public sealed class LiveServerDungeonTests
     private const string ActionsAsset = "_Project/Settings/InputSystem_Actions.inputactions";
     private const string ClientName = "LiveDungeonOne";
     private const string FieldScene = "11_TrainingField";
+    private const string GrottoScene = "12_UmbralGrotto";
+    private const string Unlit = "Universal Render Pipeline/Unlit";
     private const float StartTimeoutSeconds = 30f;
     private const float StepTimeoutSeconds = 20f;
     private const int TestTimeoutMs = 300_000;
 
-    // Where the field's way to the grotto begins, by its east wall.
+    // Where the field's way to the grotto begins, by its east wall; the portal before the east gate; and a step into
+    // the grotto's entrance hall.
     private static readonly WorldPosition FieldEastSide = new(20.5f, 0f, -8f);
+    private static readonly WorldPosition FieldEastPortal = new(22.2f, 0f, -8f);
+    private static readonly WorldPosition EntranceHall = new(-24f, 0f, -22f);
 
     private LiveDatabase? m_database;
     private LiveServer? m_server;
@@ -68,11 +75,12 @@ public sealed class LiveServerDungeonTests
         }
     }
 
-    // The real client crosses from the ground to the field and walks to the field's east side, where the way to the
-    // grotto begins (Gameplay Systems §4.2).
+    // The real client crosses from the ground to the field, walks to the field's east side, and crosses into the
+    // grotto (Gameplay Systems §4.2): the grotto's dark scene, the graybox in the scene's colours, and the bars and
+    // rings over the map drawn unlit (Prototype Content §2).
     [UnityTest]
     [Timeout(TestTimeoutMs)]
-    public IEnumerator Crossing_TheRealClientWalksTheFieldTowardTheGrotto()
+    public IEnumerator Crossing_TheRealClientWalksOverTheFieldIntoTheDarkGrotto()
     {
         string actionsPath = RequirePrerequisites();
         yield return StartDatabaseAndServer();
@@ -92,19 +100,62 @@ public sealed class LiveServerDungeonTests
         Assert.That(field.Map.Value, Is.EqualTo("map.training_field"), $"{client.Status} {server.JoinOutput()}");
         Assert.That(SceneManager.GetActiveScene().name, Is.EqualTo(FieldScene));
 
+        yield return WalkTo(client, field, FieldEastSide, "by the east wall");
         Assert.That(
-            client.Controller!.TryMoveTo(field.Predictor.Position, FieldEastSide),
+            Object.FindObjectsByType<HealthBar>(FindObjectsSortMode.None),
+            Is.Not.Empty,
+            "the field's monsters have bars");
+        Assert.That(OverlayShaders(), Is.All.EqualTo(Unlit), "the bars and rings over the field");
+
+        Assert.That(
+            client.Controller!.TryMoveTo(field.Predictor.Position, FieldEastPortal),
             Is.True,
-            "a way across the field");
+            "a way into the field's east portal");
         yield return WaitUntil(
-            () => client.Controller != null && !client.Controller.HasPath && field.Predictor.PendingCount == 0,
+            () => client.World != null && client.World != field && client.World.Inventory.IsCurrent,
             StepTimeoutSeconds);
-        WorldPosition at = field.Predictor.Position;
+        ClientWorld grotto = client.World!;
+        Assert.That(grotto.Map.Value, Is.EqualTo("map.umbral_grotto"), $"{client.Status} {server.JoinOutput()}");
+        Assert.That(SceneManager.GetActiveScene().name, Is.EqualTo(GrottoScene));
+        Assert.That(RenderSettings.fog, Is.True, "the grotto's fog");
+        MapLook look = Object.FindFirstObjectByType<MapLook>();
+        GrayboxMap map = Object.FindFirstObjectByType<GrayboxMap>();
+        Assert.That(look, Is.Not.Null, "the grotto's look");
         Assert.That(
-            Math.Abs(at.X - FieldEastSide.X) + Math.Abs(at.Z - FieldEastSide.Z),
-            Is.LessThan(0.5f),
-            $"by the east wall, at {at}");
+            map.GetComponent<MeshRenderer>().sharedMaterials.Select(surface => surface.color),
+            Is.EqualTo(look.Palette).Using(new ColorEqualityComparer(1e-4f)),
+            "the graybox in the grotto's colours");
+
+        yield return WalkTo(client, grotto, EntranceHall, "in the entrance hall");
         Assert.That(client.Connection!.MalformedMessages + client.Connection.UnexpectedMessages, Is.Zero);
+    }
+
+    // The renderers of every health bar, the target ring, and the move marker.
+    private static string[] OverlayShaders()
+    {
+        IEnumerable<Renderer> bars = Object
+            .FindObjectsByType<HealthBar>(FindObjectsSortMode.None)
+            .SelectMany(bar => bar.GetComponentsInChildren<Renderer>(true));
+        IEnumerable<Renderer> rings = Object
+            .FindObjectsByType<TargetMarker>(FindObjectsSortMode.None)
+            .Select(marker => marker.GetComponent<Renderer>())
+            .Concat(
+                Object.FindObjectsByType<MoveMarker>(FindObjectsSortMode.None)
+                    .Select(marker => marker.GetComponent<Renderer>()));
+        return bars.Concat(rings).Select(renderer => renderer.sharedMaterial.shader.name).ToArray();
+    }
+
+    private static IEnumerator WalkTo(GameClient client, ClientWorld world, WorldPosition destination, string where)
+    {
+        Assert.That(client.Controller!.TryMoveTo(world.Predictor.Position, destination), Is.True, $"a way {where}");
+        yield return WaitUntil(
+            () => client.Controller != null && !client.Controller.HasPath && world.Predictor.PendingCount == 0,
+            StepTimeoutSeconds);
+        WorldPosition at = world.Predictor.Position;
+        Assert.That(
+            Math.Abs(at.X - destination.X) + Math.Abs(at.Z - destination.Z),
+            Is.LessThan(0.5f),
+            $"{where}, at {at}");
     }
 
     private static string RequirePrerequisites()
