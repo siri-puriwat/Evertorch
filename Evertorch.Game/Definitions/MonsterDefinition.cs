@@ -28,7 +28,8 @@ public sealed class MonsterDefinition
         int baseExperience,
         int jobExperience,
         IReadOnlyList<MonsterDrop> drops,
-        IReadOnlyList<MonsterSkill> skills)
+        IReadOnlyList<MonsterSkill> skills,
+        bool isBoss = false)
     {
         Id = id;
         DisplayName = displayName;
@@ -54,6 +55,7 @@ public sealed class MonsterDefinition
         JobExperience = jobExperience;
         Drops = drops;
         Skills = skills;
+        IsBoss = isBoss;
     }
 
     public MonsterDefinitionId Id { get; }
@@ -120,5 +122,11 @@ public sealed class MonsterDefinition
 
     /// <summary>The skills it may cast, tried in this order at a decision.</summary>
     public IReadOnlyList<MonsterSkill> Skills { get; }
+
+    /// <summary>
+    ///     A boss (Gameplay Systems §10): the players see it named one, and the server announces it and chooses its
+    ///     most valuable player.
+    /// </summary>
+    public bool IsBoss { get; }
 }
 }

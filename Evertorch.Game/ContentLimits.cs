@@ -51,6 +51,14 @@ public static class ContentLimits
     public const double MaxStepHeight = 100d;
 
     /// <summary>
+    ///     The smallest and the largest a monster's body is drawn, as a multiple of its model's own size (Prototype
+    ///     Content §2).
+    /// </summary>
+    public const double MinBodyScale = 0.25d;
+
+    public const double MaxBodyScale = 4d;
+
+    /// <summary>
     ///     Generated packages name each distinct cell kind with one letter.
     /// </summary>
     public const int MaxLegendEntries = 52;

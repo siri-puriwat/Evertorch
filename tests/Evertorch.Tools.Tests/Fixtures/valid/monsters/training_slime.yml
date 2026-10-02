@@ -29,3 +29,5 @@ rewards:
 client:
   prefab: monster_training_slime
   icon: monster_training_slime_icon
+  scale: 1.5
+  tint: "#4A7C59"

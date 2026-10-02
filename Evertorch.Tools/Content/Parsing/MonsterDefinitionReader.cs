@@ -23,6 +23,7 @@ internal static class MonsterDefinitionReader
 
         string displayName = root.RequiredString("displayName");
         int level = root.RequiredInt("level", 1, ContentLimits.MaxLevel);
+        bool isBoss = root.Has("boss") && root.RequiredBool("boss");
 
         YamlFieldReader stats = root.RequiredMapping("stats");
         int hp = stats.RequiredInt("hp", 1, ContentLimits.MaxHp);
@@ -99,6 +100,10 @@ internal static class MonsterDefinitionReader
         string prefab = client.RequiredAssetKey("prefab");
         string icon = client.RequiredAssetKey("icon");
         string? projectile = client.Has("projectile") ? client.RequiredAssetKey("projectile") : null;
+        double? scale = client.Has("scale")
+            ? client.RequiredDouble("scale", ContentLimits.MinBodyScale, ContentLimits.MaxBodyScale, false)
+            : null;
+        string? tint = client.Has("tint") ? client.RequiredColor("tint") : null;
 
         root.ReportUnknownFields();
         if (diagnostics.Count != errorsBefore)
@@ -130,8 +135,9 @@ internal static class MonsterDefinitionReader
             baseExperience,
             jobExperience,
             drops,
-            skills);
-        return new AuthoredMonster(root.ToSource(), definition, prefab, icon, projectile);
+            skills,
+            isBoss);
+        return new AuthoredMonster(root.ToSource(), definition, prefab, icon, projectile, scale, tint);
     }
 
     private static MonsterDrop ReadDrop(YamlFieldReader drop)

@@ -104,6 +104,28 @@ public sealed class YamlFieldReader
         return value;
     }
 
+    /// <summary>
+    ///     A colour written "#RRGGBB", returned in capitals. The value is quoted, since YAML reads an unquoted # as
+    ///     the start of a comment.
+    /// </summary>
+    public string RequiredColor(string key)
+    {
+        YamlScalarNode? scalar = RequiredScalar(key);
+        if (scalar == null)
+        {
+            return string.Empty;
+        }
+
+        string value = scalar.Value ?? string.Empty;
+        if (!IsColor(value))
+        {
+            Report(key, scalar, "must be a colour written \"#RRGGBB\", in quotes");
+            return string.Empty;
+        }
+
+        return value.ToUpperInvariant();
+    }
+
     public T RequiredId<T>(string key, TryCreateId<T> tryCreate, string kindPrefix)
         where T : struct
     {
@@ -440,6 +462,24 @@ public sealed class YamlFieldReader
     public string PathOf(string key)
     {
         return m_path.Length == 0 ? key : $"{m_path}.{key}";
+    }
+
+    private static bool IsColor(string value)
+    {
+        if (value.Length != 7 || value[0] != '#')
+        {
+            return false;
+        }
+
+        for (int index = 1; index < value.Length; index++)
+        {
+            if (!Uri.IsHexDigit(value[index]))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private static bool IsAssetKey(string value)

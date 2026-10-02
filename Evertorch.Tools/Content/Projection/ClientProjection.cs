@@ -120,6 +120,22 @@ internal static class ClientProjection
                 writer.WriteString("projectile", authored.Projectile);
             }
 
+            // The body's size and colour and the boss flag are what the player sees, written only when authored.
+            if (authored.Scale != null)
+            {
+                writer.WriteNumber("scale", authored.Scale.Value);
+            }
+
+            if (authored.Tint != null)
+            {
+                writer.WriteString("tint", authored.Tint);
+            }
+
+            if (monster.IsBoss)
+            {
+                writer.WriteBoolean("boss", true);
+            }
+
             writer.WriteEndObject();
         }
 

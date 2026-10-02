@@ -284,6 +284,7 @@ internal static class ServerProjection
             writer.WriteString("id", monster.Id.Value);
             writer.WriteString("displayName", monster.DisplayName);
             writer.WriteNumber("level", monster.Level);
+            writer.WriteBoolean("boss", monster.IsBoss);
             writer.WriteNumber("hp", monster.Hp);
             writer.WriteNumber("physicalAttack", monster.PhysicalAttack);
             writer.WriteNumber("physicalDefense", monster.PhysicalDefense);

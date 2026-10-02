@@ -172,6 +172,26 @@ public sealed class ClientContentParserTests
         "\"schemaVersion\":2",
         "'monsters.json' is not readable or has an unsupported schema version")]
     [TestCase(
+        ClientContentParser.MonstersFile,
+        "\"level\":1,",
+        "\"level\":0,",
+        "Monster 'monster.training_slime': level must be at least 1")]
+    [TestCase(
+        ClientContentParser.MonstersFile,
+        "\"level\":1,",
+        "\"level\":1,\"scale\":4.5,",
+        "Monster 'monster.training_slime': scale must be between 0.25 and 4")]
+    [TestCase(
+        ClientContentParser.MonstersFile,
+        "\"level\":1,",
+        "\"level\":1,\"tint\":\"#5B3A8\",",
+        "Monster 'monster.training_slime': tint is not a colour written #RRGGBB")]
+    [TestCase(
+        ClientContentParser.MonstersFile,
+        "\"level\":1,",
+        "\"level\":1,\"tint\":\"# 5B3A8\",",
+        "Monster 'monster.training_slime': tint is not a colour written #RRGGBB")]
+    [TestCase(
         ClientContentParser.ItemsFile,
         "\"model\":\"pickup_slime_gel\"",
         "\"model\":\"pickup_slime_gel\",\"held\":\"weapon_slime_gel\"",
@@ -362,6 +382,23 @@ public sealed class ClientContentParserTests
         }
     }
 
+    [Test]
+    public void Parse_AVariantBody_ReadsItsLevelScaleTintAndBossFlag()
+    {
+        string monsters = Package.DefaultTexts(Maps)[ClientContentParser.MonstersFile]
+            .Replace("\"level\":1,", "\"level\":25,\"scale\":2.6,\"tint\":\"#5B3A8C\",\"boss\":true,");
+        var package = Package.With(ClientContentParser.MonstersFile, monsters);
+
+        ClientContent? content = ClientContentParser.Parse(package.Manifest, package.Files, out string error);
+
+        Assert.That(error, Is.Empty);
+        Assert.That(
+            content!.TryGetMonster(new MonsterDefinitionId("monster.training_slime"), out ClientMonster? monster),
+            Is.True);
+        Assert.That((monster!.Level, monster.Scale, monster.IsBoss), Is.EqualTo((25, 2.6f, true)));
+        Assert.That(monster.Tint, Is.EqualTo((Color)new Color32(0x5B, 0x3A, 0x8C, 0xFF)));
+    }
+
     // A heal may name another player (Gameplay Systems §9).
     [Test]
     public void Parse_ForASkillOnAnAlly_ReadsItsTargetType()
@@ -483,6 +520,10 @@ public sealed class ClientContentParserTests
         Assert.That(monster.PrefabKey, Is.EqualTo("monster_training_slime"));
         Assert.That(monster.IconKey, Is.EqualTo("monster_training_slime_icon"));
         Assert.That(monster.ProjectileKey, Is.Empty, "no projectile when the package names none");
+        Assert.That(monster.Level, Is.EqualTo(1));
+        Assert.That(monster.Scale, Is.EqualTo(1f), "the model's own size when the package names none");
+        Assert.That(monster.Tint, Is.Null);
+        Assert.That(monster.IsBoss, Is.False);
         Assert.That(content.TryGetItem(new ItemDefinitionId("item.material.slime_gel"), out ClientItem? item), Is.True);
         Assert.That(item!.DisplayName, Is.EqualTo("Slime Gel"));
         Assert.That(item.Type, Is.EqualTo(ItemType.Material));

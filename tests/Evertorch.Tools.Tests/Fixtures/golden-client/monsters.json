@@ -6,7 +6,9 @@
       "displayName": "Training Slime",
       "level": 1,
       "prefab": "monster_training_slime",
-      "icon": "monster_training_slime_icon"
+      "icon": "monster_training_slime_icon",
+      "scale": 1.5,
+      "tint": "#4A7C59"
     }
   ]
 }

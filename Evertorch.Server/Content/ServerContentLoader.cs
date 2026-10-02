@@ -484,6 +484,7 @@ public static class ServerContentLoader
         int problemsBefore = problems.Count;
         string displayName = entry.RequiredString("displayName");
         int level = entry.RequiredInt("level", 1, ContentLimits.MaxLevel);
+        bool isBoss = entry.RequiredBool("boss");
         int hp = entry.RequiredInt("hp", 1, ContentLimits.MaxHp);
         int physicalAttack = entry.RequiredInt("physicalAttack", 0, ContentLimits.MaxStat);
         int physicalDefense = entry.RequiredInt("physicalDefense", 0, ContentLimits.MaxStat);
@@ -585,7 +586,8 @@ public static class ServerContentLoader
             baseExperience,
             jobExperience,
             drops.AsReadOnly(),
-            skills.AsReadOnly());
+            skills.AsReadOnly(),
+            isBoss);
     }
 
     private static SkillDefinition? ReadSkill(PackageObjectReader entry, SkillDefinitionId id, List<string> problems)

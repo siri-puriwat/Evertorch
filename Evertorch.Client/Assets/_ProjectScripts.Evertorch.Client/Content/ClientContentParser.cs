@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
@@ -289,9 +290,51 @@ public static class ClientContentParser
                 return null;
             }
 
+            if (monster.level < 1)
+            {
+                error = $"Monster '{monster.id}': level must be at least 1.";
+                return null;
+            }
+
+            // JsonUtility reads an absent scale as 0, which stands for the model's own size, and an absent tint as
+            // empty.
+            float scale = monster.scale == 0f ? 1f : monster.scale;
+            if (scale < ContentLimits.MinBodyScale || scale > ContentLimits.MaxBodyScale)
+            {
+                error = string.Format(
+                    CultureInfo.InvariantCulture,
+                    "Monster '{0}': scale must be between {1} and {2}.",
+                    monster.id,
+                    ContentLimits.MinBodyScale,
+                    ContentLimits.MaxBodyScale);
+                return null;
+            }
+
+            Color? tint = null;
+            string tintText = monster.tint ?? string.Empty;
+            if (tintText.Length > 0)
+            {
+                if (!TryParseColor(tintText, out Color parsed))
+                {
+                    error = $"Monster '{monster.id}': tint is not a colour written #RRGGBB.";
+                    return null;
+                }
+
+                tint = parsed;
+            }
+
             monsters.Add(
                 id,
-                new ClientMonster(id, monster.displayName ?? string.Empty, monster.prefab, monster.icon, projectile));
+                new ClientMonster(
+                    id,
+                    monster.displayName ?? string.Empty,
+                    monster.prefab,
+                    monster.icon,
+                    projectile,
+                    monster.level,
+                    scale,
+                    tint,
+                    monster.boss));
         }
 
         return monsters;
@@ -530,6 +573,25 @@ public static class ClientContentParser
                 targetType = SkillTargetType.Enemy;
                 return false;
         }
+    }
+
+    // "#RRGGBB", as the content tools write a colour.
+    private static bool TryParseColor(string text, out Color color)
+    {
+        color = default;
+        if (text.Length != 7
+            || text[0] != '#'
+            || !uint.TryParse(
+                text.Substring(1),
+                NumberStyles.AllowHexSpecifier,
+                CultureInfo.InvariantCulture,
+                out uint rgb))
+        {
+            return false;
+        }
+
+        color = new Color32((byte)(rgb >> 16), (byte)(rgb >> 8), (byte)rgb, byte.MaxValue);
+        return true;
     }
 
     // The content tools enforce the same grammar. It is checked again here because a key that is a path would still
@@ -798,6 +860,10 @@ public static class ClientContentParser
         public string? prefab = string.Empty;
         public string? icon = string.Empty;
         public string? projectile = string.Empty;
+        public int level = 0;
+        public float scale = 0f;
+        public string? tint = string.Empty;
+        public bool boss = false;
     }
 
     [Serializable]
