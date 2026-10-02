@@ -948,6 +948,86 @@ WHERE character_quests.state = {CharacterQuestRow.ActiveState} AND character_que
             cancellationToken);
     }
 
+    public Task<InventoryResult> CommitGrantAsync(GrantCommit grant, CancellationToken cancellationToken)
+    {
+        return RunAsync(
+            async context =>
+            {
+                await using (IDbContextTransaction transaction =
+                             await context.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false))
+                {
+                    CharacterRow character = await LockCharacterAsync(context, grant.CharacterId, cancellationToken)
+                        .ConfigureAwait(false);
+                    InventoryResult? earlier = await FindAsync(
+                            context,
+                            grant.OperationId,
+                            grant.CharacterId,
+                            Array.Empty<long>(),
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                    if (earlier != null)
+                    {
+                        return earlier;
+                    }
+
+                    List<InventoryItemRow> rows = await context.InventoryItems
+                        .Where(row => row.CharacterId == grant.CharacterId)
+                        .ToListAsync(cancellationToken)
+                        .ConfigureAwait(false);
+                    InventoryItemRow? stack = grant.StackLimit == 1
+                        ? null
+                        : rows.FirstOrDefault(row => row.ItemDefinitionId == grant.ItemDefinitionId);
+                    int held = stack?.Quantity ?? 0;
+                    if (held > grant.StackLimit - grant.Quantity || (stack == null && rows.Count >= grant.MaxRows))
+                    {
+                        return new InventoryResult(
+                            InventoryStatus.InventoryFull,
+                            (uint)character.InventoryRevision,
+                            character.Currency,
+                            Array.Empty<StoredItem>());
+                    }
+
+                    if (stack == null)
+                    {
+                        // Saved at once, so the ledger row can name it.
+                        stack = new InventoryItemRow
+                        {
+                            CharacterId = grant.CharacterId,
+                            ItemDefinitionId = grant.ItemDefinitionId,
+                            Quantity = grant.Quantity
+                        };
+                        context.InventoryItems.Add(stack);
+                        await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+                    }
+                    else
+                    {
+                        stack.Quantity += grant.Quantity;
+                        stack.Version++;
+                    }
+
+                    return await CommitOperationAsync(
+                            context,
+                            transaction,
+                            character,
+                            new LedgerRow
+                            {
+                                OperationId = grant.OperationId,
+                                ActorCharacterId = grant.CharacterId,
+                                OperationType = LedgerRow.BossRewardOperation,
+                                ItemInstanceId = stack.Id,
+                                ItemDefinitionId = grant.ItemDefinitionId,
+                                QuantityDelta = grant.Quantity,
+                                CreatedAt = grant.At
+                            },
+                            new[] { stack.Id },
+                            Array.Empty<long>(),
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                }
+            },
+            cancellationToken);
+    }
+
     public Task<InventoryResult> CommitQuestRewardAsync(QuestRewardCommit reward, CancellationToken cancellationToken)
     {
         return RunAsync(

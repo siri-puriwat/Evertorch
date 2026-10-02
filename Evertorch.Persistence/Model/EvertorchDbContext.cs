@@ -186,7 +186,8 @@ internal sealed class EvertorchDbContext : DbContext
                 "ck_economy_ledger_operation_type",
                 $"operation_type IN ('{LedgerRow.PickupOperation}', '{LedgerRow.EquipOperation}', "
                 + $"'{LedgerRow.UnequipOperation}', '{LedgerRow.ConsumeOperation}', '{LedgerRow.BuyOperation}', "
-                + $"'{LedgerRow.SellOperation}', '{LedgerRow.QuestRewardOperation}')");
+                + $"'{LedgerRow.SellOperation}', '{LedgerRow.QuestRewardOperation}', "
+                + $"'{LedgerRow.BossRewardOperation}')");
         });
         entry.HasKey(row => row.Id).HasName("pk_economy_ledger");
         entry.Property(row => row.Id).UseIdentityAlwaysColumn();

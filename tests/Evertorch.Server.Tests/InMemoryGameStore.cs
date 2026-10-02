@@ -150,6 +150,16 @@ internal sealed class InMemoryGameStore : IGameStore
     public List<QuestRewardCommit> RewardCommits { get; } = new();
 
     /// <summary>
+    ///     How many of the next grant commits succeed and then throw as if the answer was lost.
+    /// </summary>
+    public int AmbiguousGrantFailures { get; set; }
+
+    /// <summary>
+    ///     Every grant commit attempted, in order, including repeats.
+    /// </summary>
+    public List<GrantCommit> GrantCommits { get; } = new();
+
+    /// <summary>
     ///     How many of the next operation lookups fail with an error of the store's own, not an outage.
     /// </summary>
     public int FailingLookups { get; set; }
@@ -560,6 +570,23 @@ internal sealed class InMemoryGameStore : IGameStore
         {
             TradeCommits.Add(sell.OperationId);
             return AnswerTrade(Find(sell.OperationId, sell.CharacterId, Array.Empty<long>()) ?? Sell(sell));
+        }
+    }
+
+    public Task<InventoryResult> CommitGrantAsync(GrantCommit grant, CancellationToken cancellationToken)
+    {
+        ThrowIfUnavailable();
+        lock (m_gate)
+        {
+            GrantCommits.Add(grant);
+            InventoryResult result = Find(grant.OperationId, grant.CharacterId, Array.Empty<long>()) ?? Grant(grant);
+            if (AmbiguousGrantFailures > 0 && result.Status == InventoryStatus.Committed)
+            {
+                AmbiguousGrantFailures--;
+                throw new StoreUnavailableException(new TimeoutException("scripted loss of the commit's answer"));
+            }
+
+            return Task.FromResult(result);
         }
     }
 
@@ -1114,6 +1141,36 @@ internal sealed class InMemoryGameStore : IGameStore
         row.Coins -= buy.Total;
         row.InventoryRevision = unchecked(row.InventoryRevision + 1);
         m_ledger.Add(buy.OperationId, new LedgerEntry(buy.CharacterId, stack.Id, buy.ItemDefinitionId));
+        return new InventoryResult(InventoryStatus.Committed, row.InventoryRevision, row.Coins, new[] { stack });
+    }
+
+    // As a buy, with no coins (the PostgreSQL store's own check): the stack, then the rows.
+    private InventoryResult Grant(GrantCommit grant)
+    {
+        Row row = m_characters[grant.CharacterId];
+        int index = grant.StackLimit == 1
+            ? -1
+            : row.Items.FindIndex(item => item.ItemDefinitionId == grant.ItemDefinitionId);
+        int held = index >= 0 ? row.Items[index].Quantity : 0;
+        if (held > grant.StackLimit - grant.Quantity || (index < 0 && row.Items.Count >= grant.MaxRows))
+        {
+            return Unchanged(InventoryStatus.InventoryFull, row);
+        }
+
+        StoredItem stack = index >= 0
+            ? new StoredItem(row.Items[index].Id, grant.ItemDefinitionId, held + grant.Quantity)
+            : new StoredItem(++m_lastItem, grant.ItemDefinitionId, grant.Quantity);
+        if (index >= 0)
+        {
+            row.Items[index] = stack;
+        }
+        else
+        {
+            row.Items.Add(stack);
+        }
+
+        row.InventoryRevision = unchecked(row.InventoryRevision + 1);
+        m_ledger.Add(grant.OperationId, new LedgerEntry(grant.CharacterId, stack.Id, grant.ItemDefinitionId));
         return new InventoryResult(InventoryStatus.Committed, row.InventoryRevision, row.Coins, new[] { stack });
     }
 

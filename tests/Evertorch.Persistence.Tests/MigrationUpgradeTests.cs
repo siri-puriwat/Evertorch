@@ -19,6 +19,7 @@ public sealed class MigrationUpgradeTests
     private const string AddQuestsAndCoins = "20260926193354_AddQuestsAndCoins";
     private const string AddSessionTokens = "20260927150302_AddSessionTokens";
     private const string AddCharacterSkills = "20260928181417_AddCharacterSkills";
+    private const string AddParties = "20261001131541_AddParties";
     private const string ForeignKeyViolation = "23503";
     private const string CheckViolation = "23514";
     private const string UndefinedTable = "42P01";
@@ -88,6 +89,43 @@ public sealed class MigrationUpgradeTests
             SqlStateOf(sql, Sql.PartyInsert(other, sql.InsertCharacter(sql.InsertAccount(), Sql.UniqueName("Up")))),
             Is.EqualTo(ForeignKeyViolation),
             "the leader's key holds");
+    }
+
+    // A boss's prize joins the ledger's operation types (Persistence §4, §5); the migration changes no row.
+    [Test]
+    public void Upgrade_FromAddParties_KeepsEveryRow_AndAcceptsBossRewards()
+    {
+        using var database = PostgresFixture.Start(targetMigration: AddParties);
+        var sql = new Sql(database.ConnectionString);
+        long account = sql.InsertAccount();
+        long character = sql.InsertCharacter(account, Sql.UniqueName("Up"));
+        long other = sql.InsertCharacter(sql.InsertAccount(), Sql.UniqueName("Up"));
+        long weapon = sql.InsertItem(character, 1);
+        sql.Execute(Sql.EquipmentInsert(character, "Weapon", weapon));
+        sql.Scalar(Sql.LedgerInsert(Guid.NewGuid(), character, "quest_reward"));
+        sql.Execute(Sql.QuestInsert(character, "quest.crawler_hunt", "completed", 5));
+        sql.Execute(Sql.SessionTokenInsert(account));
+        sql.Execute(Sql.SkillInsert(character, "skill.strike", 2));
+        sql.Scalar(Sql.PartyInsert(character, character, other));
+        string? rewardBefore = SqlStateOf(sql, Sql.LedgerInsert(Guid.NewGuid(), character, "boss_reward"));
+        string before = Dump(sql, "character_quests", "session_tokens", "character_skills", "parties", "party_members");
+
+        EvertorchDatabase.ApplyMigrationsAsync(database.ConnectionString, CancellationToken.None)
+            .GetAwaiter()
+            .GetResult();
+
+        IReadOnlyList<string> pending = EvertorchDatabase
+            .GetPendingMigrationsAsync(database.ConnectionString, CancellationToken.None)
+            .GetAwaiter()
+            .GetResult();
+        Assert.That(rewardBefore, Is.EqualTo(CheckViolation), "the ledger knew no prizes before");
+        Assert.That(pending, Is.Empty);
+        Assert.That(
+            Dump(sql, "character_quests", "session_tokens", "character_skills", "parties", "party_members"),
+            Is.EqualTo(before),
+            "every row as it was");
+        Assert.That(SqlStateOf(sql, Sql.LedgerInsert(Guid.NewGuid(), character, "boss_reward")), Is.Null);
+        Assert.That(SqlStateOf(sql, Sql.LedgerInsert(Guid.NewGuid(), character, "trade")), Is.EqualTo(CheckViolation));
     }
 
     [Test]

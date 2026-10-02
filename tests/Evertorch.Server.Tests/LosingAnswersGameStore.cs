@@ -155,6 +155,11 @@ internal sealed class LosingAnswersGameStore : IGameStore
         return AnswerAsync(m_inner.CommitSellAsync(sell, cancellationToken));
     }
 
+    public Task<InventoryResult> CommitGrantAsync(GrantCommit grant, CancellationToken cancellationToken)
+    {
+        return AnswerAsync(m_inner.CommitGrantAsync(grant, cancellationToken));
+    }
+
     public Task<InventoryResult> CommitQuestRewardAsync(QuestRewardCommit reward, CancellationToken cancellationToken)
     {
         return AnswerAsync(m_inner.CommitQuestRewardAsync(reward, cancellationToken));

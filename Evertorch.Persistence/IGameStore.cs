@@ -176,6 +176,14 @@ public interface IGameStore
     Task<InventoryResult> CommitQuestRewardAsync(QuestRewardCommit reward, CancellationToken cancellationToken);
 
     /// <summary>
+    ///     Adds the quantity of the item the server grants to the character's inventory in one transaction with a
+    ///     <c>boss_reward</c> ledger row, like <see cref="CommitBuyAsync" /> with no coins; the item merges into its
+    ///     row unless its stack limit is 1. <see cref="InventoryStatus.InventoryFull" /> when the stack limit or the
+    ///     row limit would be passed.
+    /// </summary>
+    Task<InventoryResult> CommitGrantAsync(GrantCommit grant, CancellationToken cancellationToken);
+
+    /// <summary>
     ///     Changes the character's job in one transaction (Persistence §5): under the character's lock, the stored job
     ///     becomes <see cref="JobChangeCommit.ToJob" /> at job level 1 with job experience 0, and an item worn in the
     ///     commit's slot comes out of it with an <c>unequip</c> ledger row under the operation ID and the inventory

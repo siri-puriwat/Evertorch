@@ -19,6 +19,7 @@ public sealed class SchemaTests
     private const string RestrictViolation = "23001";
     private const string ValueTooLong = "22001";
     private const string AddCharacterSkills = "20260928181417_AddCharacterSkills";
+    private const string AddParties = "20261001131541_AddParties";
 
     private PostgresFixture m_database = null!;
     private Sql m_sql = null!;
@@ -134,6 +135,19 @@ public sealed class SchemaTests
         return m_sql.Scalar(Sql.LedgerInsert(Guid.NewGuid(), character, "pickup"));
     }
 
+    private static string? SqlStateOf(Sql sql, string commandText)
+    {
+        try
+        {
+            sql.Execute(commandText);
+            return null;
+        }
+        catch (PostgresException exception)
+        {
+            return exception.SqlState;
+        }
+    }
+
     private void AssertFailsWith(string sqlState, string commandText)
     {
         PostgresException? failure = null;
@@ -157,6 +171,7 @@ public sealed class SchemaTests
     [TestCase("buy")]
     [TestCase("sell")]
     [TestCase("quest_reward")]
+    [TestCase("boss_reward")]
     public void Ledger_WithAKnownOperationType_IsStored(string operationType)
     {
         long character = NewCharacter();
@@ -223,6 +238,45 @@ public sealed class SchemaTests
         m_sql.Execute(Sql.SessionTokenInsert(account));
 
         AssertFailsWith(RestrictViolation, $"DELETE FROM accounts WHERE id = {account}");
+    }
+
+    // AddBossRewards runs down only while no ledger row is a boss's prize, since the narrower check cannot hold over
+    // one, and the ledger never forgets a row (Persistence §11).
+    [Test]
+    public void AddBossRewards_Down_IsRefusedOverABossReward_AndOtherwiseNarrowsTheTypesUntilUp()
+    {
+        using var rewarded = PostgresFixture.Start();
+        var rewardedSql = new Sql(rewarded.ConnectionString);
+        rewardedSql.Scalar(
+            Sql.LedgerInsert(Guid.NewGuid(), rewardedSql.InsertCharacter(rewardedSql.InsertAccount(), "Rewarded"),
+                "boss_reward"));
+        using var plain = PostgresFixture.Start();
+        var plainSql = new Sql(plain.ConnectionString);
+        long character = plainSql.InsertCharacter(plainSql.InsertAccount(), Sql.UniqueName("Dn"));
+
+        Exception? refused = null;
+        try
+        {
+            EvertorchDatabase.ApplyMigrationsAsync(rewarded.ConnectionString, AddParties, CancellationToken.None)
+                .GetAwaiter()
+                .GetResult();
+        }
+        catch (PostgresException exception)
+        {
+            refused = exception;
+        }
+
+        EvertorchDatabase.ApplyMigrationsAsync(plain.ConnectionString, AddParties, CancellationToken.None)
+            .GetAwaiter()
+            .GetResult();
+        string? afterDown = SqlStateOf(plainSql, Sql.LedgerInsert(Guid.NewGuid(), character, "boss_reward"));
+        EvertorchDatabase.ApplyMigrationsAsync(plain.ConnectionString, CancellationToken.None)
+            .GetAwaiter()
+            .GetResult();
+
+        Assert.That((refused as PostgresException)?.SqlState, Is.EqualTo(CheckViolation), "the prize's row holds");
+        Assert.That(afterDown, Is.EqualTo(CheckViolation), "no prize without the type");
+        Assert.That(SqlStateOf(plainSql, Sql.LedgerInsert(Guid.NewGuid(), character, "boss_reward")), Is.Null);
     }
 
     // AddParties runs down and up again (Persistence §11): no ledger row refers to a party, so the down migration

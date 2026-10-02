@@ -14,6 +14,7 @@ internal sealed class LedgerRow
     public const string BuyOperation = "buy";
     public const string SellOperation = "sell";
     public const string QuestRewardOperation = "quest_reward";
+    public const string BossRewardOperation = "boss_reward";
 
     public long Id { get; set; }
 
