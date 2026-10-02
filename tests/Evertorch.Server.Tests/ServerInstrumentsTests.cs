@@ -254,6 +254,24 @@ public sealed class ServerInstrumentsTests
     }
 
     [Test]
+    public void BossKill_IsCountedByMonster_AndNoOtherDeathIs()
+    {
+        var server = new TestServer(withEveryMap: true, withGrotto: true, withMonsters: true, withMonsterAi: false);
+        using var recorder = new MeterRecorder(server.Instruments.Meter);
+        server.World.TryGetMap(new MapDefinitionId("map.umbral_grotto"), out MapInstance? grotto);
+        MonsterEntity monarch = grotto!.Monsters.Single(monster => monster.Definition.IsBoss);
+        MonsterEntity crawler = grotto.Monsters.First(monster => !monster.Definition.IsBoss);
+
+        server.Combat.Kill(grotto, crawler, null, server.CurrentTick);
+        server.Combat.Kill(grotto, monarch, null, server.CurrentTick);
+
+        Assert.That(
+            Named(recorder, "evertorch.boss.kills")
+                .Select(measurement => (measurement.Value, measurement.Tags.Single())),
+            Is.EqualTo(new[] { (1d, new KeyValuePair<string, object?>("monster", "monster.slime_monarch")) }));
+    }
+
+    [Test]
     public void BuildChanges_CountAJobChange_TaggedJob()
     {
         var server = new TestServer(withNpcs: true);

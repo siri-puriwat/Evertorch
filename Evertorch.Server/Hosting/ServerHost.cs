@@ -127,10 +127,12 @@ public static class ServerHost
         builder.Services.AddSingleton<ITickPhase, MovementSystem>();
         builder.Services.AddSingleton<StatusEffectSystem>();
         builder.Services.AddSingleton<ITickPhase>(services => services.GetRequiredService<StatusEffectSystem>());
+        builder.Services.AddSingleton<BossAnnouncer>();
         builder.Services.AddSingleton<CombatSystem>();
         builder.Services.AddSingleton<ITickPhase>(services => services.GetRequiredService<CombatSystem>());
         builder.Services.AddSingleton<ITickPhase, RegenerationSystem>();
-        builder.Services.AddSingleton<ITickPhase, MonsterAiSystem>();
+        builder.Services.AddSingleton<MonsterAiSystem>();
+        builder.Services.AddSingleton<ITickPhase>(services => services.GetRequiredService<MonsterAiSystem>());
         builder.Services.AddSingleton<ItemDropSystem>();
         builder.Services.AddSingleton<ITickPhase>(services => services.GetRequiredService<ItemDropSystem>());
         builder.Services.AddSingleton<ITickPhase, VisibilityPhase>();

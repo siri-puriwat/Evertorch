@@ -174,6 +174,7 @@ internal sealed class TestServer
         var handshake = new HandshakeValidator(compatibility, tokens, Content);
         Drops = new ItemDropSystem(World, dropRandom ?? Random, Options.Create(world), simulation);
         StatusEffects = new StatusEffectSystem(World, Sessions, Content, stats, sender, Instruments, simulation);
+        Bosses = new BossAnnouncer(Sessions, sender, Instruments, BossLog);
         Combat = new CombatSystem(
             World,
             Sessions,
@@ -187,8 +188,10 @@ internal sealed class TestServer
             new RenewalSkillRules(),
             combatRandom ?? Random,
             Instruments,
+            Bosses,
             Options.Create(world),
             simulation);
+        MonsterAi = new MonsterAiSystem(World, Random, Options.Create(world), simulation, Instruments, Combat, Bosses);
         Items = new ItemActionSystem(
             Persistence,
             sender,
@@ -231,7 +234,7 @@ internal sealed class TestServer
             Instruments,
             Audit,
             Log);
-        AdminQueue = new AdminQueue(Lifetime, Audit);
+        AdminQueue = new AdminQueue(Lifetime, MonsterAi, Audit);
         Metrics = new ServerMetrics(
             new TickLogObserver(new CapturingLogger<TickLogObserver>(), new FakeClock()),
             Instruments);
@@ -245,6 +248,7 @@ internal sealed class TestServer
             Persistence,
             Clock,
             Instruments,
+            MonsterAi,
             simulation);
         Accounts = new AccountService(
             GameStore,
@@ -277,7 +281,7 @@ internal sealed class TestServer
         };
         if (withMonsterAi)
         {
-            phases.Add(new MonsterAiSystem(World, Random, Options.Create(world), simulation, Instruments, Combat));
+            phases.Add(MonsterAi);
         }
 
         Phases = phases;
@@ -290,6 +294,15 @@ internal sealed class TestServer
     public ServerRandom Random { get; }
 
     public CombatSystem Combat { get; }
+
+    public BossAnnouncer Bosses { get; }
+
+    public CapturingLogger<BossAnnouncer> BossLog { get; } = new();
+
+    /// <summary>
+    ///     The monsters' AI, ticked only when the server was made with it.
+    /// </summary>
+    public MonsterAiSystem MonsterAi { get; }
 
     /// <summary>
     ///     The phases in the order this composition registered them.

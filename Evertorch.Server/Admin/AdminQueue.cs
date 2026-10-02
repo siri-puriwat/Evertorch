@@ -1,21 +1,27 @@
 using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
+using Evertorch.Game;
 
 namespace Evertorch.Server
 {
 /// <summary>
 ///     Operator commands that act on the world wait here for the tick thread, which runs them in its
-///     <c>SchedulePersistence</c> phase (System Architecture §8). Only <c>save</c> uses it so far.
+///     <c>SchedulePersistence</c> phase (System Architecture §8): <c>save</c> and <c>boss respawn</c>.
 /// </summary>
 public sealed class AdminQueue : ITickPhase
 {
     private readonly ConcurrentQueue<SaveRequest> m_saves = new();
+    private readonly ConcurrentQueue<BossRespawnRequest> m_bossRespawns = new();
     private readonly CharacterLifetime m_characters;
+    private readonly MonsterAiSystem m_monsters;
     private readonly AuditLog m_audit;
 
-    public AdminQueue(CharacterLifetime characters, AuditLog audit)
+    public AdminQueue(CharacterLifetime characters, MonsterAiSystem monsters, AuditLog audit)
     {
         m_characters = characters;
+        m_monsters = monsters;
         m_audit = audit;
     }
 
@@ -29,6 +35,15 @@ public sealed class AdminQueue : ITickPhase
             m_audit.OperatorSaved(request.Actor, queued);
             request.Result.TrySetResult(queued);
         }
+
+        while (m_bossRespawns.TryDequeue(out BossRespawnRequest? request))
+        {
+            MonsterDefinitionId[] returned = m_monsters.RespawnBossesNow()
+                .Select(boss => boss.Definition.Id)
+                .ToArray();
+            m_audit.OperatorBossRespawned(request.Actor, returned);
+            request.Result.TrySetResult(returned);
+        }
     }
 
     /// <summary>
@@ -40,6 +55,30 @@ public sealed class AdminQueue : ITickPhase
         var request = new SaveRequest(actor);
         m_saves.Enqueue(request);
         return request.Result.Task;
+    }
+
+    /// <summary>
+    ///     Safe from any thread. The task ends with the bosses brought back, none when every boss is alive, once a
+    ///     tick has run the request, and never if the server stops first.
+    /// </summary>
+    public Task<IReadOnlyList<MonsterDefinitionId>> RequestBossRespawn(AdminActor actor)
+    {
+        var request = new BossRespawnRequest(actor);
+        m_bossRespawns.Enqueue(request);
+        return request.Result.Task;
+    }
+
+    private sealed class BossRespawnRequest
+    {
+        public BossRespawnRequest(AdminActor actor)
+        {
+            Actor = actor;
+        }
+
+        public AdminActor Actor { get; }
+
+        public TaskCompletionSource<IReadOnlyList<MonsterDefinitionId>> Result { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
     }
 
     private sealed class SaveRequest

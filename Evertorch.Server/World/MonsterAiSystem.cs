@@ -30,12 +30,14 @@ public sealed class MonsterAiSystem : ITickPhase
     private readonly IRandomSource m_random;
     private readonly ServerInstruments m_instruments;
     private readonly CombatSystem m_combat;
+    private readonly BossAnnouncer m_bosses;
     private readonly int m_tickRate;
     private readonly int m_corpseMs;
     private readonly Dictionary<MapInstance, Navigator> m_navigators = new();
     private readonly List<MonsterEntity> m_monsters = new();
     private readonly List<PendingRespawn> m_respawns = new();
     private readonly List<PendingRespawn> m_due = new();
+    private bool m_hasAnnouncedTheBosses;
 
     public MonsterAiSystem(
         WorldSimulation world,
@@ -43,12 +45,14 @@ public sealed class MonsterAiSystem : ITickPhase
         IOptions<WorldOptions> worldOptions,
         IOptions<SimulationOptions> simulation,
         ServerInstruments instruments,
-        CombatSystem combat)
+        CombatSystem combat,
+        BossAnnouncer bosses)
     {
         m_world = world;
         m_random = random;
         m_instruments = instruments;
         m_combat = combat;
+        m_bosses = bosses;
         m_tickRate = simulation.Value.TickRate;
         m_corpseMs = worldOptions.Value.MonsterCorpseMs;
         foreach (MapInstance map in world.Maps)
@@ -61,8 +65,26 @@ public sealed class MonsterAiSystem : ITickPhase
 
     public void Execute(in TickContext context)
     {
-        long now = (long)(context.Tick - 1) * MillisecondsPerSecond / m_tickRate;
+        long now = NowOf(context.Tick);
         float stepDistance = context.DeltaSeconds;
+
+        // The world spawned its bosses before the first tick, and nothing could log them then (System Architecture
+        // §10).
+        if (!m_hasAnnouncedTheBosses)
+        {
+            m_hasAnnouncedTheBosses = true;
+            foreach (MapInstance map in m_world.Maps)
+            {
+                foreach (MonsterEntity monster in map.Monsters)
+                {
+                    if (monster.Definition.IsBoss && !monster.IsDead)
+                    {
+                        m_bosses.Appeared(map, monster);
+                    }
+                }
+            }
+        }
+
         foreach (MapInstance map in m_world.Maps)
         {
             m_monsters.Clear();
@@ -74,6 +96,61 @@ public sealed class MonsterAiSystem : ITickPhase
         }
 
         Respawn(now);
+    }
+
+    /// <summary>
+    ///     Every boss in the world, alive or waiting to return, and how long until it does (the console's
+    ///     <c>boss</c>; System Architecture §10). Only the tick thread calls it.
+    /// </summary>
+    public IReadOnlyList<BossSummary> DescribeBosses(uint tick)
+    {
+        long now = NowOf(tick);
+        var bosses = new List<BossSummary>();
+        foreach (MapInstance map in m_world.Maps)
+        {
+            foreach (MonsterEntity monster in map.Monsters)
+            {
+                if (monster.Definition.IsBoss && !monster.IsDead)
+                {
+                    bosses.Add(new BossSummary(monster.Definition.Id, map.Definition.Id, true, 0));
+                }
+            }
+        }
+
+        foreach (PendingRespawn respawn in m_respawns)
+        {
+            if (respawn.IsBoss)
+            {
+                bosses.Add(
+                    new BossSummary(
+                        respawn.Spawn.Monster,
+                        respawn.Map.Definition.Id,
+                        false,
+                        Math.Max(0, respawn.DueMs - now)));
+            }
+        }
+
+        return bosses;
+    }
+
+    /// <summary>
+    ///     Brings every boss waiting to return back at once, each heard of as on its own return (the console's
+    ///     <c>boss respawn</c>; System Architecture §10), and returns them. Only the tick thread calls it.
+    /// </summary>
+    public IReadOnlyList<MonsterEntity> RespawnBossesNow()
+    {
+        var returned = new List<MonsterEntity>();
+        for (int index = 0; index < m_respawns.Count; index++)
+        {
+            PendingRespawn respawn = m_respawns[index];
+            if (respawn.IsBoss)
+            {
+                m_respawns.RemoveAt(index--);
+                returned.Add(SpawnFrom(respawn));
+            }
+        }
+
+        return returned;
     }
 
     private static float HorizontalDistance(WorldPosition a, WorldPosition b)
@@ -453,7 +530,12 @@ public sealed class MonsterAiSystem : ITickPhase
             brain.DiedAtMs = now;
             brain.Path.Cancel();
             brain.DesiredDirection = default;
-            m_respawns.Add(new PendingRespawn(map, monster.Spawn, now + RespawnDelay(monster.Spawn, m_random)));
+            m_respawns.Add(
+                new PendingRespawn(
+                    map,
+                    monster.Spawn,
+                    now + RespawnDelay(monster.Spawn, m_random),
+                    monster.Definition.IsBoss));
         }
 
         if (now >= brain.DiedAtMs + m_corpseMs)
@@ -476,17 +558,34 @@ public sealed class MonsterAiSystem : ITickPhase
         foreach (PendingRespawn respawn in m_due)
         {
             m_respawns.Remove(respawn);
-            m_world.SpawnMonster(respawn.Map, respawn.Spawn);
+            SpawnFrom(respawn);
         }
+    }
+
+    private MonsterEntity SpawnFrom(PendingRespawn respawn)
+    {
+        MonsterEntity monster = m_world.SpawnMonster(respawn.Map, respawn.Spawn);
+        if (monster.Definition.IsBoss)
+        {
+            m_bosses.Appeared(respawn.Map, monster);
+        }
+
+        return monster;
+    }
+
+    private long NowOf(uint tick)
+    {
+        return (long)(tick - 1) * MillisecondsPerSecond / m_tickRate;
     }
 
     private sealed class PendingRespawn
     {
-        public PendingRespawn(MapInstance map, MonsterSpawn spawn, long dueMs)
+        public PendingRespawn(MapInstance map, MonsterSpawn spawn, long dueMs, bool isBoss)
         {
             Map = map;
             Spawn = spawn;
             DueMs = dueMs;
+            IsBoss = isBoss;
         }
 
         public MapInstance Map { get; }
@@ -494,6 +593,8 @@ public sealed class MonsterAiSystem : ITickPhase
         public MonsterSpawn Spawn { get; }
 
         public long DueMs { get; }
+
+        public bool IsBoss { get; }
     }
 
     private sealed class Navigator

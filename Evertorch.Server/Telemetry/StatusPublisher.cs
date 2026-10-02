@@ -19,6 +19,7 @@ public sealed class StatusPublisher : ITickPhase
     private readonly PersistenceWorker m_persistence;
     private readonly IMonotonicClock m_clock;
     private readonly ServerInstruments m_instruments;
+    private readonly MonsterAiSystem m_monsters;
     private readonly int m_tickRate;
     private ServerStatus m_current = ServerStatus.Empty;
 
@@ -32,6 +33,7 @@ public sealed class StatusPublisher : ITickPhase
         PersistenceWorker persistence,
         IMonotonicClock clock,
         ServerInstruments instruments,
+        MonsterAiSystem monsters,
         IOptions<SimulationOptions> simulation)
     {
         m_metrics = metrics;
@@ -43,6 +45,7 @@ public sealed class StatusPublisher : ITickPhase
         m_persistence = persistence;
         m_clock = clock;
         m_instruments = instruments;
+        m_monsters = monsters;
         m_tickRate = simulation.Value.TickRate;
         instruments.ObserveStatus(() => Current);
     }
@@ -153,7 +156,8 @@ public sealed class StatusPublisher : ITickPhase
             playersPerMap,
             monstersPerMap,
             entitiesPerMap,
-            players);
+            players,
+            m_monsters.DescribeBosses(tick));
     }
 }
 }

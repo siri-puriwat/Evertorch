@@ -113,6 +113,7 @@ public sealed class GameClient : MonoBehaviour
     private NamePlatePresenter? m_namePlates;
     private ChatBubblePresenter? m_bubbles;
     private ProjectilePresenter? m_projectiles;
+    private AreaTelegraphPresenter? m_telegraphs;
     private Material? m_runtimeMaterial;
     private Material? m_runtimeOverlayMaterial;
     private string m_leaveReason = string.Empty;
@@ -205,6 +206,8 @@ public sealed class GameClient : MonoBehaviour
     public ChatBubblePresenter? Bubbles => m_bubbles;
 
     public ProjectilePresenter? Projectiles => m_projectiles;
+
+    public AreaTelegraphPresenter? Telegraphs => m_telegraphs;
 
     public IReadOnlyDictionary<EntityId, EntityView> RemoteViews => m_remoteViews;
 
@@ -461,6 +464,7 @@ public sealed class GameClient : MonoBehaviour
         }
 
         m_projectiles?.Present(m_localView, m_remoteViews);
+        m_telegraphs?.Present(m_localView, m_remoteViews);
         m_namePlates?.Present(m_localView, m_remoteViews, Camera.main);
         m_bubbles?.Present(m_localView, m_remoteViews, Camera.main, Time.unscaledTime);
     }
@@ -607,6 +611,7 @@ public sealed class GameClient : MonoBehaviour
             Connection.Closed -= OnClosed;
             Connection.ChatLineReceived -= OnChatLine;
             Connection.PartyEventReceived -= OnPartyEvent;
+            Connection.BossAnnouncementReceived -= OnBossAnnouncement;
             Connection.PartyRosterReceived -= Party.Apply;
             Connection.PartyMemberStatusReceived -= Party.Apply;
         }
@@ -637,6 +642,7 @@ public sealed class GameClient : MonoBehaviour
         Connection.Closed += OnClosed;
         Connection.ChatLineReceived += OnChatLine;
         Connection.PartyEventReceived += OnPartyEvent;
+        Connection.BossAnnouncementReceived += OnBossAnnouncement;
         Connection.PartyRosterReceived += Party.Apply;
         Connection.PartyMemberStatusReceived += Party.Apply;
         Status = $"Connecting to {session.Host}:{session.Port}";
@@ -1070,6 +1076,11 @@ public sealed class GameClient : MonoBehaviour
             m_viewCatalog,
             1.0 / Connection.ServerTickRate,
             material);
+        m_telegraphs = new AreaTelegraphPresenter(
+            world,
+            m_contentLoader.Content,
+            1.0 / Connection.ServerTickRate,
+            overlay);
 
         Camera? mainCamera = Camera.main;
         if (mainCamera != null)
@@ -1619,6 +1630,13 @@ public sealed class GameClient : MonoBehaviour
         ChatLog.AddSystem(PartyMessages.Describe(message.Kind, message.Name, PlayedCharacter?.Name));
     }
 
+    // A boss's appearance and fall join the log as grey lines, wherever on its map the player stands (Prototype
+    // Content §2).
+    private void OnBossAnnouncement(BossAnnouncement message)
+    {
+        ChatLog.AddSystem(BossMessages.Describe(message, m_contentLoader.Content));
+    }
+
     // A line said nearby also shows over its speaker (Prototype Content §2).
     private void OnChatLine(ChatReceived line)
     {
@@ -1666,6 +1684,8 @@ public sealed class GameClient : MonoBehaviour
         m_bubbles = null;
         m_projectiles?.Dispose();
         m_projectiles = null;
+        m_telegraphs?.Dispose();
+        m_telegraphs = null;
         m_world = null;
         m_driver = null;
         m_autoAttack = null;

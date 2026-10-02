@@ -29,6 +29,7 @@ public sealed class CombatSystem : ITickPhase
     private readonly ISkillRules m_skillRules;
     private readonly ServerInstruments m_instruments;
     private readonly IRandomSource m_random;
+    private readonly BossAnnouncer m_bosses;
     private readonly int m_tickRate;
     private readonly float m_rangeTolerance;
     private readonly List<WorldEntity> m_due = new();
@@ -48,6 +49,7 @@ public sealed class CombatSystem : ITickPhase
         ISkillRules skillRules,
         IRandomSource random,
         ServerInstruments instruments,
+        BossAnnouncer bosses,
         IOptions<WorldOptions> worldOptions,
         IOptions<SimulationOptions> simulation)
     {
@@ -63,6 +65,7 @@ public sealed class CombatSystem : ITickPhase
         m_skillRules = skillRules;
         m_random = random;
         m_instruments = instruments;
+        m_bosses = bosses;
         m_tickRate = simulation.Value.TickRate;
         m_rangeTolerance = worldOptions.Value.AttackRangeTolerance;
     }
@@ -315,6 +318,10 @@ public sealed class CombatSystem : ITickPhase
             m_progression.AwardKill(map, monster);
             CharacterId killer = source is PlayerEntity player ? player.Character : default;
             m_drops.DropLoot(map, monster, killer, tick);
+            if (monster.Definition.IsBoss)
+            {
+                m_bosses.Fell(map, monster);
+            }
         }
     }
 

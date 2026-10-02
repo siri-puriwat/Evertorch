@@ -26,7 +26,8 @@ public sealed class TelemetryTests
         Assert.That(
             output.ToString().Trim(),
             Is.EqualTo(
-                "Unknown command. Commands: status, players, save, account create|password <login> <password>, shutdown [reason], help"));
+                "Unknown command. Commands: status, players, boss [respawn], save, account create|password <login> "
+                + "<password>, shutdown [reason], help"));
     }
 
     [TestCase("")]
@@ -212,7 +213,8 @@ public sealed class TelemetryTests
 
         Assert.That(output.ToString().Trim(),
             Is.EqualTo(
-                "Commands: status, players, save, account create|password <login> <password>, shutdown [reason], help"));
+                "Commands: status, players, boss [respawn], save, account create|password <login> <password>, "
+                + "shutdown [reason], help"));
     }
 
     [Test]

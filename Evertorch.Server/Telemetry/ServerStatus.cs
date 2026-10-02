@@ -32,7 +32,8 @@ public sealed class ServerStatus
         IReadOnlyDictionary<string, int> playersPerMap,
         IReadOnlyDictionary<string, int> monstersPerMap,
         IReadOnlyDictionary<string, int> entitiesPerMap,
-        IReadOnlyList<PlayerSummary> players)
+        IReadOnlyList<PlayerSummary> players,
+        IReadOnlyList<BossSummary> bosses)
     {
         Tick = tick;
         TickRate = tickRate;
@@ -57,6 +58,7 @@ public sealed class ServerStatus
         MonstersPerMap = monstersPerMap;
         EntitiesPerMap = entitiesPerMap;
         Players = players;
+        Bosses = bosses;
     }
 
     public static ServerStatus Empty { get; } = new(
@@ -82,7 +84,8 @@ public sealed class ServerStatus
         new Dictionary<string, int>(),
         new Dictionary<string, int>(),
         new Dictionary<string, int>(),
-        new PlayerSummary[0]);
+        new PlayerSummary[0],
+        new BossSummary[0]);
 
     public uint Tick { get; }
 
@@ -135,5 +138,7 @@ public sealed class ServerStatus
     public IReadOnlyDictionary<string, int> EntitiesPerMap { get; }
 
     public IReadOnlyList<PlayerSummary> Players { get; }
+
+    public IReadOnlyList<BossSummary> Bosses { get; }
 }
 }

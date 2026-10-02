@@ -248,6 +248,16 @@ public sealed class ClientContentParserTests
         "Skill 'skill.strike': projectile is not a logical key")]
     [TestCase(
         ClientContentParser.SkillsFile,
+        "\"projectile\":\"projectile_strike\"",
+        "\"projectile\":\"projectile_strike\",\"area\":4",
+        "Skill 'skill.strike': area must be 0, or a radius up to 10000 on a skill cast on its caster")]
+    [TestCase(
+        ClientContentParser.SkillsFile,
+        "\"targetType\":\"self\",",
+        "\"targetType\":\"self\",\"area\":-1,",
+        "Skill 'skill.first_aid': area must be 0, or a radius up to 10000 on a skill cast on its caster")]
+    [TestCase(
+        ClientContentParser.SkillsFile,
         "\"schemaVersion\":1",
         "\"schemaVersion\":2",
         "'skills.json' is not readable or has an unsupported schema version")]
@@ -413,6 +423,24 @@ public sealed class ClientContentParserTests
         Assert.That(content, Is.Not.Null, error);
         Assert.That(content!.TryGetSkill(new SkillDefinitionId("skill.first_aid"), out ClientSkill? aid), Is.True);
         Assert.That(aid!.TargetType, Is.EqualTo(SkillTargetType.Ally));
+    }
+
+    // A skill cast on its caster may strike an area, whose radius the client draws as its telegraph (Content Pipeline
+    // §5); a skill that names none has none.
+    [Test]
+    public void Parse_ForASkillWithAnArea_ReadsItsRadius()
+    {
+        string original = Package.DefaultTexts(Maps)[ClientContentParser.SkillsFile];
+        var package = Package.With(
+            ClientContentParser.SkillsFile,
+            original.Replace("\"targetType\":\"self\",", "\"targetType\":\"self\",\"area\":4,"));
+
+        ClientContent? content = ClientContentParser.Parse(package.Manifest, package.Files, out string error);
+
+        Assert.That(content, Is.Not.Null, error);
+        Assert.That(content!.TryGetSkill(new SkillDefinitionId("skill.first_aid"), out ClientSkill? aid), Is.True);
+        Assert.That(content.TryGetSkill(new SkillDefinitionId("skill.strike"), out ClientSkill? strike), Is.True);
+        Assert.That((aid!.AreaRadius, strike!.AreaRadius), Is.EqualTo((4f, 0f)));
     }
 
     [Test]

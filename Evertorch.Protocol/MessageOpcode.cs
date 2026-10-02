@@ -69,6 +69,7 @@ public enum MessageOpcode : ushort
     WornWeaponChanged = 0x8020,
     PartyEvent = 0x8021,
     PartyRoster = 0x8022,
-    PartyMemberStatus = 0x8023
+    PartyMemberStatus = 0x8023,
+    BossAnnouncement = 0x8024
 }
 }

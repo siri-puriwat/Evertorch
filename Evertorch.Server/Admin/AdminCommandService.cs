@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using Evertorch.Game;
 using Microsoft.Extensions.Hosting;
 
 namespace Evertorch.Server
@@ -43,6 +44,16 @@ public sealed class AdminCommandService : IAdminCommandService
     public IReadOnlyList<PlayerSummary> GetPlayers(AdminActor actor)
     {
         return m_status.Current.Players;
+    }
+
+    public IReadOnlyList<BossSummary> GetBosses(AdminActor actor)
+    {
+        return m_status.Current.Bosses;
+    }
+
+    public Task<IReadOnlyList<MonsterDefinitionId>> RespawnBossesAsync(AdminActor actor)
+    {
+        return m_queue.RequestBossRespawn(actor);
     }
 
     public Task<int> SaveAsync(AdminActor actor)

@@ -175,6 +175,9 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
             case MessageOpcode.PartyMemberStatus:
                 OnPartyMemberStatus(payload);
                 break;
+            case MessageOpcode.BossAnnouncement:
+                OnBossAnnouncement(payload);
+                break;
             case MessageOpcode.EntitySnapshot:
                 OnEntitySnapshot(payload);
                 break;
@@ -909,6 +912,11 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
 
     public event Action<PartyMemberStatus>? PartyMemberStatusReceived;
 
+    /// <summary>
+    ///     A boss appeared or fell on the player's map, for the chat log, which outlives the world.
+    /// </summary>
+    public event Action<BossAnnouncement>? BossAnnouncementReceived;
+
     public event Action<ClientWorld>? EnteredWorld;
 
     /// <summary>
@@ -1127,6 +1135,22 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
         else
         {
             PartyEventReceived?.Invoke(message);
+        }
+    }
+
+    private void OnBossAnnouncement(ReadOnlySpan<byte> payload)
+    {
+        if (!BossAnnouncement.TryRead(payload, out BossAnnouncement? message) || message == null)
+        {
+            MalformedMessages++;
+        }
+        else if (World == null)
+        {
+            UnexpectedMessages++;
+        }
+        else
+        {
+            BossAnnouncementReceived?.Invoke(message);
         }
     }
 

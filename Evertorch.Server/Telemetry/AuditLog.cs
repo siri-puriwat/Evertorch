@@ -1,4 +1,7 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
+using Evertorch.Game;
 using Evertorch.Persistence;
 using Evertorch.Protocol;
 using Microsoft.Extensions.Logging;
@@ -83,6 +86,12 @@ public sealed class AuditLog
             LogLevel.Information,
             new EventId(6006, "OperatorPasswordChanged"),
             "Operator {Actor} ({User}) changed the password of account {Account}, ending its session tokens.");
+
+    private static readonly Action<ILogger, string, string, string, Exception?> LogOperatorBossRespawned =
+        LoggerMessage.Define<string, string, string>(
+            LogLevel.Information,
+            new EventId(6008, "OperatorBossRespawned"),
+            "Operator {Actor} ({User}) brought back the bosses: {Bosses}.");
 
     private readonly ILogger m_logger;
     private readonly IMonotonicClock m_clock;
@@ -223,6 +232,15 @@ public sealed class AuditLog
     public void OperatorPasswordChanged(AdminActor actor, AccountId account)
     {
         LogOperatorPasswordChanged(m_logger, actor.Name, actor.User, account.Value, null);
+    }
+
+    /// <summary>
+    ///     The console's <c>boss respawn</c>, naming the bosses it brought back, or none.
+    /// </summary>
+    public void OperatorBossRespawned(AdminActor actor, IReadOnlyList<MonsterDefinitionId> bosses)
+    {
+        string names = bosses.Count == 0 ? "none" : string.Join(", ", bosses.Select(boss => boss.Value));
+        LogOperatorBossRespawned(m_logger, actor.Name, actor.User, names, null);
     }
 
     private static long AccountOf(ClientSession session)

@@ -16,7 +16,8 @@ public sealed class ClientSkill
         SkillTargetType targetType,
         string iconKey,
         string description = "",
-        string projectileKey = "")
+        string projectileKey = "",
+        float areaRadius = 0f)
     {
         Id = id;
         DisplayName = displayName ?? throw new ArgumentNullException(nameof(displayName));
@@ -24,6 +25,7 @@ public sealed class ClientSkill
         IconKey = iconKey ?? throw new ArgumentNullException(nameof(iconKey));
         Description = description ?? throw new ArgumentNullException(nameof(description));
         ProjectileKey = projectileKey ?? throw new ArgumentNullException(nameof(projectileKey));
+        AreaRadius = areaRadius;
     }
 
     public SkillDefinitionId Id { get; }
@@ -43,5 +45,11 @@ public sealed class ClientSkill
     ///     What the skill flies from its caster to its target; empty when it flies nothing.
     /// </summary>
     public string ProjectileKey { get; }
+
+    /// <summary>
+    ///     The radius around its caster that a skill cast on itself strikes, which the player sees as its telegraph
+    ///     (Gameplay Systems §9); 0 for a skill with no area.
+    /// </summary>
+    public float AreaRadius { get; }
 }
 }

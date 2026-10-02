@@ -57,6 +57,11 @@ internal static class WireEnums
         return value >= PartyEventKind.Invited && value <= PartyEventKind.Disbanded;
     }
 
+    public static bool IsDefined(BossAnnouncementKind value)
+    {
+        return value == BossAnnouncementKind.Appeared || value == BossAnnouncementKind.Fell;
+    }
+
     public static bool IsDefined(ChatChannel value)
     {
         return value >= ChatChannel.Nearby && value <= ChatChannel.WhisperSent;

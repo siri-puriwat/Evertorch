@@ -429,6 +429,20 @@ public static class ClientContentParser
                 return null;
             }
 
+            // JsonUtility reads an absent area as 0, which stands for none; only a skill cast on its caster has one.
+            if (float.IsNaN(skill.area)
+                || skill.area < 0f
+                || skill.area > ContentLimits.MaxDistance
+                || (skill.area > 0f && targetType != SkillTargetType.Self))
+            {
+                error = string.Format(
+                    CultureInfo.InvariantCulture,
+                    "Skill '{0}': area must be 0, or a radius up to {1} on a skill cast on its caster.",
+                    skill.id,
+                    ContentLimits.MaxDistance);
+                return null;
+            }
+
             skills.Add(
                 id,
                 new ClientSkill(
@@ -437,7 +451,8 @@ public static class ClientContentParser
                     targetType,
                     skill.icon,
                     skill.description ?? string.Empty,
-                    projectile));
+                    projectile,
+                    skill.area));
         }
 
         return skills;
@@ -915,6 +930,7 @@ public static class ClientContentParser
         public string? icon = string.Empty;
         public string? description = string.Empty;
         public string? projectile = string.Empty;
+        public float area = 0f;
     }
 
     [Serializable]

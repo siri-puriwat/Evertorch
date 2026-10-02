@@ -30,6 +30,7 @@ public sealed class LiveServerDungeonTests
     private const string FieldScene = "11_TrainingField";
     private const string GrottoScene = "12_UmbralGrotto";
     private const string Unlit = "Universal Render Pipeline/Unlit";
+    private const string Monarch = "monster.slime_monarch";
     private const float StartTimeoutSeconds = 30f;
     private const float StepTimeoutSeconds = 20f;
     private const int TestTimeoutMs = 300_000;
@@ -42,6 +43,10 @@ public sealed class LiveServerDungeonTests
 
     // The crawler hall's south end, from where the pack in its middle is in view.
     private static readonly WorldPosition CrawlerHall = new(-22f, 0f, 4f);
+
+    // The corridor from the crawler hall to the boss chamber, and a place 3 m west of the boss's home at (18, 0, 18).
+    private static readonly WorldPosition Corridor = new(0f, 0f, 18f);
+    private static readonly WorldPosition BeforeTheBoss = new(15f, 0f, 18f);
 
     // The Grotto Crawler's tint in the content, "#4B6B3C".
     private static readonly Color CrawlerTint = new Color32(0x4B, 0x6B, 0x3C, 0xFF);
@@ -155,6 +160,96 @@ public sealed class LiveServerDungeonTests
         Assert.That(client.Connection!.MalformedMessages + client.Connection.UnexpectedMessages, Is.Zero);
     }
 
+    // The real client walks into the boss chamber, where the Slime Monarch fights it: the client draws its slam's
+    // telegraph, an unlit ring of 4 m at the boss's feet; then the client brings the boss down and its chat log says so,
+    // and the console's "boss respawn" brings it back, which the log says too (Prototype Content §2). The test package
+    // leaves the boss 1 HP and no dodge, and has its swings and its slam strike for 1.
+    [UnityTest]
+    [Timeout(TestTimeoutMs)]
+    public IEnumerator Boss_TheRealClientDrawsTheSlamsTelegraph_AndLogsTheBossFallingAndAppearing()
+    {
+        string actionsPath = RequirePrerequisites();
+        using var package = LiveTestPackage.WithMonster(
+            Monarch,
+            new Dictionary<string, string>
+            {
+                ["hp"] = "1",
+                ["physicalAttack"] = "0",
+                ["flee"] = "0",
+                ["magicAttack"] = "0"
+            });
+        yield return StartDatabaseAndServer(package.Path);
+        LiveServer server = m_server!;
+        GameClient client = CreateClient(actionsPath);
+        yield return EnterByName(client, ClientName);
+        ClientWorld ground = client.World!;
+        Assert.That(
+            client.Controller!.TryMoveTo(ground.Predictor.Position, new WorldPosition(22.2f, 0f, 0f)),
+            Is.True,
+            "a way into the ground's portal");
+        yield return WaitUntil(
+            () => client.World != null && client.World != ground && client.World.Inventory.IsCurrent,
+            StepTimeoutSeconds);
+        ClientWorld field = client.World!;
+        yield return WalkTo(client, field, FieldEastSide, "by the east wall");
+        Assert.That(
+            client.Controller!.TryMoveTo(field.Predictor.Position, FieldEastPortal),
+            Is.True,
+            "a way into the field's east portal");
+        yield return WaitUntil(
+            () => client.World != null && client.World != field && client.World.Inventory.IsCurrent,
+            StepTimeoutSeconds);
+        ClientWorld grotto = client.World!;
+        Assert.That(grotto.Map.Value, Is.EqualTo("map.umbral_grotto"), $"{client.Status} {server.JoinOutput()}");
+
+        yield return WalkTo(client, grotto, EntranceHall, "in the entrance hall");
+        yield return WalkTo(client, grotto, CrawlerHall, "in the crawler hall");
+        yield return WalkTo(client, grotto, Corridor, "in the corridor");
+        yield return WalkTo(client, grotto, BeforeTheBoss, "before the boss");
+        GameObject? ring = null;
+        yield return WaitUntil(() => (ring = ShownTelegraph()) != null, StepTimeoutSeconds);
+        Assert.That(ring, Is.Not.Null, $"the slam's telegraph: {server.JoinOutput()}");
+        RemoteEntity monarch = grotto.Remotes.Values.Single(remote => remote.DefinitionId == Monarch);
+        Vector3 feet = client.RemoteViews[monarch.Entity].transform.position;
+        Vector3 drawn = ring!.transform.position;
+        Assert.That(ring.GetComponent<MeshFilter>().sharedMesh.bounds.extents.x, Is.EqualTo(4f).Within(1e-3f));
+        Assert.That(ring.GetComponent<MeshRenderer>().sharedMaterial.shader.name, Is.EqualTo(Unlit));
+        Assert.That(new Vector2(drawn.x - feet.x, drawn.z - feet.z).magnitude, Is.LessThan(0.1f), "at its feet");
+
+        client.Connection!.SendAttack(monarch.Entity);
+        float deadline = Time.realtimeSinceStartup + StepTimeoutSeconds;
+        while (!HasLine(client, "The Slime Monarch has fallen.") && Time.realtimeSinceStartup < deadline)
+        {
+            if (client.RemoteViews.TryGetValue(monarch.Entity, out EntityView? view) && view != null)
+            {
+                Vector3 at = view.transform.position;
+                client.Controller!.TryMoveTo(grotto.Predictor.Position, new WorldPosition(at.x - 1f, 0f, at.z));
+            }
+
+            yield return new WaitForSecondsRealtime(0.5f);
+        }
+
+        Assert.That(HasLine(client, "The Slime Monarch has fallen."), Is.True, server.JoinOutput());
+        server.ClearOutput();
+        server.SendCommand("boss respawn");
+        yield return WaitUntil(() => HasLine(client, "The Slime Monarch has appeared."), StepTimeoutSeconds);
+        Assert.That(HasLine(client, "The Slime Monarch has appeared."), Is.True, server.JoinOutput());
+        Assert.That(server.HasOutput("Brought back: monster.slime_monarch."), Is.True, server.JoinOutput());
+        Assert.That(client.Connection.MalformedMessages + client.Connection.UnexpectedMessages, Is.Zero);
+    }
+
+    private static bool HasLine(GameClient client, string text)
+    {
+        return client.ChatLog.Lines.Any(line => line.Text == text);
+    }
+
+    private static GameObject? ShownTelegraph()
+    {
+        return Object.FindObjectsByType<MeshFilter>(FindObjectsSortMode.None)
+            .Select(filter => filter.gameObject)
+            .FirstOrDefault(ring => ring.name == AreaTelegraphPresenter.ObjectName && ring.activeInHierarchy);
+    }
+
     private static EntityView? CrawlerView(GameClient client)
     {
         ClientWorld? world = client.World;
@@ -235,7 +330,7 @@ public sealed class LiveServerDungeonTests
         }
     }
 
-    private IEnumerator StartDatabaseAndServer()
+    private IEnumerator StartDatabaseAndServer(string? contentPath = null)
     {
         Task<LiveDatabase> starting = LiveDatabase.StartAsync();
         yield return new WaitUntil(() => starting.IsCompleted);
@@ -243,7 +338,7 @@ public sealed class LiveServerDungeonTests
         m_database = starting.Result;
 
         LiveServer server = m_server = new LiveServer();
-        server.Start(m_database, "--World:RandomSeed=13");
+        server.Start(m_database, "--World:RandomSeed=13", contentPath);
         Assert.That(server.IsTiedToEditor || !KillOnCloseJob.IsSupported, Is.True, "the server ends with the editor");
         yield return WaitUntil(() => server.TryReadListeningPort(out int _), StartTimeoutSeconds);
     }

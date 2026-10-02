@@ -18,9 +18,10 @@ namespace Evertorch.Server.Tests
 ///     (<see cref="DungeonPackage" />), with three clients built from the client's production networking and gameplay
 ///     code. Three players enter the training ground together, Aldo invites Bree and Cora into a party, and the party
 ///     walks through the ground's portal onto the training field, then through the field's east portal into the Umbral
-///     Grotto, where a pack of Grotto Crawlers links when Aldo attacks one and a Gloom Wisp numbs Bree. Each later
-///     line of Milestone 13 adds its steps here: the boss with its slam and its announcement, the most valuable
-///     player's prize, the quests, and a restart.
+///     Grotto, where a pack of Grotto Crawlers links when Aldo attacks one, a Gloom Wisp numbs Bree, and in its chamber
+///     the Slime Monarch slams: Cora steps out of the telegraph and is spared while Aldo is struck, the party brings the
+///     boss down, and each member hears it fall and, brought back by the console, appear. Each later line of Milestone 13
+///     adds its steps here: the most valuable player's prize, the quests, and a restart.
 /// </summary>
 [TestFixture]
 [NonParallelizable]
@@ -31,6 +32,7 @@ public sealed class DungeonAcceptanceTests
     private const string UmbralGrotto = "map.umbral_grotto";
     private const string GrottoCrawler = "monster.grotto_crawler";
     private const string GloomWisp = "monster.gloom_wisp";
+    private const string SlimeMonarch = "monster.slime_monarch";
     private const string AldoIdentity = "dungeon-aldo";
     private const string AldoName = "Aldo";
     private const string BreeIdentity = "dungeon-bree";
@@ -41,6 +43,14 @@ public sealed class DungeonAcceptanceTests
     private static readonly TimeSpan FightLimit = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan WalkLimit = TimeSpan.FromSeconds(30);
     private static readonly StatusDefinitionId Numbed = new("status.numbed");
+    private static readonly SkillDefinitionId QuakeSlam = new("skill.quake_slam");
+
+    // Aldo 2.5 m west of the boss's home at (18, 0, 18); Bree and Cora 9 m from it, beyond its 6 m of notice; and Cora's
+    // place inside the slam's 4 m.
+    private static readonly WorldPosition BeforeTheBoss = new(15.5f, 0f, 18f);
+    private static readonly WorldPosition HangingBack = new(9f, 0f, 17f);
+    private static readonly WorldPosition WaitingBack = new(9f, 0f, 19f);
+    private static readonly WorldPosition BesideTheBoss = new(16f, 0f, 20f);
 
     private PostgresFixture m_database = null!;
 
@@ -301,6 +311,129 @@ public sealed class DungeonAcceptanceTests
             $"{step}: Bree's attacks and dodge slowed");
     }
 
+    private static bool IsAll(Func<SocketClient, bool> condition, params SocketClient[] clients)
+    {
+        return clients.All(condition);
+    }
+
+    // The party walks back west and up into the corridor, then east into the boss chamber. Aldo goes in first, and the
+    // Slime Monarch takes Aldo for its target; then Cora comes beside it, and once the client sees its slam's cast
+    // begin, Cora walks out of the 4 m and is spared while Aldo, who stays, is struck (Gameplay Systems §9). The party
+    // brings the boss down and each member hears it fall; the console brings it back and each hears it appear (Network
+    // Protocol §9). The test package leaves the boss 60 HP and no dodge, has its swings and its slam strike for 1, and
+    // has it slam whenever it may.
+    private static void MeetTheSlimeMonarch(
+        IAdminCommandService admin,
+        SocketClient aldo,
+        SocketClient bree,
+        SocketClient cora)
+    {
+        const string step = "the boss";
+        SocketClient[] party = { aldo, bree, cora };
+        var heard = new Dictionary<SocketClient, List<string>>();
+        foreach (SocketClient client in party)
+        {
+            var lines = new List<string>();
+            heard.Add(client, lines);
+            client.Connection.BossAnnouncementReceived += announcement =>
+                lines.Add($"{announcement.Kind} {announcement.Monster.Value}");
+        }
+
+        foreach ((SocketClient client, WorldPosition place) in new[]
+                 {
+                     (aldo, BeforeTheBoss), (bree, HangingBack), (cora, WaitingBack)
+                 })
+        {
+            Assert.That(
+                client.Controller.TryMoveTo(client.World.Predictor.Position, place),
+                Is.True,
+                $"{step}: a way into the chamber");
+        }
+
+        Assert.That(
+            SocketClients.PumpUntil(() => IsAll(client => !client.Controller.HasPath, party), WalkLimit, party),
+            Is.True,
+            $"{step}: in the chamber");
+        EntityId boss = aldo.World.Remotes.Values.Single(remote => remote.DefinitionId == SlimeMonarch).Entity;
+        bool isAldoFought = false;
+        aldo.World.AttackStartedReceived += started =>
+            isAldoFought |= started.Attacker == boss && started.Target == aldo.World.LocalEntity;
+        Assert.That(
+            SocketClients.PumpUntil(() => isAldoFought, FightLimit, party),
+            Is.True,
+            $"{step}: the boss swung at Aldo");
+        Assert.That(
+            cora.Controller.TryMoveTo(cora.World.Predictor.Position, BesideTheBoss),
+            Is.True,
+            $"{step}: a way beside the boss");
+        Assert.That(
+            SocketClients.PumpUntil(() => !cora.Controller.HasPath, party),
+            Is.True,
+            $"{step}: Cora beside the boss");
+
+        bool hasSlamBegun = false;
+        bool hasSteppedOut = false;
+        bool isAldoStruck = false;
+        bool isCoraStruck = false;
+        cora.World.SkillCastStartedReceived += started =>
+            hasSlamBegun |= started.Caster == boss && started.Skill == QuakeSlam;
+        aldo.World.SkillResolvedReceived += resolved =>
+            isAldoStruck |= resolved.Skill == QuakeSlam && resolved.Target == aldo.World.LocalEntity;
+        cora.World.SkillResolvedReceived += resolved =>
+            isCoraStruck |= resolved.Skill == QuakeSlam && resolved.Target == cora.World.LocalEntity;
+        Assert.That(
+            SocketClients.PumpUntil(
+                () =>
+                {
+                    if (hasSlamBegun && !hasSteppedOut)
+                    {
+                        hasSteppedOut = cora.Controller.TryMoveTo(cora.World.Predictor.Position, WaitingBack);
+                    }
+
+                    return hasSteppedOut && isAldoStruck;
+                },
+                FightLimit,
+                party),
+            Is.True,
+            $"{step}: a slam began, Cora stepped out, and it struck Aldo");
+        SocketClients.PumpUntil(() => false, TimeSpan.FromSeconds(0.5), party);
+        Assert.That(isCoraStruck, Is.False, $"{step}: the slam spared Cora");
+
+        foreach (SocketClient client in party)
+        {
+            client.Connection.SendTarget(boss);
+        }
+
+        Assert.That(
+            SocketClients.PumpUntil(() => IsAll(client => client.World.Target == boss, party), party),
+            Is.True,
+            $"{step}: every member targeted the boss");
+        foreach (SocketClient client in party)
+        {
+            client.AttackTarget();
+        }
+
+        Assert.That(
+            SocketClients.PumpUntil(
+                () => IsAll(client => heard[client].Contains($"Fell {SlimeMonarch}"), party),
+                FightLimit,
+                party),
+            Is.True,
+            $"{step}: every member heard the boss fall");
+
+        IReadOnlyList<MonsterDefinitionId> returned = admin
+            .RespawnBossesAsync(new AdminActor("acceptance", "test"))
+            .GetAwaiter()
+            .GetResult();
+        Assert.That(returned, Is.EqualTo(new[] { new MonsterDefinitionId(SlimeMonarch) }), $"{step}: brought back");
+        Assert.That(
+            SocketClients.PumpUntil(
+                () => IsAll(client => heard[client].Contains($"Appeared {SlimeMonarch}"), party),
+                party),
+            Is.True,
+            $"{step}: every member heard the boss appear");
+    }
+
     private static bool IsGloomWisp(ClientWorld world, EntityId entity)
     {
         return world.Remotes.TryGetValue(entity, out RemoteEntity? remote) && remote.DefinitionId == GloomWisp;
@@ -326,7 +459,12 @@ public sealed class DungeonAcceptanceTests
                 DungeonPackage.Expose(GrottoCrawler),
                 DungeonPackage.Disarm(GloomWisp),
                 DungeonPackage.Expose(GloomWisp),
-                DungeonPackage.AlwaysCast(GloomWisp)));
+                DungeonPackage.AlwaysCast(GloomWisp),
+                DungeonPackage.Weaken(SlimeMonarch, 60),
+                DungeonPackage.Disarm(SlimeMonarch),
+                DungeonPackage.Expose(SlimeMonarch),
+                DungeonPackage.Muffle(SlimeMonarch),
+                DungeonPackage.AlwaysCast(SlimeMonarch)));
 
         using IHost host = StartHost(root.Path);
         ServerContent content = host.Services.GetRequiredService<ServerContent>();
@@ -351,6 +489,9 @@ public sealed class DungeonAcceptanceTests
 
         MeetTheWispThatNumbs(bree, aldo, bree, cora);
         AssertCleanTraffic("the wisp", aldo, bree, cora);
+
+        MeetTheSlimeMonarch(host.Services.GetRequiredService<IAdminCommandService>(), aldo, bree, cora);
+        AssertCleanTraffic("the boss", aldo, bree, cora);
 
         host.StopAsync().GetAwaiter().GetResult();
     }

@@ -46,6 +46,12 @@ internal static class DungeonPackage
         return files => PackageFixture.SetValue(files, Monsters, monster, "flee", Number(0));
     }
 
+    /// <summary>A monster whose spells strike for 1, the least a strike deals: no magic attack.</summary>
+    public static Action<Dictionary<string, byte[]>> Muffle(string monster)
+    {
+        return files => PackageFixture.SetValue(files, Monsters, monster, "magicAttack", Number(0));
+    }
+
     /// <summary>A monster that casts its first skill at every decision it may.</summary>
     public static Action<Dictionary<string, byte[]>> AlwaysCast(string monster)
     {

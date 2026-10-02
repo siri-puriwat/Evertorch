@@ -116,6 +116,29 @@ public sealed class ClientConnectionTests
         Assert.That(next, Is.EqualTo(expected));
     }
 
+    // A boss's appearance and fall reach the chat log through the connection, which outlives a scene's load; one
+    // outside the world is unexpected (Network Protocol §9).
+    [Test]
+    public void BossAnnouncement_InTheWorld_IsRaised_AndOutsideItIsUnexpected()
+    {
+        var outside = new Harness();
+        outside.ConnectAndReceiveHello();
+        var inside = new Harness();
+        inside.EnterWorld();
+        var heard = new List<string>();
+        inside.Connection.BossAnnouncementReceived += message => heard.Add($"{message.Kind} {message.Name}");
+        var monarch = new MonsterDefinitionId("monster.slime_monarch");
+        var fell = new BossAnnouncement(BossAnnouncementKind.Fell, monarch, "Anna");
+        byte[] payload = Encode(fell.GetEncodedLength(), fell.Write);
+
+        inside.Deliver(ProtocolChannel.Control, payload);
+        outside.Deliver(ProtocolChannel.Control, payload);
+
+        Assert.That(heard, Is.EqualTo(new[] { "Fell Anna" }));
+        Assert.That(inside.Connection.MalformedMessages + inside.Connection.UnexpectedMessages, Is.Zero);
+        Assert.That(outside.Connection.UnexpectedMessages, Is.EqualTo(1));
+    }
+
     [Test]
     public void CharacterList_AfterALogout_IsNotTakenForTheAnswerToAnEarlierCreation()
     {

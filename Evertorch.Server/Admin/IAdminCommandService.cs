@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using Evertorch.Game;
 
 namespace Evertorch.Server
 {
@@ -13,6 +14,14 @@ public interface IAdminCommandService
     ServerStatus GetStatus(AdminActor actor);
 
     IReadOnlyList<PlayerSummary> GetPlayers(AdminActor actor);
+
+    IReadOnlyList<BossSummary> GetBosses(AdminActor actor);
+
+    /// <summary>
+    ///     Brings every boss waiting to return back at once (Gameplay Systems §10), audited. The tick thread does it;
+    ///     the task ends with the bosses brought back.
+    /// </summary>
+    Task<IReadOnlyList<MonsterDefinitionId>> RespawnBossesAsync(AdminActor actor);
 
     /// <summary>
     ///     Queues a checkpoint for every character in the world or in its grace period (Persistence §6). The tick thread

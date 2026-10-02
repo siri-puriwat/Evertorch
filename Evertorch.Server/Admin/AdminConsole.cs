@@ -2,8 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Evertorch.Game;
 
 namespace Evertorch.Server
 {
@@ -13,11 +15,13 @@ namespace Evertorch.Server
 public sealed class AdminConsole
 {
     private const string Help =
-        "Commands: status, players, save, account create|password <login> <password>, shutdown [reason], help";
+        "Commands: status, players, boss [respawn], save, account create|password <login> <password>, "
+        + "shutdown [reason], help";
 
     private const string ShutdownCommand = "shutdown";
     private const string AccountCommand = "account";
     private const string AccountUsage = "Usage: account create|password <login> <password>";
+    private const long MillisecondsPerMinute = 60_000;
 
     private readonly IAdminCommandService m_commands;
     private readonly AdminActor m_actor = AdminActor.LocalConsole;
@@ -70,6 +74,16 @@ public sealed class AdminConsole
         else if (string.Equals(command, "players", StringComparison.OrdinalIgnoreCase))
         {
             WritePlayers(m_commands.GetPlayers(m_actor), output);
+        }
+        else if (string.Equals(command, "boss", StringComparison.OrdinalIgnoreCase))
+        {
+            WriteBosses(m_commands.GetBosses(m_actor), output);
+        }
+        else if (words.Length == 2
+                 && string.Equals(words[0], "boss", StringComparison.OrdinalIgnoreCase)
+                 && string.Equals(words[1], "respawn", StringComparison.OrdinalIgnoreCase))
+        {
+            return RespawnBosses(output);
         }
         else if (string.Equals(command, "save", StringComparison.OrdinalIgnoreCase))
         {
@@ -142,6 +156,30 @@ public sealed class AdminConsole
             CancellationToken.None,
             TaskContinuationOptions.None,
             TaskScheduler.Default);
+    }
+
+    // The answer waits for the tick that brings the bosses back, as an account command waits for the store.
+    private Task RespawnBosses(TextWriter output)
+    {
+        return m_commands.RespawnBossesAsync(m_actor)
+            .ContinueWith(
+                finished => output.WriteLine(DescribeRespawn(finished)),
+                CancellationToken.None,
+                TaskContinuationOptions.None,
+                TaskScheduler.Default);
+    }
+
+    private static string DescribeRespawn(Task<IReadOnlyList<MonsterDefinitionId>> finished)
+    {
+        if (!finished.IsCompletedSuccessfully)
+        {
+            string failure = finished.Exception?.GetBaseException().GetType().Name ?? "cancelled";
+            return $"No boss brought back: the command failed ({failure}).";
+        }
+
+        return finished.Result.Count == 0
+            ? "No boss is waiting to return."
+            : $"Brought back: {string.Join(", ", finished.Result.Select(boss => boss.Value))}.";
     }
 
     // "shutdown" alone, or followed by white space and the reason.
@@ -224,6 +262,30 @@ public sealed class AdminConsole
         {
             status.MonstersPerMap.TryGetValue(map.Key, out int monsters);
             output.WriteLine(Format("map {0}: {1} players, {2} monsters", map.Key, map.Value, monsters));
+        }
+
+        WriteBosses(status.Bosses, output);
+    }
+
+    // A dead boss's return is told in whole minutes, rounded up, as "about" fits a spread of minutes.
+    private static void WriteBosses(IReadOnlyList<BossSummary> bosses, TextWriter output)
+    {
+        if (bosses.Count == 0)
+        {
+            output.WriteLine("No bosses in the world.");
+            return;
+        }
+
+        foreach (BossSummary boss in bosses)
+        {
+            output.WriteLine(
+                boss.IsAlive
+                    ? Format("boss {0} on {1}: alive", boss.Monster.Value, boss.Map.Value)
+                    : Format(
+                        "boss {0} on {1}: returns in about {2} min",
+                        boss.Monster.Value,
+                        boss.Map.Value,
+                        Math.Max(1L, (boss.ReturnsInMs + MillisecondsPerMinute - 1) / MillisecondsPerMinute)));
         }
     }
 

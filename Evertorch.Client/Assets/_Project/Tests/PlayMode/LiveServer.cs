@@ -48,7 +48,10 @@ internal sealed class LiveServer : IDisposable
 
     private static string DllPath => Path.Combine(Repository, ServerDll);
 
-    private static string ContentPath => Path.Combine(Repository, "artifacts", "content", "server");
+    /// <summary>
+    ///     The server package the tools built from the repository's content, which a test may copy and edit.
+    /// </summary>
+    public static string ContentPath => Path.Combine(Repository, "artifacts", "content", "server");
 
     private static string ClientContentFolder =>
         Path.Combine(Application.streamingAssetsPath, StreamingContentLoader.FolderName);
@@ -118,9 +121,10 @@ internal sealed class LiveServer : IDisposable
 
     /// <summary>
     ///     Starts the server on a port it picks itself, so nothing can take one between a probe and the bind, with
-    ///     <paramref name="database" /> as its database.
+    ///     <paramref name="database" /> as its database, and the repository's server package unless
+    ///     <paramref name="contentPath" /> names another.
     /// </summary>
-    public void Start(LiveDatabase database, string extraArguments = "")
+    public void Start(LiveDatabase database, string extraArguments = "", string? contentPath = null)
     {
         var start = new ProcessStartInfo
         {
@@ -129,7 +133,7 @@ internal sealed class LiveServer : IDisposable
             // thumbprint rather than trust. Development sign-in stays on for the bare connections of some tests.
             Arguments = $"\"{DllPath}\" --Network:Port=0 --Health:Port=0 --Gateway:Port=0"
                 + " --Accounts:PasswordIterations=1000 --DevelopmentAuthentication:Enabled=true"
-                + $" --Content:ServerPackagePath=\"{ContentPath}\" {extraArguments}",
+                + $" --Content:ServerPackagePath=\"{contentPath ?? ContentPath}\" {extraArguments}",
             WorkingDirectory = Path.GetDirectoryName(DllPath),
             UseShellExecute = false,
             CreateNoWindow = true,
