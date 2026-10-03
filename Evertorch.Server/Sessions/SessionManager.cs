@@ -317,6 +317,9 @@ public sealed class SessionManager : ITickPhase
             case InboundEventKind.TradeLock:
             case InboundEventKind.TradeConfirm:
             case InboundEventKind.TradeCancel:
+            case InboundEventKind.StorageOpen:
+            case InboundEventKind.StorageDeposit:
+            case InboundEventKind.StorageWithdraw:
                 HandleCommand(session, inboundEvent, tick);
                 break;
             default:
@@ -1043,6 +1046,19 @@ public sealed class SessionManager : ITickPhase
             InboundEventKind.TradeLock => m_trades.TryLock(session),
             InboundEventKind.TradeConfirm => m_trades.TryConfirm(session),
             InboundEventKind.TradeCancel => m_trades.TryCancel(session),
+            InboundEventKind.StorageOpen => m_items.TryOpenStorage(session, command.Target, command.CommandSequence),
+            InboundEventKind.StorageDeposit => m_items.TryDeposit(
+                session,
+                command.Target,
+                command.InventoryItem,
+                command.Quantity,
+                command.CommandSequence),
+            InboundEventKind.StorageWithdraw => m_items.TryWithdraw(
+                session,
+                command.Target,
+                command.InventoryItem,
+                command.Quantity,
+                command.CommandSequence),
             _ => CommandRejectionReason.NotAllowedNow
         };
     }
@@ -1063,6 +1079,9 @@ public sealed class SessionManager : ITickPhase
             case InboundEventKind.CompleteQuest:
             case InboundEventKind.ResetBuild:
             case InboundEventKind.ChangeJob:
+            case InboundEventKind.StorageOpen:
+            case InboundEventKind.StorageDeposit:
+            case InboundEventKind.StorageWithdraw:
                 return true;
             default:
                 return false;

@@ -88,7 +88,8 @@ public readonly struct InboundEvent
 
     /// <summary>
     ///     For <see cref="InboundEventKind.Equip" />, the inventory row to wear; for <see cref="InboundEventKind.UseItem" />,
-    ///     the row to use; for <see cref="InboundEventKind.Sell" />, the row to sell from.
+    ///     the row to use; for <see cref="InboundEventKind.Sell" /> and <see cref="InboundEventKind.StorageDeposit" />, the
+    ///     row to sell or store from; for <see cref="InboundEventKind.StorageWithdraw" />, the storage's row.
     /// </summary>
     public long InventoryItem { get; }
 
@@ -434,6 +435,30 @@ public readonly struct InboundEvent
             inventoryItem: inventoryItem,
             quantity: quantity,
             isAccepted: isAccepted);
+    }
+
+    /// <summary>
+    ///     One of the Storekeeper's commands: a read names only the NPC; a deposit names a bag row and a withdrawal a
+    ///     storage row, each with its quantity.
+    /// </summary>
+    public static InboundEvent ForStorage(
+        InboundEventKind kind,
+        ConnectionId connection,
+        EntityId npc,
+        uint commandSequence,
+        long row = 0,
+        uint quantity = 0)
+    {
+        return new InboundEvent(
+            kind,
+            connection,
+            null,
+            default,
+            default,
+            npc,
+            commandSequence,
+            inventoryItem: row,
+            quantity: quantity);
     }
 
     public static InboundEvent ForCreateCharacter(ConnectionId connection, string name)

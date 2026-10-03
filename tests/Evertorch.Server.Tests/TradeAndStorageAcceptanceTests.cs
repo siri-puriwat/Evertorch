@@ -19,9 +19,10 @@ namespace Evertorch.Server.Tests
 ///     production networking and gameplay code. Anna, stored holding ten Slime Gel, the Iron Sword, and 300 coins, enters
 ///     the training ground; Bobby, of another account, and Cora, a second character of Anna's account, enter beside her.
 ///     Each sees the other two by name, Bobby stands within a trade's reach of Anna, and Cora walks up to the
-///     Quartermaster, beside whom the Storekeeper will stand. Anna asks Bobby to trade, Bobby accepts, Anna offers four
-///     gel, the sword, and 100 coins, both lock and confirm, and the exchange commits once, each hearing its whole
-///     inventory and then the completion. Each later line of Milestone 14 adds its steps here: storage, and a restart.
+///     Quartermaster. Anna asks Bobby to trade, Bobby accepts, Anna offers four gel, the sword, and 100 coins, both lock
+///     and confirm, and the exchange commits once, each hearing its whole inventory and then the completion. Anna then
+///     stores her six gel with the Storekeeper for its fee, Cora takes two of them back there, and Bobby finds his own
+///     storage empty and cannot take from theirs. The restart's line adds its step here.
 /// </summary>
 [TestFixture]
 [NonParallelizable]
@@ -29,6 +30,8 @@ public sealed class TradeAndStorageAcceptanceTests
 {
     private const string TrainingGround = "map.training_ground";
     private const string Quartermaster = "npc.quartermaster";
+    private const string Storekeeper = "npc.storekeeper";
+    private const uint DepositFee = 20;
     private const string SlimeGel = "item.material.slime_gel";
     private const string IronSword = "item.weapon.iron_sword";
     private const string AnnaIdentity = "trade-anna";
@@ -205,6 +208,101 @@ public sealed class TradeAndStorageAcceptanceTests
             $"{step}: Cora walked up to it, at {world.Predictor.Position}");
     }
 
+    // Walks the client up to the Storekeeper through the client's own talk, whose window then opens (Gameplay Systems
+    // §6.1).
+    private static EntityId WalkUpToTheStorekeeper(string step, SocketClient client, SocketClient[] all)
+    {
+        ClientWorld world = client.World;
+        Assert.That(
+            SocketClients.PumpUntil(() => world.Remotes.Values.Any(remote => remote.DefinitionId == Storekeeper), all),
+            Is.True,
+            $"{step}: the Storekeeper in view");
+        EntityId storekeeper = world.Remotes.Values.Single(remote => remote.DefinitionId == Storekeeper).Entity;
+        client.TalkTo(storekeeper);
+        Assert.That(
+            SocketClients.PumpUntil(() => client.NpcWindows.Contains(storekeeper), all),
+            Is.True,
+            $"{step}: walked up to it, at {world.Predictor.Position}");
+        return storekeeper;
+    }
+
+    // Anna stores her six gel for the fee, Cora, of her account, reads them and takes two back, and Bobby, of another
+    // account, reads his own empty storage and cannot take from theirs; each hears only its own (Gameplay Systems
+    // §11.4).
+    private static void Store(SocketClient anna, SocketClient bobby, SocketClient cora)
+    {
+        const string step = "storage";
+        SocketClient[] all = { anna, bobby, cora };
+        var parts = new Dictionary<SocketClient, List<StorageSnapshot>>();
+        var changes = new Dictionary<SocketClient, List<StorageChanged>>();
+        foreach (SocketClient client in all)
+        {
+            var heard = new List<StorageSnapshot>();
+            var changed = new List<StorageChanged>();
+            parts.Add(client, heard);
+            changes.Add(client, changed);
+            client.Connection.StorageSnapshotReceived += heard.Add;
+            client.Connection.StorageChangedReceived += changed.Add;
+        }
+
+        EntityId storekeeper = WalkUpToTheStorekeeper(step, anna, all);
+        anna.Connection.SendStorageOpen(storekeeper);
+        Assert.That(SocketClients.PumpUntil(() => parts[anna].Count == 1, all), Is.True, $"{step}: Anna read it");
+        Assert.That(
+            (parts[anna][0].Revision, parts[anna][0].DepositFee, parts[anna][0].Entries.Count),
+            Is.EqualTo((0u, DepositFee, 0)),
+            $"{step}: empty, and the fee told");
+        InventoryEntry gel = anna.World.Inventory.Rows.Single(row => row.Item.Value == SlimeGel);
+        anna.Connection.SendStorageDeposit(storekeeper, gel.InventoryItem, 6);
+        Assert.That(
+            SocketClients.PumpUntil(
+                () => changes[anna].Count == 1 && anna.World.Inventory.Coins == AnnaCoins - 100 - DepositFee,
+                all),
+            Is.True,
+            $"{step}: Anna stored her gel ({anna.World.LastRejection})");
+        StorageEntry stored = changes[anna][0].Row;
+        Assert.That(
+            (changes[anna][0].NewRevision, stored.Item.Value, stored.Quantity),
+            Is.EqualTo((1u, SlimeGel, 6u)),
+            $"{step}: six gel in storage");
+        Assert.That(anna.World.Inventory.Rows, Is.Empty, $"{step}: Anna's bag is empty");
+
+        WalkUpToTheStorekeeper(step, cora, all);
+        cora.Connection.SendStorageOpen(storekeeper);
+        Assert.That(SocketClients.PumpUntil(() => parts[cora].Count == 1, all), Is.True, $"{step}: Cora read it");
+        Assert.That(
+            parts[cora][0].Entries.Select(entry => (entry.StorageItem, entry.Item.Value, entry.Quantity)),
+            Is.EqualTo(new[] { (stored.StorageItem, SlimeGel, 6u) }),
+            $"{step}: Cora sees Anna's gel");
+        cora.Connection.SendStorageWithdraw(storekeeper, stored.StorageItem, 2);
+        Assert.That(
+            SocketClients.PumpUntil(() => changes[cora].Count == 1, all),
+            Is.True,
+            $"{step}: Cora took two ({cora.World.LastRejection})");
+        Assert.That(
+            (changes[cora][0].PriorRevision, changes[cora][0].NewRevision, changes[cora][0].Row.Quantity),
+            Is.EqualTo((1u, 2u, 4u)),
+            $"{step}: four left");
+        Assert.That(
+            SocketClients.PumpUntil(
+                () => cora.World.Inventory.Rows.Any(row => row.Item.Value == SlimeGel && row.Quantity == 2),
+                all),
+            Is.True,
+            $"{step}: Cora holds two gel");
+
+        WalkUpToTheStorekeeper(step, bobby, all);
+        bobby.Connection.SendStorageOpen(storekeeper);
+        Assert.That(SocketClients.PumpUntil(() => parts[bobby].Count == 1, all), Is.True, $"{step}: Bobby read his");
+        Assert.That(parts[bobby][0].Entries, Is.Empty, $"{step}: Bobby's own storage is empty");
+        bobby.Connection.SendStorageWithdraw(storekeeper, stored.StorageItem, 1);
+        Assert.That(
+            SocketClients.PumpUntil(() => bobby.World.LastRejection == CommandRejectionReason.InvalidTarget, all),
+            Is.True,
+            $"{step}: Bobby cannot take Anna's gel");
+        Assert.That(changes[bobby], Is.Empty, $"{step}: Bobby heard no change");
+        Assert.That(changes[anna], Has.Count.EqualTo(1), $"{step}: Anna heard only her own deposit");
+    }
+
     private void StoreItem(string name, string item, int quantity)
     {
         using var connection = new NpgsqlConnection(m_database.ConnectionString);
@@ -263,6 +361,9 @@ public sealed class TradeAndStorageAcceptanceTests
 
         Trade(anna, bobby, cora);
         AssertCleanTraffic("trade", anna, bobby, cora);
+
+        Store(anna, bobby, cora);
+        AssertCleanTraffic("storage", anna, bobby, cora);
 
         host.StopAsync().GetAwaiter().GetResult();
         Assert.That(

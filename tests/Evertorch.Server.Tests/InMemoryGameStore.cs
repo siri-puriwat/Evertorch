@@ -1076,6 +1076,22 @@ internal sealed class InMemoryGameStore : IGameStore
     ///     Adds <paramref name="rows" /> stacks of <paramref name="item" /> to character <paramref name="id" /> and sets
     ///     its inventory revision, as earlier pickups would have left them.
     /// </summary>
+    /// <summary>
+    ///     Puts <paramref name="quantity" /> of <paramref name="item" /> in the storage of character
+    ///     <paramref name="id" />'s account as a row of its own, as an earlier deposit would have left it; the row's ID.
+    /// </summary>
+    public long PutInStorage(long id, string item, int quantity)
+    {
+        lock (m_gate)
+        {
+            StorageEntry storage = StorageOf(m_characters[id].Account.Value);
+            var row = new StoredStorageItem(++m_lastStorageItem, item, quantity);
+            storage.Items.Add(row);
+            storage.Revision++;
+            return row.Id;
+        }
+    }
+
     public void GiveItems(long id, string item, int rows, int quantity, uint revision)
     {
         lock (m_gate)
@@ -1319,17 +1335,19 @@ internal sealed class InMemoryGameStore : IGameStore
         Row row = m_characters[withdraw.CharacterId];
         StorageEntry storage = StorageOf(row.Account.Value);
         int index = storage.Items.FindIndex(item => item.Id == withdraw.StorageItemId);
-        if (index < 0 || storage.Items[index].Quantity < withdraw.Quantity)
+        if (index < 0
+            || storage.Items[index].Quantity < withdraw.Quantity
+            || !withdraw.StackLimits.TryGetValue(storage.Items[index].ItemDefinitionId, out int stackLimit))
         {
             return Unstored(InventoryStatus.Refused, row, storage);
         }
 
         StoredStorageItem taken = storage.Items[index];
-        int stack = withdraw.StackLimit == 1
+        int stack = stackLimit == 1
             ? -1
             : row.Items.FindIndex(item => item.ItemDefinitionId == taken.ItemDefinitionId);
         int held = stack >= 0 ? row.Items[stack].Quantity : 0;
-        if (held > withdraw.StackLimit - withdraw.Quantity || (stack < 0 && row.Items.Count >= withdraw.MaxRows))
+        if (held > stackLimit - withdraw.Quantity || (stack < 0 && row.Items.Count >= withdraw.MaxRows))
         {
             return Unstored(InventoryStatus.InventoryFull, row, storage);
         }

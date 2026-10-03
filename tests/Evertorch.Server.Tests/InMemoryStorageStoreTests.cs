@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using Evertorch.Game;
 using Evertorch.Persistence;
@@ -90,7 +91,14 @@ public sealed class InMemoryStorageStoreTests
             (found!.Status, found.Coins, found.Row!.Quantity, found.StorageRow!.Quantity, found.StorageRevision),
             Is.EqualTo((InventoryStatus.Committed, 5L, 0, 10, 1u)));
         StorageResult back = m_store.CommitStorageWithdrawAsync(
-                new StorageWithdrawCommit(Guid.NewGuid(), other, found.StorageRow.Id, 4, 999, 100, Now),
+                new StorageWithdrawCommit(
+                    Guid.NewGuid(),
+                    other,
+                    found.StorageRow.Id,
+                    4,
+                    new Dictionary<string, int> { ["item.material.slime_gel"] = 999 },
+                    100,
+                    Now),
                 CancellationToken.None)
             .GetAwaiter()
             .GetResult();

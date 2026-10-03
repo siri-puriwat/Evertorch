@@ -32,6 +32,16 @@ public enum InventoryOperationKind
     ///     A face-to-face trade, one operation of each trader under the trade's one ID, started by the server once both
     ///     confirmed (Gameplay Systems §16).
     /// </summary>
-    Trade = 10
+    Trade = 10,
+
+    /// <summary>
+    ///     A deposit into the account's storage at the Storekeeper, for its fee (Gameplay Systems §11.4).
+    /// </summary>
+    StorageDeposit = 11,
+
+    /// <summary>
+    ///     A withdrawal from the account's storage at the Storekeeper (Gameplay Systems §11.4).
+    /// </summary>
+    StorageWithdraw = 12
 }
 }

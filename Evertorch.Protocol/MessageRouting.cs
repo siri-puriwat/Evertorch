@@ -51,6 +51,9 @@ public static class MessageRouting
             case MessageOpcode.TradeLock:
             case MessageOpcode.TradeConfirm:
             case MessageOpcode.TradeCancel:
+            case MessageOpcode.StorageOpen:
+            case MessageOpcode.StorageDeposit:
+            case MessageOpcode.StorageWithdraw:
             case MessageOpcode.ServerHello:
             case MessageOpcode.WorldEntered:
             case MessageOpcode.EntitySpawn:
@@ -87,6 +90,8 @@ public static class MessageRouting
             case MessageOpcode.MvpAwarded:
             case MessageOpcode.TradeEvent:
             case MessageOpcode.TradeSide:
+            case MessageOpcode.StorageSnapshot:
+            case MessageOpcode.StorageChanged:
                 return true;
             case MessageOpcode.MoveInput:
             case MessageOpcode.StopMovement:

@@ -270,6 +270,53 @@ public sealed class InboundQueueTests
             0u).SetName("TradeCancel");
     }
 
+    private static IEnumerable<TestCaseData> StorageCommands()
+    {
+        yield return new TestCaseData(
+            Payload(StorageOpen.EncodedLength, bytes => new StorageOpen(new EntityId(40), 9).Write(bytes)),
+            InboundEventKind.StorageOpen,
+            0L,
+            0u).SetName("StorageOpen");
+        yield return new TestCaseData(
+            Payload(StorageDeposit.EncodedLength, bytes => new StorageDeposit(new EntityId(40), 42, 5, 9).Write(bytes)),
+            InboundEventKind.StorageDeposit,
+            42L,
+            5u).SetName("StorageDeposit");
+        yield return new TestCaseData(
+            Payload(StorageWithdraw.EncodedLength,
+                bytes => new StorageWithdraw(new EntityId(40), 7, 2, 9).Write(bytes)),
+            InboundEventKind.StorageWithdraw,
+            7L,
+            2u).SetName("StorageWithdraw");
+    }
+
+    [TestCaseSource(nameof(StorageCommands))]
+    public void StorageCommand_ThatIsWellFormed_IsQueuedWithTheNpcTheRowAndItsSequence(
+        byte[] payload,
+        InboundEventKind kind,
+        long row,
+        uint quantity)
+    {
+        InboundQueue queue = CreateQueue(16);
+
+        queue.OnPayload(Peer, ProtocolChannel.Control, payload);
+
+        Assert.That(queue.TryDequeue(out InboundEvent command), Is.True);
+        Assert.That(
+            (command.Kind, command.Target, command.InventoryItem, command.Quantity, command.CommandSequence),
+            Is.EqualTo((kind, new EntityId(40), row, quantity, 9u)));
+    }
+
+    [TestCaseSource(nameof(StorageCommands))]
+    public void StorageCommand_CutShort_IsRejected(byte[] payload, InboundEventKind kind, long row, uint quantity)
+    {
+        InboundQueue queue = CreateQueue(16);
+
+        queue.OnPayload(Peer, ProtocolChannel.Control, payload.Take(payload.Length - 1).ToArray());
+
+        AssertOnlyMalformed(queue, 1);
+    }
+
     [TestCaseSource(nameof(TradeCommands))]
     public void TradeCommand_ThatIsWellFormed_IsQueuedWithWhatItNamesAndItsSequence(
         byte[] payload,

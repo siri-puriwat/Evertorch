@@ -205,6 +205,24 @@ public enum InboundEventKind
     /// <summary>
     ///     The end of the sender's open trade or request, carrying a command sequence.
     /// </summary>
-    TradeCancel = 39
+    TradeCancel = 39,
+
+    /// <summary>
+    ///     A read of the account's storage at the Storekeeper <see cref="InboundEvent.Target" />, carrying a command
+    ///     sequence.
+    /// </summary>
+    StorageOpen = 40,
+
+    /// <summary>
+    ///     <see cref="InboundEvent.Quantity" /> of the bag's row <see cref="InboundEvent.InventoryItem" /> into storage at
+    ///     the Storekeeper <see cref="InboundEvent.Target" />, carrying a command sequence.
+    /// </summary>
+    StorageDeposit = 41,
+
+    /// <summary>
+    ///     <see cref="InboundEvent.Quantity" /> of the storage's row <see cref="InboundEvent.InventoryItem" /> into the bag
+    ///     at the Storekeeper <see cref="InboundEvent.Target" />, carrying a command sequence.
+    /// </summary>
+    StorageWithdraw = 42
 }
 }

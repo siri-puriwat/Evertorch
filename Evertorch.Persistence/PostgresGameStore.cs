@@ -1685,7 +1685,9 @@ WHERE character_quests.state = {CharacterQuestRow.ActiveState} AND character_que
                             item => item.Id == withdraw.StorageItemId && item.AccountId == storage.AccountId,
                             cancellationToken)
                         .ConfigureAwait(false);
-                    if (stored == null || stored.Quantity < withdraw.Quantity)
+                    if (stored == null
+                        || stored.Quantity < withdraw.Quantity
+                        || !withdraw.StackLimits.TryGetValue(stored.ItemDefinitionId, out int stackLimit))
                     {
                         return Unstored(InventoryStatus.Refused, character, storage);
                     }
@@ -1694,11 +1696,11 @@ WHERE character_quests.state = {CharacterQuestRow.ActiveState} AND character_que
                         .Where(item => item.CharacterId == withdraw.CharacterId)
                         .ToListAsync(cancellationToken)
                         .ConfigureAwait(false);
-                    InventoryItemRow? stack = withdraw.StackLimit == 1
+                    InventoryItemRow? stack = stackLimit == 1
                         ? null
                         : rows.FirstOrDefault(item => item.ItemDefinitionId == stored.ItemDefinitionId);
                     int held = stack?.Quantity ?? 0;
-                    if (held > withdraw.StackLimit - withdraw.Quantity ||
+                    if (held > stackLimit - withdraw.Quantity ||
                         (stack == null && rows.Count >= withdraw.MaxRows))
                     {
                         return Unstored(InventoryStatus.InventoryFull, character, storage);

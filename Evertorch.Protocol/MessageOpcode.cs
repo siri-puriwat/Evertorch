@@ -43,6 +43,9 @@ public enum MessageOpcode : ushort
     TradeLock = 0x0023,
     TradeConfirm = 0x0024,
     TradeCancel = 0x0025,
+    StorageOpen = 0x0026,
+    StorageDeposit = 0x0027,
+    StorageWithdraw = 0x0028,
     ServerHello = 0x8001,
     WorldEntered = 0x8003,
     EntitySpawn = 0x8004,
@@ -79,6 +82,8 @@ public enum MessageOpcode : ushort
     BossAnnouncement = 0x8024,
     MvpAwarded = 0x8025,
     TradeEvent = 0x8026,
-    TradeSide = 0x8027
+    TradeSide = 0x8027,
+    StorageSnapshot = 0x8028,
+    StorageChanged = 0x8029
 }
 }

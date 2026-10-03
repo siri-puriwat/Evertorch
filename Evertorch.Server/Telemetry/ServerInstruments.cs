@@ -31,6 +31,7 @@ public sealed class ServerInstruments
     public const string ChatCommandLimit = "session_chat";
     public const string PartyCommandLimit = "session_party";
     public const string TradeCommandLimit = "session_trade";
+    public const string ReadCommandLimit = "session_read";
     public const string AdmissionLimit = "admission";
     public const string SignInAddressLimit = "sign_in_address";
     public const string SignInLoginLimit = "sign_in_login";
@@ -117,6 +118,7 @@ public sealed class ServerInstruments
     private readonly Counter<long> m_tradesEnded;
     private readonly Counter<long> m_tradesCompleted;
     private readonly Counter<long> m_tradeCoins;
+    private readonly Counter<long> m_storageMoves;
 
     public ServerInstruments(IMeterFactory meters)
     {
@@ -161,6 +163,10 @@ public sealed class ServerInstruments
             "evertorch.trade.coins",
             "{coin}",
             "Coins moved between players by committed trades; a transfer, never counted as coins earned or spent.");
+        m_storageMoves = Meter.CreateCounter<long>(
+            "evertorch.storage.moves",
+            "{move}",
+            "Deposits and withdrawals committed, by direction.");
         m_jobDuration = Meter.CreateHistogram<double>(
             "evertorch.persistence.job.duration",
             "ms",
@@ -304,6 +310,12 @@ public sealed class ServerInstruments
         m_tradesEnded.Add(1, new KeyValuePair<string, object?>("reason", reason));
     }
 
+    /// <param name="direction"><c>deposit</c> or <c>withdraw</c>.</param>
+    public void RecordStorageMove(string direction)
+    {
+        m_storageMoves.Add(1, new KeyValuePair<string, object?>("direction", direction));
+    }
+
     public void RecordTradeCompleted(long coins)
     {
         m_tradesCompleted.Add(1);
@@ -426,7 +438,7 @@ public sealed class ServerInstruments
         m_bossRewards.Add(1, new KeyValuePair<string, object?>("placed", placed));
     }
 
-    /// <param name="operation">What moved them: <c>buy</c>, <c>sell</c>, or <c>quest reward</c>.</param>
+    /// <param name="operation">What moved them: <c>buy</c>, <c>sell</c>, <c>quest reward</c>, or <c>storage fee</c>.</param>
     /// <param name="coins">How many coins moved, whichever way.</param>
     public void RecordCoins(string operation, long coins)
     {

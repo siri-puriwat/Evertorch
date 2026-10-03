@@ -462,6 +462,33 @@ public sealed class InboundQueue
                 decoded = InboundEvent.ForTrade(InboundEventKind.TradeCancel, connection,
                     tradeCancel!.CommandSequence);
                 return true;
+            case MessageOpcode.StorageOpen:
+                if (!StorageOpen.TryRead(payload, out StorageOpen? storageOpen))
+                {
+                    return false;
+                }
+
+                decoded = InboundEvent.ForStorage(InboundEventKind.StorageOpen, connection, storageOpen!.Npc,
+                    storageOpen.CommandSequence);
+                return true;
+            case MessageOpcode.StorageDeposit:
+                if (!StorageDeposit.TryRead(payload, out StorageDeposit? deposit))
+                {
+                    return false;
+                }
+
+                decoded = InboundEvent.ForStorage(InboundEventKind.StorageDeposit, connection, deposit!.Npc,
+                    deposit.CommandSequence, deposit.InventoryItem, deposit.Quantity);
+                return true;
+            case MessageOpcode.StorageWithdraw:
+                if (!StorageWithdraw.TryRead(payload, out StorageWithdraw? withdraw))
+                {
+                    return false;
+                }
+
+                decoded = InboundEvent.ForStorage(InboundEventKind.StorageWithdraw, connection, withdraw!.Npc,
+                    withdraw.CommandSequence, withdraw.StorageItem, withdraw.Quantity);
+                return true;
             case MessageOpcode.LearnSkill:
                 if (!LearnSkill.TryRead(payload, out LearnSkill? learn))
                 {

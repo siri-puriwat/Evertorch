@@ -717,6 +717,37 @@ internal sealed class TestServer
         Inbound.OnPayload(connection, ProtocolChannel.Control, payload);
     }
 
+    public void SendStorageOpen(ConnectionId connection, EntityId npc, uint commandSequence)
+    {
+        byte[] payload = new byte[StorageOpen.EncodedLength];
+        new StorageOpen(npc, commandSequence).Write(payload);
+        Inbound.OnPayload(connection, ProtocolChannel.Control, payload);
+    }
+
+    public void SendStorageDeposit(
+        ConnectionId connection,
+        EntityId npc,
+        long inventoryItem,
+        uint quantity,
+        uint commandSequence)
+    {
+        byte[] payload = new byte[StorageDeposit.EncodedLength];
+        new StorageDeposit(npc, inventoryItem, quantity, commandSequence).Write(payload);
+        Inbound.OnPayload(connection, ProtocolChannel.Control, payload);
+    }
+
+    public void SendStorageWithdraw(
+        ConnectionId connection,
+        EntityId npc,
+        long storageItem,
+        uint quantity,
+        uint commandSequence)
+    {
+        byte[] payload = new byte[StorageWithdraw.EncodedLength];
+        new StorageWithdraw(npc, storageItem, quantity, commandSequence).Write(payload);
+        Inbound.OnPayload(connection, ProtocolChannel.Control, payload);
+    }
+
     public void SendAcceptQuest(ConnectionId connection, EntityId npc, string quest, uint commandSequence)
     {
         var message = new AcceptQuest(npc, new QuestDefinitionId(quest), commandSequence);

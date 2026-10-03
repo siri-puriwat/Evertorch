@@ -49,7 +49,8 @@ public sealed class ClientAuthorityTests
                     "InventoryResyncRequest", "EquipItem", "UnequipItem", "UseItem", "BuyItem", "SellItem",
                     "AcceptQuest", "CompleteQuest", "AllocateStat", "LearnSkill", "ResetBuild", "ChangeJob",
                     "PartyInvite", "PartyReply", "PartyLeave", "PartyKick", "PartyLead", "TradeRequest",
-                    "TradeReply", "TradeOffer", "TradeLock", "TradeConfirm", "TradeCancel"
+                    "TradeReply", "TradeOffer", "TradeLock", "TradeConfirm", "TradeCancel", "StorageOpen",
+                    "StorageDeposit", "StorageWithdraw"
                 }),
             "a new client message must be checked against the rules below before it joins this list");
     }

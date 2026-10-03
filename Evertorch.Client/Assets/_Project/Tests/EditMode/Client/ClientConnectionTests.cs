@@ -1334,6 +1334,36 @@ public sealed class ClientConnectionTests
     }
 
     [Test]
+    public void StorageMessages_InTheWorld_AreRaised_AndStorageCommandsGoOutReliably()
+    {
+        var harness = new Harness();
+        harness.EnterWorld();
+        var heard = new List<string>();
+        harness.Connection.StorageSnapshotReceived += message =>
+            heard.Add($"snapshot {message.Revision} {message.DepositFee}");
+        harness.Connection.StorageChangedReceived += message => heard.Add($"changed {message.NewRevision}");
+        var snapshot = new StorageSnapshot(3, 20, 0, 1, Array.Empty<StorageEntry>());
+        var changed = new StorageChanged(3, 4, new StorageEntry(9, new ItemDefinitionId("item.a"), 2));
+        var storekeeper = new EntityId(40);
+        int before = harness.Transport.Sent.Count;
+
+        harness.Deliver(ProtocolChannel.Control, Encode(snapshot.GetEncodedLength(), snapshot.Write));
+        harness.Deliver(ProtocolChannel.Control, Encode(changed.GetEncodedLength(), changed.Write));
+        uint open = harness.Connection.SendStorageOpen(storekeeper);
+        uint deposit = harness.Connection.SendStorageDeposit(storekeeper, 5, 2);
+        uint withdraw = harness.Connection.SendStorageWithdraw(storekeeper, 9, 1);
+        uint nothing = harness.Connection.SendStorageWithdraw(storekeeper, 9, 0);
+
+        Assert.That(heard, Is.EqualTo(new[] { "snapshot 3 20", "changed 4" }));
+        Assert.That((open, deposit, withdraw, nothing), Is.EqualTo((open, open + 1, open + 2, 0u)));
+        FakeClientTransport.SentMessage[] sent = harness.Transport.Sent.Skip(before).ToArray();
+        Assert.That(sent.Select(message => message.Delivery), Is.All.EqualTo(MessageDelivery.ReliableOrdered));
+        Assert.That(StorageDeposit.TryRead(sent[1].Payload, out StorageDeposit? read), Is.True);
+        Assert.That((read!.Npc, read.InventoryItem, read.Quantity), Is.EqualTo((storekeeper, 5L, 2u)));
+        Assert.That(harness.Connection.MalformedMessages + harness.Connection.UnexpectedMessages, Is.Zero);
+    }
+
+    [Test]
     public void TargetChanged_ReachesTheWorld_AndSendTargetGoesOutReliably()
     {
         var harness = new Harness();

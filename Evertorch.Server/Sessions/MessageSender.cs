@@ -78,6 +78,16 @@ public sealed class MessageSender
         m_outbound.Send(connection, m_buffer.AsSpan(0, message.Write(m_buffer)));
     }
 
+    public void Send(ConnectionId connection, StorageSnapshot message)
+    {
+        m_outbound.Send(connection, m_buffer.AsSpan(0, message.Write(m_buffer)));
+    }
+
+    public void Send(ConnectionId connection, StorageChanged message)
+    {
+        m_outbound.Send(connection, m_buffer.AsSpan(0, message.Write(m_buffer)));
+    }
+
     public void Send(ConnectionId connection, PartyEvent message)
     {
         m_outbound.Send(connection, m_buffer.AsSpan(0, message.Write(m_buffer)));

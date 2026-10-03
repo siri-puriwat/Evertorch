@@ -212,6 +212,36 @@ public sealed class MessageFuzzTests
                 ? Encode(message!.GetEncodedLength(), message.Write)
                 : null);
         yield return Case(
+            "StorageOpen",
+            Encode(StorageOpen.EncodedLength, StorageMessageTests.OpenGolden.Write),
+            payload => StorageOpen.TryRead(payload, out StorageOpen? message)
+                ? Encode(StorageOpen.EncodedLength, message!.Write)
+                : null);
+        yield return Case(
+            "StorageDeposit",
+            Encode(StorageDeposit.EncodedLength, StorageMessageTests.DepositGolden.Write),
+            payload => StorageDeposit.TryRead(payload, out StorageDeposit? message)
+                ? Encode(StorageDeposit.EncodedLength, message!.Write)
+                : null);
+        yield return Case(
+            "StorageWithdraw",
+            Encode(StorageWithdraw.EncodedLength, StorageMessageTests.WithdrawGolden.Write),
+            payload => StorageWithdraw.TryRead(payload, out StorageWithdraw? message)
+                ? Encode(StorageWithdraw.EncodedLength, message!.Write)
+                : null);
+        yield return Case(
+            "StorageSnapshot",
+            Encode(StorageMessageTests.SnapshotGolden.GetEncodedLength(), StorageMessageTests.SnapshotGolden.Write),
+            payload => StorageSnapshot.TryRead(payload, out StorageSnapshot? message)
+                ? Encode(message!.GetEncodedLength(), message.Write)
+                : null);
+        yield return Case(
+            "StorageChanged",
+            Encode(StorageMessageTests.ChangedGolden.GetEncodedLength(), StorageMessageTests.ChangedGolden.Write),
+            payload => StorageChanged.TryRead(payload, out StorageChanged? message)
+                ? Encode(message!.GetEncodedLength(), message.Write)
+                : null);
+        yield return Case(
             "TradeSide",
             Encode(TradeMessageTests.SideGolden.GetEncodedLength(), TradeMessageTests.SideGolden.Write),
             payload => TradeSide.TryRead(payload, out TradeSide? message)

@@ -185,6 +185,12 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
             case MessageOpcode.TradeSide:
                 OnTradeSide(payload);
                 break;
+            case MessageOpcode.StorageSnapshot:
+                OnStorageSnapshot(payload);
+                break;
+            case MessageOpcode.StorageChanged:
+                OnStorageChanged(payload);
+                break;
             case MessageOpcode.MvpAwarded:
                 OnMvpAwarded(payload);
                 break;
@@ -843,6 +849,58 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
     }
 
     /// <summary>
+    ///     Asks the Storekeeper <paramref name="npc" /> for the account's storage; 0 while not in the world, else the
+    ///     command's sequence.
+    /// </summary>
+    public uint SendStorageOpen(EntityId npc)
+    {
+        if (State != ClientConnectionState.InWorld)
+        {
+            return 0;
+        }
+
+        uint sequence = NextCommandSequence();
+        SendRouted(MessageOpcode.StorageOpen, new StorageOpen(npc, sequence).Write(m_sendBuffer));
+        return sequence;
+    }
+
+    /// <summary>
+    ///     Stores <paramref name="quantity" /> of the bag's row <paramref name="inventoryItem" /> with the Storekeeper
+    ///     <paramref name="npc" />; 0 when nothing was sent.
+    /// </summary>
+    public uint SendStorageDeposit(EntityId npc, long inventoryItem, uint quantity)
+    {
+        if (State != ClientConnectionState.InWorld || inventoryItem <= 0 || quantity == 0)
+        {
+            return 0;
+        }
+
+        uint sequence = NextCommandSequence();
+        SendRouted(
+            MessageOpcode.StorageDeposit,
+            new StorageDeposit(npc, inventoryItem, quantity, sequence).Write(m_sendBuffer));
+        return sequence;
+    }
+
+    /// <summary>
+    ///     Takes <paramref name="quantity" /> of the storage's row <paramref name="storageItem" /> back into the bag at the
+    ///     Storekeeper <paramref name="npc" />; 0 when nothing was sent.
+    /// </summary>
+    public uint SendStorageWithdraw(EntityId npc, long storageItem, uint quantity)
+    {
+        if (State != ClientConnectionState.InWorld || storageItem <= 0 || quantity == 0)
+        {
+            return 0;
+        }
+
+        uint sequence = NextCommandSequence();
+        SendRouted(
+            MessageOpcode.StorageWithdraw,
+            new StorageWithdraw(npc, storageItem, quantity, sequence).Write(m_sendBuffer));
+        return sequence;
+    }
+
+    /// <summary>
     ///     The trade command <paramref name="commandSequence" /> numbered and the name it carried, so a refusal can
     ///     say what was refused.
     /// </summary>
@@ -1023,6 +1081,16 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
     ///     One side of the player's open trade as it stands, while in the world.
     /// </summary>
     public event Action<TradeSide>? TradeSideReceived;
+
+    /// <summary>
+    ///     One part of the account's storage, answering a read, while in the world.
+    /// </summary>
+    public event Action<StorageSnapshot>? StorageSnapshotReceived;
+
+    /// <summary>
+    ///     One committed change of the account's storage, after the bag's change it went with, while in the world.
+    /// </summary>
+    public event Action<StorageChanged>? StorageChangedReceived;
 
     /// <summary>
     ///     A boss appeared or fell on the player's map, for the chat log, which outlives the world.
@@ -1270,6 +1338,38 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
         {
             World.Trade.Apply(message);
             TradeEventReceived?.Invoke(message);
+        }
+    }
+
+    private void OnStorageSnapshot(ReadOnlySpan<byte> payload)
+    {
+        if (!StorageSnapshot.TryRead(payload, out StorageSnapshot? message) || message == null)
+        {
+            MalformedMessages++;
+        }
+        else if (World == null)
+        {
+            UnexpectedMessages++;
+        }
+        else
+        {
+            StorageSnapshotReceived?.Invoke(message);
+        }
+    }
+
+    private void OnStorageChanged(ReadOnlySpan<byte> payload)
+    {
+        if (!StorageChanged.TryRead(payload, out StorageChanged? message) || message == null)
+        {
+            MalformedMessages++;
+        }
+        else if (World == null)
+        {
+            UnexpectedMessages++;
+        }
+        else
+        {
+            StorageChangedReceived?.Invoke(message);
         }
     }
 

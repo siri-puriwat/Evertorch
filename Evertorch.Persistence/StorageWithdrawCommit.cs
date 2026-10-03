@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace Evertorch.Persistence
 {
@@ -13,20 +14,21 @@ public sealed class StorageWithdrawCommit
         long characterId,
         long storageItemId,
         int quantity,
-        int stackLimit,
+        IReadOnlyDictionary<string, int> stackLimits,
         int maxRows,
         DateTime at)
     {
-        if (quantity < 1 || stackLimit < 1 || maxRows < 1)
+        if (quantity < 1 || maxRows < 1)
         {
-            throw new ArgumentOutOfRangeException(nameof(quantity), "Quantity, stack limit, and rows are at least 1.");
+            throw new ArgumentOutOfRangeException(nameof(quantity), "Quantity and rows are at least 1.");
         }
+
+        StackLimits = stackLimits ?? throw new ArgumentNullException(nameof(stackLimits));
 
         OperationId = operationId;
         CharacterId = characterId;
         StorageItemId = storageItemId;
         Quantity = quantity;
-        StackLimit = stackLimit;
         MaxRows = maxRows;
         At = at;
     }
@@ -39,7 +41,11 @@ public sealed class StorageWithdrawCommit
 
     public int Quantity { get; }
 
-    public int StackLimit { get; }
+    /// <summary>
+    ///     The stack limit of every item the content knows, by item definition ID: a withdrawal learns which item it
+    ///     takes only from the storage row, since the server keeps no view of storage.
+    /// </summary>
+    public IReadOnlyDictionary<string, int> StackLimits { get; }
 
     public int MaxRows { get; }
 

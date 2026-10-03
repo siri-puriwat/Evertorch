@@ -187,7 +187,10 @@ public sealed class SessionCommandLimitTests
             [InboundEventKind.TradeOffer] = ServerInstruments.ItemCommandLimit,
             [InboundEventKind.TradeLock] = ServerInstruments.ItemCommandLimit,
             [InboundEventKind.TradeConfirm] = ServerInstruments.ItemCommandLimit,
-            [InboundEventKind.TradeCancel] = ServerInstruments.ItemCommandLimit
+            [InboundEventKind.TradeCancel] = ServerInstruments.ItemCommandLimit,
+            [InboundEventKind.StorageOpen] = ServerInstruments.ReadCommandLimit,
+            [InboundEventKind.StorageDeposit] = ServerInstruments.ItemCommandLimit,
+            [InboundEventKind.StorageWithdraw] = ServerInstruments.ItemCommandLimit
         };
         var limits = new SessionCommandLimits(Defaults, TestServer.TickRate, 0);
 
@@ -254,6 +257,22 @@ public sealed class SessionCommandLimitTests
         Assert.That(
             Rejections(server, player).Count(rejection => rejection.Reason == CommandRejectionReason.NotAllowedNow),
             Is.EqualTo(1));
+    }
+
+    // Three reads at once, then one a second: a read costs the database a query (Network Protocol §11).
+    [Test]
+    public void ReadBucket_TakesThreeAtOnce_ThenOneASecond()
+    {
+        var limits = new SessionCommandLimits(Defaults, TestServer.TickRate, 0);
+
+        bool[] atOnce = Enumerable.Range(0, 4)
+            .Select(_ => limits.TryTake(InboundEventKind.StorageOpen, 0, out string _))
+            .ToArray();
+        bool early = limits.TryTake(InboundEventKind.StorageOpen, TestServer.TickRate - 1, out string _);
+        bool aSecondLater = limits.TryTake(InboundEventKind.StorageOpen, TestServer.TickRate, out string limit);
+
+        Assert.That(atOnce, Is.EqualTo(new[] { true, true, true, false }));
+        Assert.That((early, aSecondLater, limit), Is.EqualTo((false, true, ServerInstruments.ReadCommandLimit)));
     }
 
     [Test]

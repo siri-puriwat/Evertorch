@@ -245,6 +245,31 @@ public sealed class TradeTests
         Assert.That(rig.Server.PlayerOf(replacement).IsTrading, Is.False, "the new connection is free");
     }
 
+    // Every NPC command is refused while trading, the Storekeeper's included, wherever the trader stands (Network
+    // Protocol §11).
+    [Test]
+    public void WhileTrading_TheStorekeepersCommandsAreRefusedWithThree()
+    {
+        var rig = new TradeRig(new TestServer(withNpcs: true));
+        ConnectionId seven = rig.Enter(7, store => store.GiveItems(7, Potion, 1, 2, 0));
+        ConnectionId eight = rig.Enter(8);
+        long potion = rig.Server.SessionOf(seven).Character!.Inventory.Rows.Single().InventoryItem;
+        EntityId storekeeper = rig.Server.NpcOf("npc.storekeeper").Id;
+        rig.Open(seven, eight, Seven, Eight);
+
+        uint open = rig.Next(seven);
+        rig.Server.SendStorageOpen(seven, storekeeper, open);
+        uint deposit = rig.Next(seven);
+        rig.Server.SendStorageDeposit(seven, storekeeper, potion, 1, deposit);
+        uint withdraw = rig.Next(seven);
+        rig.Server.SendStorageWithdraw(seven, storekeeper, 1, 1, withdraw);
+        rig.Server.Tick();
+
+        Assert.That(
+            new[] { rig.RefusalOf(seven, open), rig.RefusalOf(seven, deposit), rig.RefusalOf(seven, withdraw) },
+            Is.All.EqualTo(CommandRejectionReason.NotAllowedNow));
+    }
+
     [Test]
     public void WhileTrading_TheTradersAreHeldStill_AndRefuseAttacksSkillsAndItemCommands_ButMayChat()
     {

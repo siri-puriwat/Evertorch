@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using NUnit.Framework;
@@ -77,10 +78,21 @@ public sealed class StorageStoreTests
             .GetResult();
     }
 
+    // Both items stack to the same limit here, so a test names one limit for whichever item the row holds.
     private StorageResult Withdraw(long character, long storageRow, int quantity, int stack)
     {
+        return Withdraw(character, storageRow, quantity,
+            new Dictionary<string, int> { [Gel] = stack, [Sword] = stack });
+    }
+
+    private StorageResult Withdraw(
+        long character,
+        long storageRow,
+        int quantity,
+        IReadOnlyDictionary<string, int> stackLimits)
+    {
         return m_store.CommitStorageWithdrawAsync(
-                new StorageWithdrawCommit(Guid.NewGuid(), character, storageRow, quantity, stack, BagRows, Now),
+                new StorageWithdrawCommit(Guid.NewGuid(), character, storageRow, quantity, stackLimits, BagRows, Now),
                 CancellationToken.None)
             .GetAwaiter()
             .GetResult();
@@ -257,6 +269,24 @@ public sealed class StorageStoreTests
         StoredStorage storage = Read(m_sql.InsertAccount());
 
         Assert.That((storage.Revision, storage.Items.Count), Is.EqualTo((0u, 0)));
+    }
+
+    [Test]
+    public void Withdraw_OfAnItemTheContentLacks_IsRefused_AndMovesNothing()
+    {
+        (long account, long character, long other) = NewAccount(Fee);
+        long sword = Give(character, Sword, 1);
+        StorageResult stored = Deposit(character, sword, 1, 1);
+
+        StorageResult refused = Withdraw(
+            other,
+            stored.StorageRow!.Id,
+            1,
+            new Dictionary<string, int> { [Gel] = GelStack });
+
+        Assert.That(
+            (refused.Status, refused.StorageRevision, Read(account).Items.Single().Id),
+            Is.EqualTo((InventoryStatus.Refused, 1u, stored.StorageRow.Id)));
     }
 
     [Test]
