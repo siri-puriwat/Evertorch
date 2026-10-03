@@ -1,0 +1,12 @@
+# As the Crawler Hunt pays for its kills: 1.2 times their base experience, as much job experience, and 0.8 coins a
+# point of it (ten Grotto Crawlers give 1,200).
+id: quest.grotto_hunt
+displayName: Grotto Hunt
+server:
+  giver: npc.gate_warden
+  objective:
+    kill: { monster: monster.grotto_crawler, count: 10 }
+  rewards:
+    baseExperience: 1440
+    jobExperience: 1440
+    currency: 960

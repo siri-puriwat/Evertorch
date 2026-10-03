@@ -21,8 +21,9 @@ namespace Evertorch.Server.Tests
 ///     Grotto, where a pack of Grotto Crawlers links when Aldo attacks one, a Gloom Wisp numbs Bree, and in its chamber
 ///     the Slime Monarch slams: Cora steps out of the telegraph and is spared while Aldo is struck, the party brings the
 ///     boss down, each member hears it fall, its most valuable player alone hears its award once the prize is in its bag,
-///     and each member hears the boss, brought back by the console, appear. Each later line of Milestone 13 adds its
-///     steps here: the quests and a restart.
+///     and each member hears the boss, brought back by the console, appear. Before leaving town each member takes the
+///     Gate Warden's two grotto quests; a crawler the party brings down and the boss's fall count for every member, and
+///     back in town each turns both in. The durability line adds a restart.
 /// </summary>
 [TestFixture]
 [NonParallelizable]
@@ -36,6 +37,9 @@ public sealed class DungeonAcceptanceTests
     private const string SlimeMonarch = "monster.slime_monarch";
     private const string MonarchMantle = "item.armor.monarch_mantle";
     private const string MonarchJelly = "item.material.monarch_jelly";
+    private const string GateWarden = "npc.gate_warden";
+    private const string GrottoHunt = "quest.grotto_hunt";
+    private const string BossQuest = "quest.slime_monarch";
     private const string AldoIdentity = "dungeon-aldo";
     private const string AldoName = "Aldo";
     private const string BreeIdentity = "dungeon-bree";
@@ -204,6 +208,142 @@ public sealed class DungeonAcceptanceTests
         }
     }
 
+    private static string QuestOf(ClientWorld world, string quest)
+    {
+        return world.Quests
+            .Where(entry => entry.Quest.Value == quest)
+            .Select(entry => $"{entry.State} {entry.Progress}/{entry.Count}")
+            .SingleOrDefault() ?? string.Empty;
+    }
+
+    // The player walks up to the Gate Warden, whose window opens on arrival, and returns it.
+    private static EntityId WalkUpToTheGateWarden(string step, SocketClient client, params SocketClient[] party)
+    {
+        ClientWorld world = client.World;
+        RemoteEntity? warden = null;
+        Assert.That(
+            SocketClients.PumpUntil(
+                () => (warden = world.Remotes.Values.FirstOrDefault(remote => remote.DefinitionId == GateWarden))
+                    != null,
+                party),
+            Is.True,
+            $"{step}: the Gate Warden in view");
+        int windows = client.NpcWindows.Count;
+        client.TalkTo(warden!.Entity);
+        Assert.That(
+            SocketClients.PumpUntil(() => client.NpcWindows.Count > windows, WalkLimit, party),
+            Is.True,
+            $"{step}: walked up to the Gate Warden");
+        return warden.Entity;
+    }
+
+    // Each member walks up to the Gate Warden, by the ground's east gate, and takes its two grotto quests (Gameplay
+    // Systems §2.2): the quest log answers both active, nothing counted. The test package's hunt asks for one crawler.
+    private static void AcceptTheGrottoQuests(params SocketClient[] party)
+    {
+        const string step = "the quests";
+        foreach (SocketClient client in party)
+        {
+            EntityId warden = WalkUpToTheGateWarden(step, client, party);
+            client.Connection.SendAcceptQuest(warden, new QuestDefinitionId(GrottoHunt));
+            client.Connection.SendAcceptQuest(warden, new QuestDefinitionId(BossQuest));
+            Assert.That(
+                SocketClients.PumpUntil(
+                    () => QuestOf(client.World, GrottoHunt) == "Active 0/1"
+                        && QuestOf(client.World, BossQuest) == "Active 0/1",
+                    party),
+                Is.True,
+                $"{step}: both taken; {client.World.LastRejection}");
+        }
+    }
+
+    // The whole party brings down the crawler Aldo fought, and its fall counts for every member's Grotto Hunt, struck
+    // or not, as a party's kills do (Gameplay Systems §2.2). The test package leaves the crawlers 100 HP.
+    private static void BringTheCrawlerDown(EntityId crawler, SocketClient aldo, params SocketClient[] party)
+    {
+        const string step = "the hunt";
+        SocketClient[] others = party.Where(client => client != aldo).ToArray();
+        foreach (SocketClient client in others)
+        {
+            client.Connection.SendTarget(crawler);
+        }
+
+        Assert.That(
+            SocketClients.PumpUntil(() => IsAll(client => client.World.Target == crawler, others), party),
+            Is.True,
+            $"{step}: every member targeted Aldo's crawler");
+        foreach (SocketClient client in others)
+        {
+            client.AttackTarget();
+        }
+
+        Assert.That(
+            SocketClients.PumpUntil(
+                () => IsAll(client => QuestOf(client.World, GrottoHunt) == "Active 1/1", party),
+                FightLimit,
+                party),
+            Is.True,
+            $"{step}: the crawler fell, and it counted for every member's Grotto Hunt");
+        foreach (SocketClient client in party)
+        {
+            client.AutoAttack.OnWalkRequested();
+        }
+    }
+
+    // The party walks into the portal from one map toward the next, from its east side, and each follows its
+    // character there (Gameplay Systems §4.2).
+    private static void CrossTo(string step, ServerContent content, string from, string to, params SocketClient[] party)
+    {
+        var destination = new MapDefinitionId(to);
+        MapPortal portal = content.Maps[new MapDefinitionId(from)].Portals
+            .Single(candidate => candidate.DestinationMap == destination);
+        foreach (SocketClient client in party)
+        {
+            Assert.That(
+                client.Controller.TryMoveTo(
+                    client.World.Predictor.Position,
+                    new WorldPosition(portal.Center.X + 0.3f, 0f, portal.Center.Z)),
+                Is.True,
+                $"{step}: a way into the portal to {to}");
+        }
+
+        Assert.That(
+            SocketClients.PumpUntil(
+                () => party.All(client => client.Connection.World?.Map == destination
+                    && client.Connection.World.Inventory.IsCurrent),
+                WalkLimit,
+                party),
+            Is.True,
+            $"{step}: every member followed its character to {to}");
+    }
+
+    // The party walks out of the grotto by its west gate, across the field, and through the field's west gate into
+    // town, where each member turns both quests in at the Gate Warden, one after the other: each is completed, and its
+    // coins come with it (Gameplay Systems §2.2).
+    private static void TurnInTheGrottoQuests(ServerContent content, params SocketClient[] party)
+    {
+        const string step = "the turn-in";
+        CrossTo(step, content, UmbralGrotto, TrainingField, party);
+        CrossTo(step, content, TrainingField, TrainingGround, party);
+        foreach (SocketClient client in party)
+        {
+            EntityId warden = WalkUpToTheGateWarden(step, client, party);
+            foreach (string id in new[] { GrottoHunt, BossQuest })
+            {
+                QuestDefinition quest = content.Quests[new QuestDefinitionId(id)];
+                uint coins = client.World.Inventory.Coins;
+                client.Connection.SendCompleteQuest(warden, quest.Id);
+                Assert.That(
+                    SocketClients.PumpUntil(
+                        () => QuestOf(client.World, id) == $"Completed {quest.Count}/{quest.Count}"
+                            && client.World.Inventory.Coins == coins + (uint)quest.Currency,
+                        party),
+                    Is.True,
+                    $"{step}: {id} completed and paid; {client.World.LastRejection}");
+            }
+        }
+    }
+
     private static bool IsGrottoCrawler(ClientWorld world, EntityId entity)
     {
         return world.Remotes.TryGetValue(entity, out RemoteEntity? remote) && remote.DefinitionId == GrottoCrawler;
@@ -213,7 +353,7 @@ public sealed class DungeonAcceptanceTests
     // back, and its kin within 11 m that see it answer its call, so more than one crawler swings at the party
     // (Gameplay Systems §10). The test package disarms the crawlers, so the party lives on, and takes their dodge away,
     // which no level-1 character's hit could beat.
-    private static void MeetThePackThatLinks(SocketClient aldo, params SocketClient[] party)
+    private static EntityId MeetThePackThatLinks(SocketClient aldo, params SocketClient[] party)
     {
         const string step = "the pack";
         var hall = new WorldPosition(-22f, 0f, 4f);
@@ -250,7 +390,7 @@ public sealed class DungeonAcceptanceTests
             SocketClients.PumpUntil(() => swingers.Count >= 2, FightLimit, party),
             Is.True,
             $"{step}: more than one crawler swung at the party ({swingers.Count}, after {hits} hits by Aldo)");
-        aldo.AutoAttack.OnWalkRequested();
+        return crawler;
     }
 
     // The party walks back down the corridor and east into the wisp gallery, and Bree attacks a Gloom Wisp: it keeps
@@ -433,6 +573,12 @@ public sealed class DungeonAcceptanceTests
         SocketClient mvp = party.Single(client => fell == $"Fell {SlimeMonarch} {names[client]}");
         Assert.That(IsAll(client => heard[client].Contains(fell), party), Is.True, $"{step}: one name for everyone");
         Assert.That(
+            SocketClients.PumpUntil(
+                () => IsAll(client => QuestOf(client.World, BossQuest) == "Active 1/1", party),
+                party),
+            Is.True,
+            $"{step}: the fall counted for every member's quest");
+        Assert.That(
             SocketClients.PumpUntil(() => awards[mvp].Count > 0, FightLimit, party),
             Is.True,
             $"{step}: {names[mvp]} heard the award");
@@ -497,7 +643,9 @@ public sealed class DungeonAcceptanceTests
                 DungeonPackage.Disarm(SlimeMonarch),
                 DungeonPackage.Expose(SlimeMonarch),
                 DungeonPackage.Muffle(SlimeMonarch),
-                DungeonPackage.AlwaysCast(SlimeMonarch)));
+                DungeonPackage.AlwaysCast(SlimeMonarch),
+                DungeonPackage.Weaken(GrottoCrawler, 100),
+                DungeonPackage.Shorten(GrottoHunt, 1)));
 
         using IHost host = StartHost(root.Path);
         ServerContent content = host.Services.GetRequiredService<ServerContent>();
@@ -511,20 +659,29 @@ public sealed class DungeonAcceptanceTests
         FormParty(aldo, bree, cora);
         AssertCleanTraffic("party", aldo, bree, cora);
 
+        AcceptTheGrottoQuests(aldo, bree, cora);
+        AssertCleanTraffic("the quests", aldo, bree, cora);
+
         CrossToTheField(content, aldo, bree, cora);
         AssertCleanTraffic("to the field", aldo, bree, cora);
 
         CrossIntoTheGrotto(content, aldo, bree, cora);
         AssertCleanTraffic("into the grotto", aldo, bree, cora);
 
-        MeetThePackThatLinks(aldo, aldo, bree, cora);
+        EntityId crawler = MeetThePackThatLinks(aldo, aldo, bree, cora);
         AssertCleanTraffic("the pack", aldo, bree, cora);
+
+        BringTheCrawlerDown(crawler, aldo, aldo, bree, cora);
+        AssertCleanTraffic("the hunt", aldo, bree, cora);
 
         MeetTheWispThatNumbs(bree, aldo, bree, cora);
         AssertCleanTraffic("the wisp", aldo, bree, cora);
 
         MeetTheSlimeMonarch(host.Services.GetRequiredService<IAdminCommandService>(), aldo, bree, cora);
         AssertCleanTraffic("the boss", aldo, bree, cora);
+
+        TurnInTheGrottoQuests(content, aldo, bree, cora);
+        AssertCleanTraffic("the turn-in", aldo, bree, cora);
 
         host.StopAsync().GetAwaiter().GetResult();
     }

@@ -153,7 +153,7 @@ public sealed class NpcContentTests
     }
 
     [Test]
-    public void Run_ForRepositoryContent_PlacesTheThreeNpcs_AndTheHuntIsTheGateWardens()
+    public void Run_ForRepositoryContent_PlacesTheThreeNpcs_AndTheQuestsAreTheGateWardens()
     {
         ContentPipelineResult result = ContentPipeline.Run(
             Path.Combine(ContentValidationTests.RepositoryRoot(), "content"));
@@ -188,10 +188,23 @@ public sealed class NpcContentTests
             Assert.That(entry.Price, Is.EqualTo(2 * sellPrice), $"{entry.Item}: twice its sell price");
         }
 
-        QuestDefinition hunt = result.Content.Quests.Single().Definition;
         Assert.That(
-            (hunt.Id.Value, hunt.Giver.Value, hunt.Monster.Value, hunt.Count, hunt.BaseExperience, hunt.Currency),
-            Is.EqualTo(("quest.crawler_hunt", "npc.gate_warden", "monster.forest_crawler", 5, 150, 100)));
+            result.Content.Quests
+                .Select(quest => quest.Definition)
+                .OrderBy(quest => quest.Id.Value, StringComparer.Ordinal)
+                .Select(quest => (quest.Id.Value, quest.Giver.Value, quest.Monster.Value, quest.Count)),
+            Is.EqualTo(
+                new[]
+                {
+                    ("quest.crawler_hunt", "npc.gate_warden", "monster.forest_crawler", 5),
+                    ("quest.grotto_hunt", "npc.gate_warden", "monster.grotto_crawler", 10),
+                    ("quest.slime_monarch", "npc.gate_warden", "monster.slime_monarch", 1)
+                }));
+        QuestDefinition hunt = result.Content.Quests.Single(quest => quest.Definition.Id.Value == "quest.crawler_hunt")
+            .Definition;
+        Assert.That(
+            (hunt.BaseExperience, hunt.JobExperience, hunt.Currency),
+            Is.EqualTo((150, 150, 100)));
         Assert.That(
             result.Content.Npcs.Single(npc => npc.Definition.Id.Value == "npc.gate_warden").Definition.HasShop,
             Is.False);

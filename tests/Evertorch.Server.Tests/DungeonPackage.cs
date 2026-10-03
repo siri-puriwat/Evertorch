@@ -15,6 +15,7 @@ internal static class DungeonPackage
 {
     private const string Monsters = "monsters.json";
     private const string Maps = "maps.json";
+    private const string Quests = "quests.json";
 
     public static Dictionary<string, byte[]> Build(params Action<Dictionary<string, byte[]>>[] edits)
     {
@@ -56,6 +57,12 @@ internal static class DungeonPackage
     public static Action<Dictionary<string, byte[]>> AlwaysCast(string monster)
     {
         return files => PackageFixture.SetValue(files, Monsters, monster, "skills[0].chance", Number(1));
+    }
+
+    /// <summary>A quest that asks for fewer kills, so a test earns it in a few.</summary>
+    public static Action<Dictionary<string, byte[]>> Shorten(string quest, int count)
+    {
+        return files => PackageFixture.SetValue(files, Quests, quest, "count", Number(count));
     }
 
     public static Action<Dictionary<string, byte[]>> Respawn(string map, string monster, int respawnMs)

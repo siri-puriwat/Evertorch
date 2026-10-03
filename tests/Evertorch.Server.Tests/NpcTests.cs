@@ -202,7 +202,14 @@ public sealed class NpcTests
         Assert.That(
             warden.Offers.Select(offer =>
                 (offer.Quest.Value, offer.Monster.Value, offer.Count, offer.BaseExperience, offer.Coins)),
-            Is.EqualTo(new[] { ("quest.crawler_hunt", "monster.forest_crawler", (ushort)5, 150ul, 100u) }));
+            Is.EqualTo(
+                new[]
+                {
+                    ("quest.crawler_hunt", "monster.forest_crawler", (ushort)5, 150ul, 100u),
+                    ("quest.grotto_hunt", "monster.grotto_crawler", (ushort)10, 1440ul, 960u),
+                    ("quest.slime_monarch", "monster.slime_monarch", (ushort)1, 2400ul, 1600u)
+                }),
+            "the Gate Warden's quests, by ID");
         NpcServices guildmaster = server.World.Maps.SelectMany(map => map.Npcs)
             .Single(npc => npc.DefinitionId == "npc.guildmaster")
             .Services;
@@ -219,7 +226,7 @@ public sealed class NpcTests
         Assert.That(shop.JobChanges.Concat(warden.JobChanges), Is.Empty, "only the Guildmaster changes jobs");
         Assert.That(
             (shop.GetEncodedLength(), warden.GetEncodedLength(), guildmaster.GetEncodedLength()),
-            Is.EqualTo((457, 80, 78)));
+            Is.EqualTo((457, 211, 78)));
     }
 
     [Test]

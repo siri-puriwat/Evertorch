@@ -1,0 +1,12 @@
+# A party's quest: the Crawler Hunt's rates on one member's share when three bring the Slime Monarch's 6,000 base
+# experience down together (2,000).
+id: quest.slime_monarch
+displayName: The Slime Monarch
+server:
+  giver: npc.gate_warden
+  objective:
+    kill: { monster: monster.slime_monarch, count: 1 }
+  rewards:
+    baseExperience: 2400
+    jobExperience: 2400
+    currency: 1600

@@ -135,7 +135,7 @@ public sealed class ServerContentNpcTests
     }
 
     [Test]
-    public void Load_ForRepositoryContent_ReadsTheThreeNpcsAndTheHunt()
+    public void Load_ForRepositoryContent_ReadsTheThreeNpcsAndTheQuests()
     {
         ServerContent content = ServerContentLoader.Load(PackageFixture.BuildRepositoryPackage());
 
@@ -147,7 +147,9 @@ public sealed class ServerContentNpcTests
         Assert.That(
             content.Npcs.Values.Where(npc => npc.OffersReset).Select(npc => npc.Id.Value),
             Is.EqualTo(new[] { "npc.guildmaster" }));
-        Assert.That(content.Quests.Keys.Select(id => id.Value), Is.EqualTo(new[] { "quest.crawler_hunt" }));
+        Assert.That(
+            content.Quests.Keys.Select(id => id.Value),
+            Is.EquivalentTo(new[] { "quest.crawler_hunt", "quest.grotto_hunt", "quest.slime_monarch" }));
         Assert.That(
             content.Maps[new MapDefinitionId(Ground)].Npcs.Select(npc => npc.Npc.Value),
             Is.EqualTo(new[] { Quartermaster, "npc.gate_warden", "npc.guildmaster" }));
@@ -216,7 +218,9 @@ public sealed class ServerContentNpcTests
                 {
                     "maps.json: map.training_ground: places NPC 'npc.quartermaster', which 'map.training_ground' "
                     + "already places",
-                    "quests.json: quest.crawler_hunt: is given by NPC 'npc.gate_warden', which no map places"
+                    "quests.json: quest.crawler_hunt: is given by NPC 'npc.gate_warden', which no map places",
+                    "quests.json: quest.grotto_hunt: is given by NPC 'npc.gate_warden', which no map places",
+                    "quests.json: quest.slime_monarch: is given by NPC 'npc.gate_warden', which no map places"
                 }));
     }
 

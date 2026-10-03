@@ -43,6 +43,16 @@ public sealed class DungeonContentTests
         return result.Content.Maps.Single(map => map.Definition.Id.Value == id).Definition;
     }
 
+    private static QuestDefinition QuestOf(ContentPipelineResult result, string id)
+    {
+        return result.Content.Quests.Single(quest => quest.Definition.Id.Value == id).Definition;
+    }
+
+    private static MonsterDefinition MonsterOf(ContentPipelineResult result, string id)
+    {
+        return result.Content.Monsters.Single(monster => monster.Definition.Id.Value == id).Definition;
+    }
+
     // The entrance hall in the south-west, the crawler hall, the wisp gallery, and the boss chamber; every room can be
     // walked to from the spawn point within the monsters' path budget.
     [TestCase(-18.5f, 15.5f, "the crawler hall")]
@@ -94,6 +104,33 @@ public sealed class DungeonContentTests
         Assert.That(sold.Intersect(tier), Is.Empty, "no shop sells it");
         Assert.That(dropping, Is.Not.Empty);
         Assert.That(dropping.Intersect(spawnedOutside), Is.Empty, "no monster outside the grotto drops it");
+    }
+
+    // The Gate Warden's two quests pay as the Crawler Hunt pays for its kills: 1.2 times their base experience, as much
+    // job experience, and 0.8 coins a point; the boss's on one member's share of a party of three.
+    [Test]
+    public void Run_ForRepositoryContent_GivesTheGrottoHuntAndTheSlimeMonarchAtTheGateWarden()
+    {
+        ContentPipelineResult result = RepositoryContent();
+        QuestDefinition hunt = QuestOf(result, "quest.grotto_hunt");
+        QuestDefinition boss = QuestOf(result, "quest.slime_monarch");
+        int killed = hunt.Count * MonsterOf(result, hunt.Monster.Value).BaseExperience;
+        int share = MonsterOf(result, Monarch).BaseExperience / 3;
+
+        Assert.That(
+            (hunt.DisplayName, hunt.Giver.Value, hunt.Monster.Value, hunt.Count),
+            Is.EqualTo(("Grotto Hunt", "npc.gate_warden", "monster.grotto_crawler", 10)));
+        Assert.That(
+            (boss.DisplayName, boss.Giver.Value, boss.Monster.Value, boss.Count),
+            Is.EqualTo(("The Slime Monarch", "npc.gate_warden", Monarch, 1)));
+        Assert.That(
+            (hunt.BaseExperience, hunt.JobExperience, hunt.Currency),
+            Is.EqualTo((killed * 6 / 5, killed * 6 / 5, killed * 4 / 5)),
+            "1,440, 1,440, and 960 for ten crawlers' 1,200");
+        Assert.That(
+            (boss.BaseExperience, boss.JobExperience, boss.Currency),
+            Is.EqualTo((share * 6 / 5, share * 6 / 5, share * 4 / 5)),
+            "2,400, 2,400, and 1,600 for a third of the boss's 6,000");
     }
 
     // Each step grows by ten more than the one before, from 30 at level 1 to 3,020 at level 24; a table of n entries

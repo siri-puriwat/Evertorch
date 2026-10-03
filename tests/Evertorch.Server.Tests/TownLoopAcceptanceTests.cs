@@ -239,11 +239,14 @@ public sealed class TownLoopAcceptanceTests
             .Union(content.Items.Values.Where(item => item.SellPrice > 0).Select(item => item.Id.Value))
             .OrderBy(item => item, StringComparer.Ordinal)
             .ToArray();
+        string[] given = content.Quests.Values
+            .Where(quest => quest.Giver == new NpcDefinitionId(GateWarden))
+            .Select(quest => quest.Id.Value)
+            .OrderBy(quest => quest, StringComparer.Ordinal)
+            .ToArray();
         Assert.That(shop!.Entries.Select(entry => entry.Item.Value), Is.EqualTo(traded), $"{step}: the shop");
-        Assert.That(
-            warden!.Offers.Select(offer => offer.Quest.Value),
-            Is.EqualTo(new[] { CrawlerHunt }),
-            $"{step}: the quest");
+        Assert.That(given, Does.Contain(CrawlerHunt), $"{step}: the hunt is the Gate Warden's");
+        Assert.That(warden!.Offers.Select(offer => offer.Quest.Value), Is.EqualTo(given), $"{step}: the quests");
 
         RemoteEntity quartermaster = NpcInView(world, Quartermaster)!;
         Assert.That(client.TalkToNearest(), Is.EqualTo(quartermaster.Entity), $"{step}: the nearer NPC");

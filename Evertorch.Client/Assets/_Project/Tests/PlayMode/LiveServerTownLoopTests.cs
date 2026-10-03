@@ -379,15 +379,16 @@ public sealed class LiveServerTownLoopTests : InputTestFixture
         yield return WalkNearTheGateWarden(client);
         yield return WalkUpTo(client, mouse, window, GateWardenPrefab);
 
+        // The Crawler Hunt comes first of the Gate Warden's quests, so its Accept is the window's first.
         Assert.That(Press(window, "Accept"), Is.True, window.Text);
         yield return WaitUntil(
             () => bar.QuestText == "Forest Crawler 0/5"
                 && lines.Text.Contains("Accepted Crawler Hunt.")
-                && window.Text.EndsWith("\nProgress: 0/5"),
+                && window.Text.Contains("\nProgress: 0/5\n"),
             StepTimeoutSeconds);
         Assert.That(bar.QuestText, Is.EqualTo("Forest Crawler 0/5"), window.Text);
         Assert.That(lines.Text, Does.Contain("Accepted Crawler Hunt."));
-        Assert.That(window.Text, Does.EndWith("\nProgress: 0/5"));
+        Assert.That(window.Text, Does.Contain("\nProgress: 0/5\n"));
 
         ClientConnection connection = client.Connection!;
         client.Logout();
@@ -403,8 +404,8 @@ public sealed class LiveServerTownLoopTests : InputTestFixture
         yield return WalkUpTo(client, mouse, window, GateWardenPrefab);
 
         Assert.That(Press(window, "Turn in"), Is.True, window.Text);
-        yield return WaitUntil(() => window.Text.EndsWith("\nCompleted"), StepTimeoutSeconds);
-        Assert.That(window.Text, Does.EndWith("\nCompleted"), $"turned in: {client.World!.LastRejection}");
+        yield return WaitUntil(() => window.Text.Contains("\nCompleted\n"), StepTimeoutSeconds);
+        Assert.That(window.Text, Does.Contain("\nCompleted\n"), $"turned in: {client.World!.LastRejection}");
         yield return WaitUntil(() => inventory.CoinsText == "Coins: 100", StepTimeoutSeconds);
         Assert.That(inventory.CoinsText, Is.EqualTo("Coins: 100"));
         Assert.That(client.World.Level, Is.EqualTo(3), "150 base experience through two levels");
@@ -443,8 +444,8 @@ public sealed class LiveServerTownLoopTests : InputTestFixture
         yield return WaitUntil(() => inventory.CoinsText == "Coins: 100", StepTimeoutSeconds);
         Assert.That(inventory.CoinsText, Is.EqualTo("Coins: 100"));
         yield return WalkUpTo(client, mouse, window, GateWardenPrefab);
-        yield return WaitUntil(() => window.Text.EndsWith("\nCompleted"), StepTimeoutSeconds);
-        Assert.That(window.Text, Does.EndWith("\nCompleted"), "the quest kept completed");
+        yield return WaitUntil(() => window.Text.Contains("\nCompleted\n"), StepTimeoutSeconds);
+        Assert.That(window.Text, Does.Contain("\nCompleted\n"), "the quest kept completed");
         Assert.That(connection.MalformedMessages + connection.UnexpectedMessages, Is.Zero);
     }
 
