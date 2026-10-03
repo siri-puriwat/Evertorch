@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using Evertorch.Game;
 using Evertorch.Protocol;
 using NUnit.Framework;
+using UnityEngine;
 
 namespace Evertorch.Client.Tests.EditMode
 {
@@ -14,7 +15,7 @@ public sealed class EntityViewKeysTests
         var monster = new ClientMonster(new MonsterDefinitionId("monster.a"), "A", "monster_a", "monster_a_icon");
         var item = new ClientItem(new ItemDefinitionId("item.material.a"), "A", ItemType.Material, "pickup_a",
             "item_a_icon");
-        var npc = new ClientNpc(new NpcDefinitionId("npc.a"), "A", "npc_a");
+        var npc = new ClientNpc(new NpcDefinitionId("npc.a"), "A", "npc_a", Color.blue);
         return new ClientContent(
             "0000000000000000",
             new Dictionary<MapDefinitionId, ClientMap>(),
@@ -37,6 +38,18 @@ public sealed class EntityViewKeysTests
     public void ForEntity_WhenTheContentDoesNotKnowIt_IsEmpty(EntityKind kind, string definitionId)
     {
         Assert.That(EntityViewKeys.ForEntity(CreateContent(), kind, definitionId), Is.Empty);
+    }
+
+    [Test]
+    public void BodyTintOf_AKnownNpc_IsItsTint_AndAnUnknownOneNone()
+    {
+        ClientContent content = CreateContent();
+
+        Assert.That(EntityViewKeys.BodyTintOf(content, EntityKind.Npc, "npc.a"), Is.EqualTo((Color?)Color.blue));
+        Assert.That(EntityViewKeys.BodyTintOf(content, EntityKind.Npc, "npc.unknown"), Is.Null);
+        Assert.That(EntityViewKeys.BodyTintOf(content, EntityKind.Player, "npc.a"), Is.Null);
+        Assert.That(EntityViewKeys.BodyTintOf(content, EntityKind.Monster, "monster.a"), Is.Null, "its model's own");
+        Assert.That(EntityViewKeys.BodyTintOf(null, EntityKind.Npc, "npc.a"), Is.Null);
     }
 
     [Test]

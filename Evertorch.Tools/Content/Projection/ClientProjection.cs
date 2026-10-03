@@ -143,7 +143,7 @@ internal static class ClientProjection
     }
 
     // A shop's prices and a quest's objective and rewards travel on the wire, where the player sees them (Content
-    // Pipeline §5); the package holds names and the NPC's prefab only.
+    // Pipeline §5); the package holds names and the NPC's prefab and tint only.
     private static void WriteNpcs(Utf8JsonWriter writer, ContentSet content)
     {
         BeginFile(writer);
@@ -153,6 +153,11 @@ internal static class ClientProjection
             writer.WriteString("id", authored.Definition.Id.Value);
             writer.WriteString("displayName", authored.Definition.DisplayName);
             writer.WriteString("prefab", authored.Prefab);
+            if (authored.Tint != null)
+            {
+                writer.WriteString("tint", authored.Tint);
+            }
+
             writer.WriteEndObject();
         }
 

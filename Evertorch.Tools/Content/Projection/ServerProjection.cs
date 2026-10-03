@@ -248,6 +248,11 @@ internal static class ServerProjection
             writer.WriteEndArray();
             writer.WriteBoolean("reset", npc.OffersReset);
             writer.WriteBoolean("jobChange", npc.OffersJobChange);
+            if (npc.DepositFee != null)
+            {
+                writer.WriteNumber("depositFee", npc.DepositFee.Value);
+            }
+
             writer.WriteEndObject();
         }
 

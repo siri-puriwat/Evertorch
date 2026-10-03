@@ -61,7 +61,7 @@ public sealed class ContentProjectionTests
             "schemaVersion", "definitions", "id", "displayName", "level", "prefab", "icon", "projectile",
             "scale", "tint", "boss"
         },
-        ["npcs.json"] = new[] { "schemaVersion", "definitions", "id", "displayName", "prefab" },
+        ["npcs.json"] = new[] { "schemaVersion", "definitions", "id", "displayName", "prefab", "tint" },
         ["quests.json"] = new[] { "schemaVersion", "definitions", "id", "displayName" },
         ["skills.json"] = new[]
         {

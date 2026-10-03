@@ -1052,9 +1052,12 @@ public static class ServerContentLoader
 
         bool offersReset = entry.RequiredBool("reset");
         bool offersJobChange = entry.RequiredBool("jobChange");
+        int? depositFee = entry.Has("depositFee")
+            ? entry.RequiredInt("depositFee", 0, ContentLimits.MaxDepositFee)
+            : null;
         entry.ReportUnexpectedProperties();
         return problems.Count == problemsBefore
-            ? new NpcDefinition(id, displayName, shop.AsReadOnly(), offersReset, offersJobChange)
+            ? new NpcDefinition(id, displayName, shop.AsReadOnly(), offersReset, offersJobChange, depositFee)
             : null;
     }
 

@@ -6,7 +6,7 @@ namespace Evertorch.Game
 /// <summary>
 ///     An NPC (Gameplay Systems §6.1): its name and, when it keeps a shop, the items the shop sells. An NPC with a shop
 ///     also buys every item whose sell price is above 0 (Gameplay Systems §11.3), and an NPC's quests are the quests
-///     that name it as their giver.
+///     that name it as their giver. A Storekeeper keeps the account's storage for a fee per deposit (§11.4).
 /// </summary>
 public sealed class NpcDefinition
 {
@@ -15,13 +15,15 @@ public sealed class NpcDefinition
         string displayName,
         IReadOnlyList<ShopEntry>? shop = null,
         bool offersReset = false,
-        bool offersJobChange = false)
+        bool offersJobChange = false,
+        int? depositFee = null)
     {
         Id = id;
         DisplayName = displayName;
         Shop = shop ?? Array.Empty<ShopEntry>();
         OffersReset = offersReset;
         OffersJobChange = offersJobChange;
+        DepositFee = depositFee;
     }
 
     public NpcDefinitionId Id { get; }
@@ -45,5 +47,12 @@ public sealed class NpcDefinition
     ///     (Gameplay Systems §6.1).
     /// </summary>
     public bool OffersJobChange { get; }
+
+    /// <summary>
+    ///     The coins a deposit costs when the NPC keeps the account's storage; null when it keeps none.
+    /// </summary>
+    public int? DepositFee { get; }
+
+    public bool KeepsStorage => DepositFee.HasValue;
 }
 }

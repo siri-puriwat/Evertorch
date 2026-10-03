@@ -1,5 +1,6 @@
 using Evertorch.Game;
 using Evertorch.Protocol;
+using UnityEngine;
 
 namespace Evertorch.Client
 {
@@ -28,6 +29,24 @@ public static class EntityViewKeys
             && content.TryGetMonster(id, out ClientMonster? monster)
                 ? monster
                 : null;
+    }
+
+    /// <summary>
+    ///     The colour of the whole body a monster or an NPC is drawn in (Prototype Content §2); null for its model's own.
+    /// </summary>
+    public static Color? BodyTintOf(ClientContent? content, EntityKind kind, string definitionId)
+    {
+        if (kind == EntityKind.Npc)
+        {
+            return content != null
+                && NpcDefinitionId.TryCreate(definitionId, out NpcDefinitionId id)
+                && content.TryGetNpc(id, out ClientNpc? npc)
+                && npc != null
+                    ? npc.Tint
+                    : null;
+        }
+
+        return MonsterOf(content, kind, definitionId)?.Tint;
     }
 
     public static string ForEntity(ClientContent? content, EntityKind kind, string definitionId)

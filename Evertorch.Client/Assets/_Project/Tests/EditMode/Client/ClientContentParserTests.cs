@@ -298,6 +298,11 @@ public sealed class ClientContentParserTests
         "NPC 'npc.gate_warden': prefab is not a logical key")]
     [TestCase(
         ClientContentParser.NpcsFile,
+        "\"prefab\":\"npc_gate_warden\"",
+        "\"prefab\":\"npc_gate_warden\",\"tint\":\"blue\"",
+        "NPC 'npc.gate_warden': tint is not a colour written #RRGGBB")]
+    [TestCase(
+        ClientContentParser.NpcsFile,
         "\"schemaVersion\":1",
         "\"schemaVersion\":2",
         "'npcs.json' is not readable or has an unsupported schema version")]
@@ -412,6 +417,22 @@ public sealed class ClientContentParserTests
             Is.True);
         Assert.That((monster!.Level, monster.Scale, monster.IsBoss), Is.EqualTo((25, 2.6f, true)));
         Assert.That(monster.Tint, Is.EqualTo((Color)new Color32(0x5B, 0x3A, 0x8C, 0xFF)));
+    }
+
+    [Test]
+    public void Parse_AnNpcsTint_ReadsIt_AndAnNpcWithoutOneHasNone()
+    {
+        string npcs = Package.DefaultTexts(Maps)[ClientContentParser.NpcsFile]
+            .Replace("\"prefab\":\"npc_gate_warden\"", "\"prefab\":\"npc_gate_warden\",\"tint\":\"#3E7CB1\"");
+        var package = Package.With(ClientContentParser.NpcsFile, npcs);
+
+        ClientContent? content = ClientContentParser.Parse(package.Manifest, package.Files, out string error);
+
+        Assert.That(error, Is.Empty);
+        content!.TryGetNpc(new NpcDefinitionId("npc.gate_warden"), out ClientNpc? warden);
+        content.TryGetNpc(new NpcDefinitionId("npc.quartermaster"), out ClientNpc? quartermaster);
+        Assert.That(warden!.Tint, Is.EqualTo((Color)new Color32(0x3E, 0x7C, 0xB1, 0xFF)));
+        Assert.That(quartermaster!.Tint, Is.Null);
     }
 
     // A heal may name another player (Gameplay Systems §9).

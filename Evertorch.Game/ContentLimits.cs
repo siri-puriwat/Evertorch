@@ -40,6 +40,11 @@ public static class ContentLimits
     public const int MaxPrice = 1_000_000_000;
 
     /// <summary>
+    ///     The most a Storekeeper takes for one deposit (Content Pipeline §4).
+    /// </summary>
+    public const int MaxDepositFee = 1_000_000;
+
+    /// <summary>
     ///     The coin cap (Gameplay Systems §11.3).
     /// </summary>
     public const int MaxCurrency = 1_000_000_000;

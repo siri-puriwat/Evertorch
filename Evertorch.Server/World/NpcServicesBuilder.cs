@@ -10,7 +10,7 @@ namespace Evertorch.Server
 ///     Turns an NPC's content into the services its clients are sent (Network Protocol §6): an NPC with a shop trades
 ///     its stock at the stock's prices and buys every item whose sell price is above 0 at that price (Gameplay Systems
 ///     §11.3); it gives every quest that names it, it resets a build when its content says so, and when it changes
-///     jobs, it offers every first job at its base job's cap (§6.1).
+///     jobs, it offers every first job at its base job's cap (§6.1). A Storekeeper says it keeps storage (§11.4).
 /// </summary>
 public static class NpcServicesBuilder
 {
@@ -60,7 +60,7 @@ public static class NpcServicesBuilder
                     (ushort)JobCap(content, content.Jobs[job.BaseJob.Value])))
                 .ToArray()
             : Array.Empty<NpcJobChangeOffer>();
-        return new NpcServices(entity, entries, offers, npc.OffersReset, jobChanges);
+        return new NpcServices(entity, entries, offers, npc.OffersReset, jobChanges, npc.KeepsStorage);
     }
 
     /// <summary>

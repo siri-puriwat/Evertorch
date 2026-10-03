@@ -7,7 +7,7 @@ namespace Evertorch.Protocol
 /// <summary>
 ///     What an NPC offers, sent right after every spawn of the NPC to a client (Network Protocol §6, §9): each item it
 ///     trades with the price it sells for and the price it pays, each quest it gives with its objective and reward,
-///     whether it resets a build, and each job change it offers.
+///     whether it resets a build, each job change it offers, and whether it keeps the account's storage.
 ///     A shop's prices and a quest's terms travel on purpose, because the player must see them (Content Pipeline §5).
 /// </summary>
 public sealed class NpcServices
@@ -33,15 +33,18 @@ public sealed class NpcServices
     /// </summary>
     public const int MaxEncodedLength = 1020;
 
-    // The services byte after the offers: bit 0, the build's reset; the other bits are not yet defined.
+    // The services byte after the offers: bit 0, the build's reset; bit 1, the account's storage; the other bits are not
+    // yet defined.
     private const byte ResetService = 1;
+    private const byte StorageService = 2;
 
     public NpcServices(
         EntityId npc,
         IReadOnlyList<NpcServiceEntry> entries,
         IReadOnlyList<NpcQuestOffer> offers,
         bool offersReset = false,
-        IReadOnlyList<NpcJobChangeOffer>? jobChanges = null)
+        IReadOnlyList<NpcJobChangeOffer>? jobChanges = null,
+        bool keepsStorage = false)
     {
         if (entries == null)
         {
@@ -76,6 +79,7 @@ public sealed class NpcServices
         Offers = offers;
         OffersReset = offersReset;
         JobChanges = jobChanges;
+        KeepsStorage = keepsStorage;
         if (GetEncodedLength() > MaxEncodedLength)
         {
             throw new ArgumentException($"An NPC's services must fit {MaxEncodedLength} bytes.", nameof(entries));
@@ -104,6 +108,11 @@ public sealed class NpcServices
     ///     (Gameplay Systems §6.1).
     /// </summary>
     public IReadOnlyList<NpcJobChangeOffer> JobChanges { get; }
+
+    /// <summary>
+    ///     Whether the NPC keeps the account's storage (Gameplay Systems §11.4); its fee arrives with the storage.
+    /// </summary>
+    public bool KeepsStorage { get; }
 
     public static bool TryRead(ReadOnlySpan<byte> source, out NpcServices? message)
     {
@@ -163,7 +172,7 @@ public sealed class NpcServices
         }
 
         if (!reader.TryReadByte(out byte services)
-            || (services & ~ResetService) != 0
+            || (services & ~(ResetService | StorageService)) != 0
             || !reader.TryReadByte(out byte jobChangeCount)
             || jobChangeCount > MaxJobChanges)
         {
@@ -193,7 +202,13 @@ public sealed class NpcServices
             return false;
         }
 
-        message = new NpcServices(new EntityId(npc), entries, offers, (services & ResetService) != 0, jobChanges);
+        message = new NpcServices(
+            new EntityId(npc),
+            entries,
+            offers,
+            (services & ResetService) != 0,
+            jobChanges,
+            (services & StorageService) != 0);
         return true;
     }
 
@@ -249,7 +264,7 @@ public sealed class NpcServices
             writer.WriteUInt32(offer.Coins);
         }
 
-        writer.WriteByte(OffersReset ? ResetService : (byte)0);
+        writer.WriteByte((byte)((OffersReset ? ResetService : 0) | (KeepsStorage ? StorageService : 0)));
         writer.WriteByte((byte)JobChanges.Count);
         foreach (NpcJobChangeOffer change in JobChanges)
         {

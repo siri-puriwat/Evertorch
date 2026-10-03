@@ -2074,7 +2074,7 @@ public sealed class GameClient : MonoBehaviour
             m_viewCatalog,
             remote.Kind == EntityKind.Player ? RemoteColor : null,
             monster?.Scale ?? 1f,
-            monster?.Tint);
+            EntityViewKeys.BodyTintOf(m_contentLoader.Content, remote.Kind, remote.DefinitionId));
         if (remote.Buffer.TrySample(double.MinValue, out WorldPosition position, out WorldDirection facing))
         {
             view.SetPose(position, facing);

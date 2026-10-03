@@ -112,6 +112,24 @@ public sealed class NpcContentTests
         }
     }
 
+    [TestCase("  storage:\n    depositFee: 1000001\n", "server.storage.depositFee", "must be between 0 and 1000000")]
+    [TestCase("  storage:\n    depositFee: -1\n", "server.storage.depositFee", "must be between 0 and 1000000")]
+    [TestCase("  storage:\n    fee: 20\n", "server.storage.depositFee", "required field is missing")]
+    public void Run_WhenAStoragesFeeIsWrong_ReportsIt(string storage, string field, string message)
+    {
+        using (var workspace = new ContentWorkspace())
+        {
+            workspace.Replace(Npc, "  shop:\n    - item: item.material.slime_gel\n      price: 146443\n", storage);
+
+            ContentPipelineResult result = ContentPipeline.Run(workspace.ContentRoot);
+
+            Assert.That(
+                result.Diagnostics.Select(diagnostic => (diagnostic.File, diagnostic.FieldPath, diagnostic.Message)),
+                Has.Member((Npc, field, message)),
+                Describe(result));
+        }
+    }
+
     [Test]
     public void Build_ForValidFixture_WritesTheShopQuestAndPlacementForTheServer_AndOnlyNamesForTheClient()
     {
@@ -153,7 +171,7 @@ public sealed class NpcContentTests
     }
 
     [Test]
-    public void Run_ForRepositoryContent_PlacesTheThreeNpcs_AndTheQuestsAreTheGateWardens()
+    public void Run_ForRepositoryContent_PlacesTheFourNpcs_AndTheQuestsAreTheGateWardens()
     {
         ContentPipelineResult result = ContentPipeline.Run(
             Path.Combine(ContentValidationTests.RepositoryRoot(), "content"));
@@ -166,8 +184,14 @@ public sealed class NpcContentTests
                 new[]
                 {
                     ("npc.quartermaster", -3.5f, 4.5f), ("npc.gate_warden", 20.5f, 3.5f),
-                    ("npc.guildmaster", 4.5f, -4.5f)
+                    ("npc.guildmaster", 4.5f, -4.5f), ("npc.storekeeper", -4.5f, -4.5f)
                 }));
+        AuthoredNpc storekeeper = result.Content.Npcs.Single(npc => npc.Definition.KeepsStorage);
+        Assert.That(
+            (storekeeper.Definition.Id.Value, storekeeper.Definition.DepositFee, storekeeper.Definition.HasShop,
+                storekeeper.Prefab, storekeeper.Tint),
+            Is.EqualTo(("npc.storekeeper", (int?)20, false, "npc_quartermaster", "#3E7CB1")),
+            "the Quartermaster's body in a colour of its own");
         Assert.That(
             result.Content.Npcs.Where(npc => npc.Definition.OffersReset).Select(npc => npc.Definition.Id.Value),
             Is.EqualTo(new[] { "npc.guildmaster" }),
@@ -259,6 +283,33 @@ public sealed class NpcContentTests
     }
 
     [Test]
+    public void Run_WhenAnNpcKeepsStorageAlone_IsValid_AndEachPackageSaysWhatItNeeds()
+    {
+        using (var workspace = new ContentWorkspace())
+        {
+            workspace.Replace(
+                Npc,
+                "  shop:\n    - item: item.material.slime_gel\n      price: 146443\n",
+                "  storage:\n    depositFee: 20\n");
+            workspace.Replace(Npc, "  prefab: npc_quartermaster\n",
+                "  prefab: npc_quartermaster\n  tint: \"#3e7cb1\"\n");
+
+            ContentPipelineResult result = ContentPipeline.Run(workspace.ContentRoot);
+
+            Assert.That(result.Diagnostics, Is.Empty, Describe(result));
+            NpcDefinition npc = result.Content.Npcs.Single().Definition;
+            Assert.That((npc.HasShop, npc.KeepsStorage, npc.DepositFee), Is.EqualTo((false, true, (int?)20)));
+            Assert.That(
+                Definition(result.Packages!.Server, "npcs.json", "npc.quartermaster").GetProperty("depositFee")
+                    .GetInt32(),
+                Is.EqualTo(20));
+            JsonElement client = Definition(result.Packages.Client, "npcs.json", "npc.quartermaster");
+            Assert.That(PropertyNames(client), Is.EqualTo(new[] { "id", "displayName", "prefab", "tint" }));
+            Assert.That(client.GetProperty("tint").GetString(), Is.EqualTo("#3E7CB1"));
+        }
+    }
+
+    [Test]
     public void Run_WhenAnNpcOffersTheResetAlone_IsValid_AndTheServerPackageSaysSo()
     {
         using (var workspace = new ContentWorkspace())
@@ -276,6 +327,22 @@ public sealed class NpcContentTests
             Assert.That(
                 Definition(result.Packages!.Server, "npcs.json", "npc.quartermaster").GetProperty("reset").GetBoolean(),
                 Is.True);
+        }
+    }
+
+    [Test]
+    public void Run_WhenAnNpcsTintIsNoColour_ReportsIt()
+    {
+        using (var workspace = new ContentWorkspace())
+        {
+            workspace.Replace(Npc, "  prefab: npc_quartermaster\n", "  prefab: npc_quartermaster\n  tint: blue\n");
+
+            ContentPipelineResult result = ContentPipeline.Run(workspace.ContentRoot);
+
+            Assert.That(
+                result.Diagnostics.Select(diagnostic => (diagnostic.File, diagnostic.FieldPath, diagnostic.Message)),
+                Is.EqualTo(new[] { (Npc, "client.tint", "must be a colour written \"#RRGGBB\", in quotes") }),
+                Describe(result));
         }
     }
 

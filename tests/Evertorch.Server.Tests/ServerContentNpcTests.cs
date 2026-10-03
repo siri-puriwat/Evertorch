@@ -135,24 +135,28 @@ public sealed class ServerContentNpcTests
     }
 
     [Test]
-    public void Load_ForRepositoryContent_ReadsTheThreeNpcsAndTheQuests()
+    public void Load_ForRepositoryContent_ReadsTheFourNpcsAndTheQuests()
     {
         ServerContent content = ServerContentLoader.Load(PackageFixture.BuildRepositoryPackage());
 
         Assert.That(
             content.Npcs.Keys.Select(id => id.Value),
-            Is.EquivalentTo(new[] { "npc.gate_warden", "npc.guildmaster", "npc.quartermaster" }));
+            Is.EquivalentTo(new[] { "npc.gate_warden", "npc.guildmaster", "npc.quartermaster", "npc.storekeeper" }));
         Assert.That(content.Npcs[new NpcDefinitionId(Quartermaster)].Shop, Has.Count.EqualTo(5));
         Assert.That(content.Npcs[new NpcDefinitionId("npc.gate_warden")].HasShop, Is.False);
         Assert.That(
             content.Npcs.Values.Where(npc => npc.OffersReset).Select(npc => npc.Id.Value),
             Is.EqualTo(new[] { "npc.guildmaster" }));
         Assert.That(
+            content.Npcs.Values.Where(npc => npc.KeepsStorage)
+                .Select(npc => (npc.Id.Value, npc.DepositFee, npc.HasShop)),
+            Is.EqualTo(new[] { ("npc.storekeeper", (int?)20, false) }));
+        Assert.That(
             content.Quests.Keys.Select(id => id.Value),
             Is.EquivalentTo(new[] { "quest.crawler_hunt", "quest.grotto_hunt", "quest.slime_monarch" }));
         Assert.That(
             content.Maps[new MapDefinitionId(Ground)].Npcs.Select(npc => npc.Npc.Value),
-            Is.EqualTo(new[] { Quartermaster, "npc.gate_warden", "npc.guildmaster" }));
+            Is.EqualTo(new[] { Quartermaster, "npc.gate_warden", "npc.guildmaster", "npc.storekeeper" }));
         Assert.That(content.Maps[new MapDefinitionId("map.training_field")].Npcs, Is.Empty);
     }
 

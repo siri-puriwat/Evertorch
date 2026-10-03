@@ -73,7 +73,7 @@ public sealed class ServerOutputTests
         ["NpcJobChangeOffer"] = new[] { "FromJob", "Job", "Level" },
         ["NpcQuestOffer"] = new[] { "BaseExperience", "Coins", "Count", "JobExperience", "Monster", "Quest" },
         ["NpcServiceEntry"] = new[] { "BuyPrice", "Item", "SellPrice" },
-        ["NpcServices"] = new[] { "Entries", "JobChanges", "Npc", "Offers", "OffersReset" },
+        ["NpcServices"] = new[] { "Entries", "JobChanges", "KeepsStorage", "Npc", "Offers", "OffersReset" },
         ["QuestDefinitionId"] = new[] { "Value" },
         ["QuestLog"] = new[] { "Entries" },
         ["QuestLogEntry"] = new[] { "Count", "Progress", "Quest", "State" },

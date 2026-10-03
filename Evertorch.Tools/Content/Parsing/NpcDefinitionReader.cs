@@ -26,10 +26,11 @@ internal static class NpcDefinitionReader
         var shop = new List<ShopEntry>();
         bool offersReset = false;
         bool offersJobChange = false;
+        int? depositFee = null;
         if (root.Has("server"))
         {
             YamlFieldReader server = root.RequiredMapping("server");
-            if (server.Has("shop") || !server.Has("guild"))
+            if (server.Has("shop") || !(server.Has("guild") || server.Has("storage")))
             {
                 ReadShop(server, diagnostics, shop);
             }
@@ -40,10 +41,17 @@ internal static class NpcDefinitionReader
                 offersReset = guild.RequiredBool("reset");
                 offersJobChange = guild.Has("jobChange") && guild.RequiredBool("jobChange");
             }
+
+            if (server.Has("storage"))
+            {
+                depositFee = server.RequiredMapping("storage")
+                    .RequiredInt("depositFee", 0, ContentLimits.MaxDepositFee);
+            }
         }
 
         YamlFieldReader client = root.RequiredMapping("client");
         string prefab = client.RequiredAssetKey("prefab");
+        string? tint = client.Has("tint") ? client.RequiredColor("tint") : null;
 
         root.ReportUnknownFields();
         if (diagnostics.Count != errorsBefore)
@@ -53,8 +61,9 @@ internal static class NpcDefinitionReader
 
         return new AuthoredNpc(
             root.ToSource(),
-            new NpcDefinition(id, displayName, shop, offersReset, offersJobChange),
-            prefab);
+            new NpcDefinition(id, displayName, shop, offersReset, offersJobChange, depositFee),
+            prefab,
+            tint);
     }
 
     // An NPC keeps a shop only when it sells something, so an authored shop lists at least one item, each once.

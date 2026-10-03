@@ -17,6 +17,7 @@ public sealed class NpcTests
     private const string Quartermaster = "npc.quartermaster";
     private const string GateWarden = "npc.gate_warden";
     private const string Guildmaster = "npc.guildmaster";
+    private const string Storekeeper = "npc.storekeeper";
     private const int GraceMs = 1000;
 
     private static readonly MapDefinitionId Ground = new("map.training_ground");
@@ -77,7 +78,7 @@ public sealed class NpcTests
     }
 
     // The field's portal lands a player east of x = 16, where the Gate Warden's interest cell and, diagonally, the
-    // Guildmaster's are in view; the Quartermaster comes into view once the player walks west of it.
+    // Guildmaster's are in view; the Quartermaster and the Storekeeper come into view once the player walks west of it.
     [Test]
     public void CrossingBack_TellsTheGateWardenOnArrival_AndTheQuartermasterOnceThePlayerWalksWestOfSixteen()
     {
@@ -87,7 +88,7 @@ public sealed class NpcTests
         server.Tick();
         Assert.That(server.SessionOf(player).Character!.Map.Definition.Id, Is.EqualTo(Field), "crossed");
         server.Tick(TestServer.TickRate);
-        Assert.That(NpcsToldTo(server, player).Length, Is.EqualTo(3), "all three were told before the crossing");
+        Assert.That(NpcsToldTo(server, player).Length, Is.EqualTo(4), "all four were told before the crossing");
         server.Transport.ClearSent();
 
         StandIn(server, player, Field, Ground);
@@ -103,7 +104,7 @@ public sealed class NpcTests
         Assert.That(server.SessionOf(player).Character!.Map.Definition.Id, Is.EqualTo(Ground), "back in town");
         Assert.That(onArrival, Is.EquivalentTo(new[] { GateWarden, Guildmaster }));
         Assert.That(eastOfSixteen, Is.Empty);
-        Assert.That(NpcsToldTo(server, player), Is.EqualTo(new[] { Quartermaster }));
+        Assert.That(NpcsToldTo(server, player), Is.EquivalentTo(new[] { Quartermaster, Storekeeper }));
     }
 
     [Test]
@@ -114,7 +115,9 @@ public sealed class NpcTests
         ConnectionId player = server.EnterWorld(1);
         server.Tick(5);
 
-        Assert.That(NpcsToldTo(server, player), Is.EquivalentTo(new[] { GateWarden, Quartermaster, Guildmaster }));
+        Assert.That(
+            NpcsToldTo(server, player),
+            Is.EquivalentTo(new[] { GateWarden, Quartermaster, Guildmaster, Storekeeper }));
     }
 
     [Test]
@@ -147,7 +150,7 @@ public sealed class NpcTests
 
         Assert.That(
             server.World.Maps.SelectMany(map => map.Npcs).Select(npc => npc.DefinitionId),
-            Is.EquivalentTo(new[] { GateWarden, Quartermaster, Guildmaster }));
+            Is.EquivalentTo(new[] { GateWarden, Quartermaster, Guildmaster, Storekeeper }));
         Assert.That(withoutNpcs.World.Maps.SelectMany(map => map.Npcs), Is.Empty, "a test asks for them");
     }
 
@@ -168,13 +171,15 @@ public sealed class NpcTests
         server.Tick(2);
 
         Assert.That(server.PlayerOf(second).Id, Is.EqualTo(entity), "the same body, attached again");
-        Assert.That(NpcsToldTo(server, second), Is.EquivalentTo(new[] { GateWarden, Quartermaster, Guildmaster }));
+        Assert.That(
+            NpcsToldTo(server, second),
+            Is.EquivalentTo(new[] { GateWarden, Quartermaster, Guildmaster, Storekeeper }));
     }
 
     // The shop trades its stock at the stock's prices and buys every item with a sell price at that price, sorted by
     // item ID; the Gate Warden gives the quest that names it (Prototype Content §2).
     [Test]
-    public void Services_OfTheRepositoryNpcs_AreTheShopTheQuestTheResetAndTheJobChanges()
+    public void Services_OfTheRepositoryNpcs_AreTheShopTheQuestTheResetTheJobChangesAndTheStorage()
     {
         var server = new TestServer(withNpcs: true);
 
@@ -227,6 +232,17 @@ public sealed class NpcTests
         Assert.That(
             (shop.GetEncodedLength(), warden.GetEncodedLength(), guildmaster.GetEncodedLength()),
             Is.EqualTo((457, 211, 78)));
+        NpcServices storekeeper = NpcOf(server, Storekeeper).Services;
+        Assert.That(
+            server.World.Maps.SelectMany(map => map.Npcs).Where(npc => npc.Services.KeepsStorage)
+                .Select(npc => npc.DefinitionId),
+            Is.EqualTo(new[] { Storekeeper }),
+            "only the Storekeeper keeps storage");
+        Assert.That(
+            (storekeeper.Entries.Count, storekeeper.Offers.Count, storekeeper.OffersReset, storekeeper.JobChanges.Count,
+                storekeeper.GetEncodedLength()),
+            Is.EqualTo((0, 0, false, 0, 14)),
+            "storage alone; its fee arrives with the storage");
     }
 
     [Test]

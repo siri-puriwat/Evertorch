@@ -337,7 +337,7 @@ public sealed class NpcServicesMessageTests
     }
 
     [Test]
-    public void NpcServices_WithTheResetBit_OffersTheReset_AndRefusesAnyOtherBit()
+    public void NpcServices_WithTheResetAndStorageBits_OffersThem_AndRefusesAnyOtherBit()
     {
         var guildmaster = new NpcServices(new EntityId(7), new NpcServiceEntry[0], new NpcQuestOffer[0], true);
         byte[] written = new byte[guildmaster.GetEncodedLength()];
@@ -349,8 +349,22 @@ public sealed class NpcServicesMessageTests
         Assert.That(Golden.OffersReset, Is.False);
         Assert.That(NpcServices.TryRead(WireMatrix.With(ServicesBytes, ServicesByte, 0x01), out read), Is.True);
         Assert.That(read!.OffersReset, Is.True);
-        Assert.That(NpcServices.TryRead(WireMatrix.With(ServicesBytes, ServicesByte, 0x02), out _), Is.False);
+        Assert.That(NpcServices.TryRead(WireMatrix.With(ServicesBytes, ServicesByte, 0x03), out read), Is.True);
+        Assert.That((read!.OffersReset, read.KeepsStorage), Is.EqualTo((true, true)));
+        Assert.That(NpcServices.TryRead(WireMatrix.With(ServicesBytes, ServicesByte, 0x04), out _), Is.False);
         Assert.That(NpcServices.TryRead(WireMatrix.With(ServicesBytes, ServicesByte, 0x81), out _), Is.False);
+
+        var storekeeper = new NpcServices(
+            new EntityId(7),
+            new NpcServiceEntry[0],
+            new NpcQuestOffer[0],
+            keepsStorage: true);
+        byte[] kept = new byte[storekeeper.GetEncodedLength()];
+        storekeeper.Write(kept);
+        Assert.That(kept, Is.EqualTo(new byte[] { 0x1D, 0x80, 0x07, 0, 0, 0, 0, 0, 0, 0, 0x00, 0x00, 0x02, 0x00 }));
+        Assert.That(NpcServices.TryRead(kept, out read), Is.True);
+        Assert.That((read!.OffersReset, read.KeepsStorage), Is.EqualTo((false, true)));
+        Assert.That(Golden.KeepsStorage, Is.False);
     }
 
     [Test]

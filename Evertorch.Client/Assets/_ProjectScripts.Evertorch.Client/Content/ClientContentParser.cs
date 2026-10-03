@@ -518,7 +518,21 @@ public static class ClientContentParser
                 return null;
             }
 
-            npcs.Add(id, new ClientNpc(id, npc.displayName ?? string.Empty, npc.prefab));
+            // JsonUtility reads an absent tint as empty.
+            Color? tint = null;
+            string tintText = npc.tint ?? string.Empty;
+            if (tintText.Length > 0)
+            {
+                if (!TryParseColor(tintText, out Color parsed))
+                {
+                    error = $"NPC '{npc.id}': tint is not a colour written #RRGGBB.";
+                    return null;
+                }
+
+                tint = parsed;
+            }
+
+            npcs.Add(id, new ClientNpc(id, npc.displayName ?? string.Empty, npc.prefab, tint));
         }
 
         return npcs;
@@ -946,6 +960,7 @@ public static class ClientContentParser
         public string? id = string.Empty;
         public string? displayName = string.Empty;
         public string? prefab = string.Empty;
+        public string? tint = string.Empty;
     }
 
     [Serializable]

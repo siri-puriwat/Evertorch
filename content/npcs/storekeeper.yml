@@ -1,0 +1,9 @@
+id: npc.storekeeper
+displayName: Storekeeper
+server:
+  storage:
+    depositFee: 20
+client:
+  # The Quartermaster's body in a colour of its own, until art arrives.
+  prefab: npc_quartermaster
+  tint: "#3E7CB1"
