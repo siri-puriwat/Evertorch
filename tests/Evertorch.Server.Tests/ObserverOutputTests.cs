@@ -19,7 +19,8 @@ namespace Evertorch.Server.Tests
 ///     reaches the observer as its new body alone, and a Mend on the observer as the heal and its own health.
 ///     Milestone 12 adds the party: another's party, its health, and its lines reach an observer outside it as nothing.
 ///     Milestone 13 adds the dungeon: another's numbing and award reach an observer as nothing, a slam on another as its
-///     result, and a boss's fall everyone on its map.
+///     result, and a boss's fall everyone on its map. Milestone 14 adds the trade and storage: another's trade, its
+///     settled bags, and its deposits and withdrawals reach an observer beside it as nothing.
 /// </summary>
 [TestFixture]
 public sealed class ObserverOutputTests
@@ -458,6 +459,64 @@ public sealed class ObserverOutputTests
             server.Transport.SnapshotsSentTo(observer).Last().Entities.Select(state => state.Entity),
             Does.Contain(server.PlayerOf(actor).Id),
             "the observer still saw the actor at the Gate Warden");
+    }
+
+    // The trade and storage (Milestone 14 verification): the actor trades gel to a partner, then stores and takes back
+    // gel at the Storekeeper, while the observer stands beside it throughout. The traders and the depositor hear their
+    // own; the observer hears what anyone near sees, and nothing more.
+    [Test]
+    public void AnotherPlayersTradeAndStorage_ReachAnObserverOnlyAsWhatAnyoneNearSees()
+    {
+        var rig = new TradeRig(new TestServer(withNpcs: true));
+        ConnectionId actor = rig.Enter(Actor, store =>
+        {
+            store.GiveItems(Actor, Gel, 1, 6, 1);
+            store.Edit(Actor, coins: 40);
+        });
+        ConnectionId observer = rig.Enter(Observer);
+        ConnectionId partner = rig.Enter(3);
+        rig.Server.Tick();
+        rig.Server.Transport.ClearSent();
+
+        rig.Open(actor, partner, "Tester1", "Tester3");
+        rig.Offer(actor, RowOf(rig.Server, actor, Gel), 2);
+        rig.Lock(actor);
+        rig.Lock(partner);
+        rig.Confirm(actor);
+        rig.Confirm(partner);
+        rig.Server.TickUntil(() => rig.Server.Trades.OpenTrades == 0);
+        NpcEntity keeper = rig.Server.NpcOf("npc.storekeeper");
+        rig.Server.Place(actor, keeper.Position.X + 2f, keeper.Position.Z);
+        rig.Server.Place(observer, keeper.Position.X + 2f, keeper.Position.Z + 1f);
+        rig.Server.Tick(2);
+        rig.Server.SendStorageOpen(actor, keeper.Id, rig.Next(actor));
+        rig.Server.Tick(2);
+        rig.Server.SendStorageDeposit(actor, keeper.Id, RowOf(rig.Server, actor, Gel), 4, rig.Next(actor));
+        Settle(rig.Server, actor);
+        long stored = Read(
+                rig.Server,
+                actor,
+                MessageOpcode.StorageChanged,
+                payload => StorageChanged.TryRead(payload, out StorageChanged? read) ? read : null)
+            .Single()
+            .Row.StorageItem;
+        rig.Server.SendStorageWithdraw(actor, keeper.Id, stored, 1, rig.Next(actor));
+        Settle(rig.Server, actor);
+
+        MessageOpcode[] actorHeard = rig.Server.Transport.SentTo(actor).Select(message => message.Opcode).ToArray();
+        MessageOpcode[] observerHeard =
+            rig.Server.Transport.SentTo(observer).Select(message => message.Opcode).ToArray();
+        Assert.That(
+            actorHeard,
+            Is.SupersetOf(
+                new[]
+                {
+                    MessageOpcode.TradeEvent, MessageOpcode.TradeSide, MessageOpcode.InventorySnapshot,
+                    MessageOpcode.StorageSnapshot, MessageOpcode.StorageChanged, MessageOpcode.InventoryChanged
+                }),
+            "the actor was told of its trade and its storage");
+        Assert.That(rig.Server.SessionOf(actor).Character!.Inventory.Coins, Is.EqualTo(20L), "the deposit's fee");
+        Assert.That(observerHeard.Distinct(), Is.SubsetOf(WhatAnyoneNearSees));
     }
 }
 }
