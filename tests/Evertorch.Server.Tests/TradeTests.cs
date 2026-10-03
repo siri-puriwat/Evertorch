@@ -245,6 +245,61 @@ public sealed class TradeTests
         Assert.That(rig.Server.PlayerOf(replacement).IsTrading, Is.False, "the new connection is free");
     }
 
+    // Duplication attempts against an offered row (Milestone 14 hardening): a pickup into the bag, an equip of the
+    // offered sword, a sale and a deposit of it, all refused while the trade is open; after the commit the sword is in
+    // one bag, once.
+    [Test]
+    public void WhileTrading_APickupAnEquipASaleAndADeposit_AgainstTheOfferedRow_AreRefused_AndTheSwordMovesOnce()
+    {
+        var rig = new TradeRig(new TestServer(withNpcs: true));
+        const string sword = "item.weapon.training_sword";
+        ConnectionId seven = rig.Enter(7, store => store.GiveItems(7, sword, 1, 1, 0));
+        ConnectionId eight = rig.Enter(8);
+        CharacterSession offerer = rig.Server.SessionOf(seven).Character!;
+        long row = offerer.Inventory.Rows.Single().InventoryItem;
+        ItemDropEntity drop = rig.Server.World.SpawnItemDrop(
+            offerer.Map,
+            new ItemDefinitionId(Gel),
+            1,
+            offerer.Player.Position,
+            rig.Server.CurrentTick,
+            long.MaxValue,
+            default);
+        rig.Open(seven, eight, Seven, Eight);
+        rig.Offer(seven, row, 1);
+
+        uint pickup = rig.Next(seven);
+        rig.Server.SendPickup(seven, drop.Id, pickup);
+        uint equip = rig.Next(seven);
+        rig.Server.SendEquip(seven, row, equip);
+        uint sale = rig.Next(seven);
+        rig.Server.SendSell(seven, rig.Server.NpcOf("npc.quartermaster").Id, row, 1, sale);
+        uint deposit = rig.Next(seven);
+        rig.Server.SendStorageDeposit(seven, rig.Server.NpcOf("npc.storekeeper").Id, row, 1, deposit);
+        rig.Server.Tick();
+        rig.Lock(seven);
+        rig.Lock(eight);
+        rig.Confirm(seven);
+        rig.Confirm(eight);
+        rig.Server.TickUntil(() => rig.Server.Trades.OpenTrades == 0);
+
+        Assert.That(
+            new[]
+            {
+                rig.RefusalOf(seven, pickup), rig.RefusalOf(seven, equip), rig.RefusalOf(seven, sale),
+                rig.RefusalOf(seven, deposit)
+            },
+            Is.All.EqualTo(CommandRejectionReason.NotAllowedNow));
+        Assert.That(
+            new[] { 7L, 8L }.SelectMany(character => rig.Server.Store.Stored(character).Items)
+                .Count(item => item.ItemDefinitionId == sword),
+            Is.EqualTo(1),
+            "one sword, in one bag");
+        Assert.That(rig.Server.Store.Stored(8).Items.Single().ItemDefinitionId, Is.EqualTo(sword));
+        Assert.That(rig.Server.World.Maps.SelectMany(map => map.ItemDrops), Has.Member(drop),
+            "the gel still lies there");
+    }
+
     // Every NPC command is refused while trading, the Storekeeper's included, wherever the trader stands (Network
     // Protocol §11).
     [Test]

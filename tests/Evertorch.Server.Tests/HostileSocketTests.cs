@@ -577,6 +577,161 @@ public sealed class HostileSocketTests
         AssertNoSecretIn(lines);
     }
 
+    // Milestone 14's commands from SecretAnna, beside SecretBob of another account, both names words no log may repeat:
+    // a trade's commands while no trade is open, a request to no one, and a reply to no request, each refused and
+    // audited; then, in an open trade, Bobby's row offered, more than Anna holds, an attack, a skill, a pickup, an
+    // equip, a sale, and the Storekeeper, each refused; at the Storekeeper, a withdrawal of no row and of more than a
+    // stack, and a deposit of more than held, refused; bursts of requests over the trade bucket and of reads over the
+    // read bucket; then malformed trade and storage commands until the connection is closed.
+    [Test]
+    public void HostileTradeAndStorageCommands_AreRefusedThrottledAndScored_AndLeaveNoNameInTheLogs()
+    {
+        using var root = new TemporaryDirectory();
+        var logs = new CapturingLoggerProvider();
+        var store = new InMemoryGameStore();
+        using IHost host = StartHost(root, logs, store);
+        int port = host.Services.GetRequiredService<LiteNetLibServerTransport>().LocalPort;
+        ServerContent content = host.Services.GetRequiredService<ServerContent>();
+        var abuse = new AbuseOptions();
+        int violationsToClose = abuse.ViolationThreshold / ViolationScore.Points;
+        byte[][] malformed =
+        {
+            // An offer cut short, a request of a name with a "!", a deposit of row 0, and a withdrawal of nothing.
+            new byte[] { 0x22, 0x00, 0x01 },
+            new byte[] { 0x20, 0x00, 0x05, 0x00, (byte)'A', (byte)'n', (byte)'n', (byte)'a', (byte)'!', 1, 0, 0, 0 },
+            new byte[] { 0x27, 0x00, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0 },
+            new byte[] { 0x28, 0x00, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0 }
+        };
+
+        using var anna = new SocketClient(content, "secret-trade-anna", "SecretAnna");
+        using var bobby = new SocketClient(content, "secret-trade-bobby", "SecretBob");
+        store.NextCharacterId = 41;
+        anna.AfterCreate = () => store.GiveItems(41, "item.material.slime_gel", 1, 5, 0);
+        anna.EnterWorld(port);
+        store.NextCharacterId = 42;
+        bobby.AfterCreate = () => store.GiveItems(42, "item.weapon.training_sword", 1, 1, 0);
+        bobby.EnterWorld(port);
+        var refused = new List<CommandRejectionReason>();
+        anna.World.CommandRejectedReceived += rejection => refused.Add(rejection.Reason);
+        var bobbyHeard = new List<TradeEventKind>();
+        bobby.Connection.TradeEventReceived += message => bobbyHeard.Add(message.Kind);
+        SocketClients.PumpUntil(
+            () => anna.World.Inventory.IsCurrent && bobby.World.Inventory.IsCurrent
+                && anna.World.Remotes.ContainsKey(bobby.World.LocalEntity),
+            anna,
+            bobby);
+        long gel = anna.World.Inventory.Rows.Single().InventoryItem;
+        long sword = bobby.World.Inventory.Rows.Single().InventoryItem;
+
+        anna.Connection.SendTradeOffer(gel, 1);
+        anna.Connection.SendTradeLock();
+        anna.Connection.SendTradeConfirm();
+        anna.Connection.SendTradeCancel();
+        anna.Connection.SendTradeRequest("Nobody1");
+        anna.Connection.SendTradeReply("SecretBob", true);
+        SocketClients.PumpUntil(() => refused.Count >= 6, anna, bobby);
+        var idle = refused.ToList();
+        anna.PumpFor(TimeSpan.FromMilliseconds(1100));
+
+        anna.Connection.SendTradeRequest("SecretBob");
+        SocketClients.PumpUntil(() => bobbyHeard.Contains(TradeEventKind.Requested), anna, bobby);
+        bobby.Connection.SendTradeReply("SecretAnna", true);
+        SocketClients.PumpUntil(() => bobbyHeard.Contains(TradeEventKind.Opened), anna, bobby);
+        RemoteEntity quartermaster =
+            anna.World.Remotes.Values.Single(remote => remote.DefinitionId == "npc.quartermaster");
+        RemoteEntity storekeeper = anna.World.Remotes.Values.Single(remote => remote.DefinitionId == "npc.storekeeper");
+        refused.Clear();
+        anna.Connection.SendTradeOffer(sword, 1);
+        anna.Connection.SendTradeOffer(gel, 6);
+        anna.Connection.SendAttack(bobby.World.LocalEntity);
+        anna.Connection.SendUseSkill(new SkillDefinitionId("skill.first_aid"), default);
+        anna.Connection.SendPickup(new EntityId(999999));
+        anna.Connection.SendEquip(gel);
+        anna.Connection.SendSell(quartermaster.Entity, gel, 1);
+        anna.Connection.SendStorageOpen(storekeeper.Entity);
+        anna.Connection.SendStorageDeposit(storekeeper.Entity, gel, 1);
+        SocketClients.PumpUntil(() => refused.Count >= 9, anna, bobby);
+        var trading = refused.ToList();
+        anna.Connection.SendTradeCancel();
+        SocketClients.PumpUntil(() => bobbyHeard.Contains(TradeEventKind.Cancelled), anna, bobby);
+        anna.PumpFor(TimeSpan.FromMilliseconds(1100));
+
+        anna.TalkTo(storekeeper.Entity);
+        SocketClients.PumpUntil(() => anna.NpcWindows.Contains(storekeeper.Entity), anna, bobby);
+        refused.Clear();
+        anna.Connection.SendStorageWithdraw(storekeeper.Entity, 999999, uint.MaxValue);
+        anna.Connection.SendStorageDeposit(storekeeper.Entity, gel, uint.MaxValue);
+        anna.Connection.SendStorageWithdraw(storekeeper.Entity, 999999, 1);
+        SocketClients.PumpUntil(() => refused.Count >= 3, anna, bobby);
+        var stored = refused.ToList();
+        anna.PumpFor(TimeSpan.FromMilliseconds(1100));
+
+        for (int index = 0; index <= abuse.TradeCommandBurst; index++)
+        {
+            anna.Connection.SendTradeRequest("Nobody1");
+        }
+
+        for (int index = 0; index <= abuse.ReadCommandBurst; index++)
+        {
+            anna.Connection.SendStorageOpen(storekeeper.Entity);
+        }
+
+        anna.PumpFor(TimeSpan.FromMilliseconds(1100));
+        for (int index = 0; index < 2 * violationsToClose; index++)
+        {
+            anna.Link.Send(ProtocolChannel.Control, MessageDelivery.ReliableOrdered,
+                malformed[index % malformed.Length]);
+        }
+
+        bool isClosed = anna.PumpUntil(() => anna.Connection.State == ClientConnectionState.Disconnected);
+        host.StopAsync().GetAwaiter().GetResult();
+
+        IReadOnlyList<string> lines = logs.Lines;
+        Assert.That(
+            idle,
+            Is.EqualTo(
+                new[]
+                {
+                    CommandRejectionReason.NotAllowedNow, CommandRejectionReason.NotAllowedNow,
+                    CommandRejectionReason.NotAllowedNow, CommandRejectionReason.NotAllowedNow,
+                    CommandRejectionReason.InvalidTarget, CommandRejectionReason.InvalidTarget
+                }),
+            "an offer, a lock, a confirm, and a cancel without a trade; a request to no one; a reply to no request");
+        Assert.That(
+            trading,
+            Is.EqualTo(
+                new[]
+                {
+                    CommandRejectionReason.InvalidTarget, CommandRejectionReason.NotAllowedNow,
+                    CommandRejectionReason.NotAllowedNow, CommandRejectionReason.NotAllowedNow,
+                    CommandRejectionReason.NotAllowedNow, CommandRejectionReason.NotAllowedNow,
+                    CommandRejectionReason.NotAllowedNow, CommandRejectionReason.NotAllowedNow,
+                    CommandRejectionReason.NotAllowedNow
+                }),
+            "Bobby's row; more than held; an attack, a skill, a pickup, an equip, a sale, a read, and a deposit");
+        Assert.That(
+            stored,
+            Is.EqualTo(
+                new[]
+                {
+                    CommandRejectionReason.NotAllowedNow, CommandRejectionReason.NotAllowedNow,
+                    CommandRejectionReason.InvalidTarget
+                }),
+            "more than a stack; more than held; then a row of no one's, which only the commit can tell");
+        Assert.That(isClosed, Is.True, "the connection was closed");
+        Assert.That(anna.Connection.Notice?.Reason, Is.EqualTo(DisconnectReason.Kicked));
+        Assert.That(store.Stored(41).Items.Single().Quantity, Is.EqualTo(5), "Anna's gel never moved");
+        Assert.That(store.Stored(42).Items.Single().ItemDefinitionId, Is.EqualTo("item.weapon.training_sword"));
+        Assert.That(lines.Any(line => line.Contains("had TradeOffer refused")), Is.True, "the refused offer audited");
+        Assert.That(lines.Any(line => line.Contains("had TradeRequest refused")), Is.True,
+            "the refused request audited");
+        Assert.That(lines.Any(line => line.Contains("had StorageWithdraw refused")), Is.True);
+        Assert.That(lines.Any(line => line.Contains("sent TradeRequest over the session_trade limit")), Is.True);
+        Assert.That(lines.Any(line => line.Contains("sent StorageOpen over the session_read limit")), Is.True);
+        Assert.That(lines.Any(line => line.Contains("ViolationDisconnect")), Is.True);
+        AssertNoSecretIn(lines);
+    }
+
     [Test]
     public void RawDatagrams_OfGarbageTruncatedHeadersAndOversizedRequests_LeaveTheServerServingHonestClients()
     {
