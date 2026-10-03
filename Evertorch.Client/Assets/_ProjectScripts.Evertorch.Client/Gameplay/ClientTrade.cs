@@ -20,6 +20,9 @@ public sealed class ClientTrade
     private static readonly TradeSide EmptyTheirs =
         new(TradeSideOwner.Partner, false, false, 0, Array.Empty<TradeEntry>());
 
+    private string? m_answered;
+    private double m_answeredEndsAt;
+
     /// <summary>
     ///     The character asking the player to trade; null when no request waits.
     /// </summary>
@@ -111,7 +114,26 @@ public sealed class ClientTrade
 
     public void EndRequest()
     {
+        if (Requester != null)
+        {
+            m_answered = Requester;
+            m_answeredEndsAt = RequestEndsAt;
+        }
+
         Requester = null;
+    }
+
+    /// <summary>
+    ///     Asks again the request last answered, which the server keeps when the answer came while an item change was
+    ///     still going through (Gameplay Systems §16); it runs out when it would have.
+    /// </summary>
+    public void ReopenRequest(string requester)
+    {
+        if (Requester == null && !IsOpen && m_answered == requester)
+        {
+            Requester = requester;
+            RequestEndsAt = m_answeredEndsAt;
+        }
     }
 
     public void ExpireRequest(double now)

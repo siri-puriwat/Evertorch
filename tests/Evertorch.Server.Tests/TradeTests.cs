@@ -210,8 +210,11 @@ public sealed class TradeTests
         ConnectionId eight = rig.Enter(8);
         ConnectionId nine = rig.Enter(9);
         ConnectionId ten = rig.Enter(10);
+        ConnectionId eleven = rig.Enter(11);
+        ConnectionId twelve = rig.Enter(12);
         rig.Open(seven, eight, Seven, Eight);
         rig.Open(nine, ten, Nine, "Tester10");
+        rig.Open(eleven, twelve, "Tester11", "Tester12");
 
         rig.Server.Combat.Kill(
             rig.Server.SessionOf(eight).Map!,
@@ -219,12 +222,15 @@ public sealed class TradeTests
             null,
             rig.Server.CurrentTick);
         rig.Server.Disconnect(ten);
+        rig.Server.SendLogout(twelve, rig.Next(twelve));
         rig.Server.Tick(2);
 
         Assert.That(rig.Events(seven).Last(),
             Is.EqualTo((TradeEventKind.Cancelled, Eight, CommandRejectionReason.None)));
         Assert.That(rig.Events(nine).Last(),
             Is.EqualTo((TradeEventKind.Cancelled, "Tester10", CommandRejectionReason.None)));
+        Assert.That(rig.Events(eleven).Last(),
+            Is.EqualTo((TradeEventKind.Cancelled, "Tester12", CommandRejectionReason.None)));
         Assert.That(rig.Server.Trades.OpenTrades, Is.Zero);
     }
 

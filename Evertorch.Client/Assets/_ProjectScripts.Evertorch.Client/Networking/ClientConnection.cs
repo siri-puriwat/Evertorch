@@ -372,7 +372,15 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
                 {
                     if (World != null && TryGetStorageSequence(rejected.CommandSequence, out StorageCommand storage))
                     {
-                        World.Storage.OnRefused(storage);
+                        World.Storage.OnRefused(storage, rejected.Reason);
+                    }
+
+                    if (World != null
+                        && rejected.Reason == CommandRejectionReason.ItemActionInFlight
+                        && TryGetTradeSequence(rejected.CommandSequence, out TradeCommand trade, out string requester)
+                        && trade == TradeCommand.Reply)
+                    {
+                        World.Trade.ReopenRequest(requester);
                     }
 
                     WithWorld(world => world.OnCommandRejected(rejected));

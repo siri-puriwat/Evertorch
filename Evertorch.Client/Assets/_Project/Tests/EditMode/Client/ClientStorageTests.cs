@@ -29,20 +29,25 @@ public sealed class ClientStorageTests
     }
 
     [Test]
-    public void AGap_OrARefusedDepositOrWithdrawal_LeavesItToBeReadAgain_AndARefusedReadEndsTheWait()
+    public void AGap_OrACommitsRefusal_LeavesItToBeReadAgain_AndARefusedReadEndsTheWaitUntilAskedAnew()
     {
         ClientStorage gap = Read(3);
         ClientStorage refused = Read(3);
+        ClientStorage full = Read(3);
         var waiting = new ClientStorage();
         waiting.BeginRead();
 
         gap.OnChanged(new StorageChanged(4, 5, new StorageEntry(9, Gel, 1)));
-        refused.OnRefused(StorageCommand.Withdraw);
-        waiting.OnRefused(StorageCommand.Open);
+        refused.OnRefused(StorageCommand.Withdraw, CommandRejectionReason.InvalidTarget);
+        full.OnRefused(StorageCommand.Deposit, CommandRejectionReason.InventoryFull);
+        waiting.OnRefused(StorageCommand.Open, CommandRejectionReason.ServiceUnavailable);
+        (bool, bool, bool) afterRefusal = (waiting.IsReading, waiting.IsCurrent, waiting.IsReadRefused);
+        waiting.BeginRead();
 
         Assert.That((gap.IsCurrent, gap.Revision, gap.Rows.Count), Is.EqualTo((false, 3u, 0)));
-        Assert.That(refused.IsCurrent, Is.False);
-        Assert.That((waiting.IsReading, waiting.IsCurrent), Is.EqualTo((false, false)));
+        Assert.That((refused.IsCurrent, full.IsCurrent), Is.EqualTo((false, false)));
+        Assert.That(afterRefusal, Is.EqualTo((false, false, true)));
+        Assert.That((waiting.IsReading, waiting.IsReadRefused), Is.EqualTo((true, false)), "asked anew");
     }
 
     [Test]
@@ -75,6 +80,24 @@ public sealed class ClientStorageTests
         Assert.That(
             (storage.IsCurrent, storage.IsReading, storage.Rows.Count, storage.Revision, storage.DepositFee),
             Is.EqualTo((true, false, 14, 5u, 20u)));
+    }
+
+    // A second press refused while the first deposit goes through says nothing of storage: the first one's change
+    // still applies and says what it moved.
+    [Test]
+    public void ARefusalThatSaysNothingOfStorage_LeavesItCurrent()
+    {
+        ClientStorage storage = Read(3, new StorageEntry(9, Gel, 6));
+        var moved = new List<StorageDelta>();
+        storage.ChangeApplied += moved.Add;
+        int version = storage.Version;
+
+        storage.OnRefused(StorageCommand.Deposit, CommandRejectionReason.ItemActionInFlight);
+        storage.OnRefused(StorageCommand.Withdraw, CommandRejectionReason.OutOfRange);
+        storage.OnChanged(new StorageChanged(3, 4, new StorageEntry(9, Gel, 10)));
+
+        Assert.That((storage.IsCurrent, storage.Version), Is.EqualTo((true, version + 1)));
+        Assert.That(moved.Single().Quantity, Is.EqualTo(4L));
     }
 
     [Test]

@@ -19,6 +19,27 @@ public sealed class ClientTradeTests
         return new TradeSide(owner, false, false, coins, entries);
     }
 
+    // The server keeps a request whose answer came while an item change was going through; the client asks it again,
+    // until it would have run out.
+    [Test]
+    public void ARequestAnsweredTooSoon_IsAskedAgain_UntilItWouldHaveRunOut()
+    {
+        var trade = new ClientTrade();
+        trade.Apply(new TradeEvent(TradeEventKind.Requested, "Bobby"));
+        trade.Stamp(100.0);
+
+        trade.EndRequest();
+        trade.ReopenRequest("Cora");
+        string? other = trade.Requester;
+        trade.ReopenRequest("Bobby");
+        (string?, double) again = (trade.Requester, trade.RequestEndsAt);
+        trade.ExpireRequest(130.0);
+
+        Assert.That(other, Is.Null, "only the request answered");
+        Assert.That(again, Is.EqualTo(("Bobby", 130.0)));
+        Assert.That(trade.Requester, Is.Null);
+    }
+
     [Test]
     public void ARequest_WaitsThirtySecondsFromWhenItWasHeard_AndAnOpeningEndsIt()
     {
@@ -51,6 +72,10 @@ public sealed class ClientTradeTests
         Assert.That(
             TradeMessages.DescribeRefusal(TradeCommand.Request, "Bobby", CommandRejectionReason.ItemActionInFlight),
             Is.EqualTo(RejectionMessages.Describe(CommandRejectionReason.ItemActionInFlight)));
+        Assert.That(
+            TradeMessages.DescribeRefusal(TradeCommand.Lock, string.Empty, CommandRejectionReason.NotAllowedNow),
+            Is.EqualTo(RejectionMessages.Describe(CommandRejectionReason.NotAllowedNow)),
+            "a second lock, or a cancel once both confirmed, while trading");
     }
 
     [Test]

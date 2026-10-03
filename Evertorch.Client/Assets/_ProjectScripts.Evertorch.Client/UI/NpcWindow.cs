@@ -169,7 +169,9 @@ public sealed class NpcWindow : MonoBehaviour
         }
 
         ClientStorage storage = world.Storage;
-        if ((m_needsRead || !storage.IsCurrent) && !storage.IsReading && m_client!.OpenStorageAt(Npc) != 0)
+        if ((m_needsRead || (!storage.IsCurrent && !storage.IsReadRefused))
+            && !storage.IsReading
+            && m_client!.OpenStorageAt(Npc) != 0)
         {
             m_needsRead = false;
         }
@@ -431,7 +433,7 @@ public sealed class NpcWindow : MonoBehaviour
         AddHeading("Storage");
         if (!storage.IsCurrent)
         {
-            AddLine("Waiting for the server");
+            AddLine(storage.IsReadRefused ? "Not read: talk to the Storekeeper again" : "Waiting for the server");
             return;
         }
 
@@ -755,8 +757,7 @@ public sealed class NpcWindow : MonoBehaviour
         // While the field has focus the gameplay keys are shut, as the chat's are (Prototype Content §4).
         TMP_InputField amount = Ui.CreateField(panel, AmountField, "1", TMP_InputField.ContentType.IntegerNumber);
         amount.characterLimit = 7;
-        amount.onSelect.AddListener(_ => client.SetTyping(amount, true));
-        amount.onDeselect.AddListener(_ => client.SetTyping(amount, false));
+        client.HoldKeysWhileFocused(amount);
         m_amount = amount;
         m_amountRow = amount.transform.parent.gameObject;
         m_amountRow.SetActive(false);

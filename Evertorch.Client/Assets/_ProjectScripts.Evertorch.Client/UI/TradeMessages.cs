@@ -104,9 +104,6 @@ public static class TradeMessages
                 return "You cannot offer that.";
             case (TradeCommand.Confirm, CommandRejectionReason.NotAllowedNow):
                 return "Both offers must be locked, and something offered, before you trade.";
-            case (TradeCommand.Lock, CommandRejectionReason.NotAllowedNow):
-            case (TradeCommand.Cancel, CommandRejectionReason.NotAllowedNow):
-                return "You are not trading.";
             default:
                 return RejectionMessages.Describe(reason);
         }

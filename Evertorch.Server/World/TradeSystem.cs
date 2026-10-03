@@ -454,7 +454,6 @@ public sealed class TradeSystem : ITickPhase
                 CommandRejectionReason.ServiceUnavailable));
             ShowSide(trade, trade.First.Offer);
             ShowSide(trade, trade.Second.Offer);
-            m_instruments.RecordTradeEnded(Unsaved);
             return;
         }
 

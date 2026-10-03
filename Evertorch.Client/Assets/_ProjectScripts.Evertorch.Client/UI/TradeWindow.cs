@@ -62,12 +62,12 @@ public sealed class TradeWindow : MonoBehaviour
     public string Text { get; private set; } = string.Empty;
 
     /// <summary>
-    ///     The amount field's number: how many of a bag row a press offers; at least 1.
+    ///     The amount field's number: how many of a bag row a press offers, 0 taking the row back; 1 while the field
+    ///     holds no number.
     /// </summary>
     public uint Amount =>
         m_amount != null &&
         uint.TryParse(m_amount.text, NumberStyles.None, CultureInfo.InvariantCulture, out uint amount)
-        && amount > 0
             ? amount
             : 1;
 
@@ -210,10 +210,10 @@ public sealed class TradeWindow : MonoBehaviour
         m_ours = CreateLines(panel, "Your lines");
 
         m_amount = Ui.CreateField(panel, AmountField, "1", TMP_InputField.ContentType.IntegerNumber);
-        WatchFocus(m_amount);
+        client.HoldKeysWhileFocused(m_amount);
         m_coins = Ui.CreateField(panel, CoinsField, string.Empty, TMP_InputField.ContentType.IntegerNumber);
         m_coins.characterLimit = 10;
-        WatchFocus(m_coins);
+        client.HoldKeysWhileFocused(m_coins);
 
         GameObject buttons = Ui.CreateRow("Buttons", panel);
         Ui.CreateButton(OfferCoins, buttons.transform, OfferTheCoins);
@@ -221,7 +221,7 @@ public sealed class TradeWindow : MonoBehaviour
         m_confirm = Ui.CreateButton(Confirm, buttons.transform, () => client.ConfirmTrade()).GetComponent<Button>();
 
         TMP_Text hint = Ui.CreateLabel("Hint", panel);
-        hint.text = "Press a bag row to offer the amount above.";
+        hint.text = "Press a bag row to offer the amount above; 0 takes it back.";
         hint.fontSize = 16f;
         hint.gameObject.AddComponent<LayoutElement>().preferredHeight = RowHeight;
 
@@ -250,13 +250,6 @@ public sealed class TradeWindow : MonoBehaviour
         lines.fontSizeMax = lines.fontSize;
         lines.gameObject.AddComponent<LayoutElement>().preferredHeight = 4 * RowHeight;
         return lines;
-    }
-
-    // While a field has focus the gameplay keys are shut, as the chat's are (Prototype Content §4).
-    private void WatchFocus(TMP_InputField field)
-    {
-        field.onSelect.AddListener(_ => m_client!.SetTyping(field, true));
-        field.onDeselect.AddListener(_ => m_client!.SetTyping(field, false));
     }
 }
 }

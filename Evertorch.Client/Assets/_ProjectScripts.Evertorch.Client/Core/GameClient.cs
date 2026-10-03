@@ -3,8 +3,10 @@ using System.Collections;
 using System.Collections.Generic;
 using Evertorch.Game;
 using Evertorch.Protocol;
+using TMPro;
 using UnityEngine;
 using UnityEngine.Events;
+using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
 using UnityEngine.InputSystem.Controls;
 using UnityEngine.SceneManagement;
@@ -433,11 +435,7 @@ public sealed class GameClient : MonoBehaviour
             slot = m_skillSource.TakeSlot(out isFromGamepad);
         }
 
-        if (slot != 0 && m_world.Trade.IsOpen)
-        {
-            SayHeld();
-        }
-        else if (slot != 0)
+        if (slot != 0)
         {
             UseSkillSlot(slot, isFromGamepad);
         }
@@ -962,6 +960,13 @@ public sealed class GameClient : MonoBehaviour
 
     private void UseSkillSlot(int slot, bool isFromGamepad)
     {
+        // A key and a bar press alike wait while trading (Gameplay Systems §16).
+        if (IsTrading)
+        {
+            SayHeld();
+            return;
+        }
+
         if (SkillSlots.TryGetItem(slot, out ItemDefinitionId item))
         {
             if (m_world != null
@@ -1814,7 +1819,7 @@ public sealed class GameClient : MonoBehaviour
     {
         if (message.Kind == TradeEventKind.Requested)
         {
-            m_world?.Trade.Stamp(Time.realtimeSinceStartupAsDouble);
+            Connection?.World?.Trade.Stamp(Time.realtimeSinceStartupAsDouble);
         }
         else if (message.Kind == TradeEventKind.Opened)
         {
@@ -1887,6 +1892,12 @@ public sealed class GameClient : MonoBehaviour
             return 0;
         }
 
+        if (IsTrading)
+        {
+            ChatLog.AddSystem("You are already trading.");
+            return 0;
+        }
+
         return Connection != null && TakeTradeToken() ? Connection.SendTradeRequest(name) : 0;
     }
 
@@ -1919,8 +1930,8 @@ public sealed class GameClient : MonoBehaviour
     }
 
     /// <summary>
-    ///     Offers the amount field's number of a bag row, at most what the row holds (Prototype Content §2); a worn row
-    ///     cannot be traded.
+    ///     Offers the amount field's number of a bag row, at most what the row holds, and 0 takes the row back
+    ///     (Prototype Content §2); a worn row cannot be traded.
     /// </summary>
     public uint OfferRowInTrade(InventoryEntry row)
     {
@@ -2020,6 +2031,25 @@ public sealed class GameClient : MonoBehaviour
     ///     Shuts the gameplay keys while <paramref name="field" /> has focus, and opens them once no field has
     ///     (Prototype Content §4): the chat's input, the trade's amount and coins, and the Storekeeper's amount.
     /// </summary>
+    /// <summary>
+    ///     Shuts the gameplay keys while <paramref name="field" /> has focus. Enter ends an edit and leaves the field
+    ///     selected, so the edit's end also lets go and deselects it; the next click selects it again.
+    /// </summary>
+    public void HoldKeysWhileFocused(TMP_InputField field)
+    {
+        field.onSelect.AddListener(_ => SetTyping(field, true));
+        field.onDeselect.AddListener(_ => SetTyping(field, false));
+        field.onEndEdit.AddListener(_ =>
+        {
+            SetTyping(field, false);
+            EventSystem? events = EventSystem.current;
+            if (events != null && !events.alreadySelecting && events.currentSelectedGameObject == field.gameObject)
+            {
+                events.SetSelectedGameObject(null);
+            }
+        });
+    }
+
     public void SetTyping(object field, bool isTyping)
     {
         m_inputGate ??= new PlayerInputGate(m_inputActions != null ? m_inputActions : InputSystem.actions);

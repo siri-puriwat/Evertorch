@@ -134,8 +134,8 @@ public sealed class LiveServerTradeTests
             "the frame names the partner");
         Assert.That(
             frame.GetComponentsInChildren<Button>().Select(button => button.name),
-            Has.Member(TargetFrame.Invite),
-            "Invite for a player outside any party");
+            Has.Member(TargetFrame.Invite).And.Member(TargetFrame.Trade),
+            "Invite for a player outside any party, and Trade while no trade is open");
         Assert.That(other.MalformedMessages + other.UnexpectedMessages, Is.Zero, "the other player's traffic");
         Assert.That(client.Connection.MalformedMessages + client.Connection.UnexpectedMessages, Is.Zero);
     }

@@ -347,12 +347,18 @@ public sealed class TradeAndStorageDurabilityTests
         }
 
         pair.Server.Tick(3);
-        bool isWaiting = anna.Operation?.Kind == InventoryOperationKind.Trade;
+        bool isWaiting = interruption switch
+        {
+            "logout" => anna.IsLoggingOut && anna.LogoutCheckpoint == null,
+            "expel" => anna.IsExpelled && anna.IsRemovalDeferred,
+            _ => pair.Server.SessionOf(again).Character == anna
+        };
+        isWaiting &= pair.Server.Sessions.Characters.Contains(anna);
         pair.Server.RunsPersistence = true;
         TickUntil(pair.Server, () => anna.Operation == null && pair.Server.Trades.OpenTrades == 0, "settled");
         pair.Server.Tick(TestServer.TickRate);
 
-        Assert.That(isWaiting, Is.True, "the commit was still in flight");
+        Assert.That(isWaiting, Is.True, "the character waited for the commit, still in the world");
         Assert.That((Bag(pair.Anna.Character), Bag(pair.Bobby.Character)), Is.EqualTo((AnnaAfter, BobbyAfter)));
         Assert.That(TradesOf(pair.Anna.Character), Is.EqualTo(1L));
         Assert.That(BagAfterRestart(pair.Bobby), Is.EqualTo(BobbyAfter));

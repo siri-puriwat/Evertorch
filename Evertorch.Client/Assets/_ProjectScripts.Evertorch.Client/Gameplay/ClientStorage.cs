@@ -36,6 +36,11 @@ public sealed class ClientStorage
     public bool IsReading { get; private set; }
 
     /// <summary>
+    ///     The last read was refused; nothing reads again until the Storekeeper is asked anew.
+    /// </summary>
+    public bool IsReadRefused { get; private set; }
+
+    /// <summary>
     ///     Goes up with every change of what is known, so a window can tell when to show it again.
     /// </summary>
     public int Version { get; private set; }
@@ -48,6 +53,7 @@ public sealed class ClientStorage
     public void BeginRead()
     {
         IsReading = true;
+        IsReadRefused = false;
         Version++;
     }
 
@@ -136,17 +142,25 @@ public sealed class ClientStorage
     }
 
     /// <summary>
-    ///     A refused read ends the wait for it; a refused deposit or withdrawal means what is shown may be out of date.
+    ///     A refused read ends the wait for it and leaves storage unread. A deposit or a withdrawal the commit refused
+    ///     (1, 5) means what is shown is out of date; any other refusal, an item change still going through say, says
+    ///     nothing of storage.
     /// </summary>
-    public void OnRefused(StorageCommand command)
+    public void OnRefused(StorageCommand command, CommandRejectionReason reason)
     {
         if (command == StorageCommand.Open)
         {
             IsReading = false;
+            IsCurrent = false;
+            IsReadRefused = true;
+        }
+        else if (reason == CommandRejectionReason.InvalidTarget || reason == CommandRejectionReason.InventoryFull)
+        {
+            IsCurrent = false;
         }
         else
         {
-            IsCurrent = false;
+            return;
         }
 
         Version++;
