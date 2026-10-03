@@ -85,6 +85,7 @@ public sealed class GameClient : MonoBehaviour
     private PickupState? m_pickup;
     private SkillState? m_skill;
     private TalkState? m_talk;
+    private FollowState? m_follow;
     private MovementController? m_controller;
     private LocalPlayerDriver? m_driver;
     private MoveIntentProducer? m_producer;
@@ -273,6 +274,13 @@ public sealed class GameClient : MonoBehaviour
         (m_npcWindow != null && m_npcWindow.IsOpen)
         || (m_statsWindow != null && m_statsWindow.IsOpen)
         || (m_skillsWindow != null && m_skillsWindow.IsOpen);
+
+    /// <summary>
+    ///     Whether the character is walking after a party member, and which one (Prototype Content §4).
+    /// </summary>
+    public bool IsFollowing => m_follow != null && m_follow.IsFollowing;
+
+    public string FollowedName => m_follow != null ? m_follow.Name : string.Empty;
 
     private IEnumerator Start()
     {
@@ -857,6 +865,7 @@ public sealed class GameClient : MonoBehaviour
         {
             m_pickup?.Cancel();
             m_talk?.Cancel();
+            m_follow?.Cancel();
             m_skill?.UseAt(skill, definition.TargetType, default);
         }
     }
@@ -910,6 +919,7 @@ public sealed class GameClient : MonoBehaviour
 
         m_pickup?.Cancel();
         m_talk?.Cancel();
+        m_follow?.Cancel();
         m_skill.Use(skill, definition.TargetType);
     }
 
@@ -1105,6 +1115,7 @@ public sealed class GameClient : MonoBehaviour
         m_skill = new SkillState(world, m_controller, Connection, 1.0 / Connection.ServerTickRate);
         m_talk = new TalkState(world, m_controller);
         m_talk.Arrived += OnTalkArrived;
+        m_follow = new FollowState(world, m_controller, Party);
         m_driver = new LocalPlayerDriver(
             m_controller,
             m_producer,
@@ -1113,7 +1124,8 @@ public sealed class GameClient : MonoBehaviour
             m_autoAttack,
             m_pickup,
             m_skill,
-            m_talk);
+            m_talk,
+            m_follow);
         Status = $"In {map.DisplayName}";
     }
 
@@ -1220,6 +1232,7 @@ public sealed class GameClient : MonoBehaviour
             m_pickup?.Cancel();
             m_skill?.Cancel();
             m_talk?.Cancel();
+            m_follow?.Cancel();
             m_marker?.ShowAccepted(m_controller.Path[m_controller.Path.Count - 1]);
         }
         else if (result == PointerMoveResult.Refused)
@@ -1336,6 +1349,7 @@ public sealed class GameClient : MonoBehaviour
 
         m_pickup?.Cancel();
         m_talk?.Cancel();
+        m_follow?.Cancel();
         m_skill?.UseAt(skill, targetType, entity);
     }
 
@@ -1353,6 +1367,7 @@ public sealed class GameClient : MonoBehaviour
         m_pickup?.Cancel();
         m_skill?.Cancel();
         m_talk?.Cancel();
+        m_follow?.Cancel();
         m_autoAttack?.Attack(target);
     }
 
@@ -1372,6 +1387,7 @@ public sealed class GameClient : MonoBehaviour
         m_autoAttack?.OnWalkRequested();
         m_skill?.Cancel();
         m_talk?.Cancel();
+        m_follow?.Cancel();
         m_pickup?.Pickup(drop);
     }
 
@@ -1382,6 +1398,7 @@ public sealed class GameClient : MonoBehaviour
         m_autoAttack?.OnWalkRequested();
         m_pickup?.Cancel();
         m_skill?.Cancel();
+        m_follow?.Cancel();
         m_talk?.Talk(npc);
     }
 
@@ -1620,6 +1637,65 @@ public sealed class GameClient : MonoBehaviour
         }
     }
 
+    /// <summary>
+    ///     Starts walking after the party member <paramref name="name" />, the target frame's Follow. The member must
+    ///     be in view: the client knows where a member is only while it draws them, so a member who leaves view ends
+    ///     the follow. It replaces whatever else the character was walking to do.
+    /// </summary>
+    public bool FollowPartyMember(string name)
+    {
+        if (m_world == null)
+        {
+            return false;
+        }
+
+        if (string.Equals(name, PlayedCharacter?.Name, StringComparison.OrdinalIgnoreCase))
+        {
+            ChatLog.AddSystem("You cannot follow yourself.");
+            return false;
+        }
+
+        if (!Party.TryGetMember(name, out PartyMember? _))
+        {
+            ChatLog.AddSystem($"{name} is not in your party.");
+            return false;
+        }
+
+        EntityId entity = default;
+        foreach (RemoteEntity remote in m_world.Remotes.Values)
+        {
+            if (remote.Kind == EntityKind.Player &&
+                string.Equals(remote.Name, name, StringComparison.OrdinalIgnoreCase))
+            {
+                entity = remote.Entity;
+                break;
+            }
+        }
+
+        if (entity == default)
+        {
+            ChatLog.AddSystem($"{name} is not in view.");
+            return false;
+        }
+
+        if (m_follow == null)
+        {
+            return false;
+        }
+
+        m_targeting.Cancel();
+        m_autoAttack?.OnWalkRequested();
+        m_pickup?.Cancel();
+        m_skill?.Cancel();
+        m_talk?.Cancel();
+        return m_follow.Follow(entity);
+    }
+
+    public void StopFollowing()
+    {
+        m_follow?.Cancel();
+    }
+
     // What happened to the party joins the log as a grey line; an invite also asks its question (Prototype Content
     // §2).
     private void OnPartyEvent(PartyEvent message)
@@ -1698,6 +1774,7 @@ public sealed class GameClient : MonoBehaviour
         m_autoAttack = null;
         m_pickup = null;
         m_skill = null;
+        m_follow = null;
         if (m_talk != null)
         {
             m_talk.Arrived -= OnTalkArrived;

@@ -11,14 +11,20 @@ namespace Evertorch.Client
 /// <summary>
 ///     The confirmed target (Prototype Content §2, §4): a monster's name, its HP ratio as a bar, its distance, and
 ///     whether it is dead, or a selected player's name and job, "Ann · Vanguard", with its HP bar only for a party
-///     member, since others' HP is not shown, and Invite while the player could join the party (Prototype Content §2). It
-///     shows only a target the server confirmed with <c>TargetChanged</c>, and the HP that the monster's own bar
-///     shows at that moment, so the frame never runs ahead of the hits on screen. It sits at the top
-///     centre, and narrower beside a window at the top left while one shows (finding 1 of the Milestone 7 review).
+///     member, since others' HP is not shown, and Invite while the player could join the party (Prototype Content §2),
+///     or Follow for a member (§4). It shows only a target the server confirmed with <c>TargetChanged</c>, and the HP
+///     that the monster's own bar shows at that moment, so the frame never runs ahead of the hits on screen. It sits
+///     at the top centre, and narrower beside a window at the top left while one shows (finding 1 of the Milestone 7
+///     review).
 /// </summary>
 public sealed class TargetFrame : MonoBehaviour
 {
     public const string Invite = "Invite";
+
+    /// <summary>
+    ///     The name of the Follow button's object; its label reads Unfollow while the member shown is followed.
+    /// </summary>
+    public const string Follow = "Follow";
 
     /// <summary>
     ///     The frame at its tallest, a selected player's name, its empty detail line, and Invite, in canvas units.
@@ -50,6 +56,9 @@ public sealed class TargetFrame : MonoBehaviour
     private RectTransform? m_fill;
     private TMP_Text? m_detail;
     private GameObject? m_invite;
+    private GameObject? m_follow;
+    private TMP_Text? m_followLabel;
+    private bool m_isShownFollowing;
     private string m_targetName = string.Empty;
     private ClientMonster? m_labelled;
     private string? m_labelledId;
@@ -99,10 +108,19 @@ public sealed class TargetFrame : MonoBehaviour
                 health / 1000f);
             m_targetName = target.Name;
             UiBuilder.SetActive(m_invite!, CanInvite(m_client, target.Name));
+            bool canFollow = CanFollow(m_client, target.Name);
+            UiBuilder.SetActive(m_follow!, canFollow);
+            if (canFollow)
+            {
+                ShowFollowing(m_client.IsFollowing
+                    && string.Equals(m_client.FollowedName, target.Name, StringComparison.OrdinalIgnoreCase));
+            }
+
             return;
         }
 
         UiBuilder.SetActive(m_invite!, false);
+        UiBuilder.SetActive(m_follow!, false);
 
         float ratio = target.HealthPermille / 1000f;
         bool isDead = target.IsDead;
@@ -174,6 +192,16 @@ public sealed class TargetFrame : MonoBehaviour
             && !string.Equals(name, own, StringComparison.OrdinalIgnoreCase)
             && !party.TryGetMember(name, out _)
             && (!party.IsInParty || party.IsLeader(own));
+    }
+
+    /// <summary>
+    ///     Whether Follow shows for the player named <paramref name="name" />: someone else in the player's party.
+    /// </summary>
+    public static bool CanFollow(GameClient client, string name)
+    {
+        return CharacterNames.IsValid(name)
+            && !string.Equals(name, client.PlayedCharacter?.Name, StringComparison.OrdinalIgnoreCase)
+            && client.Party.TryGetMember(name, out _);
     }
 
     public static TargetFrame Create(GameClient client)
@@ -267,6 +295,28 @@ public sealed class TargetFrame : MonoBehaviour
         UiBuilder.SetActive(m_panel!, false);
     }
 
+    private void ShowFollowing(bool isFollowing)
+    {
+        if (isFollowing != m_isShownFollowing)
+        {
+            m_isShownFollowing = isFollowing;
+            Write(m_followLabel!, isFollowing ? "Unfollow" : Follow);
+        }
+    }
+
+    private void OnFollowPressed()
+    {
+        if (m_client!.IsFollowing
+            && string.Equals(m_client.FollowedName, m_targetName, StringComparison.OrdinalIgnoreCase))
+        {
+            m_client.StopFollowing();
+        }
+        else
+        {
+            m_client.FollowPartyMember(m_targetName);
+        }
+    }
+
     private void ShowName(string name)
     {
         if (!string.Equals(name, m_shownName, StringComparison.Ordinal))
@@ -345,6 +395,9 @@ public sealed class TargetFrame : MonoBehaviour
         m_detail.alignment = TextAlignmentOptions.Center;
         m_invite = Ui.CreateButton(Invite, panel, () => client.InviteToParty(m_targetName));
         m_invite.SetActive(false);
+        m_follow = Ui.CreateButton(Follow, panel, OnFollowPressed);
+        m_followLabel = m_follow.GetComponentInChildren<TMP_Text>();
+        m_follow.SetActive(false);
         m_panel.SetActive(false);
     }
 

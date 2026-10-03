@@ -16,7 +16,8 @@ public sealed class PresentationBoundaryTests
 {
     private static readonly Regex Forbidden = new(
         @"ClientConnection|ICombatCommandSink|IMoveIntentSink|ISkillCommandSink|IItemCommandSink|\bSend\w*\("
-        + @"|AutoAttackState|PickupState|SkillState|TalkState|InventoryActions\.Press\b|MovementController"
+        + @"|AutoAttackState|PickupState|SkillState|TalkState|FollowState|InventoryActions\.Press\b"
+        + @"|MovementController"
         + @"|LocalPlayerDriver"
         + @"|MovementPredictor|\.Predictor\b|\.IsLocked\b|RequestRespawn|UseSkillSlot|\bUseSkill\(|PressInventoryRow"
         + @"|BuyFrom|SellTo"
@@ -35,7 +36,7 @@ public sealed class PresentationBoundaryTests
     // cannot hide the call.
     private static readonly Regex UiForbidden = new(
         @"ICombatCommandSink|IMoveIntentSink|ISkillCommandSink|IItemCommandSink|\.Send\w*\(|AutoAttackState"
-        + @"|LocalPlayerDriver|PickupState|SkillState|TalkState|InventoryActions\.Press\b"
+        + @"|LocalPlayerDriver|PickupState|SkillState|TalkState|FollowState|InventoryActions\.Press\b"
         + @"|\.ActionLock\b|MoveIntentProducer|\bnew\s+(MoveIntent|ClientHello|EnterWorldRequest|MoveInput|StopMovement"
         + @"|TargetEntity|AttackEntity|CancelAction|UseSkill|Respawn|Logout|PickupItem|CreateCharacter"
         + @"|InventoryResyncRequest|EquipItem|UnequipItem|UseItem|BuyItem|SellItem|AcceptQuest|CompleteQuest"
@@ -102,6 +103,7 @@ public sealed class PresentationBoundaryTests
             "m_world.OnCommandRejected(rejected);", "m_world.Advance(0.05f);",
             "var pickup = new PickupState(world, controller, sink);", "world.Level =", "m_world.Target = entity;",
             "var talk = new TalkState(world, controller);", "m_world.OnNpcServices(services);",
+            "var follow = new FollowState(world, controller, party);",
             "m_world.CollectNpcCandidates(candidates);", "m_client.BuyFrom(npc, item, 1);", "m_world.OnQuestLog(log);",
             "client.SellTo(npc, row.InventoryItem, 2);", "m_client.AcceptQuestFrom(npc, quest);",
             "client.TurnInQuestTo(npc, quest);", "m_client.RaiseStat(PrimaryStat.Agi);", "client.ToggleStats();",
@@ -170,6 +172,7 @@ public sealed class PresentationBoundaryTests
             "NpcServices? shop = world.TryGetNpcServices(Npc, out NpcServices? services)",
             "world.QuestsChanged += OnQuestsChanged;",
             "AddButton(\"Accept\", () => client.AcceptQuestFrom(npc, quest));",
+            "m_client.FollowPartyMember(m_targetName);", "m_client.StopFollowing();",
             "m_lastQuests = world != null && world.QuestLogsReceived > 0 ? world.Quests : null;"
         };
         string[] lockProbes = { "world.ActionLock.LockForSwing(4);", "bool held = m_world.ActionLock.IsCastLocked;" };

@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Threading.Tasks;
+using Evertorch.Game;
 using Evertorch.Protocol;
 using NUnit.Framework;
 using TMPro;
@@ -234,6 +235,131 @@ public sealed class LiveServerSocialTests
         Assert.That(heard, Has.Member($"[Party] {AnnName}: ready"), server.JoinOutput());
         Assert.That(client.ChatLog.Lines.Select(line => line.Text), Has.Member($"[Party] {AnnName}: ready"));
         Assert.That(other.MalformedMessages + other.UnexpectedMessages, Is.Zero, "the other player's traffic");
+    }
+
+    // Follow through the real target frame (Prototype Content §4): a party member is selected and Follow pressed; the
+    // member walks off, the character walks after it and stops within the follow distance; Unfollow ends it.
+    [UnityTest]
+    [Timeout(TestTimeoutMs)]
+    public IEnumerator Follow_ThroughTheTargetFrame_WalksAfterAMember_UntilUnfollowed()
+    {
+        string actionsPath = RequirePrerequisites();
+        yield return StartDatabaseAndServer();
+        LiveServer server = m_server!;
+        Assert.That(server.TryReadListeningPort(out int port), Is.True, server.JoinOutput());
+        GameClient client = CreateClient(actionsPath);
+        yield return EnterByName(client, AnnName);
+        ClientWorld world = client.World!;
+        yield return EnterTheOther(client, port);
+        ClientConnection other = m_other!;
+        ClientWorld otherWorld = other.World!;
+        EntityId seen = otherWorld.LocalEntity;
+        yield return WaitUntil(
+            () =>
+            {
+                other.Poll();
+                return world.Remotes.ContainsKey(seen);
+            },
+            StartTimeoutSeconds);
+        other.SendPartyInvite(AnnName);
+        PartyInvitePrompt prompt = client.InvitePrompt!;
+        yield return WaitUntil(
+            () =>
+            {
+                other.Poll();
+                return prompt.IsVisible;
+            },
+            StartTimeoutSeconds);
+        prompt.GetComponentsInChildren<Button>().Single(button => button.name == PartyInvitePrompt.Accept).onClick
+            .Invoke();
+        PartyList list = client.PartyList!;
+        yield return WaitUntil(
+            () =>
+            {
+                other.Poll();
+                return list.IsVisible && client.Party.Members.Count == 2;
+            },
+            StartTimeoutSeconds);
+        list.transform.Find("Panel/Row1").GetComponent<Button>().onClick.Invoke();
+        TargetFrame frame = client.GetComponentsInChildren<TargetFrame>(true).Single();
+        yield return WaitUntil(
+            () =>
+            {
+                other.Poll();
+                return world.Target == seen && frame.IsVisible;
+            },
+            StartTimeoutSeconds);
+        yield return null;
+        Button follow = frame.GetComponentsInChildren<Button>().Single(button => button.name == TargetFrame.Follow);
+
+        follow.onClick.Invoke();
+        yield return null;
+
+        Assert.That((client.IsFollowing, client.FollowedName), Is.EqualTo((true, BobName)), server.JoinOutput());
+        Assert.That(follow.GetComponentInChildren<TMP_Text>().text, Is.EqualTo("Unfollow"));
+        var controller = new MovementController(otherWorld.Grid);
+        var driver = new LocalPlayerDriver(controller, new MoveIntentProducer(), otherWorld, other);
+        var clock = new FixedTickClock(1f / other.ServerTickRate);
+        float farthest = 0f;
+        controller.SetManualDirection(1f, 0f);
+        yield return Simulate(other, driver, otherWorld, clock, 1.5f, () => false);
+        controller.SetManualDirection(0f, 0f);
+        yield return Simulate(
+            other,
+            driver,
+            otherWorld,
+            clock,
+            StartTimeoutSeconds,
+            () =>
+            {
+                float gap = Gap(world, otherWorld);
+                farthest = Mathf.Max(farthest, gap);
+                return otherWorld.Predictor.PendingCount == 0
+                    && farthest > FollowState.FollowDistance + FollowState.Margin + 0.5f
+                    && gap <= FollowState.FollowDistance + 0.1f;
+            });
+
+        Assert.That(farthest, Is.GreaterThan(FollowState.FollowDistance + FollowState.Margin), "the member walked off");
+        Assert.That(Gap(world, otherWorld), Is.LessThanOrEqualTo(FollowState.FollowDistance + 0.1f), "it caught up");
+        Assert.That(client.IsFollowing, Is.True, "arriving does not end it");
+
+        follow.onClick.Invoke();
+        yield return null;
+
+        Assert.That(client.IsFollowing, Is.False, "Unfollow ends it");
+        Assert.That(follow.GetComponentInChildren<TMP_Text>().text, Is.EqualTo(TargetFrame.Follow));
+        Assert.That(other.MalformedMessages + other.UnexpectedMessages, Is.Zero, "the other player's traffic");
+    }
+
+    private static float Gap(ClientWorld a, ClientWorld b)
+    {
+        WorldPosition from = a.Predictor.Position;
+        WorldPosition to = b.Predictor.Position;
+        return Mathf.Sqrt((from.X - to.X) * (from.X - to.X) + (from.Z - to.Z) * (from.Z - to.Z));
+    }
+
+    // The other player's own client ticks, as LiveServerPrototypeTests runs them.
+    private static IEnumerator Simulate(
+        ClientConnection connection,
+        LocalPlayerDriver driver,
+        ClientWorld world,
+        FixedTickClock clock,
+        float seconds,
+        Func<bool> isDone)
+    {
+        float deadline = Time.realtimeSinceStartup + seconds;
+        while (Time.realtimeSinceStartup < deadline && !isDone())
+        {
+            connection.Poll();
+            int due = clock.Advance(Time.unscaledDeltaTime);
+            for (int index = 0; index < due; index++)
+            {
+                driver.Tick(clock.NextTick());
+            }
+
+            world.Advance(Time.unscaledDeltaTime);
+            yield return null;
+        }
     }
 
     // The other player: the client's own networking without Unity's views, as a second window would run it.

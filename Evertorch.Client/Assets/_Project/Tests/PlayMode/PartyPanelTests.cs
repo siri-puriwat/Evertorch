@@ -310,6 +310,64 @@ public sealed class PartyPanelTests
         Assert.That(frame.ShownRatio, Is.EqualTo(0.4f).Within(1e-3f));
     }
 
+    // Follow shows for a member only, in Invite's place (Prototype Content §4). What its press does, with a world to
+    // walk in, is LiveServerSocialTests'.
+    [UnityTest]
+    public IEnumerator TargetFrame_OffersFollow_ForAMember_AndNotForAStranger()
+    {
+        (GameClient client, _) = Enter();
+        TargetFrame frame = Track(TargetFrame.Create(client));
+        ClientWorld world = client.World!;
+        SpawnBobby(world);
+        world.OnTargetChanged(new TargetChanged(Local, new EntityId(7)));
+        yield return null;
+        yield return null;
+        bool isOfferedToAStranger = frame.GetComponentsInChildren<Button>()
+            .Any(button => button.name == TargetFrame.Follow);
+
+        client.Party.Apply(Roster(0, ("Ann0", Ground), ("Bobby", Ground)));
+        yield return null;
+        bool isInviteHidden = frame.GetComponentsInChildren<Button>().All(button => button.name != TargetFrame.Invite);
+
+        Assert.That(isOfferedToAStranger, Is.False);
+        Assert.That(isInviteHidden, Is.True, "Invite is for those outside the party");
+        Assert.That(FollowLabel(frame), Is.EqualTo(TargetFrame.Follow));
+
+        client.Party.Apply(Roster(0, ("Ann0", Ground)));
+        yield return null;
+
+        Assert.That(
+            frame.GetComponentsInChildren<Button>().Any(button => button.name == TargetFrame.Follow),
+            Is.False,
+            "gone with the party");
+    }
+
+    [UnityTest]
+    public IEnumerator Follow_IsRefusedInWords_ForAStrangerAndForAMemberOutOfView()
+    {
+        (GameClient client, _) = Enter();
+        SpawnBobby(client.World!);
+        client.Party.Apply(Roster(0, ("Ann0", Ground), ("Cora", Field)));
+        yield return null;
+
+        bool stranger = client.FollowPartyMember("Bobby");
+        bool away = client.FollowPartyMember("Cora");
+        bool self = client.FollowPartyMember("ann0");
+
+        Assert.That((stranger, away, self), Is.EqualTo((false, false, false)));
+        Assert.That(
+            client.ChatLog.Lines.Select(line => line.Text),
+            Is.EqualTo(new[] { "Bobby is not in your party.", "Cora is not in view.", "You cannot follow yourself." }));
+        Assert.That(client.IsFollowing, Is.False);
+    }
+
+    private static string FollowLabel(TargetFrame frame)
+    {
+        Button button = frame.GetComponentsInChildren<Button>()
+            .First(candidate => candidate.name == TargetFrame.Follow);
+        return button.GetComponentInChildren<TMP_Text>().text;
+    }
+
     // A throttled party command scores a violation on the server, so the client refuses past its own bucket of four
     // (Network Protocol §11).
     [Test]
