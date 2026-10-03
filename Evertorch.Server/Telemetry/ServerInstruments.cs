@@ -114,6 +114,7 @@ public sealed class ServerInstruments
     private readonly Counter<long> m_signIns;
     private readonly Counter<long> m_chatMessages;
     private readonly Counter<long> m_partyChanges;
+    private readonly Counter<long> m_tradesEnded;
 
     public ServerInstruments(IMeterFactory meters)
     {
@@ -146,6 +147,10 @@ public sealed class ServerInstruments
             "evertorch.party.changes",
             "{change}",
             "Party changes committed, tagged by kind.");
+        m_tradesEnded = Meter.CreateCounter<long>(
+            "evertorch.trade.ended",
+            "{trade}",
+            "Trades that ended without their exchange, tagged by reason.");
         m_jobDuration = Meter.CreateHistogram<double>(
             "evertorch.persistence.job.duration",
             "ms",
@@ -279,6 +284,14 @@ public sealed class ServerInstruments
             _ => "whisper"
         };
         m_chatMessages.Add(1, new KeyValuePair<string, object?>("channel", name));
+    }
+
+    /// <summary>
+    ///     A trade ended without its exchange, tagged by why: cancelled, parted, refused, or unsaved.
+    /// </summary>
+    public void RecordTradeEnded(string reason)
+    {
+        m_tradesEnded.Add(1, new KeyValuePair<string, object?>("reason", reason));
     }
 
     public void RecordPartyChange(PartyChangeKind kind)

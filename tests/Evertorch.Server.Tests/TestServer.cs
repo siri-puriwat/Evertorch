@@ -219,6 +219,7 @@ internal sealed class TestServer
             Options.Create(world),
             simulation,
             RewardLog);
+        Trades = new TradeSystem(Sessions, sender, Combat, Instruments, Options.Create(world), simulation, TradeLog);
         SessionManager = new SessionManager(
             Inbound,
             Persistence,
@@ -238,6 +239,7 @@ internal sealed class TestServer
             Rewards,
             new ChatSystem(Sessions, sender, Instruments, Parties),
             Parties,
+            Trades,
             Time,
             simulation,
             Options.Create(network),
@@ -291,6 +293,7 @@ internal sealed class TestServer
             Pickups,
             Items,
             Rewards,
+            Trades,
             Parties
         };
         if (withMonsterAi)
@@ -336,6 +339,10 @@ internal sealed class TestServer
     public CapturingLogger<BossRewardSystem> RewardLog { get; } = new();
 
     public PartyRegistry Parties { get; }
+
+    public TradeSystem Trades { get; }
+
+    public CapturingLogger<TradeSystem> TradeLog { get; } = new();
 
     public CapturingLogger<PartyRegistry> PartyLog { get; } = new();
 
@@ -752,6 +759,50 @@ internal sealed class TestServer
         var message = new ChatSend(channel, recipient, text, commandSequence);
         byte[] payload = new byte[message.GetEncodedLength()];
         message.Write(payload);
+        Inbound.OnPayload(connection, ProtocolChannel.Control, payload);
+    }
+
+    public void SendTradeRequest(ConnectionId connection, string name, uint commandSequence)
+    {
+        var message = new TradeRequest(name, commandSequence);
+        byte[] payload = new byte[message.GetEncodedLength()];
+        message.Write(payload);
+        Inbound.OnPayload(connection, ProtocolChannel.Control, payload);
+    }
+
+    public void SendTradeReply(ConnectionId connection, string requester, bool isAccepted, uint commandSequence)
+    {
+        var message = new TradeReply(requester, isAccepted, commandSequence);
+        byte[] payload = new byte[message.GetEncodedLength()];
+        message.Write(payload);
+        Inbound.OnPayload(connection, ProtocolChannel.Control, payload);
+    }
+
+    public void SendTradeOffer(ConnectionId connection, long row, uint quantity, uint commandSequence)
+    {
+        byte[] payload = new byte[TradeOffer.EncodedLength];
+        new TradeOffer(row, quantity, commandSequence).Write(payload);
+        Inbound.OnPayload(connection, ProtocolChannel.Control, payload);
+    }
+
+    public void SendTradeLock(ConnectionId connection, uint commandSequence)
+    {
+        byte[] payload = new byte[TradeLock.EncodedLength];
+        new TradeLock(commandSequence).Write(payload);
+        Inbound.OnPayload(connection, ProtocolChannel.Control, payload);
+    }
+
+    public void SendTradeConfirm(ConnectionId connection, uint commandSequence)
+    {
+        byte[] payload = new byte[TradeConfirm.EncodedLength];
+        new TradeConfirm(commandSequence).Write(payload);
+        Inbound.OnPayload(connection, ProtocolChannel.Control, payload);
+    }
+
+    public void SendTradeCancel(ConnectionId connection, uint commandSequence)
+    {
+        byte[] payload = new byte[TradeCancel.EncodedLength];
+        new TradeCancel(commandSequence).Write(payload);
         Inbound.OnPayload(connection, ProtocolChannel.Control, payload);
     }
 

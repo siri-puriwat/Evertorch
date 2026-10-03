@@ -113,6 +113,11 @@ public sealed class PlayerEntity : WorldEntity
     public bool RespawnPending { get; set; }
 
     /// <summary>
+    ///     A trade is open: the player is held still, as through a swing or a cast (Gameplay Systems §5, §16).
+    /// </summary>
+    public bool IsTrading { get; set; }
+
+    /// <summary>
     ///     The item of the weapon the player wears, which everyone near sees in its hand; null while the weapon slot is
     ///     empty (Gameplay Systems §11.1).
     /// </summary>

@@ -83,10 +83,10 @@ public sealed class MovementSystem : ITickPhase
 
     private void Move(PlayerEntity player, MapInstance map, PlayerInputState input, in TickContext context)
     {
-        // From a swing's start to its impact, through a cast, and while dead, input is consumed and acknowledged but
-        // applied as a zero direction (Gameplay Systems §5). Storing the zero keeps the hold timeout from resuming the
-        // walk later.
-        bool isHeld = player.IsDead || player.Combat.IsSwinging || player.Combat.IsCasting;
+        // From a swing's start to its impact, through a cast, while dead, and while trading, input is consumed and
+        // acknowledged but applied as a zero direction (Gameplay Systems §5). Storing the zero keeps the hold timeout
+        // from resuming the walk later.
+        bool isHeld = player.IsDead || player.Combat.IsSwinging || player.Combat.IsCasting || player.IsTrading;
         if (input.Queue.TryDequeue(out MoveIntent intent))
         {
             input.Direction = isHeld

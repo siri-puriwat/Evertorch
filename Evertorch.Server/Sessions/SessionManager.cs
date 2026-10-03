@@ -85,6 +85,7 @@ public sealed class SessionManager : ITickPhase
     private readonly ItemActionSystem m_items;
     private readonly ChatSystem m_chat;
     private readonly PartyRegistry m_parties;
+    private readonly TradeSystem m_trades;
     private readonly TimeProvider m_time;
     private readonly ServerInstruments m_instruments;
     private readonly AuditLog m_audit;
@@ -120,6 +121,7 @@ public sealed class SessionManager : ITickPhase
         BossRewardSystem rewards,
         ChatSystem chat,
         PartyRegistry parties,
+        TradeSystem trades,
         TimeProvider time,
         IOptions<SimulationOptions> simulation,
         IOptions<NetworkOptions> network,
@@ -152,6 +154,7 @@ public sealed class SessionManager : ITickPhase
         m_items = items;
         m_chat = chat;
         m_parties = parties;
+        m_trades = trades;
         m_items.Settled += OnOperationSettled;
         rewards.Settled += OnOperationSettled;
         m_time = time;
@@ -975,6 +978,13 @@ public sealed class SessionManager : ITickPhase
                 return m_parties.TryLead(session, command.Name!, command.CommandSequence);
         }
 
+        // While trading the character is busy: it cannot fight, cast, change its bag, or use an NPC (Gameplay Systems
+        // §16).
+        if (m_trades.IsTrading(session.Character) && IsBusyWhileTrading(command.Kind))
+        {
+            return CommandRejectionReason.NotAllowedNow;
+        }
+
         if (player.IsDead)
         {
             return command.Kind == InboundEventKind.Respawn && m_life.TryRespawn(session, tick)
@@ -1025,8 +1035,36 @@ public sealed class SessionManager : ITickPhase
                 command.Target,
                 command.Job,
                 command.CommandSequence),
+            InboundEventKind.TradeRequest => m_trades.TryRequest(session, command.Name!),
+            InboundEventKind.TradeReply => m_trades.TryReply(session, command.Name!, command.IsAccepted),
+            InboundEventKind.TradeOffer => m_trades.TryOffer(session, command.InventoryItem, command.Quantity),
+            InboundEventKind.TradeLock => m_trades.TryLock(session),
+            InboundEventKind.TradeConfirm => m_trades.TryConfirm(session),
+            InboundEventKind.TradeCancel => m_trades.TryCancel(session),
             _ => CommandRejectionReason.NotAllowedNow
         };
+    }
+
+    private static bool IsBusyWhileTrading(InboundEventKind kind)
+    {
+        switch (kind)
+        {
+            case InboundEventKind.Attack:
+            case InboundEventKind.UseSkill:
+            case InboundEventKind.Pickup:
+            case InboundEventKind.Equip:
+            case InboundEventKind.Unequip:
+            case InboundEventKind.UseItem:
+            case InboundEventKind.Buy:
+            case InboundEventKind.Sell:
+            case InboundEventKind.AcceptQuest:
+            case InboundEventKind.CompleteQuest:
+            case InboundEventKind.ResetBuild:
+            case InboundEventKind.ChangeJob:
+                return true;
+            default:
+                return false;
+        }
     }
 
     // The Guildmaster's reset (Gameplay Systems §6.1): refused while an inventory operation is in flight, as a turn-in
