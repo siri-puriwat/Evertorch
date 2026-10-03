@@ -17,6 +17,8 @@ namespace Evertorch.Server.Tests
 ///     levels, and reset reach the observer as nothing at all. Milestone 10 adds the first jobs: another's change
 ///     reaches the observer as its new body alone, and a Mend on the observer as the heal and its own health.
 ///     Milestone 12 adds the party: another's party, its health, and its lines reach an observer outside it as nothing.
+///     Milestone 13 adds the dungeon: another's numbing and award reach an observer as nothing, a slam on another as its
+///     result, and a boss's fall everyone on its map.
 /// </summary>
 [TestFixture]
 public sealed class ObserverOutputTests
@@ -33,6 +35,8 @@ public sealed class ObserverOutputTests
     private const string GateWarden = "npc.gate_warden";
     private const string Hunt = "quest.crawler_hunt";
     private const string Guildmaster = "npc.guildmaster";
+    private const string NumbingSpark = "skill.numbing_spark";
+    private const string QuakeSlam = "skill.quake_slam";
 
     private static readonly MessageOpcode[] WhatAnyoneNearSees =
     {
@@ -46,6 +50,12 @@ public sealed class ObserverOutputTests
     {
         server.World.TryGetMap(new MapDefinitionId("map.training_ground"), out MapInstance? ground);
         return ground!;
+    }
+
+    private static MapInstance GrottoOf(TestServer server)
+    {
+        server.World.TryGetMap(new MapDefinitionId("map.umbral_grotto"), out MapInstance? grotto);
+        return grotto!;
     }
 
     private static void StandBeside(TestServer server, ConnectionId player, MonsterEntity monster)
@@ -153,6 +163,86 @@ public sealed class ObserverOutputTests
             "never another's sheet or skills");
     }
 
+    // The party (Milestone 12 verification): the actor and a third player form a party, the actor is wounded, speaks to
+    // the party, passes the lead, and leaves, while the observer stands beside it outside the party. The observer
+    // hears none of the party's messages, no party line, and nothing of the actor's health.
+    // The dungeon (Milestone 13 verification): a Gloom Wisp numbs the actor, the Slime Monarch slams it, and the boss
+    // falls to the actor, its most valuable player with HP to spare, while the observer stands near the actor
+    // throughout, a third player waits by the grotto's west gate, out of their sight, and a fourth stands in town. The
+    // observer hears what anyone near sees, the slam's result on the actor among it, and the boss's fall, and nothing
+    // of the actor's numbing or award; the player by the gate hears the fall and nothing of the slam; the one in town,
+    // nothing of the boss.
+    [Test]
+    public void AnotherPlayersDungeon_ReachesAnObserverAsWhatAnyoneNearSees_AndItsMapAsTheBossesFall()
+    {
+        var server = new TestServer(
+            withEveryMap: true,
+            withGrotto: true,
+            withMonsters: true,
+            withMonsterAi: false,
+            dropRandom: new ScriptedRandom(0));
+        ConnectionId actor = server.EnterWorld(Actor);
+        ConnectionId observer = server.EnterWorld(Observer);
+        ConnectionId gate = server.EnterWorld(3);
+        ConnectionId town = server.EnterWorld(4);
+        foreach (ConnectionId player in new[] { actor, observer, gate })
+        {
+            server.CrossIntoTheGrotto(player);
+        }
+
+        MapInstance grotto = GrottoOf(server);
+        PlayerEntity acting = server.PlayerOf(actor);
+        MonsterEntity wisp = grotto.Monsters.First(monster => monster.Definition.Id.Value == "monster.gloom_wisp");
+        MonsterEntity monarch = grotto.Monsters.Single(monster => monster.Definition.IsBoss);
+        wisp.Position = new WorldPosition(16f, 0f, -19.5f);
+        acting.Position = new WorldPosition(12f, 0f, -19.5f);
+        server.PlayerOf(observer).Position = new WorldPosition(12f, 0f, -17.5f);
+        server.Tick(2);
+        server.Transport.ClearSent();
+
+        server.Combat.BeginMonsterCast(grotto, wisp, new SkillDefinitionId(NumbingSpark), acting, server.CurrentTick);
+        server.Tick(TestServer.TickRate);
+        acting.Position = new WorldPosition(15.5f, 0f, 18f);
+        acting.CurrentHealth = 1_000_000;
+        server.PlayerOf(observer).Position = new WorldPosition(11f, 0f, 18f);
+        server.Tick(2);
+        server.Combat.BeginMonsterCast(grotto, monarch, new SkillDefinitionId(QuakeSlam), acting, server.CurrentTick);
+        server.Tick(2 * TestServer.TickRate);
+        monarch.LogMvpDealt(acting.Character, 500);
+        server.Combat.Kill(grotto, monarch, acting, server.CurrentTick);
+        TickUntil(server, () => !server.SessionOf(actor).Character!.HasInventoryWork, "the prize settled");
+
+        MessageOpcode[] observerHeard = server.Transport.SentTo(observer).Select(message => message.Opcode).ToArray();
+        MessageOpcode[] gateHeard = server.Transport.SentTo(gate).Select(message => message.Opcode).ToArray();
+        SkillResolved[] slamsSeenByTheObserver = Read(server, observer, MessageOpcode.SkillResolved, payload =>
+                SkillResolved.TryRead(payload, out SkillResolved? read) ? read : null)
+            .Where(resolved => resolved.Skill.Value == QuakeSlam)
+            .ToArray();
+        Assert.That(
+            server.Transport.SentTo(actor).Select(message => message.Opcode),
+            Is.SupersetOf(
+                new[]
+                {
+                    MessageOpcode.StatusEffects, MessageOpcode.BossAnnouncement, MessageOpcode.MvpAwarded,
+                    MessageOpcode.InventoryChanged
+                }),
+            "the actor was told of its numbing, the fall, and its award");
+        Assert.That(
+            observerHeard.Distinct(),
+            Is.SubsetOf(WhatAnyoneNearSees.Append(MessageOpcode.BossAnnouncement)));
+        Assert.That(observerHeard, Does.Contain(MessageOpcode.BossAnnouncement), "the observer heard the fall");
+        Assert.That(
+            slamsSeenByTheObserver.Select(resolved => resolved.Target),
+            Is.EqualTo(new[] { acting.Id }),
+            "the slam's result on the actor, whom the observer knows");
+        Assert.That(gateHeard, Does.Contain(MessageOpcode.BossAnnouncement), "the player by the gate heard the fall");
+        Assert.That(gateHeard, Has.No.Member(MessageOpcode.SkillResolved), "but nothing of the slam far off");
+        Assert.That(
+            server.Transport.SentTo(town).Select(message => message.Opcode),
+            Has.No.Member(MessageOpcode.BossAnnouncement).And.No.Member(MessageOpcode.SkillResolved),
+            "nothing of the boss in town");
+    }
+
     // The first jobs (Milestone 10 verification): the actor, at the Adventurer's job level 10, becomes an Arcanist at
     // the Guildmaster, selects the observer, and Mends it. The actor hears its sheet with the job, its skill list, and
     // its selection; the observer hears the actor's new body as one replacement spawn and nothing of its sheet, its
@@ -219,9 +309,6 @@ public sealed class ObserverOutputTests
         Assert.That(healed.CurrentHealth, Is.GreaterThanOrEqualTo(50), "Mend 1 on the observer");
     }
 
-    // The party (Milestone 12 verification): the actor and a third player form a party, the actor is wounded, speaks to
-    // the party, passes the lead, and leaves, while the observer stands beside it outside the party. The observer
-    // hears none of the party's messages, no party line, and nothing of the actor's health.
     [Test]
     public void AnotherPlayersParty_ReachesAnObserverOutsideItAsNothing()
     {
