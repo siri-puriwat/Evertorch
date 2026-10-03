@@ -735,6 +735,8 @@ internal sealed class TestServer
             .Concat(ItemActionLog.Entries)
             .Concat(PartyLog.Entries)
             .Concat(ProgressionLog.Entries)
+            .Concat(BossLog.Entries)
+            .Concat(RewardLog.Entries)
             .Concat(AuditLogger.Entries)
             .SelectMany(entry => new[] { entry.Message }
                 .Concat(entry.Fields.Values.Select(value => value?.ToString() ?? string.Empty)));

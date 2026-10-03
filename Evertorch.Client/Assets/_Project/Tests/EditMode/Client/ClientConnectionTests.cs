@@ -116,6 +116,43 @@ public sealed class ClientConnectionTests
         Assert.That(next, Is.EqualTo(expected));
     }
 
+    // A garbled or hostile boss line or award never reaches the chat log: each is counted and dropped (Network Protocol
+    // §6), and the connection stays in the world.
+    [Test]
+    public void BossAnnouncementAndMvpAwarded_GarbledOrHostile_AreCountedAndRaiseNothing()
+    {
+        var harness = new Harness();
+        harness.EnterWorld();
+        int raised = 0;
+        harness.Connection.BossAnnouncementReceived += _ => raised++;
+        harness.Connection.MvpAwardedReceived += _ => raised++;
+        var monarch = new MonsterDefinitionId("monster.slime_monarch");
+        var fell = new BossAnnouncement(BossAnnouncementKind.Fell, monarch, "Anna");
+        var award = new MvpAwarded(
+            monarch,
+            3000,
+            new ItemDefinitionId("item.armor.monarch_mantle"),
+            1,
+            PrizePlacement.Bag);
+        byte[] cutShort = Encode(fell.GetEncodedLength(), fell.Write);
+        Array.Resize(ref cutShort, cutShort.Length - 1);
+        byte[] unknownKind = Encode(fell.GetEncodedLength(), fell.Write);
+        unknownKind[2] = 9;
+        byte[] placedNowhere = Encode(award.GetEncodedLength(), award.Write);
+        placedNowhere[placedNowhere.Length - 1] = 0;
+        byte[] trailed = Encode(award.GetEncodedLength(), award.Write);
+        Array.Resize(ref trailed, trailed.Length + 1);
+
+        foreach (byte[] payload in new[] { cutShort, unknownKind, placedNowhere, trailed })
+        {
+            harness.Deliver(ProtocolChannel.Control, payload);
+        }
+
+        Assert.That(raised, Is.Zero);
+        Assert.That(harness.Connection.MalformedMessages, Is.EqualTo(4));
+        Assert.That(harness.Connection.State, Is.EqualTo(ClientConnectionState.InWorld));
+    }
+
     // A boss's appearance and fall reach the chat log through the connection, which outlives a scene's load; one
     // outside the world is unexpected (Network Protocol §9).
     [Test]
