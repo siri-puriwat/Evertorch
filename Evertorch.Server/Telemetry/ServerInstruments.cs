@@ -115,6 +115,8 @@ public sealed class ServerInstruments
     private readonly Counter<long> m_chatMessages;
     private readonly Counter<long> m_partyChanges;
     private readonly Counter<long> m_tradesEnded;
+    private readonly Counter<long> m_tradesCompleted;
+    private readonly Counter<long> m_tradeCoins;
 
     public ServerInstruments(IMeterFactory meters)
     {
@@ -151,6 +153,14 @@ public sealed class ServerInstruments
             "evertorch.trade.ended",
             "{trade}",
             "Trades that ended without their exchange, tagged by reason.");
+        m_tradesCompleted = Meter.CreateCounter<long>(
+            "evertorch.trade.completed",
+            "{trade}",
+            "Trades whose exchange committed.");
+        m_tradeCoins = Meter.CreateCounter<long>(
+            "evertorch.trade.coins",
+            "{coin}",
+            "Coins moved between players by committed trades; a transfer, never counted as coins earned or spent.");
         m_jobDuration = Meter.CreateHistogram<double>(
             "evertorch.persistence.job.duration",
             "ms",
@@ -292,6 +302,15 @@ public sealed class ServerInstruments
     public void RecordTradeEnded(string reason)
     {
         m_tradesEnded.Add(1, new KeyValuePair<string, object?>("reason", reason));
+    }
+
+    public void RecordTradeCompleted(long coins)
+    {
+        m_tradesCompleted.Add(1);
+        if (coins > 0)
+        {
+            m_tradeCoins.Add(coins);
+        }
     }
 
     public void RecordPartyChange(PartyChangeKind kind)

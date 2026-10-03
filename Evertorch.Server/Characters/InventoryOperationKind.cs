@@ -26,6 +26,12 @@ public enum InventoryOperationKind
     ///     A boss's prize for its most valuable player, which the server starts without a command (Gameplay Systems
     ///     §11).
     /// </summary>
-    BossReward = 9
+    BossReward = 9,
+
+    /// <summary>
+    ///     A face-to-face trade, one operation of each trader under the trade's one ID, started by the server once both
+    ///     confirmed (Gameplay Systems §16).
+    /// </summary>
+    Trade = 10
 }
 }

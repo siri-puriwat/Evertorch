@@ -155,6 +155,8 @@ public sealed class SessionManager : ITickPhase
         m_chat = chat;
         m_parties = parties;
         m_trades = trades;
+        m_trades.Settled += OnOperationSettled;
+        m_trades.SettleFaulted += CloseFaulted;
         m_items.Settled += OnOperationSettled;
         rewards.Settled += OnOperationSettled;
         m_time = time;

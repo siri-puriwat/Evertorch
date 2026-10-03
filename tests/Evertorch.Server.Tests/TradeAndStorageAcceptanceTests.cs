@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Evertorch.Client;
@@ -18,8 +19,9 @@ namespace Evertorch.Server.Tests
 ///     production networking and gameplay code. Anna, stored holding ten Slime Gel, the Iron Sword, and 300 coins, enters
 ///     the training ground; Bobby, of another account, and Cora, a second character of Anna's account, enter beside her.
 ///     Each sees the other two by name, Bobby stands within a trade's reach of Anna, and Cora walks up to the
-///     Quartermaster, beside whom the Storekeeper will stand. Each later line of Milestone 14 adds its steps here: the
-///     trade, storage, and a restart.
+///     Quartermaster, beside whom the Storekeeper will stand. Anna asks Bobby to trade, Bobby accepts, Anna offers four
+///     gel, the sword, and 100 coins, both lock and confirm, and the exchange commits once, each hearing its whole
+///     inventory and then the completion. Each later line of Milestone 14 adds its steps here: storage, and a restart.
 /// </summary>
 [TestFixture]
 [NonParallelizable]
@@ -120,6 +122,69 @@ public sealed class TradeAndStorageAcceptanceTests
             $"{step}: Bobby is a player to Anna");
     }
 
+    // Anna asks, Bobby accepts, Anna offers, both lock and confirm, and the exchange commits once (Gameplay Systems §16).
+    private static void Trade(SocketClient anna, SocketClient bobby, SocketClient cora)
+    {
+        const string step = "trade";
+        SocketClient[] all = { anna, bobby, cora };
+        var heard = new Dictionary<SocketClient, List<string>>();
+        foreach (SocketClient client in all)
+        {
+            var events = new List<string>();
+            heard.Add(client, events);
+            client.Connection.TradeEventReceived += tradeEvent => events.Add($"{tradeEvent.Kind} {tradeEvent.Name}");
+        }
+
+        anna.Connection.SendTradeRequest(BobbyName);
+        Assert.That(
+            SocketClients.PumpUntil(() => heard[bobby].Contains($"Requested {AnnaName}"), all),
+            Is.True,
+            $"{step}: Bobby asked");
+        bobby.Connection.SendTradeReply(AnnaName, true);
+        Assert.That(
+            SocketClients.PumpUntil(
+                () => heard[anna].Contains($"Opened {BobbyName}") && heard[bobby].Contains($"Opened {AnnaName}"),
+                all),
+            Is.True,
+            $"{step}: opened for both");
+
+        InventoryEntry gel = anna.World.Inventory.Rows.Single(row => row.Item.Value == SlimeGel);
+        InventoryEntry sword = anna.World.Inventory.Rows.Single(row => row.Item.Value == IronSword);
+        anna.Connection.SendTradeOffer(gel.InventoryItem, 4);
+        anna.Connection.SendTradeOffer(sword.InventoryItem, 1);
+        anna.Connection.SendTradeOffer(0, 100);
+        anna.Connection.SendTradeLock();
+        bobby.Connection.SendTradeLock();
+        SocketClients.PumpFor(TimeSpan.FromMilliseconds(300), all);
+        anna.Connection.SendTradeConfirm();
+        bobby.Connection.SendTradeConfirm();
+        Assert.That(
+            SocketClients.PumpUntil(
+                () => heard[anna].Contains($"Completed {BobbyName}") && heard[bobby].Contains($"Completed {AnnaName}"),
+                all),
+            Is.True,
+            $"{step}: completed for both ({string.Join(", ", heard[anna])}; {anna.World.LastRejection})");
+        Assert.That(
+            SocketClients.PumpUntil(
+                () => bobby.World.Inventory.Coins == 100 && anna.World.Inventory.Coins == AnnaCoins - 100, all),
+            Is.True,
+            $"{step}: the coins moved");
+        Assert.That(
+            anna.World.Inventory.Rows.Select(row => $"{row.Item.Value} x {row.Quantity}"),
+            Is.EqualTo(new[] { $"{SlimeGel} x 6" }),
+            $"{step}: Anna kept six gel");
+        Assert.That(
+            bobby.World.Inventory.Rows.Select(row => $"{row.Item.Value} x {row.Quantity}")
+                .OrderBy(row => row, StringComparer.Ordinal),
+            Is.EqualTo(new[] { $"{SlimeGel} x 4", $"{IronSword} x 1" }),
+            $"{step}: Bobby holds four gel and the sword");
+        Assert.That(
+            bobby.World.Inventory.Rows.Single(row => row.Item.Value == IronSword).InventoryItem,
+            Is.EqualTo(sword.InventoryItem),
+            $"{step}: the sword's row kept its ID");
+        Assert.That(heard[cora], Is.Empty, $"{step}: Cora heard nothing of it");
+    }
+
     // Cora walks up to the Quartermaster, whose window opens (Gameplay Systems §6.1).
     private static void VisitTheQuartermaster(SocketClient cora, params SocketClient[] others)
     {
@@ -195,6 +260,9 @@ public sealed class TradeAndStorageAcceptanceTests
         StandTogether(anna, bobby);
         VisitTheQuartermaster(cora, anna, bobby);
         AssertCleanTraffic("town", anna, bobby, cora);
+
+        Trade(anna, bobby, cora);
+        AssertCleanTraffic("trade", anna, bobby, cora);
 
         host.StopAsync().GetAwaiter().GetResult();
         Assert.That(

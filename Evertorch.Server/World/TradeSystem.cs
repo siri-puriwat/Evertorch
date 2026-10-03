@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Evertorch.Game;
+using Evertorch.Persistence;
 using Evertorch.Protocol;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -19,6 +21,10 @@ public sealed class TradeSystem : ITickPhase
     private const int MillisecondsPerSecond = 1000;
     private const string Cancelled = "cancelled";
     private const string Parted = "parted";
+    private const int FailedLookupDelayMs = 1000;
+    private const string Refused = "refused";
+    private const string Unsaved = "unsaved";
+
 
     private static readonly Action<ILogger, long, long, string, Exception?> LogEnded =
         LoggerMessage.Define<long, long, string>(
@@ -26,7 +32,28 @@ public sealed class TradeSystem : ITickPhase
             new EventId(1028, "TradeEnded"),
             "The trade between characters {First} and {Second} ended: {Reason}.");
 
+    private static readonly Action<ILogger, long, long, Guid, Exception?> LogCompleted =
+        LoggerMessage.Define<long, long, Guid>(
+            LogLevel.Information,
+            new EventId(1027, "TradeCompleted"),
+            "Characters {First} and {Second} traded (operation {Operation}).");
+
+    private static readonly Action<ILogger, Guid, long, long, Exception?> LogUnsettled =
+        LoggerMessage.Define<Guid, long, long>(
+            LogLevel.Warning,
+            new EventId(4013, "TradeUnsettled"),
+            "The commit of trade {Operation} between characters {First} and {Second} gave no answer; both wait until "
+            + "the database says what happened.");
+
     private readonly SessionRegistry m_sessions;
+    private readonly PersistenceWorker m_persistence;
+    private readonly CharacterLifetime m_lifetime;
+    private readonly IReadOnlyDictionary<ItemDefinitionId, ItemDefinition> m_items;
+    private readonly TimeProvider m_time;
+    private readonly uint m_failedLookupDelayTicks;
+    private readonly List<(OpenTrade Trade, uint NotBefore)> m_unsettled = new();
+    private readonly List<OpenTrade> m_ready = new();
+
     private readonly MessageSender m_sender;
     private readonly CombatSystem m_combat;
     private readonly ServerInstruments m_instruments;
@@ -44,6 +71,10 @@ public sealed class TradeSystem : ITickPhase
         SessionRegistry sessions,
         MessageSender sender,
         CombatSystem combat,
+        PersistenceWorker persistence,
+        CharacterLifetime lifetime,
+        ServerContent content,
+        TimeProvider time,
         ServerInstruments instruments,
         IOptions<WorldOptions> world,
         IOptions<SimulationOptions> simulation,
@@ -52,11 +83,18 @@ public sealed class TradeSystem : ITickPhase
         m_sessions = sessions;
         m_sender = sender;
         m_combat = combat;
+        m_persistence = persistence;
+        m_lifetime = lifetime;
+        m_items = content.Items;
+        m_time = time;
         m_instruments = instruments;
         m_logger = logger;
         m_reach = NpcInteraction.Range + world.Value.AttackRangeTolerance;
         m_requestTicks = (uint)((long)RequestLifetimeMs * simulation.Value.TickRate / MillisecondsPerSecond);
+        m_failedLookupDelayTicks =
+            (uint)((long)FailedLookupDelayMs * simulation.Value.TickRate / MillisecondsPerSecond);
     }
+
 
     public int PendingRequests => m_byRequester.Count;
 
@@ -72,6 +110,15 @@ public sealed class TradeSystem : ITickPhase
     public void Execute(in TickContext context)
     {
         m_tick = context.Tick;
+        for (int index = m_unsettled.Count - 1; index >= 0; index--)
+        {
+            (OpenTrade waiting, uint notBefore) = m_unsettled[index];
+            if (unchecked((int)(m_tick - notBefore)) >= 0 && TryQueueLookup(waiting))
+            {
+                m_unsettled.RemoveAt(index);
+            }
+        }
+
         m_endedRequests.Clear();
         foreach (PendingTrade request in m_byRequester.Values)
         {
@@ -104,7 +151,38 @@ public sealed class TradeSystem : ITickPhase
         {
             End(trade, Parted);
         }
+
+        m_ready.Clear();
+        foreach (OpenTrade trade in m_trades.Values)
+        {
+            if (!trade.IsCommitting
+                && !m_ready.Contains(trade)
+                && trade.First.Offer.IsConfirmed
+                && trade.Second.Offer.IsConfirmed
+                && !trade.First.Character.HasInventoryWork
+                && !trade.Second.Character.HasInventoryWork)
+            {
+                m_ready.Add(trade);
+            }
+        }
+
+        foreach (OpenTrade trade in m_ready)
+        {
+            StartCommit(trade);
+        }
     }
+
+    /// <summary>
+    ///     A trade's commit finished, one way or the other, for this trader: it may now log out, leave, or cross once
+    ///     nothing else of its inventory is in flight.
+    /// </summary>
+    public event Action<CharacterSession>? Settled;
+
+    /// <summary>
+    ///     Settling one trader threw: the connection's session is closed, as a fault inside its own boundary would close
+    ///     it, while the other trader settles on.
+    /// </summary>
+    public event Action<ConnectionId, Exception>? SettleFaulted;
 
     /// <summary>
     ///     Whether the character has a trade open, which holds it still and freezes its bag (Gameplay Systems §16).
@@ -326,14 +404,238 @@ public sealed class TradeSystem : ITickPhase
         ShowSide(trade, trade.Second.Offer);
     }
 
-    // Ends an open trade before its commit started, telling both traders and letting them move again.
-    private void End(OpenTrade trade, string reason)
+    // Ends an open trade: one that never committed tells both traders it was cancelled; one the commit refused has told
+    // them why already. Either way both may move again.
+    private void End(OpenTrade trade, string reason, bool isCancelled = true)
     {
         Close(trade);
-        Tell(trade.First, new TradeEvent(TradeEventKind.Cancelled, trade.Second.Name));
-        Tell(trade.Second, new TradeEvent(TradeEventKind.Cancelled, trade.First.Name));
+        if (isCancelled)
+        {
+            Tell(trade.First, new TradeEvent(TradeEventKind.Cancelled, trade.Second.Name));
+            Tell(trade.Second, new TradeEvent(TradeEventKind.Cancelled, trade.First.Name));
+        }
+
         LogEnded(m_logger, IdOf(trade.First.Character), IdOf(trade.Second.Character), reason, null);
         m_instruments.RecordTradeEnded(reason);
+    }
+
+    // Both have confirmed and neither has inventory work: the offers are checked here first, then each trader gets its
+    // own operation under the trade's ID and one job commits both (Gameplay Systems §16; Persistence §5).
+    private void StartCommit(OpenTrade trade)
+    {
+        TradeCommit commit = CommitOf(trade);
+        var settlement = new TradeSettlement(
+            commit,
+            HoldingsOf(trade.First.Character).Concat(HoldingsOf(trade.Second.Character)),
+            trade.First.Character.Inventory.Coins,
+            trade.Second.Character.Inventory.Coins);
+        if (settlement.Status != TradeStatus.Committed)
+        {
+            Fail(trade, settlement.Status, settlement.RefusedCharacterId!.Value);
+            return;
+        }
+
+        CharacterSession first = trade.First.Character;
+        var job = new PersistenceJob<TradeResult>(
+            "trade",
+            first.Connection?.Connection ?? default,
+            IdOf(first),
+            (store, cancellation) => store.CommitTradeAsync(commit, cancellation),
+            (outcome, result) => CompleteCommit(trade, outcome, result),
+            trade.Id.ToString());
+        if (!m_persistence.TryEnqueue(job))
+        {
+            // Nothing was asked of the database: the trade stays open, and both may confirm again.
+            trade.First.Offer.IsConfirmed = false;
+            trade.Second.Offer.IsConfirmed = false;
+            Tell(trade.First, new TradeEvent(TradeEventKind.Unsaved, trade.Second.Name,
+                CommandRejectionReason.ServiceUnavailable));
+            Tell(trade.Second, new TradeEvent(TradeEventKind.Unsaved, trade.First.Name,
+                CommandRejectionReason.ServiceUnavailable));
+            ShowSide(trade, trade.First.Offer);
+            ShowSide(trade, trade.Second.Offer);
+            m_instruments.RecordTradeEnded(Unsaved);
+            return;
+        }
+
+        trade.IsCommitting = true;
+        first.Operation = new InventoryOperation(InventoryOperationKind.Trade, 0, trade.Id);
+        trade.Second.Character.Operation = new InventoryOperation(InventoryOperationKind.Trade, 0, trade.Id);
+    }
+
+    private TradeCommit CommitOf(OpenTrade trade)
+    {
+        var limits = new Dictionary<string, int>(StringComparer.Ordinal);
+        foreach (Trader trader in new[] { trade.First, trade.Second })
+        {
+            foreach ((long row, uint _) in trader.Offer.Rows)
+            {
+                if (trader.Character.Inventory.TryGetRow(row, out InventoryEntry held))
+                {
+                    limits[held.Item.Value] = m_items[held.Item].StackLimit;
+                }
+            }
+        }
+
+        return new TradeCommit(
+            trade.Id,
+            OfferOf(trade.First),
+            OfferOf(trade.Second),
+            limits,
+            PickupSystem.MaxInventoryRows,
+            m_time.GetUtcNow().UtcDateTime);
+    }
+
+    private static TraderOffer OfferOf(Trader trader)
+    {
+        return new TraderOffer(
+            IdOf(trader.Character),
+            trader.Offer.Rows.Select(offered => new TradeLine(offered.Row, (int)offered.Quantity)).ToList(),
+            trader.Offer.Coins);
+    }
+
+    private static IEnumerable<TradeSettlement.Holding> HoldingsOf(CharacterSession character)
+    {
+        return character.Inventory.Rows.Select(row => new TradeSettlement.Holding(
+            row.InventoryItem,
+            IdOf(character),
+            row.Item.Value,
+            (int)row.Quantity,
+            row.Slot != EquipmentSlot.None));
+    }
+
+    private void CompleteCommit(OpenTrade trade, PersistenceOutcome outcome, TradeResult result)
+    {
+        if (outcome == PersistenceOutcome.Succeeded)
+        {
+            Settle(trade, result);
+            return;
+        }
+
+        // The commit may have happened; only the trades table can say.
+        LogUnsettled(m_logger, trade.Id, IdOf(trade.First.Character), IdOf(trade.Second.Character), null);
+        if (!TryQueueLookup(trade))
+        {
+            m_unsettled.Add((trade, m_tick));
+        }
+    }
+
+    private bool TryQueueLookup(OpenTrade trade)
+    {
+        Guid id = trade.Id;
+        long first = IdOf(trade.First.Character);
+        long second = IdOf(trade.Second.Character);
+        var lookup = new PersistenceJob<TradeResult?>(
+            "trade lookup",
+            trade.First.Character.Connection?.Connection ?? default,
+            first,
+            (store, cancellation) => store.FindTradeAsync(id, first, second, cancellation),
+            (outcome, found) => CompleteLookup(trade, outcome, found),
+            id.ToString());
+        return m_persistence.TryEnqueue(lookup);
+    }
+
+    private void CompleteLookup(OpenTrade trade, PersistenceOutcome outcome, TradeResult? found)
+    {
+        if (outcome != PersistenceOutcome.Succeeded)
+        {
+            uint notBefore = outcome == PersistenceOutcome.Failed ? m_tick + m_failedLookupDelayTicks : m_tick;
+            m_unsettled.Add((trade, notBefore));
+            return;
+        }
+
+        if (found != null)
+        {
+            Settle(trade, found);
+            return;
+        }
+
+        // The trade never committed: it ends with nothing moved.
+        Finish(trade, () =>
+        {
+            Tell(trade.First, new TradeEvent(TradeEventKind.Failed, trade.Second.Name,
+                CommandRejectionReason.ServiceUnavailable));
+            Tell(trade.Second, new TradeEvent(TradeEventKind.Failed, trade.First.Name,
+                CommandRejectionReason.ServiceUnavailable));
+            End(trade, Unsaved, false);
+        });
+    }
+
+    private void Settle(OpenTrade trade, TradeResult result)
+    {
+        Finish(trade, () =>
+        {
+            if (result.Status != TradeStatus.Committed)
+            {
+                Fail(trade, result.Status, result.RefusedCharacterId!.Value);
+                return;
+            }
+
+            SettleSide(trade.First, result.First, trade.Second.Name);
+            SettleSide(trade.Second, result.Second, trade.First.Name);
+            LogCompleted(m_logger, IdOf(trade.First.Character), IdOf(trade.Second.Character), trade.Id, null);
+            m_instruments.RecordTradeCompleted(trade.First.Offer.Coins + trade.Second.Offer.Coins);
+        });
+    }
+
+    // Each trader is settled inside a fault boundary of its own, so one that throws never leaves the other stuck; the
+    // trade closes and both operations clear whatever happened (System Architecture §8).
+    private void Finish(OpenTrade trade, Action settle)
+    {
+        try
+        {
+            settle();
+        }
+        finally
+        {
+            Close(trade);
+            foreach (Trader trader in new[] { trade.First, trade.Second })
+            {
+                trader.Character.Operation = null;
+                Settled?.Invoke(trader.Character);
+                m_lifetime.OnOperationSettled(trader.Character);
+            }
+        }
+    }
+
+    private void SettleSide(Trader trader, TraderInventory inventory, string partnerName)
+    {
+        CharacterSession character = trader.Character;
+        try
+        {
+            character.Inventory.Replace(inventory.InventoryRevision, inventory.Coins, inventory.Rows);
+
+            // A whole inventory, never a change: a trade may change more rows than a change holds, and the client takes
+            // a snapshot it did not ask for without a shop's line (Network Protocol §9).
+            ClientSession? owner = character.Connection;
+            if (owner != null && owner.State == SessionState.InWorld)
+            {
+                foreach (InventorySnapshot part in character.Inventory.CreateSnapshot())
+                {
+                    m_sender.Send(owner.Connection, part);
+                }
+
+                m_sender.Send(owner.Connection, new TradeEvent(TradeEventKind.Completed, partnerName));
+            }
+        }
+        catch (Exception exception)
+        {
+            SettleFaulted?.Invoke(character.Connection?.Connection ?? default, exception);
+        }
+    }
+
+    private void Fail(OpenTrade trade, TradeStatus status, long refusedCharacterId)
+    {
+        string named = refusedCharacterId == IdOf(trade.First.Character) ? trade.First.Name : trade.Second.Name;
+        CommandRejectionReason reason = status switch
+        {
+            TradeStatus.InventoryFull => CommandRejectionReason.InventoryFull,
+            TradeStatus.CoinCapReached => CommandRejectionReason.CoinCapReached,
+            _ => CommandRejectionReason.NotAllowedNow
+        };
+        Tell(trade.First, new TradeEvent(TradeEventKind.Failed, named, reason));
+        Tell(trade.Second, new TradeEvent(TradeEventKind.Failed, named, reason));
+        End(trade, Refused, false);
     }
 
     private void Close(OpenTrade trade)

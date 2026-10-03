@@ -219,7 +219,18 @@ internal sealed class TestServer
             Options.Create(world),
             simulation,
             RewardLog);
-        Trades = new TradeSystem(Sessions, sender, Combat, Instruments, Options.Create(world), simulation, TradeLog);
+        Trades = new TradeSystem(
+            Sessions,
+            sender,
+            Combat,
+            Persistence,
+            Lifetime,
+            Content,
+            Time,
+            Instruments,
+            Options.Create(world),
+            simulation,
+            TradeLog);
         SessionManager = new SessionManager(
             Inbound,
             Persistence,

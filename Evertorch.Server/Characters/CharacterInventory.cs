@@ -123,6 +123,22 @@ public sealed class CharacterInventory
         return rows;
     }
 
+    /// <summary>
+    ///     Takes a whole inventory as committed, in place of the rows held: what a trade settles with, since a trade may
+    ///     change more rows than a change names (Gameplay Systems §16).
+    /// </summary>
+    public void Replace(uint revision, long coins, IReadOnlyList<StoredItem> rows)
+    {
+        m_rows.Clear();
+        foreach (StoredItem row in rows)
+        {
+            Take(row);
+        }
+
+        Revision = revision;
+        Coins = coins;
+    }
+
     public IReadOnlyList<InventorySnapshot> CreateSnapshot()
     {
         return InventorySnapshot.CreateParts(Revision, (uint)Coins, m_rows);
