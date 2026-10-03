@@ -173,9 +173,10 @@ public sealed class TradeCommitTests
     }
 
     // One trader's settle throws (its stored slot is one the server does not know); its session closes, as a fault in
-    // its own boundary would close it, and the other still hears its completion.
+    // its own boundary would close it, and the other still hears its completion and logs out. PostgreSQL's slot check
+    // cannot store such a row, so this fault is shown on the in-memory store alone.
     [Test]
-    public void OneTradersFaultingSettle_ClosesItsSession_AndTheOtherSettlesOn()
+    public void OneTradersFaultingSettle_ClosesItsSession_AndTheOtherSettlesOn_AndLogsOut()
     {
         (TradeRig rig, ConnectionId seven, ConnectionId eight) = Opened();
         rig.Server.Store.GiveItems(8, "item.material.crawler_shell", 1, 1, 0);
@@ -187,6 +188,10 @@ public sealed class TradeCommitTests
         Assert.That(rig.Events(seven).Last().Kind, Is.EqualTo(TradeEventKind.Completed));
         Assert.That(rig.Server.PlayerOf(seven).IsTrading, Is.False);
         Assert.That(rig.Server.Transport.Disconnects[eight], Is.EqualTo(DisconnectReason.InternalError));
+        rig.Server.SendLogout(seven, rig.Next(seven));
+        rig.Server.TickUntil(() => rig.Server.Transport.ControlSentTo(seven)
+            .Any(message => message.Opcode == MessageOpcode.LogoutComplete));
+        Assert.That(Bag(rig.Server, 7), Is.EqualTo($"{Gel} 6, {Sword} 1; 0"), "the exchange stored for the other");
     }
 
     [Test]
