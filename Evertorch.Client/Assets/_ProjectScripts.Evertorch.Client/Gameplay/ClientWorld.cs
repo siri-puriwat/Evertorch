@@ -127,6 +127,12 @@ public sealed class ClientWorld
     public ClientInventory Inventory { get; } = new();
 
     /// <summary>
+    ///     The player's trade and the request waiting for its answer, as the server last told them (Gameplay Systems
+    ///     §16).
+    /// </summary>
+    public ClientTrade Trade { get; } = new();
+
+    /// <summary>
     ///     The skills the server says the local character knows, with the cooldown left when the list was sent.
     /// </summary>
     public IReadOnlyList<SkillListEntry> Skills { get; private set; } = Array.Empty<SkillListEntry>();

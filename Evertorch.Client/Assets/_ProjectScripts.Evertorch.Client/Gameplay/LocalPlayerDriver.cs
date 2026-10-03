@@ -50,7 +50,8 @@ public sealed class LocalPlayerDriver
         MovementPredictor predictor = m_world.Predictor;
         WorldPosition previous = predictor.Position;
         m_controller.IsDead = m_world.IsLocalDead;
-        m_controller.IsLocked = m_world.ActionLock.Advance();
+        // An open trade holds the character still, as a swing or a cast does (Gameplay Systems §5).
+        m_controller.IsLocked = m_world.ActionLock.Advance() | m_world.Trade.IsOpen;
         m_autoAttack?.Tick(previous);
         m_pickup?.Tick(previous);
         m_skill?.Tick(previous);

@@ -5,8 +5,9 @@ using UnityEngine.UI;
 namespace Evertorch.Client
 {
 /// <summary>
-///     The question an invite asks (Prototype Content §2): "Ann invites you to a party." with Accept and Decline,
-///     for the 30 s the server keeps the invite. It stands beside the chat on the desktop and over the touch log, clear
+///     The question an invite or a trade's request asks (Prototype Content §2): "Anna invites you to a party." or
+///     "Anna wants to trade with you." with Accept and Decline, the newer of the two while both wait, for the 30 s the
+///     server keeps each. It stands beside the chat on the desktop and over the touch log, clear
 ///     of the target frame, the party list, and the side windows.
 /// </summary>
 public sealed class PartyInvitePrompt : MonoBehaviour
@@ -35,6 +36,7 @@ public sealed class PartyInvitePrompt : MonoBehaviour
     private RectTransform? m_accept;
     private RectTransform? m_decline;
     private bool? m_isTouchLayout;
+    private bool m_isTrade;
 
     public bool IsVisible => m_panel != null && m_panel.activeSelf;
 
@@ -48,13 +50,19 @@ public sealed class PartyInvitePrompt : MonoBehaviour
             return;
         }
 
-        party.ExpireInvite(Time.realtimeSinceStartupAsDouble);
-        bool isShown = m_client.World != null && party.Inviter != null;
+        double now = Time.realtimeSinceStartupAsDouble;
+        party.ExpireInvite(now);
+        ClientTrade? trade = m_client.World?.Trade;
+        trade?.ExpireRequest(now);
+        bool isTrade = trade?.Requester != null && (party.Inviter == null || trade.RequestEndsAt > party.InviteEndsAt);
+        bool isShown = m_client.World != null && (party.Inviter != null || isTrade);
         UiBuilder.SetActive(m_panel!, isShown);
         if (!isShown)
         {
             return;
         }
+
+        m_isTrade = isTrade;
 
         bool isTouch = m_client.Touch != null && m_client.Touch.IsVisible;
         if (isTouch != m_isTouchLayout)
@@ -62,7 +70,9 @@ public sealed class PartyInvitePrompt : MonoBehaviour
             Place(isTouch);
         }
 
-        UiBuilder.SetText(m_question!, PartyMessages.Invitation(party.Inviter!));
+        UiBuilder.SetText(
+            m_question!,
+            isTrade ? TradeMessages.Request(trade!.Requester!) : PartyMessages.Invitation(party.Inviter!));
     }
 
     public static PartyInvitePrompt Create(GameClient client)
@@ -108,12 +118,22 @@ public sealed class PartyInvitePrompt : MonoBehaviour
         m_question.richText = false;
         m_question.textWrappingMode = TextWrappingModes.Normal;
         m_question.alignment = TextAlignmentOptions.MidlineLeft;
-        m_accept = (RectTransform)Ui.CreateButton(Accept, panel.transform, () => client.AnswerPartyInvite(true))
-            .transform;
-        m_decline = (RectTransform)Ui.CreateButton(Decline, panel.transform, () => client.AnswerPartyInvite(false))
-            .transform;
+        m_accept = (RectTransform)Ui.CreateButton(Accept, panel.transform, () => Answer(true)).transform;
+        m_decline = (RectTransform)Ui.CreateButton(Decline, panel.transform, () => Answer(false)).transform;
         Place(false);
         panel.SetActive(false);
+    }
+
+    private void Answer(bool isAccepted)
+    {
+        if (m_isTrade)
+        {
+            m_client!.AnswerTradeRequest(isAccepted);
+        }
+        else
+        {
+            m_client!.AnswerPartyInvite(isAccepted);
+        }
     }
 
     // The desktop's narrow place puts the question above the buttons; the touch strip puts them beside it.

@@ -12,7 +12,8 @@ namespace Evertorch.Client
 ///     The confirmed target (Prototype Content §2, §4): a monster's name, its HP ratio as a bar, its distance, and
 ///     whether it is dead, or a selected player's name and job, "Ann · Vanguard", with its HP bar only for a party
 ///     member, since others' HP is not shown, and Invite while the player could join the party (Prototype Content §2),
-///     or Follow for a member (§4). It shows only a target the server confirmed with <c>TargetChanged</c>, and the HP
+///     or Follow for a member (§4), beside Trade for anyone else while no trade is open (Gameplay Systems §16). It shows
+///     only a target the server confirmed with <c>TargetChanged</c>, and the HP
 ///     that the monster's own bar shows at that moment, so the frame never runs ahead of the hits on screen. It sits
 ///     at the top centre, and narrower beside a window at the top left while one shows (finding 1 of the Milestone 7
 ///     review).
@@ -20,6 +21,8 @@ namespace Evertorch.Client
 public sealed class TargetFrame : MonoBehaviour
 {
     public const string Invite = "Invite";
+
+    public const string Trade = "Trade";
 
     /// <summary>
     ///     The name of the Follow button's object; its label reads Unfollow while the member shown is followed.
@@ -56,6 +59,7 @@ public sealed class TargetFrame : MonoBehaviour
     private RectTransform? m_fill;
     private TMP_Text? m_detail;
     private GameObject? m_invite;
+    private GameObject? m_trade;
     private GameObject? m_follow;
     private TMP_Text? m_followLabel;
     private bool m_isShownFollowing;
@@ -108,6 +112,7 @@ public sealed class TargetFrame : MonoBehaviour
                 health / 1000f);
             m_targetName = target.Name;
             UiBuilder.SetActive(m_invite!, CanInvite(m_client, target.Name));
+            UiBuilder.SetActive(m_trade!, CanTrade(m_client, target.Name));
             bool canFollow = CanFollow(m_client, target.Name);
             UiBuilder.SetActive(m_follow!, canFollow);
             if (canFollow)
@@ -121,6 +126,7 @@ public sealed class TargetFrame : MonoBehaviour
 
         UiBuilder.SetActive(m_invite!, false);
         UiBuilder.SetActive(m_follow!, false);
+        UiBuilder.SetActive(m_trade!, false);
 
         float ratio = target.HealthPermille / 1000f;
         bool isDead = target.IsDead;
@@ -192,6 +198,16 @@ public sealed class TargetFrame : MonoBehaviour
             && !string.Equals(name, own, StringComparison.OrdinalIgnoreCase)
             && !party.TryGetMember(name, out _)
             && (!party.IsInParty || party.IsLeader(own));
+    }
+
+    /// <summary>
+    ///     Whether Trade shows for the player named <paramref name="name" />: someone else, while no trade is open.
+    /// </summary>
+    public static bool CanTrade(GameClient client, string name)
+    {
+        return CharacterNames.IsValid(name)
+            && !string.Equals(name, client.PlayedCharacter?.Name, StringComparison.OrdinalIgnoreCase)
+            && !client.IsTrading;
     }
 
     /// <summary>
@@ -393,11 +409,15 @@ public sealed class TargetFrame : MonoBehaviour
 
         m_detail = Ui.CreateLabel("Detail", panel);
         m_detail.alignment = TextAlignmentOptions.Center;
-        m_invite = Ui.CreateButton(Invite, panel, () => client.InviteToParty(m_targetName));
+        // Invite and Follow never show together, so with Trade they keep one row's height.
+        GameObject actions = Ui.CreateRow("Actions", panel);
+        m_invite = Ui.CreateButton(Invite, actions.transform, () => client.InviteToParty(m_targetName));
         m_invite.SetActive(false);
-        m_follow = Ui.CreateButton(Follow, panel, OnFollowPressed);
+        m_follow = Ui.CreateButton(Follow, actions.transform, OnFollowPressed);
         m_followLabel = m_follow.GetComponentInChildren<TMP_Text>();
         m_follow.SetActive(false);
+        m_trade = Ui.CreateButton(Trade, actions.transform, () => client.RequestTrade(m_targetName));
+        m_trade.SetActive(false);
         m_panel.SetActive(false);
     }
 

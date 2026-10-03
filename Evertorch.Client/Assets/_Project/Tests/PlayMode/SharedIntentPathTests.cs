@@ -91,8 +91,9 @@ public sealed class SharedIntentPathTests : InputTestFixture
         Rig rig = CreateRig();
         SkillInputSource skills = rig.CreateSkillSource();
         var gate = new PlayerInputGate(rig.Actions);
+        object chat = new();
 
-        gate.Shut();
+        gate.Shut(chat);
         foreach (Key key in new[] { Key.W, Key.A, Key.S, Key.D })
         {
             SetKeys(keyboard, key);
@@ -107,7 +108,7 @@ public sealed class SharedIntentPathTests : InputTestFixture
         int slotWhileShut = skills.TakeSlot();
         int sentWhileShut = rig.Sent.Count;
         WorldPosition stood = rig.World.Predictor.Position;
-        gate.Open();
+        gate.Open(chat);
         SetKeys(keyboard, Key.W);
         rig.Tick();
         SetKeys(keyboard);

@@ -229,8 +229,12 @@ public sealed class ChatPanel : MonoBehaviour
                 Submit();
             }
         }
-        else if (isEnter && world != null && Time.frameCount != m_closedAtFrame)
+        else if (isEnter
+                 && world != null
+                 && Time.frameCount != m_closedAtFrame
+                 && (m_client == null || !m_client.IsTyping))
         {
+            // An Enter typed into another field, the trade's amount say, is that field's own (Prototype Content §4).
             Open();
         }
     }
@@ -268,6 +272,10 @@ public sealed class ChatPanel : MonoBehaviour
         if (request.Refusal != null)
         {
             Add(request.Refusal);
+        }
+        else if (request.Trader != null)
+        {
+            m_client?.RequestTrade(request.Trader);
         }
         else if (request.Invitee != null)
         {
@@ -341,6 +349,17 @@ public sealed class ChatPanel : MonoBehaviour
                 out string name))
         {
             Add(RejectionMessages.DescribeParty(command, name, rejected.Reason));
+            return;
+        }
+
+        if (m_client != null
+            && m_client.Connection != null
+            && m_client.Connection.TryGetTradeSequence(
+                rejected.CommandSequence,
+                out TradeCommand trade,
+                out string partner))
+        {
+            Add(TradeMessages.DescribeRefusal(trade, partner, rejected.Reason));
             return;
         }
 

@@ -1,9 +1,11 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Threading.Tasks;
+using Evertorch.Game;
 using Evertorch.Protocol;
 using NUnit.Framework;
 using TMPro;
@@ -131,6 +133,117 @@ public sealed class LiveServerTradeTests
             "Invite for a player outside any party");
         Assert.That(other.MalformedMessages + other.UnexpectedMessages, Is.Zero, "the other player's traffic");
         Assert.That(client.Connection.MalformedMessages + client.Connection.UnexpectedMessages, Is.Zero);
+    }
+
+    // The other player asks; the real client's prompt asks the question and Accept opens the trade window, where the
+    // amount field's number of a bag row is offered by pressing the row, coins by the coin field, and Lock and Trade
+    // finish it once the other locks and confirms: the log says "Trade complete." and the bag holds what is left. While
+    // the trade is open the client stands still (Prototype Content §2, §4; Gameplay Systems §16).
+    [UnityTest]
+    [Timeout(TestTimeoutMs)]
+    public IEnumerator Trade_ThroughThePromptAndTheWindow_CompletesAndTheBagShowsIt()
+    {
+        string actionsPath = RequirePrerequisites();
+        yield return StartDatabaseAndServer();
+        LiveServer server = m_server!;
+        Assert.That(server.TryReadListeningPort(out int port), Is.True, server.JoinOutput());
+        GameClient client = CreateClient(actionsPath);
+        yield return EnterByName(client, AnnName, () =>
+        {
+            m_database!.Execute(
+                "INSERT INTO inventory_items (character_id, item_definition_id, quantity, refine_level, version) "
+                + $"SELECT id, '{SlimeGel}', 10, 0, 0 FROM characters WHERE name = '{AnnName}'");
+            m_database.Execute($"UPDATE characters SET currency = {AnnCoins} WHERE name = '{AnnName}'");
+        });
+        ClientWorld world = client.World!;
+        yield return EnterTheOther(client, port);
+        ClientConnection other = m_other!;
+        var heard = new List<string>();
+        other.TradeEventReceived += message => heard.Add($"{message.Kind} {message.Name}");
+
+        other.SendTradeRequest(AnnName);
+        PartyInvitePrompt prompt = client.InvitePrompt!;
+        yield return WaitUntil(
+            () =>
+            {
+                other.Poll();
+                return prompt.IsVisible;
+            },
+            StartTimeoutSeconds);
+        Assert.That(prompt.Text, Is.EqualTo($"{BobName} wants to trade with you."), server.JoinOutput());
+        prompt.GetComponentsInChildren<Button>().Single(button => button.name == PartyInvitePrompt.Accept).onClick
+            .Invoke();
+        TradeWindow window = client.TradeWindow!;
+        yield return WaitUntil(
+            () =>
+            {
+                other.Poll();
+                return window.IsOpen && heard.Contains($"Opened {AnnName}");
+            },
+            StartTimeoutSeconds);
+        Assert.That(window.IsOpen, Is.True, $"{client.Status} {server.JoinOutput()}");
+        Assert.That(client.ChatLog.Lines.Select(line => line.Text), Has.Member($"Trading with {BobName}."));
+
+        // Held still: a walk asked of the controller goes nowhere while the trade is open.
+        WorldPosition stood = world.Predictor.Position;
+        client.Controller!.TryMoveTo(stood, new WorldPosition(stood.X + 3f, 0f, stood.Z));
+        yield return WaitUntil(
+            () =>
+            {
+                other.Poll();
+                return false;
+            },
+            1f);
+        Assert.That(world.Predictor.Position, Is.EqualTo(stood), "held still");
+
+        window.AmountInput!.text = "4";
+        InventoryEntry gel = world.Inventory.Rows.Single(row => row.Item.Value == SlimeGel);
+        client.PressInventoryRow(gel);
+        window.CoinsInput!.text = "100";
+        window.GetComponentsInChildren<Button>().Single(button => button.name == TradeWindow.OfferCoins).onClick
+            .Invoke();
+        yield return WaitUntil(
+            () =>
+            {
+                other.Poll();
+                return world.Trade.Own.Coins == 100 && world.Trade.OfferedOf(gel.InventoryItem) == 4;
+            },
+            StartTimeoutSeconds);
+        Assert.That(window.Text, Does.Contain("Slime Gel x 4").And.Contain("100 coins"), window.Text);
+        Assert.That(
+            client.GetComponentsInChildren<InventoryWindow>(true).Single().Text,
+            Does.Contain("(offered x 4)"));
+
+        window.GetComponentsInChildren<Button>().Single(button => button.name == TradeWindow.Lock).onClick.Invoke();
+        other.SendTradeLock();
+        yield return WaitUntil(
+            () =>
+            {
+                other.Poll();
+                return world.Trade.Own.IsLocked && world.Trade.Theirs.IsLocked;
+            },
+            StartTimeoutSeconds);
+        yield return null;
+        window.GetComponentsInChildren<Button>().Single(button => button.name == TradeWindow.Confirm).onClick
+            .Invoke();
+        other.SendTradeConfirm();
+        yield return WaitUntil(
+            () =>
+            {
+                other.Poll();
+                return client.ChatLog.Lines.Any(line => line.Text == "Trade complete.");
+            },
+            StartTimeoutSeconds);
+
+        Assert.That(client.ChatLog.Lines.Select(line => line.Text), Has.Member("Trade complete."), server.JoinOutput());
+        Assert.That(window.IsOpen, Is.False, "the window closes with the trade");
+        Assert.That(world.Inventory.Coins, Is.EqualTo(AnnCoins - 100));
+        Assert.That(
+            world.Inventory.Rows.Select(row => $"{row.Item.Value} x {row.Quantity}"),
+            Is.EqualTo(new[] { $"{SlimeGel} x 6" }));
+        Assert.That(other.World!.Inventory.Coins, Is.EqualTo(100u));
+        Assert.That(other.MalformedMessages + other.UnexpectedMessages, Is.Zero, "the other player's traffic");
+        Assert.That(client.Connection!.MalformedMessages + client.Connection.UnexpectedMessages, Is.Zero);
     }
 
     private static string RequirePrerequisites()

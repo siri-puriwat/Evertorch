@@ -59,6 +59,8 @@ public sealed class ClientChatBucketTests
         Assert.That(ChatThrottle.PerSecond, Is.LessThanOrEqualTo(options.ChatCommandsPerSecond));
         Assert.That(ChatThrottle.Burst, Is.LessThanOrEqualTo(options.PartyCommandBurst - 1), "the party's too");
         Assert.That(ChatThrottle.PerSecond, Is.LessThanOrEqualTo(options.PartyCommandsPerSecond));
+        Assert.That(ChatThrottle.Burst, Is.LessThanOrEqualTo(options.TradeCommandBurst - 1), "the trade's too");
+        Assert.That(ChatThrottle.PerSecond, Is.LessThanOrEqualTo(options.TradeCommandsPerSecond));
     }
 
     [Test]

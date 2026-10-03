@@ -51,6 +51,7 @@ public sealed class InventoryWindow : MonoBehaviour
     private ClientInventory? m_shownInventory;
     private bool m_shownCurrent;
     private uint m_shownRevision;
+    private TradeSide? m_shownOffer;
     private bool m_hadContent;
 
     public int TextChanges { get; private set; }
@@ -128,13 +129,18 @@ public sealed class InventoryWindow : MonoBehaviour
     public void Show(ClientInventory inventory, ClientContent? content)
     {
         bool hasContent = content != null;
+        ClientTrade? trade = m_client != null ? m_client.World?.Trade : null;
+        TradeSide? offered = trade != null && trade.IsOpen ? trade.Own : null;
         if (inventory == m_shownInventory
             && inventory.IsCurrent == m_shownCurrent
             && inventory.Revision == m_shownRevision
-            && hasContent == m_hadContent)
+            && hasContent == m_hadContent
+            && offered == m_shownOffer)
         {
             return;
         }
+
+        m_shownOffer = offered;
 
         m_shownInventory = inventory;
         m_shownCurrent = inventory.IsCurrent;
@@ -155,7 +161,7 @@ public sealed class InventoryWindow : MonoBehaviour
         {
             foreach (InventoryEntry row in inventory.Rows)
             {
-                AddRow(row, content);
+                AddRow(row, content, trade);
             }
         }
 
@@ -163,13 +169,17 @@ public sealed class InventoryWindow : MonoBehaviour
         TextChanges++;
     }
 
-    private static string RowText(InventoryEntry row, ClientItem? item)
+    // A row the open trade offers says how much of it (Prototype Content §2).
+    private static string RowText(InventoryEntry row, ClientItem? item, uint offered)
     {
         string name = item != null ? item.DisplayName : row.Item.Value;
-        return row.Slot == EquipmentSlot.None ? $"{name} x {row.Quantity}" : $"{name} x {row.Quantity} (equipped)";
+        string text = row.Slot == EquipmentSlot.None
+            ? $"{name} x {row.Quantity}"
+            : $"{name} x {row.Quantity} (equipped)";
+        return offered > 0 ? $"{text} (offered x {offered})" : text;
     }
 
-    private void AddRow(InventoryEntry row, ClientContent? content)
+    private void AddRow(InventoryEntry row, ClientContent? content, ClientTrade? trade)
     {
         ClientItem? item = null;
         if (content != null && content.TryGetItem(row.Item, out ClientItem? found))
@@ -177,8 +187,11 @@ public sealed class InventoryWindow : MonoBehaviour
             item = found;
         }
 
-        string text = RowText(row, item);
-        if (item != null && InventoryActions.HasAction(item.Type))
+        bool isTrading = trade != null && trade.IsOpen;
+        string text = RowText(row, item, isTrading ? trade!.OfferedOf(row.InventoryItem) : 0);
+
+        // While trading a press offers any unworn row, whatever its item does otherwise.
+        if ((isTrading && row.Slot == EquipmentSlot.None) || (item != null && InventoryActions.HasAction(item.Type)))
         {
             GameClient client = m_client!;
             GameObject button = Ui.CreateButton(text, m_rows!, () => client.PressInventoryRow(row));

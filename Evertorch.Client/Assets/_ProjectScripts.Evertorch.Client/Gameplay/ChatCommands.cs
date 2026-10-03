@@ -9,13 +9,20 @@ namespace Evertorch.Client
 /// </summary>
 public readonly struct ChatRequest
 {
-    private ChatRequest(ChatChannel channel, string recipient, string text, string? refusal, string? invitee = null)
+    private ChatRequest(
+        ChatChannel channel,
+        string recipient,
+        string text,
+        string? refusal,
+        string? invitee = null,
+        string? trader = null)
     {
         Channel = channel;
         Recipient = recipient;
         Text = text;
         Refusal = refusal;
         Invitee = invitee;
+        Trader = trader;
     }
 
     /// <summary>
@@ -37,6 +44,11 @@ public readonly struct ChatRequest
     /// </summary>
     public string? Invitee { get; }
 
+    /// <summary>
+    ///     The player to ask to trade; null unless the line was <c>/trade Name</c>.
+    /// </summary>
+    public string? Trader { get; }
+
     public static ChatRequest Send(ChatChannel channel, string recipient, string text)
     {
         return new ChatRequest(channel, recipient, text, null);
@@ -53,17 +65,23 @@ public readonly struct ChatRequest
     {
         return new ChatRequest(ChatChannel.None, string.Empty, string.Empty, null, name);
     }
+
+    public static ChatRequest Trade(string name)
+    {
+        return new ChatRequest(ChatChannel.None, string.Empty, string.Empty, null, null, name);
+    }
 }
 
 /// <summary>
 ///     The chat input's commands (Prototype Content §2): <c>/w Name text</c> whispers, <c>/r text</c> answers the last
-///     whisper, <c>/p text</c> speaks to the party, <c>/invite Name</c> invites to it, and anything else is said
+///     whisper, <c>/p text</c> speaks to the party, <c>/invite Name</c> invites to it, <c>/trade Name</c> asks to
+///     trade, and anything else is said
 ///     nearby. The client checks the name and
 ///     the text rules itself, so an honest player is never scored for a malformed line (Network Protocol §11).
 /// </summary>
 public static class ChatCommands
 {
-    public const string Usage = "Commands: /w Name text, /r text, /p text, /invite Name.";
+    public const string Usage = "Commands: /w Name text, /r text, /p text, /invite Name, /trade Name.";
 
     public static ChatRequest Parse(string typed, string? lastWhisperer, string? ownName)
     {
@@ -100,6 +118,12 @@ public static class ChatCommands
         {
             string name = FirstWord(rest, out _);
             return name.Length == 0 ? ChatRequest.Refuse("Invite with /invite Name.") : ChatRequest.Invite(name);
+        }
+
+        if (string.Equals(command, "/trade", StringComparison.OrdinalIgnoreCase))
+        {
+            string name = FirstWord(rest, out _);
+            return name.Length == 0 ? ChatRequest.Refuse("Trade with /trade Name.") : ChatRequest.Trade(name);
         }
 
         return ChatRequest.Refuse(Usage);

@@ -71,6 +71,9 @@ public sealed class GameClient : MonoBehaviour
 
     // The party's commands are scored when throttled as chat is, so they go through a bucket of their own as strict.
     private readonly ChatThrottle m_partyThrottle = new();
+
+    // A trade's requests and replies are scored when throttled too (Network Protocol §11).
+    private readonly ChatThrottle m_tradeThrottle = new();
     private IClientTransport? m_socket;
     private ManualMoveSource? m_manualSource;
     private PointerMoveSource? m_pointerSource;
@@ -105,6 +108,8 @@ public sealed class GameClient : MonoBehaviour
     private NpcWindow? m_npcWindow;
     private StatsWindow? m_statsWindow;
     private SkillsWindow? m_skillsWindow;
+    private TradeWindow? m_tradeWindow;
+    private bool m_hasSaidHeld;
     private SkillBar? m_skillBar;
     private ChatPanel? m_chat;
     private PartyList? m_partyList;
@@ -273,7 +278,15 @@ public sealed class GameClient : MonoBehaviour
     public bool IsSideWindowOpen =>
         (m_npcWindow != null && m_npcWindow.IsOpen)
         || (m_statsWindow != null && m_statsWindow.IsOpen)
-        || (m_skillsWindow != null && m_skillsWindow.IsOpen);
+        || (m_skillsWindow != null && m_skillsWindow.IsOpen)
+        || (m_tradeWindow != null && m_tradeWindow.IsOpen);
+
+    /// <summary>
+    ///     Whether a trade is open, which holds the character still and takes the side slot (Gameplay Systems §16).
+    /// </summary>
+    public bool IsTrading => m_world != null && m_world.Trade.IsOpen;
+
+    public TradeWindow? TradeWindow => m_tradeWindow;
 
     /// <summary>
     ///     Whether the character is walking after a party member, and which one (Prototype Content §4).
@@ -314,6 +327,8 @@ public sealed class GameClient : MonoBehaviour
         m_statsWindow.transform.SetParent(transform, false);
         m_skillsWindow = SkillsWindow.Create(this);
         m_skillsWindow.transform.SetParent(transform, false);
+        m_tradeWindow = TradeWindow.Create(this);
+        m_tradeWindow.transform.SetParent(transform, false);
         m_skillBar = SkillBar.Create(this);
         m_skillBar.transform.SetParent(transform, false);
         m_chat = ChatPanel.Create(this);
@@ -360,6 +375,12 @@ public sealed class GameClient : MonoBehaviour
 
         float yaw = m_camera == null ? 0f : m_camera.YawDegrees;
         m_manualSource?.Apply(m_controller, yaw);
+        if (m_world.Trade.IsOpen && m_controller.HasManualDirection)
+        {
+            m_controller.SetManualDirection(0f, 0f);
+            SayHeld();
+        }
+
         m_targetCandidates.Clear();
         m_world.CollectTargetCandidates(m_targetCandidates);
         m_pointerCandidates.Clear();
@@ -408,7 +429,11 @@ public sealed class GameClient : MonoBehaviour
             slot = m_skillSource.TakeSlot(out isFromGamepad);
         }
 
-        if (slot != 0)
+        if (slot != 0 && m_world.Trade.IsOpen)
+        {
+            SayHeld();
+        }
+        else if (slot != 0)
         {
             UseSkillSlot(slot, isFromGamepad);
         }
@@ -619,6 +644,7 @@ public sealed class GameClient : MonoBehaviour
             Connection.Closed -= OnClosed;
             Connection.ChatLineReceived -= OnChatLine;
             Connection.PartyEventReceived -= OnPartyEvent;
+            Connection.TradeEventReceived -= OnTradeEvent;
             Connection.BossAnnouncementReceived -= OnBossAnnouncement;
             Connection.MvpAwardedReceived -= OnMvpAwarded;
             Connection.PartyRosterReceived -= Party.Apply;
@@ -651,6 +677,7 @@ public sealed class GameClient : MonoBehaviour
         Connection.Closed += OnClosed;
         Connection.ChatLineReceived += OnChatLine;
         Connection.PartyEventReceived += OnPartyEvent;
+        Connection.TradeEventReceived += OnTradeEvent;
         Connection.BossAnnouncementReceived += OnBossAnnouncement;
         Connection.MvpAwardedReceived += OnMvpAwarded;
         Connection.PartyRosterReceived += Party.Apply;
@@ -707,6 +734,12 @@ public sealed class GameClient : MonoBehaviour
     /// </summary>
     public void PressInventoryRow(InventoryEntry row)
     {
+        if (IsTrading)
+        {
+            OfferRowInTrade(row);
+            return;
+        }
+
         ClientContent? content = m_contentLoader.Content;
         if (Connection != null
             && content != null
@@ -805,6 +838,12 @@ public sealed class GameClient : MonoBehaviour
             return;
         }
 
+        // The trade window keeps the side slot until the trade ends (Prototype Content §2).
+        if (IsTrading)
+        {
+            return;
+        }
+
         m_npcWindow?.Close();
         m_skillsWindow?.Close();
         m_statsWindow.Open();
@@ -823,6 +862,11 @@ public sealed class GameClient : MonoBehaviour
         if (m_skillsWindow.IsOpen)
         {
             m_skillsWindow.Close();
+            return;
+        }
+
+        if (IsTrading)
+        {
             return;
         }
 
@@ -1226,6 +1270,14 @@ public sealed class GameClient : MonoBehaviour
             return;
         }
 
+        // While trading the character stays where it is: a click on the ground walks nowhere, and one on anything but
+        // a player only says so (Gameplay Systems §16).
+        if (m_world.Trade.IsOpen)
+        {
+            HoldPointer(result, entity);
+            return;
+        }
+
         if (result == PointerMoveResult.Accepted)
         {
             m_autoAttack?.OnWalkRequested();
@@ -1274,6 +1326,15 @@ public sealed class GameClient : MonoBehaviour
         }
 
         CombatRequest request = m_combatSource.TakeRequest();
+        if (m_world.Trade.IsOpen
+            && (request == CombatRequest.Attack
+                || request == CombatRequest.Pickup
+                || request == CombatRequest.Talk))
+        {
+            SayHeld();
+            return;
+        }
+
         if (request == CombatRequest.Clear)
         {
             // It ends a wait for a skill's target first; otherwise a skill walking to its target, and the selection.
@@ -1404,6 +1465,11 @@ public sealed class GameClient : MonoBehaviour
 
     private void OnTalkArrived(EntityId npc)
     {
+        if (IsTrading)
+        {
+            return;
+        }
+
         m_statsWindow?.Close();
         m_skillsWindow?.Close();
         m_npcWindow?.Open(npc);
@@ -1696,6 +1762,172 @@ public sealed class GameClient : MonoBehaviour
         m_follow?.Cancel();
     }
 
+    // What happened to the trade joins the log as a grey line; a request also asks its question, and an opening ends
+    // whatever the character was doing, since it now stands still (Prototype Content §2).
+    private void OnTradeEvent(TradeEvent message)
+    {
+        if (message.Kind == TradeEventKind.Requested)
+        {
+            m_world?.Trade.Stamp(Time.realtimeSinceStartupAsDouble);
+        }
+        else if (message.Kind == TradeEventKind.Opened)
+        {
+            m_hasSaidHeld = false;
+            m_targeting.Cancel();
+            m_controller?.CancelPath();
+            m_controller?.SetManualDirection(0f, 0f);
+            m_autoAttack?.OnWalkRequested();
+            m_pickup?.Cancel();
+            m_skill?.Cancel();
+            m_talk?.Cancel();
+            m_follow?.Cancel();
+            m_npcWindow?.Close();
+            m_statsWindow?.Close();
+            m_skillsWindow?.Close();
+        }
+
+        string? line = TradeMessages.Describe(message);
+        if (line != null)
+        {
+            ChatLog.AddSystem(line);
+        }
+    }
+
+    private void SayHeld()
+    {
+        if (!m_hasSaidHeld)
+        {
+            m_hasSaidHeld = true;
+            ChatLog.AddSystem(TradeMessages.Held);
+        }
+    }
+
+    private void HoldPointer(PointerMoveResult result, EntityId entity)
+    {
+        if (result == PointerMoveResult.Accepted)
+        {
+            m_controller!.CancelPath();
+            SayHeld();
+        }
+        else if (result == PointerMoveResult.Entity)
+        {
+            if (m_world!.Remotes.TryGetValue(entity, out RemoteEntity? remote) && remote.Kind == EntityKind.Player)
+            {
+                SelectPlayer(entity);
+            }
+            else
+            {
+                SayHeld();
+            }
+        }
+    }
+
+    /// <summary>
+    ///     Asks the player named <paramref name="name" /> to trade, the chat's <c>/trade</c> and the target frame's
+    ///     Trade. The client refuses what the server would, in the same words, so nothing is sent for it. 0 when nothing
+    ///     was sent, else the command's sequence.
+    /// </summary>
+    public uint RequestTrade(string name)
+    {
+        if (!CharacterNames.IsValid(name))
+        {
+            ChatLog.AddSystem($"{name} is not online.");
+            return 0;
+        }
+
+        if (string.Equals(name, PlayedCharacter?.Name, StringComparison.OrdinalIgnoreCase))
+        {
+            ChatLog.AddSystem("You cannot trade with yourself.");
+            return 0;
+        }
+
+        return Connection != null && TakeTradeToken() ? Connection.SendTradeRequest(name) : 0;
+    }
+
+    /// <summary>
+    ///     Answers the request waiting, the prompt's Accept or Decline.
+    /// </summary>
+    public uint AnswerTradeRequest(bool isAccepted)
+    {
+        string? requester = m_world?.Trade.Requester;
+        if (requester == null || Connection == null || !TakeTradeToken())
+        {
+            return 0;
+        }
+
+        m_world!.Trade.EndRequest();
+        return Connection.SendTradeReply(requester, isAccepted);
+    }
+
+    // The server scores a throttled request or reply, so the client keeps a stricter bucket of its own (Network
+    // Protocol §11).
+    private bool TakeTradeToken()
+    {
+        if (m_tradeThrottle.TryTake(Time.realtimeSinceStartupAsDouble))
+        {
+            return true;
+        }
+
+        ChatLog.AddSystem("You are doing that too fast.");
+        return false;
+    }
+
+    /// <summary>
+    ///     Offers the amount field's number of a bag row, at most what the row holds (Prototype Content §2); a worn row
+    ///     cannot be traded.
+    /// </summary>
+    public uint OfferRowInTrade(InventoryEntry row)
+    {
+        if (Connection == null || !IsTrading)
+        {
+            return 0;
+        }
+
+        if (row.Slot != EquipmentSlot.None)
+        {
+            ChatLog.AddSystem("Take it off before you trade it.");
+            return 0;
+        }
+
+        uint amount = m_tradeWindow != null ? m_tradeWindow.Amount : 1;
+        return Connection.SendTradeOffer(row.InventoryItem, Math.Min(amount, row.Quantity));
+    }
+
+    /// <summary>
+    ///     Offers <paramref name="coins" /> in the open trade; 0 takes the coins back.
+    /// </summary>
+    public uint OfferCoinsInTrade(uint coins)
+    {
+        if (Connection == null || !IsTrading)
+        {
+            return 0;
+        }
+
+        uint held = m_world!.Inventory.Coins;
+        if (coins > held)
+        {
+            ChatLog.AddSystem($"You have {ShopMessages.Coins(held)}.");
+            return 0;
+        }
+
+        return Connection.SendTradeOffer(0, coins);
+    }
+
+    public uint LockTrade()
+    {
+        return Connection != null && IsTrading ? Connection.SendTradeLock() : 0;
+    }
+
+    public uint ConfirmTrade()
+    {
+        return Connection != null && IsTrading ? Connection.SendTradeConfirm() : 0;
+    }
+
+    public uint CancelTrade()
+    {
+        return Connection != null && IsTrading ? Connection.SendTradeCancel() : 0;
+    }
+
     // What happened to the party joins the log as a grey line; an invite also asks its question (Prototype Content
     // §2).
     private void OnPartyEvent(PartyEvent message)
@@ -1735,14 +1967,23 @@ public sealed class GameClient : MonoBehaviour
     /// </summary>
     public void SetTyping(bool isTyping)
     {
+        SetTyping(this, isTyping);
+    }
+
+    /// <summary>
+    ///     Shuts the gameplay keys while <paramref name="field" /> has focus, and opens them once no field has
+    ///     (Prototype Content §4): the chat's input, the trade's amount and coins, and the Storekeeper's amount.
+    /// </summary>
+    public void SetTyping(object field, bool isTyping)
+    {
         m_inputGate ??= new PlayerInputGate(m_inputActions != null ? m_inputActions : InputSystem.actions);
         if (isTyping)
         {
-            m_inputGate.Shut();
+            m_inputGate.Shut(field);
         }
         else
         {
-            m_inputGate.Open();
+            m_inputGate.Open(field);
         }
     }
 

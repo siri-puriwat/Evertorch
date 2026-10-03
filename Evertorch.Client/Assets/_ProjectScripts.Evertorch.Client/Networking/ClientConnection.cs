@@ -1268,6 +1268,7 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
         }
         else
         {
+            World.Trade.Apply(message);
             TradeEventReceived?.Invoke(message);
         }
     }
@@ -1284,6 +1285,7 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
         }
         else
         {
+            World.Trade.Apply(message);
             TradeSideReceived?.Invoke(message);
         }
     }
