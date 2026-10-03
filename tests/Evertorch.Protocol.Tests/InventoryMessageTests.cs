@@ -17,7 +17,7 @@ public sealed class InventoryMessageTests
         0x0F, 0x80, 0x07, 0x00, 0x00, 0x00, 0xFA, 0x00, 0x00, 0x00, 0x01, 0x03, 0x01,
         0x0B, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x06, 0x00,
         0x69, 0x74, 0x65, 0x6D, 0x2E, 0x61, 0x02, 0x00, 0x00, 0x00,
-        0x01
+        0x01, 0x00
     };
 
     // From revision 7 to 8 with 250 coins: row 11, item.a, removed.
@@ -26,7 +26,7 @@ public sealed class InventoryMessageTests
         0x10, 0x80, 0x07, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0xFA, 0x00, 0x00, 0x00, 0x01,
         0x0B, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x06, 0x00,
         0x69, 0x74, 0x65, 0x6D, 0x2E, 0x61, 0x00, 0x00, 0x00, 0x00,
-        0x00
+        0x00, 0x00
     };
 
     // From revision 7 to 8, where only the coins moved, to 250.
@@ -160,7 +160,7 @@ public sealed class InventoryMessageTests
 
         bool isRead = InventoryChanged.TryRead(Encode(message), out InventoryChanged? read);
 
-        Assert.That(message.GetEncodedLength(), Is.EqualTo(963));
+        Assert.That(message.GetEncodedLength(), Is.EqualTo(975));
         Assert.That(isRead, Is.True);
         Assert.That(read!.Changes, Has.Count.EqualTo(12));
     }
@@ -266,7 +266,7 @@ public sealed class InventoryMessageTests
 
         bool isRead = InventorySnapshot.TryRead(Encode(message), out InventorySnapshot? read);
 
-        Assert.That(message.GetEncodedLength(), Is.EqualTo(961));
+        Assert.That(message.GetEncodedLength(), Is.EqualTo(973));
         Assert.That(isRead, Is.True);
         Assert.That(read!.Entries, Has.Count.EqualTo(12));
     }
@@ -312,6 +312,23 @@ public sealed class InventoryMessageTests
         Action build = () => _ = new InventorySnapshot(1, 0, 0, 1, entries);
 
         Assert.That(build, Throws.ArgumentException);
+    }
+
+    // A refine level travels from protocol 37 and belongs to a row of one: never to a stack, nor to a removed row
+    // (Network Protocol §6).
+    [Test]
+    public void RefineLevel_TravelsOnARowOfOne_AndIsMalformedOnAStackOrARemovedRow()
+    {
+        var item = new ItemDefinitionId("item.a");
+        var refined =
+            new InventorySnapshot(1, 0, 0, 1, new[] { new InventoryEntry(5, item, 1, EquipmentSlot.Weapon, 7) });
+        var stack = new InventorySnapshot(1, 0, 0, 1, new[] { new InventoryEntry(5, item, 2, EquipmentSlot.None, 7) });
+        var removed = new InventoryChanged(1, 2, 0, new[] { new InventoryEntry(5, item, 0, EquipmentSlot.None, 7) });
+
+        Assert.That(InventorySnapshot.TryRead(Encode(refined), out InventorySnapshot? read), Is.True);
+        Assert.That(read!.Entries[0].RefineLevel, Is.EqualTo(7));
+        Assert.That(InventorySnapshot.TryRead(Encode(stack), out _), Is.False, "a stack");
+        Assert.That(InventoryChanged.TryRead(Encode(removed), out _), Is.False, "a removed row");
     }
 }
 }

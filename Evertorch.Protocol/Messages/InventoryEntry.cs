@@ -4,8 +4,8 @@ using Evertorch.Game;
 namespace Evertorch.Protocol
 {
 /// <summary>
-///     One inventory row as the owner sees it: its stable ID, what it holds, how many, and the equipment slot it is
-///     worn in.
+///     One inventory row as the owner sees it: its stable ID, what it holds, how many, the equipment slot it is worn in,
+///     and its refine level.
 /// </summary>
 public readonly struct InventoryEntry
 {
@@ -13,12 +13,14 @@ public readonly struct InventoryEntry
         long inventoryItem,
         ItemDefinitionId item,
         uint quantity,
-        EquipmentSlot slot = EquipmentSlot.None)
+        EquipmentSlot slot = EquipmentSlot.None,
+        byte refineLevel = 0)
     {
         InventoryItem = inventoryItem;
         Item = item;
         Quantity = quantity;
         Slot = slot;
+        RefineLevel = refineLevel;
     }
 
     public long InventoryItem { get; }
@@ -36,12 +38,17 @@ public readonly struct InventoryEntry
     /// </summary>
     public EquipmentSlot Slot { get; }
 
+    /// <summary>
+    ///     0 until refining exists (Network Protocol §6); above 0 only for a row of one.
+    /// </summary>
+    public byte RefineLevel { get; }
+
     internal int GetEncodedLength()
     {
         return sizeof(long)
             + WireText.GetEncodedLength(Item.Value, ProtocolLimits.MaxDefinitionIdBytes)
             + sizeof(uint)
-            + sizeof(byte);
+            + 2 * sizeof(byte);
     }
 
     internal void Write(ref WireWriter writer)
@@ -50,6 +57,7 @@ public readonly struct InventoryEntry
         writer.WriteString(Item.Value, ProtocolLimits.MaxDefinitionIdBytes);
         writer.WriteUInt32(Quantity);
         writer.WriteByte((byte)Slot);
+        writer.WriteByte(RefineLevel);
     }
 
     internal static bool TryRead(ref WireReader reader, bool allowsZero, out InventoryEntry entry)
@@ -59,16 +67,18 @@ public readonly struct InventoryEntry
             || !reader.TryReadString(ProtocolLimits.MaxDefinitionIdBytes, out string itemText)
             || !reader.TryReadUInt32(out uint quantity)
             || !reader.TryReadByte(out byte slot)
+            || !reader.TryReadByte(out byte refineLevel)
             || inventoryItem <= 0
             || (quantity == 0 && !allowsZero)
             || slot > (byte)EquipmentSlot.Armor
             || (quantity == 0 && slot != (byte)EquipmentSlot.None)
+            || (refineLevel > 0 && quantity != 1)
             || !ItemDefinitionId.TryCreate(itemText, out ItemDefinitionId item))
         {
             return false;
         }
 
-        entry = new InventoryEntry(inventoryItem, item, quantity, (EquipmentSlot)slot);
+        entry = new InventoryEntry(inventoryItem, item, quantity, (EquipmentSlot)slot, refineLevel);
         return true;
     }
 

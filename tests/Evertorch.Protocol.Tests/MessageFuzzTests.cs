@@ -170,6 +170,54 @@ public sealed class MessageFuzzTests
                 ? Encode(message!.GetEncodedLength(), message.Write)
                 : null);
         yield return Case(
+            "TradeRequest",
+            Encode(TradeMessageTests.RequestGolden.GetEncodedLength(), TradeMessageTests.RequestGolden.Write),
+            payload => TradeRequest.TryRead(payload, out TradeRequest? message)
+                ? Encode(message!.GetEncodedLength(), message.Write)
+                : null);
+        yield return Case(
+            "TradeReply",
+            Encode(TradeMessageTests.ReplyGolden.GetEncodedLength(), TradeMessageTests.ReplyGolden.Write),
+            payload => TradeReply.TryRead(payload, out TradeReply? message)
+                ? Encode(message!.GetEncodedLength(), message.Write)
+                : null);
+        yield return Case(
+            "TradeOffer",
+            Encode(TradeOffer.EncodedLength, TradeMessageTests.OfferGolden.Write),
+            payload => TradeOffer.TryRead(payload, out TradeOffer? message)
+                ? Encode(TradeOffer.EncodedLength, message!.Write)
+                : null);
+        yield return Case(
+            "TradeLock",
+            Encode(TradeLock.EncodedLength, TradeMessageTests.LockGolden.Write),
+            payload => TradeLock.TryRead(payload, out TradeLock? message)
+                ? Encode(TradeLock.EncodedLength, message!.Write)
+                : null);
+        yield return Case(
+            "TradeConfirm",
+            Encode(TradeConfirm.EncodedLength, TradeMessageTests.ConfirmGolden.Write),
+            payload => TradeConfirm.TryRead(payload, out TradeConfirm? message)
+                ? Encode(TradeConfirm.EncodedLength, message!.Write)
+                : null);
+        yield return Case(
+            "TradeCancel",
+            Encode(TradeCancel.EncodedLength, TradeMessageTests.CancelGolden.Write),
+            payload => TradeCancel.TryRead(payload, out TradeCancel? message)
+                ? Encode(TradeCancel.EncodedLength, message!.Write)
+                : null);
+        yield return Case(
+            "TradeEvent",
+            Encode(TradeMessageTests.EventGolden.GetEncodedLength(), TradeMessageTests.EventGolden.Write),
+            payload => TradeEvent.TryRead(payload, out TradeEvent? message)
+                ? Encode(message!.GetEncodedLength(), message.Write)
+                : null);
+        yield return Case(
+            "TradeSide",
+            Encode(TradeMessageTests.SideGolden.GetEncodedLength(), TradeMessageTests.SideGolden.Write),
+            payload => TradeSide.TryRead(payload, out TradeSide? message)
+                ? Encode(message!.GetEncodedLength(), message.Write)
+                : null);
+        yield return Case(
             "ChatReceived",
             Encode(ChatMessageTests.ReceivedGolden),
             payload => ChatReceived.TryRead(payload, out ChatReceived? message) ? Encode(message!) : null);

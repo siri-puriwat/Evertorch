@@ -410,6 +410,32 @@ public readonly struct InboundEvent
             isAccepted: isAccepted);
     }
 
+    /// <summary>
+    ///     One of the trade's commands: <paramref name="name" /> is the partner or the requester, empty otherwise; an offer
+    ///     carries its row, 0 for coins, and its quantity.
+    /// </summary>
+    public static InboundEvent ForTrade(
+        InboundEventKind kind,
+        ConnectionId connection,
+        uint commandSequence,
+        string name = "",
+        bool isAccepted = false,
+        long inventoryItem = 0,
+        uint quantity = 0)
+    {
+        return new InboundEvent(
+            kind,
+            connection,
+            null,
+            default,
+            default,
+            commandSequence: commandSequence,
+            name: name,
+            inventoryItem: inventoryItem,
+            quantity: quantity,
+            isAccepted: isAccepted);
+    }
+
     public static InboundEvent ForCreateCharacter(ConnectionId connection, string name)
     {
         return new InboundEvent(InboundEventKind.CreateCharacter, connection, null, default, default, name: name);

@@ -410,6 +410,58 @@ public sealed class InboundQueue
                 decoded = InboundEvent.ForParty(InboundEventKind.PartyLead, connection, lead!.Member,
                     lead.CommandSequence);
                 return true;
+            case MessageOpcode.TradeRequest:
+                if (!TradeRequest.TryRead(payload, out TradeRequest? tradeRequest))
+                {
+                    return false;
+                }
+
+                decoded = InboundEvent.ForTrade(InboundEventKind.TradeRequest, connection,
+                    tradeRequest!.CommandSequence, tradeRequest.Partner);
+                return true;
+            case MessageOpcode.TradeReply:
+                if (!TradeReply.TryRead(payload, out TradeReply? tradeReply))
+                {
+                    return false;
+                }
+
+                decoded = InboundEvent.ForTrade(InboundEventKind.TradeReply, connection, tradeReply!.CommandSequence,
+                    tradeReply.Requester, tradeReply.IsAccepted);
+                return true;
+            case MessageOpcode.TradeOffer:
+                if (!TradeOffer.TryRead(payload, out TradeOffer? offer))
+                {
+                    return false;
+                }
+
+                decoded = InboundEvent.ForTrade(InboundEventKind.TradeOffer, connection, offer!.CommandSequence,
+                    inventoryItem: offer.InventoryItem, quantity: offer.Quantity);
+                return true;
+            case MessageOpcode.TradeLock:
+                if (!TradeLock.TryRead(payload, out TradeLock? tradeLock))
+                {
+                    return false;
+                }
+
+                decoded = InboundEvent.ForTrade(InboundEventKind.TradeLock, connection, tradeLock!.CommandSequence);
+                return true;
+            case MessageOpcode.TradeConfirm:
+                if (!TradeConfirm.TryRead(payload, out TradeConfirm? confirm))
+                {
+                    return false;
+                }
+
+                decoded = InboundEvent.ForTrade(InboundEventKind.TradeConfirm, connection, confirm!.CommandSequence);
+                return true;
+            case MessageOpcode.TradeCancel:
+                if (!TradeCancel.TryRead(payload, out TradeCancel? tradeCancel))
+                {
+                    return false;
+                }
+
+                decoded = InboundEvent.ForTrade(InboundEventKind.TradeCancel, connection,
+                    tradeCancel!.CommandSequence);
+                return true;
             case MessageOpcode.LearnSkill:
                 if (!LearnSkill.TryRead(payload, out LearnSkill? learn))
                 {

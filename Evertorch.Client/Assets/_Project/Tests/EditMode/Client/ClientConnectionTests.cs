@@ -1362,6 +1362,34 @@ public sealed class ClientConnectionTests
     }
 
     [Test]
+    public void TradeMessages_InTheWorld_AreRaised_AndTradeCommandsRememberWhatTheyNamed()
+    {
+        var harness = new Harness();
+        harness.EnterWorld();
+        var heard = new List<string>();
+        harness.Connection.TradeEventReceived += message => heard.Add($"{message.Kind} {message.Name}");
+        harness.Connection.TradeSideReceived += message => heard.Add($"side {message.Owner} {message.Coins}");
+        var requested = new TradeEvent(TradeEventKind.Requested, "Bobby");
+        var side = new TradeSide(TradeSideOwner.Partner, false, false, 40, Array.Empty<TradeEntry>());
+        int before = harness.Transport.Sent.Count;
+
+        harness.Deliver(ProtocolChannel.Control, Encode(requested.GetEncodedLength(), requested.Write));
+        harness.Deliver(ProtocolChannel.Control, Encode(side.GetEncodedLength(), side.Write));
+        uint reply = harness.Connection.SendTradeReply("Bobby", true);
+        uint offer = harness.Connection.SendTradeOffer(0, 40);
+        uint refused = harness.Connection.SendTradeRequest("Bo");
+
+        Assert.That(heard, Is.EqualTo(new[] { "Requested Bobby", "side Partner 40" }));
+        Assert.That(refused, Is.Zero, "a name that breaks the rule is not sent");
+        Assert.That(harness.Transport.Sent.Count - before, Is.EqualTo(2));
+        Assert.That(harness.Connection.TryGetTradeSequence(reply, out TradeCommand command, out string name), Is.True);
+        Assert.That((command, name), Is.EqualTo((TradeCommand.Reply, "Bobby")));
+        Assert.That(harness.Connection.TryGetTradeSequence(offer, out TradeCommand offered, out _), Is.True);
+        Assert.That(offered, Is.EqualTo(TradeCommand.Offer));
+        Assert.That(harness.Connection.MalformedMessages + harness.Connection.UnexpectedMessages, Is.Zero);
+    }
+
+    [Test]
     public void WorldEntered_BeforeTheHello_IsUnexpectedAndIgnored()
     {
         var harness = new Harness();

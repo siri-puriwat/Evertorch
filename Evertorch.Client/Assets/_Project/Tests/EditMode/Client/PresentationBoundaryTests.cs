@@ -41,7 +41,7 @@ public sealed class PresentationBoundaryTests
         + @"|TargetEntity|AttackEntity|CancelAction|UseSkill|Respawn|Logout|PickupItem|CreateCharacter"
         + @"|InventoryResyncRequest|EquipItem|UnequipItem|UseItem|BuyItem|SellItem|AcceptQuest|CompleteQuest"
         + @"|AllocateStat|LearnSkill|ResetBuild|ChangeJob|ChatSend|PartyInvite|PartyReply|PartyLeave|PartyKick"
-        + @"|PartyLead)\s*\("
+        + @"|PartyLead|TradeRequest|TradeReply|TradeOffer|TradeLock|TradeConfirm|TradeCancel)\s*\("
         + @"|\.Connection\??\.(Connect|Disconnect|EnterWorld|CreateCharacter|Poll)\("
         + @"|\.Controller\??\.(Cancel\w*|Tick)\("
         + @"|\.(SetManualDirection|TryMoveTo|Chase\w*|StopChase|CancelPath|NextTick|Reconcile|Teleport"

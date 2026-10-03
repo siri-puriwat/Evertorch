@@ -26,6 +26,7 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
     private readonly HashSet<uint> m_equipSequences = new();
     private readonly Dictionary<uint, (ChatChannel Channel, string Recipient)> m_chatSequences = new();
     private readonly Dictionary<uint, (PartyCommand Command, string Name)> m_partySequences = new();
+    private readonly Dictionary<uint, (TradeCommand Command, string Name)> m_tradeSequences = new();
     private uint m_commandSequence;
 
     public ClientConnection(IClientTransport transport, ClientConnectionSettings settings, IMapProvider maps)
@@ -177,6 +178,12 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
                 break;
             case MessageOpcode.BossAnnouncement:
                 OnBossAnnouncement(payload);
+                break;
+            case MessageOpcode.TradeEvent:
+                OnTradeEvent(payload);
+                break;
+            case MessageOpcode.TradeSide:
+                OnTradeSide(payload);
                 break;
             case MessageOpcode.MvpAwarded:
                 OnMvpAwarded(payload);
@@ -773,6 +780,98 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
         m_partySequences[sequence] = (command, name);
     }
 
+    /// <summary>
+    ///     Asks the character named <paramref name="name" /> to trade; 0 while not in the world or for a name that breaks
+    ///     the rule, else the command's sequence.
+    /// </summary>
+    public uint SendTradeRequest(string name)
+    {
+        if (!CharacterNames.IsValid(name))
+        {
+            return 0;
+        }
+
+        return SendTrade(TradeCommand.Request, name, MessageOpcode.TradeRequest,
+            sequence => new TradeRequest(name, sequence).Write(m_sendBuffer));
+    }
+
+    /// <summary>
+    ///     Accepts or declines the request from <paramref name="requester" />; 0 when nothing was sent.
+    /// </summary>
+    public uint SendTradeReply(string requester, bool isAccepted)
+    {
+        if (!CharacterNames.IsValid(requester))
+        {
+            return 0;
+        }
+
+        return SendTrade(TradeCommand.Reply, requester, MessageOpcode.TradeReply,
+            sequence => new TradeReply(requester, isAccepted, sequence).Write(m_sendBuffer));
+    }
+
+    /// <summary>
+    ///     Offers <paramref name="quantity" /> of row <paramref name="inventoryItem" />, or that many coins for row 0, in
+    ///     the open trade; 0 takes the row back. 0 when nothing was sent.
+    /// </summary>
+    public uint SendTradeOffer(long inventoryItem, uint quantity)
+    {
+        if (inventoryItem < 0 || quantity > ContentLimits.MaxCurrency)
+        {
+            return 0;
+        }
+
+        return SendTrade(TradeCommand.Offer, string.Empty, MessageOpcode.TradeOffer,
+            sequence => new TradeOffer(inventoryItem, quantity, sequence).Write(m_sendBuffer));
+    }
+
+    public uint SendTradeLock()
+    {
+        return SendTrade(TradeCommand.Lock, string.Empty, MessageOpcode.TradeLock,
+            sequence => new TradeLock(sequence).Write(m_sendBuffer));
+    }
+
+    public uint SendTradeConfirm()
+    {
+        return SendTrade(TradeCommand.Confirm, string.Empty, MessageOpcode.TradeConfirm,
+            sequence => new TradeConfirm(sequence).Write(m_sendBuffer));
+    }
+
+    public uint SendTradeCancel()
+    {
+        return SendTrade(TradeCommand.Cancel, string.Empty, MessageOpcode.TradeCancel,
+            sequence => new TradeCancel(sequence).Write(m_sendBuffer));
+    }
+
+    /// <summary>
+    ///     The trade command <paramref name="commandSequence" /> numbered and the name it carried, so a refusal can
+    ///     say what was refused.
+    /// </summary>
+    public bool TryGetTradeSequence(uint commandSequence, out TradeCommand command, out string name)
+    {
+        bool isTrade = m_tradeSequences.TryGetValue(commandSequence, out (TradeCommand Command, string Name) sent);
+        command = isTrade ? sent.Command : TradeCommand.None;
+        name = isTrade ? sent.Name : string.Empty;
+        return isTrade;
+    }
+
+    private uint SendTrade(TradeCommand command, string name, MessageOpcode opcode, Func<uint, int> write)
+    {
+        if (State != ClientConnectionState.InWorld)
+        {
+            return 0;
+        }
+
+        uint sequence = NextCommandSequence();
+        SendRouted(opcode, write(sequence));
+        if (m_tradeSequences.Count >= MaxEquipSequences)
+        {
+            m_tradeSequences.Clear();
+        }
+
+        m_tradeSequences[sequence] = (command, name);
+        return sequence;
+    }
+
     public uint SendChangeJob(EntityId npc, JobDefinitionId job)
     {
         if (State != ClientConnectionState.InWorld)
@@ -914,6 +1013,16 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
     public event Action<PartyRoster>? PartyRosterReceived;
 
     public event Action<PartyMemberStatus>? PartyMemberStatusReceived;
+
+    /// <summary>
+    ///     A request, or something that happened to the player's trade, while in the world.
+    /// </summary>
+    public event Action<TradeEvent>? TradeEventReceived;
+
+    /// <summary>
+    ///     One side of the player's open trade as it stands, while in the world.
+    /// </summary>
+    public event Action<TradeSide>? TradeSideReceived;
 
     /// <summary>
     ///     A boss appeared or fell on the player's map, for the chat log, which outlives the world.
@@ -1092,6 +1201,7 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
             m_equipSequences.Clear();
             m_chatSequences.Clear();
             m_partySequences.Clear();
+            m_tradeSequences.Clear();
         }
 
         // The command sequence belongs to the character, not the connection: after a reconnect it goes on from the
@@ -1143,6 +1253,38 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
         else
         {
             PartyEventReceived?.Invoke(message);
+        }
+    }
+
+    private void OnTradeEvent(ReadOnlySpan<byte> payload)
+    {
+        if (!TradeEvent.TryRead(payload, out TradeEvent? message) || message == null)
+        {
+            MalformedMessages++;
+        }
+        else if (World == null)
+        {
+            UnexpectedMessages++;
+        }
+        else
+        {
+            TradeEventReceived?.Invoke(message);
+        }
+    }
+
+    private void OnTradeSide(ReadOnlySpan<byte> payload)
+    {
+        if (!TradeSide.TryRead(payload, out TradeSide? message) || message == null)
+        {
+            MalformedMessages++;
+        }
+        else if (World == null)
+        {
+            UnexpectedMessages++;
+        }
+        else
+        {
+            TradeSideReceived?.Invoke(message);
         }
     }
 

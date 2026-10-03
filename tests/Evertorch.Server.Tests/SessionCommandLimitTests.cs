@@ -181,7 +181,13 @@ public sealed class SessionCommandLimitTests
             [InboundEventKind.PartyReply] = ServerInstruments.PartyCommandLimit,
             [InboundEventKind.PartyLeave] = ServerInstruments.PartyCommandLimit,
             [InboundEventKind.PartyKick] = ServerInstruments.PartyCommandLimit,
-            [InboundEventKind.PartyLead] = ServerInstruments.PartyCommandLimit
+            [InboundEventKind.PartyLead] = ServerInstruments.PartyCommandLimit,
+            [InboundEventKind.TradeRequest] = ServerInstruments.TradeCommandLimit,
+            [InboundEventKind.TradeReply] = ServerInstruments.TradeCommandLimit,
+            [InboundEventKind.TradeOffer] = ServerInstruments.ItemCommandLimit,
+            [InboundEventKind.TradeLock] = ServerInstruments.ItemCommandLimit,
+            [InboundEventKind.TradeConfirm] = ServerInstruments.ItemCommandLimit,
+            [InboundEventKind.TradeCancel] = ServerInstruments.ItemCommandLimit
         };
         var limits = new SessionCommandLimits(Defaults, TestServer.TickRate, 0);
 

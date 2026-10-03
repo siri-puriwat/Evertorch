@@ -48,7 +48,8 @@ public sealed class ClientAuthorityTests
                     "Logout",
                     "InventoryResyncRequest", "EquipItem", "UnequipItem", "UseItem", "BuyItem", "SellItem",
                     "AcceptQuest", "CompleteQuest", "AllocateStat", "LearnSkill", "ResetBuild", "ChangeJob",
-                    "PartyInvite", "PartyReply", "PartyLeave", "PartyKick", "PartyLead"
+                    "PartyInvite", "PartyReply", "PartyLeave", "PartyKick", "PartyLead", "TradeRequest",
+                    "TradeReply", "TradeOffer", "TradeLock", "TradeConfirm", "TradeCancel"
                 }),
             "a new client message must be checked against the rules below before it joins this list");
     }

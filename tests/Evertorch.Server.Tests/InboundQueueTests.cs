@@ -222,6 +222,90 @@ public sealed class InboundQueueTests
         AssertOnlyMalformed(queue, 1);
     }
 
+    private static IEnumerable<TestCaseData> TradeCommands()
+    {
+        var request = new TradeRequest("Tester8", 9);
+        var reply = new TradeReply("Tester7", true, 9);
+        yield return new TestCaseData(
+            Payload(request.GetEncodedLength(), bytes => request.Write(bytes)),
+            InboundEventKind.TradeRequest,
+            "Tester8",
+            false,
+            0L,
+            0u).SetName("TradeRequest");
+        yield return new TestCaseData(
+            Payload(reply.GetEncodedLength(), bytes => reply.Write(bytes)),
+            InboundEventKind.TradeReply,
+            "Tester7",
+            true,
+            0L,
+            0u).SetName("TradeReply");
+        yield return new TestCaseData(
+            Payload(TradeOffer.EncodedLength, bytes => new TradeOffer(42, 5, 9).Write(bytes)),
+            InboundEventKind.TradeOffer,
+            string.Empty,
+            false,
+            42L,
+            5u).SetName("TradeOffer");
+        yield return new TestCaseData(
+            Payload(TradeLock.EncodedLength, bytes => new TradeLock(9).Write(bytes)),
+            InboundEventKind.TradeLock,
+            string.Empty,
+            false,
+            0L,
+            0u).SetName("TradeLock");
+        yield return new TestCaseData(
+            Payload(TradeConfirm.EncodedLength, bytes => new TradeConfirm(9).Write(bytes)),
+            InboundEventKind.TradeConfirm,
+            string.Empty,
+            false,
+            0L,
+            0u).SetName("TradeConfirm");
+        yield return new TestCaseData(
+            Payload(TradeCancel.EncodedLength, bytes => new TradeCancel(9).Write(bytes)),
+            InboundEventKind.TradeCancel,
+            string.Empty,
+            false,
+            0L,
+            0u).SetName("TradeCancel");
+    }
+
+    [TestCaseSource(nameof(TradeCommands))]
+    public void TradeCommand_ThatIsWellFormed_IsQueuedWithWhatItNamesAndItsSequence(
+        byte[] payload,
+        InboundEventKind kind,
+        string name,
+        bool isAccepted,
+        long row,
+        uint quantity)
+    {
+        InboundQueue queue = CreateQueue(16);
+
+        queue.OnPayload(Peer, ProtocolChannel.Control, payload);
+
+        Assert.That(queue.TryDequeue(out InboundEvent command), Is.True);
+        Assert.That(
+            (command.Kind, command.Name, command.IsAccepted, command.InventoryItem, command.Quantity,
+                command.CommandSequence),
+            Is.EqualTo((kind, name, isAccepted, row, quantity, 9u)));
+    }
+
+    [TestCaseSource(nameof(TradeCommands))]
+    public void TradeCommand_CutShort_IsRejected(
+        byte[] payload,
+        InboundEventKind kind,
+        string name,
+        bool isAccepted,
+        long row,
+        uint quantity)
+    {
+        InboundQueue queue = CreateQueue(16);
+
+        queue.OnPayload(Peer, ProtocolChannel.Control, payload.Take(payload.Length - 1).ToArray());
+
+        AssertOnlyMalformed(queue, 1);
+    }
+
     private static byte[] LearnSkillPayload()
     {
         var message = new LearnSkill(new SkillDefinitionId("skill.strike"), 9);

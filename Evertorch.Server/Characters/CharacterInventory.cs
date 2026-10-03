@@ -134,7 +134,8 @@ public sealed class CharacterInventory
             stored.Id,
             new ItemDefinitionId(stored.ItemDefinitionId),
             (uint)stored.Quantity,
-            stored.Quantity == 0 ? EquipmentSlot.None : SlotOf(stored));
+            stored.Quantity == 0 ? EquipmentSlot.None : SlotOf(stored),
+            stored.Quantity == 0 ? (byte)0 : (byte)stored.RefineLevel);
         int index = m_rows.FindIndex(existing => existing.InventoryItem == row.InventoryItem);
         if (row.Quantity == 0)
         {

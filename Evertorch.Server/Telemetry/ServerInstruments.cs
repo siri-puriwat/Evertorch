@@ -30,6 +30,7 @@ public sealed class ServerInstruments
     public const string ResyncRequestLimit = "session_resync";
     public const string ChatCommandLimit = "session_chat";
     public const string PartyCommandLimit = "session_party";
+    public const string TradeCommandLimit = "session_trade";
     public const string AdmissionLimit = "admission";
     public const string SignInAddressLimit = "sign_in_address";
     public const string SignInLoginLimit = "sign_in_login";

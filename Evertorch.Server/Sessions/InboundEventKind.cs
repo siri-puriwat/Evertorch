@@ -173,6 +173,38 @@ public enum InboundEventKind
     ///     The leader's passing of the lead to the member named <see cref="InboundEvent.Name" />, carrying a command
     ///     sequence.
     /// </summary>
-    PartyLead = 33
+    PartyLead = 33,
+
+    /// <summary>
+    ///     A request to trade with the character named <see cref="InboundEvent.Name" />, carrying a command sequence.
+    /// </summary>
+    TradeRequest = 34,
+
+    /// <summary>
+    ///     The answer, <see cref="InboundEvent.IsAccepted" />, to the request of the character named
+    ///     <see cref="InboundEvent.Name" />, carrying a command sequence.
+    /// </summary>
+    TradeReply = 35,
+
+    /// <summary>
+    ///     How much of row <see cref="InboundEvent.InventoryItem" />, or of the coins for row 0, the open trade offers:
+    ///     <see cref="InboundEvent.Quantity" />, carrying a command sequence.
+    /// </summary>
+    TradeOffer = 36,
+
+    /// <summary>
+    ///     The sender's lock of its own offer, carrying a command sequence.
+    /// </summary>
+    TradeLock = 37,
+
+    /// <summary>
+    ///     The sender's confirm of the trade, carrying a command sequence.
+    /// </summary>
+    TradeConfirm = 38,
+
+    /// <summary>
+    ///     The end of the sender's open trade or request, carrying a command sequence.
+    /// </summary>
+    TradeCancel = 39
 }
 }

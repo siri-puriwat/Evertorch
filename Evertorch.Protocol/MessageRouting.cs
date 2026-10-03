@@ -45,6 +45,12 @@ public static class MessageRouting
             case MessageOpcode.PartyLeave:
             case MessageOpcode.PartyKick:
             case MessageOpcode.PartyLead:
+            case MessageOpcode.TradeRequest:
+            case MessageOpcode.TradeReply:
+            case MessageOpcode.TradeOffer:
+            case MessageOpcode.TradeLock:
+            case MessageOpcode.TradeConfirm:
+            case MessageOpcode.TradeCancel:
             case MessageOpcode.ServerHello:
             case MessageOpcode.WorldEntered:
             case MessageOpcode.EntitySpawn:
@@ -79,6 +85,8 @@ public static class MessageRouting
             case MessageOpcode.PartyMemberStatus:
             case MessageOpcode.BossAnnouncement:
             case MessageOpcode.MvpAwarded:
+            case MessageOpcode.TradeEvent:
+            case MessageOpcode.TradeSide:
                 return true;
             case MessageOpcode.MoveInput:
             case MessageOpcode.StopMovement:

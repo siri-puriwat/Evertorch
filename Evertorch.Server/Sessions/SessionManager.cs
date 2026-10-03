@@ -306,6 +306,12 @@ public sealed class SessionManager : ITickPhase
             case InboundEventKind.PartyLeave:
             case InboundEventKind.PartyKick:
             case InboundEventKind.PartyLead:
+            case InboundEventKind.TradeRequest:
+            case InboundEventKind.TradeReply:
+            case InboundEventKind.TradeOffer:
+            case InboundEventKind.TradeLock:
+            case InboundEventKind.TradeConfirm:
+            case InboundEventKind.TradeCancel:
                 HandleCommand(session, inboundEvent, tick);
                 break;
             default:

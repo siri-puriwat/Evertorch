@@ -14,6 +14,7 @@ public sealed class SessionCommandLimits
     private readonly TickBucket m_resync;
     private readonly TickBucket m_chat;
     private readonly TickBucket m_party;
+    private readonly TickBucket m_trade;
 
     public SessionCommandLimits(AbuseOptions options, int tickRate, uint tick)
     {
@@ -24,6 +25,7 @@ public sealed class SessionCommandLimits
         m_resync = new TickBucket(options.ResyncRequestsPerSecond, options.ResyncRequestBurst, tickRate, tick);
         m_chat = new TickBucket(options.ChatCommandsPerSecond, options.ChatCommandBurst, tickRate, tick);
         m_party = new TickBucket(options.PartyCommandsPerSecond, options.PartyCommandBurst, tickRate, tick);
+        m_trade = new TickBucket(options.TradeCommandsPerSecond, options.TradeCommandBurst, tickRate, tick);
     }
 
     /// <summary>
@@ -53,6 +55,10 @@ public sealed class SessionCommandLimits
             case InboundEventKind.LearnSkill:
             case InboundEventKind.ResetBuild:
             case InboundEventKind.ChangeJob:
+            case InboundEventKind.TradeOffer:
+            case InboundEventKind.TradeLock:
+            case InboundEventKind.TradeConfirm:
+            case InboundEventKind.TradeCancel:
                 limit = ServerInstruments.ItemCommandLimit;
                 return m_item.TryTake(tick);
             case InboundEventKind.CreateCharacter:
@@ -73,6 +79,10 @@ public sealed class SessionCommandLimits
             case InboundEventKind.PartyLead:
                 limit = ServerInstruments.PartyCommandLimit;
                 return m_party.TryTake(tick);
+            case InboundEventKind.TradeRequest:
+            case InboundEventKind.TradeReply:
+                limit = ServerInstruments.TradeCommandLimit;
+                return m_trade.TryTake(tick);
             default:
                 limit = string.Empty;
                 return true;

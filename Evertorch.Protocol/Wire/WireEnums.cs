@@ -57,6 +57,16 @@ internal static class WireEnums
         return value >= PartyEventKind.Invited && value <= PartyEventKind.Disbanded;
     }
 
+    public static bool IsDefined(TradeEventKind value)
+    {
+        return value >= TradeEventKind.Requested && value <= TradeEventKind.Unsaved;
+    }
+
+    public static bool IsDefined(TradeSideOwner value)
+    {
+        return value == TradeSideOwner.Own || value == TradeSideOwner.Partner;
+    }
+
     public static bool IsDefined(BossAnnouncementKind value)
     {
         return value == BossAnnouncementKind.Appeared || value == BossAnnouncementKind.Fell;

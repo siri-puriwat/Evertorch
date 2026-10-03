@@ -37,6 +37,12 @@ public enum MessageOpcode : ushort
     PartyLeave = 0x001D,
     PartyKick = 0x001E,
     PartyLead = 0x001F,
+    TradeRequest = 0x0020,
+    TradeReply = 0x0021,
+    TradeOffer = 0x0022,
+    TradeLock = 0x0023,
+    TradeConfirm = 0x0024,
+    TradeCancel = 0x0025,
     ServerHello = 0x8001,
     WorldEntered = 0x8003,
     EntitySpawn = 0x8004,
@@ -71,6 +77,8 @@ public enum MessageOpcode : ushort
     PartyRoster = 0x8022,
     PartyMemberStatus = 0x8023,
     BossAnnouncement = 0x8024,
-    MvpAwarded = 0x8025
+    MvpAwarded = 0x8025,
+    TradeEvent = 0x8026,
+    TradeSide = 0x8027
 }
 }
