@@ -20,6 +20,7 @@ public sealed class MigrationUpgradeTests
     private const string AddSessionTokens = "20260927150302_AddSessionTokens";
     private const string AddCharacterSkills = "20260928181417_AddCharacterSkills";
     private const string AddParties = "20261001131541_AddParties";
+    private const string AddBossRewards = "20261002222843_AddBossRewards";
     private const string ForeignKeyViolation = "23503";
     private const string CheckViolation = "23514";
     private const string UndefinedTable = "42P01";
@@ -48,6 +49,55 @@ public sealed class MigrationUpgradeTests
         {
             return exception.SqlState;
         }
+    }
+
+    // Trades and storage add three tables and three ledger types (Persistence §4); the migration changes no row, and
+    // every account starts with no storage.
+    [Test]
+    public void Upgrade_FromAddBossRewards_KeepsEveryRow_AndAddsTradesAndStorage()
+    {
+        using var database = PostgresFixture.Start(targetMigration: AddBossRewards);
+        var sql = new Sql(database.ConnectionString);
+        long account = sql.InsertAccount();
+        long character = sql.InsertCharacter(account, Sql.UniqueName("Up"));
+        long other = sql.InsertCharacter(sql.InsertAccount(), Sql.UniqueName("Up"));
+        long weapon = sql.InsertItem(character, 1);
+        sql.Execute(Sql.EquipmentInsert(character, "Weapon", weapon));
+        sql.Scalar(Sql.LedgerInsert(Guid.NewGuid(), character, "boss_reward"));
+        sql.Execute(Sql.QuestInsert(character, "quest.crawler_hunt", "completed", 5));
+        sql.Execute(Sql.SessionTokenInsert(account));
+        sql.Execute(Sql.SkillInsert(character, "skill.strike", 2));
+        sql.Scalar(Sql.PartyInsert(character, character, other));
+        string? tradeBefore = SqlStateOf(sql, Sql.LedgerInsert(Guid.NewGuid(), character, "trade"));
+        string? tableBefore = SqlStateOf(sql, "SELECT count(*) FROM storage_items");
+        string before = Dump(sql, "character_quests", "session_tokens", "character_skills", "parties", "party_members");
+
+        EvertorchDatabase.ApplyMigrationsAsync(database.ConnectionString, CancellationToken.None)
+            .GetAwaiter()
+            .GetResult();
+
+        IReadOnlyList<string> pending = EvertorchDatabase
+            .GetPendingMigrationsAsync(database.ConnectionString, CancellationToken.None)
+            .GetAwaiter()
+            .GetResult();
+        Assert.That((tradeBefore, tableBefore), Is.EqualTo((CheckViolation, UndefinedTable)), "neither existed");
+        Assert.That(pending, Is.Empty);
+        Assert.That(
+            Dump(sql, "character_quests", "session_tokens", "character_skills", "parties", "party_members"),
+            Is.EqualTo(before),
+            "every row as it was");
+        Assert.That(
+            sql.Scalar(
+                "SELECT (SELECT count(*) FROM trades) + (SELECT count(*) FROM account_storages) "
+                + "+ (SELECT count(*) FROM storage_items)"),
+            Is.Zero,
+            "no trade and no storage yet");
+        foreach (string type in new[] { "trade", "storage_deposit", "storage_withdraw" })
+        {
+            Assert.That(SqlStateOf(sql, Sql.LedgerInsert(Guid.NewGuid(), character, type)), Is.Null, type);
+        }
+
+        Assert.That(SqlStateOf(sql, Sql.LedgerInsert(Guid.NewGuid(), character, "gift")), Is.EqualTo(CheckViolation));
     }
 
     // Every existing character starts without a party (Persistence §4; owner decision 3 of the pre-Milestone-12

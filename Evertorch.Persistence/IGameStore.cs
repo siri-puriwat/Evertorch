@@ -238,8 +238,42 @@ public interface IGameStore
         CancellationToken cancellationToken);
 
     /// <summary>
-    ///     Every distinct job, map, item, and quest definition ID stored for any character, for the startup comparison
-    ///     with the loaded content (Persistence §8).
+    ///     The account's storage as it is now: its revision and every row, in row order (Persistence §5). An account
+    ///     that never deposited has an empty storage at revision 0.
+    /// </summary>
+    Task<StoredStorage> ReadStorageAsync(AccountId account, CancellationToken cancellationToken);
+
+    /// <summary>
+    ///     Moves a quantity of the character's bag row into its account's storage for the fee in one transaction with a
+    ///     <c>storage_deposit</c> ledger row (Persistence §5): the account's storage row is made if missing and locked,
+    ///     then the character; a repeat answers from the ledger. The item merges into the storage's stack unless its
+    ///     stack limit is 1, keeping its refine level and instance data, and both revisions go up by one.
+    ///     <see cref="InventoryStatus.Refused" /> when the row is not the character's, is worn, holds less, or the
+    ///     coins fall short of the fee; <see cref="InventoryStatus.InventoryFull" /> when storage has no room.
+    /// </summary>
+    Task<StorageResult> CommitStorageDepositAsync(StorageDepositCommit deposit, CancellationToken cancellationToken);
+
+    /// <summary>
+    ///     Moves a quantity of a row of the character's account's storage into its bag in one transaction with a
+    ///     <c>storage_withdraw</c> ledger row, like <see cref="CommitStorageDepositAsync" /> without a fee.
+    ///     <see cref="InventoryStatus.Refused" /> when the row is not the account's or holds less;
+    ///     <see cref="InventoryStatus.InventoryFull" /> when the bag has no room.
+    /// </summary>
+    Task<StorageResult> CommitStorageWithdrawAsync(StorageWithdrawCommit withdraw, CancellationToken cancellationToken);
+
+    /// <summary>
+    ///     What became of a deposit or a withdrawal whose answer was lost, looked up under the same locks: null when the
+    ///     ledger has no entry for <paramref name="operationId" />, else the bag's row and the storage's row the ledger
+    ///     names, as they are now.
+    /// </summary>
+    Task<StorageResult?> FindStorageOperationAsync(
+        Guid operationId,
+        long characterId,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    ///     Every distinct job, map, item, quest, and skill definition ID stored for any character, and every item in
+    ///     storage, for the startup comparison with the loaded content (Persistence §8).
     /// </summary>
     Task<IReadOnlyList<string>> ListStoredDefinitionIdsAsync(CancellationToken cancellationToken);
 }

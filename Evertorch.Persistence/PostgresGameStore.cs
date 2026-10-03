@@ -1286,7 +1286,11 @@ WHERE character_quests.state = {CharacterQuestRow.ActiveState} AND character_que
                     .ToListAsync(cancellationToken).ConfigureAwait(false);
                 List<string> skills = await context.CharacterSkills.Select(row => row.SkillDefinitionId).Distinct()
                     .ToListAsync(cancellationToken).ConfigureAwait(false);
-                return (IReadOnlyList<string>)jobs.Concat(maps).Concat(items).Concat(quests).Concat(skills).Distinct()
+                List<string> stored = await context.StorageItems.Select(row => row.ItemDefinitionId).Distinct()
+                    .ToListAsync(cancellationToken).ConfigureAwait(false);
+                return (IReadOnlyList<string>)jobs.Concat(maps).Concat(items).Concat(quests).Concat(skills)
+                    .Concat(stored)
+                    .Distinct()
                     .OrderBy(id => id, StringComparer.Ordinal)
                     .ToList();
             },
@@ -1523,6 +1527,262 @@ WHERE character_quests.state = {CharacterQuestRow.ActiveState} AND character_que
             cancellationToken);
     }
 
+    public Task<StoredStorage> ReadStorageAsync(AccountId account, CancellationToken cancellationToken)
+    {
+        return RunAsync(
+            async context =>
+            {
+                long revision = await context.AccountStorages
+                    .AsNoTracking()
+                    .Where(row => row.AccountId == account.Value)
+                    .Select(row => row.Revision)
+                    .SingleOrDefaultAsync(cancellationToken)
+                    .ConfigureAwait(false);
+                List<StoredStorageItem> items = await context.StorageItems
+                    .AsNoTracking()
+                    .Where(row => row.AccountId == account.Value)
+                    .OrderBy(row => row.Id)
+                    .Select(row => new StoredStorageItem(row.Id, row.ItemDefinitionId, row.Quantity, row.RefineLevel))
+                    .ToListAsync(cancellationToken)
+                    .ConfigureAwait(false);
+                return new StoredStorage((uint)revision, items);
+            },
+            cancellationToken);
+    }
+
+    public Task<StorageResult> CommitStorageDepositAsync(
+        StorageDepositCommit deposit,
+        CancellationToken cancellationToken)
+    {
+        return RunAsync(
+            async context =>
+            {
+                await using (IDbContextTransaction transaction =
+                             await context.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false))
+                {
+                    (CharacterRow character, AccountStorageRow storage) = await LockStorageAsync(
+                            context,
+                            deposit.CharacterId,
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                    StorageResult? earlier = await FindStorageAsync(context, deposit.OperationId, character, storage,
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                    if (earlier != null)
+                    {
+                        return earlier;
+                    }
+
+                    InventoryItemRow? row = await context.InventoryItems
+                        .SingleOrDefaultAsync(
+                            item => item.Id == deposit.InventoryItemId && item.CharacterId == deposit.CharacterId,
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                    bool isWorn = await context.Equipment
+                        .AnyAsync(slot => slot.InventoryItemId == deposit.InventoryItemId, cancellationToken)
+                        .ConfigureAwait(false);
+                    if (row == null || isWorn || row.Quantity < deposit.Quantity || character.Currency < deposit.Fee)
+                    {
+                        return Unstored(InventoryStatus.Refused, character, storage);
+                    }
+
+                    List<StorageItemRow> stored = await context.StorageItems
+                        .Where(item => item.AccountId == storage.AccountId)
+                        .OrderBy(item => item.Id)
+                        .ToListAsync(cancellationToken)
+                        .ConfigureAwait(false);
+                    StorageItemRow? stack = deposit.StackLimit == 1
+                        ? null
+                        : stored.FirstOrDefault(item => item.ItemDefinitionId == row.ItemDefinitionId);
+                    int held = stack?.Quantity ?? 0;
+                    if (held > deposit.StackLimit - deposit.Quantity
+                        || (stack == null && stored.Count >= deposit.MaxStorageRows))
+                    {
+                        return Unstored(InventoryStatus.InventoryFull, character, storage);
+                    }
+
+                    if (stack == null)
+                    {
+                        // Saved at once, so the ledger row can name it.
+                        stack = new StorageItemRow
+                        {
+                            AccountId = storage.AccountId,
+                            ItemDefinitionId = row.ItemDefinitionId,
+                            Quantity = deposit.Quantity,
+                            RefineLevel = row.RefineLevel,
+                            InstanceDataJson = row.InstanceDataJson
+                        };
+                        context.StorageItems.Add(stack);
+                        await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+                    }
+                    else
+                    {
+                        stack.Quantity += deposit.Quantity;
+                        stack.Version++;
+                    }
+
+                    if (row.Quantity == deposit.Quantity)
+                    {
+                        context.InventoryItems.Remove(row);
+                    }
+                    else
+                    {
+                        row.Quantity -= deposit.Quantity;
+                        row.Version++;
+                    }
+
+                    character.Currency -= deposit.Fee;
+                    return await CommitStorageAsync(
+                            context,
+                            transaction,
+                            character,
+                            storage,
+                            new LedgerRow
+                            {
+                                OperationId = deposit.OperationId,
+                                ActorCharacterId = deposit.CharacterId,
+                                OperationType = LedgerRow.StorageDepositOperation,
+                                ItemInstanceId = row.Id,
+                                ItemDefinitionId = row.ItemDefinitionId,
+                                QuantityDelta = -deposit.Quantity,
+                                CurrencyDelta = -deposit.Fee,
+                                MetadataJson = StorageMetadata(stack.Id),
+                                CreatedAt = deposit.At
+                            },
+                            stack.Id,
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                }
+            },
+            cancellationToken);
+    }
+
+    public Task<StorageResult> CommitStorageWithdrawAsync(
+        StorageWithdrawCommit withdraw,
+        CancellationToken cancellationToken)
+    {
+        return RunAsync(
+            async context =>
+            {
+                await using (IDbContextTransaction transaction =
+                             await context.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false))
+                {
+                    (CharacterRow character, AccountStorageRow storage) = await LockStorageAsync(
+                            context,
+                            withdraw.CharacterId,
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                    StorageResult? earlier = await FindStorageAsync(context, withdraw.OperationId, character, storage,
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                    if (earlier != null)
+                    {
+                        return earlier;
+                    }
+
+                    StorageItemRow? stored = await context.StorageItems
+                        .SingleOrDefaultAsync(
+                            item => item.Id == withdraw.StorageItemId && item.AccountId == storage.AccountId,
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                    if (stored == null || stored.Quantity < withdraw.Quantity)
+                    {
+                        return Unstored(InventoryStatus.Refused, character, storage);
+                    }
+
+                    List<InventoryItemRow> rows = await context.InventoryItems
+                        .Where(item => item.CharacterId == withdraw.CharacterId)
+                        .ToListAsync(cancellationToken)
+                        .ConfigureAwait(false);
+                    InventoryItemRow? stack = withdraw.StackLimit == 1
+                        ? null
+                        : rows.FirstOrDefault(item => item.ItemDefinitionId == stored.ItemDefinitionId);
+                    int held = stack?.Quantity ?? 0;
+                    if (held > withdraw.StackLimit - withdraw.Quantity ||
+                        (stack == null && rows.Count >= withdraw.MaxRows))
+                    {
+                        return Unstored(InventoryStatus.InventoryFull, character, storage);
+                    }
+
+                    if (stack == null)
+                    {
+                        stack = new InventoryItemRow
+                        {
+                            CharacterId = withdraw.CharacterId,
+                            ItemDefinitionId = stored.ItemDefinitionId,
+                            Quantity = withdraw.Quantity,
+                            RefineLevel = stored.RefineLevel,
+                            InstanceDataJson = stored.InstanceDataJson
+                        };
+                        context.InventoryItems.Add(stack);
+                        await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+                    }
+                    else
+                    {
+                        stack.Quantity += withdraw.Quantity;
+                        stack.Version++;
+                    }
+
+                    if (stored.Quantity == withdraw.Quantity)
+                    {
+                        context.StorageItems.Remove(stored);
+                    }
+                    else
+                    {
+                        stored.Quantity -= withdraw.Quantity;
+                        stored.Version++;
+                    }
+
+                    return await CommitStorageAsync(
+                            context,
+                            transaction,
+                            character,
+                            storage,
+                            new LedgerRow
+                            {
+                                OperationId = withdraw.OperationId,
+                                ActorCharacterId = withdraw.CharacterId,
+                                OperationType = LedgerRow.StorageWithdrawOperation,
+                                ItemInstanceId = stack.Id,
+                                ItemDefinitionId = stored.ItemDefinitionId,
+                                QuantityDelta = withdraw.Quantity,
+                                MetadataJson = StorageMetadata(stored.Id),
+                                CreatedAt = withdraw.At
+                            },
+                            stored.Id,
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                }
+            },
+            cancellationToken);
+    }
+
+    public Task<StorageResult?> FindStorageOperationAsync(
+        Guid operationId,
+        long characterId,
+        CancellationToken cancellationToken)
+    {
+        return RunAsync(
+            async context =>
+            {
+                await using (IDbContextTransaction transaction =
+                             await context.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false))
+                {
+                    (CharacterRow character, AccountStorageRow storage) = await LockStorageAsync(
+                            context,
+                            characterId,
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                    StorageResult? found = await FindStorageAsync(context, operationId, character, storage,
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                    await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+                    return found;
+                }
+            },
+            cancellationToken);
+    }
+
     // Each line's two rows, the giver's and the receiver's, each under its own operation ID derived from the trade's,
     // since the ledger's operation ID is unique.
     private static LedgerRow TradeEntry(
@@ -1598,6 +1858,155 @@ WHERE character_quests.state = {CharacterQuestRow.ActiveState} AND character_que
                     slots.FirstOrDefault(slot => slot.InventoryItemId == row.Id)?.Slot,
                     row.RefineLevel))
                 .ToList());
+    }
+
+    // The account's storage row is made if it is missing, then locked, then the character: never the account row,
+    // which a sign-in locks outside the writer (Persistence §5).
+    private static async Task<(CharacterRow Character, AccountStorageRow Storage)> LockStorageAsync(
+        EvertorchDbContext context,
+        long characterId,
+        CancellationToken cancellationToken)
+    {
+        long account = await context.Characters
+            .Where(row => row.Id == characterId)
+            .Select(row => row.AccountId)
+            .SingleAsync(cancellationToken)
+            .ConfigureAwait(false);
+        await context.Database
+            .ExecuteSqlAsync(
+                $"INSERT INTO account_storages (account_id, revision, version) VALUES ({account}, 0, 0) ON CONFLICT DO NOTHING",
+                cancellationToken)
+            .ConfigureAwait(false);
+        List<AccountStorageRow> storage = await context.AccountStorages
+            .FromSql($"SELECT * FROM account_storages WHERE account_id = {account} FOR UPDATE")
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        CharacterRow character = await LockCharacterAsync(context, characterId, cancellationToken)
+            .ConfigureAwait(false);
+        return (character, storage.Single());
+    }
+
+    private static string StorageMetadata(long storageItemId)
+    {
+        return JsonSerializer.Serialize(new { storageItem = storageItemId });
+    }
+
+    private static StorageResult Unstored(InventoryStatus status, CharacterRow character, AccountStorageRow storage)
+    {
+        return new StorageResult(
+            status,
+            (uint)character.InventoryRevision,
+            character.Currency,
+            null,
+            (uint)storage.Revision,
+            null);
+    }
+
+    // The common end of a deposit and a withdrawal: both revisions go up by one, the ledger row goes in, and the answer
+    // reads both changed rows back. A clash on the operation ID means the same operation won elsewhere.
+    private static async Task<StorageResult> CommitStorageAsync(
+        EvertorchDbContext context,
+        IDbContextTransaction transaction,
+        CharacterRow character,
+        AccountStorageRow storage,
+        LedgerRow entry,
+        long storageItemId,
+        CancellationToken cancellationToken)
+    {
+        character.InventoryRevision = (character.InventoryRevision + 1) % RevisionModulus;
+        character.Version++;
+        storage.Revision = (storage.Revision + 1) % RevisionModulus;
+        storage.Version++;
+        context.Ledger.Add(entry);
+        try
+        {
+            await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (DbUpdateException exception) when (IsUniqueViolation(exception, LedgerIndex))
+        {
+            await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
+            context.ChangeTracker.Clear();
+            return await FindStorageAsync(context, entry.OperationId, character, storage, cancellationToken)
+                    .ConfigureAwait(false)
+                ?? throw new InvalidOperationException(
+                    $"Operation {entry.OperationId} clashed but is not in the ledger.");
+        }
+
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        return await StorageAnswerAsync(context, character.Id, entry.ItemInstanceId!.Value, entry.ItemDefinitionId!,
+                storageItemId, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private static async Task<StorageResult?> FindStorageAsync(
+        EvertorchDbContext context,
+        Guid operationId,
+        CharacterRow character,
+        AccountStorageRow storage,
+        CancellationToken cancellationToken)
+    {
+        LedgerRow? entry = await context.Ledger
+            .AsNoTracking()
+            .SingleOrDefaultAsync(row => row.OperationId == operationId, cancellationToken)
+            .ConfigureAwait(false);
+        if (entry == null)
+        {
+            return null;
+        }
+
+        if (entry.ActorCharacterId != character.Id)
+        {
+            return new StorageResult(InventoryStatus.TakenByOther, 0, 0, null, 0, null);
+        }
+
+        long storageItemId = JsonDocument.Parse(entry.MetadataJson!).RootElement.GetProperty("storageItem").GetInt64();
+        return await StorageAnswerAsync(context, character.Id, entry.ItemInstanceId!.Value, entry.ItemDefinitionId!,
+                storageItemId, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private static async Task<StorageResult> StorageAnswerAsync(
+        EvertorchDbContext context,
+        long characterId,
+        long inventoryItemId,
+        string itemDefinitionId,
+        long storageItemId,
+        CancellationToken cancellationToken)
+    {
+        var character = await context.Characters
+            .AsNoTracking()
+            .Where(row => row.Id == characterId)
+            .Select(row => new { row.InventoryRevision, row.Currency, row.AccountId })
+            .SingleAsync(cancellationToken)
+            .ConfigureAwait(false);
+        IReadOnlyList<StoredItem> bag = await ReadRowsAsync(
+                context,
+                characterId,
+                new[] { inventoryItemId },
+                itemDefinitionId,
+                cancellationToken)
+            .ConfigureAwait(false);
+        long storageRevision = await context.AccountStorages
+            .AsNoTracking()
+            .Where(row => row.AccountId == character.AccountId)
+            .Select(row => row.Revision)
+            .SingleAsync(cancellationToken)
+            .ConfigureAwait(false);
+        StorageItemRow? stored = await context.StorageItems
+            .AsNoTracking()
+            .SingleOrDefaultAsync(
+                row => row.Id == storageItemId && row.AccountId == character.AccountId,
+                cancellationToken)
+            .ConfigureAwait(false);
+        return new StorageResult(
+            InventoryStatus.Committed,
+            (uint)character.InventoryRevision,
+            character.Currency,
+            bag[0],
+            (uint)storageRevision,
+            stored == null
+                ? new StoredStorageItem(storageItemId, itemDefinitionId, 0)
+                : new StoredStorageItem(stored.Id, stored.ItemDefinitionId, stored.Quantity, stored.RefineLevel));
     }
 
     // Both characters are locked in the order of their IDs, so two creations over the same pair queue rather than

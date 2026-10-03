@@ -26,10 +26,15 @@ internal sealed class InMemoryGameStore : IGameStore
     private readonly Dictionary<Guid, LedgerEntry> m_ledger = new();
     private readonly Dictionary<long, PartyEntry> m_parties = new();
     private readonly HashSet<Guid> m_trades = new();
+    private readonly Dictionary<long, StorageEntry> m_storages = new();
+
+    // The storage row each deposit's or withdrawal's ledger entry names, as the PostgreSQL store keeps it in metadata.
+    private readonly Dictionary<Guid, long> m_storageRows = new();
     private long m_lastParty;
     private long m_lastAccount;
     private long m_lastCharacter;
     private long m_lastItem;
+    private long m_lastStorageItem;
 
     public IReadOnlyList<string> PendingMigrations { get; set; } = Array.Empty<string>();
 
@@ -139,6 +144,16 @@ internal sealed class InMemoryGameStore : IGameStore
     ///     Every buy and sell commit attempted, in order, by operation ID.
     /// </summary>
     public List<Guid> ShopCommits { get; } = new();
+
+    /// <summary>
+    ///     How many of the next deposit or withdrawal commits succeed and then throw as if the answer was lost.
+    /// </summary>
+    public int AmbiguousStorageFailures { get; set; }
+
+    /// <summary>
+    ///     Every deposit and withdrawal commit attempted, in order, by operation ID.
+    /// </summary>
+    public List<Guid> StorageCommits { get; } = new();
 
     /// <summary>
     ///     How many of the next trade commits succeed and then throw as if the answer was lost.
@@ -724,6 +739,53 @@ internal sealed class InMemoryGameStore : IGameStore
         }
     }
 
+    public Task<StoredStorage> ReadStorageAsync(AccountId account, CancellationToken cancellationToken)
+    {
+        ThrowIfUnavailable();
+        lock (m_gate)
+        {
+            StorageEntry storage = StorageOf(account.Value);
+            return Task.FromResult(new StoredStorage(storage.Revision, storage.Items.ToList()));
+        }
+    }
+
+    public Task<StorageResult> CommitStorageDepositAsync(
+        StorageDepositCommit deposit,
+        CancellationToken cancellationToken)
+    {
+        ThrowIfUnavailable();
+        lock (m_gate)
+        {
+            StorageCommits.Add(deposit.OperationId);
+            return AnswerStorage(FindStorage(deposit.OperationId, deposit.CharacterId) ?? Deposit(deposit));
+        }
+    }
+
+    public Task<StorageResult> CommitStorageWithdrawAsync(
+        StorageWithdrawCommit withdraw,
+        CancellationToken cancellationToken)
+    {
+        ThrowIfUnavailable();
+        lock (m_gate)
+        {
+            StorageCommits.Add(withdraw.OperationId);
+            return AnswerStorage(FindStorage(withdraw.OperationId, withdraw.CharacterId) ?? Withdraw(withdraw));
+        }
+    }
+
+    public Task<StorageResult?> FindStorageOperationAsync(
+        Guid operationId,
+        long characterId,
+        CancellationToken cancellationToken)
+    {
+        ThrowIfUnavailable();
+        lock (m_gate)
+        {
+            Lookups.Add(operationId);
+            return Task.FromResult(FindStorage(operationId, characterId));
+        }
+    }
+
     public Task<IReadOnlyList<string>> ListStoredDefinitionIdsAsync(CancellationToken cancellationToken)
     {
         ThrowIfUnavailable();
@@ -734,6 +796,7 @@ internal sealed class InMemoryGameStore : IGameStore
                     .Concat(row.Items.Select(item => item.ItemDefinitionId))
                     .Concat(row.Quests.Keys)
                     .Concat(row.Skills.Keys))
+                .Concat(m_storages.Values.SelectMany(storage => storage.Items.Select(item => item.ItemDefinitionId)))
                 .Distinct()
                 .ToList();
             return Task.FromResult(ids);
@@ -1133,6 +1196,181 @@ internal sealed class InMemoryGameStore : IGameStore
             row.Items.OrderBy(item => item.Id).Select(item => row.Read(item.Id)).ToList());
     }
 
+    private StorageEntry StorageOf(long account)
+    {
+        if (!m_storages.TryGetValue(account, out StorageEntry? storage))
+        {
+            storage = new StorageEntry();
+            m_storages.Add(account, storage);
+        }
+
+        return storage;
+    }
+
+    private Task<StorageResult> AnswerStorage(StorageResult result)
+    {
+        if (AmbiguousStorageFailures > 0 && result.Status == InventoryStatus.Committed)
+        {
+            AmbiguousStorageFailures--;
+            throw new StoreUnavailableException(new TimeoutException("scripted loss of the commit's answer"));
+        }
+
+        return Task.FromResult(result);
+    }
+
+    // As the PostgreSQL store answers: the ledger's bag row and storage row as they are now, an emptied one at 0.
+    private StorageResult? FindStorage(Guid operationId, long characterId)
+    {
+        if (!m_ledger.TryGetValue(operationId, out LedgerEntry? entry))
+        {
+            return null;
+        }
+
+        return entry.Character != characterId
+            ? new StorageResult(InventoryStatus.TakenByOther, 0, 0, null, 0, null)
+            : Stored(characterId, entry.Item, entry.ItemDefinition, m_storageRows[operationId]);
+    }
+
+    private StorageResult Stored(long characterId, long bagRow, string item, long storageRow)
+    {
+        Row row = m_characters[characterId];
+        StorageEntry storage = StorageOf(row.Account.Value);
+        StoredStorageItem? stored = storage.Items.SingleOrDefault(candidate => candidate.Id == storageRow);
+        return new StorageResult(
+            InventoryStatus.Committed,
+            row.InventoryRevision,
+            row.Coins,
+            row.Read(bagRow, item),
+            storage.Revision,
+            stored ?? new StoredStorageItem(storageRow, item, 0));
+    }
+
+    private static StorageResult Unstored(InventoryStatus status, Row row, StorageEntry storage)
+    {
+        return new StorageResult(status, row.InventoryRevision, row.Coins, null, storage.Revision, null);
+    }
+
+    // As the PostgreSQL store checks it: the row, unworn, its quantity, and the fee; then storage's stack and rows.
+    private StorageResult Deposit(StorageDepositCommit deposit)
+    {
+        Row row = m_characters[deposit.CharacterId];
+        StorageEntry storage = StorageOf(row.Account.Value);
+        int index = row.Items.FindIndex(item => item.Id == deposit.InventoryItemId);
+        if (index < 0
+            || row.Equipment.ContainsValue(deposit.InventoryItemId)
+            || row.Items[index].Quantity < deposit.Quantity
+            || row.Coins < deposit.Fee)
+        {
+            return Unstored(InventoryStatus.Refused, row, storage);
+        }
+
+        StoredItem given = row.Items[index];
+        int stack = deposit.StackLimit == 1
+            ? -1
+            : storage.Items.FindIndex(item => item.ItemDefinitionId == given.ItemDefinitionId);
+        int held = stack >= 0 ? storage.Items[stack].Quantity : 0;
+        if (held > deposit.StackLimit - deposit.Quantity
+            || (stack < 0 && storage.Items.Count >= deposit.MaxStorageRows))
+        {
+            return Unstored(InventoryStatus.InventoryFull, row, storage);
+        }
+
+        StoredStorageItem kept = stack >= 0
+            ? new StoredStorageItem(
+                storage.Items[stack].Id,
+                given.ItemDefinitionId,
+                held + deposit.Quantity,
+                storage.Items[stack].RefineLevel)
+            : new StoredStorageItem(++m_lastStorageItem, given.ItemDefinitionId, deposit.Quantity, given.RefineLevel);
+        if (stack >= 0)
+        {
+            storage.Items[stack] = kept;
+        }
+        else
+        {
+            storage.Items.Add(kept);
+        }
+
+        if (given.Quantity == deposit.Quantity)
+        {
+            row.Items.RemoveAt(index);
+        }
+        else
+        {
+            row.Items[index] = new StoredItem(
+                given.Id,
+                given.ItemDefinitionId,
+                given.Quantity - deposit.Quantity,
+                null,
+                given.RefineLevel);
+        }
+
+        row.Coins -= deposit.Fee;
+        row.InventoryRevision = unchecked(row.InventoryRevision + 1);
+        storage.Revision = unchecked(storage.Revision + 1);
+        m_ledger.Add(deposit.OperationId, new LedgerEntry(deposit.CharacterId, given.Id, given.ItemDefinitionId));
+        m_storageRows.Add(deposit.OperationId, kept.Id);
+        return Stored(deposit.CharacterId, given.Id, given.ItemDefinitionId, kept.Id);
+    }
+
+    // As the PostgreSQL store checks it: the account's row and its quantity; then the bag's stack and rows.
+    private StorageResult Withdraw(StorageWithdrawCommit withdraw)
+    {
+        Row row = m_characters[withdraw.CharacterId];
+        StorageEntry storage = StorageOf(row.Account.Value);
+        int index = storage.Items.FindIndex(item => item.Id == withdraw.StorageItemId);
+        if (index < 0 || storage.Items[index].Quantity < withdraw.Quantity)
+        {
+            return Unstored(InventoryStatus.Refused, row, storage);
+        }
+
+        StoredStorageItem taken = storage.Items[index];
+        int stack = withdraw.StackLimit == 1
+            ? -1
+            : row.Items.FindIndex(item => item.ItemDefinitionId == taken.ItemDefinitionId);
+        int held = stack >= 0 ? row.Items[stack].Quantity : 0;
+        if (held > withdraw.StackLimit - withdraw.Quantity || (stack < 0 && row.Items.Count >= withdraw.MaxRows))
+        {
+            return Unstored(InventoryStatus.InventoryFull, row, storage);
+        }
+
+        StoredItem received = stack >= 0
+            ? new StoredItem(
+                row.Items[stack].Id,
+                taken.ItemDefinitionId,
+                held + withdraw.Quantity,
+                null,
+                row.Items[stack].RefineLevel)
+            : new StoredItem(++m_lastItem, taken.ItemDefinitionId, withdraw.Quantity, null, taken.RefineLevel);
+        if (stack >= 0)
+        {
+            row.Items[stack] = received;
+        }
+        else
+        {
+            row.Items.Add(received);
+        }
+
+        if (taken.Quantity == withdraw.Quantity)
+        {
+            storage.Items.RemoveAt(index);
+        }
+        else
+        {
+            storage.Items[index] = new StoredStorageItem(
+                taken.Id,
+                taken.ItemDefinitionId,
+                taken.Quantity - withdraw.Quantity,
+                taken.RefineLevel);
+        }
+
+        row.InventoryRevision = unchecked(row.InventoryRevision + 1);
+        storage.Revision = unchecked(storage.Revision + 1);
+        m_ledger.Add(withdraw.OperationId, new LedgerEntry(withdraw.CharacterId, received.Id, taken.ItemDefinitionId));
+        m_storageRows.Add(withdraw.OperationId, taken.Id);
+        return Stored(withdraw.CharacterId, received.Id, taken.ItemDefinitionId, taken.Id);
+    }
+
     // As the PostgreSQL store answers: the ledger's row and the named ones as they are now, an emptied one at 0.
     private InventoryResult? Find(Guid operationId, long characterId, IReadOnlyCollection<long> rowIds)
     {
@@ -1500,6 +1738,14 @@ internal sealed class InMemoryGameStore : IGameStore
         ///     The item the entry names, which an emptied row is reported under, as the PostgreSQL store's ledger does.
         /// </summary>
         public string ItemDefinition { get; }
+    }
+
+    // An account's storage as stored: its revision and its rows in row order.
+    private sealed class StorageEntry
+    {
+        public uint Revision { get; set; }
+
+        public List<StoredStorageItem> Items { get; } = new();
     }
 
     // A party as stored: its leader and each member's character with its place in the joining order.

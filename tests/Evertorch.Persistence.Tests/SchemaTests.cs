@@ -20,6 +20,7 @@ public sealed class SchemaTests
     private const string ValueTooLong = "22001";
     private const string AddCharacterSkills = "20260928181417_AddCharacterSkills";
     private const string AddParties = "20261001131541_AddParties";
+    private const string AddBossRewards = "20261002222843_AddBossRewards";
 
     private PostgresFixture m_database = null!;
     private Sql m_sql = null!;
@@ -308,6 +309,49 @@ public sealed class SchemaTests
         Assert.That((afterDown, characters), Is.EqualTo((0L, 2L)), "the tables gone, the characters kept");
         Assert.That(sql.Scalar(tables), Is.EqualTo(2));
         Assert.That(sql.Scalar(Sql.PartyInsert(leader, leader, member)), Is.Positive, "and usable again");
+    }
+
+    // AddTradesAndStorage runs down only while no ledger row is of a type it adds, and drops its tables with their rows
+    // (Persistence §4, §11).
+    [Test]
+    public void AddTradesAndStorage_Down_IsRefusedOverATradeRow_AndOtherwiseDropsItsTables()
+    {
+        using var traded = PostgresFixture.Start();
+        var tradedSql = new Sql(traded.ConnectionString);
+        tradedSql.Scalar(
+            Sql.LedgerInsert(Guid.NewGuid(), tradedSql.InsertCharacter(tradedSql.InsertAccount(), "Trader"), "trade"));
+        using var plain = PostgresFixture.Start();
+        var plainSql = new Sql(plain.ConnectionString);
+        long account = plainSql.InsertAccount();
+        plainSql.Execute($"INSERT INTO account_storages (account_id, revision, version) VALUES ({account}, 0, 0)");
+
+        Exception? refused = null;
+        try
+        {
+            EvertorchDatabase.ApplyMigrationsAsync(traded.ConnectionString, AddBossRewards, CancellationToken.None)
+                .GetAwaiter()
+                .GetResult();
+        }
+        catch (PostgresException exception)
+        {
+            refused = exception;
+        }
+
+        EvertorchDatabase.ApplyMigrationsAsync(plain.ConnectionString, AddBossRewards, CancellationToken.None)
+            .GetAwaiter()
+            .GetResult();
+
+        Assert.That((refused as PostgresException)?.SqlState, Is.EqualTo(CheckViolation), "a trade row holds it up");
+        Assert.That(
+            plainSql.Scalar(
+                "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name IN "
+                + "('trades', 'account_storages', 'storage_items')"),
+            Is.Zero,
+            "its tables went with it");
+        Assert.That(
+            tradedSql.Scalar("SELECT count(*) FROM economy_ledger WHERE operation_type = 'trade'"),
+            Is.EqualTo(1),
+            "the refused down kept the row");
     }
 
     [Test]
@@ -612,6 +656,34 @@ public sealed class SchemaTests
         m_sql.Execute(insert);
 
         AssertFailsWith(UniqueViolation, insert);
+    }
+
+    [Test]
+    public void Storage_AndTrades_KeepTheirRules()
+    {
+        long account = m_sql.InsertAccount();
+        long first = NewCharacter();
+        long second = NewCharacter();
+        m_sql.Execute($"INSERT INTO account_storages (account_id, revision, version) VALUES ({account}, 0, 0)");
+        string item =
+            "INSERT INTO storage_items (account_id, item_definition_id, quantity, refine_level, version) VALUES ";
+
+        AssertFailsWith(CheckViolation, item + $"({account}, 'item.a', 0, 0, 0)");
+        AssertFailsWith(CheckViolation, item + $"({account}, 'item.a', 1000001, 0, 0)");
+        AssertFailsWith(CheckViolation, item + $"({account}, 'item.a', 1, -1, 0)");
+        AssertFailsWith(ForeignKeyViolation, item + $"({m_sql.InsertAccount()}, 'item.a', 1, 0, 0)");
+        AssertFailsWith(
+            CheckViolation,
+            $"UPDATE account_storages SET revision = 4294967296 WHERE account_id = {account}");
+        AssertFailsWith(
+            ForeignKeyViolation,
+            "INSERT INTO account_storages (account_id, revision, version) VALUES (-1, 0, 0)");
+        string trade = "INSERT INTO trades (id, first_character_id, second_character_id, committed_at) VALUES ";
+        AssertFailsWith(CheckViolation, trade + $"('{Guid.NewGuid()}', {second}, {first}, now())");
+        AssertFailsWith(CheckViolation, trade + $"('{Guid.NewGuid()}', {first}, {first}, now())");
+        AssertFailsWith(ForeignKeyViolation, trade + $"('{Guid.NewGuid()}', {first}, {second + 1000}, now())");
+        Assert.That(m_sql.Execute(trade + $"('{Guid.NewGuid()}', {first}, {second}, now())"), Is.EqualTo(1));
+        Assert.That(m_sql.Execute(item + $"({account}, 'item.a', 1000000, 9, 0)"), Is.EqualTo(1));
     }
 }
 }

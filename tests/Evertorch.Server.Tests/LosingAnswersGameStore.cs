@@ -209,9 +209,48 @@ internal sealed class LosingAnswersGameStore : IGameStore
         return m_inner.FindTradeAsync(tradeId, firstCharacterId, secondCharacterId, cancellationToken);
     }
 
+    public Task<StoredStorage> ReadStorageAsync(AccountId account, CancellationToken cancellationToken)
+    {
+        return m_inner.ReadStorageAsync(account, cancellationToken);
+    }
+
+    public Task<StorageResult> CommitStorageDepositAsync(
+        StorageDepositCommit deposit,
+        CancellationToken cancellationToken)
+    {
+        return AnswerAsync(m_inner.CommitStorageDepositAsync(deposit, cancellationToken));
+    }
+
+    public Task<StorageResult> CommitStorageWithdrawAsync(
+        StorageWithdrawCommit withdraw,
+        CancellationToken cancellationToken)
+    {
+        return AnswerAsync(m_inner.CommitStorageWithdrawAsync(withdraw, cancellationToken));
+    }
+
+    public Task<StorageResult?> FindStorageOperationAsync(
+        Guid operationId,
+        long characterId,
+        CancellationToken cancellationToken)
+    {
+        return m_inner.FindStorageOperationAsync(operationId, characterId, cancellationToken);
+    }
+
     public Task<IReadOnlyList<string>> ListStoredDefinitionIdsAsync(CancellationToken cancellationToken)
     {
         return m_inner.ListStoredDefinitionIdsAsync(cancellationToken);
+    }
+
+    private async Task<StorageResult> AnswerAsync(Task<StorageResult> commit)
+    {
+        StorageResult result = await commit.ConfigureAwait(false);
+        if (IsLosingAnswers && result.Status == InventoryStatus.Committed)
+        {
+            Interlocked.Increment(ref m_lostAnswers);
+            throw new StoreUnavailableException(new TimeoutException("scripted loss of the commit's answer"));
+        }
+
+        return result;
     }
 
     private async Task<InventoryResult> AnswerAsync(Task<InventoryResult> commit)
