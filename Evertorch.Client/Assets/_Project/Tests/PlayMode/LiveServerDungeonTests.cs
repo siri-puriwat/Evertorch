@@ -32,8 +32,11 @@ public sealed class LiveServerDungeonTests
     private const string Unlit = "Universal Render Pipeline/Unlit";
     private const string Monarch = "monster.slime_monarch";
 
-    // The client's character dealt the boss its only damage, so it is the most valuable player.
+    // The client's character dealt the boss its only damage, so it is the most valuable player, and its award names the
+    // Mantle or, when that roll fails, five Monarch Jelly.
     private const string Fallen = "The Slime Monarch has fallen. MVP: " + ClientName + ".";
+    private const string AwardedMantle = "You are the MVP: 3,000 experience and Monarch Mantle.";
+    private const string AwardedJelly = "You are the MVP: 3,000 experience and 5 Monarch Jelly.";
     private const float StartTimeoutSeconds = 30f;
     private const float StepTimeoutSeconds = 20f;
     private const int TestTimeoutMs = 300_000;
@@ -165,8 +168,9 @@ public sealed class LiveServerDungeonTests
 
     // The real client walks into the boss chamber, where the Slime Monarch fights it: the client draws its slam's
     // telegraph, an unlit ring of 4 m at the boss's feet; then the client brings the boss down and its chat log says so,
-    // and the console's "boss respawn" brings it back, which the log says too (Prototype Content §2). The test package
-    // leaves the boss 1 HP and no dodge, and has its swings and its slam strike for 1.
+    // and says the award its most valuable player won, and the console's "boss respawn" brings it back, which the log
+    // says too (Prototype Content §2). The test package leaves the boss 1 HP and no dodge, and has its swings and its
+    // slam strike for 1.
     [UnityTest]
     [Timeout(TestTimeoutMs)]
     public IEnumerator Boss_TheRealClientDrawsTheSlamsTelegraph_AndLogsTheBossFallingAndAppearing()
@@ -233,6 +237,10 @@ public sealed class LiveServerDungeonTests
         }
 
         Assert.That(HasLine(client, Fallen), Is.True, server.JoinOutput());
+        yield return WaitUntil(
+            () => HasLine(client, AwardedMantle) || HasLine(client, AwardedJelly),
+            StepTimeoutSeconds);
+        Assert.That(HasLine(client, AwardedMantle) || HasLine(client, AwardedJelly), Is.True, server.JoinOutput());
         server.ClearOutput();
         server.SendCommand("boss respawn");
         yield return WaitUntil(() => HasLine(client, "The Slime Monarch has appeared."), StepTimeoutSeconds);

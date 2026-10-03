@@ -70,6 +70,7 @@ public enum MessageOpcode : ushort
     PartyEvent = 0x8021,
     PartyRoster = 0x8022,
     PartyMemberStatus = 0x8023,
-    BossAnnouncement = 0x8024
+    BossAnnouncement = 0x8024,
+    MvpAwarded = 0x8025
 }
 }

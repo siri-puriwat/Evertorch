@@ -107,6 +107,18 @@ public sealed class BossRewardTests
         return server.RewardLog.Entries.Select(entry => entry.EventId.Id);
     }
 
+    private static List<MvpAwarded> Awards(TestServer server, ConnectionId connection)
+    {
+        return server.Transport.ControlSentTo(connection)
+            .Where(message => message.Opcode == MessageOpcode.MvpAwarded)
+            .Select(message =>
+            {
+                Assert.That(MvpAwarded.TryRead(message.Payload, out MvpAwarded? award), Is.True);
+                return award!;
+            })
+            .ToList();
+    }
+
     private static List<CommandRejected> Rejections(TestServer server, ConnectionId connection)
     {
         return server.Transport.ControlSentTo(connection)
@@ -117,6 +129,29 @@ public sealed class BossRewardTests
                 return rejected;
             })
             .ToList();
+    }
+
+    // A boss that gives its MVP no prize tells the award at once, with no item.
+    [Test]
+    public void Fall_WithAnMvpButNoPrize_TellsTheAwardAtOnce_ToTheMvpAlone()
+    {
+        TestServer server = InTheGrotto();
+        ConnectionId connection = Enter(server, 1);
+        ConnectionId other = Enter(server, 2);
+        server.CrossIntoTheGrotto(connection);
+        server.CrossIntoTheGrotto(other);
+        CharacterSession character = CharacterOf(server, connection);
+        MonsterEntity monarch = GrottoOf(server).Monsters.Single(monster => monster.Definition.Id == Monarch);
+        server.Transport.ClearSent();
+
+        server.Bosses.Fell(GrottoOf(server), monarch, new MostValuablePlayer(character, 3000, null));
+
+        MvpAwarded award = Awards(server, connection).Single();
+        Assert.That(
+            (award.Monster, award.MvpExperience, award.Item, award.Amount, award.Placed),
+            Is.EqualTo((Monarch, 3000UL, (ItemDefinitionId?)null, 0U, PrizePlacement.None)));
+        Assert.That(Awards(server, other), Is.Empty);
+        Assert.That(character.HasInventoryWork, Is.False);
     }
 
     // The outage cuts the commit short; once the database answers, the ledger shows it never happened, and the grant
@@ -293,19 +328,31 @@ public sealed class BossRewardTests
     {
         TestServer server = InTheGrotto();
         ConnectionId connection = Enter(server, 1);
+        ConnectionId other = Enter(server, 2);
         server.CrossIntoTheGrotto(connection);
+        server.CrossIntoTheGrotto(other);
         CharacterSession character = CharacterOf(server, connection);
         server.Transport.ClearSent();
 
         Win(server, connection);
         bool isWaiting = character.HasInventoryWork;
+        bool isToldEarly = Awards(server, connection).Count > 0;
         Settle(server, character);
 
-        Assert.That(isWaiting, Is.True, "the prize waited on the character");
+        MvpAwarded award = Awards(server, connection).Single();
+        var opcodes = server.Transport.ControlOpcodesSentTo(connection).ToList();
+        Assert.That((isWaiting, isToldEarly), Is.EqualTo((true, false)), "the prize waited, and its award with it");
         Assert.That(server.Store.GrantCommits.Select(commit => commit.ItemDefinitionId), Is.EqualTo(new[] { Mantle }));
         Assert.That(Mantles(character), Is.EqualTo(1));
         Assert.That(server.Store.Stored(1).Items.Count(item => item.ItemDefinitionId == Mantle), Is.EqualTo(1));
-        Assert.That(server.Transport.ControlOpcodesSentTo(connection), Has.Member(MessageOpcode.InventoryChanged));
+        Assert.That(
+            (award.Monster, award.MvpExperience, award.Item, award.Amount, award.Placed),
+            Is.EqualTo((Monarch, 3000UL, (ItemDefinitionId?)new ItemDefinitionId(Mantle), 1U, PrizePlacement.Bag)));
+        Assert.That(
+            opcodes.IndexOf(MessageOpcode.InventoryChanged),
+            Is.GreaterThanOrEqualTo(0).And.LessThan(opcodes.IndexOf(MessageOpcode.MvpAwarded)),
+            "the bag changes before the award is told");
+        Assert.That(Awards(server, other), Is.Empty, "the MVP alone hears it");
         Assert.That(RewardEvents(server), Is.EqualTo(new[] { 1025 }));
         Assert.That(MantlesOnTheGround(server), Is.Empty);
     }
@@ -328,6 +375,7 @@ public sealed class BossRewardTests
         uint placed = server.CurrentTick;
         ItemDropEntity prize = MantlesOnTheGround(server).Single();
         Guid grant = server.Store.GrantCommits.Single().OperationId;
+        PrizePlacement told = Awards(server, winner).Single().Placed;
         TickUntilAged(server, prize, 5000);
         server.Transport.ClearSent();
         server.SendPickup(other, prize.Id, 1);
@@ -339,6 +387,7 @@ public sealed class BossRewardTests
 
         Assert.That((prize.DropId, prize.Priority), Is.EqualTo((grant, character.Character)));
         Assert.That(prize.DroppedTick, Is.EqualTo(placed), "its window counts from the tick it appeared");
+        Assert.That(told, Is.EqualTo(PrizePlacement.Feet), "the award says where the prize lies");
         Assert.That(prize.Position, Is.EqualTo(server.PlayerOf(winner).Position), "at the MVP's feet");
         Assert.That(atFiveSeconds, Is.EqualTo(CommandRejectionReason.LootPriority));
         Assert.That(Mantles(CharacterOf(server, other)), Is.EqualTo(1), "anyone's at 10 s");

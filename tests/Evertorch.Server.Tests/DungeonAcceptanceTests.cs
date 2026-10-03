@@ -20,8 +20,9 @@ namespace Evertorch.Server.Tests
 ///     walks through the ground's portal onto the training field, then through the field's east portal into the Umbral
 ///     Grotto, where a pack of Grotto Crawlers links when Aldo attacks one, a Gloom Wisp numbs Bree, and in its chamber
 ///     the Slime Monarch slams: Cora steps out of the telegraph and is spared while Aldo is struck, the party brings the
-///     boss down, and each member hears it fall and, brought back by the console, appear. Each later line of Milestone 13
-///     adds its steps here: the most valuable player's prize, the quests, and a restart.
+///     boss down, each member hears it fall, its most valuable player alone hears its award once the prize is in its bag,
+///     and each member hears the boss, brought back by the console, appear. Each later line of Milestone 13 adds its
+///     steps here: the quests and a restart.
 /// </summary>
 [TestFixture]
 [NonParallelizable]
@@ -33,6 +34,8 @@ public sealed class DungeonAcceptanceTests
     private const string GrottoCrawler = "monster.grotto_crawler";
     private const string GloomWisp = "monster.gloom_wisp";
     private const string SlimeMonarch = "monster.slime_monarch";
+    private const string MonarchMantle = "item.armor.monarch_mantle";
+    private const string MonarchJelly = "item.material.monarch_jelly";
     private const string AldoIdentity = "dungeon-aldo";
     private const string AldoName = "Aldo";
     private const string BreeIdentity = "dungeon-bree";
@@ -319,9 +322,10 @@ public sealed class DungeonAcceptanceTests
     // The party walks back west and up into the corridor, then east into the boss chamber. Aldo goes in first, and the
     // Slime Monarch takes Aldo for its target; then Cora comes beside it, and once the client sees its slam's cast
     // begin, Cora walks out of the 4 m and is spared while Aldo, who stays, is struck (Gameplay Systems §9). The party
-    // brings the boss down and each member hears it fall; the console brings it back and each hears it appear (Network
-    // Protocol §9). The test package leaves the boss 60 HP and no dodge, has its swings and its slam strike for 1, and
-    // has it slam whenever it may.
+    // brings the boss down and each member hears it fall, naming its most valuable player, who alone hears its award
+    // with its 3,000 MVP experience and the prize in its bag; the console brings the boss back and each hears it appear
+    // (Network Protocol §9). The test package leaves the boss 60 HP and no dodge, has its swings and its slam strike for
+    // 1, and has it slam whenever it may.
     private static void MeetTheSlimeMonarch(
         IAdminCommandService admin,
         SocketClient aldo,
@@ -330,13 +334,18 @@ public sealed class DungeonAcceptanceTests
     {
         const string step = "the boss";
         SocketClient[] party = { aldo, bree, cora };
+        var names = new Dictionary<SocketClient, string> { [aldo] = AldoName, [bree] = BreeName, [cora] = CoraName };
         var heard = new Dictionary<SocketClient, List<string>>();
+        var awards = new Dictionary<SocketClient, List<MvpAwarded>>();
         foreach (SocketClient client in party)
         {
             var lines = new List<string>();
+            var awarded = new List<MvpAwarded>();
             heard.Add(client, lines);
+            awards.Add(client, awarded);
             client.Connection.BossAnnouncementReceived += announcement =>
-                lines.Add($"{announcement.Kind} {announcement.Monster.Value}");
+                lines.Add($"{announcement.Kind} {announcement.Monster.Value} {announcement.Name}".TrimEnd());
+            client.Connection.MvpAwardedReceived += awarded.Add;
         }
 
         foreach ((SocketClient client, WorldPosition place) in new[]
@@ -415,11 +424,35 @@ public sealed class DungeonAcceptanceTests
 
         Assert.That(
             SocketClients.PumpUntil(
-                () => IsAll(client => heard[client].Contains($"Fell {SlimeMonarch}"), party),
+                () => IsAll(client => heard[client].Any(line => line.StartsWith($"Fell {SlimeMonarch} ")), party),
                 FightLimit,
                 party),
             Is.True,
-            $"{step}: every member heard the boss fall");
+            $"{step}: every member heard the boss fall, naming its most valuable player");
+        string fell = heard[aldo].Single(line => line.StartsWith($"Fell {SlimeMonarch} "));
+        SocketClient mvp = party.Single(client => fell == $"Fell {SlimeMonarch} {names[client]}");
+        Assert.That(IsAll(client => heard[client].Contains(fell), party), Is.True, $"{step}: one name for everyone");
+        Assert.That(
+            SocketClients.PumpUntil(() => awards[mvp].Count > 0, FightLimit, party),
+            Is.True,
+            $"{step}: {names[mvp]} heard the award");
+        MvpAwarded award = awards[mvp].Single();
+        Assert.That(
+            (award.Monster.Value, award.MvpExperience, award.Placed),
+            Is.EqualTo((SlimeMonarch, 3000UL, PrizePlacement.Bag)),
+            $"{step}: the award");
+        Assert.That(
+            (award.Item?.Value, award.Amount),
+            Is.EqualTo((MonarchMantle, 1U)).Or.EqualTo((MonarchJelly, 5U)),
+            $"{step}: the Mantle, or else five Monarch Jelly");
+        Assert.That(
+            mvp.World.Inventory.Rows.Where(row => row.Item == award.Item).Sum(row => row.Quantity),
+            Is.GreaterThanOrEqualTo(award.Amount),
+            $"{step}: the prize in {names[mvp]}'s bag");
+        Assert.That(
+            party.Where(client => client != mvp).Select(client => awards[client].Count),
+            Is.All.EqualTo(0),
+            $"{step}: the others heard no award");
 
         IReadOnlyList<MonsterDefinitionId> returned = admin
             .RespawnBossesAsync(new AdminActor("acceptance", "test"))

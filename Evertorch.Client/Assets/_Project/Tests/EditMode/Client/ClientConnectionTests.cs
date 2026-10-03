@@ -657,6 +657,32 @@ public sealed class ClientConnectionTests
         Assert.That(harness.Connection.State, Is.EqualTo(ClientConnectionState.SelectingCharacter));
     }
 
+    // The most valuable player's award reaches the chat log through the connection too (Network Protocol §9).
+    [Test]
+    public void MvpAwarded_InTheWorld_IsRaised_AndOutsideItIsUnexpected()
+    {
+        var outside = new Harness();
+        outside.ConnectAndReceiveHello();
+        var inside = new Harness();
+        inside.EnterWorld();
+        var heard = new List<string>();
+        inside.Connection.MvpAwardedReceived += message => heard.Add($"{message.Item?.Value} {message.Placed}");
+        var award = new MvpAwarded(
+            new MonsterDefinitionId("monster.slime_monarch"),
+            3000,
+            new ItemDefinitionId("item.armor.monarch_mantle"),
+            1,
+            PrizePlacement.Feet);
+        byte[] payload = Encode(award.GetEncodedLength(), award.Write);
+
+        inside.Deliver(ProtocolChannel.Control, payload);
+        outside.Deliver(ProtocolChannel.Control, payload);
+
+        Assert.That(heard, Is.EqualTo(new[] { "item.armor.monarch_mantle Feet" }));
+        Assert.That(inside.Connection.MalformedMessages + inside.Connection.UnexpectedMessages, Is.Zero);
+        Assert.That(outside.Connection.UnexpectedMessages, Is.EqualTo(1));
+    }
+
     // An NPC's services come only while it is in view, so the connection keeps each quest's offer for the session.
     [Test]
     public void NpcServices_TheirQuestOffers_AreKeptForTheSession()

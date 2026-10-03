@@ -17,6 +17,18 @@ public sealed class SharedBossMessageTests
         0x04, 0x00, 0x41, 0x6E, 0x6E, 0x61
     };
 
+    private static readonly byte[] MvpAwardedBytes =
+    {
+        0x25, 0x80,
+        0x15, 0x00, 0x6D, 0x6F, 0x6E, 0x73, 0x74, 0x65, 0x72, 0x2E, 0x73, 0x6C, 0x69, 0x6D, 0x65, 0x5F, 0x6D, 0x6F,
+        0x6E, 0x61, 0x72, 0x63, 0x68,
+        0xB8, 0x0B, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x19, 0x00, 0x69, 0x74, 0x65, 0x6D, 0x2E, 0x61, 0x72, 0x6D, 0x6F, 0x72, 0x2E, 0x6D, 0x6F, 0x6E, 0x61, 0x72,
+        0x63, 0x68, 0x5F, 0x6D, 0x61, 0x6E, 0x74, 0x6C, 0x65,
+        0x01, 0x00, 0x00, 0x00,
+        0x01
+    };
+
     [Test]
     public void BossAnnouncement_WritesItsGoldenBytes_AndReadsThemBack()
     {
@@ -29,6 +41,23 @@ public sealed class SharedBossMessageTests
         Assert.That(BossAnnouncement.TryRead(BossFellBytes, out BossAnnouncement? read), Is.True);
         Assert.That((read!.Kind, read.Monster, read.Name), Is.EqualTo((BossAnnouncementKind.Fell, monarch, "Anna")));
         Assert.That(BossAnnouncement.TryRead(BossFellBytes.AsSpan(0, BossFellBytes.Length - 1), out _), Is.False);
+    }
+
+    [Test]
+    public void MvpAwarded_WritesItsGoldenBytes_AndReadsThemBack()
+    {
+        var monarch = new MonsterDefinitionId("monster.slime_monarch");
+        var mantle = new ItemDefinitionId("item.armor.monarch_mantle");
+        var award = new MvpAwarded(monarch, 3000, mantle, 1, PrizePlacement.Bag);
+        byte[] written = new byte[award.GetEncodedLength()];
+        award.Write(written);
+
+        Assert.That(written, Is.EqualTo(MvpAwardedBytes));
+        Assert.That(MvpAwarded.TryRead(MvpAwardedBytes, out MvpAwarded? read), Is.True);
+        Assert.That(
+            (read!.Monster, read.MvpExperience, read.Item, read.Amount, read.Placed),
+            Is.EqualTo((monarch, 3000UL, (ItemDefinitionId?)mantle, 1U, PrizePlacement.Bag)));
+        Assert.That(MvpAwarded.TryRead(MvpAwardedBytes.AsSpan(0, MvpAwardedBytes.Length - 1), out _), Is.False);
     }
 }
 }

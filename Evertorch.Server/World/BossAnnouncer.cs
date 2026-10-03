@@ -60,6 +60,19 @@ public sealed class BossAnnouncer
                 BossAnnouncementKind.Fell,
                 boss.Definition.Id,
                 mostValuable?.Character.Player.Name ?? string.Empty));
+
+        // A prize is told of once it settles (BossRewardSystem); without one, the award is told at once.
+        if (mostValuable != null && mostValuable.Prize == null)
+        {
+            m_sender.SendMvpAwarded(
+                mostValuable.Character,
+                new MvpAwarded(
+                    boss.Definition.Id,
+                    (ulong)mostValuable.GainedExperience,
+                    null,
+                    0,
+                    PrizePlacement.None));
+        }
     }
 
     // Every player with a connection in the world on the boss's map hears it, wherever on the map it stands.

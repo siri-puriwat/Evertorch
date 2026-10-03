@@ -25,6 +25,7 @@ public sealed class ServerOutputTests
         ["AttackStarted"] = new[] { "Attacker", "StartTick", "Target", "Timing" },
         ["AttackTiming"] = new[] { "Impact", "Interval", "Recovery", "Windup" },
         ["BossAnnouncement"] = new[] { "Kind", "Monster", "Name" },
+        ["MvpAwarded"] = new[] { "Amount", "Item", "Monster", "MvpExperience", "Placed" },
         ["ChatReceived"] = new[] { "Channel", "Name", "Speaker", "Text" },
         ["PartyEvent"] = new[] { "Kind", "Name" },
         ["PartyMemberStatus"] = new[] { "HealthPermille", "Name", "SpiritPermille" },
@@ -106,12 +107,13 @@ public sealed class ServerOutputTests
     };
 
     // An NPC's prices and a quest's terms travel on purpose, because the player must see them (Content Pipeline §5),
-    // and so do the derived statistics of the owner's Stats window (Network Protocol §9): exactly these fields may
-    // carry a server-only word.
+    // and so do the derived statistics of the owner's Stats window and the MVP experience a boss's most valuable
+    // player gained (Network Protocol §9): exactly these fields may carry a server-only word.
     private static readonly string[] SentOnPurpose =
     {
         "NpcServiceEntry.BuyPrice", "NpcServiceEntry.SellPrice", "NpcQuestOffer.BaseExperience",
-        "CharacterSheet.Defense", "CharacterSheet.Flee", "CharacterSheet.MagicAttack", "CharacterSheet.MagicDefense"
+        "CharacterSheet.Defense", "CharacterSheet.Flee", "CharacterSheet.MagicAttack", "CharacterSheet.MagicDefense",
+        "MvpAwarded.MvpExperience"
     };
 
     // Words of the content's server-only fields (Content Pipeline §5).
@@ -119,7 +121,7 @@ public sealed class ServerOutputTests
     {
         "Hp", "PhysicalAttack", "Defense", "Flee", "MagicAttack", "Behavior", "Perception", "Leash", "Roam", "Idle",
         "Scan", "KeepDistance", "BaseExperience", "Drops", "Weight", "Price", "Ratio", "Percent", "Penalty", "Bonus",
-        "Chance", "Seed", "Threshold", "Burst"
+        "Chance", "Seed", "Threshold", "Burst", "MvpExperience"
     };
 
     private static readonly Assembly[] WireAssemblies = { typeof(MessageOpcode).Assembly, typeof(EntityId).Assembly };
@@ -230,7 +232,7 @@ public sealed class ServerOutputTests
                     "Hp", "PhysicalAttack", "PhysicalDefense", "Flee", "MagicAttack", "Behavior", "PerceptionRadius",
                     "LeashRadius", "RoamRadius", "IdlePauseMinMs", "IdlePauseMaxMs", "ScanIntervalMs", "KeepDistance",
                     "BaseExperience", "Drops", "Chance", "Weight", "SellPrice", "AttackSpeedPenalty", "Defense",
-                    "Bonus", "DamageRatioPercent", "HealHp"
+                    "Bonus", "DamageRatioPercent", "HealHp", "MvpExperience", "MvpDrops"
                 }));
     }
 }

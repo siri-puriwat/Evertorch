@@ -612,6 +612,7 @@ public sealed class GameClient : MonoBehaviour
             Connection.ChatLineReceived -= OnChatLine;
             Connection.PartyEventReceived -= OnPartyEvent;
             Connection.BossAnnouncementReceived -= OnBossAnnouncement;
+            Connection.MvpAwardedReceived -= OnMvpAwarded;
             Connection.PartyRosterReceived -= Party.Apply;
             Connection.PartyMemberStatusReceived -= Party.Apply;
         }
@@ -643,6 +644,7 @@ public sealed class GameClient : MonoBehaviour
         Connection.ChatLineReceived += OnChatLine;
         Connection.PartyEventReceived += OnPartyEvent;
         Connection.BossAnnouncementReceived += OnBossAnnouncement;
+        Connection.MvpAwardedReceived += OnMvpAwarded;
         Connection.PartyRosterReceived += Party.Apply;
         Connection.PartyMemberStatusReceived += Party.Apply;
         Status = $"Connecting to {session.Host}:{session.Port}";
@@ -1633,6 +1635,11 @@ public sealed class GameClient : MonoBehaviour
     // A boss's appearance and fall join the log as grey lines, wherever on its map the player stands (Prototype
     // Content §2).
     private void OnBossAnnouncement(BossAnnouncement message)
+    {
+        ChatLog.AddSystem(BossMessages.Describe(message, m_contentLoader.Content));
+    }
+
+    private void OnMvpAwarded(MvpAwarded message)
     {
         ChatLog.AddSystem(BossMessages.Describe(message, m_contentLoader.Content));
     }

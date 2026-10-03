@@ -78,6 +78,7 @@ public static class MessageRouting
             case MessageOpcode.PartyRoster:
             case MessageOpcode.PartyMemberStatus:
             case MessageOpcode.BossAnnouncement:
+            case MessageOpcode.MvpAwarded:
                 return true;
             case MessageOpcode.MoveInput:
             case MessageOpcode.StopMovement:

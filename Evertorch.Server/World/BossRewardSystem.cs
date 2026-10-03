@@ -236,7 +236,7 @@ public sealed class BossRewardSystem : ITickPhase
                 break;
             default:
                 // Another's operation holds this ID, so the prize already lies somewhere: it is not made twice.
-                Finish(character);
+                Finish(character, PrizePlacement.None);
                 break;
         }
     }
@@ -255,7 +255,7 @@ public sealed class BossRewardSystem : ITickPhase
             operation.OperationId,
             null);
         m_instruments.RecordBossReward(Bag);
-        Finish(character);
+        Finish(character, PrizePlacement.Bag);
     }
 
     // The prize's drop takes the grant's operation ID as its own, so the ledger's unique index lets it into one bag
@@ -284,13 +284,23 @@ public sealed class BossRewardSystem : ITickPhase
             operation.OperationId,
             null);
         m_instruments.RecordBossReward(Feet);
-        Finish(character);
+        Finish(character, PrizePlacement.Feet);
     }
 
-    private void Finish(CharacterSession character)
+    // The most valuable player hears its award once its prize has settled (Network Protocol §9).
+    private void Finish(CharacterSession character, PrizePlacement placed)
     {
-        character.PendingGrants.Dequeue();
+        BossGrant grant = character.PendingGrants.Dequeue();
         character.Operation = null;
+        bool hasPrize = placed != PrizePlacement.None;
+        m_sender.SendMvpAwarded(
+            character,
+            new MvpAwarded(
+                grant.Boss,
+                (ulong)grant.GainedExperience,
+                hasPrize ? grant.Item : null,
+                hasPrize ? (uint)grant.Amount : 0,
+                placed));
         Settled?.Invoke(character);
         m_lifetime.OnOperationSettled(character);
     }

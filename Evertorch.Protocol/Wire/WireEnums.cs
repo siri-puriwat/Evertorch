@@ -62,6 +62,11 @@ internal static class WireEnums
         return value == BossAnnouncementKind.Appeared || value == BossAnnouncementKind.Fell;
     }
 
+    public static bool IsDefined(PrizePlacement value)
+    {
+        return value <= PrizePlacement.Feet;
+    }
+
     public static bool IsDefined(ChatChannel value)
     {
         return value >= ChatChannel.Nearby && value <= ChatChannel.WhisperSent;

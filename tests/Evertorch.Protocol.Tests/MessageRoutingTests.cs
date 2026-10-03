@@ -78,6 +78,7 @@ public sealed class MessageRoutingTests
     [TestCase(MessageOpcode.PartyRoster)]
     [TestCase(MessageOpcode.PartyMemberStatus)]
     [TestCase(MessageOpcode.BossAnnouncement)]
+    [TestCase(MessageOpcode.MvpAwarded)]
     public void TryGetRoute_ForSessionAndLifecycleMessages_IsReliableOrderedOnControl(MessageOpcode opcode)
     {
         MessageRouting.TryGetRoute(opcode, out ProtocolChannel channel, out MessageDelivery delivery);
@@ -185,7 +186,7 @@ public sealed class MessageRoutingTests
             "LogoutComplete=0x8019", "CharacterProgress=0x801A", "SkillList=0x801B",
             "StatusEffects=0x801C", "NpcServices=0x801D", "QuestLog=0x801E", "CharacterSheet=0x801F",
             "WornWeaponChanged=0x8020", "PartyEvent=0x8021", "PartyRoster=0x8022", "PartyMemberStatus=0x8023",
-            "BossAnnouncement=0x8024"
+            "BossAnnouncement=0x8024", "MvpAwarded=0x8025"
         };
 
         string[] actual = ((MessageOpcode[])Enum.GetValues(typeof(MessageOpcode)))
@@ -206,9 +207,9 @@ public sealed class MessageRoutingTests
     }
 
     [Test]
-    public void ProtocolVersion_IsThirtyFive()
+    public void ProtocolVersion_IsThirtySix()
     {
-        Assert.That(ProtocolConstants.ProtocolVersion, Is.EqualTo(35));
+        Assert.That(ProtocolConstants.ProtocolVersion, Is.EqualTo(36));
     }
 
     [Test]

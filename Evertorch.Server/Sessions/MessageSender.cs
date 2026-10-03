@@ -55,6 +55,19 @@ public sealed class MessageSender
         m_outbound.Send(connection, m_buffer.AsSpan(0, message.Write(m_buffer)));
     }
 
+    /// <summary>
+    ///     A boss's award to its most valuable player alone, while a connection controls it in the world (Network
+    ///     Protocol §9); a player away hears nothing of it.
+    /// </summary>
+    public void SendMvpAwarded(CharacterSession character, MvpAwarded message)
+    {
+        ClientSession? owner = character.Connection;
+        if (owner != null && owner.State == SessionState.InWorld)
+        {
+            m_outbound.Send(owner.Connection, m_buffer.AsSpan(0, message.Write(m_buffer)));
+        }
+    }
+
     public void Send(ConnectionId connection, PartyEvent message)
     {
         m_outbound.Send(connection, m_buffer.AsSpan(0, message.Write(m_buffer)));

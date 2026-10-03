@@ -178,6 +178,9 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
             case MessageOpcode.BossAnnouncement:
                 OnBossAnnouncement(payload);
                 break;
+            case MessageOpcode.MvpAwarded:
+                OnMvpAwarded(payload);
+                break;
             case MessageOpcode.EntitySnapshot:
                 OnEntitySnapshot(payload);
                 break;
@@ -917,6 +920,11 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
     /// </summary>
     public event Action<BossAnnouncement>? BossAnnouncementReceived;
 
+    /// <summary>
+    ///     The player was a boss's most valuable player, and its prize has settled, for the chat log.
+    /// </summary>
+    public event Action<MvpAwarded>? MvpAwardedReceived;
+
     public event Action<ClientWorld>? EnteredWorld;
 
     /// <summary>
@@ -1151,6 +1159,22 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
         else
         {
             BossAnnouncementReceived?.Invoke(message);
+        }
+    }
+
+    private void OnMvpAwarded(ReadOnlySpan<byte> payload)
+    {
+        if (!MvpAwarded.TryRead(payload, out MvpAwarded? message) || message == null)
+        {
+            MalformedMessages++;
+        }
+        else if (World == null)
+        {
+            UnexpectedMessages++;
+        }
+        else
+        {
+            MvpAwardedReceived?.Invoke(message);
         }
     }
 

@@ -164,6 +164,12 @@ public sealed class MessageFuzzTests
                 ? Encode(message!.GetEncodedLength(), message.Write)
                 : null);
         yield return Case(
+            "MvpAwarded",
+            Encode(MvpMessageTests.InTheBagGolden.GetEncodedLength(), MvpMessageTests.InTheBagGolden.Write),
+            payload => MvpAwarded.TryRead(payload, out MvpAwarded? message)
+                ? Encode(message!.GetEncodedLength(), message.Write)
+                : null);
+        yield return Case(
             "ChatReceived",
             Encode(ChatMessageTests.ReceivedGolden),
             payload => ChatReceived.TryRead(payload, out ChatReceived? message) ? Encode(message!) : null);
