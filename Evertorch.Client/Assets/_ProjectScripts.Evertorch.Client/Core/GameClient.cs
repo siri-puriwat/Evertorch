@@ -74,6 +74,10 @@ public sealed class GameClient : MonoBehaviour
 
     // A trade's requests and replies are scored when throttled too (Network Protocol §11).
     private readonly ChatThrottle m_tradeThrottle = new();
+
+    // A read of storage costs the server a query, so the client keeps a stricter bucket than its own (Network Protocol
+    // §11).
+    private readonly ChatThrottle m_readThrottle = new(ChatThrottle.ReadBurst);
     private IClientTransport? m_socket;
     private ManualMoveSource? m_manualSource;
     private PointerMoveSource? m_pointerSource;
@@ -766,6 +770,48 @@ public sealed class GameClient : MonoBehaviour
     public void SellTo(EntityId npc, long inventoryItem, uint quantity)
     {
         Connection?.SendSell(npc, inventoryItem, quantity);
+    }
+
+    /// <summary>
+    ///     Reads the account's storage at the Storekeeper <paramref name="npc" /> (Gameplay Systems §11.4), unless a read
+    ///     is on its way or the client's own bucket is empty: the window asks again until storage is current. 0 when
+    ///     nothing was sent, else the command's sequence.
+    /// </summary>
+    public uint OpenStorageAt(EntityId npc)
+    {
+        ClientWorld? world = m_world;
+        if (Connection == null
+            || world == null
+            || world.Storage.IsReading
+            || !m_readThrottle.TryTake(Time.realtimeSinceStartupAsDouble))
+        {
+            return 0;
+        }
+
+        uint sequence = Connection.SendStorageOpen(npc);
+        if (sequence != 0)
+        {
+            world.Storage.BeginRead();
+        }
+
+        return sequence;
+    }
+
+    /// <summary>
+    ///     Stores <paramref name="quantity" /> of a bag row with the Storekeeper for its fee; only the committed change
+    ///     moves it.
+    /// </summary>
+    public uint DepositAt(EntityId npc, long inventoryItem, uint quantity)
+    {
+        return Connection?.SendStorageDeposit(npc, inventoryItem, quantity) ?? 0;
+    }
+
+    /// <summary>
+    ///     Takes <paramref name="quantity" /> of a storage row back into the bag at the Storekeeper.
+    /// </summary>
+    public uint WithdrawAt(EntityId npc, long storageItem, uint quantity)
+    {
+        return Connection?.SendStorageWithdraw(npc, storageItem, quantity) ?? 0;
     }
 
     /// <summary>

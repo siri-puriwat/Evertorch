@@ -304,6 +304,7 @@ public sealed class ChatPanel : MonoBehaviour
             m_watched.SheetChanged -= OnSheetChanged;
             m_watched.SkillsChanged -= OnSkillsChanged;
             m_watched.Inventory.ChangeApplied -= OnChangeApplied;
+            m_watched.Storage.ChangeApplied -= OnStorageChangeApplied;
             m_watched.QuestsChanged -= OnQuestsChanged;
         }
 
@@ -320,6 +321,7 @@ public sealed class ChatPanel : MonoBehaviour
             world.SheetChanged += OnSheetChanged;
             world.SkillsChanged += OnSkillsChanged;
             world.Inventory.ChangeApplied += OnChangeApplied;
+            world.Storage.ChangeApplied += OnStorageChangeApplied;
             world.QuestsChanged += OnQuestsChanged;
         }
         else
@@ -360,6 +362,14 @@ public sealed class ChatPanel : MonoBehaviour
                 out string partner))
         {
             Add(TradeMessages.DescribeRefusal(trade, partner, rejected.Reason));
+            return;
+        }
+
+        if (m_client != null
+            && m_client.Connection != null
+            && m_client.Connection.TryGetStorageSequence(rejected.CommandSequence, out StorageCommand storage))
+        {
+            Add(StorageMessages.DescribeRefusal(storage, rejected.Reason));
             return;
         }
 
@@ -463,6 +473,11 @@ public sealed class ChatPanel : MonoBehaviour
         {
             Add(line);
         }
+    }
+
+    private void OnStorageChangeApplied(StorageDelta delta)
+    {
+        Add(StorageMessages.Describe(delta, m_client != null ? m_client.Content : null));
     }
 
     private void Build(GameClient client)

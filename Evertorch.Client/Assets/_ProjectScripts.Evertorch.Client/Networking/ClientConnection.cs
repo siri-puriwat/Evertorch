@@ -27,6 +27,7 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
     private readonly Dictionary<uint, (ChatChannel Channel, string Recipient)> m_chatSequences = new();
     private readonly Dictionary<uint, (PartyCommand Command, string Name)> m_partySequences = new();
     private readonly Dictionary<uint, (TradeCommand Command, string Name)> m_tradeSequences = new();
+    private readonly Dictionary<uint, StorageCommand> m_storageSequences = new();
     private uint m_commandSequence;
 
     public ClientConnection(IClientTransport transport, ClientConnectionSettings settings, IMapProvider maps)
@@ -369,6 +370,11 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
             case MessageOpcode.CommandRejected:
                 if (CommandRejected.TryRead(payload, out CommandRejected rejected))
                 {
+                    if (World != null && TryGetStorageSequence(rejected.CommandSequence, out StorageCommand storage))
+                    {
+                        World.Storage.OnRefused(storage);
+                    }
+
                     WithWorld(world => world.OnCommandRejected(rejected));
                 }
                 else
@@ -861,6 +867,7 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
 
         uint sequence = NextCommandSequence();
         SendRouted(MessageOpcode.StorageOpen, new StorageOpen(npc, sequence).Write(m_sendBuffer));
+        Remember(sequence, StorageCommand.Open);
         return sequence;
     }
 
@@ -879,6 +886,7 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
         SendRouted(
             MessageOpcode.StorageDeposit,
             new StorageDeposit(npc, inventoryItem, quantity, sequence).Write(m_sendBuffer));
+        Remember(sequence, StorageCommand.Deposit);
         return sequence;
     }
 
@@ -897,7 +905,26 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
         SendRouted(
             MessageOpcode.StorageWithdraw,
             new StorageWithdraw(npc, storageItem, quantity, sequence).Write(m_sendBuffer));
+        Remember(sequence, StorageCommand.Withdraw);
         return sequence;
+    }
+
+    /// <summary>
+    ///     The Storekeeper command <paramref name="commandSequence" /> numbered, so a refusal can say what was refused.
+    /// </summary>
+    public bool TryGetStorageSequence(uint commandSequence, out StorageCommand command)
+    {
+        return m_storageSequences.TryGetValue(commandSequence, out command);
+    }
+
+    private void Remember(uint sequence, StorageCommand command)
+    {
+        if (m_storageSequences.Count >= MaxEquipSequences)
+        {
+            m_storageSequences.Clear();
+        }
+
+        m_storageSequences[sequence] = command;
     }
 
     /// <summary>
@@ -1270,6 +1297,7 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
             m_chatSequences.Clear();
             m_partySequences.Clear();
             m_tradeSequences.Clear();
+            m_storageSequences.Clear();
         }
 
         // The command sequence belongs to the character, not the connection: after a reconnect it goes on from the
@@ -1353,6 +1381,7 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
         }
         else
         {
+            World.Storage.OnSnapshot(message);
             StorageSnapshotReceived?.Invoke(message);
         }
     }
@@ -1369,6 +1398,7 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
         }
         else
         {
+            World.Storage.OnChanged(message);
             StorageChangedReceived?.Invoke(message);
         }
     }

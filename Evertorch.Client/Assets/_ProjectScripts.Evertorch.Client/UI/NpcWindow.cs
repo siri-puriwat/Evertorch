@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Text;
 using Evertorch.Game;
 using Evertorch.Protocol;
@@ -17,7 +18,9 @@ namespace Evertorch.Client
 ///     of the character's rows it buys, not worn, at what one fetches; for each quest the NPC gives, its objective, its
 ///     reward, and where the character stands with it; and for the Guildmaster, "Reset all points" and each first job
 ///     it offers from the character's job, "Become a Vanguard" from its base job's cap and "Needs Adventurer Lv 10 to
-///     become a Vanguard" below it. A Buy press buys one; a Sell press sells one, and a stack's All sells the row; Accept
+///     become a Vanguard" below it; for the Storekeeper, the fee, the storage's rows, the bag's unworn rows, and an
+///     amount field, where a press on a stored row withdraws the amount and one on a bag row deposits it (Gameplay
+///     Systems §11.4). A Buy press buys one; a Sell press sells one, and a stack's All sells the row; Accept
 ///     and Turn in ask for the quest; the reset and a change each ask for a second press within
 ///     <see cref="ResetConfirmSeconds" />, since the reset undoes every choice and the change is final, and arming one
 ///     disarms the other. The presses go through <see cref="GameClient" />, and only what the server commits moves the
@@ -43,6 +46,8 @@ public sealed class NpcWindow : MonoBehaviour
     private const float AllWidth = 130f;
 
     private const float CloseWidth = 80f;
+
+    public const string AmountField = "Amount";
 
     // The padding, the heading with Close at its end, and the space between it and the list.
     private const float Chrome = 2 * Padding + RowHeight + RowSpacing;
@@ -78,6 +83,10 @@ public sealed class NpcWindow : MonoBehaviour
     private JobDefinitionId m_armedJob;
     private JobDefinitionId m_shownJob;
     private int m_shownJobLevel = -1;
+    private int m_shownStorage = -1;
+    private TMP_InputField? m_amount;
+    private GameObject? m_amountRow;
+    private bool m_needsRead;
 
     public bool IsOpen => m_panel != null && m_panel.activeSelf;
 
@@ -99,6 +108,18 @@ public sealed class NpcWindow : MonoBehaviour
     public string Text { get; private set; } = string.Empty;
 
     public int TextChanges { get; private set; }
+
+    /// <summary>
+    ///     The amount field's number: how many of a row a press stores or takes back; at least 1.
+    /// </summary>
+    public uint Amount =>
+        m_amount != null
+        && uint.TryParse(m_amount.text, NumberStyles.None, CultureInfo.InvariantCulture, out uint amount)
+        && amount > 0
+            ? amount
+            : 1;
+
+    public TMP_InputField? AmountInput => m_amount;
 
     private void Update()
     {
@@ -135,6 +156,23 @@ public sealed class NpcWindow : MonoBehaviour
 
         Show(world, m_client.Content);
         FitList();
+        ReadStorageWhenDue(world);
+    }
+
+    // Storage is read on opening and again whenever what is shown may be out of date; GameClient sends one read at a
+    // time, within its own bucket.
+    private void ReadStorageWhenDue(ClientWorld world)
+    {
+        if (!world.TryGetNpcServices(Npc, out NpcServices? services) || services == null || !services.KeepsStorage)
+        {
+            return;
+        }
+
+        ClientStorage storage = world.Storage;
+        if ((m_needsRead || !storage.IsCurrent) && !storage.IsReading && m_client!.OpenStorageAt(Npc) != 0)
+        {
+            m_needsRead = false;
+        }
     }
 
     public static NpcWindow Create(GameClient client)
@@ -192,6 +230,7 @@ public sealed class NpcWindow : MonoBehaviour
 
         m_world = world;
         Npc = npc;
+        m_needsRead = true;
         m_name!.text = NpcName(m_client!.Content, remote.DefinitionId);
         UiBuilder.SetActive(m_panel!, true);
         Show(world, m_client.Content);
@@ -206,6 +245,14 @@ public sealed class NpcWindow : MonoBehaviour
 
         // The services stay cached for the NPC, so the next open must write the lists again, disarmed.
         m_shownServices = null;
+        m_needsRead = false;
+
+        // A field that had focus when the window closed gives the keys back.
+        if (m_amount != null)
+        {
+            m_client?.SetTyping(m_amount, false);
+        }
+
         UiBuilder.SetActive(m_panel!, false);
     }
 
@@ -271,6 +318,7 @@ public sealed class NpcWindow : MonoBehaviour
             && inventory == m_shownInventory
             && inventory.IsCurrent == m_shownCurrent
             && inventory.Revision == m_shownRevision
+            && world.Storage.Version == m_shownStorage
             && hasContent == m_hadContent)
         {
             return;
@@ -283,14 +331,24 @@ public sealed class NpcWindow : MonoBehaviour
         m_shownInventory = inventory;
         m_shownCurrent = inventory.IsCurrent;
         m_shownRevision = inventory.Revision;
+        m_shownStorage = world.Storage.Version;
         m_hadContent = hasContent;
         ClearRows();
         m_text.Clear();
         bool hasQuests = services != null && services.Offers.Count > 0;
         bool offersReset = services != null && services.OffersReset;
         bool offersChange = services != null && HasChangeFrom(services, world.LocalJob);
-        UiBuilder.SetActive(m_list!, shop != null || hasQuests || offersReset || offersChange);
-        m_coins!.text = shop != null && inventory.IsCurrent ? $"Coins: {inventory.Coins}" : string.Empty;
+        bool keepsStorage = services != null && services.KeepsStorage;
+        UiBuilder.SetActive(m_list!, shop != null || hasQuests || offersReset || offersChange || keepsStorage);
+        UiBuilder.SetActive(m_amountRow!, keepsStorage);
+        m_coins!.text = (shop != null || keepsStorage) && inventory.IsCurrent
+            ? $"Coins: {inventory.Coins}"
+            : string.Empty;
+        if (keepsStorage)
+        {
+            ListStorage(world.Storage, inventory, content);
+        }
+
         if (shop != null)
         {
             ListForSale(shop, content);
@@ -364,6 +422,70 @@ public sealed class NpcWindow : MonoBehaviour
         {
             AddLine("Nothing to sell");
         }
+    }
+
+    // The Storekeeper's fee, then each stored row, whose press takes the amount back, and each unworn bag row, whose
+    // press stores it; a row holding less gives what it holds.
+    private void ListStorage(ClientStorage storage, ClientInventory inventory, ClientContent? content)
+    {
+        AddHeading("Storage");
+        if (!storage.IsCurrent)
+        {
+            AddLine("Waiting for the server");
+            return;
+        }
+
+        AddLine(StorageMessages.Fee(storage.DepositFee));
+        GameClient client = m_client!;
+        EntityId npc = Npc;
+        foreach (StorageEntry row in storage.Rows)
+        {
+            long storageItem = row.StorageItem;
+            uint held = row.Quantity;
+            AddButton(
+                RowText(content, row.Item, row.Quantity, row.RefineLevel),
+                () => client.WithdrawAt(npc, storageItem, Math.Min(Amount, held)));
+        }
+
+        if (storage.Rows.Count == 0)
+        {
+            AddLine("Nothing stored");
+        }
+
+        AddHeading("Bag");
+        if (!inventory.IsCurrent)
+        {
+            AddLine("Waiting for the server");
+            return;
+        }
+
+        int listed = 0;
+        foreach (InventoryEntry row in inventory.Rows)
+        {
+            if (row.Slot != EquipmentSlot.None)
+            {
+                continue;
+            }
+
+            long inventoryItem = row.InventoryItem;
+            uint held = row.Quantity;
+            AddButton(
+                RowText(content, row.Item, row.Quantity, row.RefineLevel),
+                () => client.DepositAt(npc, inventoryItem, Math.Min(Amount, held)));
+            listed++;
+        }
+
+        if (listed == 0)
+        {
+            AddLine("Nothing to store");
+        }
+    }
+
+    private static string RowText(ClientContent? content, ItemDefinitionId item, uint quantity, byte refineLevel)
+    {
+        string name = ShopMessages.ItemName(content, item);
+        string refined = refineLevel > 0 ? $"+{refineLevel} {name}" : name;
+        return quantity == 1 ? refined : $"{refined} x {quantity}";
     }
 
     // For each quest the NPC gives: its name, objective, and reward, then where the character stands with it, and the
@@ -582,7 +704,10 @@ public sealed class NpcWindow : MonoBehaviour
         float canvasHeight = ((RectTransform)transform).rect.height;
         bool isTouchShown = m_client!.Touch != null && m_client.Touch.IsVisible;
         PlaceLeft(isTouchShown);
-        float height = ListHeightFor(canvasHeight, m_rowObjects.Count, isTouchShown);
+
+        // The amount field takes a row of the room the list would have.
+        float field = m_amountRow!.activeSelf ? RowHeight + RowSpacing : 0f;
+        float height = Math.Max(0f, ListHeightFor(canvasHeight, m_rowObjects.Count, isTouchShown) - field);
         if (height != m_listHeight)
         {
             m_listHeight = height;
@@ -626,6 +751,15 @@ public sealed class NpcWindow : MonoBehaviour
         m_coins.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1f;
         FitOnOneLine(m_coins);
         Ui.CreateButton("Close", heading.transform, Close).GetComponent<LayoutElement>().preferredWidth = CloseWidth;
+
+        // While the field has focus the gameplay keys are shut, as the chat's are (Prototype Content §4).
+        TMP_InputField amount = Ui.CreateField(panel, AmountField, "1", TMP_InputField.ContentType.IntegerNumber);
+        amount.characterLimit = 7;
+        amount.onSelect.AddListener(_ => client.SetTyping(amount, true));
+        amount.onDeselect.AddListener(_ => client.SetTyping(amount, false));
+        m_amount = amount;
+        m_amountRow = amount.transform.parent.gameObject;
+        m_amountRow.SetActive(false);
         m_rows = CreateList(panel);
         m_panel.SetActive(false);
     }

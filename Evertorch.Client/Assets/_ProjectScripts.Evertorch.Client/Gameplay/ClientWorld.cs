@@ -133,6 +133,11 @@ public sealed class ClientWorld
     public ClientTrade Trade { get; } = new();
 
     /// <summary>
+    ///     The account's storage as the Storekeeper last read it to this character (Gameplay Systems §11.4).
+    /// </summary>
+    public ClientStorage Storage { get; } = new();
+
+    /// <summary>
     ///     The skills the server says the local character knows, with the cooldown left when the list was sent.
     /// </summary>
     public IReadOnlyList<SkillListEntry> Skills { get; private set; } = Array.Empty<SkillListEntry>();

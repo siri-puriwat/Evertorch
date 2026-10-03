@@ -11,8 +11,10 @@ using NUnit.Framework;
 using TMPro;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.InputSystem.LowLevel;
 using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
+using UnityEngine.TestTools.Utils;
 using UnityEngine.UI;
 using EntityId = Evertorch.Game.EntityId;
 using Object = UnityEngine.Object;
@@ -32,14 +34,17 @@ public sealed class LiveServerTradeTests
     private const string AnnName = "LiveTradeAnn";
     private const string BobName = "LiveTradeBob";
     private const string SlimeGel = "item.material.slime_gel";
+    private const string Storekeeper = "npc.storekeeper";
     private const uint AnnCoins = 300;
     private const float StartTimeoutSeconds = 30f;
     private const int TestTimeoutMs = 300_000;
+    private static readonly Color StorekeeperTint = new Color32(0x3E, 0x7C, 0xB1, 0xFF);
 
     private LiveDatabase? m_database;
     private LiveServer? m_server;
     private GameObject? m_client;
     private InputActionAsset? m_actions;
+
     private LiteNetLibClientTransport? m_otherSocket;
     private ClientConnection? m_other;
 
@@ -244,6 +249,104 @@ public sealed class LiveServerTradeTests
         Assert.That(other.World!.Inventory.Coins, Is.EqualTo(100u));
         Assert.That(other.MalformedMessages + other.UnexpectedMessages, Is.Zero, "the other player's traffic");
         Assert.That(client.Connection!.MalformedMessages + client.Connection.UnexpectedMessages, Is.Zero);
+    }
+
+    // A click on the Storekeeper, drawn as the Quartermaster in its own colour, walks the real client up to it and opens
+    // its window, which reads storage and shows the fee. The amount field's number of a bag row is stored by pressing
+    // the row, and of a stored row taken back by pressing that one; the log says what moved, and only the committed
+    // changes move the lists and the coins (Gameplay Systems §11.4; Prototype Content §2).
+    [UnityTest]
+    [Timeout(TestTimeoutMs)]
+    public IEnumerator Storage_ThroughTheStorekeepersWindow_StoresAndTakesBack()
+    {
+        string actionsPath = RequirePrerequisites();
+        yield return StartDatabaseAndServer();
+        LiveServer server = m_server!;
+        Mouse mouse = InputSystem.AddDevice<Mouse>();
+        GameClient client = CreateClient(actionsPath);
+        yield return EnterByName(client, AnnName, () =>
+        {
+            m_database!.Execute(
+                "INSERT INTO inventory_items (character_id, item_definition_id, quantity, refine_level, version) "
+                + $"SELECT id, '{SlimeGel}', 10, 0, 0 FROM characters WHERE name = '{AnnName}'");
+            m_database.Execute($"UPDATE characters SET currency = {AnnCoins} WHERE name = '{AnnName}'");
+        });
+        ClientWorld world = client.World!;
+        NpcWindow window = client.GetComponentsInChildren<NpcWindow>(true).Single();
+
+        yield return WaitUntil(() => StorekeeperView(client)?.HasBody == true, StartTimeoutSeconds);
+        EntityView storekeeper = StorekeeperView(client)!;
+        var block = new MaterialPropertyBlock();
+        foreach (Renderer renderer in storekeeper.GetComponentsInChildren<Renderer>())
+        {
+            renderer.GetPropertyBlock(block);
+            Assert.That(
+                block.GetColor("_BaseColor"),
+                Is.EqualTo(StorekeeperTint).Using(new ColorEqualityComparer(1e-3f)),
+                $"{renderer.name}: the whole body in the Storekeeper's colour");
+        }
+
+        Vector3 onScreen = Camera.main!.WorldToScreenPoint(
+            storekeeper.transform.position + Vector3.up * EntityPicker.PickHeight);
+        ClickAt(mouse, onScreen);
+        yield return WaitUntil(() => window.IsOpen && window.Text.Contains("Each deposit costs"), StartTimeoutSeconds);
+        Assert.That(window.ShownName, Is.EqualTo("Storekeeper"), $"{window.Text} at {world.Predictor.Position}");
+        Assert.That(
+            window.Text,
+            Does.Contain("Each deposit costs 20 coins").And.Contain("Nothing stored").And.Contain("Slime Gel x 10"));
+
+        window.AmountInput!.text = "4";
+        Assert.That(Press(window, "Slime Gel x 10"), Is.True, window.Text);
+        yield return WaitUntil(
+            () => client.ChatLog.Lines.Any(line => line.Text == "Deposited Slime Gel x 4 for 20 coins."),
+            StartTimeoutSeconds);
+        yield return null;
+        Assert.That(
+            client.ChatLog.Lines.Select(line => line.Text),
+            Has.Member("Deposited Slime Gel x 4 for 20 coins."),
+            server.JoinOutput());
+        Assert.That(window.Text, Does.Contain("Slime Gel x 4").And.Contain("Slime Gel x 6"));
+
+        window.AmountInput.text = "1";
+        Assert.That(Press(window, "Slime Gel x 4"), Is.True, window.Text);
+        yield return WaitUntil(
+            () => client.ChatLog.Lines.Any(line => line.Text == "Withdrew Slime Gel."),
+            StartTimeoutSeconds);
+        yield return null;
+
+        Assert.That(client.ChatLog.Lines.Select(line => line.Text), Has.Member("Withdrew Slime Gel."));
+        Assert.That(window.Text, Does.Contain("Slime Gel x 3").And.Contain("Slime Gel x 7"));
+        Assert.That(world.Inventory.Coins, Is.EqualTo(AnnCoins - 20));
+        Assert.That(world.Storage.Rows.Single().Quantity, Is.EqualTo(3u));
+        Assert.That(client.Connection!.MalformedMessages + client.Connection.UnexpectedMessages, Is.Zero);
+    }
+
+    private static EntityView? StorekeeperView(GameClient client)
+    {
+        ClientWorld? world = client.World;
+        return world == null
+            ? null
+            : client.RemoteViews
+                .Where(pair => world.Remotes.TryGetValue(pair.Key, out RemoteEntity? remote)
+                    && remote.DefinitionId == Storekeeper)
+                .Select(pair => pair.Value)
+                .SingleOrDefault();
+    }
+
+    // Presses the window's button of that name, as a click on it does.
+    private static bool Press(NpcWindow window, string name)
+    {
+        Button? button = window.GetComponentsInChildren<Button>().FirstOrDefault(candidate => candidate.name == name);
+        button?.onClick.Invoke();
+        return button != null;
+    }
+
+    private static void ClickAt(Mouse mouse, Vector2 screenPosition)
+    {
+        InputSystem.QueueStateEvent(mouse, new MouseState { position = screenPosition }.WithButton(MouseButton.Left));
+        InputSystem.Update();
+        InputSystem.QueueStateEvent(mouse, new MouseState { position = screenPosition });
+        InputSystem.Update();
     }
 
     private static string RequirePrerequisites()

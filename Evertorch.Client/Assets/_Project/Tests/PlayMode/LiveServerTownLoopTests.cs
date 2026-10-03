@@ -36,8 +36,8 @@ public sealed class LiveServerTownLoopTests : InputTestFixture
     private const long SeededCoins = 4321;
     private const string GelItem = "item.material.slime_gel";
     private const string SwordItem = "item.weapon.training_sword";
-    private const string QuartermasterPrefab = "npc_quartermaster";
-    private const string GateWardenPrefab = "npc_gate_warden";
+    private const string Quartermaster = "npc.quartermaster";
+    private const string GateWarden = "npc.gate_warden";
     private const string GroundScene = "10_TrainingGround";
     private const string LocalViewName = "LocalPlayer";
     private const float StartTimeoutSeconds = 30f;
@@ -184,23 +184,22 @@ public sealed class LiveServerTownLoopTests : InputTestFixture
         NpcWindow window = client.GetComponentsInChildren<NpcWindow>(true).Single();
 
         yield return WaitUntil(
-            () => NpcView(client, QuartermasterPrefab)?.HasBody == true
-                && NpcView(client, GateWardenPrefab)?.HasBody == true,
+            () => NpcView(client, Quartermaster)?.HasBody == true && NpcView(client, GateWarden)?.HasBody == true,
             StepTimeoutSeconds);
-        foreach (string prefab in new[] { QuartermasterPrefab, GateWardenPrefab })
+        foreach (string npc in new[] { Quartermaster, GateWarden })
         {
-            EntityView? view = NpcView(client, prefab);
-            Assert.That(view, Is.Not.Null, $"{prefab}: drawn");
-            Assert.That(view!.IsPlaceholder, Is.False, $"{prefab}: the body is its prefab, not the placeholder");
-            Assert.That(view.HasClips, Is.True, $"{prefab}: the delivered NPC plays clips");
+            EntityView? view = NpcView(client, npc);
+            Assert.That(view, Is.Not.Null, $"{npc}: drawn");
+            Assert.That(view!.IsPlaceholder, Is.False, $"{npc}: the body is its prefab, not the placeholder");
+            Assert.That(view.HasClips, Is.True, $"{npc}: the delivered NPC plays clips");
             Assert.That(
                 view.transform.position.y,
                 Is.EqualTo(GrayboxMeshBuilder.NpcMarkerHeight).Within(1e-4f),
-                $"{prefab}: on its plinth");
+                $"{npc}: on its plinth");
         }
 
-        EntityView quartermaster = NpcView(client, QuartermasterPrefab)!;
-        EntityId npc = client.RemoteViews.Single(pair => pair.Value == quartermaster).Key;
+        EntityView quartermaster = NpcView(client, Quartermaster)!;
+        EntityId quartermasterId = client.RemoteViews.Single(pair => pair.Value == quartermaster).Key;
         Vector3 onScreen = Camera.main!.WorldToScreenPoint(
             quartermaster.transform.position + Vector3.up * EntityPicker.PickHeight);
         Assert.That(
@@ -211,7 +210,7 @@ public sealed class LiveServerTownLoopTests : InputTestFixture
         ClickAt(mouse, onScreen);
         yield return WaitUntil(() => window.IsOpen, StepTimeoutSeconds);
         Assert.That(window.IsOpen, Is.True, $"the window opened; the player at {town.Predictor.Position}");
-        Assert.That(window.Npc, Is.EqualTo(npc));
+        Assert.That(window.Npc, Is.EqualTo(quartermasterId));
         Assert.That(window.ShownName, Is.EqualTo("Quartermaster"));
         Assert.That(town.Target, Is.EqualTo(default(EntityId)), "the click selected nothing");
         Assert.That(DistanceToDrawn(town, quartermaster), Is.LessThanOrEqualTo(TalkState.OpenDistance), "beside it");
@@ -301,7 +300,7 @@ public sealed class LiveServerTownLoopTests : InputTestFixture
         ClientWorld town = client.World!;
         NpcWindow window = client.GetComponentsInChildren<NpcWindow>(true).Single();
         ChatPanel lines = client.GetComponentsInChildren<ChatPanel>(true).Single();
-        yield return WalkUpTo(client, mouse, window, QuartermasterPrefab);
+        yield return WalkUpTo(client, mouse, window, Quartermaster);
         yield return WaitUntil(() => window.CoinsText == "Coins: 100", StepTimeoutSeconds);
         Assert.That(window.CoinsText, Is.EqualTo("Coins: 100"), window.Text);
 
@@ -344,14 +343,14 @@ public sealed class LiveServerTownLoopTests : InputTestFixture
         Assert.That(client.Connection.MalformedMessages + client.Connection.UnexpectedMessages, Is.Zero);
     }
 
-    // A click on the NPC drawn from the prefab walks the player up to it and opens its window.
-    private static IEnumerator WalkUpTo(GameClient client, Mouse mouse, NpcWindow window, string prefab)
+    // A click on the NPC walks the player up to it and opens its window.
+    private static IEnumerator WalkUpTo(GameClient client, Mouse mouse, NpcWindow window, string npc)
     {
-        yield return WaitUntil(() => NpcView(client, prefab)?.HasBody == true, StepTimeoutSeconds);
-        EntityView npc = NpcView(client, prefab)!;
-        ClickAt(mouse, Camera.main!.WorldToScreenPoint(npc.transform.position + Vector3.up * EntityPicker.PickHeight));
+        yield return WaitUntil(() => NpcView(client, npc)?.HasBody == true, StepTimeoutSeconds);
+        EntityView view = NpcView(client, npc)!;
+        ClickAt(mouse, Camera.main!.WorldToScreenPoint(view.transform.position + Vector3.up * EntityPicker.PickHeight));
         yield return WaitUntil(() => window.IsOpen, StepTimeoutSeconds);
-        Assert.That(window.IsOpen, Is.True, $"the window of {prefab} opened");
+        Assert.That(window.IsOpen, Is.True, $"the window of {npc} opened");
     }
 
     // The Gate Warden's window over the real server (Gameplay Systems §2.2; Prototype Content §2): Accept takes the
@@ -377,7 +376,7 @@ public sealed class LiveServerTownLoopTests : InputTestFixture
         ChatPanel lines = client.GetComponentsInChildren<ChatPanel>(true).Single();
         InventoryWindow inventory = client.GetComponentsInChildren<InventoryWindow>(true).Single();
         yield return WalkNearTheGateWarden(client);
-        yield return WalkUpTo(client, mouse, window, GateWardenPrefab);
+        yield return WalkUpTo(client, mouse, window, GateWarden);
 
         // The Crawler Hunt comes first of the Gate Warden's quests, so its Accept is the window's first.
         Assert.That(Press(window, "Accept"), Is.True, window.Text);
@@ -401,7 +400,7 @@ public sealed class LiveServerTownLoopTests : InputTestFixture
         yield return WaitUntil(() => client.World?.Inventory.IsCurrent == true, StartTimeoutSeconds);
         yield return WaitUntil(() => bar.QuestText == "Forest Crawler 5/5 (ready)", StepTimeoutSeconds);
         Assert.That(bar.QuestText, Is.EqualTo("Forest Crawler 5/5 (ready)"), "the kills written while away");
-        yield return WalkUpTo(client, mouse, window, GateWardenPrefab);
+        yield return WalkUpTo(client, mouse, window, GateWarden);
 
         Assert.That(Press(window, "Turn in"), Is.True, window.Text);
         yield return WaitUntil(() => window.Text.Contains("\nCompleted\n"), StepTimeoutSeconds);
@@ -443,7 +442,7 @@ public sealed class LiveServerTownLoopTests : InputTestFixture
             "the level and the coins kept");
         yield return WaitUntil(() => inventory.CoinsText == "Coins: 100", StepTimeoutSeconds);
         Assert.That(inventory.CoinsText, Is.EqualTo("Coins: 100"));
-        yield return WalkUpTo(client, mouse, window, GateWardenPrefab);
+        yield return WalkUpTo(client, mouse, window, GateWarden);
         yield return WaitUntil(() => window.Text.Contains("\nCompleted\n"), StepTimeoutSeconds);
         Assert.That(window.Text, Does.Contain("\nCompleted\n"), "the quest kept completed");
         Assert.That(connection.MalformedMessages + connection.UnexpectedMessages, Is.Zero);
@@ -470,7 +469,8 @@ public sealed class LiveServerTownLoopTests : InputTestFixture
         return button != null;
     }
 
-    private static EntityView? NpcView(GameClient client, string prefab)
+    // By the NPC's definition: the Storekeeper is drawn from the Quartermaster's prefab.
+    private static EntityView? NpcView(GameClient client, string npc)
     {
         ClientWorld? world = client.World;
         return world == null
@@ -478,7 +478,7 @@ public sealed class LiveServerTownLoopTests : InputTestFixture
             : client.RemoteViews
                 .Where(pair => world.Remotes.TryGetValue(pair.Key, out RemoteEntity? remote)
                     && remote.Kind == EntityKind.Npc
-                    && pair.Value.Key == prefab)
+                    && remote.DefinitionId == npc)
                 .Select(pair => pair.Value)
                 .SingleOrDefault();
     }
