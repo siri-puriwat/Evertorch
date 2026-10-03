@@ -188,6 +188,27 @@ internal sealed class LosingAnswersGameStore : IGameStore
         return m_inner.FindOperationAsync(operationId, characterId, rowIds, cancellationToken);
     }
 
+    public async Task<TradeResult> CommitTradeAsync(TradeCommit trade, CancellationToken cancellationToken)
+    {
+        TradeResult result = await m_inner.CommitTradeAsync(trade, cancellationToken).ConfigureAwait(false);
+        if (IsLosingAnswers && result.Status == TradeStatus.Committed)
+        {
+            Interlocked.Increment(ref m_lostAnswers);
+            throw new StoreUnavailableException(new TimeoutException("scripted loss of the commit's answer"));
+        }
+
+        return result;
+    }
+
+    public Task<TradeResult?> FindTradeAsync(
+        Guid tradeId,
+        long firstCharacterId,
+        long secondCharacterId,
+        CancellationToken cancellationToken)
+    {
+        return m_inner.FindTradeAsync(tradeId, firstCharacterId, secondCharacterId, cancellationToken);
+    }
+
     public Task<IReadOnlyList<string>> ListStoredDefinitionIdsAsync(CancellationToken cancellationToken)
     {
         return m_inner.ListStoredDefinitionIdsAsync(cancellationToken);

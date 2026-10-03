@@ -82,15 +82,15 @@ public sealed class ShopTests
         server.Store.Edit(1, coins: coins);
         server.SendEnterWorld(player, 1);
         server.TickUntil(() => server.SessionOf(player).State == SessionState.InWorld);
-        NpcEntity trader = server.NpcOf(npc);
-        server.Place(player, trader.Position.X + distance, trader.Position.Z);
+        NpcEntity shopkeeper = server.NpcOf(npc);
+        server.Place(player, shopkeeper.Position.X + distance, shopkeeper.Position.Z);
         server.Tick(2);
         Assert.That(
-            server.SessionOf(player).KnownEntities.Contains(trader.Id),
+            server.SessionOf(player).KnownEntities.Contains(shopkeeper.Id),
             Is.EqualTo(distance < 16f),
             "the NPC is known unless the player stands beyond its view");
         server.Transport.ClearSent();
-        return new Shop(server, player, trader.Id);
+        return new Shop(server, player, shopkeeper.Id);
     }
 
     private static Action<InMemoryGameStore> Holding(string item, int quantity)
@@ -165,7 +165,7 @@ public sealed class ShopTests
 
         Assert.That(shop.Answer(), Is.EqualTo(expected));
         Assert.That(shop.Server.Store.Stored(1).Coins, Is.EqualTo(coins), "no coins moved");
-        Assert.That(shop.Server.Store.TradeCommits, Is.Empty, "nothing was committed");
+        Assert.That(shop.Server.Store.ShopCommits, Is.Empty, "nothing was committed");
         AssertNotScored(shop);
     }
 
@@ -215,7 +215,7 @@ public sealed class ShopTests
         shop.Server.SendBuy(shop.Player, shop.Npc, Potion, 1, 1);
 
         Assert.That(shop.Answer(), Is.EqualTo(CommandRejectionReason.InvalidTarget));
-        Assert.That(shop.Server.Store.TradeCommits, Has.Count.EqualTo(1));
+        Assert.That(shop.Server.Store.ShopCommits, Has.Count.EqualTo(1));
         Assert.That(
             shop.Server.AuditLogger.Entries.Single(entry => entry.EventId.Name == "CommandRefused").Fields["Command"],
             Is.EqualTo(InboundEventKind.Buy));
@@ -246,13 +246,13 @@ public sealed class ShopTests
     public void Commit_WhoseAnswerIsLost_IsSettledFromTheLedgerOnce()
     {
         Shop shop = Enter(100);
-        shop.Server.Store.AmbiguousTradeFailures = 100;
+        shop.Server.Store.AmbiguousShopFailures = 100;
         int ledger = shop.Server.Store.LedgerCount;
 
         shop.Server.SendBuy(shop.Player, shop.Npc, Potion, 1, 1);
         shop.Server.Tick(2);
         bool isUnsettled = shop.Character.Operation != null;
-        shop.Server.Store.AmbiguousTradeFailures = 0;
+        shop.Server.Store.AmbiguousShopFailures = 0;
         shop.Server.TickUntil(() => shop.Character.Operation == null);
 
         Assert.That(isUnsettled, Is.True, "no answer yet");
@@ -336,7 +336,7 @@ public sealed class ShopTests
                 }));
         foreach (Shop shop in new[] { warden, notHeld, farAway, worn, tooMany, capped })
         {
-            Assert.That(shop.Server.Store.TradeCommits, Is.Empty, "nothing was committed");
+            Assert.That(shop.Server.Store.ShopCommits, Is.Empty, "nothing was committed");
             AssertNotScored(shop);
         }
 

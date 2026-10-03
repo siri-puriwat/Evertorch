@@ -19,7 +19,7 @@ namespace Evertorch.Server.Tests
 ///     Retries cannot duplicate the town's value on PostgreSQL 18 (Milestone 7 verification line V3, Persistence
 ///     §5–§7): buys, sales, and turn-ins asked for twice or whose answers are lost are each committed and paid
 ///     once; coins stay between 0 and their cap; and a logout, a removal, a crossing, and a clean stop wait for a
-///     trade or a turn-in in flight and keep it once. The servers run on the real store.
+///     purchase, a sale, or a turn-in in flight and keep it once. The servers run on the real store.
 /// </summary>
 [TestFixture]
 [NonParallelizable]
@@ -521,7 +521,7 @@ public sealed class TownValueDurabilityTests
     }
 
     [Test]
-    public void Logout_AndRemoval_WithATradeInFlight_WaitForItsCommit_AndKeepItOnce()
+    public void Logout_AndRemoval_WithAPurchaseAndASaleInFlight_WaitForItsCommit_AndKeepItOnce()
     {
         TestServer server = NewServer();
         ConnectionId leaving = EnterSeeded(server, "v3-logout", "TownLogout", 100);

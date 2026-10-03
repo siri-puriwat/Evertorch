@@ -219,6 +219,25 @@ public interface IGameStore
         CancellationToken cancellationToken);
 
     /// <summary>
+    ///     Commits a face-to-face trade in one transaction (Persistence §5): both characters locked in the order of their
+    ///     IDs, every line and the coins checked again, rows and coins moved, both inventory revisions raised, a
+    ///     <c>trades</c> row and two <c>trade</c> ledger rows for each line written, and both whole inventories read
+    ///     back. A <c>trades</c> row already there changes nothing and answers <see cref="TradeStatus.Committed" />; a
+    ///     refusal moves nothing and names its side.
+    /// </summary>
+    Task<TradeResult> CommitTradeAsync(TradeCommit trade, CancellationToken cancellationToken);
+
+    /// <summary>
+    ///     What became of a trade whose answer was lost, settled from its <c>trades</c> row under both characters'
+    ///     locks: null when the trade never committed, else both whole inventories as they are now.
+    /// </summary>
+    Task<TradeResult?> FindTradeAsync(
+        Guid tradeId,
+        long firstCharacterId,
+        long secondCharacterId,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     ///     Every distinct job, map, item, and quest definition ID stored for any character, for the startup comparison
     ///     with the loaded content (Persistence §8).
     /// </summary>

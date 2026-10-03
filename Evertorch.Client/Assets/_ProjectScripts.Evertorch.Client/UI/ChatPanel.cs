@@ -355,7 +355,7 @@ public sealed class ChatPanel : MonoBehaviour
         if (m_watched != null && pickedUp.Recipient == m_watched.LocalEntity)
         {
             ClientContent? content = m_client != null ? m_client.Content : null;
-            Add($"Picked up {TradeMessages.ItemName(content, pickedUp.Item)} x {pickedUp.Amount}");
+            Add($"Picked up {ShopMessages.ItemName(content, pickedUp.Item)} x {pickedUp.Amount}");
         }
     }
 
@@ -439,7 +439,7 @@ public sealed class ChatPanel : MonoBehaviour
 
     private void OnChangeApplied(InventoryDelta delta)
     {
-        string? line = TradeMessages.Describe(delta, m_client != null ? m_client.Content : null);
+        string? line = ShopMessages.Describe(delta, m_client != null ? m_client.Content : null);
         if (line != null)
         {
             Add(line);

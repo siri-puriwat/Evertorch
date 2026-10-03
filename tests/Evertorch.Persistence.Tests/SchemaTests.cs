@@ -172,6 +172,9 @@ public sealed class SchemaTests
     [TestCase("sell")]
     [TestCase("quest_reward")]
     [TestCase("boss_reward")]
+    [TestCase("trade")]
+    [TestCase("storage_deposit")]
+    [TestCase("storage_withdraw")]
     public void Ledger_WithAKnownOperationType_IsStored(string operationType)
     {
         long character = NewCharacter();
@@ -534,8 +537,9 @@ public sealed class SchemaTests
             m_sql.Scalar(
                 "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name IN "
                 + "('accounts', 'characters', 'inventory_items', 'equipment', 'economy_ledger', 'character_quests', "
-                + "'session_tokens', 'character_skills', 'parties', 'party_members')"),
-            Is.EqualTo(10));
+                + "'session_tokens', 'character_skills', 'parties', 'party_members', 'trades', 'account_storages', "
+                + "'storage_items')"),
+            Is.EqualTo(13));
     }
 
     [Test]

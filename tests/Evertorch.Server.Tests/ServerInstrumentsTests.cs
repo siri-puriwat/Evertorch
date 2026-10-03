@@ -417,7 +417,7 @@ public sealed class ServerInstrumentsTests
     }
 
     [Test]
-    public void Coins_AreCountedByOperation_ForEachCommittedTrade()
+    public void Coins_AreCountedByOperation_ForEachCommittedPurchaseAndSale()
     {
         var server = new TestServer(withNpcs: true);
         using var recorder = new MeterRecorder(server.Instruments.Meter);

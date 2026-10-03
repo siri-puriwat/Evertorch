@@ -327,7 +327,7 @@ public sealed class NpcWindow : MonoBehaviour
                 continue;
             }
 
-            string text = $"{TradeMessages.ItemName(content, entry.Item)}: {TradeMessages.Coins(entry.BuyPrice)}";
+            string text = $"{ShopMessages.ItemName(content, entry.Item)}: {ShopMessages.Coins(entry.BuyPrice)}";
             GameClient client = m_client!;
             EntityId npc = Npc;
             ItemDefinitionId item = entry.Item;
@@ -500,10 +500,10 @@ public sealed class NpcWindow : MonoBehaviour
     // One press sells one; a stack also offers All, which sells the whole row.
     private void AddSellRow(InventoryEntry row, uint price, ClientContent? content)
     {
-        string name = TradeMessages.ItemName(content, row.Item);
+        string name = ShopMessages.ItemName(content, row.Item);
         string text = row.Quantity > 1
-            ? $"{name} x {row.Quantity}: {TradeMessages.Coins(price)} each"
-            : $"{name} x 1: {TradeMessages.Coins(price)}";
+            ? $"{name} x {row.Quantity}: {ShopMessages.Coins(price)} each"
+            : $"{name} x 1: {ShopMessages.Coins(price)}";
         GameClient client = m_client!;
         EntityId npc = Npc;
         long inventoryItem = row.InventoryItem;
@@ -513,7 +513,7 @@ public sealed class NpcWindow : MonoBehaviour
         one.GetComponent<LayoutElement>().flexibleWidth = 1f;
         if (quantity > 1)
         {
-            string all = $"All: {TradeMessages.Coins((long)price * quantity)}";
+            string all = $"All: {ShopMessages.Coins((long)price * quantity)}";
             GameObject allButton = CreateButton(all, line.transform, () => client.SellTo(npc, inventoryItem, quantity));
             allButton.GetComponent<LayoutElement>().preferredWidth = AllWidth;
         }

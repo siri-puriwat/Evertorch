@@ -325,7 +325,8 @@ WHERE account_id = {account.Value} AND expires_at > {issuedAt} AND token_hash NO
                         context.Equipment
                             .Where(worn => worn.InventoryItemId == item.Id)
                             .Select(worn => worn.Slot)
-                            .FirstOrDefault()))
+                            .FirstOrDefault(),
+                        item.RefineLevel))
                     .ToListAsync(cancellationToken)
                     .ConfigureAwait(false);
                 List<StoredQuest> quests = await context.CharacterQuests
@@ -583,7 +584,10 @@ WHERE character_quests.state = {CharacterQuestRow.ActiveState} AND character_que
                         InventoryStatus.Committed,
                         (uint)character.InventoryRevision,
                         character.Currency,
-                        new[] { new StoredItem(stack.Id, stack.ItemDefinitionId, stack.Quantity) });
+                        new[]
+                        {
+                            new StoredItem(stack.Id, stack.ItemDefinitionId, stack.Quantity, null, stack.RefineLevel)
+                        });
                 }
             },
             cancellationToken);
@@ -1338,6 +1342,264 @@ WHERE character_quests.state = {CharacterQuestRow.ActiveState} AND character_que
             cancellationToken);
     }
 
+    public Task<TradeResult> CommitTradeAsync(TradeCommit trade, CancellationToken cancellationToken)
+    {
+        if (trade == null)
+        {
+            throw new ArgumentNullException(nameof(trade));
+        }
+
+        return RunAsync(
+            async context =>
+            {
+                await using (IDbContextTransaction transaction =
+                             await context.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false))
+                {
+                    long firstId = trade.First.CharacterId;
+                    long secondId = trade.Second.CharacterId;
+                    CharacterRow first = await LockCharacterAsync(context, firstId, cancellationToken)
+                        .ConfigureAwait(false);
+                    CharacterRow second = await LockCharacterAsync(context, secondId, cancellationToken)
+                        .ConfigureAwait(false);
+                    bool isCommitted = await context.Trades
+                        .AnyAsync(row => row.Id == trade.TradeId, cancellationToken)
+                        .ConfigureAwait(false);
+                    if (isCommitted)
+                    {
+                        return await TradeAnswerAsync(context, TradeStatus.Committed, null, firstId, secondId,
+                                cancellationToken)
+                            .ConfigureAwait(false);
+                    }
+
+                    List<InventoryItemRow> rows = await context.InventoryItems
+                        .Where(row => row.CharacterId == firstId || row.CharacterId == secondId)
+                        .OrderBy(row => row.Id)
+                        .ToListAsync(cancellationToken)
+                        .ConfigureAwait(false);
+                    List<long> worn = await context.Equipment
+                        .Where(slot => slot.CharacterId == firstId || slot.CharacterId == secondId)
+                        .Select(slot => slot.InventoryItemId)
+                        .ToListAsync(cancellationToken)
+                        .ConfigureAwait(false);
+                    var settlement = new TradeSettlement(
+                        trade,
+                        rows.Select(row => new TradeSettlement.Holding(
+                            row.Id,
+                            row.CharacterId,
+                            row.ItemDefinitionId,
+                            row.Quantity,
+                            worn.Contains(row.Id))),
+                        first.Currency,
+                        second.Currency);
+                    if (settlement.Status != TradeStatus.Committed)
+                    {
+                        return await TradeAnswerAsync(
+                                context,
+                                settlement.Status,
+                                settlement.RefusedCharacterId,
+                                firstId,
+                                secondId,
+                                cancellationToken)
+                            .ConfigureAwait(false);
+                    }
+
+                    var created = new Dictionary<TradeSettlement.Holding, InventoryItemRow>();
+                    foreach (TradeSettlement.Holding holding in settlement.Holdings)
+                    {
+                        InventoryItemRow? row = holding.Id is long id ? rows.Single(item => item.Id == id) : null;
+                        if (row == null)
+                        {
+                            InventoryItemRow source = rows.Single(item => item.Id == holding.SourceId);
+                            var added = new InventoryItemRow
+                            {
+                                CharacterId = holding.CharacterId,
+                                ItemDefinitionId = holding.ItemDefinitionId,
+                                Quantity = holding.Quantity,
+                                RefineLevel = source.RefineLevel,
+                                InstanceDataJson = source.InstanceDataJson
+                            };
+                            context.InventoryItems.Add(added);
+                            created.Add(holding, added);
+                        }
+                        else if (holding.Quantity == 0)
+                        {
+                            context.InventoryItems.Remove(row);
+                        }
+                        else if (holding.CharacterId != row.CharacterId)
+                        {
+                            // The owner is part of the key a worn slot points at, which EF Core will not change on a
+                            // tracked row, so a whole row moves by SQL and keeps its ID, level, and instance data.
+                            context.Entry(row).State = EntityState.Detached;
+                            await context.Database
+                                .ExecuteSqlAsync(
+                                    $"UPDATE inventory_items SET character_id = {holding.CharacterId}, quantity = {holding.Quantity}, version = version + 1 WHERE id = {row.Id}",
+                                    cancellationToken)
+                                .ConfigureAwait(false);
+                        }
+                        else if (holding.Quantity != row.Quantity)
+                        {
+                            row.Quantity = holding.Quantity;
+                            row.Version++;
+                        }
+                    }
+
+                    first.Currency = settlement.FirstCoins;
+                    second.Currency = settlement.SecondCoins;
+                    foreach (CharacterRow trader in new[] { first, second })
+                    {
+                        trader.InventoryRevision = (trader.InventoryRevision + 1) % RevisionModulus;
+                        trader.Version++;
+                    }
+
+                    context.Trades.Add(new TradeRow
+                    {
+                        Id = trade.TradeId,
+                        FirstCharacterId = firstId,
+                        SecondCharacterId = secondId,
+                        CommittedAt = trade.At
+                    });
+                    await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+                    string metadata = JsonSerializer.Serialize(new { trade = trade.TradeId });
+                    foreach (TradeSettlement.Movement movement in settlement.Movements)
+                    {
+                        long? received = movement.Received == null
+                            ? null
+                            : movement.Received.Id ?? created[movement.Received].Id;
+                        context.Ledger.Add(TradeEntry(trade, movement.Line, movement.GiverId, movement.GivenRowId,
+                            movement.ItemDefinitionId, -movement.Quantity, -movement.Coins, metadata));
+                        context.Ledger.Add(TradeEntry(trade, movement.Line, movement.ReceiverId, received,
+                            movement.ItemDefinitionId, movement.Quantity, movement.Coins, metadata));
+                    }
+
+                    await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+                    TradeResult answer = await TradeAnswerAsync(
+                            context,
+                            TradeStatus.Committed,
+                            null,
+                            firstId,
+                            secondId,
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                    await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+                    return answer;
+                }
+            },
+            cancellationToken);
+    }
+
+    public Task<TradeResult?> FindTradeAsync(
+        Guid tradeId,
+        long firstCharacterId,
+        long secondCharacterId,
+        CancellationToken cancellationToken)
+    {
+        return RunAsync(
+            async context =>
+            {
+                // A commit whose answer was lost may still hold both locks; waiting on them sees it settled.
+                await using (IDbContextTransaction transaction =
+                             await context.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false))
+                {
+                    await LockCharacterAsync(context, firstCharacterId, cancellationToken).ConfigureAwait(false);
+                    await LockCharacterAsync(context, secondCharacterId, cancellationToken).ConfigureAwait(false);
+                    bool isCommitted = await context.Trades
+                        .AnyAsync(row => row.Id == tradeId, cancellationToken)
+                        .ConfigureAwait(false);
+                    TradeResult? answer = isCommitted
+                        ? await TradeAnswerAsync(
+                                context,
+                                TradeStatus.Committed,
+                                null,
+                                firstCharacterId,
+                                secondCharacterId,
+                                cancellationToken)
+                            .ConfigureAwait(false)
+                        : null;
+                    await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+                    return answer;
+                }
+            },
+            cancellationToken);
+    }
+
+    // Each line's two rows, the giver's and the receiver's, each under its own operation ID derived from the trade's,
+    // since the ledger's operation ID is unique.
+    private static LedgerRow TradeEntry(
+        TradeCommit trade,
+        int line,
+        long characterId,
+        long? row,
+        string? itemDefinitionId,
+        int quantityDelta,
+        long currencyDelta,
+        string metadata)
+    {
+        return new LedgerRow
+        {
+            OperationId = TradeOperationIds.For(trade.TradeId, characterId, line),
+            ActorCharacterId = characterId,
+            OperationType = LedgerRow.TradeOperation,
+            ItemInstanceId = row,
+            ItemDefinitionId = itemDefinitionId,
+            QuantityDelta = quantityDelta,
+            CurrencyDelta = currencyDelta,
+            MetadataJson = metadata,
+            CreatedAt = trade.At
+        };
+    }
+
+    private static async Task<TradeResult> TradeAnswerAsync(
+        EvertorchDbContext context,
+        TradeStatus status,
+        long? refusedCharacterId,
+        long firstCharacterId,
+        long secondCharacterId,
+        CancellationToken cancellationToken)
+    {
+        return new TradeResult(
+            status,
+            refusedCharacterId,
+            await ReadInventoryAsync(context, firstCharacterId, cancellationToken).ConfigureAwait(false),
+            await ReadInventoryAsync(context, secondCharacterId, cancellationToken).ConfigureAwait(false));
+    }
+
+    // The character's whole inventory as it is now, each row with its slot and refine level, in row order.
+    private static async Task<TraderInventory> ReadInventoryAsync(
+        EvertorchDbContext context,
+        long characterId,
+        CancellationToken cancellationToken)
+    {
+        var character = await context.Characters
+            .AsNoTracking()
+            .Where(row => row.Id == characterId)
+            .Select(row => new { row.InventoryRevision, row.Currency })
+            .SingleAsync(cancellationToken)
+            .ConfigureAwait(false);
+        List<InventoryItemRow> rows = await context.InventoryItems
+            .AsNoTracking()
+            .Where(row => row.CharacterId == characterId)
+            .OrderBy(row => row.Id)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        List<EquipmentRow> slots = await context.Equipment
+            .AsNoTracking()
+            .Where(row => row.CharacterId == characterId)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        return new TraderInventory(
+            characterId,
+            (uint)character.InventoryRevision,
+            character.Currency,
+            rows.Select(row => new StoredItem(
+                    row.Id,
+                    row.ItemDefinitionId,
+                    row.Quantity,
+                    slots.FirstOrDefault(slot => slot.InventoryItemId == row.Id)?.Slot,
+                    row.RefineLevel))
+                .ToList());
+    }
+
     // Both characters are locked in the order of their IDs, so two creations over the same pair queue rather than
     // deadlock; the second of two characters accepting each other's invites then finds them in a party.
     private static async Task<PartyChangeResult> CreatePartyAsync(
@@ -1875,7 +2137,7 @@ WHERE character_skills.level <> EXCLUDED.level",
             rows.Add(
                 row == null
                     ? new StoredItem(id, emptiedItemDefinitionId, 0)
-                    : new StoredItem(row.Id, row.ItemDefinitionId, row.Quantity, slot));
+                    : new StoredItem(row.Id, row.ItemDefinitionId, row.Quantity, slot, row.RefineLevel));
         }
 
         return rows;

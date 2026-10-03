@@ -1694,7 +1694,7 @@ public sealed class PlayerPanelTests
     }
 
     [UnityTest]
-    public IEnumerator NpcWindow_ForAnNpcThatDoesNotTrade_ShowsItsNameAndCloseOnly()
+    public IEnumerator NpcWindow_ForAnNpcWithoutAShop_ShowsItsNameAndCloseOnly()
     {
         GameClient client = CreateIdleClient();
         ClientWorld world = GiveWorld(client);

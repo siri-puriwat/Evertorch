@@ -125,7 +125,7 @@ public sealed class MigrationUpgradeTests
             Is.EqualTo(before),
             "every row as it was");
         Assert.That(SqlStateOf(sql, Sql.LedgerInsert(Guid.NewGuid(), character, "boss_reward")), Is.Null);
-        Assert.That(SqlStateOf(sql, Sql.LedgerInsert(Guid.NewGuid(), character, "trade")), Is.EqualTo(CheckViolation));
+        Assert.That(SqlStateOf(sql, Sql.LedgerInsert(Guid.NewGuid(), character, "gift")), Is.EqualTo(CheckViolation));
     }
 
     [Test]
@@ -237,7 +237,7 @@ public sealed class MigrationUpgradeTests
                 .Select(type => SqlStateOf(sql, Sql.LedgerInsert(Guid.NewGuid(), character, type))),
             Is.All.Null,
             "the new operation types are accepted");
-        Assert.That(SqlStateOf(sql, Sql.LedgerInsert(Guid.NewGuid(), character, "trade")), Is.EqualTo(CheckViolation));
+        Assert.That(SqlStateOf(sql, Sql.LedgerInsert(Guid.NewGuid(), character, "gift")), Is.EqualTo(CheckViolation));
     }
 
     [Test]
@@ -274,7 +274,7 @@ public sealed class MigrationUpgradeTests
                 .Select(type => SqlStateOf(sql, Sql.LedgerInsert(Guid.NewGuid(), character, type))),
             Is.All.Null,
             "the new operation types are accepted");
-        Assert.That(SqlStateOf(sql, Sql.LedgerInsert(Guid.NewGuid(), character, "trade")), Is.EqualTo(CheckViolation));
+        Assert.That(SqlStateOf(sql, Sql.LedgerInsert(Guid.NewGuid(), character, "gift")), Is.EqualTo(CheckViolation));
         Assert.That(
             SqlStateOf(sql, $"UPDATE characters SET currency = 1000000001 WHERE id = {character}"),
             Is.EqualTo(CheckViolation),

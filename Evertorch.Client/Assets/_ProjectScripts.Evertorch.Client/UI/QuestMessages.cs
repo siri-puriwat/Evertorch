@@ -112,7 +112,7 @@ public static class QuestMessages
 
         if (offer.Coins > 0)
         {
-            parts.Add(TradeMessages.Coins(offer.Coins));
+            parts.Add(ShopMessages.Coins(offer.Coins));
         }
 
         return string.Join(", ", parts);

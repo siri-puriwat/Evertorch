@@ -12,7 +12,8 @@ namespace Evertorch.Server.Tests
 ///     an actor strikes and kills a slime, picks up its drop, casts First Aid and Focus, equips a sword, drinks a
 ///     potion, has a command refused, and crosses to the field, while an observer beside it at full HP and SP does
 ///     nothing. The observer hears what anyone near sees, and nothing of the actor's own target, health, progress,
-///     skills, status effects, inventory, refusals, or new map. Milestone 7 adds the town: the actor's trades,
+///     skills, status effects, inventory, refusals, or new map. Milestone 7 adds the town: the actor's purchases and
+///     sales,
 ///     quest, and reward reach the observer as nothing more. Milestone 9 adds the build: the actor's raises, learned
 ///     levels, and reset reach the observer as nothing at all. Milestone 10 adds the first jobs: another's change
 ///     reaches the observer as its new body alone, and a Mend on the observer as the heal and its own health.
@@ -416,7 +417,7 @@ public sealed class ObserverOutputTests
     // are in view. The prices, the catalogue, and the reward went to both with each NPC's services when it came into
     // view; the actor's coins, rows, quest, and reward reach the observer as nothing.
     [Test]
-    public void AnotherPlayersTradesAndQuest_ReachAnObserverOnlyAsWhatAnyoneNearSees()
+    public void AnotherPlayersShoppingAndQuest_ReachAnObserverOnlyAsWhatAnyoneNearSees()
     {
         var server = new TestServer(withNpcs: true);
         ConnectionId actor = server.Connect();
@@ -450,7 +451,7 @@ public sealed class ObserverOutputTests
             actorHeard,
             Is.SupersetOf(
                 new[] { MessageOpcode.InventoryChanged, MessageOpcode.QuestLog, MessageOpcode.CharacterProgress }),
-            "the actor was told of its trades, its quest, and its reward");
+            "the actor was told of its purchases and sales, its quest, and its reward");
         Assert.That(server.SessionOf(actor).Character!.Inventory.Coins, Is.EqualTo(186L), "all three went through");
         Assert.That(observerHeard.Distinct(), Is.SubsetOf(WhatAnyoneNearSees));
         Assert.That(

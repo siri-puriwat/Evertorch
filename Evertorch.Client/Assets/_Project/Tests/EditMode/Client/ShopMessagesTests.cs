@@ -5,11 +5,12 @@ using NUnit.Framework;
 namespace Evertorch.Client.Tests.EditMode
 {
 /// <summary>
-///     The feedback line for a committed trade, told apart by which way the coins and the units moved (Prototype Content
+///     The feedback line for a committed purchase or sale, told apart by which way the coins and the units moved
+///     (Prototype Content
 ///     §2), in words composed from display names and the committed values.
 /// </summary>
 [TestFixture]
-public sealed class TradeMessagesTests
+public sealed class ShopMessagesTests
 {
     private static readonly ItemDefinitionId Sword = new("item.weapon.training_sword");
     private static readonly ItemDefinitionId Gel = new("item.material.slime_gel");
@@ -50,10 +51,10 @@ public sealed class TradeMessagesTests
         ClientContent content = Content();
 
         Assert.That(
-            TradeMessages.Describe(Delta(100, 50, (Sword, 1)), content),
+            ShopMessages.Describe(Delta(100, 50, (Sword, 1)), content),
             Is.EqualTo("Bought Training Sword for 50 coins."));
         Assert.That(
-            TradeMessages.Describe(Delta(100, 40, (Potion, 3)), content),
+            ShopMessages.Describe(Delta(100, 40, (Potion, 3)), content),
             Is.EqualTo("Bought Minor Health Potion x 3 for 60 coins."));
     }
 
@@ -63,9 +64,9 @@ public sealed class TradeMessagesTests
         ClientContent content = Content();
 
         Assert.That(
-            TradeMessages.Describe(Delta(50, 74, (Gel, -12)), content),
+            ShopMessages.Describe(Delta(50, 74, (Gel, -12)), content),
             Is.EqualTo("Sold Slime Gel x 12 for 24 coins."));
-        Assert.That(TradeMessages.Describe(Delta(0, 1, (Gel, -1)), content), Is.EqualTo("Sold Slime Gel for 1 coin."));
+        Assert.That(ShopMessages.Describe(Delta(0, 1, (Gel, -1)), content), Is.EqualTo("Sold Slime Gel for 1 coin."));
     }
 
     [Test]
@@ -85,7 +86,7 @@ public sealed class TradeMessagesTests
 
         foreach (InventoryDelta other in others)
         {
-            Assert.That(TradeMessages.Describe(other, content), Is.Null);
+            Assert.That(ShopMessages.Describe(other, content), Is.Null);
         }
     }
 
@@ -93,7 +94,7 @@ public sealed class TradeMessagesTests
     public void Describe_WithoutContent_NamesTheDefinition()
     {
         Assert.That(
-            TradeMessages.Describe(Delta(100, 50, (Sword, 1)), null),
+            ShopMessages.Describe(Delta(100, 50, (Sword, 1)), null),
             Is.EqualTo("Bought item.weapon.training_sword for 50 coins."));
     }
 }

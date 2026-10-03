@@ -25,6 +25,7 @@ internal sealed class InMemoryGameStore : IGameStore
     private readonly Dictionary<long, Row> m_characters = new();
     private readonly Dictionary<Guid, LedgerEntry> m_ledger = new();
     private readonly Dictionary<long, PartyEntry> m_parties = new();
+    private readonly HashSet<Guid> m_trades = new();
     private long m_lastParty;
     private long m_lastAccount;
     private long m_lastCharacter;
@@ -132,12 +133,27 @@ internal sealed class InMemoryGameStore : IGameStore
     /// <summary>
     ///     How many of the next buy or sell commits succeed and then throw as if the answer was lost.
     /// </summary>
-    public int AmbiguousTradeFailures { get; set; }
+    public int AmbiguousShopFailures { get; set; }
 
     /// <summary>
     ///     Every buy and sell commit attempted, in order, by operation ID.
     /// </summary>
-    public List<Guid> TradeCommits { get; } = new();
+    public List<Guid> ShopCommits { get; } = new();
+
+    /// <summary>
+    ///     How many of the next trade commits succeed and then throw as if the answer was lost.
+    /// </summary>
+    public int AmbiguousTradeFailures { get; set; }
+
+    /// <summary>
+    ///     Every trade commit attempted, in order, including repeats.
+    /// </summary>
+    public List<TradeCommit> TradeCommits { get; } = new();
+
+    /// <summary>
+    ///     Every trade lookup asked for, in order, by trade ID.
+    /// </summary>
+    public List<Guid> TradeLookups { get; } = new();
 
     /// <summary>
     ///     How many of the next turn-in commits succeed and then throw as if the answer was lost.
@@ -558,8 +574,8 @@ internal sealed class InMemoryGameStore : IGameStore
         ThrowIfUnavailable();
         lock (m_gate)
         {
-            TradeCommits.Add(buy.OperationId);
-            return AnswerTrade(Find(buy.OperationId, buy.CharacterId, Array.Empty<long>()) ?? Buy(buy));
+            ShopCommits.Add(buy.OperationId);
+            return AnswerShop(Find(buy.OperationId, buy.CharacterId, Array.Empty<long>()) ?? Buy(buy));
         }
     }
 
@@ -568,8 +584,8 @@ internal sealed class InMemoryGameStore : IGameStore
         ThrowIfUnavailable();
         lock (m_gate)
         {
-            TradeCommits.Add(sell.OperationId);
-            return AnswerTrade(Find(sell.OperationId, sell.CharacterId, Array.Empty<long>()) ?? Sell(sell));
+            ShopCommits.Add(sell.OperationId);
+            return AnswerShop(Find(sell.OperationId, sell.CharacterId, Array.Empty<long>()) ?? Sell(sell));
         }
     }
 
@@ -670,6 +686,41 @@ internal sealed class InMemoryGameStore : IGameStore
             }
 
             return Task.FromResult(Find(operationId, characterId, rowIds));
+        }
+    }
+
+    public Task<TradeResult> CommitTradeAsync(TradeCommit trade, CancellationToken cancellationToken)
+    {
+        ThrowIfUnavailable();
+        lock (m_gate)
+        {
+            TradeCommits.Add(trade);
+            TradeResult result = m_trades.Contains(trade.TradeId)
+                ? Traded(TradeStatus.Committed, null, trade.First.CharacterId, trade.Second.CharacterId)
+                : Trade(trade);
+            if (AmbiguousTradeFailures > 0 && result.Status == TradeStatus.Committed)
+            {
+                AmbiguousTradeFailures--;
+                throw new StoreUnavailableException(new TimeoutException("scripted loss of the commit's answer"));
+            }
+
+            return Task.FromResult(result);
+        }
+    }
+
+    public Task<TradeResult?> FindTradeAsync(
+        Guid tradeId,
+        long firstCharacterId,
+        long secondCharacterId,
+        CancellationToken cancellationToken)
+    {
+        ThrowIfUnavailable();
+        lock (m_gate)
+        {
+            TradeLookups.Add(tradeId);
+            return Task.FromResult(m_trades.Contains(tradeId)
+                ? Traded(TradeStatus.Committed, null, firstCharacterId, secondCharacterId)
+                : null);
         }
     }
 
@@ -1008,6 +1059,80 @@ internal sealed class InMemoryGameStore : IGameStore
         }
     }
 
+    // As the PostgreSQL store settles it, through the same settlement.
+    private TradeResult Trade(TradeCommit trade)
+    {
+        Row first = m_characters[trade.First.CharacterId];
+        Row second = m_characters[trade.Second.CharacterId];
+        var settlement = new TradeSettlement(
+            trade,
+            new[] { (trade.First.CharacterId, first), (trade.Second.CharacterId, second) }
+                .SelectMany(pair => pair.Item2.Items.Select(item => new TradeSettlement.Holding(
+                    item.Id,
+                    pair.Item1,
+                    item.ItemDefinitionId,
+                    item.Quantity,
+                    pair.Item2.Equipment.ContainsValue(item.Id))))
+                .OrderBy(holding => holding.Id),
+            first.Coins,
+            second.Coins);
+        if (settlement.Status != TradeStatus.Committed)
+        {
+            return Traded(settlement.Status, settlement.RefusedCharacterId, trade.First.CharacterId,
+                trade.Second.CharacterId);
+        }
+
+        var before = first.Items.Concat(second.Items).ToDictionary(item => item.Id);
+        foreach ((long character, Row row) in new[]
+                     { (trade.First.CharacterId, first), (trade.Second.CharacterId, second) })
+        {
+            row.Items.Clear();
+            foreach (TradeSettlement.Holding holding in settlement.Holdings
+                         .Where(holding => holding.CharacterId == character && holding.Quantity > 0))
+            {
+                StoredItem source = before[holding.Id ?? holding.SourceId];
+                row.Items.Add(new StoredItem(
+                    holding.Id ?? ++m_lastItem,
+                    holding.ItemDefinitionId,
+                    holding.Quantity,
+                    null,
+                    source.RefineLevel));
+            }
+
+            row.InventoryRevision = unchecked(row.InventoryRevision + 1);
+        }
+
+        first.Coins = settlement.FirstCoins;
+        second.Coins = settlement.SecondCoins;
+        m_trades.Add(trade.TradeId);
+        foreach (TradeSettlement.Movement movement in settlement.Movements)
+        {
+            foreach (long actor in new[] { movement.GiverId, movement.ReceiverId })
+            {
+                m_ledger.Add(
+                    TradeOperationIds.For(trade.TradeId, actor, movement.Line),
+                    new LedgerEntry(actor, 0, movement.ItemDefinitionId ?? string.Empty));
+            }
+        }
+
+        return Traded(TradeStatus.Committed, null, trade.First.CharacterId, trade.Second.CharacterId);
+    }
+
+    private TradeResult Traded(TradeStatus status, long? refused, long first, long second)
+    {
+        return new TradeResult(status, refused, Inventory(first), Inventory(second));
+    }
+
+    private TraderInventory Inventory(long character)
+    {
+        Row row = m_characters[character];
+        return new TraderInventory(
+            character,
+            row.InventoryRevision,
+            row.Coins,
+            row.Items.OrderBy(item => item.Id).Select(item => row.Read(item.Id)).ToList());
+    }
+
     // As the PostgreSQL store answers: the ledger's row and the named ones as they are now, an emptied one at 0.
     private InventoryResult? Find(Guid operationId, long characterId, IReadOnlyCollection<long> rowIds)
     {
@@ -1097,11 +1222,11 @@ internal sealed class InMemoryGameStore : IGameStore
             new[] { row.Read(used.Id, used.ItemDefinitionId) });
     }
 
-    private Task<InventoryResult> AnswerTrade(InventoryResult result)
+    private Task<InventoryResult> AnswerShop(InventoryResult result)
     {
-        if (AmbiguousTradeFailures > 0 && result.Status == InventoryStatus.Committed)
+        if (AmbiguousShopFailures > 0 && result.Status == InventoryStatus.Committed)
         {
-            AmbiguousTradeFailures--;
+            AmbiguousShopFailures--;
             throw new StoreUnavailableException(new TimeoutException("scripted loss of the commit's answer"));
         }
 
@@ -1453,7 +1578,7 @@ internal sealed class InMemoryGameStore : IGameStore
             string? slot = Equipment.Where(pair => pair.Value == id).Select(pair => pair.Key).FirstOrDefault();
             return item == null
                 ? new StoredItem(id, emptiedItem, 0)
-                : new StoredItem(item.Id, item.ItemDefinitionId, item.Quantity, slot);
+                : new StoredItem(item.Id, item.ItemDefinitionId, item.Quantity, slot, item.RefineLevel);
         }
 
         public StoredCharacter ToStored(long id)

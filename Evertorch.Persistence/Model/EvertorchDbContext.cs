@@ -53,6 +53,12 @@ internal sealed class EvertorchDbContext : DbContext
 
     public DbSet<PartyMemberRow> PartyMembers => Set<PartyMemberRow>();
 
+    public DbSet<TradeRow> Trades => Set<TradeRow>();
+
+    public DbSet<AccountStorageRow> AccountStorages => Set<AccountStorageRow>();
+
+    public DbSet<StorageItemRow> StorageItems => Set<StorageItemRow>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         ConfigureAccounts(modelBuilder.Entity<AccountRow>());
@@ -65,6 +71,9 @@ internal sealed class EvertorchDbContext : DbContext
         ConfigureSkills(modelBuilder.Entity<CharacterSkillRow>());
         ConfigureParties(modelBuilder.Entity<PartyRow>());
         ConfigurePartyMembers(modelBuilder.Entity<PartyMemberRow>());
+        ConfigureTrades(modelBuilder.Entity<TradeRow>());
+        ConfigureAccountStorages(modelBuilder.Entity<AccountStorageRow>());
+        ConfigureStorageItems(modelBuilder.Entity<StorageItemRow>());
 
         foreach (IMutableEntityType entity in modelBuilder.Model.GetEntityTypes())
         {
@@ -187,7 +196,8 @@ internal sealed class EvertorchDbContext : DbContext
                 $"operation_type IN ('{LedgerRow.PickupOperation}', '{LedgerRow.EquipOperation}', "
                 + $"'{LedgerRow.UnequipOperation}', '{LedgerRow.ConsumeOperation}', '{LedgerRow.BuyOperation}', "
                 + $"'{LedgerRow.SellOperation}', '{LedgerRow.QuestRewardOperation}', "
-                + $"'{LedgerRow.BossRewardOperation}')");
+                + $"'{LedgerRow.BossRewardOperation}', '{LedgerRow.TradeOperation}', "
+                + $"'{LedgerRow.StorageDepositOperation}', '{LedgerRow.StorageWithdrawOperation}')");
         });
         entry.HasKey(row => row.Id).HasName("pk_economy_ledger");
         entry.Property(row => row.Id).UseIdentityAlwaysColumn();
@@ -266,6 +276,62 @@ internal sealed class EvertorchDbContext : DbContext
             .HasForeignKey(row => row.CharacterId)
             .OnDelete(DeleteBehavior.Restrict)
             .HasConstraintName("fk_party_members_characters");
+    }
+
+    private static void ConfigureTrades(EntityTypeBuilder<TradeRow> trade)
+    {
+        trade.ToTable("trades", table => table.HasCheckConstraint(
+            "ck_trades_characters",
+            "first_character_id < second_character_id"));
+        trade.HasKey(row => row.Id).HasName("pk_trades");
+        trade.Property(row => row.Id).ValueGeneratedNever();
+        trade.HasIndex(row => row.FirstCharacterId).HasDatabaseName("ix_trades_first_character_id");
+        trade.HasIndex(row => row.SecondCharacterId).HasDatabaseName("ix_trades_second_character_id");
+        trade.HasOne<CharacterRow>()
+            .WithMany()
+            .HasForeignKey(row => row.FirstCharacterId)
+            .OnDelete(DeleteBehavior.Restrict)
+            .HasConstraintName("fk_trades_first_character");
+        trade.HasOne<CharacterRow>()
+            .WithMany()
+            .HasForeignKey(row => row.SecondCharacterId)
+            .OnDelete(DeleteBehavior.Restrict)
+            .HasConstraintName("fk_trades_second_character");
+    }
+
+    private static void ConfigureAccountStorages(EntityTypeBuilder<AccountStorageRow> storage)
+    {
+        storage.ToTable("account_storages", table => table.HasCheckConstraint(
+            "ck_account_storages_revision",
+            $"revision BETWEEN 0 AND {MaxInventoryRevision}"));
+        storage.HasKey(row => row.AccountId).HasName("pk_account_storages");
+        storage.Property(row => row.AccountId).ValueGeneratedNever();
+        storage.Property(row => row.Version).IsConcurrencyToken();
+        storage.HasOne<AccountRow>()
+            .WithMany()
+            .HasForeignKey(row => row.AccountId)
+            .OnDelete(DeleteBehavior.Restrict)
+            .HasConstraintName("fk_account_storages_accounts");
+    }
+
+    private static void ConfigureStorageItems(EntityTypeBuilder<StorageItemRow> item)
+    {
+        item.ToTable("storage_items", table =>
+        {
+            table.HasCheckConstraint("ck_storage_items_quantity", $"quantity BETWEEN 1 AND {MaxQuantity}");
+            table.HasCheckConstraint("ck_storage_items_refine_level", "refine_level >= 0");
+        });
+        item.HasKey(row => row.Id).HasName("pk_storage_items");
+        item.Property(row => row.Id).UseIdentityAlwaysColumn();
+        item.Property(row => row.ItemDefinitionId).HasMaxLength(MaxDefinitionIdLength).IsRequired();
+        item.Property(row => row.InstanceDataJson).HasColumnType("jsonb");
+        item.Property(row => row.Version).IsConcurrencyToken();
+        item.HasIndex(row => row.AccountId).HasDatabaseName("ix_storage_items_account_id");
+        item.HasOne<AccountStorageRow>()
+            .WithMany()
+            .HasForeignKey(row => row.AccountId)
+            .OnDelete(DeleteBehavior.Restrict)
+            .HasConstraintName("fk_storage_items_account_storages");
     }
 
     private static void ConfigureSessionTokens(EntityTypeBuilder<SessionTokenRow> token)

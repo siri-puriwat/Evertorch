@@ -97,7 +97,7 @@ public sealed class ChatLog
     }
 
     /// <summary>
-    ///     A line the client tells the player itself: a refusal, a pickup, a trade, a quest, or the build.
+    ///     A line the client tells the player itself: a refusal, a pickup, a purchase or a sale, a quest, or the build.
     /// </summary>
     public void AddSystem(string text)
     {

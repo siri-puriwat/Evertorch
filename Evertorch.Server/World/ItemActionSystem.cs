@@ -265,13 +265,13 @@ public sealed class ItemActionSystem : ITickPhase
             return CommandRejectionReason.ItemActionInFlight;
         }
 
-        CommandRejectionReason reach = NpcReach.Check(session, npc, m_npcReach, out NpcEntity? trader);
+        CommandRejectionReason reach = NpcReach.Check(session, npc, m_npcReach, out NpcEntity? shopkeeper);
         if (reach != CommandRejectionReason.None)
         {
             return reach;
         }
 
-        ShopEntry? stock = trader!.Definition.Shop.FirstOrDefault(entry => entry.Item == item);
+        ShopEntry? stock = shopkeeper!.Definition.Shop.FirstOrDefault(entry => entry.Item == item);
         if (stock == null)
         {
             return CommandRejectionReason.InvalidTarget;
@@ -332,13 +332,13 @@ public sealed class ItemActionSystem : ITickPhase
             return CommandRejectionReason.ItemActionInFlight;
         }
 
-        CommandRejectionReason reach = NpcReach.Check(session, npc, m_npcReach, out NpcEntity? trader);
+        CommandRejectionReason reach = NpcReach.Check(session, npc, m_npcReach, out NpcEntity? shopkeeper);
         if (reach != CommandRejectionReason.None)
         {
             return reach;
         }
 
-        if (!trader!.Definition.HasShop || !character.Inventory.TryGetRow(inventoryItem, out InventoryEntry row))
+        if (!shopkeeper!.Definition.HasShop || !character.Inventory.TryGetRow(inventoryItem, out InventoryEntry row))
         {
             return CommandRejectionReason.InvalidTarget;
         }

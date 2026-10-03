@@ -4,10 +4,11 @@ using Evertorch.Game;
 namespace Evertorch.Client
 {
 /// <summary>
-///     The client's words for a trade (Prototype Content §2), composed from display names and the values the server
+///     The client's words for a purchase or a sale (Prototype Content §2), composed from display names and the values the
+///     server
 ///     committed: a system line for a purchase or a sale, and the coins as the NPC window shows them.
 /// </summary>
-public static class TradeMessages
+public static class ShopMessages
 {
     /// <summary>
     ///     The system line for a committed change that bought or sold one kind of item, told apart by which way the

@@ -121,7 +121,7 @@ public sealed class TownLoopAcceptanceTests
     /// <summary>
     ///     The player enters the training ground, meets the NPCs, and uses its skills on a training slime; with a
     ///     partner who joins it accepts the Gate Warden's quest; both cross to the training field, fight forest
-    ///     crawlers together until both quests are ready, cross back, and turn the quest in; the player then trades at
+    ///     crawlers together until both quests are ready, cross back, and turn the quest in; the player then shops at
     ///     the Quartermaster, tries the bought sword on a slime, and stops in town, and the server stops. Returns what
     ///     the server and the client last showed of the player's character.
     /// </summary>
@@ -155,7 +155,7 @@ public sealed class TownLoopAcceptanceTests
         ReturnToTown(content, admin, client);
         TurnInTheHunt("turn in", content, admin, client);
         TurnInTheHunt("partner turns in", content, admin, partner);
-        TradeAtTheQuartermaster(content, admin, client);
+        ShopAtTheQuartermaster(content, admin, client);
         SwingTheBoughtSword(admin, client);
 
         var stopped = new Stopped(
@@ -651,10 +651,10 @@ public sealed class TownLoopAcceptanceTests
 
     // Back in town the player walks up to the Quartermaster and sells what the hunt brought back but the potions and
     // what it wears, then buys a new training sword and cloth armor and wears them (Gameplay Systems §11.3). Each
-    // trade answers with the coins, one operation at a time.
-    private static void TradeAtTheQuartermaster(ServerContent content, IAdminCommandService admin, SocketClient client)
+    // purchase and sale answers with the coins, one operation at a time.
+    private static void ShopAtTheQuartermaster(ServerContent content, IAdminCommandService admin, SocketClient client)
     {
-        const string step = "trade";
+        const string step = "shop";
         ClientWorld world = client.World;
         WalkTo(step, client, TownSpot);
         Assert.That(
@@ -996,7 +996,7 @@ public sealed class TownLoopAcceptanceTests
 
     // Every sale, purchase, and quest reward of the loop is one ledger row, and together they account for the coins the
     // character holds (Persistence §5).
-    private void AssertTheTradesInTheLedger(Stopped stopped)
+    private void AssertTheShoppingInTheLedger(Stopped stopped)
     {
         using var connection = new NpgsqlConnection(m_database.ConnectionString);
         connection.Open();
@@ -1005,22 +1005,22 @@ public sealed class TownLoopAcceptanceTests
             + "WHERE actor_character_id = @character AND operation_type IN ('buy', 'sell', 'quest_reward') ORDER BY id",
             connection);
         command.Parameters.AddWithValue("character", stopped.Summary.Character.Value);
-        var trades = new List<(string Type, long Coins)>();
+        var entries = new List<(string Type, long Coins)>();
         using (NpgsqlDataReader reader = command.ExecuteReader())
         {
             while (reader.Read())
             {
-                trades.Add((reader.GetString(0), reader.GetInt64(1)));
+                entries.Add((reader.GetString(0), reader.GetInt64(1)));
             }
         }
 
-        Assert.That(trades.Count(trade => trade.Type == "buy"), Is.EqualTo(2), "ledger: the sword and the armor");
-        Assert.That(trades.Where(trade => trade.Type == "sell").Select(trade => trade.Coins), Is.All.Positive);
+        Assert.That(entries.Count(entry => entry.Type == "buy"), Is.EqualTo(2), "ledger: the sword and the armor");
+        Assert.That(entries.Where(entry => entry.Type == "sell").Select(entry => entry.Coins), Is.All.Positive);
         Assert.That(
-            trades.Where(trade => trade.Type == "quest_reward").Select(trade => trade.Coins),
+            entries.Where(entry => entry.Type == "quest_reward").Select(entry => entry.Coins),
             Is.EqualTo(new[] { 100L }),
             "ledger: the quest's reward, once");
-        Assert.That(trades.Sum(trade => trade.Coins), Is.EqualTo(stopped.Summary.Coins), "ledger: the coins held");
+        Assert.That(entries.Sum(entry => entry.Coins), Is.EqualTo(stopped.Summary.Coins), "ledger: the coins held");
     }
 
     // Both characters were given the Adventurer build the moment they were created, before they first entered, and every
@@ -1081,7 +1081,7 @@ public sealed class TownLoopAcceptanceTests
         using (IHost first = StartHost(root.Path, logs))
         {
             stopped = PlayTheLoop(first, m_database.ConnectionString);
-            AssertTheTradesInTheLedger(stopped);
+            AssertTheShoppingInTheLedger(stopped);
             AssertTheSeededBuilds();
         }
 
