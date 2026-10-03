@@ -51,6 +51,9 @@ public sealed class TargetFrame : MonoBehaviour
     private TMP_Text? m_detail;
     private GameObject? m_invite;
     private string m_targetName = string.Empty;
+    private ClientMonster? m_labelled;
+    private string? m_labelledId;
+    private string m_label = string.Empty;
     private string? m_shownName;
     private int m_shownPermille = -1;
     private int m_shownTenths = -1;
@@ -127,7 +130,7 @@ public sealed class TargetFrame : MonoBehaviour
         }
 
         ShowTarget(
-            MonsterLabel(
+            CachedMonsterLabel(
                 EntityViewKeys.MonsterOf(m_client.Content, target.Kind, target.DefinitionId),
                 target.DefinitionId),
             ratio,
@@ -286,6 +289,20 @@ public sealed class TargetFrame : MonoBehaviour
 
         string label = $"{monster.DisplayName} \u00B7 Lv {monster.Level.ToString(CultureInfo.InvariantCulture)}";
         return monster.IsBoss ? $"{label} \u00B7 Boss" : label;
+    }
+
+    // The frame asks for its monster's label every frame; it is built once for each monster it names.
+    private string CachedMonsterLabel(ClientMonster? monster, string definitionId)
+    {
+        if (!ReferenceEquals(monster, m_labelled) ||
+            !string.Equals(definitionId, m_labelledId, StringComparison.Ordinal))
+        {
+            m_labelled = monster;
+            m_labelledId = definitionId;
+            m_label = MonsterLabel(monster, definitionId);
+        }
+
+        return m_label;
     }
 
     private void PlaceBeside(bool isBeside, bool isTouchShown)

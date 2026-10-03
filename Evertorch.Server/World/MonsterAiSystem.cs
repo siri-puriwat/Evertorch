@@ -312,6 +312,7 @@ public sealed class MonsterAiSystem : ITickPhase
             if (HorizontalDistance(monster.Position, monster.Home) > monster.Definition.LeashRadius)
             {
                 ReturnHome(map, monster, now);
+                brain.IsLeashed = brain.State == MonsterAiState.ReturnHome;
             }
             else if (TryRetreat(map, monster, target) || TryCast(map, monster, target, tick))
             {
@@ -493,11 +494,12 @@ public sealed class MonsterAiSystem : ITickPhase
         }
     }
 
-    // A boss home from its leash recovers all its HP and forgets who hurt it (Gameplay Systems §10); any other monster
+    // A boss home from its leash recovers all its HP and forgets who hurt it (Gameplay Systems §10); a boss whose
+    // target died or left walks home and keeps both, so a fight that lost one player goes on, and any other monster
     // keeps its wounds.
     private void ArriveHome(MonsterEntity monster, long now)
     {
-        if (monster.Definition.IsBoss)
+        if (monster.Definition.IsBoss && monster.Brain.IsLeashed)
         {
             monster.CurrentHealth = monster.MaxHealth;
             monster.ClearDamageLog();
@@ -511,6 +513,7 @@ public sealed class MonsterAiSystem : ITickPhase
         MonsterBrain brain = monster.Brain;
         brain.State = MonsterAiState.Idle;
         brain.IsRetreating = false;
+        brain.IsLeashed = false;
         brain.Path.Cancel();
         brain.DesiredDirection = default;
         brain.IdleUntilMs = now + DrawPause(monster.Definition);

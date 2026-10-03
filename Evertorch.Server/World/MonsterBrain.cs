@@ -53,6 +53,12 @@ public sealed class MonsterBrain
     public WorldPosition ChaseGoal { get; set; }
 
     /// <summary>
+    ///     Whether the walk home began at the leash's edge; a boss that arrives home from it recovers (Gameplay Systems
+    ///     §10), and one sent home by a lost target does not.
+    /// </summary>
+    public bool IsLeashed { get; set; }
+
+    /// <summary>
     ///     Where the AI wants to move next tick; the movement phase steps the monster with it.
     /// </summary>
     public WorldDirection DesiredDirection { get; set; }

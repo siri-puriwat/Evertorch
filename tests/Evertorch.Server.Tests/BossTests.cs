@@ -192,6 +192,40 @@ public sealed class BossTests
         Assert.That(GrottoOf(server).Monsters, Does.Contain(bosses[0]));
     }
 
+    // Its target dies near home: the boss walks home, as any monster does, but keeps its wounds and its logs, so the
+    // fight's MVP and shares survive the loss of one player (Gameplay Systems §10).
+    [Test]
+    public void Monarch_WhoseTargetDies_WalksHome_KeepingItsWoundsAndItsLogs()
+    {
+        var server = new TestServer(withEveryMap: true, withGrotto: true, withMonsters: true);
+        ConnectionId connection = server.EnterWorld(1);
+        server.CrossIntoTheGrotto(connection);
+        PlayerEntity player = server.PlayerOf(connection);
+        MonsterEntity monarch = MonarchOf(server);
+        player.CurrentHealth = Spare;
+        player.Position = new WorldPosition(monarch.Home.X - 5f, 0f, monarch.Home.Z);
+        monarch.CurrentHealth -= 5000;
+        monarch.LogDamage(player.Character, 5000);
+        monarch.LogMvpDealt(player.Character, 5000);
+        server.Tick(TestServer.TickRate);
+        bool wasNoticed = monarch.Target == player.Id;
+
+        server.Combat.Kill(GrottoOf(server), player, monarch, server.CurrentTick);
+        bool hasWalkedHome = false;
+        bool isHome = false;
+        for (int tick = 0; tick < 30 * TestServer.TickRate && !isHome; tick++)
+        {
+            server.Tick();
+            hasWalkedHome |= monarch.Brain.State == MonsterAiState.ReturnHome;
+            isHome = hasWalkedHome && monarch.Brain.State == MonsterAiState.Idle;
+        }
+
+        Assert.That(wasNoticed, Is.True, "the aggressive boss took the player within its 6 m");
+        Assert.That((hasWalkedHome, isHome), Is.EqualTo((true, true)), "it walked home once its target died");
+        Assert.That(monarch.CurrentHealth, Is.EqualTo(monarch.MaxHealth - 5000), "its wounds kept");
+        Assert.That((monarch.DamageLog.Count, monarch.MvpLog.Count), Is.EqualTo((1, 1)), "its logs kept");
+    }
+
     [Test]
     public void QuakeSlam_DoesNotStrikeAPlayerBehindAPillar()
     {

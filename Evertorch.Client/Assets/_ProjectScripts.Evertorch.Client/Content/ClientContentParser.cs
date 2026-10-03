@@ -299,7 +299,7 @@ public static class ClientContentParser
             // JsonUtility reads an absent scale as 0, which stands for the model's own size, and an absent tint as
             // empty.
             float scale = monster.scale == 0f ? 1f : monster.scale;
-            if (scale < ContentLimits.MinBodyScale || scale > ContentLimits.MaxBodyScale)
+            if (float.IsNaN(scale) || scale < ContentLimits.MinBodyScale || scale > ContentLimits.MaxBodyScale)
             {
                 error = string.Format(
                     CultureInfo.InvariantCulture,

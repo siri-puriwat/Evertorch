@@ -184,6 +184,11 @@ public sealed class ClientContentParserTests
     [TestCase(
         ClientContentParser.MonstersFile,
         "\"level\":1,",
+        "\"level\":1,\"scale\":NaN,",
+        "Monster 'monster.training_slime': scale must be between 0.25 and 4")]
+    [TestCase(
+        ClientContentParser.MonstersFile,
+        "\"level\":1,",
         "\"level\":1,\"tint\":\"#5B3A8\",",
         "Monster 'monster.training_slime': tint is not a colour written #RRGGBB")]
     [TestCase(
