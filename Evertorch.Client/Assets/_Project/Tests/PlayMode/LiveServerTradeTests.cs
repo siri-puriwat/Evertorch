@@ -11,7 +11,6 @@ using NUnit.Framework;
 using TMPro;
 using UnityEngine;
 using UnityEngine.InputSystem;
-using UnityEngine.InputSystem.LowLevel;
 using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
 using UnityEngine.TestTools.Utils;
@@ -251,10 +250,12 @@ public sealed class LiveServerTradeTests
         Assert.That(client.Connection!.MalformedMessages + client.Connection.UnexpectedMessages, Is.Zero);
     }
 
-    // A click on the Storekeeper, drawn as the Quartermaster in its own colour, walks the real client up to it and opens
-    // its window, which reads storage and shows the fee. The amount field's number of a bag row is stored by pressing
-    // the row, and of a stored row taken back by pressing that one; the log says what moved, and only the committed
-    // changes move the lists and the coins (Gameplay Systems §11.4; Prototype Content §2).
+    // The real client walks up to the Storekeeper, drawn as the Quartermaster in its own colour, and its window opens,
+    // reads storage, and shows the fee. The amount field's number of a bag row is stored by pressing the row, and of a
+    // stored row taken back by pressing that one; the log says what moved, and only the committed changes move the
+    // lists and the coins (Gameplay Systems §11.4; Prototype Content §2). The walk goes through the controller and the
+    // window opens as an arrival opens it, so an editor without focus, which drops a queued click, cannot fail the step;
+    // the town loop's live test clicks an NPC.
     [UnityTest]
     [Timeout(TestTimeoutMs)]
     public IEnumerator Storage_ThroughTheStorekeepersWindow_StoresAndTakesBack()
@@ -262,7 +263,6 @@ public sealed class LiveServerTradeTests
         string actionsPath = RequirePrerequisites();
         yield return StartDatabaseAndServer();
         LiveServer server = m_server!;
-        Mouse mouse = InputSystem.AddDevice<Mouse>();
         GameClient client = CreateClient(actionsPath);
         yield return EnterByName(client, AnnName, () =>
         {
@@ -286,9 +286,16 @@ public sealed class LiveServerTradeTests
                 $"{renderer.name}: the whole body in the Storekeeper's colour");
         }
 
-        Vector3 onScreen = Camera.main!.WorldToScreenPoint(
-            storekeeper.transform.position + Vector3.up * EntityPicker.PickHeight);
-        ClickAt(mouse, onScreen);
+        EntityId keeper = client.RemoteViews.Single(pair => pair.Value == storekeeper).Key;
+        Vector3 at = storekeeper.transform.position;
+        var beside = new WorldPosition(at.x + 1.5f, 0f, at.z);
+        Assert.That(client.Controller!.TryMoveTo(world.Predictor.Position, beside), Is.True,
+            "a way to the Storekeeper");
+        yield return WaitUntil(
+            () => new Vector2(world.Predictor.Position.X - beside.X, world.Predictor.Position.Z - beside.Z).magnitude
+                < 0.1f,
+            StartTimeoutSeconds);
+        window.Open(keeper);
         yield return WaitUntil(() => window.IsOpen && window.Text.Contains("Each deposit costs"), StartTimeoutSeconds);
         Assert.That(window.ShownName, Is.EqualTo("Storekeeper"), $"{window.Text} at {world.Predictor.Position}");
         Assert.That(
@@ -339,14 +346,6 @@ public sealed class LiveServerTradeTests
         Button? button = window.GetComponentsInChildren<Button>().FirstOrDefault(candidate => candidate.name == name);
         button?.onClick.Invoke();
         return button != null;
-    }
-
-    private static void ClickAt(Mouse mouse, Vector2 screenPosition)
-    {
-        InputSystem.QueueStateEvent(mouse, new MouseState { position = screenPosition }.WithButton(MouseButton.Left));
-        InputSystem.Update();
-        InputSystem.QueueStateEvent(mouse, new MouseState { position = screenPosition });
-        InputSystem.Update();
     }
 
     private static string RequirePrerequisites()
