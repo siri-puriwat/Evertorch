@@ -1,3 +1,4 @@
+using System;
 using Evertorch.Game;
 
 namespace Evertorch.Protocol
@@ -10,6 +11,11 @@ public readonly struct MarketBoardEntry
 {
     public MarketBoardEntry(ItemDefinitionId item, uint price, uint stock)
     {
+        if (item.Value.Length == 0 || price == 0)
+        {
+            throw new ArgumentException("An entry names its item, at a price of at least 1 coin.");
+        }
+
         Item = item;
         Price = price;
         Stock = stock;

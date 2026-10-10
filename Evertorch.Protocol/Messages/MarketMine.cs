@@ -21,6 +21,14 @@ public sealed class MarketMine
         {
             throw new ArgumentException("A character holds at most 8 listings.", nameof(entries));
         }
+
+        foreach (MarketListingEntry entry in entries)
+        {
+            if (entry.Listing <= 0)
+            {
+                throw new ArgumentException("A listing is at least 1.", nameof(entries));
+            }
+        }
     }
 
     public IReadOnlyList<MarketListingEntry> Entries { get; }

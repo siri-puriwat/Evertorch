@@ -16,10 +16,11 @@ public sealed class MarketEvent
 
     public MarketEvent(MarketEventKind kind, long listing, ItemDefinitionId item, uint quantity, uint coins)
     {
-        if (!IsValid(kind, listing, quantity, coins))
+        if (item.Value.Length == 0 || !IsValid(kind, listing, quantity, coins))
         {
             throw new ArgumentException(
-                "A listing is at least 1; a listing and a sale carry units and coins, a collection one of them.");
+                "A notice names its item and a listing of at least 1; a listing and a sale carry units and coins, a "
+                + "collection one of them.");
         }
 
         Kind = kind;

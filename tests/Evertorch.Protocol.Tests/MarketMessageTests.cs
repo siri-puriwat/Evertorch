@@ -187,6 +187,11 @@ public sealed class MarketMessageTests
         Action tooMany = () => _ = new MarketMine(nine);
         Action unpaid = () => _ = new MarketEvent(MarketEventKind.Listed, 9, ItemA, 1, 0);
         Action nowhere = () => _ = new MarketEvent(MarketEventKind.Sold, 0, ItemA, 1, 1);
+        Action unnamed = () => _ = new MarketEvent(MarketEventKind.Sold, 9, default, 1, 1);
+        Action unnamedPurchase = () => _ = new MarketBuy(new EntityId(7), default, 1, 1, 1);
+        Action unnamedEntry = () => _ = new MarketBoardEntry(default, 1, 1);
+        Action emptyListing = () => _ = new MarketListingEntry(9, ItemA, 0, 0, 0, 0);
+        Action defaultListing = () => _ = new MarketMine(new[] { default(MarketListingEntry) });
 
         Assert.That(rowless, Throws.InstanceOf<ArgumentOutOfRangeException>());
         Assert.That(nothing, Throws.InstanceOf<ArgumentOutOfRangeException>());
@@ -197,6 +202,11 @@ public sealed class MarketMessageTests
         Assert.That(tooMany, Throws.ArgumentException);
         Assert.That(unpaid, Throws.ArgumentException);
         Assert.That(nowhere, Throws.ArgumentException);
+        Assert.That(unnamed, Throws.ArgumentException);
+        Assert.That(unnamedPurchase, Throws.ArgumentException);
+        Assert.That(unnamedEntry, Throws.ArgumentException);
+        Assert.That(emptyListing, Throws.ArgumentException);
+        Assert.That(defaultListing, Throws.ArgumentException);
     }
 
     [Test]

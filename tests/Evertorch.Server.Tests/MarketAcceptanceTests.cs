@@ -170,8 +170,16 @@ public sealed class MarketAcceptanceTests
         foreach (SocketClient client in clients)
         {
             var each = new Heard();
-            client.Connection.MarketBoardReceived += each.Boards.Add;
-            client.Connection.MarketMineReceived += each.Mines.Add;
+            client.Connection.MarketBoardReceived += board =>
+            {
+                each.Boards.Add(board);
+                each.Order.Add('b');
+            };
+            client.Connection.MarketMineReceived += mine =>
+            {
+                each.Mines.Add(mine);
+                each.Order.Add('m');
+            };
             client.Connection.MarketEventReceived += each.Notices.Add;
             heard.Add(client, each);
         }
@@ -179,13 +187,20 @@ public sealed class MarketAcceptanceTests
         return heard;
     }
 
-    // Opens the board at the Broker and waits for the listings that end the read.
+    // Opens the board at the Broker and waits for the read's entries and then the listings that end it; listings that
+    // end the push of an earlier command may still be on their way, and do not count.
     private static void Read(string step, SocketClient client, EntityId broker, Heard heard, SocketClient[] all)
     {
-        int mines = heard.Mines.Count;
+        int start = heard.Order.Count;
         client.Connection.SendMarketOpen(broker);
         Assert.That(
-            SocketClients.PumpUntil(() => heard.Mines.Count > mines, all),
+            SocketClients.PumpUntil(
+                () =>
+                {
+                    int board = heard.Order.IndexOf('b', start);
+                    return board >= 0 && heard.Order.IndexOf('m', board) >= 0;
+                },
+                all),
             Is.True,
             $"{step}: read the board ({client.World.LastRejection})");
     }
@@ -414,6 +429,11 @@ public sealed class MarketAcceptanceTests
         public List<MarketMine> Mines { get; } = new();
 
         public List<MarketEvent> Notices { get; } = new();
+
+        /// <summary>
+        ///     The order the entries ('b') and the listings ('m') arrived in.
+        /// </summary>
+        public List<char> Order { get; } = new();
     }
 
     [Test]

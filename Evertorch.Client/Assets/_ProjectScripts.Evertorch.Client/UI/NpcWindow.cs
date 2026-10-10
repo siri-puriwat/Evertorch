@@ -576,7 +576,7 @@ public sealed class NpcWindow : MonoBehaviour
 
             ItemDefinitionId item = entry.Item;
             uint price = entry.Price;
-            uint most = Math.Min(entry.Stock, StackLimitOf(content, item));
+            uint most = Math.Min(entry.Stock, RoomFor(inventory, content, item));
             string key = BuyKey(item);
             AddButton(
                 m_armedMarket == key ? MarketMessages.BuyPrompt(item, m_armedQuantity, price, content) : text,
@@ -702,11 +702,23 @@ public sealed class NpcWindow : MonoBehaviour
         PressMarket(key, 0, _ => client.CollectListingAt(npc, listing.Listing));
     }
 
-    private static uint StackLimitOf(ClientContent? content, ItemDefinitionId item)
+    // As many as the bag's row of the item can still take, or one of an item a row holds one of, which takes a row of
+    // its own; at least one, so a full bag hears the server's refusal.
+    private static uint RoomFor(ClientInventory inventory, ClientContent? content, ItemDefinitionId item)
     {
-        return content != null && content.TryGetItem(item, out ClientItem? found) && found != null
+        uint limit = content != null && content.TryGetItem(item, out ClientItem? found) && found != null
             ? (uint)found.StackLimit
             : 1;
+        uint held = 0;
+        foreach (InventoryEntry row in inventory.Rows)
+        {
+            if (row.Item == item)
+            {
+                held += row.Quantity;
+            }
+        }
+
+        return limit == 1 || held >= limit ? 1 : limit - held;
     }
 
     private static string BuyKey(ItemDefinitionId item)

@@ -94,6 +94,24 @@ public sealed class MarketContentTests
         }
     }
 
+    // A listable item whose stack limit is out of range has that reported, not a failure of the run.
+    [Test]
+    public void Run_ForAListableItemWithoutAStackLimit_ReportsTheStackLimit()
+    {
+        using (var workspace = new ContentWorkspace())
+        {
+            workspace.Replace(Gel, SellPrice, $"{SellPrice}  market:\n    basePrice: 100000\n");
+            workspace.Replace(Gel, "stackLimit: 999\n", "stackLimit: 0\n");
+
+            ContentPipelineResult result = ContentPipeline.Run(workspace.ContentRoot);
+
+            Assert.That(
+                result.Diagnostics.Select(diagnostic => (diagnostic.File, diagnostic.FieldPath)),
+                Is.EqualTo(new[] { (Gel, "stackLimit") }),
+                Describe(result));
+        }
+    }
+
     [Test]
     public void Run_ForAnItemWithoutTerms_IsNotListed_AndTheServerPackageSaysNothing()
     {

@@ -19,6 +19,11 @@ public sealed class MarketBuy
             throw new ArgumentOutOfRangeException(nameof(quantity), "A quantity and a price limit are at least 1.");
         }
 
+        if (item.Value.Length == 0)
+        {
+            throw new ArgumentException("A purchase names its item.", nameof(item));
+        }
+
         Npc = npc;
         Item = item;
         Quantity = quantity;

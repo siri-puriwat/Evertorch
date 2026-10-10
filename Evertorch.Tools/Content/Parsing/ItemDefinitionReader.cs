@@ -138,13 +138,23 @@ internal static class ItemDefinitionReader
     // and the ceiling keeps a stack's price within the coin cap.
     private static ItemMarket? ReadMarket(YamlFieldReader market, int sellPrice, int stackLimit)
     {
-        int highest = ContentLimits.MaxCurrency / stackLimit;
         int basePrice = market.RequiredInt("basePrice", 1, ContentLimits.MaxPrice);
         int lowest = MarketPricing.DefaultFloor(sellPrice);
         int floor = market.Has("floor") ? market.RequiredInt("floor", 1, ContentLimits.MaxPrice) : lowest;
-        int ceiling = market.Has("ceiling")
-            ? market.RequiredInt("ceiling", 1, ContentLimits.MaxPrice)
-            : MarketPricing.DefaultCeiling(basePrice, stackLimit);
+        int ceiling = market.Has("ceiling") ? market.RequiredInt("ceiling", 1, ContentLimits.MaxPrice) : 0;
+
+        // A stack limit out of its range was reported where it was read, and no ceiling can be checked without one.
+        if (stackLimit < 1)
+        {
+            return null;
+        }
+
+        int highest = ContentLimits.MaxCurrency / stackLimit;
+        if (!market.Has("ceiling"))
+        {
+            ceiling = MarketPricing.DefaultCeiling(basePrice, stackLimit);
+        }
+
         bool isValid = true;
         if (floor < lowest)
         {

@@ -1,3 +1,4 @@
+using System;
 using Evertorch.Game;
 
 namespace Evertorch.Protocol
@@ -16,6 +17,11 @@ public readonly struct MarketListingEntry
         uint coinsWaiting,
         uint secondsLeft)
     {
+        if (listing <= 0 || item.Value.Length == 0 || (unitsLeft == 0 && unitsSold == 0))
+        {
+            throw new ArgumentException("A listing is at least 1, names its item, and has units left or sold.");
+        }
+
         Listing = listing;
         Item = item;
         UnitsLeft = unitsLeft;
