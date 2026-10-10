@@ -2859,13 +2859,16 @@ WHERE character_skills.level <> EXCLUDED.level",
         }
     }
 
+    // FOR NO KEY UPDATE, which excludes every other commit of the character as FOR UPDATE does, but not the key share a
+    // foreign key takes: a purchase that holds an item's price row and writes a sale naming its seller must not wait on
+    // a seller who holds its own row and waits for that price row to collect (Persistence §5).
     private static async Task<CharacterRow> LockCharacterAsync(
         EvertorchDbContext context,
         long characterId,
         CancellationToken cancellationToken)
     {
         List<CharacterRow> locked = await context.Characters
-            .FromSql($"SELECT * FROM characters WHERE id = {characterId} FOR UPDATE")
+            .FromSql($"SELECT * FROM characters WHERE id = {characterId} FOR NO KEY UPDATE")
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
         return locked.Count == 1
