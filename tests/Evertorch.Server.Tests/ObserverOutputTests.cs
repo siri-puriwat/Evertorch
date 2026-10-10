@@ -20,7 +20,8 @@ namespace Evertorch.Server.Tests
 ///     Milestone 12 adds the party: another's party, its health, and its lines reach an observer outside it as nothing.
 ///     Milestone 13 adds the dungeon: another's numbing and award reach an observer as nothing, a slam on another as its
 ///     result, and a boss's fall everyone on its map. Milestone 14 adds the trade and storage: another's trade, its
-///     settled bags, and its deposits and withdrawals reach an observer beside it as nothing.
+///     settled bags, and its deposits and withdrawals reach an observer beside it as nothing. Milestone 15 adds the
+///     market board: another's reads, listings, purchases, sales, and collections reach an observer beside it as nothing.
 /// </summary>
 [TestFixture]
 public sealed class ObserverOutputTests
@@ -33,6 +34,7 @@ public sealed class ObserverOutputTests
     private const string Sword = "item.weapon.training_sword";
     private const string Potion = "item.consumable.minor_health";
     private const string Gel = "item.material.slime_gel";
+    private const string Dust = "item.material.gloom_dust";
     private const string Quartermaster = "npc.quartermaster";
     private const string GateWarden = "npc.gate_warden";
     private const string Hunt = "quest.crawler_hunt";
@@ -118,6 +120,24 @@ public sealed class ObserverOutputTests
         return server.Transport.SentTo(connection)
             .Where(message => message.Opcode == opcode)
             .Select(message => read(message.Payload)!);
+    }
+
+    private static ConnectionId EnterBesideTheBroker(
+        TestServer server,
+        long character,
+        long coins,
+        Action<InMemoryGameStore>? prepare)
+    {
+        ConnectionId player = server.Connect();
+        server.SignInWithCharacter(player, character);
+        prepare?.Invoke(server.Store);
+        server.Store.Edit(character, coins: coins);
+        server.SendEnterWorld(player, character);
+        server.TickUntil(() => server.SessionOf(player).State == SessionState.InWorld);
+        NpcEntity broker = server.NpcOf("npc.broker");
+        server.Place(player, broker.Position.X - 2f, broker.Position.Z + character - 2);
+        server.Tick(2);
+        return player;
     }
 
     // The build (Milestone 9 verification): the actor raises AGI and VIT, learns Strike, is refused a raise past its
@@ -309,6 +329,61 @@ public sealed class ObserverOutputTests
                 .And.None.EqualTo(MessageOpcode.TargetChanged),
             "never another's sheet, skills, or selection");
         Assert.That(healed.CurrentHealth, Is.GreaterThanOrEqualTo(50), "Mend 1 on the observer");
+    }
+
+    // The market board (Milestone 15 verification): the actor reads the board, lists ten Gloom Dust, and collects its
+    // listing after a third player bought four, while the observer stands beside both throughout. The actor hears its
+    // board, its listings, its bag, and its notices, the buyer its purchase and its board; the observer hears what
+    // anyone near sees, and nothing more.
+    [Test]
+    public void AnotherPlayersMarketCommands_ReachAnObserverOnlyAsWhatAnyoneNearSees()
+    {
+        var server = new TestServer(withNpcs: true);
+        ConnectionId actor = EnterBesideTheBroker(server, Actor, 100, store => store.GiveItems(Actor, Dust, 1, 10, 1));
+        ConnectionId observer = EnterBesideTheBroker(server, Observer, 0, null);
+        ConnectionId buyer = EnterBesideTheBroker(server, 3, 500, null);
+        EntityId broker = server.NpcOf("npc.broker").Id;
+        server.Tick();
+        server.Transport.ClearSent();
+
+        server.SendMarketOpen(actor, broker, 1);
+        server.Tick(3);
+        server.SendMarketList(actor, broker, RowOf(server, actor, Dust), 10, 2);
+        Settle(server, actor);
+        server.Tick(3);
+        server.SendMarketBuy(buyer, broker, Dust, 4, 28, 1);
+        Settle(server, buyer);
+        server.Tick(3);
+        long listing = Read(
+                server,
+                actor,
+                MessageOpcode.MarketEvent,
+                payload => MarketEvent.TryRead(payload, out MarketEvent? read) ? read : null)
+            .First()
+            .Listing;
+        server.SendMarketCollect(actor, broker, listing, 3);
+        Settle(server, actor);
+        server.Tick(3);
+
+        MessageOpcode[] actorHeard = server.Transport.SentTo(actor).Select(message => message.Opcode).ToArray();
+        MessageOpcode[] buyerHeard = server.Transport.SentTo(buyer).Select(message => message.Opcode).ToArray();
+        MessageOpcode[] observerHeard = server.Transport.SentTo(observer).Select(message => message.Opcode).ToArray();
+        Assert.That(
+            actorHeard,
+            Is.SupersetOf(
+                new[]
+                {
+                    MessageOpcode.MarketBoard, MessageOpcode.MarketMine, MessageOpcode.MarketEvent,
+                    MessageOpcode.InventoryChanged
+                }),
+            "the actor was told of its board, its listing, its sale, and its collection");
+        Assert.That(
+            buyerHeard,
+            Is.SupersetOf(new[] { MessageOpcode.MarketBoard, MessageOpcode.MarketMine, MessageOpcode.InventoryChanged })
+                .And.No.Member(MessageOpcode.MarketEvent),
+            "the buyer heard its purchase, never the sale's notice");
+        Assert.That(server.SessionOf(actor).Character!.Inventory.Coins, Is.EqualTo(200L), "the fee, then 102 net");
+        Assert.That(observerHeard.Distinct(), Is.SubsetOf(WhatAnyoneNearSees));
     }
 
     [Test]

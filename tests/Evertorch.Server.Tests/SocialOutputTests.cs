@@ -11,7 +11,8 @@ namespace Evertorch.Server.Tests
 ///     roster, status, events, and lines only its members. Tester7 and Tester8 stand together on the training ground;
 ///     Tester9 is on the field, out of sight. Milestone 14 adds a trade's request, sides, and end only to its two
 ///     traders, beside a third player who hears none of it, and storage only to the character at the Storekeeper, not
-///     to another character of its account in the world.
+///     to another character of its account in the world. Milestone 15 adds the board and the listings only to their
+///     reader and a sale's notice only to its seller, never to another character of its account or to the buyer.
 /// </summary>
 [TestFixture]
 public sealed class SocialOutputTests
@@ -33,6 +34,11 @@ public sealed class SocialOutputTests
     private static readonly MessageOpcode[] StorageOpcodes =
     {
         MessageOpcode.StorageSnapshot, MessageOpcode.StorageChanged, MessageOpcode.InventoryChanged
+    };
+
+    private static readonly MessageOpcode[] MarketOpcodes =
+    {
+        MessageOpcode.MarketBoard, MessageOpcode.MarketMine, MessageOpcode.MarketEvent, MessageOpcode.InventoryChanged
     };
 
     private static (PartyRig Rig, ConnectionId Seven, ConnectionId Eight, ConnectionId Nine) Three()
@@ -142,6 +148,65 @@ public sealed class SocialOutputTests
             Is.SupersetOf(StorageOpcodes),
             "the depositor heard its storage and its bag");
         Assert.That(server.Transport.ControlOpcodesSentTo(eleven).Intersect(StorageOpcodes), Is.Empty);
+    }
+
+    // Tester1 lists at the Broker and Tester2, of another account, buys from it, while Tester11, of Tester1's account,
+    // stands beside them: the board and the listings reach only their reader, and the sale's notice only its seller.
+    [Test]
+    public void TheBoard_ReachesOnlyItsReader_AndASale_OnlyItsSeller_NotAnotherOfItsAccount()
+    {
+        var server = new TestServer(withNpcs: true);
+        ConnectionId one = server.Connect();
+        server.SignInWithCharacter(one, 1);
+        server.Store.GiveItems(1, "item.material.gloom_dust", 1, 10, 0);
+        server.Store.Edit(1, coins: 100);
+        server.SendEnterWorld(one, 1);
+        server.TickUntil(() => server.SessionOf(one).State == SessionState.InWorld);
+        ConnectionId eleven = server.Connect();
+        server.SignIn(eleven, $"{TestServer.DevelopmentToken}1");
+        server.TickUntil(() => server.SessionOf(eleven).Characters != null);
+        server.Store.NextCharacterId = 11;
+        server.SendCreateCharacter(eleven, "Tester11");
+        server.TickUntil(() => server.SessionOf(eleven).Characters!.Any(owned => owned.Id == 11));
+        server.SendEnterWorld(eleven, 11);
+        server.TickUntil(() => server.SessionOf(eleven).State == SessionState.InWorld);
+        ConnectionId two = server.Connect();
+        server.SignInWithCharacter(two, 2);
+        server.Store.Edit(2, coins: 500);
+        server.SendEnterWorld(two, 2);
+        server.TickUntil(() => server.SessionOf(two).State == SessionState.InWorld);
+        NpcEntity broker = server.NpcOf("npc.broker");
+        server.Place(one, broker.Position.X - 2f, broker.Position.Z);
+        server.Place(eleven, broker.Position.X - 2f, broker.Position.Z + 1f);
+        server.Place(two, broker.Position.X - 2f, broker.Position.Z - 1f);
+        server.Tick(2);
+        server.Transport.ClearSent();
+
+        server.SendMarketOpen(one, broker.Id, 1);
+        server.Tick(3);
+        server.SendMarketList(
+            one,
+            broker.Id,
+            server.SessionOf(one).Character!.Inventory.Rows.Single().InventoryItem,
+            10,
+            2);
+        server.Tick();
+        server.TickUntil(() => server.SessionOf(one).Character!.Operation == null);
+        server.SendMarketBuy(two, broker.Id, "item.material.gloom_dust", 4, 28, 1);
+        server.Tick();
+        server.TickUntil(() => server.SessionOf(two).Character!.Operation == null);
+        server.Tick(3);
+
+        Assert.That(
+            server.Transport.ControlOpcodesSentTo(one),
+            Is.SupersetOf(MarketOpcodes),
+            "the seller heard its board, its listings, its bag, and its sale");
+        Assert.That(
+            server.Transport.ControlOpcodesSentTo(two),
+            Is.SupersetOf(new[] { MessageOpcode.MarketBoard, MessageOpcode.MarketMine, MessageOpcode.InventoryChanged })
+                .And.No.Member(MessageOpcode.MarketEvent),
+            "the buyer heard its purchase and the board, never the sale");
+        Assert.That(server.Transport.ControlOpcodesSentTo(eleven).Intersect(MarketOpcodes), Is.Empty);
     }
 
     [Test]
