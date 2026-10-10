@@ -577,6 +577,150 @@ public sealed class HostileSocketTests
         AssertNoSecretIn(lines);
     }
 
+    // Milestone 15's commands from SecretAnna, beside SecretBob of another account, both names words no log may repeat:
+    // at the Broker, a listing of Bobby's row, of more than held, and of gel the board does not take, a purchase of two
+    // swords that stack to one and at a limit past what the coins cover, and a collection of no listing and of Bobby's,
+    // each refused and audited; while trading, every Broker command refused; a burst of reads over the read bucket;
+    // then malformed market commands, a price limit of 0 among them, until the connection is closed.
+    [Test]
+    public void HostileMarketCommands_AreRefusedThrottledAndScored_AndLeaveNoNameInTheLogs()
+    {
+        using var root = new TemporaryDirectory();
+        var logs = new CapturingLoggerProvider();
+        var store = new InMemoryGameStore();
+        using IHost host = StartHost(root, logs, store);
+        int port = host.Services.GetRequiredService<LiteNetLibServerTransport>().LocalPort;
+        ServerContent content = host.Services.GetRequiredService<ServerContent>();
+        var abuse = new AbuseOptions();
+        int violationsToClose = abuse.ViolationThreshold / ViolationScore.Points;
+        byte[][] malformed =
+        {
+            // A purchase at a limit of 0, a collection of listing 0, a listing cut short, and an item that is no ID.
+            new byte[]
+            {
+                0x2B, 0x00, 1, 0, 0, 0, 0, 0, 0, 0, 0x06, 0x00, (byte)'i', (byte)'t', (byte)'e', (byte)'m', (byte)'.',
+                (byte)'a', 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0
+            },
+            new byte[] { 0x2C, 0x00, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0 },
+            new byte[] { 0x2A, 0x00, 0x01 },
+            new byte[]
+            {
+                0x2B, 0x00, 1, 0, 0, 0, 0, 0, 0, 0, 0x06, 0x00, (byte)'I', (byte)'T', (byte)'E', (byte)'M', (byte)'.',
+                (byte)'A', 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0
+            }
+        };
+
+        using var anna = new SocketClient(content, "secret-market-anna", "SecretAnna");
+        using var bobby = new SocketClient(content, "secret-market-bobby", "SecretBob");
+        store.NextCharacterId = 51;
+        anna.AfterCreate = () =>
+        {
+            store.GiveItems(51, "item.material.gloom_dust", 1, 10, 0);
+            store.GiveItems(51, "item.material.slime_gel", 1, 5, 0);
+            store.Edit(51, coins: 50);
+        };
+        anna.EnterWorld(port);
+        store.NextCharacterId = 52;
+        bobby.AfterCreate = () =>
+        {
+            store.GiveItems(52, "item.material.gloom_dust", 1, 2, 0);
+            store.Edit(52, coins: 50);
+        };
+        bobby.EnterWorld(port);
+        var refused = new List<CommandRejectionReason>();
+        anna.World.CommandRejectedReceived += rejection => refused.Add(rejection.Reason);
+        var bobbyHeard = new List<TradeEventKind>();
+        bobby.Connection.TradeEventReceived += message => bobbyHeard.Add(message.Kind);
+        var bobbyNotices = new List<MarketEvent>();
+        bobby.Connection.MarketEventReceived += bobbyNotices.Add;
+        SocketClients.PumpUntil(
+            () => anna.World.Inventory.IsCurrent && bobby.World.Inventory.IsCurrent
+                && anna.World.Remotes.Values.Any(remote => remote.DefinitionId == "npc.broker"),
+            anna,
+            bobby);
+        EntityId broker = anna.World.Remotes.Values.Single(remote => remote.DefinitionId == "npc.broker").Entity;
+        bobby.TalkTo(broker);
+        SocketClients.PumpUntil(() => bobby.NpcWindows.Contains(broker), anna, bobby);
+        bobby.Connection.SendMarketList(broker, bobby.World.Inventory.Rows.Single().InventoryItem, 2);
+        SocketClients.PumpUntil(() => bobbyNotices.Count == 1, anna, bobby);
+        long bobbysListing = bobbyNotices.Single().Listing;
+        anna.TalkTo(broker);
+        SocketClients.PumpUntil(() => anna.NpcWindows.Contains(broker), anna, bobby);
+        long dust = anna.World.Inventory.Rows.Single(row => row.Item.Value == "item.material.gloom_dust").InventoryItem;
+        long gel = anna.World.Inventory.Rows.Single(row => row.Item.Value == "item.material.slime_gel").InventoryItem;
+
+        anna.Connection.SendMarketList(broker, 999999, 1);
+        anna.Connection.SendMarketList(broker, dust, 11);
+        anna.Connection.SendMarketList(broker, gel, 1);
+        anna.Connection.SendMarketBuy(broker, new ItemDefinitionId("item.weapon.iron_sword"), 2, 120);
+        anna.Connection.SendMarketBuy(broker, new ItemDefinitionId("item.material.gloom_dust"), 1, uint.MaxValue);
+        anna.Connection.SendMarketCollect(broker, 999999);
+        SocketClients.PumpUntil(() => refused.Count >= 6, anna, bobby);
+        anna.Connection.SendMarketCollect(broker, bobbysListing);
+        SocketClients.PumpUntil(() => refused.Count >= 7, anna, bobby);
+        var atTheBroker = refused.ToList();
+        anna.PumpFor(TimeSpan.FromMilliseconds(1100));
+
+        anna.Connection.SendTradeRequest("SecretBob");
+        SocketClients.PumpUntil(() => bobbyHeard.Contains(TradeEventKind.Requested), anna, bobby);
+        bobby.Connection.SendTradeReply("SecretAnna", true);
+        SocketClients.PumpUntil(() => bobbyHeard.Contains(TradeEventKind.Opened), anna, bobby);
+        refused.Clear();
+        anna.Connection.SendMarketOpen(broker);
+        anna.Connection.SendMarketList(broker, dust, 1);
+        anna.Connection.SendMarketBuy(broker, new ItemDefinitionId("item.material.gloom_dust"), 1, 28);
+        anna.Connection.SendMarketCollect(broker, bobbysListing);
+        SocketClients.PumpUntil(() => refused.Count >= 4, anna, bobby);
+        var trading = refused.ToList();
+        anna.Connection.SendTradeCancel();
+        SocketClients.PumpUntil(() => bobbyHeard.Contains(TradeEventKind.Cancelled), anna, bobby);
+        anna.PumpFor(TimeSpan.FromMilliseconds(1100));
+
+        for (int index = 0; index <= abuse.ReadCommandBurst; index++)
+        {
+            anna.Connection.SendMarketOpen(broker);
+        }
+
+        anna.PumpFor(TimeSpan.FromMilliseconds(1100));
+        for (int index = 0; index < 2 * violationsToClose; index++)
+        {
+            anna.Link.Send(ProtocolChannel.Control, MessageDelivery.ReliableOrdered,
+                malformed[index % malformed.Length]);
+        }
+
+        bool isClosed = anna.PumpUntil(() => anna.Connection.State == ClientConnectionState.Disconnected);
+        host.StopAsync().GetAwaiter().GetResult();
+
+        IReadOnlyList<string> lines = logs.Lines;
+        Assert.That(
+            atTheBroker,
+            Is.EqualTo(
+                new[]
+                {
+                    CommandRejectionReason.InvalidTarget, CommandRejectionReason.NotAllowedNow,
+                    CommandRejectionReason.NotAllowedNow, CommandRejectionReason.NotAllowedNow,
+                    CommandRejectionReason.NotEnoughCoins, CommandRejectionReason.InvalidTarget,
+                    CommandRejectionReason.InvalidTarget
+                }),
+            "no row of hers; more than held; gel; two swords; a limit past her coins; no listing; Bobby's listing");
+        Assert.That(
+            trading,
+            Is.EqualTo(Enumerable.Repeat(CommandRejectionReason.NotAllowedNow, 4)),
+            "a read, a listing, a purchase, and a collection while trading");
+        Assert.That(isClosed, Is.True, "the connection was closed");
+        Assert.That(anna.Connection.Notice?.Reason, Is.EqualTo(DisconnectReason.Kicked));
+        Assert.That(
+            store.Stored(51).Items.Select(item => item.Quantity).OrderBy(quantity => quantity),
+            Is.EqualTo(new[] { 5, 10 }),
+            "Anna's gel and dust never moved");
+        Assert.That((store.Stored(51).Coins, store.Stored(52).Coins), Is.EqualTo((50L, 49L)), "only Bobby's fee paid");
+        Assert.That(lines.Any(line => line.Contains("had MarketList refused")), Is.True, "the refused listing audited");
+        Assert.That(lines.Any(line => line.Contains("had MarketCollect refused")), Is.True);
+        Assert.That(lines.Any(line => line.Contains("sent MarketOpen over the session_read limit")), Is.True);
+        Assert.That(lines.Any(line => line.Contains("ViolationDisconnect")), Is.True);
+        AssertNoSecretIn(lines);
+    }
+
     // Milestone 14's commands from SecretAnna, beside SecretBob of another account, both names words no log may repeat:
     // a trade's commands while no trade is open, a request to no one, and a reply to no request, each refused and
     // audited; then, in an open trade, Bobby's row offered, more than Anna holds, an attack, a skill, a pickup, an

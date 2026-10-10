@@ -272,6 +272,79 @@ public sealed class MarketTests
         AssertNotScored(server, player);
     }
 
+    private static void SendEveryCommand(TestServer server, ConnectionId player, EntityId broker, TradeRig rig)
+    {
+        server.SendMarketOpen(player, broker, rig.Next(player));
+        server.SendMarketList(player, broker, RowOf(server, player, Dust), 1, rig.Next(player));
+        server.SendMarketBuy(player, broker, Dust, 1, 28, rig.Next(player));
+        server.SendMarketCollect(player, broker, 1, rig.Next(player));
+    }
+
+    // Two accounts in league sell one unit back and forth to pump the price: only the first sell-out in a period raises
+    // it, so a day of trying gains one step, about a tenth (tracker §8, a known limit).
+    [Test]
+    public void APumpAttempt_RaisesThePriceOnlyOnceAPeriod()
+    {
+        var server = new TestServer(withNpcs: true);
+        ConnectionId seller = Enter(server, Seller, 1000, Holding(Seller, Dust, 10));
+        ConnectionId accomplice = Enter(server, Buyer, 1000);
+        EntityId broker = BrokerOf(server);
+        uint sequence = 0;
+        var prices = new List<uint>();
+
+        for (int round = 0; round < 4; round++)
+        {
+            if (round == 3)
+            {
+                server.Time.UtcNow += TimeSpan.FromDays(1);
+            }
+
+            server.SendMarketList(seller, broker, RowOf(server, seller, Dust), 1, ++sequence);
+            Assert.That(Answer(server, seller), Is.EqualTo(CommandRejectionReason.None), $"round {round}: listed");
+            server.Transport.ClearSent();
+            server.SendMarketBuy(accomplice, broker, Dust, 1, 100, ++sequence);
+            Assert.That(Answer(server, accomplice), Is.EqualTo(CommandRejectionReason.None), $"round {round}: bought");
+            prices.Add(Boards(server, accomplice).Last().Entries.Single().Price);
+        }
+
+        Assert.That(prices, Is.EqualTo(new[] { 30u, 30u, 30u, 33u }), "one rise in the first day, one the next");
+    }
+
+    // Another character of the seller's account sees none of its stock and cannot buy it: a buyer never takes its own
+    // account's units (Gameplay Systems §11.5).
+    [Test]
+    public void AnotherCharacterOfTheSellersAccount_SeesNoStock_AndCannotBuyIt()
+    {
+        (TestServer server, _, _) = Listed();
+        ConnectionId sibling = server.Connect();
+        server.SignIn(sibling, $"{TestServer.DevelopmentToken}{Seller}");
+        server.TickUntil(() => server.SessionOf(sibling).Characters != null);
+        server.Store.NextCharacterId = 11;
+        server.SendCreateCharacter(sibling, "Tester11");
+        server.TickUntil(() => server.SessionOf(sibling).Characters!.Any(owned => owned.Id == 11));
+        server.Store.Edit(11, coins: 500);
+        server.SendEnterWorld(sibling, 11);
+        server.TickUntil(() => server.SessionOf(sibling).State == SessionState.InWorld);
+        NpcEntity broker = server.NpcOf(Broker);
+        server.Place(sibling, broker.Position.X - 2f, broker.Position.Z + 1f);
+        server.Tick(2);
+        server.Transport.ClearSent();
+
+        server.SendMarketOpen(sibling, broker.Id, 1);
+        CommandRejectionReason read = Answer(server, sibling);
+        server.SendMarketBuy(sibling, broker.Id, Dust, 1, 28, 2);
+        CommandRejectionReason bought = Answer(server, sibling);
+
+        Assert.That(read, Is.EqualTo(CommandRejectionReason.None));
+        Assert.That(
+            Boards(server, sibling).First().Entries.Single(entry => entry.Item.Value == Dust).Stock,
+            Is.Zero,
+            "its account's ten are not stock it may buy");
+        Assert.That(bought, Is.EqualTo(CommandRejectionReason.InvalidTarget));
+        Assert.That(server.Store.Stored(11).Coins, Is.EqualTo(500L), "paid nothing");
+        AssertNotScored(server, sibling);
+    }
+
     [Test]
     public void Buy_OfTheLastUnits_RaisesThePrice_AndASellerAwayHearsNothing()
     {
@@ -445,6 +518,45 @@ public sealed class MarketTests
         Assert.That(mismatch["Listing"], Is.EqualTo(retired));
         Assert.That(Notices(server, seller).Concat(Notices(server, other)), Is.Empty);
         AssertNotScored(server, seller, other);
+    }
+
+    // While trading or dead, a read and each of the three commands are refused with 3, and nothing reaches the store
+    // (Network Protocol §11).
+    [Test]
+    public void Commands_WhileTradingOrDead_AreThree()
+    {
+        var rig = new TradeRig(new TestServer(withNpcs: true));
+        ConnectionId seller = rig.Enter(Seller, store =>
+        {
+            store.GiveItems(Seller, Dust, 1, 10, 5);
+            store.Edit(Seller, coins: 100);
+        });
+        ConnectionId partner = rig.Enter(Buyer, store => store.Edit(Buyer, coins: 500));
+        TestServer server = rig.Server;
+        NpcEntity broker = server.NpcOf(Broker);
+        server.Place(seller, broker.Position.X - 2f, broker.Position.Z);
+        server.Place(partner, broker.Position.X - 2f, broker.Position.Z + 1f);
+        server.Tick(2);
+        rig.Open(seller, partner, "Tester1", "Tester2");
+        server.Transport.ClearSent();
+
+        SendEveryCommand(server, seller, broker.Id, rig);
+        server.Tick(2);
+        CommandRejectionReason[] trading = Rejections(server, seller).Select(rejected => rejected.Reason).ToArray();
+        rig.Cancel(seller);
+        server.Combat.Kill(server.World.Maps.Single(), server.PlayerOf(seller), null, server.CurrentTick);
+        server.Transport.ClearSent();
+        SendEveryCommand(server, seller, broker.Id, rig);
+        server.Tick(2);
+        CommandRejectionReason[] dead = Rejections(server, seller).Select(rejected => rejected.Reason).ToArray();
+
+        Assert.That(trading, Is.EqualTo(Enumerable.Repeat(CommandRejectionReason.NotAllowedNow, 4)), "while trading");
+        Assert.That(dead, Is.EqualTo(Enumerable.Repeat(CommandRejectionReason.NotAllowedNow, 4)), "while dead");
+        Assert.That(
+            (server.Store.MarketCommits.Count, server.Store.MarketReads.Count),
+            Is.EqualTo((0, 0)),
+            "nothing reached the store");
+        AssertNotScored(server, seller);
     }
 
     [Test]
