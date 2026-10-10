@@ -1383,6 +1383,220 @@ WHERE character_quests.state = {CharacterQuestRow.ActiveState} AND character_que
             cancellationToken);
     }
 
+    public Task<StoredMarket> ReadMarketAsync(MarketRead read, CancellationToken cancellationToken)
+    {
+        return RunAsync(
+            async context =>
+            {
+                // One snapshot: the prices, the stock, and the listings as of one moment, none locked or written.
+                await using (IDbContextTransaction transaction = await context.Database
+                                 .BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken)
+                                 .ConfigureAwait(false))
+                {
+                    long account = await context.Characters
+                        .AsNoTracking()
+                        .Where(row => row.Id == read.CharacterId)
+                        .Select(row => row.AccountId)
+                        .SingleAsync(cancellationToken)
+                        .ConfigureAwait(false);
+                    string[] items = read.Items.Keys.ToArray();
+                    List<MarketPriceRow> prices = await context.MarketPrices
+                        .AsNoTracking()
+                        .Where(row => items.Contains(row.ItemDefinitionId))
+                        .ToListAsync(cancellationToken)
+                        .ConfigureAwait(false);
+                    var stock = await context.MarketListings
+                        .AsNoTracking()
+                        .Where(row => items.Contains(row.ItemDefinitionId)
+                            && row.UnitsLeft > 0
+                            && row.ExpiresAt > read.At
+                            && row.SellerAccountId != account)
+                        .GroupBy(row => row.ItemDefinitionId)
+                        .Select(group => new { Item = group.Key, Units = group.Sum(row => (long)row.UnitsLeft) })
+                        .ToListAsync(cancellationToken)
+                        .ConfigureAwait(false);
+                    List<StoredMarketListing> listings = await context.MarketListings
+                        .AsNoTracking()
+                        .Where(row => row.SellerCharacterId == read.CharacterId)
+                        .OrderBy(row => row.Id)
+                        .Select(row => new StoredMarketListing(
+                            row.Id,
+                            row.ItemDefinitionId,
+                            row.UnitsListed,
+                            row.UnitsLeft,
+                            row.GrossCoins,
+                            row.ListedAt,
+                            row.ExpiresAt))
+                        .ToListAsync(cancellationToken)
+                        .ConfigureAwait(false);
+                    await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+                    var entries = new List<StoredMarketEntry>(items.Length);
+                    foreach (string item in items.OrderBy(item => item, StringComparer.Ordinal))
+                    {
+                        ItemMarket terms = read.Items[item];
+                        MarketPriceRow? price = prices.SingleOrDefault(row => row.ItemDefinitionId == item);
+                        MarketPriceState state = price == null
+                            ? MarketPriceState.Start(terms.BasePrice, read.At)
+                            : MarketPricing.Settle(StateOf(price), read.At, terms.Floor, read.PricePeriodMs);
+                        entries.Add(new StoredMarketEntry(
+                            item,
+                            state.Price,
+                            stock.SingleOrDefault(group => group.Item == item)?.Units ?? 0));
+                    }
+
+                    return new StoredMarket(entries, listings);
+                }
+            },
+            cancellationToken);
+    }
+
+    public Task<MarketResult> CommitMarketBuyAsync(MarketBuyCommit buy, CancellationToken cancellationToken)
+    {
+        return RunAsync(
+            async context =>
+            {
+                await using (IDbContextTransaction transaction =
+                             await context.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false))
+                {
+                    CharacterRow character = await LockCharacterAsync(context, buy.CharacterId, cancellationToken)
+                        .ConfigureAwait(false);
+                    MarketResult? earlier = await FindMarketAsync(context, buy.OperationId, character.Id,
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                    if (earlier != null)
+                    {
+                        return earlier;
+                    }
+
+                    string item = buy.ItemDefinitionId;
+                    MarketPriceRow price = await LockNewPriceAsync(context, item, buy.Terms.BasePrice, buy.At,
+                            cancellationToken)
+                        .ConfigureAwait(false);
+
+                    // Oldest first, and never the buyer's own account's (Gameplay Systems §11.5).
+                    List<MarketListingRow> stock = await context.MarketListings
+                        .FromSql(
+                            $"SELECT * FROM market_listings WHERE item_definition_id = {item} AND units_left > 0 AND expires_at > {buy.At} AND seller_account_id <> {character.AccountId} ORDER BY listed_at, id FOR UPDATE")
+                        .ToListAsync(cancellationToken)
+                        .ConfigureAwait(false);
+                    MarketPriceState settled = MarketPricing.Settle(
+                        StateOf(price),
+                        buy.At,
+                        buy.Terms.Floor,
+                        buy.PricePeriodMs);
+                    long available = stock.Sum(listing => (long)listing.UnitsLeft);
+                    if (settled.Price > buy.PriceLimit || available < buy.Quantity)
+                    {
+                        return Unmarketed(InventoryStatus.BoardChanged, character, item);
+                    }
+
+                    long total = (long)settled.Price * buy.Quantity;
+                    if (character.Currency < total)
+                    {
+                        return Unmarketed(InventoryStatus.NotEnoughCoins, character, item);
+                    }
+
+                    List<InventoryItemRow> rows = await context.InventoryItems
+                        .Where(row => row.CharacterId == buy.CharacterId)
+                        .ToListAsync(cancellationToken)
+                        .ConfigureAwait(false);
+                    InventoryItemRow? bag = buy.StackLimit == 1
+                        ? null
+                        : rows.FirstOrDefault(row => row.ItemDefinitionId == item);
+                    int held = bag?.Quantity ?? 0;
+                    if (held > buy.StackLimit - buy.Quantity || (bag == null && rows.Count >= buy.MaxRows))
+                    {
+                        return Unmarketed(InventoryStatus.InventoryFull, character, item);
+                    }
+
+                    int remaining = buy.Quantity;
+                    foreach (MarketListingRow listing in stock)
+                    {
+                        if (remaining == 0)
+                        {
+                            break;
+                        }
+
+                        int units = Math.Min(remaining, listing.UnitsLeft);
+                        long gross = (long)units * settled.Price;
+                        listing.UnitsLeft -= units;
+                        listing.GrossCoins += gross;
+                        listing.Version++;
+                        context.MarketSales.Add(new MarketSaleRow
+                        {
+                            OperationId = buy.OperationId,
+                            ListingId = listing.Id,
+                            SellerCharacterId = listing.SellerCharacterId,
+                            BuyerCharacterId = buy.CharacterId,
+                            ItemDefinitionId = item,
+                            Units = units,
+                            GrossCoins = gross
+                        });
+                        remaining -= units;
+                    }
+
+                    if (bag == null)
+                    {
+                        // Saved at once, so the ledger row can name it.
+                        bag = new InventoryItemRow
+                        {
+                            CharacterId = buy.CharacterId,
+                            ItemDefinitionId = item,
+                            Quantity = buy.Quantity
+                        };
+                        context.InventoryItems.Add(bag);
+                        await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+                    }
+                    else
+                    {
+                        bag.Quantity += buy.Quantity;
+                        bag.Version++;
+                    }
+
+                    character.Currency -= total;
+
+                    // The buyer took the last unit it could: the one rise a period (Gameplay Systems §11.5).
+                    MarketPriceState after = available == buy.Quantity
+                        ? MarketPricing.Rise(settled, buy.At, buy.Terms.Ceiling, buy.PricePeriodMs)
+                        : settled;
+                    if (stock.Any(listing => listing.UnitsLeft == 0))
+                    {
+                        DateTime? others = await LatestStockAsync(
+                                context,
+                                item,
+                                stock.Select(listing => listing.Id).ToArray(),
+                                cancellationToken)
+                            .ConfigureAwait(false);
+                        DateTime? locked = stock.Where(listing => listing.UnitsLeft > 0)
+                            .Select(listing => (DateTime?)listing.ExpiresAt)
+                            .Max();
+                        after = after.WithStockUntil(Latest(others, locked));
+                    }
+
+                    Apply(price, after);
+                    return await CommitMarketAsync(
+                            context,
+                            transaction,
+                            character,
+                            new LedgerRow
+                            {
+                                OperationId = buy.OperationId,
+                                ActorCharacterId = buy.CharacterId,
+                                OperationType = LedgerRow.MarketBuyOperation,
+                                ItemInstanceId = bag.Id,
+                                ItemDefinitionId = item,
+                                QuantityDelta = buy.Quantity,
+                                CurrencyDelta = -total,
+                                MetadataJson = JsonSerializer.Serialize(new { price = settled.Price }),
+                                CreatedAt = buy.At
+                            },
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                }
+            },
+            cancellationToken);
+    }
+
     public Task<MarketResult> CommitMarketCollectAsync(
         MarketCollectCommit collect,
         CancellationToken cancellationToken)
@@ -2844,6 +3058,11 @@ WHERE character_skills.level <> EXCLUDED.level",
     private static DateTime? Later(DateTime? first, DateTime second)
     {
         return first.HasValue && first.Value > second ? first : second;
+    }
+
+    private static DateTime? Latest(DateTime? first, DateTime? second)
+    {
+        return second.HasValue ? Later(first, second.Value) : first;
     }
 
     private static MarketPriceState StateOf(MarketPriceRow price)

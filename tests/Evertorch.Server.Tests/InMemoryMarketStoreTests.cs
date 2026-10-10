@@ -16,13 +16,20 @@ namespace Evertorch.Server.Tests
 [TestFixture]
 public sealed class InMemoryMarketStoreTests
 {
+    // A store of its own for each test, so no test meets another's prices.
+    [SetUp]
+    public void StartStore()
+    {
+        m_store = new InMemoryGameStore();
+    }
+
     private const string Dust = "item.material.gloom_dust";
     private const long Period = 86_400_000;
 
     private static readonly DateTime Now = new(2026, 10, 10, 12, 0, 0, DateTimeKind.Utc);
     private static readonly ItemMarket DustTerms = new(28, 14, 280);
 
-    private readonly InMemoryGameStore m_store = new();
+    private InMemoryGameStore m_store = null!;
 
     private long NewCharacter(long coins)
     {
@@ -88,6 +95,34 @@ public sealed class InMemoryMarketStoreTests
             .GetResult();
     }
 
+    private MarketResult Buy(long character, int quantity, int priceLimit, DateTime? at = null)
+    {
+        return m_store.CommitMarketBuyAsync(
+                new MarketBuyCommit(
+                    Guid.NewGuid(),
+                    character,
+                    Dust,
+                    quantity,
+                    priceLimit,
+                    999,
+                    100,
+                    DustTerms,
+                    Period,
+                    at ?? Now),
+                CancellationToken.None)
+            .GetAwaiter()
+            .GetResult();
+    }
+
+    private StoredMarket Read(long character, DateTime at)
+    {
+        return m_store.ReadMarketAsync(
+                new MarketRead(character, new Dictionary<string, ItemMarket> { [Dust] = DustTerms }, Period, at),
+                CancellationToken.None)
+            .GetAwaiter()
+            .GetResult();
+    }
+
     [Test]
     public void AListing_WhoseAnswerIsLost_IsFound_AndItsCollectionPaysTheNet()
     {
@@ -115,6 +150,27 @@ public sealed class InMemoryMarketStoreTests
     }
 
     [Test]
+    public void APurchase_TakesTheOldestUnitsOfOtherAccounts_AndTheLastOneRaisesThePrice()
+    {
+        long first = NewCharacter(100);
+        long second = NewCharacter(100);
+        long buyer = NewCharacter(1000);
+        long older = List(first, GiveDust(first, 3), 3).ListingId;
+        long newer = List(second, GiveDust(second, 3), 3, at: Now.AddHours(1)).ListingId;
+
+        MarketResult bought = Buy(buyer, 6, 28, Now.AddHours(2));
+        StoredMarket after = Read(buyer, Now.AddHours(2));
+
+        Assert.That(
+            bought.Fills.Select(fill => (fill.ListingId, fill.Units, fill.Gross)),
+            Is.EqualTo(new[] { (older, 3, 84L), (newer, 3, 84L) }));
+        Assert.That((bought.Coins, bought.Rows.Single().Quantity), Is.EqualTo((832L, 6)));
+        Assert.That((after.Entries.Single().Price, after.Entries.Single().Stock), Is.EqualTo((30, 0L)),
+            "the buyer took the last units it could");
+        Assert.That(Buy(buyer, 1, 30, Now.AddHours(3)).Status, Is.EqualTo(InventoryStatus.BoardChanged), "none left");
+    }
+
+    [Test]
     public void Refusals_ChangeNothing_AndTheFeeFollowsTheSettledPrice()
     {
         long poor = NewCharacter(0);
@@ -130,6 +186,22 @@ public sealed class InMemoryMarketStoreTests
         long seller = NewCharacter(100);
         MarketResult later = List(seller, GiveDust(seller, 100), 100, at: Now.AddDays(2.5));
         Assert.That(later.CoinsMoved, Is.EqualTo(24L), "the busy seller's stock made the price fall twice");
+    }
+
+    [Test]
+    public void TheRead_SettlesPricesWithoutWriting_AndKeepsItsOwnAccountsStockOut()
+    {
+        long seller = NewCharacter(100);
+        long listing = List(seller, GiveDust(seller, 10), 10).ListingId;
+        long buyer = NewCharacter(100);
+
+        StoredMarket later = Read(buyer, Now.AddDays(2.5));
+        StoredMarket own = Read(seller, Now);
+
+        Assert.That((later.Entries.Single().Price, later.Entries.Single().Stock), Is.EqualTo((24, 10L)));
+        Assert.That((own.Entries.Single().Price, own.Entries.Single().Stock), Is.EqualTo((28, 0L)),
+            "the earlier read wrote nothing, and its own stock is not for it");
+        Assert.That(own.Listings.Single().Id, Is.EqualTo(listing));
     }
 }
 }

@@ -21,6 +21,7 @@ public sealed class SchemaTests
     private const string AddCharacterSkills = "20260928181417_AddCharacterSkills";
     private const string AddParties = "20261001131541_AddParties";
     private const string AddBossRewards = "20261002222843_AddBossRewards";
+    private const string AddTradesAndStorage = "20261003172540_AddTradesAndStorage";
 
     private PostgresFixture m_database = null!;
     private Sql m_sql = null!;
@@ -176,6 +177,9 @@ public sealed class SchemaTests
     [TestCase("trade")]
     [TestCase("storage_deposit")]
     [TestCase("storage_withdraw")]
+    [TestCase("market_list")]
+    [TestCase("market_buy")]
+    [TestCase("market_collect")]
     public void Ledger_WithAKnownOperationType_IsStored(string operationType)
     {
         long character = NewCharacter();
@@ -281,6 +285,54 @@ public sealed class SchemaTests
         Assert.That((refused as PostgresException)?.SqlState, Is.EqualTo(CheckViolation), "the prize's row holds");
         Assert.That(afterDown, Is.EqualTo(CheckViolation), "no prize without the type");
         Assert.That(SqlStateOf(plainSql, Sql.LedgerInsert(Guid.NewGuid(), character, "boss_reward")), Is.Null);
+    }
+
+    // AddMarketBoard runs down only while no ledger row is of a type it adds, drops its tables with their rows, and
+    // gives the ledger's trigger function back its old words (Persistence §4, §11).
+    [Test]
+    public void AddMarketBoard_Down_IsRefusedOverAMarketRow_AndOtherwiseDropsItsTables()
+    {
+        using var listed = PostgresFixture.Start();
+        var listedSql = new Sql(listed.ConnectionString);
+        listedSql.Scalar(
+            Sql.LedgerInsert(Guid.NewGuid(), listedSql.InsertCharacter(listedSql.InsertAccount(), "Seller"),
+                "market_list"));
+        using var plain = PostgresFixture.Start();
+        var plainSql = new Sql(plain.ConnectionString);
+        long seller = plainSql.InsertCharacter(plainSql.InsertAccount(), "Plain");
+        plainSql.Scalar(Sql.ListingInsert(seller, "item.material.gloom_dust", 5, 5, 0));
+
+        Exception? refused = null;
+        try
+        {
+            EvertorchDatabase.ApplyMigrationsAsync(listed.ConnectionString, AddTradesAndStorage, CancellationToken.None)
+                .GetAwaiter()
+                .GetResult();
+        }
+        catch (PostgresException exception)
+        {
+            refused = exception;
+        }
+
+        EvertorchDatabase.ApplyMigrationsAsync(plain.ConnectionString, AddTradesAndStorage, CancellationToken.None)
+            .GetAwaiter()
+            .GetResult();
+
+        Assert.That((refused as PostgresException)?.SqlState, Is.EqualTo(CheckViolation), "a market row holds it up");
+        Assert.That(
+            plainSql.Scalar(
+                "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name IN "
+                + "('market_prices', 'market_listings', 'market_sales')"),
+            Is.Zero,
+            "its tables went with it");
+        Assert.That(
+            plainSql.Text("SELECT prosrc FROM pg_proc WHERE proname = 'economy_ledger_reject_change'"),
+            Does.Contain("economy_ledger is append-only"),
+            "the trigger function's old words");
+        Assert.That(
+            listedSql.Scalar("SELECT count(*) FROM economy_ledger WHERE operation_type = 'market_list'"),
+            Is.EqualTo(1),
+            "the refused down kept the row");
     }
 
     // AddParties runs down and up again (Persistence §11): no ledger row refers to a party, so the down migration
@@ -569,6 +621,58 @@ public sealed class SchemaTests
     }
 
     [Test]
+    public void MarketListing_OutsideItsBounds_OrOfNoCharacter_IsRejected()
+    {
+        long seller = NewCharacter();
+        const string dust = "item.material.gloom_dust";
+
+        AssertFailsWith(CheckViolation, Sql.ListingInsert(seller, dust, 0, 0, 0));
+        AssertFailsWith(CheckViolation, Sql.ListingInsert(seller, dust, 5, 6, 0));
+        AssertFailsWith(CheckViolation, Sql.ListingInsert(seller, dust, 5, -1, 0));
+        AssertFailsWith(CheckViolation, Sql.ListingInsert(seller, dust, 5, 5, 1_000_000_001));
+        AssertFailsWith(CheckViolation, Sql.ListingInsert(seller, dust, 5, 5, 0, "now()", "now()"));
+        AssertFailsWith(
+            ForeignKeyViolation,
+            "INSERT INTO market_listings (seller_character_id, seller_account_id, item_definition_id, units_listed, "
+            + $"units_left, gross_coins, listed_at, expires_at, version) VALUES ({long.MaxValue}, "
+            + $"(SELECT account_id FROM characters WHERE id = {seller}), '{dust}', 1, 1, 0, now(), now() + "
+            + "interval '1 day', 0)");
+        Assert.That(m_sql.Scalar(Sql.ListingInsert(seller, dust, 5, 0, 1_000_000_000)), Is.Positive, "sold out");
+    }
+
+    [Test]
+    public void MarketPrice_BelowOneCoin_OrWithNegativeListedTime_IsRejected()
+    {
+        AssertFailsWith(
+            CheckViolation,
+            "INSERT INTO market_prices (item_definition_id, price, listed_ms, settled_at, version) "
+            + "VALUES ('item.material.cheap', 0, 0, now(), 0)");
+        AssertFailsWith(
+            CheckViolation,
+            "INSERT INTO market_prices (item_definition_id, price, listed_ms, settled_at, version) "
+            + "VALUES ('item.material.cheap', 1, -1, now(), 0)");
+    }
+
+    [Test]
+    public void MarketSales_AreAppendOnly_AndKeyedByPurchaseAndListing()
+    {
+        long seller = NewCharacter();
+        long buyer = NewCharacter();
+        long listing = m_sql.Scalar(Sql.ListingInsert(seller, "item.material.gloom_dust", 5, 3, 56));
+        var operation = Guid.NewGuid();
+        m_sql.Execute(Sql.SaleInsert(operation, listing, seller, buyer, 2, 56));
+
+        AssertFailsWith(UniqueViolation, Sql.SaleInsert(operation, listing, seller, buyer, 1, 28));
+        AssertFailsWith(CheckViolation, Sql.SaleInsert(Guid.NewGuid(), listing, seller, buyer, 0, 28));
+        AssertFailsWith(RestrictViolation, $"UPDATE market_sales SET units = 9 WHERE operation_id = '{operation}'");
+        AssertFailsWith(RestrictViolation, $"DELETE FROM market_sales WHERE operation_id = '{operation}'");
+        AssertFailsWith(RestrictViolation, "TRUNCATE market_sales");
+        Assert.That(
+            m_sql.Text($"SELECT units || ' ' || gross_coins FROM market_sales WHERE operation_id = '{operation}'"),
+            Is.EqualTo("2 56"));
+    }
+
+    [Test]
     public void Migrations_AppliedFromZero_LeaveNonePending()
     {
         IReadOnlyList<string> pending =
@@ -582,8 +686,8 @@ public sealed class SchemaTests
                 "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name IN "
                 + "('accounts', 'characters', 'inventory_items', 'equipment', 'economy_ledger', 'character_quests', "
                 + "'session_tokens', 'character_skills', 'parties', 'party_members', 'trades', 'account_storages', "
-                + "'storage_items')"),
-            Is.EqualTo(13));
+                + "'storage_items', 'market_prices', 'market_listings', 'market_sales')"),
+            Is.EqualTo(16));
     }
 
     [Test]

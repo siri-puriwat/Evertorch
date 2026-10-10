@@ -146,5 +146,28 @@ internal sealed class Sql
             + $"VALUES ('{operation}', {actorText}, '{operationType}', 'item.material.slime_gel', 1, 0, now()) "
             + "RETURNING id";
     }
+
+    // A listing of the character's account, listed now and selling for three days unless the test says otherwise.
+    public static string ListingInsert(
+        long character,
+        string item,
+        int listed,
+        int left,
+        long gross,
+        string listedAt = "now()",
+        string expiresAt = "now() + interval '3 days'")
+    {
+        return "INSERT INTO market_listings (seller_character_id, seller_account_id, item_definition_id, "
+            + "units_listed, units_left, gross_coins, listed_at, expires_at, version) "
+            + $"SELECT {character}, account_id, '{item}', {listed}, {left}, {gross}, {listedAt}, {expiresAt}, 0 "
+            + $"FROM characters WHERE id = {character} RETURNING id";
+    }
+
+    public static string SaleInsert(Guid operation, long listing, long seller, long buyer, int units, long gross)
+    {
+        return "INSERT INTO market_sales (operation_id, listing_id, seller_character_id, buyer_character_id, "
+            + "item_definition_id, units, gross_coins) "
+            + $"VALUES ('{operation}', {listing}, {seller}, {buyer}, 'item.material.gloom_dust', {units}, {gross})";
+    }
 }
 }

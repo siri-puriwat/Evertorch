@@ -173,6 +173,11 @@ internal sealed class InMemoryGameStore : IGameStore
     public List<Guid> MarketCommits { get; } = new();
 
     /// <summary>
+    ///     Every board read asked for, in order.
+    /// </summary>
+    public List<MarketRead> MarketReads { get; } = new();
+
+    /// <summary>
     ///     How many of the next trade commits succeed and then throw as if the answer was lost.
     /// </summary>
     public int AmbiguousTradeFailures { get; set; }
@@ -810,6 +815,55 @@ internal sealed class InMemoryGameStore : IGameStore
         {
             MarketCommits.Add(list.OperationId);
             return AnswerMarket(FindMarket(list.OperationId, list.CharacterId) ?? List(list));
+        }
+    }
+
+    public Task<StoredMarket> ReadMarketAsync(MarketRead read, CancellationToken cancellationToken)
+    {
+        ThrowIfUnavailable();
+        lock (m_gate)
+        {
+            MarketReads.Add(read);
+            long account = m_characters[read.CharacterId].Account.Value;
+            var entries = new List<StoredMarketEntry>();
+            foreach (string item in read.Items.Keys.OrderBy(item => item, StringComparer.Ordinal))
+            {
+                ItemMarket terms = read.Items[item];
+                MarketPriceState state = m_prices.TryGetValue(item, out MarketPriceState? stored)
+                    ? MarketPricing.Settle(stored!, read.At, terms.Floor, read.PricePeriodMs)
+                    : MarketPriceState.Start(terms.BasePrice, read.At);
+                long stock = m_listings.Values
+                    .Where(listing => listing.Item == item
+                        && listing.Left > 0
+                        && listing.ExpiresAt > read.At
+                        && listing.Account != account)
+                    .Sum(listing => (long)listing.Left);
+                entries.Add(new StoredMarketEntry(item, state.Price, stock));
+            }
+
+            var listings = m_listings.Values
+                .Where(listing => listing.Seller == read.CharacterId)
+                .OrderBy(listing => listing.Id)
+                .Select(listing => new StoredMarketListing(
+                    listing.Id,
+                    listing.Item,
+                    listing.Listed,
+                    listing.Left,
+                    listing.Gross,
+                    listing.ListedAt,
+                    listing.ExpiresAt))
+                .ToList();
+            return Task.FromResult(new StoredMarket(entries, listings));
+        }
+    }
+
+    public Task<MarketResult> CommitMarketBuyAsync(MarketBuyCommit buy, CancellationToken cancellationToken)
+    {
+        ThrowIfUnavailable();
+        lock (m_gate)
+        {
+            MarketCommits.Add(buy.OperationId);
+            return AnswerMarket(FindMarket(buy.OperationId, buy.CharacterId) ?? Buy(buy));
         }
     }
 
@@ -1866,6 +1920,81 @@ internal sealed class InMemoryGameStore : IGameStore
         m_prices[list.ItemDefinitionId] = settled.WithStockUntil(stockUntil);
         return Marketed(list.OperationId, list.CharacterId, item.Id, item.ItemDefinitionId, listing.Id, list.Quantity,
             fee);
+    }
+
+    // As the PostgreSQL store buys: the oldest of other accounts' unexpired units, the limit, the coins, the room; the
+    // coins go to the listings, and taking the last unit the buyer could take raises the price.
+    private MarketResult Buy(MarketBuyCommit buy)
+    {
+        Row row = m_characters[buy.CharacterId];
+        string item = buy.ItemDefinitionId;
+        var stock = m_listings.Values
+            .Where(listing => listing.Item == item
+                && listing.Left > 0
+                && listing.ExpiresAt > buy.At
+                && listing.Account != row.Account.Value)
+            .OrderBy(listing => listing.ListedAt)
+            .ThenBy(listing => listing.Id)
+            .ToList();
+        MarketPriceState state = m_prices.TryGetValue(item, out MarketPriceState? stored)
+            ? stored!
+            : MarketPriceState.Start(buy.Terms.BasePrice, buy.At);
+        MarketPriceState settled = MarketPricing.Settle(state, buy.At, buy.Terms.Floor, buy.PricePeriodMs);
+        long available = stock.Sum(listing => (long)listing.Left);
+        if (settled.Price > buy.PriceLimit || available < buy.Quantity)
+        {
+            return Unmarketed(InventoryStatus.BoardChanged, row, item);
+        }
+
+        long total = (long)settled.Price * buy.Quantity;
+        if (row.Coins < total)
+        {
+            return Unmarketed(InventoryStatus.NotEnoughCoins, row, item);
+        }
+
+        int index = buy.StackLimit == 1 ? -1 : row.Items.FindIndex(candidate => candidate.ItemDefinitionId == item);
+        int held = index >= 0 ? row.Items[index].Quantity : 0;
+        if (held > buy.StackLimit - buy.Quantity || (index < 0 && row.Items.Count >= buy.MaxRows))
+        {
+            return Unmarketed(InventoryStatus.InventoryFull, row, item);
+        }
+
+        int remaining = buy.Quantity;
+        foreach (MarketListing listing in stock)
+        {
+            if (remaining == 0)
+            {
+                break;
+            }
+
+            int units = Math.Min(remaining, listing.Left);
+            long gross = (long)units * settled.Price;
+            listing.Left -= units;
+            listing.Gross += gross;
+            m_sales.Add(new MarketSale(buy.OperationId, listing.Id, listing.Seller, buy.CharacterId, units, gross));
+            remaining -= units;
+        }
+
+        StoredItem bag = index >= 0
+            ? new StoredItem(row.Items[index].Id, item, held + buy.Quantity)
+            : new StoredItem(++m_lastItem, item, buy.Quantity);
+        if (index >= 0)
+        {
+            row.Items[index] = bag;
+        }
+        else
+        {
+            row.Items.Add(bag);
+        }
+
+        row.Coins -= total;
+        MarketPriceState after = available == buy.Quantity
+            ? MarketPricing.Rise(settled, buy.At, buy.Terms.Ceiling, buy.PricePeriodMs)
+            : settled;
+        m_prices[item] = stock.Any(listing => listing.Left == 0)
+            ? after.WithStockUntil(LatestStock(item, 0))
+            : after;
+        return Marketed(buy.OperationId, buy.CharacterId, bag.Id, item, 0, buy.Quantity, total);
     }
 
     // As the PostgreSQL store collects: the listing the character's, the item known, the cap, then the room; the net and

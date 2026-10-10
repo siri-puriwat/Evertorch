@@ -284,6 +284,26 @@ public interface IGameStore
     Task<MarketResult> CommitMarketListAsync(MarketListCommit list, CancellationToken cancellationToken);
 
     /// <summary>
+    ///     Buys a quantity of an item on the board in one transaction with a <c>market_buy</c> ledger row and a
+    ///     <c>market_sales</c> row for each listing it fills (Persistence §5): the buyer is locked, then the item's price
+    ///     row, made at its base when missing, then the item's unexpired listings with units left of other accounts,
+    ///     oldest first; a repeat answers from the ledger and the sales. The price is settled to the commit's time, the
+    ///     units taken listing by listing, their price added to each listing's gross, and the units put in the buyer's
+    ///     one bag row; when the buyer took the last unit it could, the price rises once a period at most.
+    ///     <see cref="InventoryStatus.BoardChanged" /> when the price passed the limit or too few units are left;
+    ///     <see cref="InventoryStatus.NotEnoughCoins" /> when the coins fall short of the price;
+    ///     <see cref="InventoryStatus.InventoryFull" /> when the bag has no room. The answer names every listing filled.
+    /// </summary>
+    Task<MarketResult> CommitMarketBuyAsync(MarketBuyCommit buy, CancellationToken cancellationToken);
+
+    /// <summary>
+    ///     The board as one character sees it, in one repeatable-read snapshot that locks and writes nothing: each named
+    ///     item's price settled to the read's time and the units of other accounts' unexpired listings, then the
+    ///     character's own listings.
+    /// </summary>
+    Task<StoredMarket> ReadMarketAsync(MarketRead read, CancellationToken cancellationToken);
+
+    /// <summary>
     ///     Ends one of the character's listings in one transaction with a <c>market_collect</c> ledger row: the character
     ///     is locked, then the item's price row, then the listing; a repeat answers from the ledger. The listing's sales
     ///     less the tax and its unsold units come back, all or nothing, and the listing is deleted.

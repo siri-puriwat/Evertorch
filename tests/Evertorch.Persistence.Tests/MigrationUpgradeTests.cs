@@ -21,6 +21,7 @@ public sealed class MigrationUpgradeTests
     private const string AddCharacterSkills = "20260928181417_AddCharacterSkills";
     private const string AddParties = "20261001131541_AddParties";
     private const string AddBossRewards = "20261002222843_AddBossRewards";
+    private const string AddTradesAndStorage = "20261003172540_AddTradesAndStorage";
     private const string ForeignKeyViolation = "23503";
     private const string CheckViolation = "23514";
     private const string UndefinedTable = "42P01";
@@ -255,6 +256,68 @@ public sealed class MigrationUpgradeTests
         Assert.That(sql.Scalar("SELECT count(*) FROM character_skills"), Is.Zero, "nothing learned");
         Assert.That(SqlStateOf(sql, Sql.SkillInsert(character, "skill.strike", 1)), Is.Null);
         Assert.That(SqlStateOf(sql, Sql.SkillInsert(character, "skill.focus", 6)), Is.EqualTo(CheckViolation));
+    }
+
+    // The market board adds three tables and three ledger types (Persistence §4); the migration changes no row, the
+    // board starts empty, and the ledger stays append-only.
+    [Test]
+    public void Upgrade_FromAddTradesAndStorage_KeepsEveryRow_AndAddsTheMarketBoard()
+    {
+        using var database = PostgresFixture.Start(targetMigration: AddTradesAndStorage);
+        var sql = new Sql(database.ConnectionString);
+        long account = sql.InsertAccount();
+        long character = sql.InsertCharacter(account, Sql.UniqueName("Up"));
+        long other = sql.InsertCharacter(sql.InsertAccount(), Sql.UniqueName("Up"));
+        long weapon = sql.InsertItem(character, 1);
+        sql.Execute(Sql.EquipmentInsert(character, "Weapon", weapon));
+        sql.Scalar(Sql.LedgerInsert(Guid.NewGuid(), character, "trade"));
+        sql.Execute(Sql.QuestInsert(character, "quest.crawler_hunt", "completed", 5));
+        sql.Execute(Sql.SessionTokenInsert(account));
+        sql.Execute(Sql.SkillInsert(character, "skill.strike", 2));
+        sql.Scalar(Sql.PartyInsert(character, character, other));
+        sql.Execute(
+            "INSERT INTO trades (id, first_character_id, second_character_id, committed_at) "
+            + $"VALUES ('{Guid.NewGuid()}', {Math.Min(character, other)}, {Math.Max(character, other)}, now())");
+        sql.Execute($"INSERT INTO account_storages (account_id, revision, version) VALUES ({account}, 1, 0)");
+        sql.Execute(
+            "INSERT INTO storage_items (account_id, item_definition_id, quantity, refine_level, version) "
+            + $"VALUES ({account}, 'item.material.slime_gel', 4, 0, 0)");
+        string? listBefore = SqlStateOf(sql, Sql.LedgerInsert(Guid.NewGuid(), character, "market_list"));
+        string? tableBefore = SqlStateOf(sql, "SELECT count(*) FROM market_listings");
+        string[] more =
+        {
+            "character_quests", "session_tokens", "character_skills", "parties", "party_members", "trades",
+            "account_storages", "storage_items"
+        };
+        string before = Dump(sql, more);
+
+        EvertorchDatabase.ApplyMigrationsAsync(database.ConnectionString, CancellationToken.None)
+            .GetAwaiter()
+            .GetResult();
+
+        IReadOnlyList<string> pending = EvertorchDatabase
+            .GetPendingMigrationsAsync(database.ConnectionString, CancellationToken.None)
+            .GetAwaiter()
+            .GetResult();
+        Assert.That((listBefore, tableBefore), Is.EqualTo((CheckViolation, UndefinedTable)), "neither existed");
+        Assert.That(pending, Is.Empty);
+        Assert.That(Dump(sql, more), Is.EqualTo(before), "every row as it was");
+        Assert.That(
+            sql.Scalar(
+                "SELECT (SELECT count(*) FROM market_prices) + (SELECT count(*) FROM market_listings) "
+                + "+ (SELECT count(*) FROM market_sales)"),
+            Is.Zero,
+            "an empty board");
+        foreach (string type in new[] { "market_list", "market_buy", "market_collect" })
+        {
+            Assert.That(SqlStateOf(sql, Sql.LedgerInsert(Guid.NewGuid(), character, type)), Is.Null, type);
+        }
+
+        Assert.That(SqlStateOf(sql, Sql.LedgerInsert(Guid.NewGuid(), character, "gift")), Is.EqualTo(CheckViolation));
+        Assert.That(
+            SqlStateOf(sql, $"DELETE FROM economy_ledger WHERE actor_character_id = {character}"),
+            Is.EqualTo("23001"),
+            "still append-only");
     }
 
     [Test]

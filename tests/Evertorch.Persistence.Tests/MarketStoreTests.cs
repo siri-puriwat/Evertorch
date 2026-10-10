@@ -151,6 +151,170 @@ public sealed class MarketStoreTests
             + $"'YYYY-MM-DD HH24:MI'), 'none') FROM market_prices WHERE item_definition_id = '{item}'");
     }
 
+    private MarketResult Buy(
+        long character,
+        string item,
+        int quantity,
+        int priceLimit,
+        DateTime? at = null,
+        Guid? operation = null)
+    {
+        return m_store.CommitMarketBuyAsync(
+                new MarketBuyCommit(
+                    operation ?? Guid.NewGuid(),
+                    character,
+                    item,
+                    quantity,
+                    priceLimit,
+                    DustStack,
+                    BagRows,
+                    DustTerms,
+                    Period,
+                    at ?? Now),
+                CancellationToken.None)
+            .GetAwaiter()
+            .GetResult();
+    }
+
+    private StoredMarket Read(long character, string item, DateTime? at = null)
+    {
+        return m_store.ReadMarketAsync(
+                new MarketRead(character, new Dictionary<string, ItemMarket> { [item] = DustTerms }, Period, at ?? Now),
+                CancellationToken.None)
+            .GetAwaiter()
+            .GetResult();
+    }
+
+    private string Sales(long buyer)
+    {
+        return m_sql.Text(
+            "SELECT coalesce(string_agg(listing_id || ':' || units || ':' || gross_coins, ', ' ORDER BY listing_id), "
+            + $"'') FROM market_sales WHERE buyer_character_id = {buyer}");
+    }
+
+    [Test]
+    public void Buy_FillsTheOldestUnitsOfOtherAccounts_AtTheSettledPrice_AndRecordsEachSale()
+    {
+        string item = Fresh(Dust);
+        long first = NewCharacter(100);
+        long second = NewCharacter(100);
+        long buyer = NewCharacter(1000);
+        long older = List(first, Give(first, item, 10), item, 10).ListingId;
+        long newer = List(second, Give(second, item, 5), item, 5, Now.AddHours(1)).ListingId;
+
+        MarketResult bought = Buy(buyer, item, 12, 28, Now.AddHours(2));
+
+        Assert.That(
+            (bought.Status, bought.Coins, bought.CoinsMoved, bought.Quantity, bought.Rows.Single().Quantity),
+            Is.EqualTo((InventoryStatus.Committed, 1000L - 336, 336L, 12, 12)));
+        Assert.That(
+            bought.Fills.Select(fill => (fill.ListingId, fill.SellerCharacterId, fill.Units, fill.Gross)),
+            Is.EqualTo(new[] { (older, first, 10, 280L), (newer, second, 2, 56L) }),
+            "the older listing first");
+        Assert.That(Sales(buyer), Is.EqualTo($"{older}:10:280, {newer}:2:56"));
+        Assert.That((Listing(older), Listing(newer)),
+            Is.EqualTo(("10 0 280 2026-10-13 12:00", "5 3 56 2026-10-13 13:00")));
+        Assert.That((Coins(first), Coins(second)), Is.EqualTo((98L, 99L)), "the sellers' coins untouched");
+        Assert.That(Ledger(buyer), Is.EqualTo("market_buy 12 -336"));
+        Assert.That(Price(item), Does.StartWith("28 "), "units were left, so no rise");
+    }
+
+    [Test]
+    public void Buy_OfItsOwnAccountsStock_OrOfExpiredStock_IsRefused_AndTheBoardShowsNoStock()
+    {
+        string item = Fresh(Dust);
+        long account = m_sql.InsertAccount();
+        long seller = NewCharacter(100, account);
+        long sameAccount = NewCharacter(100, account);
+        long other = NewCharacter(100);
+        List(seller, Give(seller, item, 5), item, 5);
+
+        MarketResult own = Buy(sameAccount, item, 1, 28);
+        MarketResult expired = Buy(other, item, 1, 28, Now.AddDays(3).AddSeconds(1));
+
+        Assert.That((own.Status, expired.Status), Is.EqualTo((InventoryStatus.BoardChanged,
+            InventoryStatus.BoardChanged)));
+        Assert.That(Read(sameAccount, item).Entries.Single().Stock, Is.Zero, "its own account's stock is not for it");
+        Assert.That(Read(other, item).Entries.Single().Stock, Is.EqualTo(5));
+        Assert.That(Read(other, item, Now.AddDays(3).AddSeconds(1)).Entries.Single().Stock, Is.Zero, "expired");
+        Assert.That(Sales(sameAccount) + Sales(other), Is.Empty);
+    }
+
+    [Test]
+    public void Buy_Refusals_ChangeNothing()
+    {
+        string item = Fresh(Dust);
+        long seller = NewCharacter(100);
+        long listing = List(seller, Give(seller, item, 5), item, 5).ListingId;
+        long poor = NewCharacter(27);
+        long full = NewCharacter(1000);
+        m_sql.Execute(
+            "INSERT INTO inventory_items (character_id, item_definition_id, quantity, refine_level, version) "
+            + $"SELECT {full}, '{Sword}', 1, 0, 0 FROM generate_series(1, {BagRows})");
+        long buyer = NewCharacter(1000);
+
+        MarketResult[] results =
+        {
+            Buy(buyer, item, 1, 27),
+            Buy(buyer, item, 6, 28),
+            Buy(poor, item, 1, 28),
+            Buy(full, item, 1, 28)
+        };
+
+        Assert.That(
+            results.Select(result => result.Status),
+            Is.EqualTo(new[]
+            {
+                InventoryStatus.BoardChanged,
+                InventoryStatus.BoardChanged,
+                InventoryStatus.NotEnoughCoins,
+                InventoryStatus.InventoryFull
+            }),
+            "a price past the limit, too few units, the coins, and the room");
+        Assert.That(Listing(listing), Does.StartWith("5 5 0"));
+        Assert.That(Ledger(buyer) + Ledger(poor) + Ledger(full), Is.Empty);
+        Assert.That(Coins(buyer), Is.EqualTo(1000));
+    }
+
+    [Test]
+    public void Buy_Repeated_BuysOnce_AndTheRepeatNamesItsSales()
+    {
+        string item = Fresh(Dust);
+        long seller = NewCharacter(100);
+        long listing = List(seller, Give(seller, item, 10), item, 10).ListingId;
+        long buyer = NewCharacter(1000);
+        var operation = Guid.NewGuid();
+
+        Buy(buyer, item, 4, 28, operation: operation);
+        MarketResult repeat = Buy(buyer, item, 4, 28, operation: operation);
+
+        Assert.That((repeat.Status, repeat.Coins, repeat.Quantity), Is.EqualTo((InventoryStatus.Committed, 888L, 4)));
+        Assert.That(repeat.Fills.Single().ListingId, Is.EqualTo(listing));
+        Assert.That(Listing(listing), Does.StartWith("10 6 112"));
+        Assert.That(Ledger(buyer), Is.EqualTo("market_buy 4 -112"));
+    }
+
+    [Test]
+    public void Buy_TheLastUnitsTheBuyerCouldTake_RaisesThePrice_AtMostOnceAPeriod()
+    {
+        string item = Fresh(Dust);
+        long seller = NewCharacter(1000);
+        long buyer = NewCharacter(10_000);
+        List(seller, Give(seller, item, 5), item, 5);
+        Buy(buyer, item, 5, 28);
+        string risen = Price(item);
+        List(seller, Give(seller, item, 5), item, 5, Now.AddHours(1));
+        Buy(buyer, item, 5, 30, Now.AddHours(2));
+        string held = Price(item);
+        List(seller, Give(seller, item, 5), item, 5, Now.AddDays(1));
+        MarketResult later = Buy(buyer, item, 5, 30, Now.AddDays(1).AddHours(1));
+
+        Assert.That(risen, Is.EqualTo("30 0 none"), "28 rose a step; no units left anywhere");
+        Assert.That(held, Is.EqualTo($"30 {3_600_000} none"), "an hour of stock, and no second rise within a day");
+        Assert.That((later.Status, Price(item)), Is.EqualTo((InventoryStatus.Committed, "33 0 none")),
+            "a day after the first rise");
+    }
+
     [Test]
     public void Collect_OfAListingStillSelling_EndsIt_AndThePriceStopsCountingItsStock()
     {
@@ -374,6 +538,29 @@ public sealed class MarketStoreTests
             Is.EqualTo((dust, item, 0)));
         Assert.That(m_store.ListStoredDefinitionIdsAsync(CancellationToken.None).GetAwaiter().GetResult(),
             Has.Member(item), "a listed item, gone from every bag");
+    }
+
+    [Test]
+    public void Read_SettlesPricesAtItsTime_WithoutWriting_AndListsTheReadersOwn()
+    {
+        string item = Fresh(Dust);
+        long seller = NewCharacter(100);
+        long listing = List(seller, Give(seller, item, 10), item, 10).ListingId;
+        long viewer = NewCharacter(100);
+        string stored = Price(item);
+
+        StoredMarket seen = Read(viewer, item, Now.AddDays(2.5));
+        StoredMarket own = Read(seller, item, Now.AddDays(2.5));
+        StoredMarket unlisted = Read(viewer, Fresh(Dust));
+
+        Assert.That((seen.Entries.Single().Price, seen.Entries.Single().Stock), Is.EqualTo((24, 10L)));
+        Assert.That(Price(item), Is.EqualTo(stored), "the read wrote nothing");
+        Assert.That(seen.Listings, Is.Empty);
+        Assert.That(
+            own.Listings.Select(row => (row.Id, row.UnitsListed, row.UnitsLeft, row.GrossCoins, row.ExpiresAt)),
+            Is.EqualTo(new[] { (listing, 10, 10, 0L, Now.AddDays(3)) }));
+        Assert.That((unlisted.Entries.Single().Price, unlisted.Entries.Single().Stock), Is.EqualTo((28, 0L)),
+            "an item never listed reads at its base");
     }
 }
 }

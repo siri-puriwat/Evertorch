@@ -248,6 +248,16 @@ internal sealed class LosingAnswersGameStore : IGameStore
         return AnswerAsync(m_inner.CommitMarketCollectAsync(collect, cancellationToken));
     }
 
+    public Task<MarketResult> CommitMarketBuyAsync(MarketBuyCommit buy, CancellationToken cancellationToken)
+    {
+        return AnswerAsync(m_inner.CommitMarketBuyAsync(buy, cancellationToken));
+    }
+
+    public Task<StoredMarket> ReadMarketAsync(MarketRead read, CancellationToken cancellationToken)
+    {
+        return m_inner.ReadMarketAsync(read, cancellationToken);
+    }
+
     public Task<IReadOnlyList<string>> ListStoredDefinitionIdsAsync(CancellationToken cancellationToken)
     {
         return m_inner.ListStoredDefinitionIdsAsync(cancellationToken);
