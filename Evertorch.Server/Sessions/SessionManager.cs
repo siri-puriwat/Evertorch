@@ -1063,6 +1063,25 @@ public sealed class SessionManager : ITickPhase
                 command.InventoryItem,
                 command.Quantity,
                 command.CommandSequence),
+            InboundEventKind.MarketOpen => m_items.TryOpenMarket(session, command.Target, command.CommandSequence),
+            InboundEventKind.MarketList => m_items.TryListOnMarket(
+                session,
+                command.Target,
+                command.InventoryItem,
+                command.Quantity,
+                command.CommandSequence),
+            InboundEventKind.MarketBuy => m_items.TryBuyOnMarket(
+                session,
+                command.Target,
+                command.Item,
+                command.Quantity,
+                command.PriceLimit,
+                command.CommandSequence),
+            InboundEventKind.MarketCollect => m_items.TryCollectListing(
+                session,
+                command.Target,
+                command.InventoryItem,
+                command.CommandSequence),
             _ => CommandRejectionReason.NotAllowedNow
         };
     }
@@ -1086,6 +1105,10 @@ public sealed class SessionManager : ITickPhase
             case InboundEventKind.StorageOpen:
             case InboundEventKind.StorageDeposit:
             case InboundEventKind.StorageWithdraw:
+            case InboundEventKind.MarketOpen:
+            case InboundEventKind.MarketList:
+            case InboundEventKind.MarketBuy:
+            case InboundEventKind.MarketCollect:
                 return true;
             default:
                 return false;

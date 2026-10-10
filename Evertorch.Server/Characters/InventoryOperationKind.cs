@@ -42,6 +42,21 @@ public enum InventoryOperationKind
     /// <summary>
     ///     A withdrawal from the account's storage at the Storekeeper (Gameplay Systems §11.4).
     /// </summary>
-    StorageWithdraw = 12
+    StorageWithdraw = 12,
+
+    /// <summary>
+    ///     Units of a bag row put on the market board at the Broker, for its fee (Gameplay Systems §11.5).
+    /// </summary>
+    MarketList = 13,
+
+    /// <summary>
+    ///     Units bought on the market board from other accounts' listings (Gameplay Systems §11.5).
+    /// </summary>
+    MarketBuy = 14,
+
+    /// <summary>
+    ///     A listing's sales less the tax and its unsold units taken back, ending it (Gameplay Systems §11.5).
+    /// </summary>
+    MarketCollect = 15
 }
 }

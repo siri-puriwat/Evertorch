@@ -144,8 +144,8 @@ public sealed class InMemoryMarketStoreTests
         m_store.SellFromListing(repeat.ListingId, 4, 120);
         MarketResult collected = Collect(seller, repeat.ListingId);
         Assert.That(
-            (collected.Status, collected.Coins, collected.CoinsMoved, collected.Quantity),
-            Is.EqualTo((InventoryStatus.Committed, 208L, 110L, 6)));
+            (collected.Status, collected.Coins, collected.CoinsMoved, collected.Quantity, collected.Tax),
+            Is.EqualTo((InventoryStatus.Committed, 208L, 110L, 6, 10L)));
         Assert.That(Collect(seller, repeat.ListingId).Status, Is.EqualTo(InventoryStatus.BoardChanged), "gone");
     }
 

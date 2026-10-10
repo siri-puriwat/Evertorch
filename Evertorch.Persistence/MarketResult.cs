@@ -6,8 +6,9 @@ namespace Evertorch.Persistence
 /// <summary>
 ///     How a listing, a purchase, or a collection ended (Persistence §5): the character's inventory revision and coins
 ///     and, when committed, the bag's one row it changed, as it is now (a row it emptied at 0), with what moved: the
-///     listing, its item, the units, and the coins (the fee, the price paid, or the net collected), and for a purchase
-///     each listing it filled. A refused collection names the listing's item, so a content that lost it can be told.
+///     listing, its item, the units, and the coins (the fee, the price paid, or the net collected), for a purchase each
+///     listing it filled, and for a collection its tax. A refused collection names the listing's item, so a content that
+///     lost it can be told.
 /// </summary>
 public sealed class MarketResult
 {
@@ -20,7 +21,8 @@ public sealed class MarketResult
         string itemDefinitionId = "",
         int quantity = 0,
         long coinsMoved = 0,
-        IReadOnlyList<MarketFill>? fills = null)
+        IReadOnlyList<MarketFill>? fills = null,
+        long tax = 0)
     {
         Status = status;
         InventoryRevision = inventoryRevision;
@@ -31,6 +33,7 @@ public sealed class MarketResult
         Quantity = quantity;
         CoinsMoved = coinsMoved;
         Fills = fills ?? Array.Empty<MarketFill>();
+        Tax = tax;
     }
 
     public InventoryStatus Status { get; }
@@ -59,5 +62,10 @@ public sealed class MarketResult
     public long CoinsMoved { get; }
 
     public IReadOnlyList<MarketFill> Fills { get; }
+
+    /// <summary>
+    ///     The tax a collection paid on its sales; 0 for a listing or a purchase.
+    /// </summary>
+    public long Tax { get; }
 }
 }

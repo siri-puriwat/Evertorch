@@ -401,6 +401,7 @@ public sealed class MarketStoreTests
         Assert.That(
             (collected.Status, collected.Coins, collected.CoinsMoved, collected.Quantity, collected.ListingId),
             Is.EqualTo((InventoryStatus.Committed, 100L - 2 + 110, 110L, 6, listing)));
+        Assert.That(collected.Tax, Is.EqualTo(10L), "9 % of 120, rounded down");
         Assert.That((collected.Rows.Single().ItemDefinitionId, collected.Rows.Single().Quantity),
             Is.EqualTo((item, 6)));
         Assert.That(collected.InventoryRevision, Is.EqualTo(2u), "the listing, then the collection");

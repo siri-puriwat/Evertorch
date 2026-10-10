@@ -3164,12 +3164,18 @@ WHERE character_skills.level <> EXCLUDED.level",
                 .ConfigureAwait(false)
             : Array.Empty<StoredItem>();
         long listing = 0;
+        long tax = 0;
         if (entry.MetadataJson != null)
         {
             using var metadata = JsonDocument.Parse(entry.MetadataJson);
             if (metadata.RootElement.TryGetProperty("listing", out JsonElement named))
             {
                 listing = named.GetInt64();
+            }
+
+            if (metadata.RootElement.TryGetProperty("tax", out JsonElement taxed))
+            {
+                tax = taxed.GetInt64();
             }
         }
 
@@ -3189,7 +3195,8 @@ WHERE character_skills.level <> EXCLUDED.level",
             entry.ItemDefinitionId ?? string.Empty,
             Math.Abs(entry.QuantityDelta),
             Math.Abs(entry.CurrencyDelta),
-            fills);
+            fills,
+            tax);
     }
 
     private static void RequireTokenHash(byte[] tokenHash)

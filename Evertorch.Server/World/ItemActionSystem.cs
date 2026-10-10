@@ -13,13 +13,12 @@ using Microsoft.Extensions.Options;
 namespace Evertorch.Server
 {
 /// <summary>
-///     Equips, unequips, uses, buys, and sells items, turns in quests, changes jobs, and reads, fills, and empties the
-///     account's storage (Gameplay Systems §2.2, §6.1, §11.1–§11.4; Persistence §5). The checks happen on the tick thread;
-///     the inventory and the coins change only through
-///     the
-///     commit, and the server's copy of them, the statistics, HP and SP, the quests, and the owner learn of it once its
-///     result is back. A commit whose answer was lost is settled from the ledger before the character may start another
-///     inventory operation.
+///     Equips, unequips, uses, buys, and sells items, turns in quests, changes jobs, reads, fills, and empties the
+///     account's storage, and reads, lists on, buys from, and collects from the market board (Gameplay Systems §2.2,
+///     §6.1, §11.1–§11.5; Persistence §5). The checks happen on the tick thread; the inventory and the coins change only
+///     through the commit, and the server's copy of them, the statistics, HP and SP, the quests, and the owner learn of
+///     it once its result is back. A commit whose answer was lost is settled from the ledger before the character may
+///     start another inventory operation.
 /// </summary>
 public sealed class ItemActionSystem : ITickPhase
 {
@@ -43,6 +42,15 @@ public sealed class ItemActionSystem : ITickPhase
     private const string StorageWithdrawLookup = "storage withdraw lookup";
     private const string StorageReadOperation = "storage read";
     private const string StorageFee = "storage fee";
+    private const string MarketListOperation = "market list";
+    private const string MarketListLookup = "market list lookup";
+    private const string MarketBuyOperation = "market buy";
+    private const string MarketBuyLookup = "market buy lookup";
+    private const string MarketCollectOperation = "market collect";
+    private const string MarketCollectLookup = "market collect lookup";
+    private const string MarketReadOperation = "market read";
+    private const string MarketFee = "market fee";
+    private const string MarketTax = "market tax";
     private const string Deposited = "deposit";
     private const string Withdrawn = "withdraw";
     private const int MillisecondsPerSecond = 1000;
@@ -90,6 +98,34 @@ public sealed class ItemActionSystem : ITickPhase
             "Connection {Connection} (account {Account}) could not read the storage of character {Character}: the "
             + "loaded content has no {Definition}. Its stored data is kept.");
 
+    private static readonly Action<ILogger, long, int, string, long, long, Guid, Exception?> LogListed =
+        LoggerMessage.Define<long, int, string, long, long, Guid>(
+            LogLevel.Information,
+            new EventId(1031, "MarketListed"),
+            "Character {Character} listed {Quantity} {Item} as listing {Listing} for a fee of {Coins} coins (operation "
+            + "{OperationId}).");
+
+    private static readonly Action<ILogger, long, int, string, long, string, Guid, Exception?> LogMarketSold =
+        LoggerMessage.Define<long, int, string, long, string, Guid>(
+            LogLevel.Information,
+            new EventId(1032, "MarketSold"),
+            "Character {Character} bought {Quantity} {Item} on the board for {Coins} coins from listings {Listings} "
+            + "(operation {OperationId}).");
+
+    private static readonly Action<ILogger, long, long, int, string, long, Guid, Exception?> LogCollected =
+        LoggerMessage.Define<long, long, int, string, long, Guid>(
+            LogLevel.Information,
+            new EventId(1033, "MarketCollected"),
+            "Character {Character} collected listing {Listing}: {Quantity} {Item} back and {Coins} coins after the tax "
+            + "(operation {OperationId}).");
+
+    private static readonly Action<ILogger, long, long, long, string, Exception?> LogMarketContentMismatch =
+        LoggerMessage.Define<long, long, long, string>(
+            LogLevel.Warning,
+            new EventId(2011, "MarketContentMismatch"),
+            "Character {Character} on connection {Connection} could not collect listing {Listing}: the loaded content "
+            + "has no {Definition}. The listing is kept.");
+
     private static readonly Action<ILogger, long, long, int, string, long, Guid, Exception?> LogSold =
         LoggerMessage.Define<long, long, int, string, long, Guid>(
             LogLevel.Information,
@@ -99,6 +135,7 @@ public sealed class ItemActionSystem : ITickPhase
 
     private readonly PersistenceWorker m_persistence;
     private readonly MessageSender m_sender;
+    private readonly SessionRegistry m_sessions;
     private readonly CharacterLifetime m_lifetime;
     private readonly CharacterStats m_stats;
     private readonly ServerContent m_content;
@@ -113,17 +150,22 @@ public sealed class ItemActionSystem : ITickPhase
     private readonly uint m_failedLookupDelayTicks;
     private readonly List<(CharacterSession Character, uint NotBefore)> m_unsettled = new();
     private readonly IReadOnlyDictionary<string, int> m_stackLimits;
+    private readonly IReadOnlyDictionary<string, ItemMarket> m_marketTerms;
+    private readonly long m_pricePeriodMs;
+    private readonly long m_listingDurationMs;
     private uint m_tick;
 
     public ItemActionSystem(
         PersistenceWorker persistence,
         MessageSender sender,
+        SessionRegistry sessions,
         CharacterLifetime lifetime,
         CharacterStats stats,
         ServerContent content,
         TimeProvider time,
         IOptions<SimulationOptions> simulation,
         IOptions<WorldOptions> world,
+        IOptions<MarketOptions> market,
         ServerInstruments instruments,
         CharacterProgression progression,
         CharacterBuilds builds,
@@ -133,6 +175,7 @@ public sealed class ItemActionSystem : ITickPhase
     {
         m_persistence = persistence;
         m_sender = sender;
+        m_sessions = sessions;
         m_lifetime = lifetime;
         m_stats = stats;
         m_content = content;
@@ -146,6 +189,10 @@ public sealed class ItemActionSystem : ITickPhase
         m_npcReach = NpcInteraction.Range + world.Value.AttackRangeTolerance;
         m_stackLimits =
             content.Items.Values.ToDictionary(item => item.Id.Value, item => item.StackLimit, StringComparer.Ordinal);
+        m_marketTerms = content.Items.Values.Where(item => item.Market != null)
+            .ToDictionary(item => item.Id.Value, item => item.Market!, StringComparer.Ordinal);
+        m_pricePeriodMs = market.Value.PricePeriodMs;
+        m_listingDurationMs = market.Value.ListingDurationMs;
         m_failedLookupDelayTicks =
             (uint)((long)FailedLookupDelayMs * simulation.Value.TickRate / MillisecondsPerSecond);
     }
@@ -575,6 +622,9 @@ public sealed class ItemActionSystem : ITickPhase
             InventoryOperationKind.JobChange => InboundEventKind.ChangeJob,
             InventoryOperationKind.StorageDeposit => InboundEventKind.StorageDeposit,
             InventoryOperationKind.StorageWithdraw => InboundEventKind.StorageWithdraw,
+            InventoryOperationKind.MarketList => InboundEventKind.MarketList,
+            InventoryOperationKind.MarketBuy => InboundEventKind.MarketBuy,
+            InventoryOperationKind.MarketCollect => InboundEventKind.MarketCollect,
             _ => throw NotAnItemAction(operation)
         };
     }
@@ -592,6 +642,9 @@ public sealed class ItemActionSystem : ITickPhase
             InventoryOperationKind.JobChange => JobChangeOperation,
             InventoryOperationKind.StorageDeposit => StorageDepositOperation,
             InventoryOperationKind.StorageWithdraw => StorageWithdrawOperation,
+            InventoryOperationKind.MarketList => MarketListOperation,
+            InventoryOperationKind.MarketBuy => MarketBuyOperation,
+            InventoryOperationKind.MarketCollect => MarketCollectOperation,
             _ => throw NotAnItemAction(operation)
         };
     }
@@ -609,6 +662,9 @@ public sealed class ItemActionSystem : ITickPhase
             InventoryOperationKind.JobChange => JobChangeLookup,
             InventoryOperationKind.StorageDeposit => StorageDepositLookup,
             InventoryOperationKind.StorageWithdraw => StorageWithdrawLookup,
+            InventoryOperationKind.MarketList => MarketListLookup,
+            InventoryOperationKind.MarketBuy => MarketBuyLookup,
+            InventoryOperationKind.MarketCollect => MarketCollectLookup,
             _ => throw NotAnItemAction(operation)
         };
     }
@@ -970,6 +1026,518 @@ public sealed class ItemActionSystem : ITickPhase
         Finish(character);
     }
 
+    /// <summary>
+    ///     Checks a read of the market board at the Broker (Gameplay Systems §11.5) and, when it passes, queues it. One
+    ///     read is in flight per character, and one asked meanwhile is answered by it, as a resync is. The caller has
+    ///     already refused a dead, leaving, or trading character.
+    /// </summary>
+    public CommandRejectionReason TryOpenMarket(ClientSession session, EntityId npc, uint commandSequence)
+    {
+        CommandRejectionReason reach = NpcReach.Check(session, npc, m_npcReach, out NpcEntity? broker);
+        if (reach != CommandRejectionReason.None)
+        {
+            return reach;
+        }
+
+        if (!broker!.Definition.KeepsMarket)
+        {
+            return CommandRejectionReason.InvalidTarget;
+        }
+
+        CharacterSession character = session.Character!;
+        if (character.IsReadingMarket)
+        {
+            return CommandRejectionReason.None;
+        }
+
+        if (!TryReadMarket(
+                character,
+                m_marketTerms,
+                (outcome, market, at) => CompleteMarketRead(character, commandSequence, outcome, market, at)))
+        {
+            return CommandRejectionReason.ServiceUnavailable;
+        }
+
+        character.IsReadingMarket = true;
+        return CommandRejectionReason.None;
+    }
+
+    /// <summary>
+    ///     Checks a listing at the Broker (Gameplay Systems §11.5, in order) and, when it passes, queues its commit, which
+    ///     settles the item's price, takes the fee at it, and refuses a ninth listing or a fee the coins cannot pay. The
+    ///     caller has already refused a dead, leaving, or trading character.
+    /// </summary>
+    public CommandRejectionReason TryListOnMarket(
+        ClientSession session,
+        EntityId npc,
+        long inventoryItem,
+        uint quantity,
+        uint commandSequence)
+    {
+        CharacterSession character = session.Character!;
+        if (character.HasInventoryWork)
+        {
+            return CommandRejectionReason.ItemActionInFlight;
+        }
+
+        CommandRejectionReason reach = NpcReach.Check(session, npc, m_npcReach, out NpcEntity? broker);
+        if (reach != CommandRejectionReason.None)
+        {
+            return reach;
+        }
+
+        if (!broker!.Definition.KeepsMarket || !character.Inventory.TryGetRow(inventoryItem, out InventoryEntry row))
+        {
+            return CommandRejectionReason.InvalidTarget;
+        }
+
+        ItemMarket? terms = m_content.Items[row.Item].Market;
+        if (row.Slot != EquipmentSlot.None || row.RefineLevel > 0 || terms == null || quantity > row.Quantity)
+        {
+            return CommandRejectionReason.NotAllowedNow;
+        }
+
+        if (character.Inventory.Coins < MarketTerms.MinimumFee)
+        {
+            return CommandRejectionReason.NotEnoughCoins;
+        }
+
+        var operation = new InventoryOperation(
+            InventoryOperationKind.MarketList,
+            commandSequence,
+            Guid.NewGuid(),
+            item: row.Item,
+            quantity: (int)quantity);
+        var commit = new MarketListCommit(
+            operation.OperationId,
+            character.Character.Value,
+            inventoryItem,
+            row.Item.Value,
+            (int)quantity,
+            terms,
+            m_pricePeriodMs,
+            m_listingDurationMs,
+            MarketTerms.MaxListings,
+            m_time.GetUtcNow().UtcDateTime);
+        return TryCommitMarket(
+            session,
+            operation,
+            (store, cancellation) => store.CommitMarketListAsync(commit, cancellation));
+    }
+
+    /// <summary>
+    ///     Checks a purchase on the board (Gameplay Systems §11.5, in order) and, when it passes, queues its commit, which
+    ///     takes the oldest units other accounts listed at the settled price and refuses a price past the limit or too few
+    ///     units. The caller has already refused a dead, leaving, or trading character.
+    /// </summary>
+    public CommandRejectionReason TryBuyOnMarket(
+        ClientSession session,
+        EntityId npc,
+        ItemDefinitionId item,
+        uint quantity,
+        uint priceLimit,
+        uint commandSequence)
+    {
+        CharacterSession character = session.Character!;
+        if (character.HasInventoryWork)
+        {
+            return CommandRejectionReason.ItemActionInFlight;
+        }
+
+        CommandRejectionReason reach = NpcReach.Check(session, npc, m_npcReach, out NpcEntity? broker);
+        if (reach != CommandRejectionReason.None)
+        {
+            return reach;
+        }
+
+        if (!broker!.Definition.KeepsMarket
+            || !m_content.Items.TryGetValue(item, out ItemDefinition? definition)
+            || definition!.Market == null)
+        {
+            return CommandRejectionReason.InvalidTarget;
+        }
+
+        // Up to the stack limit, so a purchase adds at most one row, the one the ledger names when an answer is lost.
+        if (quantity > definition.StackLimit)
+        {
+            return CommandRejectionReason.NotAllowedNow;
+        }
+
+        if (character.Inventory.Coins < (long)quantity * priceLimit)
+        {
+            return CommandRejectionReason.NotEnoughCoins;
+        }
+
+        if (!HasRoomFor(character.Inventory, definition, quantity))
+        {
+            return CommandRejectionReason.InventoryFull;
+        }
+
+        var operation = new InventoryOperation(
+            InventoryOperationKind.MarketBuy,
+            commandSequence,
+            Guid.NewGuid(),
+            item: item,
+            quantity: (int)quantity);
+
+        // The coins cover the limit, so it is within the coin cap.
+        var commit = new MarketBuyCommit(
+            operation.OperationId,
+            character.Character.Value,
+            item.Value,
+            (int)quantity,
+            (int)priceLimit,
+            definition.StackLimit,
+            PickupSystem.MaxInventoryRows,
+            definition.Market,
+            m_pricePeriodMs,
+            m_time.GetUtcNow().UtcDateTime);
+        return TryCommitMarket(
+            session,
+            operation,
+            (store, cancellation) => store.CommitMarketBuyAsync(commit, cancellation));
+    }
+
+    /// <summary>
+    ///     Checks a collection at the Broker (Gameplay Systems §11.5) and, when it passes, queues its commit. The server
+    ///     keeps no view of the board, so the commit checks that the listing is the character's, the coin cap, and the
+    ///     room in the bag. The caller has already refused a dead, leaving, or trading character.
+    /// </summary>
+    public CommandRejectionReason TryCollectListing(
+        ClientSession session,
+        EntityId npc,
+        long listing,
+        uint commandSequence)
+    {
+        CharacterSession character = session.Character!;
+        if (character.HasInventoryWork)
+        {
+            return CommandRejectionReason.ItemActionInFlight;
+        }
+
+        CommandRejectionReason reach = NpcReach.Check(session, npc, m_npcReach, out NpcEntity? broker);
+        if (reach != CommandRejectionReason.None)
+        {
+            return reach;
+        }
+
+        if (!broker!.Definition.KeepsMarket)
+        {
+            return CommandRejectionReason.InvalidTarget;
+        }
+
+        var operation = new InventoryOperation(
+            InventoryOperationKind.MarketCollect,
+            commandSequence,
+            Guid.NewGuid(),
+            listing: listing);
+        var commit = new MarketCollectCommit(
+            operation.OperationId,
+            character.Character.Value,
+            listing,
+            m_stackLimits,
+            m_marketTerms,
+            PickupSystem.MaxInventoryRows,
+            m_pricePeriodMs,
+            m_time.GetUtcNow().UtcDateTime);
+        return TryCommitMarket(
+            session,
+            operation,
+            (store, cancellation) => store.CommitMarketCollectAsync(commit, cancellation));
+    }
+
+    private CommandRejectionReason TryCommitMarket(
+        ClientSession session,
+        InventoryOperation operation,
+        Func<IGameStore, CancellationToken, Task<MarketResult>> commit)
+    {
+        CharacterSession character = session.Character!;
+        var job = new PersistenceJob<MarketResult>(
+            CommitNameOf(operation),
+            session.Connection,
+            character.Character.Value,
+            commit,
+            (outcome, result) => CompleteMarketCommit(character, outcome, result),
+            operation.OperationId.ToString());
+        if (!m_persistence.TryEnqueue(job))
+        {
+            return CommandRejectionReason.ServiceUnavailable;
+        }
+
+        character.Operation = operation;
+        return CommandRejectionReason.None;
+    }
+
+    private void CompleteMarketCommit(CharacterSession character, PersistenceOutcome outcome, MarketResult result)
+    {
+        if (outcome == PersistenceOutcome.Succeeded)
+        {
+            SettleMarket(character, result);
+            return;
+        }
+
+        Unsettle(character);
+    }
+
+    // The owner hears the bag's row and the coins, then what became of its listing, then the item's entry and its
+    // listings again; each seller a purchase paid hears of its sale while a connection controls it in the world
+    // (Network Protocol §9).
+    private void SettleMarket(CharacterSession character, MarketResult result)
+    {
+        if (result.Status != InventoryStatus.Committed)
+        {
+            Refuse(character, MarketRefusalOf(character, result));
+            return;
+        }
+
+        uint prior = character.Inventory.Revision;
+        InventoryEntry[] rows = character.Inventory.Apply(
+            new InventoryResult(InventoryStatus.Committed, result.InventoryRevision, result.Coins, result.Rows));
+        m_sender.SendInventoryChange(character, prior, rows);
+        InventoryOperation operation = character.Operation!;
+        var item = new ItemDefinitionId(result.ItemDefinitionId);
+        long id = character.Character.Value;
+        switch (operation.Kind)
+        {
+            case InventoryOperationKind.MarketList:
+                Tell(
+                    character,
+                    new MarketEvent(
+                        MarketEventKind.Listed,
+                        result.ListingId,
+                        item,
+                        (uint)result.Quantity,
+                        (uint)result.CoinsMoved));
+                LogListed(
+                    m_logger,
+                    id,
+                    result.Quantity,
+                    item.Value,
+                    result.ListingId,
+                    result.CoinsMoved,
+                    operation.OperationId,
+                    null);
+                m_instruments.RecordMarketListing();
+                m_instruments.RecordCoins(MarketFee, result.CoinsMoved);
+                break;
+            case InventoryOperationKind.MarketBuy:
+                LogMarketSold(
+                    m_logger,
+                    id,
+                    result.Quantity,
+                    item.Value,
+                    result.CoinsMoved,
+                    string.Join(", ", result.Fills.Select(fill => fill.ListingId)),
+                    operation.OperationId,
+                    null);
+                m_instruments.RecordMarketSales(result.Fills.Count);
+                foreach (MarketFill fill in result.Fills)
+                {
+                    TellSeller(fill, item);
+                }
+
+                break;
+            default:
+                Tell(
+                    character,
+                    new MarketEvent(
+                        MarketEventKind.Collected,
+                        result.ListingId,
+                        item,
+                        (uint)result.Quantity,
+                        (uint)result.CoinsMoved));
+                LogCollected(
+                    m_logger,
+                    id,
+                    result.ListingId,
+                    result.Quantity,
+                    item.Value,
+                    result.CoinsMoved,
+                    operation.OperationId,
+                    null);
+                if (result.Tax > 0)
+                {
+                    m_instruments.RecordCoins(MarketTax, result.Tax);
+                }
+
+                break;
+        }
+
+        PushMarket(character, result.ItemDefinitionId);
+        Finish(character);
+    }
+
+    // Each refusal of the store has its reason (Network Protocol §11). A collection of an item the loaded content lacks
+    // is logged and refused as unavailable; its listing is kept (Persistence §8).
+    private CommandRejectionReason MarketRefusalOf(CharacterSession character, MarketResult result)
+    {
+        switch (result.Status)
+        {
+            case InventoryStatus.NotEnoughCoins:
+                return CommandRejectionReason.NotEnoughCoins;
+            case InventoryStatus.CoinCapReached:
+                return CommandRejectionReason.CoinCapReached;
+            case InventoryStatus.ListingCapReached:
+                return CommandRejectionReason.RequirementNotMet;
+            case InventoryStatus.InventoryFull:
+                return CommandRejectionReason.InventoryFull;
+            case InventoryStatus.Refused
+                when character.Operation!.Kind == InventoryOperationKind.MarketCollect
+                && result.ItemDefinitionId.Length > 0:
+                LogMarketContentMismatch(
+                    m_logger,
+                    character.Character.Value,
+                    character.Connection?.Connection.Value ?? 0,
+                    character.Operation.Listing,
+                    result.ItemDefinitionId,
+                    null);
+                return CommandRejectionReason.ServiceUnavailable;
+            default:
+                return CommandRejectionReason.InvalidTarget;
+        }
+    }
+
+    private void Tell(CharacterSession character, MarketEvent notice)
+    {
+        ClientSession? owner = character.Connection;
+        if (owner != null && owner.State == SessionState.InWorld)
+        {
+            m_sender.Send(owner.Connection, notice);
+        }
+    }
+
+    // A sale reaches its seller alone and never names the buyer (Network Protocol §9).
+    private void TellSeller(MarketFill fill, ItemDefinitionId item)
+    {
+        if (m_sessions.TryGetByCharacter(new CharacterId(fill.SellerCharacterId), out ClientSession? seller)
+            && seller!.State == SessionState.InWorld)
+        {
+            m_sender.Send(
+                seller.Connection,
+                new MarketEvent(MarketEventKind.Sold, fill.ListingId, item, (uint)fill.Units, (uint)fill.Gross));
+        }
+    }
+
+    // After its own commit a character hears the item's entry of the board and its listings again (Network Protocol
+    // §9): a read of that one item, or of every listable item when a lookup could not say which. A read that fails
+    // sends nothing; an open reads again.
+    private void PushMarket(CharacterSession character, string item)
+    {
+        TryReadMarket(
+            character,
+            MarketItemsOf(item),
+            (outcome, market, at) =>
+            {
+                ClientSession? owner = character.Connection;
+                if (outcome == PersistenceOutcome.Succeeded && owner != null && owner.State == SessionState.InWorld)
+                {
+                    SendMarket(owner, market, at);
+                }
+            });
+    }
+
+    // An item the content no longer lists has no entry to read; the character's listings are read all the same.
+    private IReadOnlyDictionary<string, ItemMarket> MarketItemsOf(string item)
+    {
+        if (item.Length == 0)
+        {
+            return m_marketTerms;
+        }
+
+        var items = new Dictionary<string, ItemMarket>(StringComparer.Ordinal);
+        if (m_marketTerms.TryGetValue(item, out ItemMarket? terms))
+        {
+            items.Add(item, terms);
+        }
+
+        return items;
+    }
+
+    // Keyed to no character, so no waiting checkpoint of the reader is pulled forward (Persistence §5).
+    private bool TryReadMarket(
+        CharacterSession character,
+        IReadOnlyDictionary<string, ItemMarket> items,
+        Action<PersistenceOutcome, StoredMarket, DateTime> complete)
+    {
+        DateTime at = m_time.GetUtcNow().UtcDateTime;
+        var read = new MarketRead(character.Character.Value, items, m_pricePeriodMs, at);
+        var job = new PersistenceJob<StoredMarket>(
+            MarketReadOperation,
+            character.Connection?.Connection ?? default,
+            0,
+            (store, cancellation) => store.ReadMarketAsync(read, cancellation),
+            (outcome, market) => complete(outcome, market, at));
+        return m_persistence.TryEnqueue(job);
+    }
+
+    // The read answers the command that asked for it, or refuses it with 6 when the database did not answer
+    // (Persistence §9).
+    private void CompleteMarketRead(
+        CharacterSession character,
+        uint commandSequence,
+        PersistenceOutcome outcome,
+        StoredMarket market,
+        DateTime at)
+    {
+        character.IsReadingMarket = false;
+        ClientSession? owner = character.Connection;
+        if (owner == null || owner.State != SessionState.InWorld)
+        {
+            return;
+        }
+
+        if (outcome != PersistenceOutcome.Succeeded)
+        {
+            owner.RefusedCommands++;
+            m_audit.CommandRefused(owner, InboundEventKind.MarketOpen, CommandRejectionReason.ServiceUnavailable);
+            m_sender.Send(
+                owner.Connection,
+                new CommandRejected(commandSequence, CommandRejectionReason.ServiceUnavailable));
+            return;
+        }
+
+        SendMarket(owner, market, at);
+    }
+
+    // The board's entries in as many messages as they need, then every listing of the reader, which ends the read.
+    private void SendMarket(ClientSession owner, StoredMarket market, DateTime at)
+    {
+        var entries = new MarketBoardEntry[market.Entries.Count];
+        for (int index = 0; index < entries.Length; index++)
+        {
+            StoredMarketEntry entry = market.Entries[index];
+            entries[index] = new MarketBoardEntry(
+                new ItemDefinitionId(entry.ItemDefinitionId),
+                (uint)entry.Price,
+                (uint)Math.Min(entry.Stock, uint.MaxValue));
+        }
+
+        foreach (MarketBoard part in MarketBoard.CreateParts(entries))
+        {
+            m_sender.Send(owner.Connection, part);
+        }
+
+        MarketListingEntry[] listings = market.Listings
+            .Take(MarketMine.MaxEntries)
+            .Select(listing => ListingOf(listing, at))
+            .ToArray();
+        m_sender.Send(owner.Connection, new MarketMine(listings));
+    }
+
+    // What collecting the listing would pay now, its sales less the tax, and the whole seconds it still sells for.
+    private static MarketListingEntry ListingOf(StoredMarketListing listing, DateTime at)
+    {
+        double secondsLeft = Math.Ceiling((listing.ExpiresAt - at).TotalSeconds);
+        return new MarketListingEntry(
+            listing.Id,
+            new ItemDefinitionId(listing.ItemDefinitionId),
+            (uint)listing.UnitsLeft,
+            (uint)(listing.UnitsListed - listing.UnitsLeft),
+            (uint)(listing.GrossCoins - MarketPricing.Tax(listing.GrossCoins)),
+            secondsLeft > 0 ? (uint)Math.Min(secondsLeft, uint.MaxValue) : 0);
+    }
+
+
     private CommandRejectionReason TryCommit(
         ClientSession session,
         InventoryOperation operation,
@@ -1134,6 +1702,13 @@ public sealed class ItemActionSystem : ITickPhase
                 break;
             case InventoryOperationKind.JobChange:
                 ChangeJob(character, operation.Job, rows);
+                break;
+            case InventoryOperationKind.MarketList:
+            case InventoryOperationKind.MarketBuy:
+            case InventoryOperationKind.MarketCollect:
+                // Only a lost answer settles here: the ledger names no listing, fee, or sale, so no notice goes out and
+                // the board's read tells the rest (Network Protocol §9).
+                PushMarket(character, operation.Item.Value);
                 break;
             default:
                 throw NotAnItemAction(operation);

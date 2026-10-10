@@ -119,6 +119,8 @@ public sealed class ServerInstruments
     private readonly Counter<long> m_tradesCompleted;
     private readonly Counter<long> m_tradeCoins;
     private readonly Counter<long> m_storageMoves;
+    private readonly Counter<long> m_marketListings;
+    private readonly Counter<long> m_marketSales;
 
     public ServerInstruments(IMeterFactory meters)
     {
@@ -167,6 +169,14 @@ public sealed class ServerInstruments
             "evertorch.storage.moves",
             "{move}",
             "Deposits and withdrawals committed, by direction.");
+        m_marketListings = Meter.CreateCounter<long>(
+            "evertorch.market.listings",
+            "{listing}",
+            "Listings put on the market board.");
+        m_marketSales = Meter.CreateCounter<long>(
+            "evertorch.market.sales",
+            "{sale}",
+            "Sales on the market board, one for each listing a committed purchase took units from.");
         m_jobDuration = Meter.CreateHistogram<double>(
             "evertorch.persistence.job.duration",
             "ms",
@@ -314,6 +324,16 @@ public sealed class ServerInstruments
     public void RecordStorageMove(string direction)
     {
         m_storageMoves.Add(1, new KeyValuePair<string, object?>("direction", direction));
+    }
+
+    public void RecordMarketListing()
+    {
+        m_marketListings.Add(1);
+    }
+
+    public void RecordMarketSales(int listingsFilled)
+    {
+        m_marketSales.Add(listingsFilled);
     }
 
     public void RecordTradeCompleted(long coins)

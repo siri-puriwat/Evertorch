@@ -118,6 +118,12 @@ public sealed class CharacterSession
     public bool IsReadingStorage { get; set; }
 
     /// <summary>
+    ///     Whether a read of the market board asked at the Broker is in flight; one at a time, and a read asked meanwhile
+    ///     is answered by it (Gameplay Systems §11.5).
+    /// </summary>
+    public bool IsReadingMarket { get; set; }
+
+    /// <summary>
     ///     The character was to leave the world while an inventory operation was in flight; it leaves once the
     ///     operation settles.
     /// </summary>

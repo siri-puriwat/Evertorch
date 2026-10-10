@@ -67,7 +67,8 @@ internal sealed class TestServer
         bool withEveryMap = false,
         bool withGrotto = false,
         bool withNpcs = false,
-        bool withAdventurerBuild = true)
+        bool withAdventurerBuild = true,
+        MarketOptions? market = null)
     {
         Content = Contents.GetOrAdd(
             (withEveryMap, withGrotto, withMonsters, withNpcs),
@@ -195,12 +196,14 @@ internal sealed class TestServer
         Items = new ItemActionSystem(
             Persistence,
             sender,
+            Sessions,
             Lifetime,
             stats,
             Content,
             Time,
             simulation,
             Options.Create(world),
+            Options.Create(market ?? new MarketOptions()),
             Instruments,
             Progression,
             Builds,
@@ -745,6 +748,46 @@ internal sealed class TestServer
     {
         byte[] payload = new byte[StorageWithdraw.EncodedLength];
         new StorageWithdraw(npc, storageItem, quantity, commandSequence).Write(payload);
+        Inbound.OnPayload(connection, ProtocolChannel.Control, payload);
+    }
+
+    public void SendMarketOpen(ConnectionId connection, EntityId npc, uint commandSequence)
+    {
+        byte[] payload = new byte[MarketOpen.EncodedLength];
+        new MarketOpen(npc, commandSequence).Write(payload);
+        Inbound.OnPayload(connection, ProtocolChannel.Control, payload);
+    }
+
+    public void SendMarketList(
+        ConnectionId connection,
+        EntityId npc,
+        long inventoryItem,
+        uint quantity,
+        uint commandSequence)
+    {
+        byte[] payload = new byte[MarketList.EncodedLength];
+        new MarketList(npc, inventoryItem, quantity, commandSequence).Write(payload);
+        Inbound.OnPayload(connection, ProtocolChannel.Control, payload);
+    }
+
+    public void SendMarketBuy(
+        ConnectionId connection,
+        EntityId npc,
+        string item,
+        uint quantity,
+        uint priceLimit,
+        uint commandSequence)
+    {
+        var message = new MarketBuy(npc, new ItemDefinitionId(item), quantity, priceLimit, commandSequence);
+        byte[] payload = new byte[message.GetEncodedLength()];
+        message.Write(payload);
+        Inbound.OnPayload(connection, ProtocolChannel.Control, payload);
+    }
+
+    public void SendMarketCollect(ConnectionId connection, EntityId npc, long listing, uint commandSequence)
+    {
+        byte[] payload = new byte[MarketCollect.EncodedLength];
+        new MarketCollect(npc, listing, commandSequence).Write(payload);
         Inbound.OnPayload(connection, ProtocolChannel.Control, payload);
     }
 

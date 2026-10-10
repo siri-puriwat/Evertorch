@@ -1201,6 +1201,42 @@ internal sealed class InMemoryGameStore : IGameStore
         }
     }
 
+    /// <summary>
+    ///     Puts <paramref name="units" /> of <paramref name="item" /> on the board for character <paramref name="id" />,
+    ///     selling from <paramref name="at" /> for <paramref name="durationMs" />, as an earlier listing would have left it,
+    ///     whatever the content says of the item; the listing's ID.
+    /// </summary>
+    public long PutOnBoard(long id, string item, int units, DateTime at, long durationMs)
+    {
+        lock (m_gate)
+        {
+            var listing = new MarketListing(
+                ++m_lastListing,
+                id,
+                m_characters[id].Account.Value,
+                item,
+                units,
+                at,
+                at.AddMilliseconds(durationMs));
+            m_listings.Add(listing.Id, listing);
+            return listing.Id;
+        }
+    }
+
+    /// <summary>
+    ///     Gives row <paramref name="item" /> of character <paramref name="id" /> the refine level
+    ///     <paramref name="level" />, as refining will.
+    /// </summary>
+    public void Refine(long id, long item, int level)
+    {
+        lock (m_gate)
+        {
+            List<StoredItem> items = m_characters[id].Items;
+            int index = items.FindIndex(row => row.Id == item);
+            items[index] = new StoredItem(item, items[index].ItemDefinitionId, items[index].Quantity, null, level);
+        }
+    }
+
     public void GiveItems(long id, string item, int rows, int quantity, uint revision)
     {
         lock (m_gate)
@@ -1837,7 +1873,8 @@ internal sealed class InMemoryGameStore : IGameStore
             m_sales.Where(sale => sale.OperationId == operationId)
                 .OrderBy(sale => sale.ListingId)
                 .Select(sale => new MarketFill(sale.ListingId, sale.SellerCharacterId, sale.Units, sale.Gross))
-                .ToList());
+                .ToList(),
+            entry.Tax);
     }
 
     private MarketResult Unmarketed(InventoryStatus status, Row row, string item = "")
@@ -1865,12 +1902,13 @@ internal sealed class InMemoryGameStore : IGameStore
         string item,
         long listing,
         int quantity,
-        long coins)
+        long coins,
+        long tax = 0)
     {
         Row row = m_characters[characterId];
         row.InventoryRevision = unchecked(row.InventoryRevision + 1);
         m_ledger.Add(operationId, new LedgerEntry(characterId, bagRow, item));
-        m_marketEntries.Add(operationId, new MarketEntry(characterId, bagRow, item, listing, quantity, coins));
+        m_marketEntries.Add(operationId, new MarketEntry(characterId, bagRow, item, listing, quantity, coins, tax));
         return FindMarket(operationId, characterId)!;
     }
 
@@ -2055,7 +2093,8 @@ internal sealed class InMemoryGameStore : IGameStore
 
         row.Coins += net;
         m_listings.Remove(listing.Id);
-        return Marketed(collect.OperationId, collect.CharacterId, bagRow, listing.Item, listing.Id, listing.Left, net);
+        return Marketed(collect.OperationId, collect.CharacterId, bagRow, listing.Item, listing.Id, listing.Left, net,
+            tax);
     }
 
     private DateTime? LatestStock(string item, long excluded)
@@ -2191,10 +2230,10 @@ internal sealed class InMemoryGameStore : IGameStore
     }
 
     // A market operation's ledger row and its metadata: its character, the bag's row, the item, the listing, the units,
-    // and the coins.
+    // the coins, and a collection's tax.
     private sealed class MarketEntry
     {
-        public MarketEntry(long character, long row, string item, long listing, int quantity, long coins)
+        public MarketEntry(long character, long row, string item, long listing, int quantity, long coins, long tax)
         {
             Character = character;
             Row = row;
@@ -2202,6 +2241,7 @@ internal sealed class InMemoryGameStore : IGameStore
             Listing = listing;
             Quantity = quantity;
             Coins = coins;
+            Tax = tax;
         }
 
         public long Character { get; }
@@ -2215,6 +2255,8 @@ internal sealed class InMemoryGameStore : IGameStore
         public int Quantity { get; }
 
         public long Coins { get; }
+
+        public long Tax { get; }
     }
 
     private sealed class LedgerEntry

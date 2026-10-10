@@ -594,6 +594,50 @@ public sealed class ServerInstrumentsTests
         Assert.That(Single(recorder, "evertorch.world.stale_epoch_inputs"), Is.EqualTo(1));
     }
 
+    // A listing's fee and a collection's tax are coins spent; a purchase and a collection's net are transfers between
+    // players and never count there (System Architecture §10).
+    [Test]
+    public void Market_CountsListingsAndSales_AndTheFeeAndTheTaxAsCoinsSpent()
+    {
+        var server = new TestServer(withNpcs: true);
+        using var recorder = new MeterRecorder(server.Instruments.Meter);
+        NpcEntity broker = server.NpcOf("npc.broker");
+        ConnectionId seller = server.Connect();
+        server.SignInWithCharacter(seller, 1);
+        server.Store.GiveItems(1, "item.material.gloom_dust", 1, 10, 5);
+        server.Store.Edit(1, coins: 100);
+        server.SendEnterWorld(seller, 1);
+        ConnectionId buyer = server.Connect();
+        server.SignInWithCharacter(buyer, 2);
+        server.Store.Edit(2, coins: 500);
+        server.SendEnterWorld(buyer, 2);
+        server.TickUntil(() => server.SessionOf(seller).State == SessionState.InWorld
+            && server.SessionOf(buyer).State == SessionState.InWorld);
+        server.Place(seller, broker.Position.X - 2f, broker.Position.Z);
+        server.Place(buyer, broker.Position.X - 2f, broker.Position.Z + 1f);
+        server.Tick(2);
+        long dust = server.Store.Stored(1).Items.Single().Id;
+        CharacterSession selling = server.SessionOf(seller).Character!;
+
+        server.SendMarketList(seller, broker.Id, dust, 10, 1);
+        server.TickUntil(() => selling.Inventory.Coins == 98);
+        server.SendMarketBuy(buyer, broker.Id, "item.material.gloom_dust", 4, 28, 1);
+        server.TickUntil(() => server.SessionOf(buyer).Character!.Inventory.Coins == 388);
+        long listing = server.Transport.ControlSentTo(seller)
+            .Where(message => message.Opcode == MessageOpcode.MarketEvent)
+            .Select(message => MarketEvent.TryRead(message.Payload, out MarketEvent? listed) ? listed!.Listing : 0)
+            .First();
+        server.SendMarketCollect(seller, broker.Id, listing, 2);
+        server.TickUntil(() => selling.Inventory.Coins == 200);
+
+        Assert.That(Named(recorder, "evertorch.market.listings").Sum(measurement => measurement.Value), Is.EqualTo(1));
+        Assert.That(Named(recorder, "evertorch.market.sales").Sum(measurement => measurement.Value), Is.EqualTo(1));
+        Assert.That(
+            Named(recorder, "evertorch.economy.coins")
+                .Select(measurement => (measurement.Value, measurement.Tags.Single().Value)),
+            Is.EqualTo(new[] { (2d, "market fee"), (10d, (object?)"market tax") }));
+    }
+
     [Test]
     public void PartyChanges_AreCountedByKind_OnceCommitted()
     {
