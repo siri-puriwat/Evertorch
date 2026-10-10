@@ -20,10 +20,12 @@ namespace Evertorch.Client
 ///     it offers from the character's job, "Become a Vanguard" from its base job's cap and "Needs Adventurer Lv 10 to
 ///     become a Vanguard" below it; for the Storekeeper, the fee, the storage's rows, the bag's unworn rows, and an
 ///     amount field, where a press on a stored row withdraws the amount and one on a bag row deposits it (Gameplay
-///     Systems §11.4). A Buy press buys one; a Sell press sells one, and a stack's All sells the row; Accept
-///     and Turn in ask for the quest; the reset and a change each ask for a second press within
-///     <see cref="ResetConfirmSeconds" />, since the reset undoes every choice and the change is final, and arming one
-///     disarms the other. The presses go through <see cref="GameClient" />, and only what the server commits moves the
+///     Systems §11.4); for the Broker, the board, the player's listings, the bag's rows the board takes, and the amount
+///     field, where a press on an item buys the amount, one on a listing collects it, and one on a bag row lists the
+///     amount (§11.5). A Buy press buys one; a Sell press sells one, and a stack's All sells the row; Accept and Turn in
+///     ask for the quest; the reset, a change, a purchase and a listing on the board, and the early end of a listing each
+///     ask for a second press within <see cref="ResetConfirmSeconds" />, the first showing what it costs, and arming one
+///     disarms the others. The presses go through <see cref="GameClient" />, and only what the server commits moves the
 ///     lists. It closes once the NPC is drawn beyond its range, the player dies, the map changes, or the connection
 ///     closes.
 /// </summary>
@@ -62,6 +64,7 @@ public sealed class NpcWindow : MonoBehaviour
 
     private readonly StringBuilder m_text = new();
     private readonly List<GameObject> m_rowObjects = new();
+    private readonly List<(TMP_Text Label, MarketListingEntry Listing)> m_listingLabels = new();
     private GameClient? m_client;
     private GameObject? m_panel;
     private TMP_Text? m_name;
@@ -87,6 +90,12 @@ public sealed class NpcWindow : MonoBehaviour
     private TMP_InputField? m_amount;
     private GameObject? m_amountRow;
     private bool m_needsRead;
+    private int m_shownMarket = -1;
+    private string m_armedMarket = string.Empty;
+    private uint m_armedQuantity;
+    private IReadOnlyList<MarketListingEntry>? m_seenListings;
+    private float m_listingsSeenAt;
+    private int m_shownSecond = -1;
 
     public bool IsOpen => m_panel != null && m_panel.activeSelf;
 
@@ -149,7 +158,8 @@ public sealed class NpcWindow : MonoBehaviour
             return;
         }
 
-        if ((m_isResetArmed || m_armedJob != default) && Time.unscaledTime > m_resetArmedUntil)
+        if ((m_isResetArmed || m_armedJob != default || m_armedMarket.Length > 0)
+            && Time.unscaledTime > m_resetArmedUntil)
         {
             ArmReset(false);
         }
@@ -157,6 +167,52 @@ public sealed class NpcWindow : MonoBehaviour
         Show(world, m_client.Content);
         FitList();
         ReadStorageWhenDue(world);
+        ReadMarketWhenDue(world);
+        CountDownListings(m_client.Content);
+    }
+
+    // The board is read on opening and again whenever what is shown may be out of date, in the read bucket storage
+    // uses.
+    private void ReadMarketWhenDue(ClientWorld world)
+    {
+        if (!world.TryGetNpcServices(Npc, out NpcServices? services) || services == null || !services.KeepsMarket)
+        {
+            return;
+        }
+
+        ClientMarket market = world.Market;
+        if ((m_needsRead || (!market.IsCurrent && !market.IsReadRefused))
+            && !market.IsReading
+            && m_client!.OpenMarketAt(Npc) != 0)
+        {
+            m_needsRead = false;
+        }
+    }
+
+    // A listing's time left counts down from the read that told it, once a second, in place, so a press is never lost
+    // to rows built again under it.
+    private void CountDownListings(ClientContent? content)
+    {
+        int second = (int)(Time.unscaledTime - m_listingsSeenAt);
+        if (m_listingLabels.Count == 0 || second == m_shownSecond)
+        {
+            return;
+        }
+
+        m_shownSecond = second;
+        foreach ((TMP_Text label, MarketListingEntry listing) in m_listingLabels)
+        {
+            if (m_armedMarket != CollectKey(listing.Listing))
+            {
+                label.text = MarketMessages.Listing(listing, SecondsLeft(listing), content);
+            }
+        }
+    }
+
+    private uint SecondsLeft(MarketListingEntry listing)
+    {
+        double left = listing.SecondsLeft - Math.Floor(Time.unscaledTime - m_listingsSeenAt);
+        return left > 0 ? (uint)left : 0;
     }
 
     // Storage is read on opening and again whenever what is shown may be out of date; GameClient sends one read at a
@@ -244,6 +300,7 @@ public sealed class NpcWindow : MonoBehaviour
         Npc = default;
         m_isResetArmed = false;
         m_armedJob = default;
+        m_armedMarket = string.Empty;
 
         // The services stay cached for the NPC, so the next open must write the lists again, disarmed.
         m_shownServices = null;
@@ -321,6 +378,7 @@ public sealed class NpcWindow : MonoBehaviour
             && inventory.IsCurrent == m_shownCurrent
             && inventory.Revision == m_shownRevision
             && world.Storage.Version == m_shownStorage
+            && world.Market.Version == m_shownMarket
             && hasContent == m_hadContent)
         {
             return;
@@ -334,6 +392,7 @@ public sealed class NpcWindow : MonoBehaviour
         m_shownCurrent = inventory.IsCurrent;
         m_shownRevision = inventory.Revision;
         m_shownStorage = world.Storage.Version;
+        m_shownMarket = world.Market.Version;
         m_hadContent = hasContent;
         ClearRows();
         m_text.Clear();
@@ -341,14 +400,22 @@ public sealed class NpcWindow : MonoBehaviour
         bool offersReset = services != null && services.OffersReset;
         bool offersChange = services != null && HasChangeFrom(services, world.LocalJob);
         bool keepsStorage = services != null && services.KeepsStorage;
-        UiBuilder.SetActive(m_list!, shop != null || hasQuests || offersReset || offersChange || keepsStorage);
-        UiBuilder.SetActive(m_amountRow!, keepsStorage);
-        m_coins!.text = (shop != null || keepsStorage) && inventory.IsCurrent
+        bool keepsMarket = services != null && services.KeepsMarket;
+        UiBuilder.SetActive(
+            m_list!,
+            shop != null || hasQuests || offersReset || offersChange || keepsStorage || keepsMarket);
+        UiBuilder.SetActive(m_amountRow!, keepsStorage || keepsMarket);
+        m_coins!.text = (shop != null || keepsStorage || keepsMarket) && inventory.IsCurrent
             ? $"Coins: {inventory.Coins}"
             : string.Empty;
         if (keepsStorage)
         {
             ListStorage(world.Storage, inventory, content);
+        }
+
+        if (keepsMarket)
+        {
+            ListMarket(world.Market, inventory, content);
         }
 
         if (shop != null)
@@ -483,6 +550,180 @@ public sealed class NpcWindow : MonoBehaviour
         }
     }
 
+    // The Broker's board, each item's price and the units the player may buy, a press buying the amount, clamped to
+    // what is for sale and what a stack holds; the player's listings, a press collecting one; and the bag's unworn,
+    // unrefined rows the board takes, a press listing the amount for the fee at the board's price (Gameplay Systems
+    // §11.5). Each asks for a second press, but the collection of a listing that sells no more.
+    private void ListMarket(ClientMarket market, ClientInventory inventory, ClientContent? content)
+    {
+        AddHeading("Board");
+        if (!market.IsCurrent)
+        {
+            AddLine(market.IsReadRefused ? "Not read: talk to the Broker again" : "Waiting for the server");
+            return;
+        }
+
+        GameClient client = m_client!;
+        EntityId npc = Npc;
+        foreach (MarketBoardEntry entry in market.Board)
+        {
+            string text = MarketMessages.Entry(entry, content);
+            if (entry.Stock == 0)
+            {
+                AddLine(text);
+                continue;
+            }
+
+            ItemDefinitionId item = entry.Item;
+            uint price = entry.Price;
+            uint most = Math.Min(entry.Stock, StackLimitOf(content, item));
+            string key = BuyKey(item);
+            AddButton(
+                m_armedMarket == key ? MarketMessages.BuyPrompt(item, m_armedQuantity, price, content) : text,
+                () => PressMarket(key, Math.Min(Amount, most), shown => client.BuyOnMarketAt(npc, item, shown, price)));
+        }
+
+        if (market.Board.Count == 0)
+        {
+            AddLine("Nothing on the board");
+        }
+
+        ListListings(market, content);
+        ListListable(market, inventory, content);
+    }
+
+    private void ListListings(ClientMarket market, ClientContent? content)
+    {
+        if (!ReferenceEquals(market.Listings, m_seenListings))
+        {
+            m_seenListings = market.Listings;
+            m_listingsSeenAt = Time.unscaledTime;
+            m_shownSecond = -1;
+        }
+
+        AddHeading("Your listings");
+        GameClient client = m_client!;
+        EntityId npc = Npc;
+        foreach (MarketListingEntry listing in market.Listings)
+        {
+            string key = CollectKey(listing.Listing);
+            bool isArmed = m_armedMarket == key;
+            MarketListingEntry pressed = listing;
+            AddButton(
+                isArmed
+                    ? MarketMessages.CollectPrompt(listing.Item, content)
+                    : MarketMessages.Listing(listing, SecondsLeft(listing), content),
+                () => PressCollect(pressed, key, client, npc));
+            if (!isArmed)
+            {
+                m_listingLabels.Add((m_rowObjects[^1].GetComponentInChildren<TMP_Text>(), listing));
+            }
+        }
+
+        if (market.Listings.Count == 0)
+        {
+            AddLine("Nothing listed");
+        }
+    }
+
+    private void ListListable(ClientMarket market, ClientInventory inventory, ClientContent? content)
+    {
+        AddHeading("List from the bag");
+        if (!inventory.IsCurrent)
+        {
+            AddLine("Waiting for the server");
+            return;
+        }
+
+        GameClient client = m_client!;
+        EntityId npc = Npc;
+        int listed = 0;
+        foreach (InventoryEntry row in inventory.Rows)
+        {
+            if (row.Slot != EquipmentSlot.None
+                || row.RefineLevel > 0
+                || !market.TryGetEntry(row.Item, out MarketBoardEntry entry))
+            {
+                continue;
+            }
+
+            long inventoryItem = row.InventoryItem;
+            ItemDefinitionId item = row.Item;
+            string key = ListKey(inventoryItem);
+            AddButton(
+                m_armedMarket == key
+                    ? MarketMessages.ListPrompt(
+                        item,
+                        m_armedQuantity,
+                        MarketPricing.Fee(m_armedQuantity, (int)entry.Price),
+                        content)
+                    : MarketMessages.BagRow(item, row.Quantity, content),
+                () => PressMarket(
+                    key,
+                    Math.Min(Amount, row.Quantity),
+                    shown => client.ListOnMarketAt(npc, inventoryItem, shown)));
+            listed++;
+        }
+
+        if (listed == 0)
+        {
+            AddLine("Nothing to list");
+        }
+    }
+
+    // A first press arms the command and shows what it costs; a second, within ResetConfirmSeconds, sends it with the
+    // amount shown, whatever the field says by then. Arming one disarms the others.
+    private void PressMarket(string key, uint quantity, Action<uint> send)
+    {
+        if (m_armedMarket == key && Time.unscaledTime <= m_resetArmedUntil)
+        {
+            uint shown = m_armedQuantity;
+            ArmReset(false);
+            send(shown);
+            return;
+        }
+
+        ArmReset(false);
+        m_armedMarket = key;
+        m_armedQuantity = quantity;
+    }
+
+    // A listing that sells no more is collected at once; one still selling ends early, its fee kept, so the first
+    // press only arms it.
+    private void PressCollect(MarketListingEntry listing, string key, GameClient client, EntityId npc)
+    {
+        if (listing.UnitsLeft == 0 || SecondsLeft(listing) == 0)
+        {
+            ArmReset(false);
+            client.CollectListingAt(npc, listing.Listing);
+            return;
+        }
+
+        PressMarket(key, 0, _ => client.CollectListingAt(npc, listing.Listing));
+    }
+
+    private static uint StackLimitOf(ClientContent? content, ItemDefinitionId item)
+    {
+        return content != null && content.TryGetItem(item, out ClientItem? found) && found != null
+            ? (uint)found.StackLimit
+            : 1;
+    }
+
+    private static string BuyKey(ItemDefinitionId item)
+    {
+        return "buy " + item.Value;
+    }
+
+    private static string CollectKey(long listing)
+    {
+        return "collect " + listing.ToString(CultureInfo.InvariantCulture);
+    }
+
+    private static string ListKey(long inventoryItem)
+    {
+        return "list " + inventoryItem.ToString(CultureInfo.InvariantCulture);
+    }
+
     private static string RowText(ClientContent? content, ItemDefinitionId item, uint quantity, byte refineLevel)
     {
         string name = ShopMessages.ItemName(content, item);
@@ -541,11 +782,13 @@ public sealed class NpcWindow : MonoBehaviour
         ArmReset(true);
     }
 
-    // The lists are written again so the button says what its next press does; arming the reset disarms a change.
+    // The lists are written again so the button says what its next press does; arming the reset disarms a change and
+    // a market command.
     private void ArmReset(bool isArmed)
     {
         m_isResetArmed = isArmed;
         m_armedJob = default;
+        m_armedMarket = string.Empty;
         m_resetArmedUntil = Time.unscaledTime + ResetConfirmSeconds;
         m_shownServices = null;
     }
@@ -698,6 +941,7 @@ public sealed class NpcWindow : MonoBehaviour
         }
 
         m_rowObjects.Clear();
+        m_listingLabels.Clear();
     }
 
     // The canvas height follows the screen's shape, and the touch controls come and go.

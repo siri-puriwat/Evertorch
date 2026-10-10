@@ -208,6 +208,11 @@ public sealed class ClientContentParserTests
         "invalid or repeated item ID")]
     [TestCase(
         ClientContentParser.ItemsFile,
+        "\"stackLimit\":999",
+        "\"stackLimit\":0",
+        "Item 'item.material.slime_gel': stackLimit is below 1")]
+    [TestCase(
+        ClientContentParser.ItemsFile,
         "\"model\":\"pickup_slime_gel\"",
         "\"model\":\"Pickup_Slime_Gel\"",
         "Item 'item.material.slime_gel': model is not a logical key")]
@@ -504,7 +509,7 @@ public sealed class ClientContentParserTests
             Is.True);
         Assert.That(monster!.PrefabKey, Is.EqualTo("monster_training_slime"));
         Assert.That(content.TryGetItem(new ItemDefinitionId("item.material.slime_gel"), out ClientItem? item), Is.True);
-        Assert.That(item!.ModelKey, Is.EqualTo("pickup_slime_gel"));
+        Assert.That((item!.ModelKey, item.StackLimit), Is.EqualTo(("pickup_slime_gel", 999)));
         Assert.That(content.TryGetNpc(new NpcDefinitionId("npc.gate_warden"), out ClientNpc? warden), Is.True);
         Assert.That((warden!.DisplayName, warden.PrefabKey), Is.EqualTo(("Gate Warden", "npc_gate_warden")));
         Assert.That(

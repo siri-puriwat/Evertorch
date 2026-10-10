@@ -4,8 +4,8 @@ using Evertorch.Game;
 namespace Evertorch.Client
 {
 /// <summary>
-///     The client-safe part of an item definition: its name, its type, the logical key of its view as a world drop, its
-///     icon, and a weapon's model in a hand.
+///     The client-safe part of an item definition: its name, its type, how many a stack holds, the logical key of its view
+///     as a world drop, its icon, and a weapon's model in a hand.
 /// </summary>
 public sealed class ClientItem
 {
@@ -15,7 +15,8 @@ public sealed class ClientItem
         ItemType type,
         string modelKey,
         string iconKey,
-        string heldKey = "")
+        string heldKey = "",
+        int stackLimit = 1)
     {
         Id = id;
         DisplayName = displayName ?? throw new ArgumentNullException(nameof(displayName));
@@ -23,6 +24,7 @@ public sealed class ClientItem
         ModelKey = modelKey ?? throw new ArgumentNullException(nameof(modelKey));
         IconKey = iconKey ?? throw new ArgumentNullException(nameof(iconKey));
         HeldKey = heldKey ?? throw new ArgumentNullException(nameof(heldKey));
+        StackLimit = stackLimit;
     }
 
     public ItemDefinitionId Id { get; }
@@ -42,5 +44,10 @@ public sealed class ClientItem
     ///     A weapon's model in a hand (Prototype Content §2); empty when the item names none.
     /// </summary>
     public string HeldKey { get; }
+
+    /// <summary>
+    ///     The most one row holds, so an amount can be clamped before the server would refuse it.
+    /// </summary>
+    public int StackLimit { get; }
 }
 }

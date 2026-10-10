@@ -138,6 +138,11 @@ public sealed class ClientWorld
     public ClientStorage Storage { get; } = new();
 
     /// <summary>
+    ///     The market board as the Broker last told this character (Gameplay Systems §11.5).
+    /// </summary>
+    public ClientMarket Market { get; } = new();
+
+    /// <summary>
     ///     The skills the server says the local character knows, with the cooldown left when the list was sent.
     /// </summary>
     public IReadOnlyList<SkillListEntry> Skills { get; private set; } = Array.Empty<SkillListEntry>();

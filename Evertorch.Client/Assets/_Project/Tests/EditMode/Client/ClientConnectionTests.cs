@@ -722,6 +722,13 @@ public sealed class ClientConnectionTests
         uint nothing = harness.Connection.SendMarketCollect(broker, 0);
 
         Assert.That(heard, Is.EqualTo(new[] { "board item.a 30", "mine 1", "Sold 120" }));
+        ClientMarket market = harness.Connection.World!.Market;
+        Assert.That(
+            (market.Board.Single().Stock, market.Listings.Single().CoinsWaiting, market.IsCurrent),
+            Is.EqualTo((6u, 110u, false)),
+            "the world's board, made stale by the sale");
+        Assert.That(harness.Connection.TryGetMarketSequence(buy, out MarketCommand command), Is.True);
+        Assert.That(command, Is.EqualTo(MarketCommand.Buy));
         Assert.That(
             (open, list, buy, collect, free, nothing),
             Is.EqualTo((open, open + 1, open + 2, open + 3, 0u, 0u)));

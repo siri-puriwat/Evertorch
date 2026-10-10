@@ -28,6 +28,7 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
     private readonly Dictionary<uint, (PartyCommand Command, string Name)> m_partySequences = new();
     private readonly Dictionary<uint, (TradeCommand Command, string Name)> m_tradeSequences = new();
     private readonly Dictionary<uint, StorageCommand> m_storageSequences = new();
+    private readonly Dictionary<uint, MarketCommand> m_marketSequences = new();
     private uint m_commandSequence;
 
     public ClientConnection(IClientTransport transport, ClientConnectionSettings settings, IMapProvider maps)
@@ -382,6 +383,11 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
                     if (World != null && TryGetStorageSequence(rejected.CommandSequence, out StorageCommand storage))
                     {
                         World.Storage.OnRefused(storage, rejected.Reason);
+                    }
+
+                    if (World != null && TryGetMarketSequence(rejected.CommandSequence, out MarketCommand market))
+                    {
+                        World.Market.OnRefused(market, rejected.Reason);
                     }
 
                     if (World != null
@@ -939,6 +945,7 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
 
         uint sequence = NextCommandSequence();
         SendRouted(MessageOpcode.MarketOpen, new MarketOpen(npc, sequence).Write(m_sendBuffer));
+        Remember(sequence, MarketCommand.Open);
         return sequence;
     }
 
@@ -957,6 +964,7 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
         SendRouted(
             MessageOpcode.MarketList,
             new MarketList(npc, inventoryItem, quantity, sequence).Write(m_sendBuffer));
+        Remember(sequence, MarketCommand.List);
         return sequence;
     }
 
@@ -975,6 +983,7 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
         SendRouted(
             MessageOpcode.MarketBuy,
             new MarketBuy(npc, item, quantity, priceLimit, sequence).Write(m_sendBuffer));
+        Remember(sequence, MarketCommand.Buy);
         return sequence;
     }
 
@@ -991,6 +1000,7 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
 
         uint sequence = NextCommandSequence();
         SendRouted(MessageOpcode.MarketCollect, new MarketCollect(npc, listing, sequence).Write(m_sendBuffer));
+        Remember(sequence, MarketCommand.Collect);
         return sequence;
     }
 
@@ -1010,6 +1020,24 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
         }
 
         m_storageSequences[sequence] = command;
+    }
+
+    /// <summary>
+    ///     The Broker command <paramref name="commandSequence" /> numbered, so a refusal can say what was refused.
+    /// </summary>
+    public bool TryGetMarketSequence(uint commandSequence, out MarketCommand command)
+    {
+        return m_marketSequences.TryGetValue(commandSequence, out command);
+    }
+
+    private void Remember(uint sequence, MarketCommand command)
+    {
+        if (m_marketSequences.Count >= MaxEquipSequences)
+        {
+            m_marketSequences.Clear();
+        }
+
+        m_marketSequences[sequence] = command;
     }
 
     /// <summary>
@@ -1398,6 +1426,7 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
             m_partySequences.Clear();
             m_tradeSequences.Clear();
             m_storageSequences.Clear();
+            m_marketSequences.Clear();
         }
 
         // The command sequence belongs to the character, not the connection: after a reconnect it goes on from the
@@ -1515,6 +1544,7 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
         }
         else
         {
+            World.Market.OnBoard(message);
             MarketBoardReceived?.Invoke(message);
         }
     }
@@ -1531,6 +1561,7 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
         }
         else
         {
+            World.Market.OnMine(message);
             MarketMineReceived?.Invoke(message);
         }
     }
@@ -1547,6 +1578,7 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
         }
         else
         {
+            World.Market.OnNotice(message);
             MarketEventReceived?.Invoke(message);
         }
     }

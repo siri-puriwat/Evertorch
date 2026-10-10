@@ -11,6 +11,8 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
+using UnityEngine.TestTools.Utils;
+using UnityEngine.UI;
 using EntityId = Evertorch.Game.EntityId;
 using Object = UnityEngine.Object;
 
@@ -19,8 +21,9 @@ namespace Evertorch.Client.Tests.PlayMode
 /// <summary>
 ///     The Milestone 15 "Market board" presentation checks (ROADMAP §8; Coding Standards §10): the real
 ///     <see cref="GameClient" /> against the real server process and a real database. The headless
-///     <c>MarketAcceptanceTests</c> hold the server's steps; here each later line adds a bounded check of what the real
-///     client draws: the Broker's window, its board and listings, listing from the bag, and the words.
+///     <c>MarketAcceptanceTests</c> hold the server's steps; here a bounded check of what the real client draws: the
+///     Broker's body and window, its board and listings, listing from the bag, the confirming presses, and the words. The
+///     server sells a listing for ten minutes, so its time left reads in minutes.
 /// </summary>
 public sealed class LiveServerMarketTests
 {
@@ -28,10 +31,13 @@ public sealed class LiveServerMarketTests
     private const string AnnName = "LiveMarketAnn";
     private const string BobName = "LiveMarketBob";
     private const string GloomDust = "item.material.gloom_dust";
-    private const string Quartermaster = "npc.quartermaster";
+    private const string Broker = "npc.broker";
     private const uint AnnCoins = 300;
+    private const uint BobCoins = 500;
     private const float StartTimeoutSeconds = 30f;
     private const int TestTimeoutMs = 300_000;
+
+    private static readonly Color BrokerTint = new Color32(0xB8, 0x86, 0x2B, 0xFF);
 
     private LiveDatabase? m_database;
     private LiveServer? m_server;
@@ -74,12 +80,16 @@ public sealed class LiveServerMarketTests
         }
     }
 
-    // The real client, stored holding ten Gloom Dust and 300 coins, enters and shows them; another player enters beside
-    // it and is drawn; a walk through the controller up to the Quartermaster opens its window, as an arrival does, so
-    // an editor without focus, which drops a queued click, cannot fail the step (Gameplay Systems §6.1).
+    // The real client, stored holding ten Gloom Dust and 300 coins, enters and shows them; another player, stored beside
+    // the Broker with 500 coins, enters and is drawn. A walk through the controller up to the Broker, whose whole body
+    // wears its colour, opens its window, as an arrival does, so an editor without focus, which drops a queued click,
+    // cannot fail the step. A first press on the bag's dust shows the fee and a second lists four; the other player
+    // buys two through its own connection, the seller hears of the sale, and the window reads the listing again; a
+    // first press on it arms the early end, and a second collects the sales less the tax and the two left (Gameplay
+    // Systems §11.5; Prototype Content §2).
     [UnityTest]
     [Timeout(TestTimeoutMs)]
-    public IEnumerator Seller_WithDungeonGoods_SeesTheBuyer_AndOpensATownWindow()
+    public IEnumerator Seller_ThroughTheBrokersWindow_ListsSellsToTheBuyer_AndCollects()
     {
         string actionsPath = RequirePrerequisites();
         yield return StartDatabaseAndServer();
@@ -113,13 +123,22 @@ public sealed class LiveServerMarketTests
         Assert.That(client.RemoteViews.ContainsKey(seen), Is.True, $"{client.Status} {server.JoinOutput()}");
 
         NpcWindow window = client.GetComponentsInChildren<NpcWindow>(true).Single();
-        yield return WaitUntil(() => NpcView(client, Quartermaster)?.HasBody == true, StartTimeoutSeconds);
-        EntityView quartermaster = NpcView(client, Quartermaster)!;
-        EntityId npc = client.RemoteViews.Single(pair => pair.Value == quartermaster).Key;
-        Vector3 at = quartermaster.transform.position;
-        var beside = new WorldPosition(at.x + 1.5f, 0f, at.z);
-        Assert.That(client.Controller!.TryMoveTo(world.Predictor.Position, beside), Is.True,
-            "a way to the Quartermaster");
+        yield return WaitUntil(() => NpcView(client, Broker)?.HasBody == true, StartTimeoutSeconds);
+        EntityView broker = NpcView(client, Broker)!;
+        var block = new MaterialPropertyBlock();
+        foreach (Renderer renderer in broker.GetComponentsInChildren<Renderer>())
+        {
+            renderer.GetPropertyBlock(block);
+            Assert.That(
+                block.GetColor("_BaseColor"),
+                Is.EqualTo(BrokerTint).Using(new ColorEqualityComparer(1e-3f)),
+                $"{renderer.name}: the whole body in the Broker's colour");
+        }
+
+        EntityId npc = client.RemoteViews.Single(pair => pair.Value == broker).Key;
+        Vector3 at = broker.transform.position;
+        var beside = new WorldPosition(at.x - 1.5f, 0f, at.z);
+        Assert.That(client.Controller!.TryMoveTo(world.Predictor.Position, beside), Is.True, "a way to the Broker");
         yield return WaitUntil(
             () =>
             {
@@ -133,13 +152,85 @@ public sealed class LiveServerMarketTests
             () =>
             {
                 other.Poll();
-                return window.IsOpen && window.ShownName == "Quartermaster";
+                return window.IsOpen && window.Text.Contains("List Gloom Dust x 10");
             },
             StartTimeoutSeconds);
-        Assert.That(window.ShownName, Is.EqualTo("Quartermaster"), $"{window.Text} at {world.Predictor.Position}");
-        Assert.That(window.Text, Does.Contain("Gloom Dust x 10"), "the bag's goods among what the shop buys");
+        Assert.That(window.ShownName, Is.EqualTo("Broker"), $"{window.Text} at {world.Predictor.Position}");
+        Assert.That(
+            window.Text,
+            Does.Contain("Gloom Dust: 28 coins, none for sale").And.Contain("Monarch Mantle: 1000 coins, none for sale")
+                .And.Contain("Nothing listed"));
+
+        window.AmountInput!.text = "4";
+        Assert.That(Press(window, "List Gloom Dust x 10"), Is.True, window.Text);
+        yield return null;
+        Assert.That(window.Text, Does.Contain("Press again to list Gloom Dust x 4 for a fee of 1 coin"));
+        Assert.That(Press(window, "Press again to list Gloom Dust x 4 for a fee of 1 coin"), Is.True, window.Text);
+        yield return WaitUntil(
+            () =>
+            {
+                other.Poll();
+                return window.Text.Contains("Collect Gloom Dust: 4 left, 0 sold");
+            },
+            StartTimeoutSeconds);
+        Assert.That(
+            client.ChatLog.Lines.Select(line => line.Text),
+            Has.Member("Listed Gloom Dust x 4 for a fee of 1 coin."),
+            server.JoinOutput());
+        Assert.That(window.Text, Does.Match(@"Collect Gloom Dust: 4 left, 0 sold, 0 coins waiting, \d+m \d+s left"));
+        Assert.That(window.Text, Does.Contain("List Gloom Dust x 6"), "the rest of the stack");
+
+        other.SendMarketBuy(npc, new ItemDefinitionId(GloomDust), 2, 28);
+        yield return WaitUntil(
+            () =>
+            {
+                other.Poll();
+                return window.Text.Contains("Collect Gloom Dust: 2 left, 2 sold, 51 coins waiting");
+            },
+            StartTimeoutSeconds);
+        Assert.That(
+            client.ChatLog.Lines.Select(line => line.Text),
+            Has.Member("Your Gloom Dust x 2 sold for 56 coins."),
+            $"{window.Text} {server.JoinOutput()}");
+        Assert.That(window.Text, Does.Contain("Collect Gloom Dust: 2 left, 2 sold, 51 coins waiting"), "read again");
+        Assert.That(
+            (other.World.Inventory.Coins, other.World.Inventory.Rows.Single().Quantity),
+            Is.EqualTo((BobCoins - 56, 2u)),
+            "the buyer's coins and dust");
+
+        string listing = window.GetComponentsInChildren<Button>()
+            .Select(button => button.name)
+            .Single(name => name.StartsWith("Collect Gloom Dust: 2 left", StringComparison.Ordinal));
+        Assert.That(Press(window, listing), Is.True, window.Text);
+        yield return null;
+        Assert.That(window.Text, Does.Contain("Press again to end the Gloom Dust listing early"), "still selling");
+        Assert.That(Press(window, "Press again to end the Gloom Dust listing early"), Is.True, window.Text);
+        yield return WaitUntil(
+            () =>
+            {
+                other.Poll();
+                return client.ChatLog.Lines.Any(line => line.Text == "Collected 51 coins and Gloom Dust x 2.")
+                    && window.Text.Contains("Nothing listed");
+            },
+            StartTimeoutSeconds);
+        yield return null;
+        Assert.That(
+            client.ChatLog.Lines.Select(line => line.Text),
+            Has.Member("Collected 51 coins and Gloom Dust x 2."),
+            server.JoinOutput());
+        Assert.That(world.Inventory.Coins, Is.EqualTo(AnnCoins - 1 + 51), "the fee paid and the net collected");
+        Assert.That(world.Inventory.Rows.Single().Quantity, Is.EqualTo(8u), "the two left back in the bag");
+        Assert.That(window.Text, Does.Contain("Nothing listed"));
         Assert.That(other.MalformedMessages + other.UnexpectedMessages, Is.Zero, "the other player's traffic");
         Assert.That(client.Connection!.MalformedMessages + client.Connection.UnexpectedMessages, Is.Zero);
+    }
+
+    // Presses the window's button of that name, as a click on it does.
+    private static bool Press(NpcWindow window, string name)
+    {
+        Button? button = window.GetComponentsInChildren<Button>().FirstOrDefault(candidate => candidate.name == name);
+        button?.onClick.Invoke();
+        return button != null;
     }
 
     private static EntityView? NpcView(GameClient client, string definition)
@@ -216,6 +307,10 @@ public sealed class LiveServerMarketTests
                 return other.Characters.Any(entry => entry.Name == BobName);
             },
             StartTimeoutSeconds);
+
+        // Stored just south of the Broker, within its reach, so the buyer needs no walk.
+        m_database!.Execute(
+            $"UPDATE characters SET currency = {BobCoins}, position_x = 3.5, position_z = 3.0 WHERE name = '{BobName}'");
         other.EnterWorld(other.Characters.Single(entry => entry.Name == BobName).Character);
         yield return WaitUntil(
             () =>
@@ -244,7 +339,7 @@ public sealed class LiveServerMarketTests
         m_database = starting.Result;
 
         LiveServer server = m_server = new LiveServer();
-        server.Start(m_database, "--World:RandomSeed=15");
+        server.Start(m_database, "--World:RandomSeed=15 --Market:ListingDurationMs=600000");
         Assert.That(server.IsTiedToEditor || !KillOnCloseJob.IsSupported, Is.True, "the server ends with the editor");
         yield return WaitUntil(() => server.TryReadListeningPort(out int _), StartTimeoutSeconds);
     }

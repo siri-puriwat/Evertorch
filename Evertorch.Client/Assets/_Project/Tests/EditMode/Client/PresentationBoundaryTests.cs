@@ -20,7 +20,7 @@ public sealed class PresentationBoundaryTests
         + @"|MovementController"
         + @"|LocalPlayerDriver"
         + @"|MovementPredictor|\.Predictor\b|\.IsLocked\b|RequestRespawn|UseSkillSlot|\bUseSkill\(|PressInventoryRow"
-        + @"|BuyFrom|SellTo"
+        + @"|BuyFrom|SellTo|OpenMarketAt|ListOnMarketAt|BuyOnMarketAt|CollectListingAt"
         + @"|AcceptQuestFrom|TurnInQuestTo|RaiseStat|ToggleStats|LearnSkillLevel|ToggleSkills|ResetBuildAt|ChangeJobAt"
         + @"|\.ActionLock\b"
         + @"|\.On(Spawn|Despawn|Snapshot|TargetChanged|AttackStarted|Damage|EntityDied|EntityRevived|CommandRejected"

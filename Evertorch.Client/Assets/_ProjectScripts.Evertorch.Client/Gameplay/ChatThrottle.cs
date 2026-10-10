@@ -7,7 +7,8 @@ namespace Evertorch.Client
 ///     server, so the client refuses a line itself before the server would. It is one line stricter than the server's
 ///     burst of 5 at 1 a second, which absorbs lines that arrive bunched by up to about a second of network delay. The
 ///     party's and the trade's commands keep a bucket of the same size, stricter still than the server's 5 at 2 a
-///     second, and storage's reads one of <see cref="ReadBurst" />, one stricter than the server's 3 at 1 a second.
+///     second, and the reads of storage and of the market board share one of <see cref="ReadBurst" />, one stricter than
+///     the server's 3 at 1 a second.
 /// </summary>
 public sealed class ChatThrottle
 {

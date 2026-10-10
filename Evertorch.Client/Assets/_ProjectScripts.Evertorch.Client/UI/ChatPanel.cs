@@ -305,6 +305,7 @@ public sealed class ChatPanel : MonoBehaviour
             m_watched.SkillsChanged -= OnSkillsChanged;
             m_watched.Inventory.ChangeApplied -= OnChangeApplied;
             m_watched.Storage.ChangeApplied -= OnStorageChangeApplied;
+            m_watched.Market.NoticeReceived -= OnMarketNotice;
             m_watched.QuestsChanged -= OnQuestsChanged;
         }
 
@@ -322,6 +323,7 @@ public sealed class ChatPanel : MonoBehaviour
             world.SkillsChanged += OnSkillsChanged;
             world.Inventory.ChangeApplied += OnChangeApplied;
             world.Storage.ChangeApplied += OnStorageChangeApplied;
+            world.Market.NoticeReceived += OnMarketNotice;
             world.QuestsChanged += OnQuestsChanged;
         }
         else
@@ -370,6 +372,14 @@ public sealed class ChatPanel : MonoBehaviour
             && m_client.Connection.TryGetStorageSequence(rejected.CommandSequence, out StorageCommand storage))
         {
             Add(StorageMessages.DescribeRefusal(storage, rejected.Reason));
+            return;
+        }
+
+        if (m_client != null
+            && m_client.Connection != null
+            && m_client.Connection.TryGetMarketSequence(rejected.CommandSequence, out MarketCommand market))
+        {
+            Add(MarketMessages.DescribeRefusal(market, rejected.Reason));
             return;
         }
 
@@ -478,6 +488,11 @@ public sealed class ChatPanel : MonoBehaviour
     private void OnStorageChangeApplied(StorageDelta delta)
     {
         Add(StorageMessages.Describe(delta, m_client != null ? m_client.Content : null));
+    }
+
+    private void OnMarketNotice(MarketEvent notice)
+    {
+        Add(MarketMessages.Describe(notice, m_client != null ? m_client.Content : null));
     }
 
     private void Build(GameClient client)

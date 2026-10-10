@@ -813,6 +813,56 @@ public sealed class GameClient : MonoBehaviour
     }
 
     /// <summary>
+    ///     Reads the market board at the Broker <paramref name="npc" /> (Gameplay Systems §11.5), unless a read is on its
+    ///     way or the read bucket, which storage's reads share, is empty: the window asks again until the board is
+    ///     current. 0 when nothing was sent, else the command's sequence.
+    /// </summary>
+    public uint OpenMarketAt(EntityId npc)
+    {
+        ClientWorld? world = m_world;
+        if (Connection == null
+            || world == null
+            || world.Market.IsReading
+            || !m_readThrottle.TryTake(Time.realtimeSinceStartupAsDouble))
+        {
+            return 0;
+        }
+
+        uint sequence = Connection.SendMarketOpen(npc);
+        if (sequence != 0)
+        {
+            world.Market.BeginRead();
+        }
+
+        return sequence;
+    }
+
+    /// <summary>
+    ///     Lists <paramref name="quantity" /> of a bag row on the board for its fee; only the committed change moves it.
+    /// </summary>
+    public uint ListOnMarketAt(EntityId npc, long inventoryItem, uint quantity)
+    {
+        return Connection?.SendMarketList(npc, inventoryItem, quantity) ?? 0;
+    }
+
+    /// <summary>
+    ///     Buys <paramref name="quantity" /> of <paramref name="item" /> on the board at most at the price shown,
+    ///     <paramref name="priceLimit" />, so a price that went up meanwhile refuses it rather than costing more.
+    /// </summary>
+    public uint BuyOnMarketAt(EntityId npc, ItemDefinitionId item, uint quantity, uint priceLimit)
+    {
+        return Connection?.SendMarketBuy(npc, item, quantity, priceLimit) ?? 0;
+    }
+
+    /// <summary>
+    ///     Collects one of the player's listings at the Broker, its sales less the tax and its units left, ending it.
+    /// </summary>
+    public uint CollectListingAt(EntityId npc, long listing)
+    {
+        return Connection?.SendMarketCollect(npc, listing) ?? 0;
+    }
+
+    /// <summary>
     ///     Asks the NPC for <paramref name="quest" /> (Gameplay Systems §2.2); the quest log shows it once the server
     ///     accepts.
     /// </summary>

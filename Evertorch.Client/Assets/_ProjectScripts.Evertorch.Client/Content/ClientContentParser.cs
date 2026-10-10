@@ -384,7 +384,22 @@ public static class ClientContentParser
                 return null;
             }
 
-            items.Add(id, new ClientItem(id, item.displayName ?? string.Empty, type, item.model, item.icon, held));
+            if (item.stackLimit < 1)
+            {
+                error = $"Item '{item.id}': stackLimit is below 1.";
+                return null;
+            }
+
+            items.Add(
+                id,
+                new ClientItem(
+                    id,
+                    item.displayName ?? string.Empty,
+                    type,
+                    item.model,
+                    item.icon,
+                    held,
+                    item.stackLimit));
         }
 
         return items;
@@ -911,6 +926,7 @@ public static class ClientContentParser
         public string? model = string.Empty;
         public string? icon = string.Empty;
         public string? held = string.Empty;
+        public int stackLimit = 0;
     }
 
     [Serializable]
