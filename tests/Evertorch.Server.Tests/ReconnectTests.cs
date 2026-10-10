@@ -133,14 +133,14 @@ public sealed class ReconnectTests
     {
         TestServer server = CreateServer();
         ConnectionId first = server.EnterWorld(2);
-        server.Place(first, 3.5f, 4.5f);
+        server.Place(first, 2.5f, 4.5f);
         server.Disconnect(first);
         server.Tick(GraceTicks + 2);
 
         ConnectionId second = server.EnterWorld(2);
 
         Assert.That(server.Store.Loads[2], Is.EqualTo(2));
-        Assert.That(server.PlayerOf(second).Position.X, Is.EqualTo(3.5f));
+        Assert.That(server.PlayerOf(second).Position.X, Is.EqualTo(2.5f));
     }
 
     [Test]

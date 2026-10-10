@@ -6,6 +6,10 @@ server:
   # The Slime Monarch's rare prize for its most valuable player: it sells for nothing, so no shop trades it.
   weight: 70
   sellPrice: 0
+  market:
+    # It sells to no shop, so its floor is authored.
+    basePrice: 1000
+    floor: 250
   equipment:
     defense: 22
 client:

@@ -1,0 +1,8 @@
+id: npc.broker
+displayName: Broker
+server:
+  market: true
+client:
+  # The Guildmaster's body in a colour of its own, until art arrives.
+  prefab: npc_guildmaster
+  tint: "#B8862B"

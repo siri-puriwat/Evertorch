@@ -62,7 +62,7 @@ public sealed class ProcessLossTests
     {
         TestServer lost = NewServer();
         ConnectionId first = lost.EnterWorldAs("loss", "LossTest");
-        lost.Place(first, 3.5f, 4.5f);
+        lost.Place(first, 2.5f, 4.5f);
         WorldPosition checkpointed = lost.PlayerOf(first).Position;
         lost.Tick(TestServer.TickRate + 1);
         lost.Persistence.RunUntilIdle();

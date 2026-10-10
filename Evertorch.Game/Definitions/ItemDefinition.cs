@@ -10,7 +10,8 @@ public sealed class ItemDefinition
         int weight,
         int sellPrice,
         ItemEquipment? equipment = null,
-        ItemEffect? effect = null)
+        ItemEffect? effect = null,
+        ItemMarket? market = null)
     {
         Id = id;
         DisplayName = displayName;
@@ -20,6 +21,7 @@ public sealed class ItemDefinition
         SellPrice = sellPrice;
         Equipment = equipment;
         Effect = effect;
+        Market = market;
     }
 
     public ItemDefinitionId Id { get; }
@@ -39,6 +41,9 @@ public sealed class ItemDefinition
 
     /// <summary>What a consumable restores; null for every other type.</summary>
     public ItemEffect? Effect { get; }
+
+    /// <summary>Its terms on the market board; null when the board does not list it (Gameplay Systems §11.5).</summary>
+    public ItemMarket? Market { get; }
 
     /// <summary>The slot a weapon or an armor fills; <see cref="EquipmentSlot.None" /> for every other type.</summary>
     public EquipmentSlot Slot => Type switch

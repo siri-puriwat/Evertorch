@@ -413,11 +413,52 @@ public static class ServerContentLoader
             entry.Report("effect", "required property is missing for a consumable");
         }
 
+        ItemMarket? market = entry.Has("market")
+            ? ReadMarket(entry, entry.RequiredObject("market"), sellPrice, stackLimit, problems)
+            : null;
         entry.ReportUnexpectedProperties();
 
         return problems.Count == problemsBefore
-            ? new ItemDefinition(id, displayName, type, stackLimit, weight, sellPrice, equipment, effect)
+            ? new ItemDefinition(id, displayName, type, stackLimit, weight, sellPrice, equipment, effect, market)
             : null;
+    }
+
+    // A listable item's terms as the tools resolved them, held to the same rules (Content Pipeline §7): the floor from
+    // the sell price, at least 1, to the base, and the ceiling from the base to what keeps a stack within the coin cap.
+    private static ItemMarket? ReadMarket(
+        PackageObjectReader entry,
+        PackageObjectReader? values,
+        int sellPrice,
+        int stackLimit,
+        List<string> problems)
+    {
+        if (values == null)
+        {
+            return null;
+        }
+
+        int problemsBefore = problems.Count;
+        int basePrice = values.RequiredInt("basePrice", 1, ContentLimits.MaxPrice);
+        int floor = values.RequiredInt("floor", 1, ContentLimits.MaxPrice);
+        int ceiling = values.RequiredInt("ceiling", 1, ContentLimits.MaxPrice);
+        values.ReportUnexpectedProperties();
+        if (problems.Count != problemsBefore)
+        {
+            return null;
+        }
+
+        if (floor < MarketPricing.DefaultFloor(sellPrice)
+            || floor > basePrice
+            || ceiling < basePrice
+            || ceiling > ContentLimits.MaxCurrency / stackLimit)
+        {
+            entry.Report(
+                "market",
+                "must keep its floor from the sell price to the base, and its ceiling from the base to a stack's cap");
+            return null;
+        }
+
+        return new ItemMarket(basePrice, floor, ceiling);
     }
 
     private static ItemEffect? ReadEffect(PackageObjectReader entry, PackageObjectReader? values)
@@ -1055,9 +1096,17 @@ public static class ServerContentLoader
         int? depositFee = entry.Has("depositFee")
             ? entry.RequiredInt("depositFee", 0, ContentLimits.MaxDepositFee)
             : null;
+        bool keepsMarket = entry.Has("market") && entry.RequiredBool("market");
         entry.ReportUnexpectedProperties();
         return problems.Count == problemsBefore
-            ? new NpcDefinition(id, displayName, shop.AsReadOnly(), offersReset, offersJobChange, depositFee)
+            ? new NpcDefinition(
+                id,
+                displayName,
+                shop.AsReadOnly(),
+                offersReset,
+                offersJobChange,
+                depositFee,
+                keepsMarket)
             : null;
     }
 

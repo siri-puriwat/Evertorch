@@ -40,7 +40,7 @@ public sealed class LiveServerBuildTests : InputTestFixture
     private const string BarClientName = "LiveBuildEight";
     private const string BoltClientName = "LiveBuildNine";
     private const string SelfMendClientName = "LiveBuildTen";
-    private const string GuildmasterPrefab = "npc_guildmaster";
+    private const string Guildmaster = "npc.guildmaster";
     private const float StartTimeoutSeconds = 30f;
     private const float FightTimeoutSeconds = 60f;
     private const int TestTimeoutMs = 300_000;
@@ -262,8 +262,8 @@ public sealed class LiveServerBuildTests : InputTestFixture
             (world.Sheet!.Stats[1].Value, world.Sheet.StatPoints),
             Is.EqualTo(((byte)7, (ushort)2)),
             "AGI 7 cost 4 of the 6 points");
-        yield return WaitUntil(() => NpcView(client, GuildmasterPrefab)?.HasBody == true, StartTimeoutSeconds);
-        EntityView guildmaster = NpcView(client, GuildmasterPrefab)!;
+        yield return WaitUntil(() => NpcView(client, Guildmaster)?.HasBody == true, StartTimeoutSeconds);
+        EntityView guildmaster = NpcView(client, Guildmaster)!;
         ClickAt(mouse,
             Camera.main!.WorldToScreenPoint(guildmaster.transform.position + Vector3.up * EntityPicker.PickHeight));
         const string offered = "\nReset all points\nChange job\nNeeds Adventurer Lv 10 to become an Arcanist"
@@ -325,8 +325,8 @@ public sealed class LiveServerBuildTests : InputTestFixture
 
         NpcWindow window = client.GetComponentsInChildren<NpcWindow>(true).Single();
         ChatPanel lines = client.GetComponentsInChildren<ChatPanel>(true).Single();
-        yield return WaitUntil(() => NpcView(client, GuildmasterPrefab)?.HasBody == true, StartTimeoutSeconds);
-        EntityView guildmaster = NpcView(client, GuildmasterPrefab)!;
+        yield return WaitUntil(() => NpcView(client, Guildmaster)?.HasBody == true, StartTimeoutSeconds);
+        EntityView guildmaster = NpcView(client, Guildmaster)!;
         ClickAt(mouse,
             Camera.main!.WorldToScreenPoint(guildmaster.transform.position + Vector3.up * EntityPicker.PickHeight));
         yield return WaitUntil(() => window.IsOpen && window.Text.EndsWith("Become a Vanguard"), StartTimeoutSeconds);
@@ -735,7 +735,8 @@ public sealed class LiveServerBuildTests : InputTestFixture
         return button != null;
     }
 
-    private static EntityView? NpcView(GameClient client, string prefab)
+    // By the NPC's definition: the Broker is drawn from the Guildmaster's prefab.
+    private static EntityView? NpcView(GameClient client, string npc)
     {
         ClientWorld? world = client.World;
         return world == null
@@ -743,7 +744,7 @@ public sealed class LiveServerBuildTests : InputTestFixture
             : client.RemoteViews
                 .Where(pair => world.Remotes.TryGetValue(pair.Key, out RemoteEntity? remote)
                     && remote.Kind == EntityKind.Npc
-                    && pair.Value.Key == prefab)
+                    && remote.DefinitionId == npc)
                 .Select(pair => pair.Value)
                 .SingleOrDefault();
     }

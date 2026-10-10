@@ -5,6 +5,8 @@ stackLimit: 999
 server:
   weight: 3
   sellPrice: 40
+  market:
+    basePrice: 80
 client:
   # The slime gel's look until art for the grotto's materials arrives.
   icon: item_slime_gel

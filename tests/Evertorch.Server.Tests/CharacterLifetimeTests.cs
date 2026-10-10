@@ -14,7 +14,7 @@ namespace Evertorch.Server.Tests
 [TestFixture]
 public sealed class CharacterLifetimeTests
 {
-    private static readonly WorldPosition Stored = new(3.5f, 0f, 4.5f);
+    private static readonly WorldPosition Stored = new(2.5f, 0f, 4.5f);
 
     private static WorldEntered LastWorldEntered(TestServer server, ConnectionId connection)
     {

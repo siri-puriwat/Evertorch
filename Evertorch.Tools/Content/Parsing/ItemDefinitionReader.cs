@@ -53,6 +53,10 @@ internal static class ItemDefinitionReader
             server.ReportField("effect", "is only for a consumable");
         }
 
+        ItemMarket? market = server.Has("market")
+            ? ReadMarket(server.RequiredMapping("market"), sellPrice, stackLimit)
+            : null;
+
         YamlFieldReader client = root.RequiredMapping("client");
         string icon = client.RequiredAssetKey("icon");
         string model = client.RequiredAssetKey("model");
@@ -75,7 +79,16 @@ internal static class ItemDefinitionReader
             return null;
         }
 
-        var definition = new ItemDefinition(id, displayName, type, stackLimit, weight, sellPrice, equipment, effect);
+        var definition = new ItemDefinition(
+            id,
+            displayName,
+            type,
+            stackLimit,
+            weight,
+            sellPrice,
+            equipment,
+            effect,
+            market);
         return new AuthoredItem(root.ToSource(), definition, icon, model, held);
     }
 
@@ -118,6 +131,47 @@ internal static class ItemDefinitionReader
         }
 
         return new ItemEffect(health, spirit);
+    }
+
+    // A listable item's terms (Content Pipeline §4): a base, and a floor and a ceiling that default to the sell price,
+    // at least 1, and ten times the base within what a stack may cost. The floor keeps a buy and a sale from gaining,
+    // and the ceiling keeps a stack's price within the coin cap.
+    private static ItemMarket? ReadMarket(YamlFieldReader market, int sellPrice, int stackLimit)
+    {
+        int highest = ContentLimits.MaxCurrency / stackLimit;
+        int basePrice = market.RequiredInt("basePrice", 1, ContentLimits.MaxPrice);
+        int lowest = MarketPricing.DefaultFloor(sellPrice);
+        int floor = market.Has("floor") ? market.RequiredInt("floor", 1, ContentLimits.MaxPrice) : lowest;
+        int ceiling = market.Has("ceiling")
+            ? market.RequiredInt("ceiling", 1, ContentLimits.MaxPrice)
+            : MarketPricing.DefaultCeiling(basePrice, stackLimit);
+        bool isValid = true;
+        if (floor < lowest)
+        {
+            market.ReportField("floor", $"must be at least {lowest}, the sell price and at least 1");
+            isValid = false;
+        }
+        else if (floor > basePrice)
+        {
+            market.ReportField(market.Has("floor") ? "floor" : "basePrice", "the floor must not pass the base price");
+            isValid = false;
+        }
+
+        if (ceiling < basePrice)
+        {
+            market.ReportField(market.Has("ceiling") ? "ceiling" : "basePrice",
+                "the ceiling must be at least the base price");
+            isValid = false;
+        }
+        else if (ceiling > highest)
+        {
+            market.ReportField(
+                market.Has("ceiling") ? "ceiling" : "basePrice",
+                $"a stack at the ceiling must cost at most {ContentLimits.MaxCurrency}, so at most {highest} a unit");
+            isValid = false;
+        }
+
+        return isValid ? new ItemMarket(basePrice, floor, ceiling) : null;
     }
 
     private static int OptionalStat(YamlFieldReader stats, string name)

@@ -72,6 +72,7 @@ public static class ServerHost
         AddOptions<AbuseOptions, AbuseOptionsValidator>(builder, AbuseOptions.SectionName);
         AddOptions<CompatibilityOptions, CompatibilityOptionsValidator>(builder, CompatibilityOptions.SectionName);
         AddOptions<WorldOptions, WorldOptionsValidator>(builder, WorldOptions.SectionName);
+        AddOptions<MarketOptions, MarketOptionsValidator>(builder, MarketOptions.SectionName);
         builder.Services
             .AddOptions<DevelopmentAuthenticationOptions>()
             .Bind(builder.Configuration.GetSection(DevelopmentAuthenticationOptions.SectionName));

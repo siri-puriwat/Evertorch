@@ -90,6 +90,15 @@ internal static class ServerProjection
                 writer.WriteEndObject();
             }
 
+            if (item.Market != null)
+            {
+                writer.WriteStartObject("market");
+                writer.WriteNumber("basePrice", item.Market.BasePrice);
+                writer.WriteNumber("floor", item.Market.Floor);
+                writer.WriteNumber("ceiling", item.Market.Ceiling);
+                writer.WriteEndObject();
+            }
+
             writer.WriteEndObject();
         }
 
@@ -251,6 +260,11 @@ internal static class ServerProjection
             if (npc.DepositFee != null)
             {
                 writer.WriteNumber("depositFee", npc.DepositFee.Value);
+            }
+
+            if (npc.KeepsMarket)
+            {
+                writer.WriteBoolean("market", true);
             }
 
             writer.WriteEndObject();

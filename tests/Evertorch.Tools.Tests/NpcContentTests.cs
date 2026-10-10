@@ -171,7 +171,7 @@ public sealed class NpcContentTests
     }
 
     [Test]
-    public void Run_ForRepositoryContent_PlacesTheFourNpcs_AndTheQuestsAreTheGateWardens()
+    public void Run_ForRepositoryContent_PlacesTheFiveNpcs_AndTheQuestsAreTheGateWardens()
     {
         ContentPipelineResult result = ContentPipeline.Run(
             Path.Combine(ContentValidationTests.RepositoryRoot(), "content"));
@@ -184,7 +184,8 @@ public sealed class NpcContentTests
                 new[]
                 {
                     ("npc.quartermaster", -3.5f, 4.5f), ("npc.gate_warden", 20.5f, 3.5f),
-                    ("npc.guildmaster", 4.5f, -4.5f), ("npc.storekeeper", -4.5f, -4.5f)
+                    ("npc.guildmaster", 4.5f, -4.5f), ("npc.storekeeper", -4.5f, -4.5f),
+                    ("npc.broker", 3.5f, 4.5f)
                 }));
         AuthoredNpc storekeeper = result.Content.Npcs.Single(npc => npc.Definition.KeepsStorage);
         Assert.That(
