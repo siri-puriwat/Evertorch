@@ -223,6 +223,30 @@ public enum InboundEventKind
     ///     <see cref="InboundEvent.Quantity" /> of the storage's row <see cref="InboundEvent.InventoryItem" /> into the bag
     ///     at the Storekeeper <see cref="InboundEvent.Target" />, carrying a command sequence.
     /// </summary>
-    StorageWithdraw = 42
+    StorageWithdraw = 42,
+
+    /// <summary>
+    ///     A read of the market board at the Broker <see cref="InboundEvent.Target" />, carrying a command sequence.
+    /// </summary>
+    MarketOpen = 43,
+
+    /// <summary>
+    ///     <see cref="InboundEvent.Quantity" /> of the bag's row <see cref="InboundEvent.InventoryItem" /> listed on the
+    ///     board at the Broker <see cref="InboundEvent.Target" />, carrying a command sequence.
+    /// </summary>
+    MarketList = 44,
+
+    /// <summary>
+    ///     <see cref="InboundEvent.Quantity" /> of <see cref="InboundEvent.Item" /> bought on the board at the Broker
+    ///     <see cref="InboundEvent.Target" />, at most <see cref="InboundEvent.PriceLimit" /> a unit, carrying a command
+    ///     sequence.
+    /// </summary>
+    MarketBuy = 45,
+
+    /// <summary>
+    ///     The collection of the listing <see cref="InboundEvent.InventoryItem" /> at the Broker
+    ///     <see cref="InboundEvent.Target" />, carrying a command sequence.
+    /// </summary>
+    MarketCollect = 46
 }
 }

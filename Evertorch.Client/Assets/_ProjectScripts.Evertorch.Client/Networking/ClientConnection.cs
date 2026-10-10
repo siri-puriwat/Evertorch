@@ -192,6 +192,15 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
             case MessageOpcode.StorageChanged:
                 OnStorageChanged(payload);
                 break;
+            case MessageOpcode.MarketBoard:
+                OnMarketBoard(payload);
+                break;
+            case MessageOpcode.MarketMine:
+                OnMarketMine(payload);
+                break;
+            case MessageOpcode.MarketEvent:
+                OnMarketEvent(payload);
+                break;
             case MessageOpcode.MvpAwarded:
                 OnMvpAwarded(payload);
                 break;
@@ -918,6 +927,74 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
     }
 
     /// <summary>
+    ///     Asks the Broker <paramref name="npc" /> for the board and the player's listings; 0 while not in the world, else
+    ///     the command's sequence.
+    /// </summary>
+    public uint SendMarketOpen(EntityId npc)
+    {
+        if (State != ClientConnectionState.InWorld)
+        {
+            return 0;
+        }
+
+        uint sequence = NextCommandSequence();
+        SendRouted(MessageOpcode.MarketOpen, new MarketOpen(npc, sequence).Write(m_sendBuffer));
+        return sequence;
+    }
+
+    /// <summary>
+    ///     Lists <paramref name="quantity" /> of the bag's row <paramref name="inventoryItem" /> on the board at the Broker
+    ///     <paramref name="npc" />; 0 when nothing was sent.
+    /// </summary>
+    public uint SendMarketList(EntityId npc, long inventoryItem, uint quantity)
+    {
+        if (State != ClientConnectionState.InWorld || inventoryItem <= 0 || quantity == 0)
+        {
+            return 0;
+        }
+
+        uint sequence = NextCommandSequence();
+        SendRouted(
+            MessageOpcode.MarketList,
+            new MarketList(npc, inventoryItem, quantity, sequence).Write(m_sendBuffer));
+        return sequence;
+    }
+
+    /// <summary>
+    ///     Buys <paramref name="quantity" /> of <paramref name="item" /> on the board at the Broker
+    ///     <paramref name="npc" />, paying at most <paramref name="priceLimit" /> a unit; 0 when nothing was sent.
+    /// </summary>
+    public uint SendMarketBuy(EntityId npc, ItemDefinitionId item, uint quantity, uint priceLimit)
+    {
+        if (State != ClientConnectionState.InWorld || quantity == 0 || priceLimit == 0)
+        {
+            return 0;
+        }
+
+        uint sequence = NextCommandSequence();
+        SendRouted(
+            MessageOpcode.MarketBuy,
+            new MarketBuy(npc, item, quantity, priceLimit, sequence).Write(m_sendBuffer));
+        return sequence;
+    }
+
+    /// <summary>
+    ///     Collects the player's listing <paramref name="listing" /> at the Broker <paramref name="npc" />; 0 when nothing
+    ///     was sent.
+    /// </summary>
+    public uint SendMarketCollect(EntityId npc, long listing)
+    {
+        if (State != ClientConnectionState.InWorld || listing <= 0)
+        {
+            return 0;
+        }
+
+        uint sequence = NextCommandSequence();
+        SendRouted(MessageOpcode.MarketCollect, new MarketCollect(npc, listing, sequence).Write(m_sendBuffer));
+        return sequence;
+    }
+
+    /// <summary>
     ///     The Storekeeper command <paramref name="commandSequence" /> numbered, so a refusal can say what was refused.
     /// </summary>
     public bool TryGetStorageSequence(uint commandSequence, out StorageCommand command)
@@ -1126,6 +1203,21 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
     ///     One committed change of the account's storage, after the bag's change it went with, while in the world.
     /// </summary>
     public event Action<StorageChanged>? StorageChangedReceived;
+
+    /// <summary>
+    ///     Entries of the market board, answering a read or after the player's own market command, while in the world.
+    /// </summary>
+    public event Action<MarketBoard>? MarketBoardReceived;
+
+    /// <summary>
+    ///     Every listing of the player, after the board's entries, while in the world.
+    /// </summary>
+    public event Action<MarketMine>? MarketMineReceived;
+
+    /// <summary>
+    ///     A listing of the player listed, sold, or collected, while in the world.
+    /// </summary>
+    public event Action<MarketEvent>? MarketEventReceived;
 
     /// <summary>
     ///     A boss appeared or fell on the player's map, for the chat log, which outlives the world.
@@ -1408,6 +1500,54 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
         {
             World.Storage.OnChanged(message);
             StorageChangedReceived?.Invoke(message);
+        }
+    }
+
+    private void OnMarketBoard(ReadOnlySpan<byte> payload)
+    {
+        if (!MarketBoard.TryRead(payload, out MarketBoard? message) || message == null)
+        {
+            MalformedMessages++;
+        }
+        else if (World == null)
+        {
+            UnexpectedMessages++;
+        }
+        else
+        {
+            MarketBoardReceived?.Invoke(message);
+        }
+    }
+
+    private void OnMarketMine(ReadOnlySpan<byte> payload)
+    {
+        if (!MarketMine.TryRead(payload, out MarketMine? message) || message == null)
+        {
+            MalformedMessages++;
+        }
+        else if (World == null)
+        {
+            UnexpectedMessages++;
+        }
+        else
+        {
+            MarketMineReceived?.Invoke(message);
+        }
+    }
+
+    private void OnMarketEvent(ReadOnlySpan<byte> payload)
+    {
+        if (!MarketEvent.TryRead(payload, out MarketEvent? message) || message == null)
+        {
+            MalformedMessages++;
+        }
+        else if (World == null)
+        {
+            UnexpectedMessages++;
+        }
+        else
+        {
+            MarketEventReceived?.Invoke(message);
         }
     }
 

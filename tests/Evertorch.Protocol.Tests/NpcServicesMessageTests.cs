@@ -337,7 +337,7 @@ public sealed class NpcServicesMessageTests
     }
 
     [Test]
-    public void NpcServices_WithTheResetAndStorageBits_OffersThem_AndRefusesAnyOtherBit()
+    public void NpcServices_WithTheResetStorageAndMarketBits_OffersThem_AndRefusesAnyOtherBit()
     {
         var guildmaster = new NpcServices(new EntityId(7), new NpcServiceEntry[0], new NpcQuestOffer[0], true);
         byte[] written = new byte[guildmaster.GetEncodedLength()];
@@ -350,8 +350,10 @@ public sealed class NpcServicesMessageTests
         Assert.That(NpcServices.TryRead(WireMatrix.With(ServicesBytes, ServicesByte, 0x01), out read), Is.True);
         Assert.That(read!.OffersReset, Is.True);
         Assert.That(NpcServices.TryRead(WireMatrix.With(ServicesBytes, ServicesByte, 0x03), out read), Is.True);
-        Assert.That((read!.OffersReset, read.KeepsStorage), Is.EqualTo((true, true)));
-        Assert.That(NpcServices.TryRead(WireMatrix.With(ServicesBytes, ServicesByte, 0x04), out _), Is.False);
+        Assert.That((read!.OffersReset, read.KeepsStorage, read.KeepsMarket), Is.EqualTo((true, true, false)));
+        Assert.That(NpcServices.TryRead(WireMatrix.With(ServicesBytes, ServicesByte, 0x07), out read), Is.True);
+        Assert.That((read!.OffersReset, read.KeepsStorage, read.KeepsMarket), Is.EqualTo((true, true, true)));
+        Assert.That(NpcServices.TryRead(WireMatrix.With(ServicesBytes, ServicesByte, 0x08), out _), Is.False);
         Assert.That(NpcServices.TryRead(WireMatrix.With(ServicesBytes, ServicesByte, 0x81), out _), Is.False);
 
         var storekeeper = new NpcServices(
@@ -365,6 +367,14 @@ public sealed class NpcServicesMessageTests
         Assert.That(NpcServices.TryRead(kept, out read), Is.True);
         Assert.That((read!.OffersReset, read.KeepsStorage), Is.EqualTo((false, true)));
         Assert.That(Golden.KeepsStorage, Is.False);
+
+        var broker = new NpcServices(new EntityId(7), new NpcServiceEntry[0], new NpcQuestOffer[0], keepsMarket: true);
+        byte[] board = new byte[broker.GetEncodedLength()];
+        broker.Write(board);
+        Assert.That(board, Is.EqualTo(new byte[] { 0x1D, 0x80, 0x07, 0, 0, 0, 0, 0, 0, 0, 0x00, 0x00, 0x04, 0x00 }));
+        Assert.That(NpcServices.TryRead(board, out read), Is.True);
+        Assert.That((read!.OffersReset, read.KeepsStorage, read.KeepsMarket), Is.EqualTo((false, false, true)));
+        Assert.That(Golden.KeepsMarket, Is.False);
     }
 
     [Test]

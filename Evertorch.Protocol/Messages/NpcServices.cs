@@ -7,7 +7,8 @@ namespace Evertorch.Protocol
 /// <summary>
 ///     What an NPC offers, sent right after every spawn of the NPC to a client (Network Protocol §6, §9): each item it
 ///     trades with the price it sells for and the price it pays, each quest it gives with its objective and reward,
-///     whether it resets a build, each job change it offers, and whether it keeps the account's storage.
+///     whether it resets a build, each job change it offers, whether it keeps the account's storage, and whether it
+///     keeps the market board.
 ///     A shop's prices and a quest's terms travel on purpose, because the player must see them (Content Pipeline §5).
 /// </summary>
 public sealed class NpcServices
@@ -33,10 +34,11 @@ public sealed class NpcServices
     /// </summary>
     public const int MaxEncodedLength = 1020;
 
-    // The services byte after the offers: bit 0, the build's reset; bit 1, the account's storage; the other bits are not
-    // yet defined.
+    // The services byte after the offers: bit 0, the build's reset; bit 1, the account's storage; bit 2, the market
+    // board; the other bits are not yet defined.
     private const byte ResetService = 1;
     private const byte StorageService = 2;
+    private const byte MarketService = 4;
 
     public NpcServices(
         EntityId npc,
@@ -44,7 +46,8 @@ public sealed class NpcServices
         IReadOnlyList<NpcQuestOffer> offers,
         bool offersReset = false,
         IReadOnlyList<NpcJobChangeOffer>? jobChanges = null,
-        bool keepsStorage = false)
+        bool keepsStorage = false,
+        bool keepsMarket = false)
     {
         if (entries == null)
         {
@@ -80,6 +83,7 @@ public sealed class NpcServices
         OffersReset = offersReset;
         JobChanges = jobChanges;
         KeepsStorage = keepsStorage;
+        KeepsMarket = keepsMarket;
         if (GetEncodedLength() > MaxEncodedLength)
         {
             throw new ArgumentException($"An NPC's services must fit {MaxEncodedLength} bytes.", nameof(entries));
@@ -113,6 +117,11 @@ public sealed class NpcServices
     ///     Whether the NPC keeps the account's storage (Gameplay Systems §11.4); its fee arrives with the storage.
     /// </summary>
     public bool KeepsStorage { get; }
+
+    /// <summary>
+    ///     Whether the NPC keeps the market board (Gameplay Systems §11.5); the board arrives when it is read.
+    /// </summary>
+    public bool KeepsMarket { get; }
 
     public static bool TryRead(ReadOnlySpan<byte> source, out NpcServices? message)
     {
@@ -172,7 +181,7 @@ public sealed class NpcServices
         }
 
         if (!reader.TryReadByte(out byte services)
-            || (services & ~(ResetService | StorageService)) != 0
+            || (services & ~(ResetService | StorageService | MarketService)) != 0
             || !reader.TryReadByte(out byte jobChangeCount)
             || jobChangeCount > MaxJobChanges)
         {
@@ -208,7 +217,8 @@ public sealed class NpcServices
             offers,
             (services & ResetService) != 0,
             jobChanges,
-            (services & StorageService) != 0);
+            (services & StorageService) != 0,
+            (services & MarketService) != 0);
         return true;
     }
 
@@ -264,7 +274,10 @@ public sealed class NpcServices
             writer.WriteUInt32(offer.Coins);
         }
 
-        writer.WriteByte((byte)((OffersReset ? ResetService : 0) | (KeepsStorage ? StorageService : 0)));
+        writer.WriteByte(
+            (byte)((OffersReset ? ResetService : 0)
+                | (KeepsStorage ? StorageService : 0)
+                | (KeepsMarket ? MarketService : 0)));
         writer.WriteByte((byte)JobChanges.Count);
         foreach (NpcJobChangeOffer change in JobChanges)
         {

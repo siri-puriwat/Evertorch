@@ -190,7 +190,11 @@ public sealed class SessionCommandLimitTests
             [InboundEventKind.TradeCancel] = ServerInstruments.ItemCommandLimit,
             [InboundEventKind.StorageOpen] = ServerInstruments.ReadCommandLimit,
             [InboundEventKind.StorageDeposit] = ServerInstruments.ItemCommandLimit,
-            [InboundEventKind.StorageWithdraw] = ServerInstruments.ItemCommandLimit
+            [InboundEventKind.StorageWithdraw] = ServerInstruments.ItemCommandLimit,
+            [InboundEventKind.MarketOpen] = ServerInstruments.ReadCommandLimit,
+            [InboundEventKind.MarketList] = ServerInstruments.ItemCommandLimit,
+            [InboundEventKind.MarketBuy] = ServerInstruments.ItemCommandLimit,
+            [InboundEventKind.MarketCollect] = ServerInstruments.ItemCommandLimit
         };
         var limits = new SessionCommandLimits(Defaults, TestServer.TickRate, 0);
 

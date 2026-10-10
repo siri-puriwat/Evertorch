@@ -290,6 +290,76 @@ public sealed class InboundQueueTests
             2u).SetName("StorageWithdraw");
     }
 
+    private static IEnumerable<TestCaseData> MarketCommands()
+    {
+        yield return new TestCaseData(
+            Payload(MarketOpen.EncodedLength, bytes => new MarketOpen(new EntityId(40), 9).Write(bytes)),
+            InboundEventKind.MarketOpen,
+            0L,
+            string.Empty,
+            0u,
+            0u).SetName("MarketOpen");
+        yield return new TestCaseData(
+            Payload(MarketList.EncodedLength, bytes => new MarketList(new EntityId(40), 42, 5, 9).Write(bytes)),
+            InboundEventKind.MarketList,
+            42L,
+            string.Empty,
+            5u,
+            0u).SetName("MarketList");
+        yield return new TestCaseData(
+            Payload(
+                new MarketBuy(new EntityId(40), new ItemDefinitionId("item.a"), 3, 30, 9).GetEncodedLength(),
+                bytes => new MarketBuy(new EntityId(40), new ItemDefinitionId("item.a"), 3, 30, 9).Write(bytes)),
+            InboundEventKind.MarketBuy,
+            0L,
+            "item.a",
+            3u,
+            30u).SetName("MarketBuy");
+        yield return new TestCaseData(
+            Payload(MarketCollect.EncodedLength, bytes => new MarketCollect(new EntityId(40), 7, 9).Write(bytes)),
+            InboundEventKind.MarketCollect,
+            7L,
+            string.Empty,
+            0u,
+            0u).SetName("MarketCollect");
+    }
+
+    [TestCaseSource(nameof(MarketCommands))]
+    public void MarketCommand_ThatIsWellFormed_IsQueuedWithTheNpcWhatItNamesAndItsSequence(
+        byte[] payload,
+        InboundEventKind kind,
+        long row,
+        string item,
+        uint quantity,
+        uint priceLimit)
+    {
+        InboundQueue queue = CreateQueue(16);
+
+        queue.OnPayload(Peer, ProtocolChannel.Control, payload);
+
+        Assert.That(queue.TryDequeue(out InboundEvent command), Is.True);
+        Assert.That(
+            (command.Kind, command.Target, command.InventoryItem, command.Item.Value, command.Quantity,
+                command.PriceLimit, command.CommandSequence),
+            Is.EqualTo((kind, new EntityId(40), row, item, quantity, priceLimit, 9u)));
+    }
+
+    [TestCaseSource(nameof(MarketCommands))]
+    public void MarketCommand_CutShort_IsRejected(
+        byte[] payload,
+        InboundEventKind kind,
+        long row,
+        string item,
+        uint quantity,
+        uint priceLimit)
+    {
+        InboundQueue queue = CreateQueue(16);
+
+        queue.OnPayload(Peer, ProtocolChannel.Control, payload.Take(payload.Length - 1).ToArray());
+
+        AssertOnlyMalformed(queue, 1);
+    }
+
     [TestCaseSource(nameof(StorageCommands))]
     public void StorageCommand_ThatIsWellFormed_IsQueuedWithTheNpcTheRowAndItsSequence(
         byte[] payload,

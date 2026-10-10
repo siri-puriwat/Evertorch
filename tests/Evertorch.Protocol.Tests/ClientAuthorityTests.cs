@@ -50,7 +50,7 @@ public sealed class ClientAuthorityTests
                     "AcceptQuest", "CompleteQuest", "AllocateStat", "LearnSkill", "ResetBuild", "ChangeJob",
                     "PartyInvite", "PartyReply", "PartyLeave", "PartyKick", "PartyLead", "TradeRequest",
                     "TradeReply", "TradeOffer", "TradeLock", "TradeConfirm", "TradeCancel", "StorageOpen",
-                    "StorageDeposit", "StorageWithdraw"
+                    "StorageDeposit", "StorageWithdraw", "MarketOpen", "MarketList", "MarketBuy", "MarketCollect"
                 }),
             "a new client message must be checked against the rules below before it joins this list");
     }

@@ -63,6 +63,9 @@ public sealed class SessionCommandLimits
             case InboundEventKind.TradeCancel:
             case InboundEventKind.StorageDeposit:
             case InboundEventKind.StorageWithdraw:
+            case InboundEventKind.MarketList:
+            case InboundEventKind.MarketBuy:
+            case InboundEventKind.MarketCollect:
                 limit = ServerInstruments.ItemCommandLimit;
                 return m_item.TryTake(tick);
             case InboundEventKind.CreateCharacter:
@@ -88,6 +91,7 @@ public sealed class SessionCommandLimits
                 limit = ServerInstruments.TradeCommandLimit;
                 return m_trade.TryTake(tick);
             case InboundEventKind.StorageOpen:
+            case InboundEventKind.MarketOpen:
                 limit = ServerInstruments.ReadCommandLimit;
                 return m_read.TryTake(tick);
             default:

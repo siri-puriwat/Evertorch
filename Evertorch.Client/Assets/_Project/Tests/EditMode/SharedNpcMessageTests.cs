@@ -157,6 +157,7 @@ public sealed class SharedNpcMessageTests
         Assert.That(offer.Coins, Is.EqualTo(100u));
         Assert.That(read.OffersReset, Is.True);
         Assert.That(read.KeepsStorage, Is.False);
+        Assert.That(read.KeepsMarket, Is.False);
         Assert.That(read.JobChanges, Is.Empty);
     }
 

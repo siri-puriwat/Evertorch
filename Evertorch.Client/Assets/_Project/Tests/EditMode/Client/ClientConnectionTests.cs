@@ -694,6 +694,45 @@ public sealed class ClientConnectionTests
         Assert.That(harness.Connection.State, Is.EqualTo(ClientConnectionState.SelectingCharacter));
     }
 
+    [Test]
+    public void MarketMessages_InTheWorld_AreRaised_AndMarketCommandsGoOutReliably()
+    {
+        var harness = new Harness();
+        harness.EnterWorld();
+        var heard = new List<string>();
+        harness.Connection.MarketBoardReceived += message =>
+            heard.Add($"board {message.Entries.Single().Item.Value} {message.Entries.Single().Price}");
+        harness.Connection.MarketMineReceived += message => heard.Add($"mine {message.Entries.Count}");
+        harness.Connection.MarketEventReceived += message => heard.Add($"{message.Kind} {message.Coins}");
+        var gel = new ItemDefinitionId("item.a");
+        var board = new MarketBoard(new[] { new MarketBoardEntry(gel, 30, 6) });
+        var mine = new MarketMine(new[] { new MarketListingEntry(9, gel, 6, 4, 110, 3600) });
+        var sold = new MarketEvent(MarketEventKind.Sold, 9, gel, 4, 120);
+        var broker = new EntityId(41);
+        int before = harness.Transport.Sent.Count;
+
+        harness.Deliver(ProtocolChannel.Control, Encode(board.GetEncodedLength(), board.Write));
+        harness.Deliver(ProtocolChannel.Control, Encode(mine.GetEncodedLength(), mine.Write));
+        harness.Deliver(ProtocolChannel.Control, Encode(sold.GetEncodedLength(), sold.Write));
+        uint open = harness.Connection.SendMarketOpen(broker);
+        uint list = harness.Connection.SendMarketList(broker, 5, 2);
+        uint buy = harness.Connection.SendMarketBuy(broker, gel, 4, 30);
+        uint collect = harness.Connection.SendMarketCollect(broker, 9);
+        uint free = harness.Connection.SendMarketBuy(broker, gel, 4, 0);
+        uint nothing = harness.Connection.SendMarketCollect(broker, 0);
+
+        Assert.That(heard, Is.EqualTo(new[] { "board item.a 30", "mine 1", "Sold 120" }));
+        Assert.That(
+            (open, list, buy, collect, free, nothing),
+            Is.EqualTo((open, open + 1, open + 2, open + 3, 0u, 0u)));
+        FakeClientTransport.SentMessage[] sent = harness.Transport.Sent.Skip(before).ToArray();
+        Assert.That(sent, Has.Length.EqualTo(4));
+        Assert.That(sent.Select(message => message.Delivery), Is.All.EqualTo(MessageDelivery.ReliableOrdered));
+        Assert.That(MarketBuy.TryRead(sent[2].Payload, out MarketBuy? read), Is.True);
+        Assert.That((read!.Npc, read.Item, read.Quantity, read.PriceLimit), Is.EqualTo((broker, gel, 4u, 30u)));
+        Assert.That(harness.Connection.MalformedMessages + harness.Connection.UnexpectedMessages, Is.Zero);
+    }
+
     // The most valuable player's award reaches the chat log through the connection too (Network Protocol §9).
     [Test]
     public void MvpAwarded_InTheWorld_IsRaised_AndOutsideItIsUnexpected()

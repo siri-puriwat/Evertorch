@@ -46,6 +46,10 @@ public enum MessageOpcode : ushort
     StorageOpen = 0x0026,
     StorageDeposit = 0x0027,
     StorageWithdraw = 0x0028,
+    MarketOpen = 0x0029,
+    MarketList = 0x002A,
+    MarketBuy = 0x002B,
+    MarketCollect = 0x002C,
     ServerHello = 0x8001,
     WorldEntered = 0x8003,
     EntitySpawn = 0x8004,
@@ -84,6 +88,9 @@ public enum MessageOpcode : ushort
     TradeEvent = 0x8026,
     TradeSide = 0x8027,
     StorageSnapshot = 0x8028,
-    StorageChanged = 0x8029
+    StorageChanged = 0x8029,
+    MarketBoard = 0x802A,
+    MarketMine = 0x802B,
+    MarketEvent = 0x802C
 }
 }

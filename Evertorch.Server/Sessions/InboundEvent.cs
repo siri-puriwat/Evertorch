@@ -29,7 +29,8 @@ public readonly struct InboundEvent
         JobDefinitionId job = default,
         ChatChannel channel = ChatChannel.None,
         string? text = null,
-        bool isAccepted = false)
+        bool isAccepted = false,
+        uint priceLimit = 0)
     {
         Kind = kind;
         Connection = connection;
@@ -52,6 +53,7 @@ public readonly struct InboundEvent
         Channel = channel;
         Text = text;
         IsAccepted = isAccepted;
+        PriceLimit = priceLimit;
     }
 
     public InboundEventKind Kind { get; }
@@ -89,7 +91,9 @@ public readonly struct InboundEvent
     /// <summary>
     ///     For <see cref="InboundEventKind.Equip" />, the inventory row to wear; for <see cref="InboundEventKind.UseItem" />,
     ///     the row to use; for <see cref="InboundEventKind.Sell" /> and <see cref="InboundEventKind.StorageDeposit" />, the
-    ///     row to sell or store from; for <see cref="InboundEventKind.StorageWithdraw" />, the storage's row.
+    ///     row to sell or store from; for <see cref="InboundEventKind.StorageWithdraw" />, the storage's row; for
+    ///     <see cref="InboundEventKind.MarketList" />, the row to list; for <see cref="InboundEventKind.MarketCollect" />,
+    ///     the listing.
     /// </summary>
     public long InventoryItem { get; }
 
@@ -138,6 +142,11 @@ public readonly struct InboundEvent
     ///     For <see cref="InboundEventKind.PartyReply" />, whether the invite is accepted.
     /// </summary>
     public bool IsAccepted { get; }
+
+    /// <summary>
+    ///     For <see cref="InboundEventKind.MarketBuy" />, the most the buyer pays a unit.
+    /// </summary>
+    public uint PriceLimit { get; }
 
     public static InboundEvent Connected(ConnectionId connection)
     {
@@ -459,6 +468,34 @@ public readonly struct InboundEvent
             commandSequence,
             inventoryItem: row,
             quantity: quantity);
+    }
+
+    /// <summary>
+    ///     One of the Broker's commands: a read names only the NPC; a listing names a bag row and its quantity, a
+    ///     purchase an item, its quantity, and the most a unit may cost, and a collection its listing.
+    /// </summary>
+    public static InboundEvent ForMarket(
+        InboundEventKind kind,
+        ConnectionId connection,
+        EntityId npc,
+        uint commandSequence,
+        long row = 0,
+        ItemDefinitionId item = default,
+        uint quantity = 0,
+        uint priceLimit = 0)
+    {
+        return new InboundEvent(
+            kind,
+            connection,
+            null,
+            default,
+            default,
+            npc,
+            commandSequence,
+            inventoryItem: row,
+            item: item,
+            quantity: quantity,
+            priceLimit: priceLimit);
     }
 
     public static InboundEvent ForCreateCharacter(ConnectionId connection, string name)

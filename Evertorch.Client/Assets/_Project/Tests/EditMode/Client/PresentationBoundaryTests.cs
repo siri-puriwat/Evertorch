@@ -42,7 +42,7 @@ public sealed class PresentationBoundaryTests
         + @"|InventoryResyncRequest|EquipItem|UnequipItem|UseItem|BuyItem|SellItem|AcceptQuest|CompleteQuest"
         + @"|AllocateStat|LearnSkill|ResetBuild|ChangeJob|ChatSend|PartyInvite|PartyReply|PartyLeave|PartyKick"
         + @"|PartyLead|TradeRequest|TradeReply|TradeOffer|TradeLock|TradeConfirm|TradeCancel|StorageOpen"
-        + @"|StorageDeposit|StorageWithdraw)\s*\("
+        + @"|StorageDeposit|StorageWithdraw|MarketOpen|MarketList|MarketBuy|MarketCollect)\s*\("
         + @"|\.Connection\??\.(Connect|Disconnect|EnterWorld|CreateCharacter|Poll)\("
         + @"|\.Controller\??\.(Cancel\w*|Tick)\("
         + @"|\.(SetManualDirection|TryMoveTo|Chase\w*|StopChase|CancelPath|NextTick|Reconcile|Teleport"

@@ -242,6 +242,60 @@ public sealed class MessageFuzzTests
                 ? Encode(message!.GetEncodedLength(), message.Write)
                 : null);
         yield return Case(
+            "MarketOpen",
+            Encode(MarketOpen.EncodedLength, MarketMessageTests.OpenGolden.Write),
+            payload => MarketOpen.TryRead(payload, out MarketOpen? message)
+                ? Encode(MarketOpen.EncodedLength, message!.Write)
+                : null);
+        yield return Case(
+            "MarketList",
+            Encode(MarketList.EncodedLength, MarketMessageTests.ListGolden.Write),
+            payload => MarketList.TryRead(payload, out MarketList? message)
+                ? Encode(MarketList.EncodedLength, message!.Write)
+                : null);
+        yield return Case(
+            "MarketBuy",
+            Encode(MarketMessageTests.BuyGolden.GetEncodedLength(), MarketMessageTests.BuyGolden.Write),
+            payload => MarketBuy.TryRead(payload, out MarketBuy? message)
+                ? Encode(message!.GetEncodedLength(), message.Write)
+                : null);
+        yield return Case(
+            "MarketCollect",
+            Encode(MarketCollect.EncodedLength, MarketMessageTests.CollectGolden.Write),
+            payload => MarketCollect.TryRead(payload, out MarketCollect? message)
+                ? Encode(MarketCollect.EncodedLength, message!.Write)
+                : null);
+        yield return Case(
+            "MarketBoard",
+            Encode(MarketMessageTests.BoardGolden.GetEncodedLength(), MarketMessageTests.BoardGolden.Write),
+            payload => MarketBoard.TryRead(payload, out MarketBoard? message)
+                ? Encode(message!.GetEncodedLength(), message.Write)
+                : null);
+        yield return Case(
+            "MarketBoard at its largest",
+            Encode(MarketMessageTests.BoardLargest.GetEncodedLength(), MarketMessageTests.BoardLargest.Write),
+            payload => MarketBoard.TryRead(payload, out MarketBoard? message)
+                ? Encode(message!.GetEncodedLength(), message.Write)
+                : null);
+        yield return Case(
+            "MarketMine",
+            Encode(MarketMessageTests.MineGolden.GetEncodedLength(), MarketMessageTests.MineGolden.Write),
+            payload => MarketMine.TryRead(payload, out MarketMine? message)
+                ? Encode(message!.GetEncodedLength(), message.Write)
+                : null);
+        yield return Case(
+            "MarketMine at its largest",
+            Encode(MarketMessageTests.MineLargest.GetEncodedLength(), MarketMessageTests.MineLargest.Write),
+            payload => MarketMine.TryRead(payload, out MarketMine? message)
+                ? Encode(message!.GetEncodedLength(), message.Write)
+                : null);
+        yield return Case(
+            "MarketEvent",
+            Encode(MarketMessageTests.EventGolden.GetEncodedLength(), MarketMessageTests.EventGolden.Write),
+            payload => MarketEvent.TryRead(payload, out MarketEvent? message)
+                ? Encode(message!.GetEncodedLength(), message.Write)
+                : null);
+        yield return Case(
             "TradeSide",
             Encode(TradeMessageTests.SideGolden.GetEncodedLength(), TradeMessageTests.SideGolden.Write),
             payload => TradeSide.TryRead(payload, out TradeSide? message)
@@ -376,6 +430,10 @@ public sealed class MessageFuzzTests
                             new JobDefinitionId("job.adventurer"),
                             10)
                     })),
+            payload => NpcServices.TryRead(payload, out NpcServices? message) ? Encode(message!) : null);
+        yield return Case(
+            "NpcServices of a Broker",
+            Encode(new NpcServices(new EntityId(16), new NpcServiceEntry[0], new NpcQuestOffer[0], keepsMarket: true)),
             payload => NpcServices.TryRead(payload, out NpcServices? message) ? Encode(message!) : null);
         yield return Case(
             "AcceptQuest",

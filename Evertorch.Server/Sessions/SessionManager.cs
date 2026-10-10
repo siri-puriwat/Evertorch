@@ -320,6 +320,10 @@ public sealed class SessionManager : ITickPhase
             case InboundEventKind.StorageOpen:
             case InboundEventKind.StorageDeposit:
             case InboundEventKind.StorageWithdraw:
+            case InboundEventKind.MarketOpen:
+            case InboundEventKind.MarketList:
+            case InboundEventKind.MarketBuy:
+            case InboundEventKind.MarketCollect:
                 HandleCommand(session, inboundEvent, tick);
                 break;
             default:

@@ -54,6 +54,10 @@ public static class MessageRouting
             case MessageOpcode.StorageOpen:
             case MessageOpcode.StorageDeposit:
             case MessageOpcode.StorageWithdraw:
+            case MessageOpcode.MarketOpen:
+            case MessageOpcode.MarketList:
+            case MessageOpcode.MarketBuy:
+            case MessageOpcode.MarketCollect:
             case MessageOpcode.ServerHello:
             case MessageOpcode.WorldEntered:
             case MessageOpcode.EntitySpawn:
@@ -92,6 +96,9 @@ public static class MessageRouting
             case MessageOpcode.TradeSide:
             case MessageOpcode.StorageSnapshot:
             case MessageOpcode.StorageChanged:
+            case MessageOpcode.MarketBoard:
+            case MessageOpcode.MarketMine:
+            case MessageOpcode.MarketEvent:
                 return true;
             case MessageOpcode.MoveInput:
             case MessageOpcode.StopMovement:

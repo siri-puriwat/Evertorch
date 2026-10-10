@@ -245,6 +245,17 @@ public sealed class NpcTests
                 storekeeper.GetEncodedLength()),
             Is.EqualTo((0, 0, false, 0, 14)),
             "storage alone; its fee arrives with the storage");
+        NpcServices broker = NpcOf(server, Broker).Services;
+        Assert.That(
+            server.World.Maps.SelectMany(map => map.Npcs).Where(npc => npc.Services.KeepsMarket)
+                .Select(npc => npc.DefinitionId),
+            Is.EqualTo(new[] { Broker }),
+            "only the Broker keeps the board");
+        Assert.That(
+            (broker.Entries.Count, broker.Offers.Count, broker.OffersReset, broker.JobChanges.Count,
+                broker.KeepsStorage, broker.GetEncodedLength()),
+            Is.EqualTo((0, 0, false, 0, false, 14)),
+            "the board alone; its prices arrive when it is read");
     }
 
     [Test]

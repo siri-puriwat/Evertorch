@@ -31,6 +31,11 @@ public sealed class ServerOutputTests
         ["TradeEntry"] = new[] { "InventoryItem", "Item", "Quantity", "RefineLevel" },
         ["TradeEvent"] = new[] { "Kind", "Name", "Reason" },
         ["TradeSide"] = new[] { "Coins", "Entries", "IsConfirmed", "IsLocked", "Owner" },
+        ["MarketBoard"] = new[] { "Entries" },
+        ["MarketBoardEntry"] = new[] { "Item", "Price", "Stock" },
+        ["MarketEvent"] = new[] { "Coins", "Item", "Kind", "Listing", "Quantity" },
+        ["MarketListingEntry"] = new[] { "CoinsWaiting", "Item", "Listing", "SecondsLeft", "UnitsLeft", "UnitsSold" },
+        ["MarketMine"] = new[] { "Entries" },
         ["StorageChanged"] = new[] { "NewRevision", "PriorRevision", "Row" },
         ["StorageEntry"] = new[] { "Item", "Quantity", "RefineLevel", "StorageItem" },
         ["StorageSnapshot"] = new[] { "DepositFee", "Entries", "IsLast", "Part", "PartCount", "Revision" },
@@ -76,7 +81,8 @@ public sealed class ServerOutputTests
         ["NpcJobChangeOffer"] = new[] { "FromJob", "Job", "Level" },
         ["NpcQuestOffer"] = new[] { "BaseExperience", "Coins", "Count", "JobExperience", "Monster", "Quest" },
         ["NpcServiceEntry"] = new[] { "BuyPrice", "Item", "SellPrice" },
-        ["NpcServices"] = new[] { "Entries", "JobChanges", "KeepsStorage", "Npc", "Offers", "OffersReset" },
+        ["NpcServices"] = new[]
+            { "Entries", "JobChanges", "KeepsMarket", "KeepsStorage", "Npc", "Offers", "OffersReset" },
         ["QuestDefinitionId"] = new[] { "Value" },
         ["QuestLog"] = new[] { "Entries" },
         ["QuestLogEntry"] = new[] { "Count", "Progress", "Quest", "State" },
@@ -112,14 +118,14 @@ public sealed class ServerOutputTests
         ["WornWeaponChanged"] = new[] { "Entity", "WornWeapon" }
     };
 
-    // An NPC's prices and a quest's terms travel on purpose, because the player must see them (Content Pipeline §5),
-    // and so do the derived statistics of the owner's Stats window and the MVP experience a boss's most valuable
-    // player gained (Network Protocol §9): exactly these fields may carry a server-only word.
+    // An NPC's prices, the board's, and a quest's terms travel on purpose, because the player must see them (Content
+    // Pipeline §5), and so do the derived statistics of the owner's Stats window and the MVP experience a boss's most
+    // valuable player gained (Network Protocol §9): exactly these fields may carry a server-only word.
     private static readonly string[] SentOnPurpose =
     {
         "NpcServiceEntry.BuyPrice", "NpcServiceEntry.SellPrice", "NpcQuestOffer.BaseExperience",
         "CharacterSheet.Defense", "CharacterSheet.Flee", "CharacterSheet.MagicAttack", "CharacterSheet.MagicDefense",
-        "MvpAwarded.MvpExperience"
+        "MvpAwarded.MvpExperience", "MarketBoardEntry.Price"
     };
 
     // Words of the content's server-only fields (Content Pipeline §5).
@@ -127,7 +133,7 @@ public sealed class ServerOutputTests
     {
         "Hp", "PhysicalAttack", "Defense", "Flee", "MagicAttack", "Behavior", "Perception", "Leash", "Roam", "Idle",
         "Scan", "KeepDistance", "BaseExperience", "Drops", "Weight", "Price", "Ratio", "Percent", "Penalty", "Bonus",
-        "Chance", "Seed", "Threshold", "Burst", "MvpExperience"
+        "Chance", "Seed", "Threshold", "Burst", "MvpExperience", "Floor", "Ceiling"
     };
 
     private static readonly Assembly[] WireAssemblies = { typeof(MessageOpcode).Assembly, typeof(EntityId).Assembly };
@@ -223,7 +229,7 @@ public sealed class ServerOutputTests
         string[] caught = new[]
             {
                 typeof(MonsterDefinition), typeof(MonsterSkill), typeof(ItemDefinition), typeof(ItemEquipment),
-                typeof(SkillEffect)
+                typeof(SkillEffect), typeof(ItemMarket)
             }
             .SelectMany(FieldsOf)
             .Select(field => field.Name)
@@ -238,7 +244,8 @@ public sealed class ServerOutputTests
                     "Hp", "PhysicalAttack", "PhysicalDefense", "Flee", "MagicAttack", "Behavior", "PerceptionRadius",
                     "LeashRadius", "RoamRadius", "IdlePauseMinMs", "IdlePauseMaxMs", "ScanIntervalMs", "KeepDistance",
                     "BaseExperience", "Drops", "Chance", "Weight", "SellPrice", "AttackSpeedPenalty", "Defense",
-                    "Bonus", "DamageRatioPercent", "HealHp", "MvpExperience", "MvpDrops"
+                    "Bonus", "DamageRatioPercent", "HealHp", "MvpExperience", "MvpDrops", "BasePrice", "Floor",
+                    "Ceiling"
                 }));
     }
 }

@@ -489,6 +489,43 @@ public sealed class InboundQueue
                 decoded = InboundEvent.ForStorage(InboundEventKind.StorageWithdraw, connection, withdraw!.Npc,
                     withdraw.CommandSequence, withdraw.StorageItem, withdraw.Quantity);
                 return true;
+            case MessageOpcode.MarketOpen:
+                if (!MarketOpen.TryRead(payload, out MarketOpen? marketOpen))
+                {
+                    return false;
+                }
+
+                decoded = InboundEvent.ForMarket(InboundEventKind.MarketOpen, connection, marketOpen!.Npc,
+                    marketOpen.CommandSequence);
+                return true;
+            case MessageOpcode.MarketList:
+                if (!MarketList.TryRead(payload, out MarketList? list))
+                {
+                    return false;
+                }
+
+                decoded = InboundEvent.ForMarket(InboundEventKind.MarketList, connection, list!.Npc,
+                    list.CommandSequence, list.InventoryItem, quantity: list.Quantity);
+                return true;
+            case MessageOpcode.MarketBuy:
+                if (!MarketBuy.TryRead(payload, out MarketBuy? marketBuy))
+                {
+                    return false;
+                }
+
+                decoded = InboundEvent.ForMarket(InboundEventKind.MarketBuy, connection, marketBuy!.Npc,
+                    marketBuy.CommandSequence, item: marketBuy.Item, quantity: marketBuy.Quantity,
+                    priceLimit: marketBuy.PriceLimit);
+                return true;
+            case MessageOpcode.MarketCollect:
+                if (!MarketCollect.TryRead(payload, out MarketCollect? collect))
+                {
+                    return false;
+                }
+
+                decoded = InboundEvent.ForMarket(InboundEventKind.MarketCollect, connection, collect!.Npc,
+                    collect.CommandSequence, collect.Listing);
+                return true;
             case MessageOpcode.LearnSkill:
                 if (!LearnSkill.TryRead(payload, out LearnSkill? learn))
                 {
