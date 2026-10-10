@@ -272,8 +272,32 @@ public interface IGameStore
         CancellationToken cancellationToken);
 
     /// <summary>
+    ///     Puts a quantity of the character's bag row on the board in one transaction with a <c>market_list</c> ledger
+    ///     row (Persistence §5): the character is locked, then the item's price row, made at its base when missing; a
+    ///     repeat answers from the ledger. The price is settled to the commit's time, the fee taken at it, the units taken
+    ///     from the row, which is deleted when listed whole, and the listing inserted to expire a duration later.
+    ///     <see cref="InventoryStatus.Refused" /> when the row is not the character's, is worn, holds another item or
+    ///     less, or carries a refine level or instance data; <see cref="InventoryStatus.ListingCapReached" /> when the
+    ///     character holds its most listings; <see cref="InventoryStatus.NotEnoughCoins" /> when the coins fall short of
+    ///     the fee.
+    /// </summary>
+    Task<MarketResult> CommitMarketListAsync(MarketListCommit list, CancellationToken cancellationToken);
+
+    /// <summary>
+    ///     Ends one of the character's listings in one transaction with a <c>market_collect</c> ledger row: the character
+    ///     is locked, then the item's price row, then the listing; a repeat answers from the ledger. The listing's sales
+    ///     less the tax and its unsold units come back, all or nothing, and the listing is deleted.
+    ///     <see cref="InventoryStatus.BoardChanged" /> when the listing is gone or another character's;
+    ///     <see cref="InventoryStatus.Refused" />, naming the item, when the commit knows no stack limit for it;
+    ///     <see cref="InventoryStatus.CoinCapReached" /> when the coins would pass the cap;
+    ///     <see cref="InventoryStatus.InventoryFull" /> when the bag has no room for the units.
+    /// </summary>
+    Task<MarketResult> CommitMarketCollectAsync(MarketCollectCommit collect, CancellationToken cancellationToken);
+
+    /// <summary>
     ///     Every distinct job, map, item, quest, and skill definition ID stored for any character, and every item in
-    ///     storage, for the startup comparison with the loaded content (Persistence §8).
+    ///     storage, on the board's listings, and in its price rows, for the startup comparison with the loaded content
+    ///     (Persistence §8).
     /// </summary>
     Task<IReadOnlyList<string>> ListStoredDefinitionIdsAsync(CancellationToken cancellationToken);
 }

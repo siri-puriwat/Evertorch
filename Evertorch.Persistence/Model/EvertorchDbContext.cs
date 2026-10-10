@@ -59,6 +59,12 @@ internal sealed class EvertorchDbContext : DbContext
 
     public DbSet<StorageItemRow> StorageItems => Set<StorageItemRow>();
 
+    public DbSet<MarketPriceRow> MarketPrices => Set<MarketPriceRow>();
+
+    public DbSet<MarketListingRow> MarketListings => Set<MarketListingRow>();
+
+    public DbSet<MarketSaleRow> MarketSales => Set<MarketSaleRow>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         ConfigureAccounts(modelBuilder.Entity<AccountRow>());
@@ -74,6 +80,9 @@ internal sealed class EvertorchDbContext : DbContext
         ConfigureTrades(modelBuilder.Entity<TradeRow>());
         ConfigureAccountStorages(modelBuilder.Entity<AccountStorageRow>());
         ConfigureStorageItems(modelBuilder.Entity<StorageItemRow>());
+        ConfigureMarketPrices(modelBuilder.Entity<MarketPriceRow>());
+        ConfigureMarketListings(modelBuilder.Entity<MarketListingRow>());
+        ConfigureMarketSales(modelBuilder.Entity<MarketSaleRow>());
 
         foreach (IMutableEntityType entity in modelBuilder.Model.GetEntityTypes())
         {
@@ -197,7 +206,9 @@ internal sealed class EvertorchDbContext : DbContext
                 + $"'{LedgerRow.UnequipOperation}', '{LedgerRow.ConsumeOperation}', '{LedgerRow.BuyOperation}', "
                 + $"'{LedgerRow.SellOperation}', '{LedgerRow.QuestRewardOperation}', "
                 + $"'{LedgerRow.BossRewardOperation}', '{LedgerRow.TradeOperation}', "
-                + $"'{LedgerRow.StorageDepositOperation}', '{LedgerRow.StorageWithdrawOperation}')");
+                + $"'{LedgerRow.StorageDepositOperation}', '{LedgerRow.StorageWithdrawOperation}', "
+                + $"'{LedgerRow.MarketListOperation}', '{LedgerRow.MarketBuyOperation}', "
+                + $"'{LedgerRow.MarketCollectOperation}')");
         });
         entry.HasKey(row => row.Id).HasName("pk_economy_ledger");
         entry.Property(row => row.Id).UseIdentityAlwaysColumn();
@@ -332,6 +343,74 @@ internal sealed class EvertorchDbContext : DbContext
             .HasForeignKey(row => row.AccountId)
             .OnDelete(DeleteBehavior.Restrict)
             .HasConstraintName("fk_storage_items_account_storages");
+    }
+
+    private static void ConfigureMarketPrices(EntityTypeBuilder<MarketPriceRow> price)
+    {
+        price.ToTable("market_prices", table =>
+        {
+            table.HasCheckConstraint("ck_market_prices_price", $"price BETWEEN 1 AND {MaxCurrency}");
+            table.HasCheckConstraint("ck_market_prices_listed_ms", "listed_ms >= 0");
+        });
+        price.HasKey(row => row.ItemDefinitionId).HasName("pk_market_prices");
+        price.Property(row => row.ItemDefinitionId).HasMaxLength(MaxDefinitionIdLength);
+        price.Property(row => row.Version).IsConcurrencyToken();
+    }
+
+    private static void ConfigureMarketListings(EntityTypeBuilder<MarketListingRow> listing)
+    {
+        listing.ToTable("market_listings", table =>
+        {
+            table.HasCheckConstraint(
+                "ck_market_listings_units",
+                $"units_listed BETWEEN 1 AND {MaxQuantity} AND units_left BETWEEN 0 AND units_listed");
+            table.HasCheckConstraint("ck_market_listings_gross_coins", $"gross_coins BETWEEN 0 AND {MaxCurrency}");
+            table.HasCheckConstraint("ck_market_listings_expiry", "expires_at > listed_at");
+        });
+        listing.HasKey(row => row.Id).HasName("pk_market_listings");
+        listing.Property(row => row.Id).UseIdentityAlwaysColumn();
+        listing.Property(row => row.ItemDefinitionId).HasMaxLength(MaxDefinitionIdLength).IsRequired();
+        listing.Property(row => row.Version).IsConcurrencyToken();
+
+        // A purchase reads an item's stock oldest first, and only listings with units left are stock.
+        listing.HasIndex(row => new { row.ItemDefinitionId, row.ListedAt, row.Id })
+            .HasFilter("units_left > 0")
+            .HasDatabaseName("ix_market_listings_stock");
+        listing.HasIndex(row => row.SellerCharacterId).HasDatabaseName("ix_market_listings_seller_character_id");
+        listing.HasIndex(row => row.SellerAccountId).HasDatabaseName("ix_market_listings_seller_account_id");
+        listing.HasOne<CharacterRow>()
+            .WithMany()
+            .HasForeignKey(row => row.SellerCharacterId)
+            .OnDelete(DeleteBehavior.Restrict)
+            .HasConstraintName("fk_market_listings_characters");
+        listing.HasOne<AccountRow>()
+            .WithMany()
+            .HasForeignKey(row => row.SellerAccountId)
+            .OnDelete(DeleteBehavior.Restrict)
+            .HasConstraintName("fk_market_listings_accounts");
+    }
+
+    private static void ConfigureMarketSales(EntityTypeBuilder<MarketSaleRow> sale)
+    {
+        sale.ToTable("market_sales", table =>
+        {
+            table.HasCheckConstraint("ck_market_sales_units", $"units BETWEEN 1 AND {MaxQuantity}");
+            table.HasCheckConstraint("ck_market_sales_gross_coins", $"gross_coins BETWEEN 1 AND {MaxCurrency}");
+        });
+        sale.HasKey(row => new { row.OperationId, row.ListingId }).HasName("pk_market_sales");
+        sale.Property(row => row.ItemDefinitionId).HasMaxLength(MaxDefinitionIdLength).IsRequired();
+        sale.HasIndex(row => row.SellerCharacterId).HasDatabaseName("ix_market_sales_seller_character_id");
+        sale.HasIndex(row => row.BuyerCharacterId).HasDatabaseName("ix_market_sales_buyer_character_id");
+        sale.HasOne<CharacterRow>()
+            .WithMany()
+            .HasForeignKey(row => row.SellerCharacterId)
+            .OnDelete(DeleteBehavior.Restrict)
+            .HasConstraintName("fk_market_sales_seller");
+        sale.HasOne<CharacterRow>()
+            .WithMany()
+            .HasForeignKey(row => row.BuyerCharacterId)
+            .OnDelete(DeleteBehavior.Restrict)
+            .HasConstraintName("fk_market_sales_buyer");
     }
 
     private static void ConfigureSessionTokens(EntityTypeBuilder<SessionTokenRow> token)

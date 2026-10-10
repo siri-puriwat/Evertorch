@@ -18,6 +18,9 @@ internal sealed class LedgerRow
     public const string TradeOperation = "trade";
     public const string StorageDepositOperation = "storage_deposit";
     public const string StorageWithdrawOperation = "storage_withdraw";
+    public const string MarketListOperation = "market_list";
+    public const string MarketBuyOperation = "market_buy";
+    public const string MarketCollectOperation = "market_collect";
 
     public long Id { get; set; }
 

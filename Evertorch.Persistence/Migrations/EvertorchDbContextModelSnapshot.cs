@@ -458,7 +458,170 @@ namespace Evertorch.Persistence
 
                     b.ToTable("economy_ledger", null, t =>
                         {
-                            t.HasCheckConstraint("ck_economy_ledger_operation_type", "operation_type IN ('pickup', 'equip', 'unequip', 'consume', 'buy', 'sell', 'quest_reward', 'boss_reward', 'trade', 'storage_deposit', 'storage_withdraw')");
+                            t.HasCheckConstraint("ck_economy_ledger_operation_type", "operation_type IN ('pickup', 'equip', 'unequip', 'consume', 'buy', 'sell', 'quest_reward', 'boss_reward', 'trade', 'storage_deposit', 'storage_withdraw', 'market_list', 'market_buy', 'market_collect')");
+                        });
+                });
+
+            modelBuilder.Entity("Evertorch.Persistence.MarketListingRow", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityAlwaysColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at");
+
+                    b.Property<long>("GrossCoins")
+                        .HasColumnType("bigint")
+                        .HasColumnName("gross_coins");
+
+                    b.Property<string>("ItemDefinitionId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("item_definition_id");
+
+                    b.Property<DateTime>("ListedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("listed_at");
+
+                    b.Property<long>("SellerAccountId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("seller_account_id");
+
+                    b.Property<long>("SellerCharacterId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("seller_character_id");
+
+                    b.Property<int>("UnitsLeft")
+                        .HasColumnType("integer")
+                        .HasColumnName("units_left");
+
+                    b.Property<int>("UnitsListed")
+                        .HasColumnType("integer")
+                        .HasColumnName("units_listed");
+
+                    b.Property<int>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer")
+                        .HasColumnName("version");
+
+                    b.HasKey("Id")
+                        .HasName("pk_market_listings");
+
+                    b.HasIndex("SellerAccountId")
+                        .HasDatabaseName("ix_market_listings_seller_account_id");
+
+                    b.HasIndex("SellerCharacterId")
+                        .HasDatabaseName("ix_market_listings_seller_character_id");
+
+                    b.HasIndex("ItemDefinitionId", "ListedAt", "Id")
+                        .HasDatabaseName("ix_market_listings_stock")
+                        .HasFilter("units_left > 0");
+
+                    b.ToTable("market_listings", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_market_listings_expiry", "expires_at > listed_at");
+
+                            t.HasCheckConstraint("ck_market_listings_gross_coins", "gross_coins BETWEEN 0 AND 1000000000");
+
+                            t.HasCheckConstraint("ck_market_listings_units", "units_listed BETWEEN 1 AND 1000000 AND units_left BETWEEN 0 AND units_listed");
+                        });
+                });
+
+            modelBuilder.Entity("Evertorch.Persistence.MarketPriceRow", b =>
+                {
+                    b.Property<string>("ItemDefinitionId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("item_definition_id");
+
+                    b.Property<long>("ListedMs")
+                        .HasColumnType("bigint")
+                        .HasColumnName("listed_ms");
+
+                    b.Property<int>("Price")
+                        .HasColumnType("integer")
+                        .HasColumnName("price");
+
+                    b.Property<DateTime?>("RoseAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("rose_at");
+
+                    b.Property<DateTime>("SettledAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("settled_at");
+
+                    b.Property<DateTime?>("StockUntil")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("stock_until");
+
+                    b.Property<int>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer")
+                        .HasColumnName("version");
+
+                    b.HasKey("ItemDefinitionId")
+                        .HasName("pk_market_prices");
+
+                    b.ToTable("market_prices", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_market_prices_listed_ms", "listed_ms >= 0");
+
+                            t.HasCheckConstraint("ck_market_prices_price", "price BETWEEN 1 AND 1000000000");
+                        });
+                });
+
+            modelBuilder.Entity("Evertorch.Persistence.MarketSaleRow", b =>
+                {
+                    b.Property<Guid>("OperationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("operation_id");
+
+                    b.Property<long>("ListingId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("listing_id");
+
+                    b.Property<long>("BuyerCharacterId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("buyer_character_id");
+
+                    b.Property<long>("GrossCoins")
+                        .HasColumnType("bigint")
+                        .HasColumnName("gross_coins");
+
+                    b.Property<string>("ItemDefinitionId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("item_definition_id");
+
+                    b.Property<long>("SellerCharacterId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("seller_character_id");
+
+                    b.Property<int>("Units")
+                        .HasColumnType("integer")
+                        .HasColumnName("units");
+
+                    b.HasKey("OperationId", "ListingId")
+                        .HasName("pk_market_sales");
+
+                    b.HasIndex("BuyerCharacterId")
+                        .HasDatabaseName("ix_market_sales_buyer_character_id");
+
+                    b.HasIndex("SellerCharacterId")
+                        .HasDatabaseName("ix_market_sales_seller_character_id");
+
+                    b.ToTable("market_sales", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_market_sales_gross_coins", "gross_coins BETWEEN 1 AND 1000000000");
+
+                            t.HasCheckConstraint("ck_market_sales_units", "units BETWEEN 1 AND 1000000");
                         });
                 });
 
@@ -714,6 +877,40 @@ namespace Evertorch.Persistence
                         .HasForeignKey("ActorCharacterId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .HasConstraintName("fk_economy_ledger_characters");
+                });
+
+            modelBuilder.Entity("Evertorch.Persistence.MarketListingRow", b =>
+                {
+                    b.HasOne("Evertorch.Persistence.AccountRow", null)
+                        .WithMany()
+                        .HasForeignKey("SellerAccountId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_market_listings_accounts");
+
+                    b.HasOne("Evertorch.Persistence.CharacterRow", null)
+                        .WithMany()
+                        .HasForeignKey("SellerCharacterId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_market_listings_characters");
+                });
+
+            modelBuilder.Entity("Evertorch.Persistence.MarketSaleRow", b =>
+                {
+                    b.HasOne("Evertorch.Persistence.CharacterRow", null)
+                        .WithMany()
+                        .HasForeignKey("BuyerCharacterId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_market_sales_buyer");
+
+                    b.HasOne("Evertorch.Persistence.CharacterRow", null)
+                        .WithMany()
+                        .HasForeignKey("SellerCharacterId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_market_sales_seller");
                 });
 
             modelBuilder.Entity("Evertorch.Persistence.PartyMemberRow", b =>

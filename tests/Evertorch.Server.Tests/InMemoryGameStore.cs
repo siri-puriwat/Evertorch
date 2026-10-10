@@ -30,11 +30,18 @@ internal sealed class InMemoryGameStore : IGameStore
 
     // The storage row each deposit's or withdrawal's ledger entry names, as the PostgreSQL store keeps it in metadata.
     private readonly Dictionary<Guid, long> m_storageRows = new();
+    private readonly Dictionary<string, MarketPriceState> m_prices = new(StringComparer.Ordinal);
+    private readonly Dictionary<long, MarketListing> m_listings = new();
+    private readonly List<MarketSale> m_sales = new();
+
+    // What each market operation's ledger row and metadata say, as the PostgreSQL store keeps them.
+    private readonly Dictionary<Guid, MarketEntry> m_marketEntries = new();
     private long m_lastParty;
     private long m_lastAccount;
     private long m_lastCharacter;
     private long m_lastItem;
     private long m_lastStorageItem;
+    private long m_lastListing;
 
     public IReadOnlyList<string> PendingMigrations { get; set; } = Array.Empty<string>();
 
@@ -154,6 +161,16 @@ internal sealed class InMemoryGameStore : IGameStore
     ///     Every deposit and withdrawal commit attempted, in order, by operation ID.
     /// </summary>
     public List<Guid> StorageCommits { get; } = new();
+
+    /// <summary>
+    ///     How many of the next listings, purchases, and collections commit and then throw as if the answer was lost.
+    /// </summary>
+    public int AmbiguousMarketFailures { get; set; }
+
+    /// <summary>
+    ///     Every listing, purchase, and collection commit attempted, in order, by operation ID.
+    /// </summary>
+    public List<Guid> MarketCommits { get; } = new();
 
     /// <summary>
     ///     How many of the next trade commits succeed and then throw as if the answer was lost.
@@ -786,6 +803,28 @@ internal sealed class InMemoryGameStore : IGameStore
         }
     }
 
+    public Task<MarketResult> CommitMarketListAsync(MarketListCommit list, CancellationToken cancellationToken)
+    {
+        ThrowIfUnavailable();
+        lock (m_gate)
+        {
+            MarketCommits.Add(list.OperationId);
+            return AnswerMarket(FindMarket(list.OperationId, list.CharacterId) ?? List(list));
+        }
+    }
+
+    public Task<MarketResult> CommitMarketCollectAsync(
+        MarketCollectCommit collect,
+        CancellationToken cancellationToken)
+    {
+        ThrowIfUnavailable();
+        lock (m_gate)
+        {
+            MarketCommits.Add(collect.OperationId);
+            return AnswerMarket(FindMarket(collect.OperationId, collect.CharacterId) ?? Collect(collect));
+        }
+    }
+
     public Task<IReadOnlyList<string>> ListStoredDefinitionIdsAsync(CancellationToken cancellationToken)
     {
         ThrowIfUnavailable();
@@ -797,6 +836,8 @@ internal sealed class InMemoryGameStore : IGameStore
                     .Concat(row.Quests.Keys)
                     .Concat(row.Skills.Keys))
                 .Concat(m_storages.Values.SelectMany(storage => storage.Items.Select(item => item.ItemDefinitionId)))
+                .Concat(m_listings.Values.Select(listing => listing.Item))
+                .Concat(m_prices.Keys)
                 .Distinct()
                 .ToList();
             return Task.FromResult(ids);
@@ -1089,6 +1130,20 @@ internal sealed class InMemoryGameStore : IGameStore
             storage.Items.Add(row);
             storage.Revision++;
             return row.Id;
+        }
+    }
+
+    /// <summary>
+    ///     Takes <paramref name="unitsSold" /> off listing <paramref name="listingId" /> for <paramref name="gross" />
+    ///     coins in all, as purchases would.
+    /// </summary>
+    public void SellFromListing(long listingId, int unitsSold, long gross)
+    {
+        lock (m_gate)
+        {
+            MarketListing listing = m_listings[listingId];
+            listing.Left -= unitsSold;
+            listing.Gross = gross;
         }
     }
 
@@ -1702,6 +1757,200 @@ internal sealed class InMemoryGameStore : IGameStore
             .ToList();
     }
 
+    // As the PostgreSQL store answers a market operation's repeat: the bag's row as it is now, with what moved.
+    private MarketResult? FindMarket(Guid operationId, long characterId)
+    {
+        if (!m_marketEntries.TryGetValue(operationId, out MarketEntry? entry))
+        {
+            return null;
+        }
+
+        if (entry.Character != characterId)
+        {
+            return new MarketResult(InventoryStatus.TakenByOther, 0, 0, Array.Empty<StoredItem>());
+        }
+
+        Row row = m_characters[characterId];
+        return new MarketResult(
+            InventoryStatus.Committed,
+            row.InventoryRevision,
+            row.Coins,
+            entry.Row == 0 ? Array.Empty<StoredItem>() : new[] { row.Read(entry.Row, entry.Item) },
+            entry.Listing,
+            entry.Item,
+            entry.Quantity,
+            entry.Coins,
+            m_sales.Where(sale => sale.OperationId == operationId)
+                .OrderBy(sale => sale.ListingId)
+                .Select(sale => new MarketFill(sale.ListingId, sale.SellerCharacterId, sale.Units, sale.Gross))
+                .ToList());
+    }
+
+    private MarketResult Unmarketed(InventoryStatus status, Row row, string item = "")
+    {
+        return new MarketResult(status, row.InventoryRevision, row.Coins, Array.Empty<StoredItem>(),
+            itemDefinitionId: item);
+    }
+
+    private Task<MarketResult> AnswerMarket(MarketResult result)
+    {
+        if (AmbiguousMarketFailures > 0 && result.Status == InventoryStatus.Committed)
+        {
+            AmbiguousMarketFailures--;
+            throw new StoreUnavailableException(new TimeoutException("scripted loss of the commit's answer"));
+        }
+
+        return Task.FromResult(result);
+    }
+
+    // A committed market operation, kept as the PostgreSQL store's ledger keeps it, so a lookup and a repeat answer.
+    private MarketResult Marketed(
+        Guid operationId,
+        long characterId,
+        long bagRow,
+        string item,
+        long listing,
+        int quantity,
+        long coins)
+    {
+        Row row = m_characters[characterId];
+        row.InventoryRevision = unchecked(row.InventoryRevision + 1);
+        m_ledger.Add(operationId, new LedgerEntry(characterId, bagRow, item));
+        m_marketEntries.Add(operationId, new MarketEntry(characterId, bagRow, item, listing, quantity, coins));
+        return FindMarket(operationId, characterId)!;
+    }
+
+    // As the PostgreSQL store lists: the row checked, the cap, the price settled, the fee, then the units.
+    private MarketResult List(MarketListCommit list)
+    {
+        Row row = m_characters[list.CharacterId];
+        StoredItem? item = row.Items.SingleOrDefault(candidate => candidate.Id == list.InventoryItemId);
+        if (item == null
+            || row.Equipment.ContainsValue(item.Id)
+            || item.ItemDefinitionId != list.ItemDefinitionId
+            || item.Quantity < list.Quantity
+            || item.RefineLevel != 0)
+        {
+            return Unmarketed(InventoryStatus.Refused, row);
+        }
+
+        if (m_listings.Values.Count(listing => listing.Seller == list.CharacterId) >= list.MaxListings)
+        {
+            return Unmarketed(InventoryStatus.ListingCapReached, row);
+        }
+
+        MarketPriceState state = m_prices.TryGetValue(list.ItemDefinitionId, out MarketPriceState? stored)
+            ? stored!
+            : MarketPriceState.Start(list.Terms.BasePrice, list.At);
+        MarketPriceState settled = MarketPricing.Settle(state, list.At, list.Terms.Floor, list.PricePeriodMs);
+        long fee = MarketPricing.Fee(list.Quantity, settled.Price);
+        if (row.Coins < fee)
+        {
+            return Unmarketed(InventoryStatus.NotEnoughCoins, row);
+        }
+
+        var listing = new MarketListing(
+            ++m_lastListing,
+            list.CharacterId,
+            row.Account.Value,
+            list.ItemDefinitionId,
+            list.Quantity,
+            list.At,
+            list.At.AddMilliseconds(list.ListingDurationMs));
+        m_listings.Add(listing.Id, listing);
+        Take(row, item, list.Quantity);
+        row.Coins -= fee;
+        DateTime? stockUntil = settled.StockUntil.HasValue && settled.StockUntil.Value > listing.ExpiresAt
+            ? settled.StockUntil
+            : listing.ExpiresAt;
+        m_prices[list.ItemDefinitionId] = settled.WithStockUntil(stockUntil);
+        return Marketed(list.OperationId, list.CharacterId, item.Id, item.ItemDefinitionId, listing.Id, list.Quantity,
+            fee);
+    }
+
+    // As the PostgreSQL store collects: the listing the character's, the item known, the cap, then the room; the net and
+    // the units come back together, and the listing goes.
+    private MarketResult Collect(MarketCollectCommit collect)
+    {
+        Row row = m_characters[collect.CharacterId];
+        if (!m_listings.TryGetValue(collect.ListingId, out MarketListing? listing)
+            || listing!.Seller != collect.CharacterId)
+        {
+            return Unmarketed(InventoryStatus.BoardChanged, row);
+        }
+
+        if (!collect.StackLimits.TryGetValue(listing.Item, out int stackLimit))
+        {
+            return Unmarketed(InventoryStatus.Refused, row, listing.Item);
+        }
+
+        long tax = MarketPricing.Tax(listing.Gross);
+        long net = listing.Gross - tax;
+        if (row.Coins > ContentLimits.MaxCurrency - net)
+        {
+            return Unmarketed(InventoryStatus.CoinCapReached, row, listing.Item);
+        }
+
+        long bagRow = 0;
+        if (listing.Left > 0)
+        {
+            int index = stackLimit == 1 ? -1 : row.Items.FindIndex(item => item.ItemDefinitionId == listing.Item);
+            int held = index >= 0 ? row.Items[index].Quantity : 0;
+            if (held > stackLimit - listing.Left || (index < 0 && row.Items.Count >= collect.MaxRows))
+            {
+                return Unmarketed(InventoryStatus.InventoryFull, row, listing.Item);
+            }
+
+            StoredItem stack = index >= 0
+                ? new StoredItem(row.Items[index].Id, listing.Item, held + listing.Left)
+                : new StoredItem(++m_lastItem, listing.Item, listing.Left);
+            if (index >= 0)
+            {
+                row.Items[index] = stack;
+            }
+            else
+            {
+                row.Items.Add(stack);
+            }
+
+            bagRow = stack.Id;
+        }
+
+        if (m_prices.TryGetValue(listing.Item, out MarketPriceState? stored)
+            && collect.Terms.TryGetValue(listing.Item, out ItemMarket? terms))
+        {
+            MarketPriceState settled = MarketPricing.Settle(stored!, collect.At, terms!.Floor, collect.PricePeriodMs);
+            m_prices[listing.Item] =
+                listing.Left == 0 ? settled : settled.WithStockUntil(LatestStock(listing.Item, listing.Id));
+        }
+
+        row.Coins += net;
+        m_listings.Remove(listing.Id);
+        return Marketed(collect.OperationId, collect.CharacterId, bagRow, listing.Item, listing.Id, listing.Left, net);
+    }
+
+    private DateTime? LatestStock(string item, long excluded)
+    {
+        return m_listings.Values
+            .Where(listing => listing.Item == item && listing.Left > 0 && listing.Id != excluded)
+            .Select(listing => (DateTime?)listing.ExpiresAt)
+            .Max();
+    }
+
+    private static void Take(Row row, StoredItem item, int quantity)
+    {
+        int index = row.Items.IndexOf(item);
+        if (item.Quantity == quantity)
+        {
+            row.Items.RemoveAt(index);
+        }
+        else
+        {
+            row.Items[index] = new StoredItem(item.Id, item.ItemDefinitionId, item.Quantity - quantity, null,
+                item.RefineLevel);
+        }
+    }
+
     private void ThrowIfUnavailable()
     {
         if (IsUnavailable)
@@ -1737,6 +1986,106 @@ internal sealed class InMemoryGameStore : IGameStore
         public DateTime IssuedAt { get; }
 
         public DateTime ExpiresAt { get; }
+    }
+
+    // A listing as stored: its seller and account, the item, the units listed and left, its sales' gross, its times.
+    private sealed class MarketListing
+    {
+        public MarketListing(
+            long id,
+            long seller,
+            long account,
+            string item,
+            int listed,
+            DateTime listedAt,
+            DateTime expiresAt)
+        {
+            Id = id;
+            Seller = seller;
+            Account = account;
+            Item = item;
+            Listed = listed;
+            Left = listed;
+            ListedAt = listedAt;
+            ExpiresAt = expiresAt;
+        }
+
+        public long Id { get; }
+
+        public long Seller { get; }
+
+        public long Account { get; }
+
+        public string Item { get; }
+
+        public int Listed { get; }
+
+        public int Left { get; set; }
+
+        public long Gross { get; set; }
+
+        public DateTime ListedAt { get; }
+
+        public DateTime ExpiresAt { get; }
+    }
+
+    // One listing a purchase filled, as market_sales keeps it.
+    private sealed class MarketSale
+    {
+        public MarketSale(
+            Guid operationId,
+            long listingId,
+            long sellerCharacterId,
+            long buyerCharacterId,
+            int units,
+            long gross)
+        {
+            OperationId = operationId;
+            ListingId = listingId;
+            SellerCharacterId = sellerCharacterId;
+            BuyerCharacterId = buyerCharacterId;
+            Units = units;
+            Gross = gross;
+        }
+
+        public Guid OperationId { get; }
+
+        public long ListingId { get; }
+
+        public long SellerCharacterId { get; }
+
+        public long BuyerCharacterId { get; }
+
+        public int Units { get; }
+
+        public long Gross { get; }
+    }
+
+    // A market operation's ledger row and its metadata: its character, the bag's row, the item, the listing, the units,
+    // and the coins.
+    private sealed class MarketEntry
+    {
+        public MarketEntry(long character, long row, string item, long listing, int quantity, long coins)
+        {
+            Character = character;
+            Row = row;
+            Item = item;
+            Listing = listing;
+            Quantity = quantity;
+            Coins = coins;
+        }
+
+        public long Character { get; }
+
+        public long Row { get; }
+
+        public string Item { get; }
+
+        public long Listing { get; }
+
+        public int Quantity { get; }
+
+        public long Coins { get; }
     }
 
     private sealed class LedgerEntry

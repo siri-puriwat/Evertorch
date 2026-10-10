@@ -21,6 +21,27 @@ public enum InventoryStatus
     ///     Nothing changed: the row is not the character's, is already in the slot, or the slot is empty; or a
     ///     consumed row is not the character's.
     /// </summary>
-    Refused = 4
+    Refused = 4,
+
+    /// <summary>
+    ///     Nothing changed: the board is not as the command saw it. Its price passed the buyer's limit, too few units are
+    ///     left, or the listing is gone or another character's (Gameplay Systems §11.5).
+    /// </summary>
+    BoardChanged = 5,
+
+    /// <summary>
+    ///     Nothing changed: the coins fall short of a listing's fee or a purchase's price.
+    /// </summary>
+    NotEnoughCoins = 6,
+
+    /// <summary>
+    ///     Nothing changed: a collection's coins would pass the cap.
+    /// </summary>
+    CoinCapReached = 7,
+
+    /// <summary>
+    ///     Nothing changed: the character already holds its most listings.
+    /// </summary>
+    ListingCapReached = 8
 }
 }
