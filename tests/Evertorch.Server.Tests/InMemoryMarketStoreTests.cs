@@ -134,7 +134,7 @@ public sealed class InMemoryMarketStoreTests
         Action lost = () => List(seller, dust, 10, operation);
 
         Assert.That(lost, Throws.InstanceOf<StoreUnavailableException>());
-        InventoryResult? found = m_store.FindOperationAsync(operation, seller, Array.Empty<long>(),
+        InventoryResult? found = m_store.FindOperationAsync(operation, seller, Array.Empty<ReportedRow>(),
                 CancellationToken.None)
             .GetAwaiter()
             .GetResult();

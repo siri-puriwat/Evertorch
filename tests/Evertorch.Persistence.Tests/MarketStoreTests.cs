@@ -528,7 +528,7 @@ public sealed class MarketStoreTests
         var operation = Guid.NewGuid();
         List(seller, dust, item, 10, operation: operation);
 
-        InventoryResult? found = m_store.FindOperationAsync(operation, seller, Array.Empty<long>(),
+        InventoryResult? found = m_store.FindOperationAsync(operation, seller, Array.Empty<ReportedRow>(),
                 CancellationToken.None)
             .GetAwaiter()
             .GetResult();

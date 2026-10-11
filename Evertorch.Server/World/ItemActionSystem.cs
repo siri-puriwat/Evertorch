@@ -256,11 +256,14 @@ public sealed class ItemActionSystem : ITickPhase
             return CommandRejectionReason.RequirementNotMet;
         }
 
+        ReportedRow? displaced = character.Inventory.TryGetRow(worn, out InventoryEntry wornRow)
+            ? new ReportedRow(worn, wornRow.Item.Value)
+            : null;
         var operation = new InventoryOperation(
             InventoryOperationKind.Equip,
             commandSequence,
             Guid.NewGuid(),
-            displacedRow: worn);
+            reported: displaced);
         var commit = new EquipCommit(
             operation.OperationId,
             character.Character.Value,
@@ -603,10 +606,11 @@ public sealed class ItemActionSystem : ITickPhase
         return inventory.Rows.Count < PickupSystem.MaxInventoryRows;
     }
 
-    // The ledger names the row an operation acted on; the row a swap took out of its slot is named here.
-    private static long[] ReportRows(InventoryOperation operation)
+    // The ledger names the row an operation acted on; the row a swap took out of its slot, or a refine's ore, is named
+    // here with its item.
+    private static ReportedRow[] ReportRows(InventoryOperation operation)
     {
-        return operation.DisplacedRow == 0 ? Array.Empty<long>() : new[] { operation.DisplacedRow };
+        return operation.Reported == null ? Array.Empty<ReportedRow>() : new[] { operation.Reported };
     }
 
     private static InboundEventKind CommandOf(InventoryOperation operation)
@@ -1604,7 +1608,7 @@ public sealed class ItemActionSystem : ITickPhase
             return m_persistence.TryEnqueue(storageLookup);
         }
 
-        long[] reportRows = ReportRows(operation);
+        ReportedRow[] reportRows = ReportRows(operation);
 
         // A change that took nothing off keeps no ledger row, so the stored job says whether it committed
         // (Persistence §5).

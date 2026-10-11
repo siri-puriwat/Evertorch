@@ -163,6 +163,25 @@ internal sealed class InMemoryGameStore : IGameStore
     public List<Guid> StorageCommits { get; } = new();
 
     /// <summary>
+    ///     How many of the next refines commit and then throw as if the answer was lost.
+    /// </summary>
+    public int AmbiguousRefineFailures { get; set; }
+
+    /// <summary>
+    ///     Every refine commit attempted, in order.
+    /// </summary>
+    public List<RefineCommit> RefineCommits { get; } = new();
+
+    /// <summary>
+    ///     Each committed refine's attempt as <c>refine_attempts</c> records it: the outcome, the levels before and
+    ///     after (null when destroyed), the ore's quantity, and the coins, by operation ID.
+    /// </summary>
+    public Dictionary<Guid, (RefineOutcomeKind Outcome, int Before, int? After, int Ore, long Coins)> RefineAttempts
+    {
+        get;
+    } = new();
+
+    /// <summary>
     ///     How many of the next listings, purchases, and collections commit and then throw as if the answer was lost.
     /// </summary>
     public int AmbiguousMarketFailures { get; set; }
@@ -554,7 +573,8 @@ internal sealed class InMemoryGameStore : IGameStore
         lock (m_gate)
         {
             PickupCommits.Add(pickup);
-            InventoryResult result = Find(pickup.DropId, pickup.CharacterId, Array.Empty<long>()) ?? Commit(pickup);
+            InventoryResult result = Find(pickup.DropId, pickup.CharacterId, Array.Empty<ReportedRow>()) ??
+                Commit(pickup);
             if (AmbiguousPickupFailures > 0 && result.Status == InventoryStatus.Committed)
             {
                 AmbiguousPickupFailures--;
@@ -582,7 +602,7 @@ internal sealed class InMemoryGameStore : IGameStore
         lock (m_gate)
         {
             EquipmentCommits.Add(unequip.OperationId);
-            InventoryResult result = Find(unequip.OperationId, unequip.CharacterId, Array.Empty<long>())
+            InventoryResult result = Find(unequip.OperationId, unequip.CharacterId, Array.Empty<ReportedRow>())
                 ?? Unequip(unequip);
             return AnswerEquipment(result);
         }
@@ -594,7 +614,7 @@ internal sealed class InMemoryGameStore : IGameStore
         lock (m_gate)
         {
             ConsumeCommits.Add(consume.OperationId);
-            InventoryResult result = Find(consume.OperationId, consume.CharacterId, Array.Empty<long>())
+            InventoryResult result = Find(consume.OperationId, consume.CharacterId, Array.Empty<ReportedRow>())
                 ?? Consume(consume);
             if (AmbiguousConsumeFailures > 0 && result.Status == InventoryStatus.Committed)
             {
@@ -612,7 +632,7 @@ internal sealed class InMemoryGameStore : IGameStore
         lock (m_gate)
         {
             ShopCommits.Add(buy.OperationId);
-            return AnswerShop(Find(buy.OperationId, buy.CharacterId, Array.Empty<long>()) ?? Buy(buy));
+            return AnswerShop(Find(buy.OperationId, buy.CharacterId, Array.Empty<ReportedRow>()) ?? Buy(buy));
         }
     }
 
@@ -622,7 +642,7 @@ internal sealed class InMemoryGameStore : IGameStore
         lock (m_gate)
         {
             ShopCommits.Add(sell.OperationId);
-            return AnswerShop(Find(sell.OperationId, sell.CharacterId, Array.Empty<long>()) ?? Sell(sell));
+            return AnswerShop(Find(sell.OperationId, sell.CharacterId, Array.Empty<ReportedRow>()) ?? Sell(sell));
         }
     }
 
@@ -632,7 +652,8 @@ internal sealed class InMemoryGameStore : IGameStore
         lock (m_gate)
         {
             GrantCommits.Add(grant);
-            InventoryResult result = Find(grant.OperationId, grant.CharacterId, Array.Empty<long>()) ?? Grant(grant);
+            InventoryResult result = Find(grant.OperationId, grant.CharacterId, Array.Empty<ReportedRow>()) ??
+                Grant(grant);
             if (AmbiguousGrantFailures > 0 && result.Status == InventoryStatus.Committed)
             {
                 AmbiguousGrantFailures--;
@@ -650,7 +671,7 @@ internal sealed class InMemoryGameStore : IGameStore
         {
             RewardCommits.Add(reward);
             InventoryResult result =
-                Find(reward.OperationId, reward.CharacterId, Array.Empty<long>()) ?? Reward(reward);
+                Find(reward.OperationId, reward.CharacterId, Array.Empty<ReportedRow>()) ?? Reward(reward);
             if (AmbiguousRewardFailures > 0 && result.Status == InventoryStatus.Committed)
             {
                 AmbiguousRewardFailures--;
@@ -705,7 +726,7 @@ internal sealed class InMemoryGameStore : IGameStore
     public Task<InventoryResult?> FindOperationAsync(
         Guid operationId,
         long characterId,
-        IReadOnlyCollection<long> rowIds,
+        IReadOnlyCollection<ReportedRow> rows,
         CancellationToken cancellationToken)
     {
         lock (m_gate)
@@ -722,7 +743,7 @@ internal sealed class InMemoryGameStore : IGameStore
                 throw new InvalidOperationException("scripted failure of the lookup");
             }
 
-            return Task.FromResult(Find(operationId, characterId, rowIds));
+            return Task.FromResult(Find(operationId, characterId, rows));
         }
     }
 
@@ -876,6 +897,23 @@ internal sealed class InMemoryGameStore : IGameStore
         {
             MarketCommits.Add(collect.OperationId);
             return AnswerMarket(FindMarket(collect.OperationId, collect.CharacterId) ?? Collect(collect));
+        }
+    }
+
+    public Task<InventoryResult> CommitRefineAsync(RefineCommit refine, CancellationToken cancellationToken)
+    {
+        ThrowIfUnavailable();
+        lock (m_gate)
+        {
+            RefineCommits.Add(refine);
+            InventoryResult result = Find(refine.OperationId, refine.CharacterId, refine.ReportRows) ?? Refine(refine);
+            if (AmbiguousRefineFailures > 0 && result.Status == InventoryStatus.Committed)
+            {
+                AmbiguousRefineFailures--;
+                throw new StoreUnavailableException(new TimeoutException("scripted loss of the commit's answer"));
+            }
+
+            return Task.FromResult(result);
         }
     }
 
@@ -1535,7 +1573,7 @@ internal sealed class InMemoryGameStore : IGameStore
     }
 
     // As the PostgreSQL store answers: the ledger's row and the named ones as they are now, an emptied one at 0.
-    private InventoryResult? Find(Guid operationId, long characterId, IReadOnlyCollection<long> rowIds)
+    private InventoryResult? Find(Guid operationId, long characterId, IReadOnlyCollection<ReportedRow> reported)
     {
         if (!m_ledger.TryGetValue(operationId, out LedgerEntry? entry))
         {
@@ -1549,14 +1587,17 @@ internal sealed class InMemoryGameStore : IGameStore
 
         Row row = m_characters[characterId];
 
-        // A turn-in's ledger row names no inventory row.
-        IEnumerable<long> named =
-            entry.Item == 0 ? rowIds : new[] { entry.Item }.Concat(rowIds.Where(id => id != entry.Item));
+        // A turn-in's ledger row names no inventory row; each reported row comes back under its own item, as the
+        // PostgreSQL store reads it.
+        IEnumerable<ReportedRow> named = entry.Item == 0
+            ? reported
+            : new[] { new ReportedRow(entry.Item, entry.ItemDefinition) }
+                .Concat(reported.Where(other => other.Id != entry.Item));
         return new InventoryResult(
             InventoryStatus.Committed,
             row.InventoryRevision,
             row.Coins,
-            named.Select(id => row.Read(id, id == entry.Item ? entry.ItemDefinition : string.Empty)).ToList());
+            named.Select(other => row.Read(other.Id, other.ItemDefinitionId)).ToList());
     }
 
     // As the PostgreSQL store checks it: the quest not completed, the carried progress, and the coin cap; the row is
@@ -1732,6 +1773,78 @@ internal sealed class InMemoryGameStore : IGameStore
             new[] { row.Read(sold.Id, sold.ItemDefinitionId) });
     }
 
+    // As the PostgreSQL store checks and applies it: the row at its level, unworn, then the ore, then the coins; the
+    // outcome as drawn; the ore's row deleted once emptied; the answer reporting both rows under their own items.
+    private InventoryResult Refine(RefineCommit refine)
+    {
+        Row row = m_characters[refine.CharacterId];
+        int index = row.Items.FindIndex(item => item.Id == refine.InventoryItemId);
+        if (index < 0
+            || row.Items[index].ItemDefinitionId != refine.ItemDefinitionId
+            || row.Items[index].RefineLevel != refine.LevelBefore)
+        {
+            return Unchanged(InventoryStatus.Refused, row);
+        }
+
+        if (row.Equipment.ContainsValue(refine.InventoryItemId))
+        {
+            return Unchanged(InventoryStatus.RowWorn, row);
+        }
+
+        StoredItem? ore = row.Items.SingleOrDefault(item => item.Id == refine.MaterialItemId);
+        if (ore == null
+            || ore.Id == refine.InventoryItemId
+            || ore.ItemDefinitionId != refine.MaterialDefinitionId
+            || ore.Quantity < refine.MaterialQuantity)
+        {
+            return Unchanged(InventoryStatus.MaterialShort, row);
+        }
+
+        if (row.Coins < refine.Coins)
+        {
+            return Unchanged(InventoryStatus.NotEnoughCoins, row);
+        }
+
+        StoredItem refined = row.Items[index];
+        Take(row, ore, refine.MaterialQuantity);
+        int target = row.Items.FindIndex(item => item.Id == refine.InventoryItemId);
+        switch (refine.Outcome)
+        {
+            case RefineOutcomeKind.Refined:
+            case RefineOutcomeKind.Lowered:
+                row.Items[target] = new StoredItem(refined.Id, refined.ItemDefinitionId, refined.Quantity, null,
+                    refine.LevelAfter);
+                break;
+            case RefineOutcomeKind.Destroyed:
+                row.Items.RemoveAt(target);
+                break;
+            case RefineOutcomeKind.Unchanged:
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(refine), refine.Outcome, "A refine needs an outcome.");
+        }
+
+        row.Coins -= refine.Coins;
+        row.InventoryRevision = unchecked(row.InventoryRevision + 1);
+        m_ledger.Add(refine.OperationId, new LedgerEntry(refine.CharacterId, refined.Id, refined.ItemDefinitionId));
+        RefineAttempts.Add(
+            refine.OperationId,
+            (refine.Outcome,
+                refine.LevelBefore,
+                refine.Outcome == RefineOutcomeKind.Destroyed ? null : refine.LevelAfter,
+                refine.MaterialQuantity,
+                refine.Coins));
+        return new InventoryResult(
+            InventoryStatus.Committed,
+            row.InventoryRevision,
+            row.Coins,
+            new[]
+            {
+                row.Read(refined.Id, refined.ItemDefinitionId),
+                row.Read(ore.Id, ore.ItemDefinitionId)
+            });
+    }
+
     private Task<InventoryResult> AnswerEquipment(InventoryResult result)
     {
         if (AmbiguousEquipmentFailures > 0 && result.Status == InventoryStatus.Committed)
@@ -1785,7 +1898,7 @@ internal sealed class InMemoryGameStore : IGameStore
     // A change that committed: the ledger's answer when it took an item off, else the character as it is.
     private InventoryResult Changed(Guid operationId, long characterId, Row row)
     {
-        return Find(operationId, characterId, Array.Empty<long>()) ?? Unchanged(InventoryStatus.Committed, row);
+        return Find(operationId, characterId, Array.Empty<ReportedRow>()) ?? Unchanged(InventoryStatus.Committed, row);
     }
 
     private InventoryResult Unequip(UnequipCommit unequip)

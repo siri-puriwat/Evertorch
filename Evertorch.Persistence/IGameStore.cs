@@ -209,13 +209,14 @@ public interface IGameStore
     ///     What became of an inventory operation whose commit may or may not have happened, looked up under the
     ///     character's lock: null when the ledger has no entry for <paramref name="operationId" />, else
     ///     <see cref="InventoryStatus.TakenByOther" /> when another character made it, or
-    ///     <see cref="InventoryStatus.Committed" /> with the ledger's row and <paramref name="rowIds" /> as they are
-    ///     now. The caller names the rows the ledger does not, such as the one a swap took out of its slot.
+    ///     <see cref="InventoryStatus.Committed" /> with the ledger's row and <paramref name="rows" /> as they are now,
+    ///     each emptied one under its own item. The caller names the rows the ledger does not, such as the one a swap
+    ///     took out of its slot, or a refine's ore.
     /// </summary>
     Task<InventoryResult?> FindOperationAsync(
         Guid operationId,
         long characterId,
-        IReadOnlyCollection<long> rowIds,
+        IReadOnlyCollection<ReportedRow> rows,
         CancellationToken cancellationToken);
 
     /// <summary>
@@ -313,6 +314,18 @@ public interface IGameStore
     ///     <see cref="InventoryStatus.InventoryFull" /> when the bag has no room for the units.
     /// </summary>
     Task<MarketResult> CommitMarketCollectAsync(MarketCollectCommit collect, CancellationToken cancellationToken);
+
+    /// <summary>
+    ///     Refines one row in one transaction with a <c>refine</c> ledger row and a <c>refine_attempts</c> row
+    ///     (Persistence §5): under the character's lock, a repeat answers from the ledger; the coins and the ore are taken,
+    ///     the ore's row deleted once emptied, and the drawn outcome applied: the level up by one, the row deleted, its
+    ///     level lowered, or nothing; the inventory revision goes up by one. The answer reports the row refined and the
+    ///     ore's row, each emptied one under its own item. <see cref="InventoryStatus.Refused" /> when the row is gone or
+    ///     at another level; <see cref="InventoryStatus.RowWorn" /> when it is worn;
+    ///     <see cref="InventoryStatus.MaterialShort" /> when the ore's row holds too few of it;
+    ///     <see cref="InventoryStatus.NotEnoughCoins" /> when the coins fall short.
+    /// </summary>
+    Task<InventoryResult> CommitRefineAsync(RefineCommit refine, CancellationToken cancellationToken);
 
     /// <summary>
     ///     Every distinct job, map, item, quest, and skill definition ID stored for any character, and every item in

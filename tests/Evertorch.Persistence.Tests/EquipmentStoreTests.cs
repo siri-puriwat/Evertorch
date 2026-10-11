@@ -57,7 +57,8 @@ public sealed class EquipmentStoreTests
 
     private InventoryResult Equip(long character, long row, Guid? operation = null, long reportRow = 0)
     {
-        long[] report = reportRow == 0 ? Array.Empty<long>() : new[] { reportRow };
+        ReportedRow[] report =
+            reportRow == 0 ? Array.Empty<ReportedRow>() : new[] { new ReportedRow(reportRow, Sword) };
         return m_store.CommitEquipAsync(
                 new EquipCommit(operation ?? Guid.NewGuid(), character, row, Weapon, report, Now),
                 CancellationToken.None)
@@ -102,7 +103,7 @@ public sealed class EquipmentStoreTests
 
         InventoryResult swap = Equip(character, second, operation, first);
         InventoryResult? found = m_store
-            .FindOperationAsync(operation, character, new[] { first }, CancellationToken.None)
+            .FindOperationAsync(operation, character, new[] { new ReportedRow(first, Sword) }, CancellationToken.None)
             .GetAwaiter()
             .GetResult();
 

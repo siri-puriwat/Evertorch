@@ -182,10 +182,10 @@ internal sealed class LosingAnswersGameStore : IGameStore
     public Task<InventoryResult?> FindOperationAsync(
         Guid operationId,
         long characterId,
-        IReadOnlyCollection<long> rowIds,
+        IReadOnlyCollection<ReportedRow> rows,
         CancellationToken cancellationToken)
     {
-        return m_inner.FindOperationAsync(operationId, characterId, rowIds, cancellationToken);
+        return m_inner.FindOperationAsync(operationId, characterId, rows, cancellationToken);
     }
 
     public async Task<TradeResult> CommitTradeAsync(TradeCommit trade, CancellationToken cancellationToken)
@@ -251,6 +251,11 @@ internal sealed class LosingAnswersGameStore : IGameStore
     public Task<MarketResult> CommitMarketBuyAsync(MarketBuyCommit buy, CancellationToken cancellationToken)
     {
         return AnswerAsync(m_inner.CommitMarketBuyAsync(buy, cancellationToken));
+    }
+
+    public Task<InventoryResult> CommitRefineAsync(RefineCommit refine, CancellationToken cancellationToken)
+    {
+        return AnswerAsync(m_inner.CommitRefineAsync(refine, cancellationToken));
     }
 
     public Task<StoredMarket> ReadMarketAsync(MarketRead read, CancellationToken cancellationToken)

@@ -57,7 +57,7 @@ public sealed class CoinAnswerTests
 
     private InventoryResult? Find(long character, Guid operation)
     {
-        return m_store.FindOperationAsync(operation, character, Array.Empty<long>(), CancellationToken.None)
+        return m_store.FindOperationAsync(operation, character, Array.Empty<ReportedRow>(), CancellationToken.None)
             .GetAwaiter()
             .GetResult();
     }
@@ -65,7 +65,7 @@ public sealed class CoinAnswerTests
     private InventoryResult Equip(long character, long row)
     {
         return m_store.CommitEquipAsync(
-                new EquipCommit(Guid.NewGuid(), character, row, Weapon, Array.Empty<long>(), Now),
+                new EquipCommit(Guid.NewGuid(), character, row, Weapon, Array.Empty<ReportedRow>(), Now),
                 CancellationToken.None)
             .GetAwaiter()
             .GetResult();

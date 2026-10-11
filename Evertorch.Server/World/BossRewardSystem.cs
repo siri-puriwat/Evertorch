@@ -190,7 +190,8 @@ public sealed class BossRewardSystem : ITickPhase
             "boss reward lookup",
             character.Connection?.Connection ?? default,
             id,
-            (store, cancellation) => store.FindOperationAsync(operationId, id, Array.Empty<long>(), cancellation),
+            (store, cancellation) =>
+                store.FindOperationAsync(operationId, id, Array.Empty<ReportedRow>(), cancellation),
             (outcome, found) => CompleteLookup(character, outcome, found),
             operationId.ToString());
         return m_persistence.TryEnqueue(lookup);

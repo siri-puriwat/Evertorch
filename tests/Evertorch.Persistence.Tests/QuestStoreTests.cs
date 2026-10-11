@@ -261,7 +261,7 @@ public sealed class QuestStoreTests
         TurnIn(character, operation: operation);
 
         InventoryResult? found = m_store
-            .FindOperationAsync(operation, character, Array.Empty<long>(), CancellationToken.None)
+            .FindOperationAsync(operation, character, Array.Empty<ReportedRow>(), CancellationToken.None)
             .GetAwaiter()
             .GetResult();
 

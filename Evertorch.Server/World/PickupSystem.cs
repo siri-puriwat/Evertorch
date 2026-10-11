@@ -206,7 +206,8 @@ public sealed class PickupSystem : ITickPhase
             "pickup lookup",
             character.Connection?.Connection ?? default,
             id,
-            (store, cancellation) => store.FindOperationAsync(dropId, id, Array.Empty<long>(), cancellation),
+            (store, cancellation) =>
+                store.FindOperationAsync(dropId, id, Array.Empty<ReportedRow>(), cancellation),
             (outcome, found) => CompleteLookup(character, outcome, found),
             dropId.ToString());
         return m_persistence.TryEnqueue(lookup);

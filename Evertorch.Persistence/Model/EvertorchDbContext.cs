@@ -18,6 +18,11 @@ internal sealed class EvertorchDbContext : DbContext
     public const long MaxInventoryRevision = uint.MaxValue;
 
     /// <summary>
+    ///     The highest refine level a row holds, what the wire's byte carries (Persistence §4).
+    /// </summary>
+    public const int MaxRefineLevel = byte.MaxValue;
+
+    /// <summary>
     ///     The coin cap (Gameplay Systems §11.3).
     /// </summary>
     public const long MaxCurrency = 1_000_000_000;
@@ -27,6 +32,7 @@ internal sealed class EvertorchDbContext : DbContext
     private const int MaxSlotLength = 16;
     private const int MaxOperationTypeLength = 32;
     private const int MaxQuestStateLength = 16;
+    private const int MaxOutcomeLength = 16;
 
     public EvertorchDbContext(DbContextOptions<EvertorchDbContext> options)
         : base(options)
@@ -65,6 +71,8 @@ internal sealed class EvertorchDbContext : DbContext
 
     public DbSet<MarketSaleRow> MarketSales => Set<MarketSaleRow>();
 
+    public DbSet<RefineAttemptRow> RefineAttempts => Set<RefineAttemptRow>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         ConfigureAccounts(modelBuilder.Entity<AccountRow>());
@@ -83,6 +91,7 @@ internal sealed class EvertorchDbContext : DbContext
         ConfigureMarketPrices(modelBuilder.Entity<MarketPriceRow>());
         ConfigureMarketListings(modelBuilder.Entity<MarketListingRow>());
         ConfigureMarketSales(modelBuilder.Entity<MarketSaleRow>());
+        ConfigureRefineAttempts(modelBuilder.Entity<RefineAttemptRow>());
 
         foreach (IMutableEntityType entity in modelBuilder.Model.GetEntityTypes())
         {
@@ -152,7 +161,9 @@ internal sealed class EvertorchDbContext : DbContext
         item.ToTable("inventory_items", table =>
         {
             table.HasCheckConstraint("ck_inventory_items_quantity", $"quantity BETWEEN 1 AND {MaxQuantity}");
-            table.HasCheckConstraint("ck_inventory_items_refine_level", "refine_level >= 0");
+            table.HasCheckConstraint(
+                "ck_inventory_items_refine_level",
+                $"refine_level BETWEEN 0 AND {MaxRefineLevel}");
         });
         item.HasKey(row => row.Id).HasName("pk_inventory_items");
         item.Property(row => row.Id).UseIdentityAlwaysColumn();
@@ -208,7 +219,7 @@ internal sealed class EvertorchDbContext : DbContext
                 + $"'{LedgerRow.BossRewardOperation}', '{LedgerRow.TradeOperation}', "
                 + $"'{LedgerRow.StorageDepositOperation}', '{LedgerRow.StorageWithdrawOperation}', "
                 + $"'{LedgerRow.MarketListOperation}', '{LedgerRow.MarketBuyOperation}', "
-                + $"'{LedgerRow.MarketCollectOperation}')");
+                + $"'{LedgerRow.MarketCollectOperation}', '{LedgerRow.RefineOperation}')");
         });
         entry.HasKey(row => row.Id).HasName("pk_economy_ledger");
         entry.Property(row => row.Id).UseIdentityAlwaysColumn();
@@ -330,7 +341,9 @@ internal sealed class EvertorchDbContext : DbContext
         item.ToTable("storage_items", table =>
         {
             table.HasCheckConstraint("ck_storage_items_quantity", $"quantity BETWEEN 1 AND {MaxQuantity}");
-            table.HasCheckConstraint("ck_storage_items_refine_level", "refine_level >= 0");
+            table.HasCheckConstraint(
+                "ck_storage_items_refine_level",
+                $"refine_level BETWEEN 0 AND {MaxRefineLevel}");
         });
         item.HasKey(row => row.Id).HasName("pk_storage_items");
         item.Property(row => row.Id).UseIdentityAlwaysColumn();
@@ -411,6 +424,34 @@ internal sealed class EvertorchDbContext : DbContext
             .HasForeignKey(row => row.BuyerCharacterId)
             .OnDelete(DeleteBehavior.Restrict)
             .HasConstraintName("fk_market_sales_buyer");
+    }
+
+    private static void ConfigureRefineAttempts(EntityTypeBuilder<RefineAttemptRow> attempt)
+    {
+        attempt.ToTable("refine_attempts", table =>
+        {
+            table.HasCheckConstraint(
+                "ck_refine_attempts_outcome",
+                $"outcome IN ('{RefineAttemptRow.RefinedOutcome}', '{RefineAttemptRow.DestroyedOutcome}', "
+                + $"'{RefineAttemptRow.LoweredOutcome}', '{RefineAttemptRow.UnchangedOutcome}')");
+            table.HasCheckConstraint(
+                "ck_refine_attempts_levels",
+                $"level_before BETWEEN 0 AND {MaxRefineLevel} AND (level_after IS NULL) = "
+                + $"(outcome = '{RefineAttemptRow.DestroyedOutcome}') AND (level_after BETWEEN 0 AND {MaxRefineLevel})");
+            table.HasCheckConstraint("ck_refine_attempts_material_quantity",
+                $"material_quantity BETWEEN 1 AND {MaxQuantity}");
+            table.HasCheckConstraint("ck_refine_attempts_coins", $"coins BETWEEN 0 AND {MaxCurrency}");
+        });
+        attempt.HasKey(row => row.OperationId).HasName("pk_refine_attempts");
+        attempt.Property(row => row.ItemDefinitionId).HasMaxLength(MaxDefinitionIdLength).IsRequired();
+        attempt.Property(row => row.Outcome).HasMaxLength(MaxOutcomeLength).IsRequired();
+        attempt.Property(row => row.MaterialDefinitionId).HasMaxLength(MaxDefinitionIdLength).IsRequired();
+        attempt.HasIndex(row => row.CharacterId).HasDatabaseName("ix_refine_attempts_character_id");
+        attempt.HasOne<CharacterRow>()
+            .WithMany()
+            .HasForeignKey(row => row.CharacterId)
+            .OnDelete(DeleteBehavior.Restrict)
+            .HasConstraintName("fk_refine_attempts_characters");
     }
 
     private static void ConfigureSessionTokens(EntityTypeBuilder<SessionTokenRow> token)

@@ -502,7 +502,7 @@ WHERE character_quests.state = {CharacterQuestRow.ActiveState} AND character_que
                         context,
                         pickup.DropId,
                         pickup.CharacterId,
-                        Array.Empty<long>(),
+                        Array.Empty<ReportedRow>(),
                         cancellationToken).ConfigureAwait(false);
                     if (earlier != null)
                     {
@@ -570,7 +570,7 @@ WHERE character_quests.state = {CharacterQuestRow.ActiveState} AND character_que
                                     context,
                                     pickup.DropId,
                                     pickup.CharacterId,
-                                    Array.Empty<long>(),
+                                    Array.Empty<ReportedRow>(),
                                     cancellationToken)
                                 .ConfigureAwait(false)
                             ?? throw new InvalidOperationException(
@@ -679,7 +679,7 @@ WHERE character_quests.state = {CharacterQuestRow.ActiveState} AND character_que
                             context,
                             unequip.OperationId,
                             unequip.CharacterId,
-                            Array.Empty<long>(),
+                            Array.Empty<ReportedRow>(),
                             cancellationToken)
                         .ConfigureAwait(false);
                     if (earlier != null)
@@ -717,7 +717,7 @@ WHERE character_quests.state = {CharacterQuestRow.ActiveState} AND character_que
                                 CreatedAt = unequip.At
                             },
                             new[] { worn.InventoryItemId },
-                            Array.Empty<long>(),
+                            Array.Empty<ReportedRow>(),
                             cancellationToken)
                         .ConfigureAwait(false);
                 }
@@ -739,7 +739,7 @@ WHERE character_quests.state = {CharacterQuestRow.ActiveState} AND character_que
                             context,
                             consume.OperationId,
                             consume.CharacterId,
-                            Array.Empty<long>(),
+                            Array.Empty<ReportedRow>(),
                             cancellationToken)
                         .ConfigureAwait(false);
                     if (earlier != null)
@@ -783,7 +783,7 @@ WHERE character_quests.state = {CharacterQuestRow.ActiveState} AND character_que
                                 CreatedAt = consume.At
                             },
                             new[] { row.Id },
-                            Array.Empty<long>(),
+                            Array.Empty<ReportedRow>(),
                             cancellationToken)
                         .ConfigureAwait(false);
                 }
@@ -805,7 +805,7 @@ WHERE character_quests.state = {CharacterQuestRow.ActiveState} AND character_que
                             context,
                             buy.OperationId,
                             buy.CharacterId,
-                            Array.Empty<long>(),
+                            Array.Empty<ReportedRow>(),
                             cancellationToken)
                         .ConfigureAwait(false);
                     if (earlier != null)
@@ -870,7 +870,7 @@ WHERE character_quests.state = {CharacterQuestRow.ActiveState} AND character_que
                                 CreatedAt = buy.At
                             },
                             new[] { stack.Id },
-                            Array.Empty<long>(),
+                            Array.Empty<ReportedRow>(),
                             cancellationToken)
                         .ConfigureAwait(false);
                 }
@@ -892,7 +892,7 @@ WHERE character_quests.state = {CharacterQuestRow.ActiveState} AND character_que
                             context,
                             sell.OperationId,
                             sell.CharacterId,
-                            Array.Empty<long>(),
+                            Array.Empty<ReportedRow>(),
                             cancellationToken)
                         .ConfigureAwait(false);
                     if (earlier != null)
@@ -944,7 +944,7 @@ WHERE character_quests.state = {CharacterQuestRow.ActiveState} AND character_que
                                 CreatedAt = sell.At
                             },
                             new[] { row.Id },
-                            Array.Empty<long>(),
+                            Array.Empty<ReportedRow>(),
                             cancellationToken)
                         .ConfigureAwait(false);
                 }
@@ -966,7 +966,7 @@ WHERE character_quests.state = {CharacterQuestRow.ActiveState} AND character_que
                             context,
                             grant.OperationId,
                             grant.CharacterId,
-                            Array.Empty<long>(),
+                            Array.Empty<ReportedRow>(),
                             cancellationToken)
                         .ConfigureAwait(false);
                     if (earlier != null)
@@ -1024,7 +1024,7 @@ WHERE character_quests.state = {CharacterQuestRow.ActiveState} AND character_que
                                 CreatedAt = grant.At
                             },
                             new[] { stack.Id },
-                            Array.Empty<long>(),
+                            Array.Empty<ReportedRow>(),
                             cancellationToken)
                         .ConfigureAwait(false);
                 }
@@ -1046,7 +1046,7 @@ WHERE character_quests.state = {CharacterQuestRow.ActiveState} AND character_que
                             context,
                             reward.OperationId,
                             reward.CharacterId,
-                            Array.Empty<long>(),
+                            Array.Empty<ReportedRow>(),
                             cancellationToken)
                         .ConfigureAwait(false);
                     if (earlier != null)
@@ -1117,7 +1117,7 @@ WHERE character_quests.state = {CharacterQuestRow.ActiveState} AND character_que
                                 CreatedAt = reward.At
                             },
                             Array.Empty<long>(),
-                            Array.Empty<long>(),
+                            Array.Empty<ReportedRow>(),
                             cancellationToken)
                         .ConfigureAwait(false);
                 }
@@ -1189,7 +1189,7 @@ WHERE character_quests.state = {CharacterQuestRow.ActiveState} AND character_que
                                 CreatedAt = change.At
                             },
                             new[] { worn.InventoryItemId },
-                            Array.Empty<long>(),
+                            Array.Empty<ReportedRow>(),
                             cancellationToken)
                         .ConfigureAwait(false);
                 }
@@ -1245,7 +1245,7 @@ WHERE character_quests.state = {CharacterQuestRow.ActiveState} AND character_que
     public Task<InventoryResult?> FindOperationAsync(
         Guid operationId,
         long characterId,
-        IReadOnlyCollection<long> rowIds,
+        IReadOnlyCollection<ReportedRow> rows,
         CancellationToken cancellationToken)
     {
         return RunAsync(
@@ -1261,7 +1261,7 @@ WHERE character_quests.state = {CharacterQuestRow.ActiveState} AND character_que
                             context,
                             operationId,
                             characterId,
-                            rowIds,
+                            rows,
                             cancellationToken)
                         .ConfigureAwait(false);
                     await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
@@ -1722,6 +1722,118 @@ WHERE character_quests.state = {CharacterQuestRow.ActiveState} AND character_que
                                     new { listing = listing.Id, gross = listing.GrossCoins, tax }),
                                 CreatedAt = collect.At
                             },
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                }
+            },
+            cancellationToken);
+    }
+
+    public Task<InventoryResult> CommitRefineAsync(RefineCommit refine, CancellationToken cancellationToken)
+    {
+        return RunAsync(
+            async context =>
+            {
+                await using (IDbContextTransaction transaction =
+                             await context.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false))
+                {
+                    CharacterRow character = await LockCharacterAsync(context, refine.CharacterId, cancellationToken)
+                        .ConfigureAwait(false);
+                    InventoryResult? earlier = await FindAsync(
+                            context,
+                            refine.OperationId,
+                            refine.CharacterId,
+                            refine.ReportRows,
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                    if (earlier != null)
+                    {
+                        return earlier;
+                    }
+
+                    InventoryItemRow? row = await context.InventoryItems
+                        .SingleOrDefaultAsync(
+                            item => item.Id == refine.InventoryItemId && item.CharacterId == refine.CharacterId,
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                    if (row == null
+                        || row.ItemDefinitionId != refine.ItemDefinitionId
+                        || row.RefineLevel != refine.LevelBefore)
+                    {
+                        return Refused(character);
+                    }
+
+                    bool isWorn = await context.Equipment
+                        .AnyAsync(slot => slot.InventoryItemId == row.Id, cancellationToken)
+                        .ConfigureAwait(false);
+                    if (isWorn)
+                    {
+                        return Unchanged(InventoryStatus.RowWorn, character);
+                    }
+
+                    InventoryItemRow? ore = await context.InventoryItems
+                        .SingleOrDefaultAsync(
+                            item => item.Id == refine.MaterialItemId && item.CharacterId == refine.CharacterId,
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                    if (ore == null
+                        || ore.Id == row.Id
+                        || ore.ItemDefinitionId != refine.MaterialDefinitionId
+                        || ore.Quantity < refine.MaterialQuantity)
+                    {
+                        return Unchanged(InventoryStatus.MaterialShort, character);
+                    }
+
+                    if (character.Currency < refine.Coins)
+                    {
+                        return Unchanged(InventoryStatus.NotEnoughCoins, character);
+                    }
+
+                    if (ore.Quantity == refine.MaterialQuantity)
+                    {
+                        context.InventoryItems.Remove(ore);
+                    }
+                    else
+                    {
+                        ore.Quantity -= refine.MaterialQuantity;
+                        ore.Version++;
+                    }
+
+                    character.Currency -= refine.Coins;
+                    Refine(context, row, refine);
+                    context.RefineAttempts.Add(
+                        new RefineAttemptRow
+                        {
+                            OperationId = refine.OperationId,
+                            CharacterId = refine.CharacterId,
+                            ItemInstanceId = row.Id,
+                            ItemDefinitionId = row.ItemDefinitionId,
+                            LevelBefore = refine.LevelBefore,
+                            LevelAfter = refine.Outcome == RefineOutcomeKind.Destroyed ? null : row.RefineLevel,
+                            Outcome = AttemptOutcomeOf(refine.Outcome),
+                            MaterialInstanceId = ore.Id,
+                            MaterialDefinitionId = ore.ItemDefinitionId,
+                            MaterialQuantity = refine.MaterialQuantity,
+                            Coins = refine.Coins,
+                            CreatedAt = refine.At
+                        });
+                    return await CommitOperationAsync(
+                            context,
+                            transaction,
+                            character,
+                            new LedgerRow
+                            {
+                                OperationId = refine.OperationId,
+                                ActorCharacterId = refine.CharacterId,
+                                OperationType = LedgerRow.RefineOperation,
+                                ItemInstanceId = row.Id,
+                                ItemDefinitionId = row.ItemDefinitionId,
+                                QuantityDelta = refine.Outcome == RefineOutcomeKind.Destroyed ? -1 : 0,
+                                CurrencyDelta = -refine.Coins,
+                                CreatedAt = refine.At
+                            },
+                            new[] { row.Id, ore.Id },
+                            refine.ReportRows,
                             cancellationToken)
                         .ConfigureAwait(false);
                 }
@@ -2448,8 +2560,7 @@ WHERE character_quests.state = {CharacterQuestRow.ActiveState} AND character_que
         IReadOnlyList<StoredItem> bag = await ReadRowsAsync(
                 context,
                 characterId,
-                new[] { inventoryItemId },
-                itemDefinitionId,
+                new[] { new ReportedRow(inventoryItemId, itemDefinitionId) },
                 cancellationToken)
             .ConfigureAwait(false);
         long storageRevision = await context.AccountStorages
@@ -2883,13 +2994,53 @@ WHERE character_skills.level <> EXCLUDED.level",
         Guid operationId,
         CancellationToken cancellationToken)
     {
-        return await FindAsync(context, operationId, character.Id, Array.Empty<long>(), cancellationToken)
+        return await FindAsync(context, operationId, character.Id, Array.Empty<ReportedRow>(), cancellationToken)
                 .ConfigureAwait(false)
             ?? new InventoryResult(
                 InventoryStatus.Committed,
                 (uint)character.InventoryRevision,
                 character.Currency,
                 Array.Empty<StoredItem>());
+    }
+
+    private static InventoryResult Unchanged(InventoryStatus status, CharacterRow character)
+    {
+        return new InventoryResult(
+            status,
+            (uint)character.InventoryRevision,
+            character.Currency,
+            Array.Empty<StoredItem>());
+    }
+
+    // The outcome the tick thread drew, as it is (Gameplay Systems §11.6): the store never draws.
+    private static void Refine(EvertorchDbContext context, InventoryItemRow row, RefineCommit refine)
+    {
+        switch (refine.Outcome)
+        {
+            case RefineOutcomeKind.Refined:
+            case RefineOutcomeKind.Lowered:
+                row.RefineLevel = refine.LevelAfter;
+                row.Version++;
+                break;
+            case RefineOutcomeKind.Destroyed:
+                context.InventoryItems.Remove(row);
+                break;
+            case RefineOutcomeKind.Unchanged:
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(refine), refine.Outcome, "A refine needs an outcome.");
+        }
+    }
+
+    private static string AttemptOutcomeOf(RefineOutcomeKind outcome)
+    {
+        return outcome switch
+        {
+            RefineOutcomeKind.Refined => RefineAttemptRow.RefinedOutcome,
+            RefineOutcomeKind.Destroyed => RefineAttemptRow.DestroyedOutcome,
+            RefineOutcomeKind.Lowered => RefineAttemptRow.LoweredOutcome,
+            _ => RefineAttemptRow.UnchangedOutcome
+        };
     }
 
     private static InventoryResult Refused(CharacterRow character)
@@ -2910,7 +3061,7 @@ WHERE character_skills.level <> EXCLUDED.level",
         CharacterRow character,
         LedgerRow entry,
         IReadOnlyList<long> changedRows,
-        IReadOnlyCollection<long> reportRows,
+        IReadOnlyCollection<ReportedRow> reportRows,
         CancellationToken cancellationToken)
     {
         character.InventoryRevision = (character.InventoryRevision + 1) % RevisionModulus;
@@ -2931,12 +3082,11 @@ WHERE character_skills.level <> EXCLUDED.level",
         }
 
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
-        IReadOnlyList<StoredItem> rows = await ReadRowsAsync(
-                context,
-                character.Id,
-                changedRows,
-                entry.ItemDefinitionId ?? string.Empty,
-                cancellationToken)
+        string ledgerItem = entry.ItemDefinitionId ?? string.Empty;
+        ReportedRow[] changed = changedRows
+            .Select(id => reportRows.FirstOrDefault(row => row.Id == id) ?? new ReportedRow(id, ledgerItem))
+            .ToArray();
+        IReadOnlyList<StoredItem> rows = await ReadRowsAsync(context, character.Id, changed, cancellationToken)
             .ConfigureAwait(false);
         return new InventoryResult(
             InventoryStatus.Committed,
@@ -2949,7 +3099,7 @@ WHERE character_skills.level <> EXCLUDED.level",
         EvertorchDbContext context,
         Guid operationId,
         long characterId,
-        IReadOnlyCollection<long> rowIds,
+        IReadOnlyCollection<ReportedRow> reportRows,
         CancellationToken cancellationToken)
     {
         LedgerRow? entry = await context.Ledger
@@ -2971,32 +3121,28 @@ WHERE character_skills.level <> EXCLUDED.level",
             .Select(row => new { row.InventoryRevision, row.Currency })
             .SingleAsync(cancellationToken)
             .ConfigureAwait(false);
-        var reported = new List<long>();
+        var reported = new List<ReportedRow>();
         if (entry.ItemInstanceId.HasValue)
         {
-            reported.Add(entry.ItemInstanceId.Value);
+            reported.Add(new ReportedRow(entry.ItemInstanceId.Value, entry.ItemDefinitionId ?? string.Empty));
         }
 
-        reported.AddRange(rowIds.Where(id => !reported.Contains(id)));
-        IReadOnlyList<StoredItem> rows = await ReadRowsAsync(
-                context,
-                characterId,
-                reported,
-                entry.ItemDefinitionId ?? string.Empty,
-                cancellationToken)
+        reported.AddRange(reportRows.Where(row => reported.All(named => named.Id != row.Id)));
+        IReadOnlyList<StoredItem> rows = await ReadRowsAsync(context, characterId, reported, cancellationToken)
             .ConfigureAwait(false);
         return new InventoryResult(InventoryStatus.Committed, (uint)now.InventoryRevision, now.Currency, rows);
     }
 
     // The rows as they are now, each with its equipped slot. A row that no longer exists was emptied, so it comes back
-    // with a quantity of 0; only the ledger's own row can be emptied, and the ledger names its item.
+    // with a quantity of 0 under the item it was reported with: the ledger's row under the ledger's item, a refine's
+    // ore under the ore (Persistence §5).
     private static async Task<IReadOnlyList<StoredItem>> ReadRowsAsync(
         EvertorchDbContext context,
         long characterId,
-        IReadOnlyList<long> ids,
-        string emptiedItemDefinitionId,
+        IReadOnlyList<ReportedRow> reported,
         CancellationToken cancellationToken)
     {
+        long[] ids = reported.Select(row => row.Id).ToArray();
         List<InventoryItemRow> found = await context.InventoryItems
             .AsNoTracking()
             .Where(row => row.CharacterId == characterId && ids.Contains(row.Id))
@@ -3007,14 +3153,14 @@ WHERE character_skills.level <> EXCLUDED.level",
             .Where(row => row.CharacterId == characterId && ids.Contains(row.InventoryItemId))
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
-        var rows = new List<StoredItem>(ids.Count);
-        foreach (long id in ids)
+        var rows = new List<StoredItem>(reported.Count);
+        foreach (ReportedRow named in reported)
         {
-            InventoryItemRow? row = found.FirstOrDefault(candidate => candidate.Id == id);
-            string? slot = slots.FirstOrDefault(candidate => candidate.InventoryItemId == id)?.Slot;
+            InventoryItemRow? row = found.FirstOrDefault(candidate => candidate.Id == named.Id);
+            string? slot = slots.FirstOrDefault(candidate => candidate.InventoryItemId == named.Id)?.Slot;
             rows.Add(
                 row == null
-                    ? new StoredItem(id, emptiedItemDefinitionId, 0)
+                    ? new StoredItem(named.Id, named.ItemDefinitionId, 0)
                     : new StoredItem(row.Id, row.ItemDefinitionId, row.Quantity, slot, row.RefineLevel));
         }
 
@@ -3161,8 +3307,7 @@ WHERE character_skills.level <> EXCLUDED.level",
             ? await ReadRowsAsync(
                     context,
                     characterId,
-                    new[] { entry.ItemInstanceId.Value },
-                    entry.ItemDefinitionId ?? string.Empty,
+                    new[] { new ReportedRow(entry.ItemInstanceId.Value, entry.ItemDefinitionId ?? string.Empty) },
                     cancellationToken)
                 .ConfigureAwait(false)
             : Array.Empty<StoredItem>();

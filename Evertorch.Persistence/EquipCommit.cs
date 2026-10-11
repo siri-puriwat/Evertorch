@@ -14,7 +14,7 @@ public sealed class EquipCommit
         long characterId,
         long inventoryItemId,
         string slot,
-        IReadOnlyCollection<long> reportRows,
+        IReadOnlyCollection<ReportedRow> reportRows,
         DateTime at)
     {
         OperationId = operationId;
@@ -34,7 +34,7 @@ public sealed class EquipCommit
     /// <summary><c>Weapon</c> or <c>Armor</c>.</summary>
     public string Slot { get; }
 
-    public IReadOnlyCollection<long> ReportRows { get; }
+    public IReadOnlyCollection<ReportedRow> ReportRows { get; }
 
     public DateTime At { get; }
 }

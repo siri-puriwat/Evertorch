@@ -394,7 +394,7 @@ namespace Evertorch.Persistence
                         {
                             t.HasCheckConstraint("ck_inventory_items_quantity", "quantity BETWEEN 1 AND 1000000");
 
-                            t.HasCheckConstraint("ck_inventory_items_refine_level", "refine_level >= 0");
+                            t.HasCheckConstraint("ck_inventory_items_refine_level", "refine_level BETWEEN 0 AND 255");
                         });
                 });
 
@@ -458,7 +458,7 @@ namespace Evertorch.Persistence
 
                     b.ToTable("economy_ledger", null, t =>
                         {
-                            t.HasCheckConstraint("ck_economy_ledger_operation_type", "operation_type IN ('pickup', 'equip', 'unequip', 'consume', 'buy', 'sell', 'quest_reward', 'boss_reward', 'trade', 'storage_deposit', 'storage_withdraw', 'market_list', 'market_buy', 'market_collect')");
+                            t.HasCheckConstraint("ck_economy_ledger_operation_type", "operation_type IN ('pickup', 'equip', 'unequip', 'consume', 'buy', 'sell', 'quest_reward', 'boss_reward', 'trade', 'storage_deposit', 'storage_withdraw', 'market_list', 'market_buy', 'market_collect', 'refine')");
                         });
                 });
 
@@ -684,6 +684,81 @@ namespace Evertorch.Persistence
                     b.ToTable("parties", (string)null);
                 });
 
+            modelBuilder.Entity("Evertorch.Persistence.RefineAttemptRow", b =>
+                {
+                    b.Property<Guid>("OperationId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("operation_id");
+
+                    b.Property<long>("CharacterId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("character_id");
+
+                    b.Property<long>("Coins")
+                        .HasColumnType("bigint")
+                        .HasColumnName("coins");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("ItemDefinitionId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("item_definition_id");
+
+                    b.Property<long>("ItemInstanceId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("item_instance_id");
+
+                    b.Property<int?>("LevelAfter")
+                        .HasColumnType("integer")
+                        .HasColumnName("level_after");
+
+                    b.Property<int>("LevelBefore")
+                        .HasColumnType("integer")
+                        .HasColumnName("level_before");
+
+                    b.Property<string>("MaterialDefinitionId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("material_definition_id");
+
+                    b.Property<long>("MaterialInstanceId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("material_instance_id");
+
+                    b.Property<int>("MaterialQuantity")
+                        .HasColumnType("integer")
+                        .HasColumnName("material_quantity");
+
+                    b.Property<string>("Outcome")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("outcome");
+
+                    b.HasKey("OperationId")
+                        .HasName("pk_refine_attempts");
+
+                    b.HasIndex("CharacterId")
+                        .HasDatabaseName("ix_refine_attempts_character_id");
+
+                    b.ToTable("refine_attempts", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_refine_attempts_coins", "coins BETWEEN 0 AND 1000000000");
+
+                            t.HasCheckConstraint("ck_refine_attempts_levels", "level_before BETWEEN 0 AND 255 AND (level_after IS NULL) = (outcome = 'destroyed') AND (level_after BETWEEN 0 AND 255)");
+
+                            t.HasCheckConstraint("ck_refine_attempts_material_quantity", "material_quantity BETWEEN 1 AND 1000000");
+
+                            t.HasCheckConstraint("ck_refine_attempts_outcome", "outcome IN ('refined', 'destroyed', 'lowered', 'unchanged')");
+                        });
+                });
+
             modelBuilder.Entity("Evertorch.Persistence.SessionTokenRow", b =>
                 {
                     b.Property<byte[]>("TokenHash")
@@ -765,7 +840,7 @@ namespace Evertorch.Persistence
                         {
                             t.HasCheckConstraint("ck_storage_items_quantity", "quantity BETWEEN 1 AND 1000000");
 
-                            t.HasCheckConstraint("ck_storage_items_refine_level", "refine_level >= 0");
+                            t.HasCheckConstraint("ck_storage_items_refine_level", "refine_level BETWEEN 0 AND 255");
                         });
                 });
 
@@ -928,6 +1003,16 @@ namespace Evertorch.Persistence
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_party_members_parties");
+                });
+
+            modelBuilder.Entity("Evertorch.Persistence.RefineAttemptRow", b =>
+                {
+                    b.HasOne("Evertorch.Persistence.CharacterRow", null)
+                        .WithMany()
+                        .HasForeignKey("CharacterId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_refine_attempts_characters");
                 });
 
             modelBuilder.Entity("Evertorch.Persistence.SessionTokenRow", b =>

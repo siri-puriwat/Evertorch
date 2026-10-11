@@ -55,12 +55,12 @@ public sealed class PickupStoreTests
 
     private InventoryResult? Find(long character, Guid drop)
     {
-        return Find(character, drop, Array.Empty<long>());
+        return Find(character, drop, Array.Empty<ReportedRow>());
     }
 
-    private InventoryResult? Find(long character, Guid operation, long[] rowIds)
+    private InventoryResult? Find(long character, Guid operation, ReportedRow[] rows)
     {
-        return m_store.FindOperationAsync(operation, character, rowIds, CancellationToken.None)
+        return m_store.FindOperationAsync(operation, character, rows, CancellationToken.None)
             .GetAwaiter()
             .GetResult();
     }
@@ -279,7 +279,8 @@ public sealed class PickupStoreTests
         m_sql.Execute(Sql.EquipmentInsert(character, "Weapon", equipped));
         m_sql.Execute($"DELETE FROM inventory_items WHERE id = {gel}");
 
-        InventoryResult found = Find(character, drop, new[] { equipped, gel })!;
+        InventoryResult found = Find(character, drop,
+            new[] { new ReportedRow(equipped, Gel), new ReportedRow(gel, Gel) })!;
 
         Assert.That(found.Status, Is.EqualTo(InventoryStatus.Committed));
         Assert.That(found.InventoryRevision, Is.EqualTo((uint)Revision(character)));

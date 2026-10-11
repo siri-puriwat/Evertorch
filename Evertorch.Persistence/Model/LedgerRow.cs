@@ -21,6 +21,7 @@ internal sealed class LedgerRow
     public const string MarketListOperation = "market_list";
     public const string MarketBuyOperation = "market_buy";
     public const string MarketCollectOperation = "market_collect";
+    public const string RefineOperation = "refine";
 
     public long Id { get; set; }
 

@@ -124,7 +124,7 @@ public sealed class DatabaseOutageTests
 
     private InventoryResult? Ledger(ItemDropEntity drop, long character)
     {
-        return m_store.FindOperationAsync(drop.DropId, character, Array.Empty<long>(), CancellationToken.None)
+        return m_store.FindOperationAsync(drop.DropId, character, Array.Empty<ReportedRow>(), CancellationToken.None)
             .GetAwaiter().GetResult();
     }
 

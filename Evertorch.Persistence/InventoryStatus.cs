@@ -18,8 +18,8 @@ public enum InventoryStatus
     TakenByOther = 3,
 
     /// <summary>
-    ///     Nothing changed: the row is not the character's, is already in the slot, or the slot is empty; or a
-    ///     consumed row is not the character's.
+    ///     Nothing changed: the row is not the character's, is already in the slot, or the slot is empty; a consumed
+    ///     row is not the character's; or a row to refine is gone or at another level.
     /// </summary>
     Refused = 4,
 
@@ -30,7 +30,7 @@ public enum InventoryStatus
     BoardChanged = 5,
 
     /// <summary>
-    ///     Nothing changed: the coins fall short of a listing's fee or a purchase's price.
+    ///     Nothing changed: the coins fall short of a listing's fee, a purchase's price, or a refine's cost.
     /// </summary>
     NotEnoughCoins = 6,
 
@@ -42,6 +42,16 @@ public enum InventoryStatus
     /// <summary>
     ///     Nothing changed: the character already holds its most listings.
     /// </summary>
-    ListingCapReached = 8
+    ListingCapReached = 8,
+
+    /// <summary>
+    ///     Nothing changed: a refine's ore is not in its row, or too few of it (Gameplay Systems §11.6).
+    /// </summary>
+    MaterialShort = 9,
+
+    /// <summary>
+    ///     Nothing changed: the row to refine is worn.
+    /// </summary>
+    RowWorn = 10
 }
 }
