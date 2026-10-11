@@ -13,6 +13,7 @@ public sealed class ClientWorld
 {
     private readonly Dictionary<EntityId, RemoteEntity> m_remotes = new();
     private readonly Dictionary<EntityId, NpcServices> m_npcServices = new();
+    private readonly Dictionary<EntityId, List<RefineTable>> m_refineTables = new();
 
     // The tick of each entity's latest death or revival. Snapshots are unreliable and the events reliable, so a
     // snapshot from before either can still arrive afterwards; it must neither raise a corpse nor put a revived body
@@ -216,6 +217,11 @@ public sealed class ClientWorld
     /// </summary>
     public CommandRejectionReason LastRejection { get; private set; }
 
+    /// <summary>
+    ///     Grows with every refine table kept, so a window can tell when to write its rows again.
+    /// </summary>
+    public int RefineTablesVersion { get; private set; }
+
     public event Action<RemoteEntity>? RemoteSpawned;
 
     public event Action<RemoteEntity>? RemoteDespawned;
@@ -301,6 +307,7 @@ public sealed class ClientWorld
         {
             m_remotes.Remove(spawn.Entity);
             m_npcServices.Remove(spawn.Entity);
+            m_refineTables.Remove(spawn.Entity);
             RemoteDespawned?.Invoke(replaced);
         }
 
@@ -338,6 +345,7 @@ public sealed class ClientWorld
         {
             m_remotes.Remove(despawn.Entity);
             m_npcServices.Remove(despawn.Entity);
+            m_refineTables.Remove(despawn.Entity);
             EndLocalCastAt(despawn.Entity);
             RemoteDespawned?.Invoke(remote);
         }
@@ -428,6 +436,72 @@ public sealed class ClientWorld
     public bool TryGetNpcServices(EntityId npc, out NpcServices? services)
     {
         return m_npcServices.TryGetValue(npc, out services);
+    }
+
+    /// <summary>
+    ///     What the player's own refine did, after its bag's change (Network Protocol §9).
+    /// </summary>
+    public event Action<RefineOutcome>? RefineOutcomeReceived;
+
+    /// <summary>
+    ///     Keeps a refiner's table by its index until the NPC despawns (Network Protocol §9). A table of an entity this
+    ///     client has no NPC spawn for is counted and ignored.
+    /// </summary>
+    public void OnRefineTable(RefineTable table)
+    {
+        if (table == null)
+        {
+            throw new ArgumentNullException(nameof(table));
+        }
+
+        if (!m_remotes.TryGetValue(table.Npc, out RemoteEntity? remote) || remote.Kind != EntityKind.Npc)
+        {
+            UnknownEntityEvents++;
+            return;
+        }
+
+        if (!m_refineTables.TryGetValue(table.Npc, out List<RefineTable>? tables))
+        {
+            tables = new List<RefineTable>();
+            m_refineTables.Add(table.Npc, tables);
+        }
+
+        tables.RemoveAll(kept => kept.Index == table.Index);
+        tables.Add(table);
+        tables.Sort((left, right) => left.Index.CompareTo(right.Index));
+        RefineTablesVersion++;
+    }
+
+    /// <summary>
+    ///     The tables kept for <paramref name="npc" /> in index order; none for an NPC that does not refine.
+    /// </summary>
+    public IReadOnlyList<RefineTable> RefineTablesOf(EntityId npc)
+    {
+        return m_refineTables.TryGetValue(npc, out List<RefineTable>? tables) ? tables : Array.Empty<RefineTable>();
+    }
+
+    /// <summary>
+    ///     The table of <paramref name="npc" /> that names <paramref name="item" />; null when none does.
+    /// </summary>
+    public RefineTable? RefineTableFor(EntityId npc, ItemDefinitionId item)
+    {
+        foreach (RefineTable table in RefineTablesOf(npc))
+        {
+            foreach (ItemDefinitionId named in table.Items)
+            {
+                if (named == item)
+                {
+                    return table;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    public void OnRefineOutcome(RefineOutcome outcome)
+    {
+        RefineOutcomeReceived?.Invoke(outcome ?? throw new ArgumentNullException(nameof(outcome)));
     }
 
     public void OnQuestLog(QuestLog log)

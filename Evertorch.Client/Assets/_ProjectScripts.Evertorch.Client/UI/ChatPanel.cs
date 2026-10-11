@@ -306,6 +306,7 @@ public sealed class ChatPanel : MonoBehaviour
             m_watched.Inventory.ChangeApplied -= OnChangeApplied;
             m_watched.Storage.ChangeApplied -= OnStorageChangeApplied;
             m_watched.Market.NoticeReceived -= OnMarketNotice;
+            m_watched.RefineOutcomeReceived -= OnRefineOutcome;
             m_watched.QuestsChanged -= OnQuestsChanged;
         }
 
@@ -324,6 +325,7 @@ public sealed class ChatPanel : MonoBehaviour
             world.Inventory.ChangeApplied += OnChangeApplied;
             world.Storage.ChangeApplied += OnStorageChangeApplied;
             world.Market.NoticeReceived += OnMarketNotice;
+            world.RefineOutcomeReceived += OnRefineOutcome;
             world.QuestsChanged += OnQuestsChanged;
         }
         else
@@ -380,6 +382,19 @@ public sealed class ChatPanel : MonoBehaviour
             && m_client.Connection.TryGetMarketSequence(rejected.CommandSequence, out MarketCommand market))
         {
             Add(MarketMessages.DescribeRefusal(market, rejected.Reason));
+            return;
+        }
+
+        if (m_client != null
+            && m_client.Connection != null
+            && m_client.Connection.TryGetRefineSequence(rejected.CommandSequence, out RefineRequest refine))
+        {
+            Add(
+                RefineMessages.DescribeRefusal(
+                    refine,
+                    m_watched?.RefineTableFor(refine.Npc, refine.Item),
+                    rejected.Reason,
+                    m_client.Content));
             return;
         }
 
@@ -488,6 +503,11 @@ public sealed class ChatPanel : MonoBehaviour
     private void OnStorageChangeApplied(StorageDelta delta)
     {
         Add(StorageMessages.Describe(delta, m_client != null ? m_client.Content : null));
+    }
+
+    private void OnRefineOutcome(RefineOutcome outcome)
+    {
+        Add(RefineMessages.Describe(outcome, m_client != null ? m_client.Content : null));
     }
 
     private void OnMarketNotice(MarketEvent notice)

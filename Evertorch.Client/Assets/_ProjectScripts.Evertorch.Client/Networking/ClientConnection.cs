@@ -29,6 +29,7 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
     private readonly Dictionary<uint, (TradeCommand Command, string Name)> m_tradeSequences = new();
     private readonly Dictionary<uint, StorageCommand> m_storageSequences = new();
     private readonly Dictionary<uint, MarketCommand> m_marketSequences = new();
+    private readonly Dictionary<uint, RefineRequest> m_refineSequences = new();
     private uint m_commandSequence;
 
     public ClientConnection(IClientTransport transport, ClientConnectionSettings settings, IMapProvider maps)
@@ -1025,7 +1026,30 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
         SendRouted(
             MessageOpcode.RefineItem,
             new RefineItem(npc, inventoryItem, refineLevel, sequence).Write(m_sendBuffer));
+        if (m_refineSequences.Count >= MaxEquipSequences)
+        {
+            m_refineSequences.Clear();
+        }
+
+        ItemDefinitionId item = default;
+        foreach (InventoryEntry row in World?.Inventory.Rows ?? Array.Empty<InventoryEntry>())
+        {
+            if (row.InventoryItem == inventoryItem)
+            {
+                item = row.Item;
+            }
+        }
+
+        m_refineSequences[sequence] = new RefineRequest(npc, inventoryItem, item, refineLevel);
         return sequence;
+    }
+
+    /// <summary>
+    ///     The refine <paramref name="commandSequence" /> numbered, so a refusal can say what was refused.
+    /// </summary>
+    public bool TryGetRefineSequence(uint commandSequence, out RefineRequest request)
+    {
+        return m_refineSequences.TryGetValue(commandSequence, out request);
     }
 
     /// <summary>
@@ -1461,6 +1485,7 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
             m_tradeSequences.Clear();
             m_storageSequences.Clear();
             m_marketSequences.Clear();
+            m_refineSequences.Clear();
         }
 
         // The command sequence belongs to the character, not the connection: after a reconnect it goes on from the
@@ -1629,6 +1654,7 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
         }
         else
         {
+            World.OnRefineTable(message);
             RefineTableReceived?.Invoke(message);
         }
     }
@@ -1645,6 +1671,7 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
         }
         else
         {
+            World.OnRefineOutcome(message);
             RefineOutcomeReceived?.Invoke(message);
         }
     }

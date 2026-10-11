@@ -863,6 +863,16 @@ public sealed class GameClient : MonoBehaviour
     }
 
     /// <summary>
+    ///     Refines the bag's row <paramref name="inventoryItem" /> at the Smith <paramref name="npc" /> from the level
+    ///     shown, <paramref name="refineLevel" />, so a row whose level changed meanwhile is refused rather than refined
+    ///     from another (Gameplay Systems §11.6).
+    /// </summary>
+    public uint RefineAt(EntityId npc, long inventoryItem, byte refineLevel)
+    {
+        return Connection?.SendRefine(npc, inventoryItem, refineLevel) ?? 0;
+    }
+
+    /// <summary>
     ///     Asks the NPC for <paramref name="quest" /> (Gameplay Systems §2.2); the quest log shows it once the server
     ///     accepts.
     /// </summary>

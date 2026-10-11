@@ -22,12 +22,13 @@ namespace Evertorch.Client
 ///     amount field, where a press on a stored row withdraws the amount and one on a bag row deposits it (Gameplay
 ///     Systems §11.4); for the Broker, the board, the player's listings, the bag's rows the board takes, and the amount
 ///     field, where a press on an item buys the amount, one on a listing collects it, and one on a bag row lists the
-///     amount (§11.5). A Buy press buys one; a Sell press sells one, and a stack's All sells the row; Accept and Turn in
-///     ask for the quest; the reset, a change, a purchase and a listing on the board, the early end of a listing, and
-///     the sale of a refined row, which names its level (Prototype Content §2), each ask for a second press within
-///     <see cref="ResetConfirmSeconds" />, the first showing what it costs, and arming one disarms the others. The
-///     presses go through <see cref="GameClient" />, and only what the server commits moves the lists. It closes once
-///     the NPC is drawn beyond its range, the player dies, the map changes, or the connection closes.
+///     amount (§11.5); for the Smith, each bag row it refines with the next level's chance and cost (§11.6). A Buy press
+///     buys one; a Sell press sells one, and a stack's All sells the row; Accept and Turn in ask for the quest; the
+///     reset, a change, a purchase and a listing on the board, the early end of a listing, the sale of a refined row,
+///     which names its level (Prototype Content §2), and a refine below 100 % each ask for a second press within
+///     <see cref="ResetConfirmSeconds" />, the first showing what it costs or risks, and arming one disarms the others.
+///     The presses go through <see cref="GameClient" />, and only what the server commits moves the lists. It closes
+///     once the NPC is drawn beyond its range, the player dies, the map changes, or the connection closes.
 /// </summary>
 public sealed class NpcWindow : MonoBehaviour
 {
@@ -91,6 +92,7 @@ public sealed class NpcWindow : MonoBehaviour
     private GameObject? m_amountRow;
     private bool m_needsRead;
     private int m_shownMarket = -1;
+    private int m_shownRefine = -1;
     private string m_armedKey = string.Empty;
     private uint m_armedQuantity;
     private IReadOnlyList<MarketListingEntry>? m_seenListings;
@@ -379,6 +381,7 @@ public sealed class NpcWindow : MonoBehaviour
             && inventory.Revision == m_shownRevision
             && world.Storage.Version == m_shownStorage
             && world.Market.Version == m_shownMarket
+            && world.RefineTablesVersion == m_shownRefine
             && hasContent == m_hadContent)
         {
             return;
@@ -393,6 +396,7 @@ public sealed class NpcWindow : MonoBehaviour
         m_shownRevision = inventory.Revision;
         m_shownStorage = world.Storage.Version;
         m_shownMarket = world.Market.Version;
+        m_shownRefine = world.RefineTablesVersion;
         m_hadContent = hasContent;
         ClearRows();
         m_text.Clear();
@@ -401,11 +405,12 @@ public sealed class NpcWindow : MonoBehaviour
         bool offersChange = services != null && HasChangeFrom(services, world.LocalJob);
         bool keepsStorage = services != null && services.KeepsStorage;
         bool keepsMarket = services != null && services.KeepsMarket;
+        bool refines = services != null && services.Refines;
         UiBuilder.SetActive(
             m_list!,
-            shop != null || hasQuests || offersReset || offersChange || keepsStorage || keepsMarket);
+            shop != null || hasQuests || offersReset || offersChange || keepsStorage || keepsMarket || refines);
         UiBuilder.SetActive(m_amountRow!, keepsStorage || keepsMarket);
-        m_coins!.text = (shop != null || keepsStorage || keepsMarket) && inventory.IsCurrent
+        m_coins!.text = (shop != null || keepsStorage || keepsMarket || refines) && inventory.IsCurrent
             ? $"Coins: {inventory.Coins}"
             : string.Empty;
         if (keepsStorage)
@@ -416,6 +421,11 @@ public sealed class NpcWindow : MonoBehaviour
         if (keepsMarket)
         {
             ListMarket(world.Market, inventory, content);
+        }
+
+        if (refines)
+        {
+            ListRefinable(world.RefineTablesOf(Npc), inventory, content);
         }
 
         if (shop != null)
@@ -734,6 +744,92 @@ public sealed class NpcWindow : MonoBehaviour
     private static string ListKey(long inventoryItem)
     {
         return "list " + inventoryItem.ToString(CultureInfo.InvariantCulture);
+    }
+
+    private static string RefineKey(long inventoryItem)
+    {
+        return "refine " + inventoryItem.ToString(CultureInfo.InvariantCulture);
+    }
+
+    // The Smith's section (Gameplay Systems §11.6): each unworn bag row one of its tables names, below that table's last
+    // level, with the next level's chance and cost and the ore held. A press refines; below 100 % the first only arms
+    // it and says what a failure does, as the reset asks.
+    private void ListRefinable(IReadOnlyList<RefineTable> tables, ClientInventory inventory, ClientContent? content)
+    {
+        AddHeading("Refine");
+        if (!inventory.IsCurrent || tables.Count == 0)
+        {
+            AddLine("Waiting for the server");
+            return;
+        }
+
+        GameClient client = m_client!;
+        EntityId npc = Npc;
+        int listed = 0;
+        foreach (InventoryEntry row in inventory.Rows)
+        {
+            RefineTable? table = TableFor(tables, row.Item);
+            if (row.Slot != EquipmentSlot.None || table == null || row.RefineLevel >= table.Steps.Count)
+            {
+                continue;
+            }
+
+            long inventoryItem = row.InventoryItem;
+            byte level = row.RefineLevel;
+            string key = RefineKey(inventoryItem);
+            bool asksTwice = table.Steps[level].Chance < 100;
+            AddButton(
+                m_armedKey == key
+                    ? RefineMessages.Prompt(table)
+                    : RefineMessages.Row(content, row, table, HeldOf(inventory, table.Ore)),
+                () =>
+                {
+                    if (asksTwice)
+                    {
+                        PressArmed(key, 1, _ => client.RefineAt(npc, inventoryItem, level));
+                    }
+                    else
+                    {
+                        client.RefineAt(npc, inventoryItem, level);
+                    }
+                });
+            listed++;
+        }
+
+        if (listed == 0)
+        {
+            AddLine("Nothing to refine");
+        }
+    }
+
+    private static RefineTable? TableFor(IReadOnlyList<RefineTable> tables, ItemDefinitionId item)
+    {
+        foreach (RefineTable table in tables)
+        {
+            foreach (ItemDefinitionId named in table.Items)
+            {
+                if (named == item)
+                {
+                    return table;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private static uint HeldOf(ClientInventory inventory, ItemDefinitionId item)
+    {
+        uint held = 0;
+        foreach (InventoryEntry row in inventory.Rows)
+        {
+            if (row.Item == item)
+            {
+                held += row.Quantity;
+            }
+        }
+
+        return held;
     }
 
     private static string SellKey(long inventoryItem)

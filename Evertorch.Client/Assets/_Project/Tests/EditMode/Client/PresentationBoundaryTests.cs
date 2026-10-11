@@ -20,12 +20,13 @@ public sealed class PresentationBoundaryTests
         + @"|MovementController"
         + @"|LocalPlayerDriver"
         + @"|MovementPredictor|\.Predictor\b|\.IsLocked\b|RequestRespawn|UseSkillSlot|\bUseSkill\(|PressInventoryRow"
-        + @"|BuyFrom|SellTo|OpenMarketAt|ListOnMarketAt|BuyOnMarketAt|CollectListingAt"
+        + @"|BuyFrom|SellTo|OpenMarketAt|ListOnMarketAt|BuyOnMarketAt|CollectListingAt|RefineAt"
         + @"|AcceptQuestFrom|TurnInQuestTo|RaiseStat|ToggleStats|LearnSkillLevel|ToggleSkills|ResetBuildAt|ChangeJobAt"
         + @"|\.ActionLock\b"
         + @"|\.On(Spawn|Despawn|Snapshot|TargetChanged|AttackStarted|Damage|EntityDied|EntityRevived|CommandRejected"
         + @"|ItemDropped|ItemPickedUp|CharacterHealth|CharacterProgress|SkillCastStarted|SkillResolved|SkillList"
-        + @"|StatusEffects|NpcServices|QuestLog|CharacterSheet|LocalCancel|WornWeaponChanged|Changed)\("
+        + @"|StatusEffects|NpcServices|QuestLog|CharacterSheet|LocalCancel|WornWeaponChanged|Changed|RefineTable"
+        + @"|RefineOutcome)\("
         + @"|\.(Advance|CollectTargetCandidates|CollectPlayerCandidates|CollectDropCandidates|CollectNpcCandidates)\("
         + @"|\.(HealthPermille|StateFlags|CurrentHealth|Target|LastRejection|LocalHealth|LocalMaximumHealth|IsDead"
         + @"|LocalSpirit|LocalMaximumSpirit|Level|Experience|ExperienceToNextLevel|WornWeapon)\s*=(?![=>])");
@@ -42,7 +43,7 @@ public sealed class PresentationBoundaryTests
         + @"|InventoryResyncRequest|EquipItem|UnequipItem|UseItem|BuyItem|SellItem|AcceptQuest|CompleteQuest"
         + @"|AllocateStat|LearnSkill|ResetBuild|ChangeJob|ChatSend|PartyInvite|PartyReply|PartyLeave|PartyKick"
         + @"|PartyLead|TradeRequest|TradeReply|TradeOffer|TradeLock|TradeConfirm|TradeCancel|StorageOpen"
-        + @"|StorageDeposit|StorageWithdraw|MarketOpen|MarketList|MarketBuy|MarketCollect)\s*\("
+        + @"|StorageDeposit|StorageWithdraw|MarketOpen|MarketList|MarketBuy|MarketCollect|RefineItem)\s*\("
         + @"|\.Connection\??\.(Connect|Disconnect|EnterWorld|CreateCharacter|Poll)\("
         + @"|\.Controller\??\.(Cancel\w*|Tick)\("
         + @"|\.(SetManualDirection|TryMoveTo|Chase\w*|StopChase|CancelPath|NextTick|Reconcile|Teleport"
@@ -50,7 +51,8 @@ public sealed class PresentationBoundaryTests
         + @"|[Pp]redictor\??\.Apply\(|\.Buffer\.(Add|Clear)\("
         + @"|\.On(Spawn|Despawn|Snapshot|TargetChanged|AttackStarted|Damage|EntityDied|EntityRevived|CommandRejected"
         + @"|ItemDropped|ItemPickedUp|CharacterHealth|CharacterProgress|SkillCastStarted|SkillResolved|SkillList"
-        + @"|StatusEffects|NpcServices|QuestLog|CharacterSheet|LocalCancel|WornWeaponChanged|Changed)\("
+        + @"|StatusEffects|NpcServices|QuestLog|CharacterSheet|LocalCancel|WornWeaponChanged|Changed|RefineTable"
+        + @"|RefineOutcome)\("
         + @"|\.(Advance|CollectTargetCandidates|CollectPlayerCandidates|CollectDropCandidates|CollectNpcCandidates)\("
         + @"|\.(Target|LastRejection|LocalHealth|LocalMaximumHealth|HealthPermille|StateFlags|CurrentHealth|IsLocked"
         + @"|IsDead|LocalSpirit|LocalMaximumSpirit|Level|Experience|ExperienceToNextLevel|WornWeapon)\s*=(?![=>])");
@@ -110,7 +112,8 @@ public sealed class PresentationBoundaryTests
             "client.TurnInQuestTo(npc, quest);", "m_client.RaiseStat(PrimaryStat.Agi);", "client.ToggleStats();",
             "m_client.LearnSkillLevel(skill);", "client.ToggleSkills();",
             "m_client.ResetBuildAt(npc);", "m_client.ChangeJobAt(npc, job);",
-            "m_world.OnWornWeaponChanged(changed);", "remote.WornWeapon = string.Empty;"
+            "m_world.OnWornWeaponChanged(changed);", "remote.WornWeapon = string.Empty;",
+            "m_client.RefineAt(npc, row, 6);", "m_world.OnRefineTable(table);"
         };
         string[] allowed =
         {
@@ -152,7 +155,8 @@ public sealed class PresentationBoundaryTests
             "world.OnQuestLog(log);", "var accept = new AcceptQuest(npc, quest, 8);",
             "var turnIn = new CompleteQuest(npc, quest, 9);", "var raise = new AllocateStat(PrimaryStat.Agi, 1, 10);",
             "var learn = new LearnSkill(skill, 11);", "var reset = new ResetBuild(npc, 12);",
-            "var change = new ChangeJob(npc, job, 13);"
+            "var change = new ChangeJob(npc, job, 13);", "var refine = new RefineItem(npc, row, 6, 14);",
+            "world.OnRefineOutcome(outcome);"
         };
         string[] allowed =
         {
@@ -174,7 +178,9 @@ public sealed class PresentationBoundaryTests
             "world.QuestsChanged += OnQuestsChanged;",
             "AddButton(\"Accept\", () => client.AcceptQuestFrom(npc, quest));",
             "m_client.FollowPartyMember(m_targetName);", "m_client.StopFollowing();",
-            "m_lastQuests = world != null && world.QuestLogsReceived > 0 ? world.Quests : null;"
+            "m_lastQuests = world != null && world.QuestLogsReceived > 0 ? world.Quests : null;",
+            "PressArmed(key, 1, _ => client.RefineAt(npc, inventoryItem, level));",
+            "world.RefineOutcomeReceived += OnRefineOutcome;"
         };
         string[] lockProbes = { "world.ActionLock.LockForSwing(4);", "bool held = m_world.ActionLock.IsCastLocked;" };
 

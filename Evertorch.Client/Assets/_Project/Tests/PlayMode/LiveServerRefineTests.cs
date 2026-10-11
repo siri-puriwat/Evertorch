@@ -11,6 +11,7 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
+using UnityEngine.UI;
 using EntityId = Evertorch.Game.EntityId;
 using Object = UnityEngine.Object;
 
@@ -30,6 +31,8 @@ public sealed class LiveServerRefineTests
     private const string BobName = "LiveRefineBob";
     private const string TrainingSword = "item.weapon.training_sword";
     private const string Quartermaster = "npc.quartermaster";
+    private const string Smith = "npc.smith";
+    private const string Emberstone = "item.material.emberstone";
     private const uint AnnCoins = 500;
     private const int SwordLevel = 3;
     private const float StartTimeoutSeconds = 30f;
@@ -94,13 +97,17 @@ public sealed class LiveServerRefineTests
             m_database!.Execute(
                 "INSERT INTO inventory_items (character_id, item_definition_id, quantity, refine_level, version) "
                 + $"SELECT id, '{TrainingSword}', 1, {SwordLevel}, 0 FROM characters WHERE name = '{AnnName}'");
+            m_database.Execute(
+                "INSERT INTO inventory_items (character_id, item_definition_id, quantity, refine_level, version) "
+                + $"SELECT id, '{Emberstone}', 2, 0, 0 FROM characters WHERE name = '{AnnName}'");
             m_database.Execute($"UPDATE characters SET currency = {AnnCoins} WHERE name = '{AnnName}'");
         });
         ClientWorld world = client.World!;
         Assert.That(world.Inventory.Coins, Is.EqualTo(AnnCoins), "the stored coins");
         Assert.That(
-            world.Inventory.Rows.Select(row => $"{row.Item.Value} x {row.Quantity} +{row.RefineLevel}"),
-            Is.EqualTo(new[] { $"{TrainingSword} x 1 +{SwordLevel}" }),
+            world.Inventory.Rows.Select(row => $"{row.Item.Value} x {row.Quantity} +{row.RefineLevel}")
+                .OrderBy(row => row, StringComparer.Ordinal),
+            Is.EqualTo(new[] { $"{Emberstone} x 2 +0", $"{TrainingSword} x 1 +{SwordLevel}" }),
             "the stored bag, the sword at its level");
 
         yield return EnterTheOther(client, port);
@@ -144,6 +151,49 @@ public sealed class LiveServerRefineTests
             window.Text,
             Does.Contain($"+{SwordLevel} Training Sword x 1"),
             "the sword among what the shop buys, named with its level");
+
+        // The Smith's section lists the sword with the next level's chance and cost; a press at 100 % refines it, and
+        // the chat says so (Prototype Content §2).
+        yield return WaitUntil(() => NpcView(client, Smith)?.HasBody == true, StartTimeoutSeconds);
+        EntityView smithView = NpcView(client, Smith)!;
+        EntityId smith = client.RemoteViews.Single(pair => pair.Value == smithView).Key;
+        Vector3 smithAt = smithView.transform.position;
+        var besideSmith = new WorldPosition(smithAt.x + 1.5f, 0f, smithAt.z);
+        Assert.That(client.Controller!.TryMoveTo(world.Predictor.Position, besideSmith), Is.True, "a way to the Smith");
+        yield return WaitUntil(
+            () =>
+            {
+                other.Poll();
+                return new Vector2(world.Predictor.Position.X - besideSmith.X,
+                        world.Predictor.Position.Z - besideSmith.Z)
+                    .magnitude < 0.1f;
+            },
+            StartTimeoutSeconds);
+        window.Open(smith);
+        string row = $"+{SwordLevel} Training Sword → +{SwordLevel + 1} · 100 % · 20 coins · Emberstone 1 (2 held)";
+        yield return WaitUntil(
+            () =>
+            {
+                other.Poll();
+                return window.IsOpen && window.Text.Contains(row);
+            },
+            StartTimeoutSeconds);
+        Assert.That(window.Text, Does.Contain(row), $"the Smith's section at {world.Predictor.Position}");
+        Button? press = window.GetComponentsInChildren<Button>().FirstOrDefault(button => button.name == row);
+        Assert.That(press, Is.Not.Null, window.Text);
+        press!.onClick.Invoke();
+        string refined = $"Refined Training Sword to +{SwordLevel + 1}.";
+        yield return WaitUntil(
+            () =>
+            {
+                other.Poll();
+                return client.ChatLog.Lines.Any(line => line.Text == refined);
+            },
+            StartTimeoutSeconds);
+        Assert.That(client.ChatLog.Lines.Select(line => line.Text), Does.Contain(refined));
+        Assert.That(
+            world.Inventory.Rows.Single(entry => entry.Item.Value == TrainingSword).RefineLevel,
+            Is.EqualTo((byte)(SwordLevel + 1)));
         Assert.That(other.MalformedMessages + other.UnexpectedMessages, Is.Zero, "the other player's traffic");
         Assert.That(client.Connection!.MalformedMessages + client.Connection.UnexpectedMessages, Is.Zero);
     }

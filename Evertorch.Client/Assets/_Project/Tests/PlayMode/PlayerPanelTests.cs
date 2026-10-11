@@ -1576,6 +1576,76 @@ public sealed class PlayerPanelTests
         Assert.That(sales, Is.EqualTo(new[] { (3L, 1u), (5L, 1u) }), "the unrefined row at one press");
     }
 
+    // The Smith's section (Prototype Content §2): each unworn row its tables name, below the last level, with the next
+    // level's chance and cost and the ore held; a press at 100 % refines, and below it the first press only arms the
+    // refine and says what a failure does.
+    [UnityTest]
+    public IEnumerator NpcWindow_ForTheSmith_ListsWhatItRefines_AndArmsARiskyRefineFirst()
+    {
+        GameClient client = CreateIdleClient();
+        (ClientWorld world, RecordingConnection recording) = GiveRecordedWorld(client);
+        GiveShop(client);
+        Spawn(world, 14, EntityKind.Npc, "npc.smith", 1000);
+        DrawNpc(client, 14);
+        world.OnNpcServices(
+            new NpcServices(new EntityId(14), new NpcServiceEntry[0], new NpcQuestOffer[0], refines: true));
+        var steps = new List<RefineTableStep>();
+        for (int level = 1; level <= 10; level++)
+        {
+            steps.Add(new RefineTableStep(level <= 6 ? (byte)100 : (byte)60, 20));
+        }
+
+        world.OnRefineTable(
+            new RefineTable(
+                new EntityId(14),
+                0,
+                new ItemDefinitionId(Gel),
+                1,
+                RefineFailure.Destroy,
+                0,
+                steps,
+                new[] { new ItemDefinitionId(Sword) }));
+        InventoryEntry[] rows =
+        {
+            new(3, new ItemDefinitionId(Sword), 1), new(4, new ItemDefinitionId(Sword), 1, EquipmentSlot.None, 6),
+            new(5, new ItemDefinitionId(Sword), 1, EquipmentSlot.Weapon), new(6, new ItemDefinitionId(Gel), 3)
+        };
+        foreach (InventorySnapshot part in InventorySnapshot.CreateParts(4, 250, rows))
+        {
+            world.Inventory.OnSnapshot(part);
+        }
+
+        var window = NpcWindow.Create(client);
+        m_created.Add(window.gameObject);
+        window.Open(new EntityId(14));
+        yield return null;
+        string before = window.Text;
+
+        const string safe = "Training Sword → +1 · 100 % · 20 coins · Slime Gel 1 (3 held)";
+        const string risky = "+6 Training Sword → +7 · 60 % · 20 coins · Slime Gel 1 (3 held)";
+        const string armed = "Press again to refine. On failure it is destroyed.";
+        Assert.That(Press(window, safe), Is.True, window.Text);
+        yield return null;
+        Assert.That(Press(window, risky), Is.True, window.Text);
+        yield return null;
+        string afterArming = window.Text;
+        int sentOnArming = recording.SentOf(MessageOpcode.RefineItem).Count();
+        Assert.That(Press(window, armed), Is.True, window.Text);
+        yield return null;
+        var refines = new List<(long, byte)>();
+        foreach (byte[] payload in recording.SentOf(MessageOpcode.RefineItem))
+        {
+            Assert.That(RefineItem.TryRead(payload, out RefineItem? refine), Is.True);
+            refines.Add((refine!.InventoryItem, refine.RefineLevel));
+        }
+
+        Assert.That(before, Is.EqualTo($"Refine\n{safe}\n{risky}"), "the worn sword and the gel left out");
+        Assert.That(window.CoinsText, Is.EqualTo("Coins: 250"));
+        Assert.That(afterArming, Does.EndWith($"\n{safe}\n{armed}"));
+        Assert.That(sentOnArming, Is.EqualTo(1), "the safe refine at one press, the risky one armed");
+        Assert.That(refines, Is.EqualTo(new[] { (3L, (byte)0), (4L, (byte)6) }));
+    }
+
     // The Guildmaster's part (Prototype Content §2): "Reset all points" asks for a second press, "Press again to reset",
     // within five seconds, after which it is "Reset all points" again.
     [UnityTest]
