@@ -25,6 +25,7 @@ public static class ServerContentLoader
     private const string MonstersFile = "monsters.json";
     private const string NpcsFile = "npcs.json";
     private const string QuestsFile = "quests.json";
+    private const string RefineFile = "refine.json";
     private const string SkillsFile = "skills.json";
     private const string StatusEffectsFile = "status-effects.json";
     private const int ContentVersionLength = 16;
@@ -47,7 +48,7 @@ public static class ServerContentLoader
 
     private static readonly string[] DataFiles =
     {
-        ExperienceFile, ItemsFile, JobsFile, MapsFile, MonstersFile, NpcsFile, QuestsFile, SkillsFile,
+        ExperienceFile, ItemsFile, JobsFile, MapsFile, MonstersFile, NpcsFile, QuestsFile, RefineFile, SkillsFile,
         StatusEffectsFile
     };
 
@@ -94,6 +95,7 @@ public static class ServerContentLoader
         var statusEffects = new Dictionary<StatusDefinitionId, StatusEffectDefinition>();
         var npcs = new Dictionary<NpcDefinitionId, NpcDefinition>();
         var quests = new Dictionary<QuestDefinitionId, QuestDefinition>();
+        var refineTables = new Dictionary<RefineDefinitionId, RefineTableDefinition>();
 
         HashSet<ItemDefinitionId> declaredItems = ReadDefinitions(
             files,
@@ -158,6 +160,13 @@ public static class ServerContentLoader
             quests,
             QuestDefinitionId.TryCreate,
             ReadQuest);
+        HashSet<RefineDefinitionId> declaredRefineTables = ReadDefinitions(
+            files,
+            RefineFile,
+            problems,
+            refineTables,
+            RefineDefinitionId.TryCreate,
+            ReadRefineTable);
         Dictionary<JobDefinitionId, JobDefinition> jobs =
             ResolveJobs(jobEntries, experienceTables, declaredJobs, problems);
         if (declaredStatusEffects.Count > StatusEffects.MaxEntries)
@@ -197,6 +206,7 @@ public static class ServerContentLoader
             declaredNpcs,
             maps.Count == declaredMaps.Count,
             problems);
+        CheckRefineTables(items, refineTables.Values, declaredItems, declaredRefineTables, problems);
 
         if (problems.Count != 0)
         {
@@ -214,7 +224,8 @@ public static class ServerContentLoader
             experienceTables,
             statusEffects,
             npcs,
-            quests);
+            quests,
+            refineTables);
     }
 
     private static PackageManifest? ReadManifest(IReadOnlyDictionary<string, byte[]> files, List<string> problems)
@@ -416,10 +427,21 @@ public static class ServerContentLoader
         ItemMarket? market = entry.Has("market")
             ? ReadMarket(entry, entry.RequiredObject("market"), sellPrice, stackLimit, problems)
             : null;
+        RefineDefinitionId? refine = null;
+        if (entry.Has("refine"))
+        {
+            refine = entry.RequiredId<RefineDefinitionId>("refine", RefineDefinitionId.TryCreate);
+            if (!isEquipment)
+            {
+                entry.Report("refine", "is only for a weapon or armor");
+            }
+        }
+
         entry.ReportUnexpectedProperties();
 
         return problems.Count == problemsBefore
-            ? new ItemDefinition(id, displayName, type, stackLimit, weight, sellPrice, equipment, effect, market)
+            ? new ItemDefinition(id, displayName, type, stackLimit, weight, sellPrice, equipment, effect, market,
+                refine)
             : null;
     }
 
@@ -1153,6 +1175,51 @@ public static class ServerContentLoader
             : null;
     }
 
+    // A refine table as the tools wrote it, held to the same rules (Content Pipeline §7).
+    private static RefineTableDefinition? ReadRefineTable(
+        PackageObjectReader entry,
+        RefineDefinitionId id,
+        List<string> problems)
+    {
+        int problemsBefore = problems.Count;
+        ItemDefinitionId material = entry.RequiredId<ItemDefinitionId>("material", ItemDefinitionId.TryCreate);
+        int materialQuantity = entry.RequiredInt("materialQuantity", 1, ContentLimits.MaxRefineMaterialQuantity);
+        RefineFailure onFailure = entry.RequiredEnum<RefineFailure>("onFailure");
+        int downgradeBy = entry.RequiredInt("downgradeBy", 0, ContentLimits.MaxRefineDowngrade);
+        if (problems.Count == problemsBefore && onFailure == RefineFailure.Downgrade != downgradeBy > 0)
+        {
+            entry.Report("downgradeBy", "must be from 1 for a downgrade, and 0 for any other failure");
+        }
+
+        IReadOnlyList<PackageObjectReader> levels = entry.RequiredObjectArray("levels");
+        if (levels.Count == 0 || levels.Count > ContentLimits.MaxRefineLevels)
+        {
+            entry.Report("levels", $"must list between 1 and {ContentLimits.MaxRefineLevels} levels");
+        }
+
+        var steps = new List<RefineStep>(levels.Count);
+        int previousBonus = 0;
+        foreach (PackageObjectReader level in levels)
+        {
+            int chance = level.RequiredInt("chance", 1, ContentLimits.MaxRefineChance);
+            int coins = level.RequiredInt("coins", 0, ContentLimits.MaxRefineCoins);
+            int bonus = level.RequiredInt("bonus", 0, ContentLimits.MaxRefineBonus);
+            if (bonus < previousBonus)
+            {
+                level.Report("bonus", "must not fall below the level before's");
+            }
+
+            level.ReportUnexpectedProperties();
+            previousBonus = bonus;
+            steps.Add(new RefineStep(chance, coins, bonus));
+        }
+
+        entry.ReportUnexpectedProperties();
+        return problems.Count == problemsBefore
+            ? new RefineTableDefinition(id, material, materialQuantity, onFailure, downgradeBy, steps.AsReadOnly())
+            : null;
+    }
+
     private static StatusEffectDefinition? ReadStatusEffect(
         PackageObjectReader entry,
         StatusDefinitionId id,
@@ -1389,6 +1456,54 @@ public static class ServerContentLoader
         }
 
         return value;
+    }
+
+    // A table's ore is a material an attempt takes from one row, an item's table exists, and a table's message holds
+    // its items, at most 13 (Content Pipeline §7).
+    private static void CheckRefineTables(
+        IReadOnlyDictionary<ItemDefinitionId, ItemDefinition> items,
+        IEnumerable<RefineTableDefinition> tables,
+        HashSet<ItemDefinitionId> declaredItems,
+        HashSet<RefineDefinitionId> declaredTables,
+        List<string> problems)
+    {
+        foreach (RefineTableDefinition table in tables)
+        {
+            if (!declaredItems.Contains(table.Material))
+            {
+                problems.Add($"{RefineFile}: {table.Id}: names unknown item '{table.Material}' as its material");
+            }
+            else if (items.TryGetValue(table.Material, out ItemDefinition? ore)
+                     && (ore.Type != ItemType.Material || table.MaterialQuantity > ore.StackLimit))
+            {
+                problems.Add(
+                    $"{RefineFile}: {table.Id}: names '{table.Material}', which is not a material or holds fewer than "
+                    + $"{table.MaterialQuantity} in a row");
+            }
+        }
+
+        var named = new Dictionary<RefineDefinitionId, int>();
+        foreach (ItemDefinition item in items.Values.OrderBy(item => item.Id.Value, StringComparer.Ordinal))
+        {
+            if (!item.Refine.HasValue)
+            {
+                continue;
+            }
+
+            RefineDefinitionId table = item.Refine.Value;
+            if (!declaredTables.Contains(table))
+            {
+                problems.Add($"{ItemsFile}: {item.Id}: names unknown refine table '{table}'");
+            }
+
+            named[table] = named.TryGetValue(table, out int count) ? count + 1 : 1;
+            if (named[table] == ContentLimits.MaxRefineItems + 1)
+            {
+                problems.Add(
+                    $"{RefineFile}: {table}: is named by more than the {ContentLimits.MaxRefineItems} items its "
+                    + "message carries");
+            }
+        }
     }
 
     private static void CheckReferences(

@@ -49,6 +49,34 @@ public static class ContentLimits
     /// </summary>
     public const int MaxCurrency = 1_000_000_000;
 
+    /// <summary>
+    ///     The most levels a refine table lists, so an item refines to +10 at most (Gameplay Systems §11.6).
+    /// </summary>
+    public const int MaxRefineLevels = 10;
+
+    /// <summary>
+    ///     A refine step's chance, in percent: certain at 100.
+    /// </summary>
+    public const int MaxRefineChance = 100;
+
+    public const int MaxRefineCoins = 1_000_000;
+    public const int MaxRefineBonus = 9_999;
+
+    /// <summary>
+    ///     The most levels a failure lowers an item by.
+    /// </summary>
+    public const int MaxRefineDowngrade = 9;
+
+    /// <summary>
+    ///     The most ore one attempt takes, what the wire's byte carries.
+    /// </summary>
+    public const int MaxRefineMaterialQuantity = 255;
+
+    /// <summary>
+    ///     The most items one refine table refines, the room of its message (Network Protocol §6).
+    /// </summary>
+    public const int MaxRefineItems = 13;
+
     public const int MaxKillCount = 1000;
     public const int MaxExperience = 1_000_000_000;
     public const int MaxDurationMs = 86_400_000;

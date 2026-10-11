@@ -674,9 +674,10 @@ public sealed class MarketTests
             Is.EqualTo(
                 new[]
                 {
-                    ("item.armor.leather", 90u, 0u), ("item.armor.monarch_mantle", 1000u, 0u), (Dust, 28u, 0u),
+                    ("item.armor.leather", 90u, 0u), ("item.armor.monarch_mantle", 1000u, 0u),
+                    ("item.material.emberstone", 40u, 0u), (Dust, 28u, 0u),
                     ("item.material.grotto_carapace", 24u, 0u), ("item.material.monarch_jelly", 80u, 0u),
-                    ("item.weapon.ash_staff", 120u, 0u), (Sword, 120u, 0u)
+                    ("item.material.wardstone", 40u, 0u), ("item.weapon.ash_staff", 120u, 0u), (Sword, 120u, 0u)
                 }),
             "every listable item at its price; its own listing is not stock it may buy");
         MarketListingEntry mine = Mines(server, seller).Single().Entries.Single();

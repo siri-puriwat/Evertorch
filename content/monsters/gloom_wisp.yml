@@ -35,6 +35,9 @@ drops:
   - item: item.consumable.minor_mana
     chance: 0.30
     amount: { min: 1, max: 2 }
+  - item: item.material.emberstone
+    chance: 0.08
+    amount: { min: 1, max: 1 }
 rewards:
   baseExperience: 150
   jobExperience: 110

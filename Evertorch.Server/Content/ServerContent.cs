@@ -20,7 +20,8 @@ public sealed class ServerContent
         IDictionary<ExperienceDefinitionId, ExperienceTableDefinition> experienceTables,
         IDictionary<StatusDefinitionId, StatusEffectDefinition> statusEffects,
         IDictionary<NpcDefinitionId, NpcDefinition> npcs,
-        IDictionary<QuestDefinitionId, QuestDefinition> quests)
+        IDictionary<QuestDefinitionId, QuestDefinition> quests,
+        IDictionary<RefineDefinitionId, RefineTableDefinition> refineTables)
     {
         ServerContentVersion = serverContentVersion;
         ClientContentVersion = clientContentVersion;
@@ -33,6 +34,7 @@ public sealed class ServerContent
         StatusEffects = Freeze(statusEffects);
         Npcs = Freeze(npcs);
         Quests = Freeze(quests);
+        RefineTables = Freeze(refineTables);
     }
 
     public string ServerContentVersion { get; }
@@ -59,6 +61,11 @@ public sealed class ServerContent
     public IReadOnlyDictionary<NpcDefinitionId, NpcDefinition> Npcs { get; }
 
     public IReadOnlyDictionary<QuestDefinitionId, QuestDefinition> Quests { get; }
+
+    /// <summary>
+    ///     The refine tables by ID (Gameplay Systems §11.6); an item names its own through <c>ItemDefinition.Refine</c>.
+    /// </summary>
+    public IReadOnlyDictionary<RefineDefinitionId, RefineTableDefinition> RefineTables { get; }
 
     private static IReadOnlyDictionary<TKey, TValue> Freeze<TKey, TValue>(IDictionary<TKey, TValue> source)
         where TKey : notnull

@@ -70,8 +70,8 @@ public sealed class ContentBuildCommandTests
             int exitCode = Build(workspace);
 
             Assert.That(exitCode, Is.EqualTo(0));
-            // The experience tables stay on the server (Content Pipeline §5); the status effects go to both.
-            foreach ((string side, int files) in new[] { ("server", 10), ("client", 9) })
+            // The experience and refine tables stay on the server (Content Pipeline §5); the status effects go to both.
+            foreach ((string side, int files) in new[] { ("server", 11), ("client", 9) })
             {
                 string directory = Path.Combine(workspace.OutputDirectory, side);
                 Assert.That(

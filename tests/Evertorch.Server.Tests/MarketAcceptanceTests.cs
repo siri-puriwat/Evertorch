@@ -217,9 +217,10 @@ public sealed class MarketAcceptanceTests
             Is.EqualTo(
                 new[]
                 {
-                    ("item.armor.leather", 90u, 0u), ("item.armor.monarch_mantle", 1000u, 0u), (GloomDust, 28u, 0u),
+                    ("item.armor.leather", 90u, 0u), ("item.armor.monarch_mantle", 1000u, 0u),
+                    ("item.material.emberstone", 40u, 0u), (GloomDust, 28u, 0u),
                     ("item.material.grotto_carapace", 24u, 0u), ("item.material.monarch_jelly", 80u, 0u),
-                    ("item.weapon.ash_staff", 120u, 0u), (IronSword, 120u, 0u)
+                    ("item.material.wardstone", 40u, 0u), ("item.weapon.ash_staff", 120u, 0u), (IronSword, 120u, 0u)
                 }),
             $"{step}: every listable item at its base");
         Assert.That(heard.Mines.Single().Entries, Is.Empty, $"{step}: nothing listed yet");

@@ -10,6 +10,7 @@ server:
     # It sells to no shop, so its floor is authored.
     basePrice: 1000
     floor: 250
+  refine: refine.armor
   equipment:
     defense: 22
 client:

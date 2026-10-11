@@ -5,6 +5,7 @@ stackLimit: 1
 server:
   weight: 60
   sellPrice: 20
+  refine: refine.armor
   equipment:
     defense: 8
 client:

@@ -20,6 +20,7 @@ internal static class ServerProjection
             new("monsters.json", PackageJson.Write(writer => WriteMonsters(writer, content))),
             new("npcs.json", PackageJson.Write(writer => WriteNpcs(writer, content))),
             new("quests.json", PackageJson.Write(writer => WriteQuests(writer, content))),
+            new("refine.json", PackageJson.Write(writer => WriteRefineTables(writer, content))),
             new("skills.json", PackageJson.Write(writer => WriteSkills(writer, content))),
             new("status-effects.json", PackageJson.Write(writer => WriteStatusEffects(writer, content)))
         };
@@ -37,6 +38,37 @@ internal static class ServerProjection
             foreach (int level in table.Levels)
             {
                 writer.WriteNumberValue(level);
+            }
+
+            writer.WriteEndArray();
+            writer.WriteEndObject();
+        }
+
+        EndFile(writer);
+    }
+
+    // Every refine table whole: the chances and coins reach the player on the wire, the bonus never (Content Pipeline
+    // §5).
+    private static void WriteRefineTables(Utf8JsonWriter writer, ContentSet content)
+    {
+        BeginFile(writer);
+        foreach (AuthoredRefineTable authored in content.RefineTables)
+        {
+            RefineTableDefinition table = authored.Definition;
+            writer.WriteStartObject();
+            writer.WriteString("id", table.Id.Value);
+            writer.WriteString("material", table.Material.Value);
+            writer.WriteNumber("materialQuantity", table.MaterialQuantity);
+            writer.WriteString("onFailure", EnumText.Of(table.OnFailure));
+            writer.WriteNumber("downgradeBy", table.DowngradeBy);
+            writer.WriteStartArray("levels");
+            foreach (RefineStep step in table.Steps)
+            {
+                writer.WriteStartObject();
+                writer.WriteNumber("chance", step.Chance);
+                writer.WriteNumber("coins", step.Coins);
+                writer.WriteNumber("bonus", step.Bonus);
+                writer.WriteEndObject();
             }
 
             writer.WriteEndArray();
@@ -97,6 +129,11 @@ internal static class ServerProjection
                 writer.WriteNumber("floor", item.Market.Floor);
                 writer.WriteNumber("ceiling", item.Market.Ceiling);
                 writer.WriteEndObject();
+            }
+
+            if (item.Refine.HasValue)
+            {
+                writer.WriteString("refine", item.Refine.Value.Value);
             }
 
             writer.WriteEndObject();

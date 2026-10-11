@@ -1096,7 +1096,8 @@ internal sealed class TestServer
             new Dictionary<ExperienceDefinitionId, ExperienceTableDefinition>(content.ExperienceTables),
             new Dictionary<StatusDefinitionId, StatusEffectDefinition>(content.StatusEffects),
             new Dictionary<NpcDefinitionId, NpcDefinition>(content.Npcs),
-            new Dictionary<QuestDefinitionId, QuestDefinition>(content.Quests));
+            new Dictionary<QuestDefinitionId, QuestDefinition>(content.Quests),
+            new Dictionary<RefineDefinitionId, RefineTableDefinition>(content.RefineTables));
     }
 }
 }

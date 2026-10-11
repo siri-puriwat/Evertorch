@@ -21,6 +21,7 @@ public static class ContentLoader
     private const string StatusEffectsFolder = "status-effects";
     private const string NpcsFolder = "npcs";
     private const string QuestsFolder = "quests";
+    private const string RefineFolder = "refine";
 
     public static ContentSet Load(string contentRoot, List<ContentDiagnostic> diagnostics)
     {
@@ -33,6 +34,7 @@ public static class ContentLoader
         var statusEffects = new List<AuthoredStatusEffect>();
         var npcs = new List<AuthoredNpc>();
         var quests = new List<AuthoredQuest>();
+        var refineTables = new List<AuthoredRefineTable>();
         var declaredIds = new HashSet<string>(StringComparer.Ordinal);
 
         if (!Directory.Exists(contentRoot))
@@ -48,6 +50,7 @@ public static class ContentLoader
                 statusEffects,
                 npcs,
                 quests,
+                refineTables,
                 declaredIds);
         }
 
@@ -100,6 +103,9 @@ public static class ContentLoader
                 case QuestsFolder:
                     AddIfValid(quests, QuestDefinitionReader.Read(root, diagnostics, declaredIds));
                     break;
+                case RefineFolder:
+                    AddIfValid(refineTables, RefineTableReader.Read(root, diagnostics, declaredIds));
+                    break;
                 default:
                     diagnostics.Add(
                         new ContentDiagnostic(
@@ -107,7 +113,7 @@ public static class ContentLoader
                             string.Empty,
                             0,
                             "file is not inside a known definition folder (items, monsters, skills, jobs, maps, "
-                            + "experience, status-effects, npcs, quests)"));
+                            + "experience, status-effects, npcs, quests, refine)"));
                     break;
             }
         }
@@ -124,6 +130,7 @@ public static class ContentLoader
             statusEffects,
             npcs,
             quests,
+            refineTables,
             declaredIds);
     }
 

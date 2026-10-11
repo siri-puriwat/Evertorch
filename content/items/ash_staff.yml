@@ -8,6 +8,7 @@ server:
   sellPrice: 60
   market:
     basePrice: 120
+  refine: refine.weapon_dungeon
   equipment:
     attack: 15
     attackSpeedPenalty: 54

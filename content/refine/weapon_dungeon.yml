@@ -1,0 +1,16 @@
+id: refine.weapon_dungeon
+# The grotto's Iron Sword and Ash Staff: always safe to +6, then a failure destroys the weapon (Gameplay Systems §11.6).
+material: item.material.emberstone
+materialQuantity: 1
+onFailure: destroy
+levels:
+  - { chance: 100, coins: 100, bonus: 3 }
+  - { chance: 100, coins: 100, bonus: 6 }
+  - { chance: 100, coins: 100, bonus: 9 }
+  - { chance: 100, coins: 100, bonus: 12 }
+  - { chance: 100, coins: 100, bonus: 15 }
+  - { chance: 100, coins: 100, bonus: 18 }
+  - { chance: 60, coins: 100, bonus: 21 }
+  - { chance: 40, coins: 100, bonus: 24 }
+  - { chance: 30, coins: 100, bonus: 27 }
+  - { chance: 20, coins: 100, bonus: 30 }

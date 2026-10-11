@@ -5,6 +5,7 @@ stackLimit: 1
 server:
   weight: 40
   sellPrice: 25
+  refine: refine.weapon_training
   equipment:
     attack: 8
     attackSpeedPenalty: 54

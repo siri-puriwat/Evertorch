@@ -73,7 +73,7 @@ public sealed class ServerContentMarketTests
     }
 
     [Test]
-    public void Load_ForRepositoryContent_ReadsTheSevenListableGoodsAndTheBroker()
+    public void Load_ForRepositoryContent_ReadsTheNineListableGoodsAndTheBroker()
     {
         ServerContent content = ServerContentLoader.Load(PackageFixture.BuildRepositoryPackage());
 
@@ -85,8 +85,9 @@ public sealed class ServerContentMarketTests
                 new[]
                 {
                     ("item.armor.leather", 90, 45, 900), ("item.armor.monarch_mantle", 1000, 250, 10000),
-                    ("item.material.gloom_dust", 28, 14, 280), ("item.material.grotto_carapace", 24, 12, 240),
-                    ("item.material.monarch_jelly", 80, 40, 800), ("item.weapon.ash_staff", 120, 60, 1200),
+                    ("item.material.emberstone", 40, 10, 400), ("item.material.gloom_dust", 28, 14, 280),
+                    ("item.material.grotto_carapace", 24, 12, 240), ("item.material.monarch_jelly", 80, 40, 800),
+                    ("item.material.wardstone", 40, 10, 400), ("item.weapon.ash_staff", 120, 60, 1200),
                     ("item.weapon.iron_sword", 120, 60, 1200)
                 }));
         Assert.That(

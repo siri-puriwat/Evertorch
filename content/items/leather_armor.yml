@@ -8,6 +8,7 @@ server:
   sellPrice: 45
   market:
     basePrice: 90
+  refine: refine.armor
   equipment:
     defense: 15
 client:

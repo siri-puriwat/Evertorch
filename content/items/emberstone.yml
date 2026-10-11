@@ -1,0 +1,16 @@
+id: item.material.emberstone
+displayName: Emberstone
+type: material
+stackLimit: 999
+server:
+  # The Smith takes one for each refine of a weapon; no shop trades it, and the board sells it.
+  weight: 1
+  sellPrice: 0
+  market:
+    # It sells to no shop, so its floor is authored.
+    basePrice: 40
+    floor: 10
+client:
+  # The slime gel's look until art for the ores arrives.
+  icon: item_slime_gel
+  model: pickup_slime_gel

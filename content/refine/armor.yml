@@ -1,0 +1,17 @@
+id: refine.armor
+# Every armor, the Monarch Mantle included: always safe to +4, then a failure destroys the armor. The defense rises
+# steeply, since hard defense divides by 4,000 (Gameplay Systems §11.6).
+material: item.material.wardstone
+materialQuantity: 1
+onFailure: destroy
+levels:
+  - { chance: 100, coins: 60, bonus: 5 }
+  - { chance: 100, coins: 60, bonus: 10 }
+  - { chance: 100, coins: 60, bonus: 15 }
+  - { chance: 100, coins: 60, bonus: 20 }
+  - { chance: 60, coins: 60, bonus: 28 }
+  - { chance: 50, coins: 60, bonus: 36 }
+  - { chance: 40, coins: 60, bonus: 44 }
+  - { chance: 30, coins: 60, bonus: 52 }
+  - { chance: 20, coins: 60, bonus: 62 }
+  - { chance: 10, coins: 60, bonus: 72 }

@@ -1,0 +1,16 @@
+id: refine.weapon_training
+# The training sword and staff: always safe to +7, then a failure destroys the weapon (Gameplay Systems §11.6).
+material: item.material.emberstone
+materialQuantity: 1
+onFailure: destroy
+levels:
+  - { chance: 100, coins: 20, bonus: 2 }
+  - { chance: 100, coins: 20, bonus: 4 }
+  - { chance: 100, coins: 20, bonus: 6 }
+  - { chance: 100, coins: 20, bonus: 8 }
+  - { chance: 100, coins: 20, bonus: 10 }
+  - { chance: 100, coins: 20, bonus: 12 }
+  - { chance: 100, coins: 20, bonus: 14 }
+  - { chance: 60, coins: 20, bonus: 16 }
+  - { chance: 40, coins: 20, bonus: 18 }
+  - { chance: 20, coins: 20, bonus: 20 }

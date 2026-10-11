@@ -57,6 +57,23 @@ internal static class ItemDefinitionReader
             ? ReadMarket(server.RequiredMapping("market"), sellPrice, stackLimit)
             : null;
 
+        // A weapon or an armor may name the table that refines it (Content Pipeline §4); the validator checks the name.
+        RefineDefinitionId? refine = null;
+        if (server.Has("refine"))
+        {
+            if (type == ItemType.Weapon || type == ItemType.Armor)
+            {
+                refine = server.RequiredId<RefineDefinitionId>(
+                    "refine",
+                    RefineDefinitionId.TryCreate,
+                    RefineDefinitionId.KindPrefix);
+            }
+            else
+            {
+                server.ReportField("refine", "is only for a weapon or armor");
+            }
+        }
+
         YamlFieldReader client = root.RequiredMapping("client");
         string icon = client.RequiredAssetKey("icon");
         string model = client.RequiredAssetKey("model");
@@ -88,7 +105,8 @@ internal static class ItemDefinitionReader
             sellPrice,
             equipment,
             effect,
-            market);
+            market,
+            refine);
         return new AuthoredItem(root.ToSource(), definition, icon, model, held);
     }
 

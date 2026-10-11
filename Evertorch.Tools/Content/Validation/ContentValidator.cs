@@ -55,8 +55,14 @@ public static class ContentValidator
         CollectIds(content.Jobs, job => job.Definition.Id.Value, job => job.Source, diagnostics);
         HashSet<string> npcs = CollectIds(content.Npcs, npc => npc.Definition.Id.Value, npc => npc.Source, diagnostics);
         CollectIds(content.Quests, quest => quest.Definition.Id.Value, quest => quest.Source, diagnostics);
+        HashSet<string> refineTables = CollectIds(
+            content.RefineTables,
+            table => table.Definition.Id.Value,
+            table => table.Source,
+            diagnostics);
 
-        HashSet<string>[] references = { items, monsters, skills, maps, experienceTables, statusEffects, npcs };
+        HashSet<string>[] references =
+            { items, monsters, skills, maps, experienceTables, statusEffects, npcs, refineTables };
         foreach (HashSet<string> known in references)
         {
             known.UnionWith(content.DeclaredIds);
@@ -184,6 +190,8 @@ public static class ContentValidator
             RequireServicesFit(npc, content, diagnostics);
         }
 
+        RequireRefineTables(content, items, itemsById, refineTables, diagnostics);
+
         // A character keeps every quest it takes, and one quest log carries them all.
         for (int index = MaxQuests; index < content.Quests.Count; index++)
         {
@@ -241,6 +249,63 @@ public static class ContentValidator
                 "server.jobExperienceTable",
                 diagnostics);
             RequireJobSkills(job, skills, skillsById, diagnostics);
+        }
+    }
+
+    // A table's ore is a material an attempt can take whole from one row, and a table's message holds its items, at most
+    // 13 (Content Pipeline §4, §7).
+    private static void RequireRefineTables(
+        ContentSet content,
+        HashSet<string> items,
+        Dictionary<string, ItemDefinition> itemsById,
+        HashSet<string> refineTables,
+        List<ContentDiagnostic> diagnostics)
+    {
+        foreach (AuthoredRefineTable table in content.RefineTables)
+        {
+            string material = table.Definition.Material.Value;
+            RequireReference(items, material, "item", table.Source, "material", diagnostics);
+            if (!itemsById.TryGetValue(material, out ItemDefinition? ore))
+            {
+                continue;
+            }
+
+            if (ore.Type != ItemType.Material)
+            {
+                Report(table.Source, "material", $"names item '{material}', which is not a material", diagnostics);
+            }
+            else if (table.Definition.MaterialQuantity > ore.StackLimit)
+            {
+                Report(
+                    table.Source,
+                    "materialQuantity",
+                    $"must be at most the stack limit {ore.StackLimit} of item '{material}'",
+                    diagnostics);
+            }
+        }
+
+        var named = new Dictionary<string, int>(StringComparer.Ordinal);
+        foreach (AuthoredItem item in content.Items)
+        {
+            if (!item.Definition.Refine.HasValue)
+            {
+                continue;
+            }
+
+            string table = item.Definition.Refine.Value.Value;
+            RequireReference(refineTables, table, "refine table", item.Source, "server.refine", diagnostics);
+            named[table] = named.TryGetValue(table, out int count) ? count + 1 : 1;
+            if (named[table] > ContentLimits.MaxRefineItems)
+            {
+                Report(
+                    item.Source,
+                    "server.refine",
+                    string.Format(
+                        CultureInfo.InvariantCulture,
+                        "is one more than the {0} items a refine table's message carries",
+                        ContentLimits.MaxRefineItems),
+                    diagnostics);
+            }
         }
     }
 

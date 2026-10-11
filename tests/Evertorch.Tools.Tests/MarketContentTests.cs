@@ -129,7 +129,7 @@ public sealed class MarketContentTests
     }
 
     [Test]
-    public void Run_ForRepositoryContent_ListsTheGrottosSevenGoods_AndTheBrokerKeepsTheBoard()
+    public void Run_ForRepositoryContent_ListsTheGrottosNineGoods_AndTheBrokerKeepsTheBoard()
     {
         ContentPipelineResult result = ContentPipeline.Run(
             Path.Combine(ContentValidationTests.RepositoryRoot(), "content"));
@@ -145,11 +145,12 @@ public sealed class MarketContentTests
                 new[]
                 {
                     ("item.armor.leather", 90, 45, 900), ("item.armor.monarch_mantle", 1000, 250, 10000),
-                    ("item.material.gloom_dust", 28, 14, 280), ("item.material.grotto_carapace", 24, 12, 240),
-                    ("item.material.monarch_jelly", 80, 40, 800), ("item.weapon.ash_staff", 120, 60, 1200),
+                    ("item.material.emberstone", 40, 10, 400), ("item.material.gloom_dust", 28, 14, 280),
+                    ("item.material.grotto_carapace", 24, 12, 240), ("item.material.monarch_jelly", 80, 40, 800),
+                    ("item.material.wardstone", 40, 10, 400), ("item.weapon.ash_staff", 120, 60, 1200),
                     ("item.weapon.iron_sword", 120, 60, 1200)
                 }),
-            "the Umbral Grotto's goods at twice their sell price, the Mantle's terms authored");
+            "the Umbral Grotto's goods at twice their sell price, the Mantle's and the ores' terms authored");
         AuthoredNpc broker = result.Content.Npcs.Single(npc => npc.Definition.KeepsMarket);
         Assert.That(
             (broker.Definition.Id.Value, broker.Definition.DisplayName, broker.Definition.HasShop, broker.Prefab,
