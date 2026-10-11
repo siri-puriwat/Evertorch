@@ -144,7 +144,11 @@ public sealed class TownLoopAcceptanceTests
         MeetTheNpcs(content, admin, client);
         UseSkillsOnASlime(client);
         using var partner = new SocketClient(content, PartnerIdentity, PartnerName);
-        partner.AfterCreate = () => BuildSeed.Adventurer.Apply(connectionString, PartnerName);
+        partner.AfterCreate = () =>
+        {
+            BuildSeed.Adventurer.Apply(connectionString, PartnerName);
+            GivePotions(connectionString, PartnerName);
+        };
         partner.EnterWorld(port);
         AcceptTheHunt("accept", client);
         AcceptTheHunt("partner accepts", partner);
@@ -773,6 +777,20 @@ public sealed class TownLoopAcceptanceTests
             client.PumpUntil(() => world.Inventory.Rows.Any(entry => entry.InventoryItem == row && entry.Slot == slot)),
             Is.True,
             $"{step}: {item} worn");
+    }
+
+    // The partner loots only its own kills, so it may hold no potion when the crawlers it joins wear it down; it died
+    // unwatched during a lure at hunt 3 in about one run in ten (Milestone 16's soak). Five potions keep it above half
+    // through the hunt.
+    private static void GivePotions(string connectionString, string name)
+    {
+        using var connection = new NpgsqlConnection(connectionString);
+        connection.Open();
+        using var insert = new NpgsqlCommand(
+            "INSERT INTO inventory_items (character_id, item_definition_id, quantity, refine_level, version) "
+            + $"SELECT id, '{MinorHealth}', 5, 0, 0 FROM characters WHERE name = '{name}'",
+            connection);
+        Assert.That(insert.ExecuteNonQuery(), Is.EqualTo(1), "the partner's potions stored");
     }
 
     private static void DrinkWhenHurt(string step, SocketClient client)
