@@ -184,8 +184,8 @@ public sealed class CharacterBuilds
 
     /// <summary>
     ///     What the owner's Stats window shows of <paramref name="player" /> (Network Protocol §9): its job progress,
-    ///     both pools, each statistic with its next cost (0 at the cap), and the derived statistics, each held to what
-    ///     its field carries.
+    ///     both pools, each statistic with its next cost (0 at the cap), the derived statistics, and what the worn
+    ///     equipment adds to them, read from the helper combat reads, each held to what its field carries.
     /// </summary>
     public CharacterSheet SheetOf(PlayerEntity player)
     {
@@ -202,6 +202,7 @@ public sealed class CharacterBuilds
         }
 
         DerivedStats derived = player.Stats;
+        WornEquipment worn = player.Equipment;
         return new CharacterSheet(
             (ushort)Math.Min(ushort.MaxValue, player.JobLevel),
             player.Job,
@@ -217,7 +218,10 @@ public sealed class CharacterBuilds
             Clamp(derived.Hit),
             Clamp(derived.Flee),
             Clamp(derived.Critical),
-            Clamp(derived.AttackSpeed));
+            Clamp(derived.AttackSpeed),
+            Clamp(worn.WeaponAttack + worn.FlatAttack),
+            Clamp(worn.MagicAttack),
+            Clamp(worn.HardDefense));
     }
 
     /// <summary>

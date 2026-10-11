@@ -29,6 +29,26 @@ public sealed class RefineBonusTests
         return (worn.WeaponAttack, worn.FlatAttack, worn.MagicAttack, worn.HardDefense);
     }
 
+    private static List<CharacterSheet> Sheets(TestServer server, ConnectionId player)
+    {
+        var sheets = new List<CharacterSheet>();
+        foreach (InMemoryServerTransport.SentMessage message in server.Transport.ControlSentTo(player))
+        {
+            if (message.Opcode == MessageOpcode.CharacterSheet
+                && CharacterSheet.TryRead(message.Payload, out CharacterSheet? sheet))
+            {
+                sheets.Add(sheet!);
+            }
+        }
+
+        return sheets;
+    }
+
+    private static (ushort, ushort, ushort) EquipmentParts(CharacterSheet sheet)
+    {
+        return (sheet.EquipmentAttack, sheet.EquipmentMagicAttack, sheet.EquipmentDefense);
+    }
+
     private static WornEquipment Of(string? weapon, int weaponLevel, string? armor, int armorLevel)
     {
         ItemDefinition? weaponItem = weapon == null ? null : Item(weapon);
@@ -99,6 +119,35 @@ public sealed class RefineBonusTests
         var worn = WornEquipment.Of(Item(Sword), null, 7, Item("item.armor.cloth"), null, 4);
 
         Assert.That(Parts(worn), Is.EqualTo((20, 0, 0, 8)));
+    }
+
+    // Gameplay Systems §2: the sheet carries what the equipment adds, from the helper combat reads, and answers an
+    // equip in the tick it lands.
+    [Test]
+    public void Sheet_CarriesWhatTheWornEquipmentAdds_AndAnswersAnEquipInItsTick()
+    {
+        var server = new TestServer();
+        ConnectionId player = server.Connect();
+        server.SignInWithCharacter(player, 1);
+        server.Store.GiveItems(1, "item.weapon.ash_staff", 1, 1, 0);
+        server.Store.GiveItems(1, "item.armor.cloth", 1, 1, 0);
+        long staff = server.Store.Stored(1).Items[0].Id;
+        long cloth = server.Store.Stored(1).Items[1].Id;
+        server.Store.Refine(1, staff, 6);
+        server.Store.Refine(1, cloth, 4);
+        server.Store.Wear(1, staff, WeaponSlot);
+        server.SendEnterWorld(player, 1);
+        server.TickUntil(() => server.SessionOf(player).State == SessionState.InWorld);
+        server.Tick();
+        CharacterSheet entered = Sheets(server, player).Last();
+        server.Transport.ClearSent();
+
+        server.SendEquip(player, cloth, 1);
+        server.TickUntil(() => server.PlayerOf(player).Armor != null);
+
+        Assert.That(EquipmentParts(entered), Is.EqualTo(((ushort)33, (ushort)18, (ushort)0)), "the staff at +6");
+        Assert.That(EquipmentParts(Sheets(server, player).Single()), Is.EqualTo(((ushort)33, (ushort)18, (ushort)28)),
+            "and the cloth at +4");
     }
 
     // The equipment research note's vector with every draw at its lowest: the sword's 32 against the slime becomes 46

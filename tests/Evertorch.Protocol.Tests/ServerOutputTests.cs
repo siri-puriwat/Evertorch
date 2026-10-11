@@ -49,8 +49,9 @@ public sealed class ServerOutputTests
         ["CharacterProgress"] = new[] { "Experience", "ExperienceToNextLevel", "Level" },
         ["CharacterSheet"] = new[]
         {
-            "Attack", "AttackSpeed", "Critical", "Defense", "Flee", "Hit", "Job", "JobExperience",
-            "JobExperienceToNextLevel", "JobLevel", "MagicAttack", "MagicDefense", "SkillPoints", "StatPoints", "Stats"
+            "Attack", "AttackSpeed", "Critical", "Defense", "EquipmentAttack", "EquipmentDefense",
+            "EquipmentMagicAttack", "Flee", "Hit", "Job", "JobExperience", "JobExperienceToNextLevel", "JobLevel",
+            "MagicAttack", "MagicDefense", "SkillPoints", "StatPoints", "Stats"
         },
         ["CharacterSheetStat"] = new[] { "NextCost", "Value" },
         ["CommandRejected"] = new[] { "CommandSequence", "Reason" },
@@ -119,13 +120,15 @@ public sealed class ServerOutputTests
     };
 
     // An NPC's prices, the board's, and a quest's terms travel on purpose, because the player must see them (Content
-    // Pipeline §5), and so do the derived statistics of the owner's Stats window and the MVP experience a boss's most
-    // valuable player gained (Network Protocol §9): exactly these fields may carry a server-only word.
+    // Pipeline §5), and so do the derived statistics of the owner's Stats window with what its equipment adds and the
+    // MVP experience a boss's most valuable player gained (Network Protocol §9): exactly these fields may carry a
+    // server-only word.
     private static readonly string[] SentOnPurpose =
     {
         "NpcServiceEntry.BuyPrice", "NpcServiceEntry.SellPrice", "NpcQuestOffer.BaseExperience",
         "CharacterSheet.Defense", "CharacterSheet.Flee", "CharacterSheet.MagicAttack", "CharacterSheet.MagicDefense",
-        "MvpAwarded.MvpExperience", "MarketBoardEntry.Price"
+        "CharacterSheet.EquipmentDefense", "CharacterSheet.EquipmentMagicAttack", "MvpAwarded.MvpExperience",
+        "MarketBoardEntry.Price"
     };
 
     // Words of the content's server-only fields (Content Pipeline §5).

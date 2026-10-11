@@ -7,9 +7,9 @@ namespace Evertorch.Protocol
 /// <summary>
 ///     The receiver's own character's build (Network Protocol §6, §9): its job level, its job, which the owner's client
 ///     draws its body from, and its job experience, the stat and skill points it has left, each primary statistic with
-///     what raising it next costs, and the derived statistics the
-///     Stats window shows. Sent to its owner alone, right after <c>WorldEntered</c> in every baseline and in the tick of
-///     any change. The values travel on purpose, because the player must see them (Content Pipeline §5).
+///     what raising it next costs, the derived statistics the Stats window shows, and what the worn equipment adds to
+///     them (Gameplay Systems §2). Sent to its owner alone, right after <c>WorldEntered</c> in every baseline and in
+///     the tick of any change. The values travel on purpose, because the player must see them (Content Pipeline §5).
 /// </summary>
 public sealed class CharacterSheet : IEquatable<CharacterSheet>
 {
@@ -28,7 +28,7 @@ public sealed class CharacterSheet : IEquatable<CharacterSheet>
     /// </summary>
     public const int MaxEncodedLength = sizeof(ushort) + sizeof(ushort) + sizeof(ushort)
         + ProtocolLimits.MaxDefinitionIdBytes + 2 * sizeof(ulong) + 2 * sizeof(ushort) + StatCount * 2 * sizeof(byte)
-        + 8 * sizeof(ushort);
+        + 11 * sizeof(ushort);
 
     public CharacterSheet(
         ushort jobLevel,
@@ -45,7 +45,10 @@ public sealed class CharacterSheet : IEquatable<CharacterSheet>
         ushort hit,
         ushort flee,
         ushort critical,
-        ushort attackSpeed)
+        ushort attackSpeed,
+        ushort equipmentAttack = 0,
+        ushort equipmentMagicAttack = 0,
+        ushort equipmentDefense = 0)
     {
         if (stats == null)
         {
@@ -77,6 +80,9 @@ public sealed class CharacterSheet : IEquatable<CharacterSheet>
         Flee = flee;
         Critical = critical;
         AttackSpeed = attackSpeed;
+        EquipmentAttack = equipmentAttack;
+        EquipmentMagicAttack = equipmentMagicAttack;
+        EquipmentDefense = equipmentDefense;
     }
 
     public ushort JobLevel { get; }
@@ -124,6 +130,22 @@ public sealed class CharacterSheet : IEquatable<CharacterSheet>
 
     public ushort AttackSpeed { get; }
 
+    /// <summary>
+    ///     What the worn weapon adds to <see cref="Attack" />: its own attack and its refine bonus (Gameplay Systems
+    ///     §11.1).
+    /// </summary>
+    public ushort EquipmentAttack { get; }
+
+    /// <summary>
+    ///     What a worn staff's refine bonus adds to <see cref="MagicAttack" />.
+    /// </summary>
+    public ushort EquipmentMagicAttack { get; }
+
+    /// <summary>
+    ///     What the worn armor adds beside the soft <see cref="Defense" />: its own defense and its refine bonus.
+    /// </summary>
+    public ushort EquipmentDefense { get; }
+
     public bool Equals(CharacterSheet? other)
     {
         if (other == null)
@@ -152,7 +174,10 @@ public sealed class CharacterSheet : IEquatable<CharacterSheet>
             && Hit == other.Hit
             && Flee == other.Flee
             && Critical == other.Critical
-            && AttackSpeed == other.AttackSpeed;
+            && AttackSpeed == other.AttackSpeed
+            && EquipmentAttack == other.EquipmentAttack
+            && EquipmentMagicAttack == other.EquipmentMagicAttack
+            && EquipmentDefense == other.EquipmentDefense;
     }
 
     public static bool TryRead(ReadOnlySpan<byte> source, out CharacterSheet? message)
@@ -195,6 +220,9 @@ public sealed class CharacterSheet : IEquatable<CharacterSheet>
             || !reader.TryReadUInt16(out ushort flee)
             || !reader.TryReadUInt16(out ushort critical)
             || !reader.TryReadUInt16(out ushort attackSpeed)
+            || !reader.TryReadUInt16(out ushort equipmentAttack)
+            || !reader.TryReadUInt16(out ushort equipmentMagicAttack)
+            || !reader.TryReadUInt16(out ushort equipmentDefense)
             || !reader.IsAtEnd)
         {
             return false;
@@ -215,7 +243,10 @@ public sealed class CharacterSheet : IEquatable<CharacterSheet>
             hit,
             flee,
             critical,
-            attackSpeed);
+            attackSpeed,
+            equipmentAttack,
+            equipmentMagicAttack,
+            equipmentDefense);
         return true;
     }
 
@@ -243,6 +274,9 @@ public sealed class CharacterSheet : IEquatable<CharacterSheet>
         writer.WriteUInt16(Flee);
         writer.WriteUInt16(Critical);
         writer.WriteUInt16(AttackSpeed);
+        writer.WriteUInt16(EquipmentAttack);
+        writer.WriteUInt16(EquipmentMagicAttack);
+        writer.WriteUInt16(EquipmentDefense);
         return writer.Position;
     }
 

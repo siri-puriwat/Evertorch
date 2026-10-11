@@ -10,7 +10,8 @@ public sealed class CharacterSheetTests
 {
     // Job level 3 of job.a with 20 of 80 job experience; 7 stat points and 2 skill points; STR 5 (2), AGI 11 (3), VIT
     // 99 (at the cap, 0), INT 5 (2), DEX 21 (4), LUK 1 (2); attack 46, magic attack 12, defense 5, magic defense 6,
-    // hit 188, flee 125, critical 13 (1.3 %), attack speed 154.
+    // hit 188, flee 125, critical 13 (1.3 %), attack speed 154; and the equipment's parts, an Ash Staff at +6 adding 33
+    // attack and 18 magic attack, and Cloth at +4 28 defense.
     private static readonly byte[] SheetBytes =
     {
         0x1F, 0x80, 0x03, 0x00,
@@ -19,7 +20,8 @@ public sealed class CharacterSheetTests
         0x50, 0, 0, 0, 0, 0, 0, 0,
         0x07, 0x00, 0x02, 0x00,
         0x05, 0x02, 0x0B, 0x03, 0x63, 0x00, 0x05, 0x02, 0x15, 0x04, 0x01, 0x02,
-        0x2E, 0x00, 0x0C, 0x00, 0x05, 0x00, 0x06, 0x00, 0xBC, 0x00, 0x7D, 0x00, 0x0D, 0x00, 0x9A, 0x00
+        0x2E, 0x00, 0x0C, 0x00, 0x05, 0x00, 0x06, 0x00, 0xBC, 0x00, 0x7D, 0x00, 0x0D, 0x00, 0x9A, 0x00,
+        0x21, 0x00, 0x12, 0x00, 0x1C, 0x00
     };
 
     // Offsets into the golden bytes.
@@ -28,6 +30,7 @@ public sealed class CharacterSheetTests
     private const int SkillPoints = 29;
     private const int FirstStat = 31;
     private const int VitCost = 36;
+    private const int EquipmentAttack = 59;
 
     public static CharacterSheet Golden =>
         new(
@@ -49,7 +52,10 @@ public sealed class CharacterSheetTests
             188,
             125,
             13,
-            154);
+            154,
+            33,
+            18,
+            28);
 
     private static CharacterSheet With(ushort jobLevel, string job, ushort skillPoints)
     {
@@ -69,7 +75,10 @@ public sealed class CharacterSheetTests
             188,
             125,
             13,
-            154);
+            154,
+            33,
+            18,
+            28);
     }
 
     [TestCase(JobLevel, new byte[] { 0x00, 0x00 }, "job level 0")]
@@ -92,7 +101,7 @@ public sealed class CharacterSheetTests
         int length = Golden.Write(written);
         bool isRead = CharacterSheet.TryRead(SheetBytes, out CharacterSheet? read);
 
-        Assert.That(Golden.GetEncodedLength(), Is.EqualTo(59));
+        Assert.That(Golden.GetEncodedLength(), Is.EqualTo(65));
         Assert.That(length, Is.EqualTo(SheetBytes.Length));
         Assert.That(written, Is.EqualTo(SheetBytes));
         Assert.That(isRead, Is.True);
@@ -110,6 +119,9 @@ public sealed class CharacterSheetTests
                 read.AttackSpeed),
             Is.EqualTo(((ushort)46, (ushort)12, (ushort)5, (ushort)6, (ushort)188, (ushort)125, (ushort)13,
                 (ushort)154)));
+        Assert.That(
+            (read.EquipmentAttack, read.EquipmentMagicAttack, read.EquipmentDefense),
+            Is.EqualTo(((ushort)33, (ushort)18, (ushort)28)));
         WireMatrix.AssertRejectsEveryTruncation(SheetBytes, bytes => CharacterSheet.TryRead(bytes, out _));
         WireMatrix.AssertRejectsTrailingData(SheetBytes, bytes => CharacterSheet.TryRead(bytes, out _));
         WireMatrix.AssertRejectsOtherOpcodes(SheetBytes, bytes => CharacterSheet.TryRead(bytes, out _));
@@ -122,6 +134,7 @@ public sealed class CharacterSheetTests
         Assert.That(SheetBytes[Job], Is.EqualTo((byte)'j'));
         Assert.That(BitConverter.ToUInt16(SheetBytes, SkillPoints), Is.EqualTo(2));
         Assert.That((SheetBytes[FirstStat], SheetBytes[VitCost]), Is.EqualTo(((byte)5, (byte)0)));
+        Assert.That(BitConverter.ToUInt16(SheetBytes, EquipmentAttack), Is.EqualTo(33));
     }
 
     [Test]
@@ -143,10 +156,16 @@ public sealed class CharacterSheetTests
             188,
             125,
             13,
-            155);
+            155,
+            33,
+            18,
+            28);
+        var tougher = new CharacterSheet(3, golden.Job, 20, 80, 7, 2, golden.Stats, 46, 12, 5, 6, 188, 125, 13, 154, 33,
+            18, 29);
 
         Assert.That(Golden, Is.EqualTo(golden));
         Assert.That(faster, Is.Not.EqualTo(golden));
+        Assert.That(tougher, Is.Not.EqualTo(golden), "more defense from the armor");
         Assert.That(With(3, "job.b", 2), Is.Not.EqualTo(golden), "another job");
         Assert.That(golden.Equals(null), Is.False);
     }
@@ -173,7 +192,7 @@ public sealed class CharacterSheetTests
         sheet.Write(written);
 
         Assert.That(sheet.GetEncodedLength(), Is.EqualTo(CharacterSheet.MaxEncodedLength));
-        Assert.That(CharacterSheet.MaxEncodedLength, Is.EqualTo(118));
+        Assert.That(CharacterSheet.MaxEncodedLength, Is.EqualTo(124));
         Assert.That(CharacterSheet.TryRead(written, out CharacterSheet? read), Is.True);
         Assert.That(read!.Job.Value, Is.EqualTo(longest));
     }
