@@ -742,8 +742,8 @@ public sealed class ItemActionSystem : ITickPhase
             return CommandRejectionReason.NotEnoughCoins;
         }
 
-        // The draw is spent only on a command the database can take (Gameplay Systems §11.6).
-        if (!m_persistence.IsAvailable)
+        // The draw is spent only on a command the writer can take (Gameplay Systems §11.6).
+        if (!m_persistence.CanEnqueue)
         {
             return CommandRejectionReason.ServiceUnavailable;
         }

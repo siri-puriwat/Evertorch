@@ -114,6 +114,21 @@ public sealed class PersistenceWorker : IDisposable
     /// </summary>
     public bool IsAvailable => State == DatabaseState.Unknown || State == DatabaseState.Available;
 
+    /// <summary>
+    ///     Whether <see cref="TryEnqueue" /> would take a job now: the database available, the writer not stopping, and
+    ///     room in the queue. Only the writer's own outage can turn it false before the caller enqueues.
+    /// </summary>
+    public bool CanEnqueue
+    {
+        get
+        {
+            lock (m_gate)
+            {
+                return IsAvailable && !m_isStopping && m_pendingJobs < m_capacity;
+            }
+        }
+    }
+
     public int PendingJobs
     {
         get

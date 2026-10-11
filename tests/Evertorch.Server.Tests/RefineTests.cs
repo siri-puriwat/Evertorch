@@ -203,5 +203,48 @@ public sealed class RefineTests
             (outcome.LevelBefore, outcome.LevelAfter, outcome.Outcome),
             Is.EqualTo(((byte)7, (byte)0, RefineOutcomeKind.Destroyed)));
     }
+
+    // The review's finding (session task T17): a refine the writer cannot queue, its queue full, is refused with 6
+    // before its draw, so a refused command draws nothing.
+    [Test]
+    public void Refine_ThatTheWriterCannotQueue_IsRefusedWithSix_AndDrawsNothing()
+    {
+        var random = new ScriptedRandom(0);
+        var server = new TestServer(
+            withNpcs: true,
+            refineRandom: random,
+            persistence: new PersistenceOptions { QueueCapacity = 1 });
+        NpcEntity smith = server.NpcOf(Smith);
+        var players = new List<(ConnectionId Player, long Sword)>();
+        foreach (long character in new[] { 1L, 2L })
+        {
+            ConnectionId player = server.Connect();
+            server.SignInWithCharacter(player, character);
+            server.Store.GiveItems(character, Sword, 1, 1, 5);
+            server.Store.GiveItems(character, Ember, 1, 1, 5);
+            server.Store.Edit(character, coins: 100);
+            server.SendEnterWorld(player, character);
+            server.TickUntil(() => server.SessionOf(player).State == SessionState.InWorld);
+            server.Place(player, smith.Position.X + 2f, smith.Position.Z + character - 1);
+            players.Add((player,
+                server.Store.Stored(character).Items.First(item => item.ItemDefinitionId == Sword).Id));
+        }
+
+        server.Tick(2);
+        server.Transport.ClearSent();
+        server.RunsPersistence = false;
+
+        server.SendRefine(players[0].Player, smith.Id, players[0].Sword, 0, 1);
+        server.SendRefine(players[1].Player, smith.Id, players[1].Sword, 0, 1);
+        server.Tick();
+        CommandRejectionReason second = server.Transport.ControlSentTo(players[1].Player)
+            .Where(message => message.Opcode == MessageOpcode.CommandRejected)
+            .Select(message => CommandRejected.TryRead(message.Payload, out CommandRejected read) ? read.Reason : 0)
+            .Single();
+        server.RunsPersistence = true;
+
+        Assert.That(second, Is.EqualTo(CommandRejectionReason.ServiceUnavailable));
+        Assert.That(random.Calls, Is.EqualTo(1), "the queued refine alone drew");
+    }
 }
 }
