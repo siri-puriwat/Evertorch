@@ -337,7 +337,7 @@ public sealed class NpcServicesMessageTests
     }
 
     [Test]
-    public void NpcServices_WithTheResetStorageAndMarketBits_OffersThem_AndRefusesAnyOtherBit()
+    public void NpcServices_WithTheResetStorageMarketAndRefineBits_OffersThem_AndRefusesAnyOtherBit()
     {
         var guildmaster = new NpcServices(new EntityId(7), new NpcServiceEntry[0], new NpcQuestOffer[0], true);
         byte[] written = new byte[guildmaster.GetEncodedLength()];
@@ -353,7 +353,11 @@ public sealed class NpcServicesMessageTests
         Assert.That((read!.OffersReset, read.KeepsStorage, read.KeepsMarket), Is.EqualTo((true, true, false)));
         Assert.That(NpcServices.TryRead(WireMatrix.With(ServicesBytes, ServicesByte, 0x07), out read), Is.True);
         Assert.That((read!.OffersReset, read.KeepsStorage, read.KeepsMarket), Is.EqualTo((true, true, true)));
-        Assert.That(NpcServices.TryRead(WireMatrix.With(ServicesBytes, ServicesByte, 0x08), out _), Is.False);
+        Assert.That(NpcServices.TryRead(WireMatrix.With(ServicesBytes, ServicesByte, 0x0F), out read), Is.True);
+        Assert.That(
+            (read!.OffersReset, read.KeepsStorage, read.KeepsMarket, read.Refines),
+            Is.EqualTo((true, true, true, true)));
+        Assert.That(NpcServices.TryRead(WireMatrix.With(ServicesBytes, ServicesByte, 0x10), out _), Is.False);
         Assert.That(NpcServices.TryRead(WireMatrix.With(ServicesBytes, ServicesByte, 0x81), out _), Is.False);
 
         var storekeeper = new NpcServices(
@@ -375,6 +379,16 @@ public sealed class NpcServicesMessageTests
         Assert.That(NpcServices.TryRead(board, out read), Is.True);
         Assert.That((read!.OffersReset, read.KeepsStorage, read.KeepsMarket), Is.EqualTo((false, false, true)));
         Assert.That(Golden.KeepsMarket, Is.False);
+
+        var smith = new NpcServices(new EntityId(7), new NpcServiceEntry[0], new NpcQuestOffer[0], refines: true);
+        byte[] refines = new byte[smith.GetEncodedLength()];
+        smith.Write(refines);
+        Assert.That(refines, Is.EqualTo(new byte[] { 0x1D, 0x80, 0x07, 0, 0, 0, 0, 0, 0, 0, 0x00, 0x00, 0x08, 0x00 }));
+        Assert.That(NpcServices.TryRead(refines, out read), Is.True);
+        Assert.That(
+            (read!.OffersReset, read.KeepsStorage, read.KeepsMarket, read.Refines),
+            Is.EqualTo((false, false, false, true)));
+        Assert.That(Golden.Refines, Is.False);
     }
 
     [Test]

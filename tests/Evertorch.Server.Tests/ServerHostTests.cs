@@ -243,8 +243,8 @@ public sealed class ServerHostTests
         host.StopAsync().GetAwaiter().GetResult();
 
         string loaded = logs.Lines.Single(line => line.Contains(" ContentLoaded: "));
-        Assert.That(loaded, Does.Contain(", 3 maps, 5 NPCs, 3 quests."));
-        Assert.That(loaded, Does.Contain("Npcs=5").And.Contain("Quests=3"));
+        Assert.That(loaded, Does.Contain(", 3 maps, 6 NPCs, 3 quests."));
+        Assert.That(loaded, Does.Contain("Npcs=6").And.Contain("Quests=3"));
     }
 
     [Test]

@@ -28,10 +28,12 @@ internal static class NpcDefinitionReader
         bool offersJobChange = false;
         int? depositFee = null;
         bool keepsMarket = false;
+        bool refines = false;
         if (root.Has("server"))
         {
             YamlFieldReader server = root.RequiredMapping("server");
-            if (server.Has("shop") || !(server.Has("guild") || server.Has("storage") || server.Has("market")))
+            if (server.Has("shop")
+                || !(server.Has("guild") || server.Has("storage") || server.Has("market") || server.Has("refine")))
             {
                 ReadShop(server, diagnostics, shop);
             }
@@ -50,6 +52,7 @@ internal static class NpcDefinitionReader
             }
 
             keepsMarket = server.Has("market") && server.RequiredBool("market");
+            refines = server.Has("refine") && server.RequiredBool("refine");
         }
 
         YamlFieldReader client = root.RequiredMapping("client");
@@ -64,7 +67,7 @@ internal static class NpcDefinitionReader
 
         return new AuthoredNpc(
             root.ToSource(),
-            new NpcDefinition(id, displayName, shop, offersReset, offersJobChange, depositFee, keepsMarket),
+            new NpcDefinition(id, displayName, shop, offersReset, offersJobChange, depositFee, keepsMarket, refines),
             prefab,
             tint);
     }

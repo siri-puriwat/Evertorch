@@ -185,7 +185,7 @@ public sealed class NpcContentTests
                 {
                     ("npc.quartermaster", -3.5f, 4.5f), ("npc.gate_warden", 20.5f, 3.5f),
                     ("npc.guildmaster", 4.5f, -4.5f), ("npc.storekeeper", -4.5f, -4.5f),
-                    ("npc.broker", 3.5f, 4.5f)
+                    ("npc.broker", 3.5f, 4.5f), ("npc.smith", -6.5f, 0.5f)
                 }));
         AuthoredNpc storekeeper = result.Content.Npcs.Single(npc => npc.Definition.KeepsStorage);
         Assert.That(

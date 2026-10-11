@@ -1,0 +1,8 @@
+id: npc.smith
+displayName: Smith
+server:
+  refine: true
+client:
+  # The Gate Warden's body in a colour of its own, until art arrives.
+  prefab: npc_gate_warden
+  tint: "#A0522D"

@@ -1119,6 +1119,7 @@ public static class ServerContentLoader
             ? entry.RequiredInt("depositFee", 0, ContentLimits.MaxDepositFee)
             : null;
         bool keepsMarket = entry.Has("market") && entry.RequiredBool("market");
+        bool refines = entry.Has("refine") && entry.RequiredBool("refine");
         entry.ReportUnexpectedProperties();
         return problems.Count == problemsBefore
             ? new NpcDefinition(
@@ -1128,7 +1129,8 @@ public static class ServerContentLoader
                 offersReset,
                 offersJobChange,
                 depositFee,
-                keepsMarket)
+                keepsMarket,
+                refines)
             : null;
     }
 

@@ -18,6 +18,7 @@ public sealed class RefineContentTests
 {
     private const string Table = "refine/sword.yml";
     private const string Sword = "items/training_sword.yml";
+    private const string Npc = "npcs/quartermaster.yml";
 
     private const string TableText =
         "id: refine.sword\n"
@@ -231,6 +232,25 @@ public sealed class RefineContentTests
         }
     }
 
+    // Prototype Content §6: the Smith refines alone, drawn with the Gate Warden's body in a colour of its own, and is
+    // placed last, so only player and drop IDs move.
+    [Test]
+    public void Run_ForRepositoryContent_PlacesTheSmithLast_WithTheGateWardensBodyTinted()
+    {
+        ContentPipelineResult result = ContentPipeline.Run(
+            Path.Combine(ContentValidationTests.RepositoryRoot(), "content"));
+
+        Assert.That(result.Diagnostics, Is.Empty, Describe(result));
+        AuthoredNpc smith = result.Content.Npcs.Single(npc => npc.Definition.Refines);
+        Assert.That(
+            (smith.Definition.Id.Value, smith.Definition.DisplayName, smith.Definition.HasShop, smith.Prefab,
+                smith.Tint),
+            Is.EqualTo(("npc.smith", "Smith", false, "npc_gate_warden", "#A0522D")));
+        NpcPlacement placed = result.Content.Maps.Single(map => map.Definition.Id.Value == "map.training_ground")
+            .Definition.Npcs.Last();
+        Assert.That((placed.Npc.Value, placed.Position.X, placed.Position.Z), Is.EqualTo(("npc.smith", -6.5f, 0.5f)));
+    }
+
     [Test]
     public void Run_ForRepositoryContent_RefinesEveryWeaponAndArmor_ThroughThreeTables()
     {
@@ -289,6 +309,32 @@ public sealed class RefineContentTests
             (ember.Item.Value, ember.Chance, ember.MinAmount, ember.MaxAmount),
             Is.EqualTo(("item.material.emberstone", 0.08, 1, 1)),
             "the wisp's Emberstone last, so every earlier draw keeps its place");
+    }
+
+    [Test]
+    public void Run_WhenAnNpcRefinesAlone_IsValid_AndTheServerPackageSaysSo()
+    {
+        using (ContentWorkspace workspace = Workspace())
+        {
+            workspace.Replace(
+                Npc,
+                "  shop:\n    - item: item.material.slime_gel\n      price: 146443\n",
+                "  refine: true\n");
+
+            ContentPipelineResult result = ContentPipeline.Run(workspace.ContentRoot);
+
+            Assert.That(result.Diagnostics, Is.Empty, Describe(result));
+            NpcDefinition npc = result.Content.Npcs.Single().Definition;
+            Assert.That((npc.HasShop, npc.Refines), Is.EqualTo((false, true)));
+            Assert.That(
+                Definition(result.Packages!.Server, "npcs.json", "npc.quartermaster").GetProperty("refine")
+                    .GetBoolean(),
+                Is.True);
+            Assert.That(
+                Definition(result.Packages.Client, "npcs.json", "npc.quartermaster").TryGetProperty("refine",
+                    out JsonElement _),
+                Is.False);
+        }
     }
 }
 }

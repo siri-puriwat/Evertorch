@@ -158,9 +158,8 @@ public sealed class MarketContentTests
             Is.EqualTo(("npc.broker", "Broker", false, "npc_guildmaster", "#B8862B")),
             "the Guildmaster's body in a colour of its own");
         NpcPlacement placed = result.Content.Maps.Single(map => map.Definition.Id.Value == "map.training_ground")
-            .Definition.Npcs.Last();
-        Assert.That((placed.Npc.Value, placed.Position.X, placed.Position.Z), Is.EqualTo(("npc.broker", 3.5f, 4.5f)),
-            "placed last, so only player and drop IDs move");
+            .Definition.Npcs.Single(npc => npc.Npc.Value == "npc.broker");
+        Assert.That((placed.Position.X, placed.Position.Z), Is.EqualTo((3.5f, 4.5f)));
     }
 
     [Test]

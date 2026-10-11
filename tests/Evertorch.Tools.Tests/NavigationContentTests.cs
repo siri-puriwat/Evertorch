@@ -251,7 +251,7 @@ public sealed class NavigationContentTests
                 {
                     new WorldPosition(-3.5f, 0f, 4.5f), new WorldPosition(20.5f, 0f, 3.5f),
                     new WorldPosition(4.5f, 0f, -4.5f), new WorldPosition(-4.5f, 0f, -4.5f),
-                    new WorldPosition(3.5f, 0f, 4.5f)
+                    new WorldPosition(3.5f, 0f, 4.5f), new WorldPosition(-6.5f, 0f, 0.5f)
                 }));
     }
 

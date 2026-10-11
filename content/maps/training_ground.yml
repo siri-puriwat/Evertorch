@@ -35,6 +35,9 @@ server:
     - npc: npc.broker
       position: { x: 3.5, y: 0.0, z: 4.5 }
       facing: { x: -0.614, z: -0.789 } # toward the spawn point
+    - npc: npc.smith
+      position: { x: -6.5, y: 0.0, z: 0.5 }
+      facing: { x: 0.997, z: -0.077 } # toward the spawn point
 navigation:
   # One symbol per cell, northern row first. The grid is the graybox geometry: the client builds its
   # visuals from it and the server validates movement against it.
@@ -77,7 +80,7 @@ navigation:
     - "#...........................................N..#"
     - "#..............................o...............#"
     - "#..............................................#"
-    - "#..............................................G"
+    - "#................N.............................G"
     - "#..............................................G"
     - "#..............................................#"
     - "#.....................o........................#"

@@ -304,6 +304,11 @@ internal static class ServerProjection
                 writer.WriteBoolean("market", true);
             }
 
+            if (npc.Refines)
+            {
+                writer.WriteBoolean("refine", true);
+            }
+
             writer.WriteEndObject();
         }
 

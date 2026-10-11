@@ -6,8 +6,8 @@ namespace Evertorch.Game
 /// <summary>
 ///     An NPC (Gameplay Systems §6.1): its name and, when it keeps a shop, the items the shop sells. An NPC with a shop
 ///     also buys every item whose sell price is above 0 (Gameplay Systems §11.3), and an NPC's quests are the quests
-///     that name it as their giver. A Storekeeper keeps the account's storage for a fee per deposit (§11.4), and a
-///     Broker keeps the market board (§11.5).
+///     that name it as their giver. A Storekeeper keeps the account's storage for a fee per deposit (§11.4), a Broker
+///     keeps the market board (§11.5), and a Smith refines (§11.6).
 /// </summary>
 public sealed class NpcDefinition
 {
@@ -18,7 +18,8 @@ public sealed class NpcDefinition
         bool offersReset = false,
         bool offersJobChange = false,
         int? depositFee = null,
-        bool keepsMarket = false)
+        bool keepsMarket = false,
+        bool refines = false)
     {
         Id = id;
         DisplayName = displayName;
@@ -27,6 +28,7 @@ public sealed class NpcDefinition
         OffersJobChange = offersJobChange;
         DepositFee = depositFee;
         KeepsMarket = keepsMarket;
+        Refines = refines;
     }
 
     public NpcDefinitionId Id { get; }
@@ -62,5 +64,10 @@ public sealed class NpcDefinition
     ///     Whether the NPC keeps the market board (Gameplay Systems §11.5).
     /// </summary>
     public bool KeepsMarket { get; }
+
+    /// <summary>
+    ///     Whether the NPC refines weapons and armor through their refine tables (Gameplay Systems §11.6).
+    /// </summary>
+    public bool Refines { get; }
 }
 }
