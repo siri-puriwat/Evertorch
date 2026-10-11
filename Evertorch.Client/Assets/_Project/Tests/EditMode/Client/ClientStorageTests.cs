@@ -120,6 +120,22 @@ public sealed class ClientStorageTests
         Assert.That(storage.Revision, Is.EqualTo(6u));
     }
 
+    // Prototype Content §2: a refined row's words name its level, taken from the row held when a change empties it.
+    [Test]
+    public void Changes_OfARefinedRow_SayItsLevel()
+    {
+        ClientStorage storage = Read(3, new StorageEntry(12, Staff, 1, 7));
+        var moved = new List<StorageDelta>();
+        storage.ChangeApplied += moved.Add;
+
+        storage.OnChanged(new StorageChanged(3, 4, new StorageEntry(12, Staff, 0)));
+        storage.OnChanged(new StorageChanged(4, 5, new StorageEntry(13, Staff, 1, 5)));
+
+        Assert.That(
+            moved.Select(delta => StorageMessages.Describe(delta, null)),
+            Is.EqualTo(new[] { $"Withdrew +7 {Staff.Value}.", $"Deposited +5 {Staff.Value} for 20 coins." }));
+    }
+
     // Two reads at once, then one a second: one stricter than the server's three (Network Protocol §11).
     [Test]
     public void TheReadBucket_TakesTwoAtOnce_ThenOneASecond()

@@ -12,11 +12,16 @@ namespace Evertorch.Client
 /// </summary>
 public sealed class InventoryDelta
 {
-    public InventoryDelta(uint coinsBefore, uint coinsAfter, IReadOnlyDictionary<ItemDefinitionId, long> units)
+    public InventoryDelta(
+        uint coinsBefore,
+        uint coinsAfter,
+        IReadOnlyDictionary<ItemDefinitionId, long> units,
+        byte refineLevel = 0)
     {
         CoinsBefore = coinsBefore;
         CoinsAfter = coinsAfter;
         Units = units ?? throw new ArgumentNullException(nameof(units));
+        RefineLevel = refineLevel;
     }
 
     public uint CoinsBefore { get; }
@@ -24,5 +29,10 @@ public sealed class InventoryDelta
     public uint CoinsAfter { get; }
 
     public IReadOnlyDictionary<ItemDefinitionId, long> Units { get; }
+
+    /// <summary>
+    ///     The refine level of the rows whose units moved, the highest of them: a sold row's, which its words name.
+    /// </summary>
+    public byte RefineLevel { get; }
 }
 }

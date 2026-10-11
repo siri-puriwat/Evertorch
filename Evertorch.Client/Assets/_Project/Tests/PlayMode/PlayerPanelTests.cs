@@ -622,6 +622,45 @@ public sealed class PlayerPanelTests
         Assert.That(changes, Is.EqualTo(2), "once for the wait, once for the sheet");
     }
 
+    // What the equipment adds stands beside its statistic (Prototype Content §2).
+    [UnityTest]
+    public IEnumerator StatsWindow_ShowsWhatTheEquipmentAdds_BesideItsStatistic()
+    {
+        GameClient client = CreateIdleClient();
+        ClientWorld world = GiveWorld(client);
+        var window = StatsWindow.Create(client);
+        m_created.Add(window.gameObject);
+        window.Open();
+        CharacterSheet sheet = StatSheet(3);
+
+        world.OnCharacterSheet(
+            new CharacterSheet(
+                sheet.JobLevel,
+                sheet.Job,
+                sheet.JobExperience,
+                sheet.JobExperienceToNextLevel,
+                sheet.StatPoints,
+                sheet.SkillPoints,
+                sheet.Stats,
+                46,
+                12,
+                5,
+                6,
+                188,
+                125,
+                13,
+                154,
+                33,
+                18,
+                28));
+        yield return null;
+        yield return null;
+
+        Assert.That(
+            window.Text.Split('\n').Skip(7).Take(4),
+            Is.EqualTo(new[] { "Attack 46 + 33", "Magic attack 12 + 18", "Defense 5 + 28", "Magic defense 6" }));
+    }
+
     // The Stats and NPC windows share one place, so opening either closes the other (Prototype Content §2).
     [UnityTest]
     public IEnumerator StatsSkillsAndNpcWindows_OpenOneAtATime()
@@ -1291,6 +1330,35 @@ public sealed class PlayerPanelTests
         Assert.That(window.Text, Does.EndWith("Training Sword x 1"), "a press shows nothing until the server answers");
     }
 
+    // A row above +0 is named with its level, worn or not; at +0 a label stays as it is (Prototype Content §2).
+    [UnityTest]
+    public IEnumerator InventoryWindow_NamesARefinedRowWithItsLevel()
+    {
+        GameClient client = CreateIdleClient();
+        ClientWorld world = GiveWorld(client);
+        GiveItems(client);
+        var window = InventoryWindow.Create(client);
+        m_created.Add(window.gameObject);
+
+        world.Inventory.OnSnapshot(
+            new InventorySnapshot(
+                4,
+                0,
+                0,
+                1,
+                new[]
+                {
+                    new InventoryEntry(2, new ItemDefinitionId(Sword), 1, EquipmentSlot.Weapon, 7),
+                    new InventoryEntry(3, new ItemDefinitionId(Sword), 1, EquipmentSlot.None, 10),
+                    new InventoryEntry(4, new ItemDefinitionId(Sword), 1)
+                }));
+        yield return null;
+
+        Assert.That(
+            window.Text,
+            Is.EqualTo("+7 Training Sword x 1 (equipped)\n+10 Training Sword x 1\nTraining Sword x 1"));
+    }
+
     // Wrapped onto a second line, the worn sword's row spilled out of its row, and the list's mask cut off its top.
     [UnityTest]
     public IEnumerator InventoryWindow_ShowsALongRowOnOneLine_InsideItsRow()
@@ -1457,6 +1525,55 @@ public sealed class PlayerPanelTests
         buttons[4].onClick.Invoke();
         yield return null;
         Assert.That(window.Text, Does.Contain("Slime Gel x 12"), "a press shows nothing until the server answers");
+    }
+
+    // The shop pays a refined row its item's price whatever its level, so its sale names the level and asks twice
+    // within five seconds, as the reset does; an unrefined row still sells at one press (Prototype Content §2).
+    [UnityTest]
+    public IEnumerator NpcWindow_ForTheQuartermaster_AsksForASecondPressBeforeSellingARefinedRow()
+    {
+        GameClient client = CreateIdleClient();
+        (ClientWorld world, RecordingConnection recording) = GiveRecordedWorld(client);
+        GiveShop(client);
+        Spawn(world, 13, EntityKind.Npc, Quartermaster, 1000);
+        DrawNpc(client, 13);
+        world.OnNpcServices(QuartermasterServices(13));
+        InventoryEntry[] rows =
+        {
+            new(3, new ItemDefinitionId(Sword), 1, EquipmentSlot.None, 7), new(5, new ItemDefinitionId(Sword), 1)
+        };
+        foreach (InventorySnapshot part in InventorySnapshot.CreateParts(4, 250, rows))
+        {
+            world.Inventory.OnSnapshot(part);
+        }
+
+        var window = NpcWindow.Create(client);
+        m_created.Add(window.gameObject);
+        window.Open(new EntityId(13));
+        yield return null;
+        string before = window.Text;
+
+        Assert.That(Press(window, "+7 Training Sword x 1: 25 coins"), Is.True, window.Text);
+        yield return null;
+        string armed = window.Text;
+        int sentOnArming = recording.SentOf(MessageOpcode.SellItem).Count();
+        Assert.That(Press(window, "Press again to sell +7 Training Sword for 25 coins"), Is.True, window.Text);
+        yield return null;
+        string afterSale = window.Text;
+        Assert.That(Press(window, "Training Sword x 1: 25 coins"), Is.True, window.Text);
+        yield return null;
+        var sales = new List<(long, uint)>();
+        foreach (byte[] payload in recording.SentOf(MessageOpcode.SellItem))
+        {
+            Assert.That(SellItem.TryRead(payload, out SellItem sale), Is.True);
+            sales.Add((sale.InventoryItem, sale.Quantity));
+        }
+
+        Assert.That(before, Does.EndWith("\nSell\n+7 Training Sword x 1: 25 coins\nTraining Sword x 1: 25 coins"));
+        Assert.That(armed, Does.Contain("\nPress again to sell +7 Training Sword for 25 coins\n"), "the first arms it");
+        Assert.That(sentOnArming, Is.Zero, "nothing sent on arming");
+        Assert.That(afterSale, Does.Contain("\n+7 Training Sword x 1: 25 coins\n"), "the second sells and disarms");
+        Assert.That(sales, Is.EqualTo(new[] { (3L, 1u), (5L, 1u) }), "the unrefined row at one press");
     }
 
     // The Guildmaster's part (Prototype Content §2): "Reset all points" asks for a second press, "Press again to reset",

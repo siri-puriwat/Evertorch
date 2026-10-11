@@ -23,11 +23,11 @@ namespace Evertorch.Client
 ///     Systems §11.4); for the Broker, the board, the player's listings, the bag's rows the board takes, and the amount
 ///     field, where a press on an item buys the amount, one on a listing collects it, and one on a bag row lists the
 ///     amount (§11.5). A Buy press buys one; a Sell press sells one, and a stack's All sells the row; Accept and Turn in
-///     ask for the quest; the reset, a change, a purchase and a listing on the board, and the early end of a listing each
-///     ask for a second press within <see cref="ResetConfirmSeconds" />, the first showing what it costs, and arming one
-///     disarms the others. The presses go through <see cref="GameClient" />, and only what the server commits moves the
-///     lists. It closes once the NPC is drawn beyond its range, the player dies, the map changes, or the connection
-///     closes.
+///     ask for the quest; the reset, a change, a purchase and a listing on the board, the early end of a listing, and
+///     the sale of a refined row, which names its level (Prototype Content §2), each ask for a second press within
+///     <see cref="ResetConfirmSeconds" />, the first showing what it costs, and arming one disarms the others. The
+///     presses go through <see cref="GameClient" />, and only what the server commits moves the lists. It closes once
+///     the NPC is drawn beyond its range, the player dies, the map changes, or the connection closes.
 /// </summary>
 public sealed class NpcWindow : MonoBehaviour
 {
@@ -91,7 +91,7 @@ public sealed class NpcWindow : MonoBehaviour
     private GameObject? m_amountRow;
     private bool m_needsRead;
     private int m_shownMarket = -1;
-    private string m_armedMarket = string.Empty;
+    private string m_armedKey = string.Empty;
     private uint m_armedQuantity;
     private IReadOnlyList<MarketListingEntry>? m_seenListings;
     private float m_listingsSeenAt;
@@ -158,7 +158,7 @@ public sealed class NpcWindow : MonoBehaviour
             return;
         }
 
-        if ((m_isResetArmed || m_armedJob != default || m_armedMarket.Length > 0)
+        if ((m_isResetArmed || m_armedJob != default || m_armedKey.Length > 0)
             && Time.unscaledTime > m_resetArmedUntil)
         {
             ArmReset(false);
@@ -202,7 +202,7 @@ public sealed class NpcWindow : MonoBehaviour
         m_shownSecond = second;
         foreach ((TMP_Text label, MarketListingEntry listing) in m_listingLabels)
         {
-            if (m_armedMarket != CollectKey(listing.Listing))
+            if (m_armedKey != CollectKey(listing.Listing))
             {
                 label.text = MarketMessages.Listing(listing, SecondsLeft(listing), content);
             }
@@ -300,7 +300,7 @@ public sealed class NpcWindow : MonoBehaviour
         Npc = default;
         m_isResetArmed = false;
         m_armedJob = default;
-        m_armedMarket = string.Empty;
+        m_armedKey = string.Empty;
 
         // The services stay cached for the NPC, so the next open must write the lists again, disarmed.
         m_shownServices = null;
@@ -579,8 +579,8 @@ public sealed class NpcWindow : MonoBehaviour
             uint most = Math.Min(entry.Stock, RoomFor(inventory, content, item));
             string key = BuyKey(item);
             AddButton(
-                m_armedMarket == key ? MarketMessages.BuyPrompt(item, m_armedQuantity, price, content) : text,
-                () => PressMarket(key, Math.Min(Amount, most), shown => client.BuyOnMarketAt(npc, item, shown, price)));
+                m_armedKey == key ? MarketMessages.BuyPrompt(item, m_armedQuantity, price, content) : text,
+                () => PressArmed(key, Math.Min(Amount, most), shown => client.BuyOnMarketAt(npc, item, shown, price)));
         }
 
         if (market.Board.Count == 0)
@@ -607,7 +607,7 @@ public sealed class NpcWindow : MonoBehaviour
         foreach (MarketListingEntry listing in market.Listings)
         {
             string key = CollectKey(listing.Listing);
-            bool isArmed = m_armedMarket == key;
+            bool isArmed = m_armedKey == key;
             MarketListingEntry pressed = listing;
             AddButton(
                 isArmed
@@ -651,14 +651,14 @@ public sealed class NpcWindow : MonoBehaviour
             ItemDefinitionId item = row.Item;
             string key = ListKey(inventoryItem);
             AddButton(
-                m_armedMarket == key
+                m_armedKey == key
                     ? MarketMessages.ListPrompt(
                         item,
                         m_armedQuantity,
                         MarketPricing.Fee(m_armedQuantity, (int)entry.Price),
                         content)
                     : MarketMessages.BagRow(item, row.Quantity, content),
-                () => PressMarket(
+                () => PressArmed(
                     key,
                     Math.Min(Amount, row.Quantity),
                     shown => client.ListOnMarketAt(npc, inventoryItem, shown)));
@@ -673,9 +673,9 @@ public sealed class NpcWindow : MonoBehaviour
 
     // A first press arms the command and shows what it costs; a second, within ResetConfirmSeconds, sends it with the
     // amount shown, whatever the field says by then. Arming one disarms the others.
-    private void PressMarket(string key, uint quantity, Action<uint> send)
+    private void PressArmed(string key, uint quantity, Action<uint> send)
     {
-        if (m_armedMarket == key && Time.unscaledTime <= m_resetArmedUntil)
+        if (m_armedKey == key && Time.unscaledTime <= m_resetArmedUntil)
         {
             uint shown = m_armedQuantity;
             ArmReset(false);
@@ -684,7 +684,7 @@ public sealed class NpcWindow : MonoBehaviour
         }
 
         ArmReset(false);
-        m_armedMarket = key;
+        m_armedKey = key;
         m_armedQuantity = quantity;
     }
 
@@ -699,7 +699,7 @@ public sealed class NpcWindow : MonoBehaviour
             return;
         }
 
-        PressMarket(key, 0, _ => client.CollectListingAt(npc, listing.Listing));
+        PressArmed(key, 0, _ => client.CollectListingAt(npc, listing.Listing));
     }
 
     // As many as the bag's row of the item can still take, or one of an item a row holds one of, which takes a row of
@@ -736,11 +736,15 @@ public sealed class NpcWindow : MonoBehaviour
         return "list " + inventoryItem.ToString(CultureInfo.InvariantCulture);
     }
 
+    private static string SellKey(long inventoryItem)
+    {
+        return "sell " + inventoryItem.ToString(CultureInfo.InvariantCulture);
+    }
+
     private static string RowText(ClientContent? content, ItemDefinitionId item, uint quantity, byte refineLevel)
     {
-        string name = ShopMessages.ItemName(content, item);
-        string refined = refineLevel > 0 ? $"+{refineLevel} {name}" : name;
-        return quantity == 1 ? refined : $"{refined} x {quantity}";
+        string name = ShopMessages.ItemName(content, item, refineLevel);
+        return quantity == 1 ? name : $"{name} x {quantity}";
     }
 
     // For each quest the NPC gives: its name, objective, and reward, then where the character stands with it, and the
@@ -795,12 +799,12 @@ public sealed class NpcWindow : MonoBehaviour
     }
 
     // The lists are written again so the button says what its next press does; arming the reset disarms a change and
-    // a market command.
+    // any other command armed.
     private void ArmReset(bool isArmed)
     {
         m_isResetArmed = isArmed;
         m_armedJob = default;
-        m_armedMarket = string.Empty;
+        m_armedKey = string.Empty;
         m_resetArmedUntil = Time.unscaledTime + ResetConfirmSeconds;
         m_shownServices = null;
     }
@@ -876,19 +880,37 @@ public sealed class NpcWindow : MonoBehaviour
         return false;
     }
 
-    // One press sells one; a stack also offers All, which sells the whole row.
+    // One press sells one; a stack also offers All, which sells the whole row. A refined row fetches its item's price
+    // whatever its level, so its first press only arms the sale.
     private void AddSellRow(InventoryEntry row, uint price, ClientContent? content)
     {
-        string name = ShopMessages.ItemName(content, row.Item);
-        string text = row.Quantity > 1
-            ? $"{name} x {row.Quantity}: {ShopMessages.Coins(price)} each"
-            : $"{name} x 1: {ShopMessages.Coins(price)}";
+        string name = ShopMessages.ItemName(content, row.Item, row.RefineLevel);
+        string key = SellKey(row.InventoryItem);
+        string text = m_armedKey == key
+            ? ShopMessages.SellPrompt(content, row.Item, row.RefineLevel, price)
+            : row.Quantity > 1
+                ? $"{name} x {row.Quantity}: {ShopMessages.Coins(price)} each"
+                : $"{name} x 1: {ShopMessages.Coins(price)}";
         GameClient client = m_client!;
         EntityId npc = Npc;
         long inventoryItem = row.InventoryItem;
         uint quantity = row.Quantity;
+        bool asksTwice = row.RefineLevel > 0;
         GameObject line = Ui.CreateRow($"Sell {inventoryItem}", m_rows!);
-        GameObject one = CreateButton(text, line.transform, () => client.SellTo(npc, inventoryItem, 1));
+        GameObject one = CreateButton(
+            text,
+            line.transform,
+            () =>
+            {
+                if (asksTwice)
+                {
+                    PressArmed(key, 1, _ => client.SellTo(npc, inventoryItem, 1));
+                }
+                else
+                {
+                    client.SellTo(npc, inventoryItem, 1);
+                }
+            });
         one.GetComponent<LayoutElement>().flexibleWidth = 1f;
         if (quantity > 1)
         {

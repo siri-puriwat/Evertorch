@@ -120,6 +120,7 @@ public sealed class ClientStorage
         StorageEntry row = change.Row;
         int index = m_rows.FindIndex(entry => entry.StorageItem == row.StorageItem);
         uint before = index >= 0 ? m_rows[index].Quantity : 0;
+        byte refineLevel = index >= 0 ? m_rows[index].RefineLevel : row.RefineLevel;
         if (row.Quantity == 0)
         {
             if (index >= 0)
@@ -138,7 +139,7 @@ public sealed class ClientStorage
 
         Revision = change.NewRevision;
         Version++;
-        ChangeApplied?.Invoke(new StorageDelta(row.Item, (long)row.Quantity - before, DepositFee));
+        ChangeApplied?.Invoke(new StorageDelta(row.Item, (long)row.Quantity - before, DepositFee, refineLevel));
     }
 
     /// <summary>

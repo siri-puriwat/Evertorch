@@ -23,7 +23,7 @@ public static class ShopMessages
 
         foreach (KeyValuePair<ItemDefinitionId, long> moved in delta.Units)
         {
-            string name = ItemName(content, moved.Key);
+            string name = ItemName(content, moved.Key, delta.RefineLevel);
             if (moved.Value > 0 && delta.CoinsAfter < delta.CoinsBefore)
             {
                 return $"Bought {Units(name, moved.Value)} for {Coins(delta.CoinsBefore - delta.CoinsAfter)}.";
@@ -48,6 +48,28 @@ public static class ShopMessages
         return content != null && content.TryGetItem(item, out ClientItem? found) && found != null
             ? found.DisplayName
             : item.Value;
+    }
+
+    /// <summary>
+    ///     "+7 Iron Sword" above +0; at +0 the name as it is (Prototype Content §2).
+    /// </summary>
+    public static string ItemName(ClientContent? content, ItemDefinitionId item, byte refineLevel)
+    {
+        return Refined(ItemName(content, item), refineLevel);
+    }
+
+    public static string Refined(string name, byte refineLevel)
+    {
+        return refineLevel > 0 ? $"+{refineLevel} {name}" : name;
+    }
+
+    /// <summary>
+    ///     "Press again to sell +7 Iron Sword for 25 coins": a refined row sells at its item's price, whatever its
+    ///     level, so its sale asks twice.
+    /// </summary>
+    public static string SellPrompt(ClientContent? content, ItemDefinitionId item, byte refineLevel, uint price)
+    {
+        return $"Press again to sell {ItemName(content, item, refineLevel)} for {Coins(price)}";
     }
 
     private static string Units(string name, long count)

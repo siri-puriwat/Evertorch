@@ -65,9 +65,8 @@ public static class TradeMessages
         var lines = new List<string>(side.Entries.Count + 1);
         foreach (TradeEntry entry in side.Entries)
         {
-            string name = ShopMessages.ItemName(content, entry.Item);
-            string refined = entry.RefineLevel > 0 ? $"+{entry.RefineLevel} " : string.Empty;
-            lines.Add(entry.Quantity == 1 ? $"{refined}{name}" : $"{refined}{name} x {entry.Quantity}");
+            string name = ShopMessages.ItemName(content, entry.Item, entry.RefineLevel);
+            lines.Add(entry.Quantity == 1 ? name : $"{name} x {entry.Quantity}");
         }
 
         if (side.Coins > 0)

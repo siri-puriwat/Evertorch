@@ -58,6 +58,23 @@ public sealed class ShopMessagesTests
             Is.EqualTo("Bought Minor Health Potion x 3 for 60 coins."));
     }
 
+    // Prototype Content §2: a refined row is named with its level in the sale's words and its prompt; at +0 a name
+    // stays as it is.
+    [Test]
+    public void Describe_ASaleOfARefinedRow_NamesItsLevel_AsItsPromptDoes()
+    {
+        ClientContent content = Content();
+        var units = new Dictionary<ItemDefinitionId, long> { [Sword] = -1 };
+
+        Assert.That(
+            ShopMessages.Describe(new InventoryDelta(50, 75, units, 7), content),
+            Is.EqualTo("Sold +7 Training Sword for 25 coins."));
+        Assert.That(
+            ShopMessages.SellPrompt(content, Sword, 7, 25),
+            Is.EqualTo("Press again to sell +7 Training Sword for 25 coins"));
+        Assert.That(ShopMessages.ItemName(content, Sword, 0), Is.EqualTo("Training Sword"));
+    }
+
     [Test]
     public void Describe_ASale_NamesWhatWasSoldAndWhatItFetched()
     {

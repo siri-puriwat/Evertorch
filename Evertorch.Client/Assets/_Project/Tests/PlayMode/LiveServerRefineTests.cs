@@ -140,7 +140,10 @@ public sealed class LiveServerRefineTests
             },
             StartTimeoutSeconds);
         Assert.That(window.ShownName, Is.EqualTo("Quartermaster"), $"{window.Text} at {world.Predictor.Position}");
-        Assert.That(window.Text, Does.Contain("Training Sword x 1"), "the sword among what the shop buys");
+        Assert.That(
+            window.Text,
+            Does.Contain($"+{SwordLevel} Training Sword x 1"),
+            "the sword among what the shop buys, named with its level");
         Assert.That(other.MalformedMessages + other.UnexpectedMessages, Is.Zero, "the other player's traffic");
         Assert.That(client.Connection!.MalformedMessages + client.Connection.UnexpectedMessages, Is.Zero);
     }

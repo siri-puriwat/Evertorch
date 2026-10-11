@@ -169,10 +169,10 @@ public sealed class InventoryWindow : MonoBehaviour
         TextChanges++;
     }
 
-    // A row the open trade offers says how much of it (Prototype Content §2).
+    // A refined row names its level, and a row the open trade offers says how much of it (Prototype Content §2).
     private static string RowText(InventoryEntry row, ClientItem? item, uint offered)
     {
-        string name = item != null ? item.DisplayName : row.Item.Value;
+        string name = ShopMessages.Refined(item != null ? item.DisplayName : row.Item.Value, row.RefineLevel);
         string text = row.Slot == EquipmentSlot.None
             ? $"{name} x {row.Quantity}"
             : $"{name} x {row.Quantity} (equipped)";

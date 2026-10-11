@@ -41,15 +41,18 @@ public static class BuildMessages
 
     /// <summary>
     ///     The derived statistics in the Stats window's order, as label and value pairs; the critical chance in percent
-    ///     with one decimal.
+    ///     with one decimal; and beside attack, magic attack, and defense what the equipment adds, "Attack 40 + 26",
+    ///     only when it adds something (Prototype Content §2).
     /// </summary>
     public static IReadOnlyList<string> Derived(CharacterSheet sheet)
     {
         string critical = (sheet.Critical / 10.0).ToString("0.0", CultureInfo.InvariantCulture);
         return new[]
         {
-            $"Attack {Number(sheet.Attack)}", $"Magic attack {Number(sheet.MagicAttack)}",
-            $"Defense {Number(sheet.Defense)}", $"Magic defense {Number(sheet.MagicDefense)}",
+            $"Attack {WithEquipment(sheet.Attack, sheet.EquipmentAttack)}",
+            $"Magic attack {WithEquipment(sheet.MagicAttack, sheet.EquipmentMagicAttack)}",
+            $"Defense {WithEquipment(sheet.Defense, sheet.EquipmentDefense)}",
+            $"Magic defense {Number(sheet.MagicDefense)}",
             $"Hit {Number(sheet.Hit)}", $"Flee {Number(sheet.Flee)}", $"Critical {critical}%",
             $"Attack speed {Number(sheet.AttackSpeed)}"
         };
@@ -202,6 +205,11 @@ public static class BuildMessages
         }
 
         return 0;
+    }
+
+    private static string WithEquipment(ushort value, ushort added)
+    {
+        return added > 0 ? $"{Number(value)} + {Number(added)}" : Number(value);
     }
 
     private static string Number(long value)

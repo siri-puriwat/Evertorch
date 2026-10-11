@@ -69,6 +69,29 @@ public sealed class ClientInventoryTests
         Assert.That(deltas[2].Units, Is.Empty, "putting a row on moves no units");
     }
 
+    // An emptied row arrives without its level, so a refined row's sale takes the level of the row held; a purchase's
+    // new units are at +0.
+    [Test]
+    public void ChangeApplied_ThatSellsARefinedRow_GivesTheRowsLevel()
+    {
+        var sword = new ItemDefinitionId("item.weapon.training_sword");
+        var inventory = new ClientInventory();
+        inventory.OnSnapshot(
+            new InventorySnapshot(
+                3,
+                100,
+                0,
+                1,
+                new[] { new InventoryEntry(3, sword, 1, EquipmentSlot.None, 7), Row(1, 12) }));
+        var deltas = new List<InventoryDelta>();
+        inventory.ChangeApplied += deltas.Add;
+
+        inventory.OnChanged(new InventoryChanged(3, 4, 125, new[] { new InventoryEntry(3, sword, 0) }));
+        inventory.OnChanged(new InventoryChanged(4, 5, 123, new[] { Row(1, 13) }));
+
+        Assert.That(deltas.Select(delta => delta.RefineLevel), Is.EqualTo(new byte[] { 7, 0 }));
+    }
+
     [Test]
     public void Change_BeforeTheFirstSnapshot_IsIgnoredWithoutAResync()
     {

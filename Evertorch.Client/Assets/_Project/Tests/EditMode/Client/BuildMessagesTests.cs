@@ -43,6 +43,30 @@ public sealed class BuildMessagesTests
             154);
     }
 
+    private static CharacterSheet Equipped(ushort attack, ushort magicAttack, ushort defense)
+    {
+        CharacterSheet sheet = Sheet(1, 5);
+        return new CharacterSheet(
+            sheet.JobLevel,
+            sheet.Job,
+            0,
+            30,
+            3,
+            0,
+            sheet.Stats,
+            46,
+            12,
+            5,
+            6,
+            188,
+            125,
+            13,
+            154,
+            attack,
+            magicAttack,
+            defense);
+    }
+
     private static SkillListEntry Entry(string skill, byte level, byte max, byte prerequisite = 255, byte needs = 0)
     {
         return new SkillListEntry(new SkillDefinitionId(skill), 0f, 0, 0, 0, 0, level, max, prerequisite, needs);
@@ -135,6 +159,18 @@ public sealed class BuildMessagesTests
         Assert.That(BuildMessages.UnmetPrerequisite(tree, tree[0], null), Is.Null, "no prerequisite");
         Assert.That(BuildMessages.UnmetPrerequisite(tree, tree[1], null), Is.EqualTo("Needs skill.strike Lv 1"));
         Assert.That(BuildMessages.UnmetPrerequisite(learned, learned[1], null), Is.Null, "met");
+    }
+
+    // Prototype Content §2: what the equipment adds stands beside its statistic, only when it adds something.
+    [Test]
+    public void TheStatsWindowsWords_AddWhatTheEquipmentAdds_OnlyAboveZero()
+    {
+        Assert.That(
+            BuildMessages.Derived(Equipped(33, 18, 28)).Take(3),
+            Is.EqualTo(new[] { "Attack 46 + 33", "Magic attack 12 + 18", "Defense 5 + 28" }));
+        Assert.That(
+            BuildMessages.Derived(Equipped(34, 0, 0)).Take(3),
+            Is.EqualTo(new[] { "Attack 46 + 34", "Magic attack 12", "Defense 5" }));
     }
 
     [Test]
