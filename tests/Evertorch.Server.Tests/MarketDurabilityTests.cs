@@ -142,12 +142,13 @@ public sealed class MarketDurabilityTests
     }
 
     // What the board's commands never change (Persistence §11): every character's coins, the gross waiting on the
-    // listings, the fees paid, and the tax collected.
+    // listings, the fees paid, the tax collected, and the coins refines spent.
     private long CoinsAccountedFor()
     {
         return Scalar("SELECT coalesce(sum(currency), 0) FROM characters")
             + Scalar("SELECT coalesce(sum(gross_coins), 0) FROM market_listings")
             - Scalar("SELECT coalesce(sum(currency_delta), 0) FROM economy_ledger WHERE operation_type = 'market_list'")
+            - Scalar("SELECT coalesce(sum(currency_delta), 0) FROM economy_ledger WHERE operation_type = 'refine'")
             + Scalar(
                 "SELECT coalesce(sum((metadata_json ->> 'tax')::bigint), 0) FROM economy_ledger "
                 + "WHERE operation_type = 'market_collect'");

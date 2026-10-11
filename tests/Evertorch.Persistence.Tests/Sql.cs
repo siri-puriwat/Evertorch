@@ -163,6 +163,23 @@ internal sealed class Sql
             + $"FROM characters WHERE id = {character} RETURNING id";
     }
 
+    // One refine of a sword with one Emberstone for 20 coins; the level after is null for a destroyed sword.
+    public static string RefineAttemptInsert(
+        Guid operation,
+        long character,
+        string outcome,
+        int levelBefore,
+        string levelAfter,
+        int materialQuantity = 1,
+        long coins = 20)
+    {
+        return "INSERT INTO refine_attempts (operation_id, character_id, item_instance_id, item_definition_id, "
+            + "level_before, level_after, outcome, material_instance_id, material_definition_id, material_quantity, "
+            + "coins, created_at) "
+            + $"VALUES ('{operation}', {character}, 1, 'item.weapon.training_sword', {levelBefore}, {levelAfter}, "
+            + $"'{outcome}', 2, 'item.material.emberstone', {materialQuantity}, {coins}, now())";
+    }
+
     public static string SaleInsert(Guid operation, long listing, long seller, long buyer, int units, long gross)
     {
         return "INSERT INTO market_sales (operation_id, listing_id, seller_character_id, buyer_character_id, "

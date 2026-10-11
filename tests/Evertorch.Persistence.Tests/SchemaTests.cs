@@ -22,6 +22,7 @@ public sealed class SchemaTests
     private const string AddParties = "20261001131541_AddParties";
     private const string AddBossRewards = "20261002222843_AddBossRewards";
     private const string AddTradesAndStorage = "20261003172540_AddTradesAndStorage";
+    private const string AddMarketBoard = "20261010111957_AddMarketBoard";
 
     private PostgresFixture m_database = null!;
     private Sql m_sql = null!;
@@ -180,6 +181,7 @@ public sealed class SchemaTests
     [TestCase("market_list")]
     [TestCase("market_buy")]
     [TestCase("market_collect")]
+    [TestCase("refine")]
     public void Ledger_WithAKnownOperationType_IsStored(string operationType)
     {
         long character = NewCharacter();
@@ -361,6 +363,56 @@ public sealed class SchemaTests
         Assert.That((afterDown, characters), Is.EqualTo((0L, 2L)), "the tables gone, the characters kept");
         Assert.That(sql.Scalar(tables), Is.EqualTo(2));
         Assert.That(sql.Scalar(Sql.PartyInsert(leader, leader, member)), Is.Positive, "and usable again");
+    }
+
+    // AddRefining runs down only while no ledger row is of the type it adds, drops its table with its rows, and lets a
+    // refine level past 255 in again (Persistence §4, §11).
+    [Test]
+    public void AddRefining_Down_IsRefusedOverARefineRow_AndOtherwiseDropsItsTable()
+    {
+        using var refined = PostgresFixture.Start();
+        var refinedSql = new Sql(refined.ConnectionString);
+        refinedSql.Scalar(
+            Sql.LedgerInsert(Guid.NewGuid(), refinedSql.InsertCharacter(refinedSql.InsertAccount(), "Refiner"),
+                "refine"));
+        using var plain = PostgresFixture.Start();
+        var plainSql = new Sql(plain.ConnectionString);
+        long character = plainSql.InsertCharacter(plainSql.InsertAccount(), "Plain");
+        plainSql.Execute(Sql.RefineAttemptInsert(Guid.NewGuid(), character, "refined", 3, "4"));
+
+        Exception? refused = null;
+        try
+        {
+            EvertorchDatabase.ApplyMigrationsAsync(refined.ConnectionString, AddMarketBoard, CancellationToken.None)
+                .GetAwaiter()
+                .GetResult();
+        }
+        catch (PostgresException exception)
+        {
+            refused = exception;
+        }
+
+        EvertorchDatabase.ApplyMigrationsAsync(plain.ConnectionString, AddMarketBoard, CancellationToken.None)
+            .GetAwaiter()
+            .GetResult();
+
+        Assert.That((refused as PostgresException)?.SqlState, Is.EqualTo(CheckViolation), "a refine row holds it up");
+        Assert.That(
+            plainSql.Scalar(
+                "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public' "
+                + "AND table_name = 'refine_attempts'"),
+            Is.Zero,
+            "its table went with it");
+        Assert.That(
+            plainSql.Scalar(
+                "INSERT INTO inventory_items (character_id, item_definition_id, quantity, refine_level, version) "
+                + $"VALUES ({character}, 'item.weapon.training_sword', 1, 300, 0) RETURNING id"),
+            Is.Positive,
+            "the levels' old bound");
+        Assert.That(
+            refinedSql.Scalar("SELECT count(*) FROM economy_ledger WHERE operation_type = 'refine'"),
+            Is.EqualTo(1),
+            "the refused down kept the row");
     }
 
     // AddTradesAndStorage runs down only while no ledger row is of a type it adds, and drops its tables with their rows
@@ -686,8 +738,8 @@ public sealed class SchemaTests
                 "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name IN "
                 + "('accounts', 'characters', 'inventory_items', 'equipment', 'economy_ledger', 'character_quests', "
                 + "'session_tokens', 'character_skills', 'parties', 'party_members', 'trades', 'account_storages', "
-                + "'storage_items', 'market_prices', 'market_listings', 'market_sales')"),
-            Is.EqualTo(16));
+                + "'storage_items', 'market_prices', 'market_listings', 'market_sales', 'refine_attempts')"),
+            Is.EqualTo(17));
     }
 
     [Test]
@@ -743,6 +795,51 @@ public sealed class SchemaTests
         long outsider = NewCharacter();
 
         AssertFailsWith(ForeignKeyViolation, Sql.PartyInsert(outsider, NewCharacter(), NewCharacter()));
+    }
+
+    [Test]
+    public void RefineAttempts_AreAppendOnly_AndKeepTheirRules()
+    {
+        long character = NewCharacter();
+        var operation = Guid.NewGuid();
+        m_sql.Execute(Sql.RefineAttemptInsert(operation, character, "refined", 3, "4"));
+
+        AssertFailsWith(UniqueViolation, Sql.RefineAttemptInsert(operation, character, "refined", 3, "4"));
+        AssertFailsWith(CheckViolation, Sql.RefineAttemptInsert(Guid.NewGuid(), character, "melted", 3, "4"));
+        AssertFailsWith(CheckViolation, Sql.RefineAttemptInsert(Guid.NewGuid(), character, "refined", 3, "NULL"));
+        AssertFailsWith(CheckViolation, Sql.RefineAttemptInsert(Guid.NewGuid(), character, "destroyed", 7, "7"));
+        AssertFailsWith(CheckViolation, Sql.RefineAttemptInsert(Guid.NewGuid(), character, "refined", 255, "256"));
+        AssertFailsWith(CheckViolation, Sql.RefineAttemptInsert(Guid.NewGuid(), character, "kept", -1, "0"));
+        AssertFailsWith(CheckViolation, Sql.RefineAttemptInsert(Guid.NewGuid(), character, "unchanged", 5, "5", 0));
+        AssertFailsWith(
+            CheckViolation,
+            Sql.RefineAttemptInsert(Guid.NewGuid(), character, "unchanged", 5, "5", 1, 1_000_000_001));
+        AssertFailsWith(ForeignKeyViolation, Sql.RefineAttemptInsert(Guid.NewGuid(), -1, "refined", 3, "4"));
+        AssertFailsWith(RestrictViolation, $"UPDATE refine_attempts SET coins = 0 WHERE operation_id = '{operation}'");
+        AssertFailsWith(RestrictViolation, $"DELETE FROM refine_attempts WHERE operation_id = '{operation}'");
+        AssertFailsWith(RestrictViolation, "TRUNCATE refine_attempts");
+        Assert.That(m_sql.Execute(Sql.RefineAttemptInsert(Guid.NewGuid(), character, "destroyed", 7, "NULL")),
+            Is.EqualTo(1));
+        Assert.That(
+            m_sql.Text($"SELECT outcome || ' ' || level_after FROM refine_attempts WHERE operation_id = '{operation}'"),
+            Is.EqualTo("refined 4"));
+    }
+
+    [Test]
+    public void RefineLevel_PastTwoHundredFiftyFive_IsRejected_InTheBagAndInStorage()
+    {
+        long character = NewCharacter();
+        long account = m_sql.InsertAccount();
+        m_sql.Execute($"INSERT INTO account_storages (account_id, revision, version) VALUES ({account}, 0, 0)");
+        string bag = "INSERT INTO inventory_items (character_id, item_definition_id, quantity, refine_level, version) "
+            + $"VALUES ({character}, 'item.weapon.training_sword', 1, ";
+        string stored = "INSERT INTO storage_items (account_id, item_definition_id, quantity, refine_level, version) "
+            + $"VALUES ({account}, 'item.weapon.training_sword', 1, ";
+
+        AssertFailsWith(CheckViolation, bag + "256, 0)");
+        AssertFailsWith(CheckViolation, stored + "256, 0)");
+        Assert.That(m_sql.Execute(bag + "255, 0)"), Is.EqualTo(1));
+        Assert.That(m_sql.Execute(stored + "255, 0)"), Is.EqualTo(1));
     }
 
     [Test]

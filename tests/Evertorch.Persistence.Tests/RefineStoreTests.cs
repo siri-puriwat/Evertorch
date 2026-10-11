@@ -122,6 +122,54 @@ public sealed class RefineStoreTests
         return result.Rows.Select(row => (row.Id, row.ItemDefinitionId, row.Quantity, row.RefineLevel)).ToArray();
     }
 
+    private InventoryResult? Find(long character, Guid operation, long ore)
+    {
+        return m_store.FindOperationAsync(operation, character, new[] { new ReportedRow(ore, Ore) },
+                CancellationToken.None)
+            .GetAwaiter()
+            .GetResult();
+    }
+
+    // What refines never change (Persistence §11): every character's coins and what the refines spent.
+    private long CoinsAccountedFor()
+    {
+        return m_sql.Scalar("SELECT coalesce(sum(currency), 0) FROM characters")
+            - m_sql.Scalar(
+                "SELECT coalesce(sum(currency_delta), 0) FROM economy_ledger WHERE operation_type = 'refine'");
+    }
+
+    [Test]
+    public void FindOperation_AfterARefineThatDestroyedTheRowAndSpentTheLastOre_ReportsBothAtZeroUnderTheirItems()
+    {
+        long character = NewCharacter();
+        long sword = Give(character, Sword, 1, 7);
+        long ore = Give(character, Ore, 1);
+        var operation = Guid.NewGuid();
+        Refine(character, sword, 7, RefineOutcomeKind.Destroyed, 0, ore, operation);
+
+        InventoryResult found = Find(character, operation, ore)!;
+
+        Assert.That(found.Status, Is.EqualTo(InventoryStatus.Committed));
+        Assert.That(Rows(found), Is.EqualTo(new[] { (sword, Sword, 0, 0), (ore, Ore, 0, 0) }));
+        Assert.That(
+            (found.InventoryRevision, found.Coins),
+            Is.EqualTo(((uint)Revision(character), Coins - Cost)));
+    }
+
+    [Test]
+    public void FindOperation_OfARefineNeverCommitted_OrAnotherCharacters_AnswersNothingOrTakenByOther()
+    {
+        long character = NewCharacter();
+        long other = NewCharacter();
+        long sword = Give(other, Sword, 1, 3);
+        long ore = Give(other, Ore, 1);
+        var operation = Guid.NewGuid();
+        Refine(other, sword, 3, RefineOutcomeKind.Refined, 4, ore, operation);
+
+        Assert.That(Find(character, Guid.NewGuid(), ore), Is.Null);
+        Assert.That(Find(character, operation, ore)!.Status, Is.EqualTo(InventoryStatus.TakenByOther));
+    }
+
     [Test]
     public void Refine_OfAWornRow_IsRefusedAsWorn_AndChangesNothing()
     {
@@ -274,6 +322,27 @@ public sealed class RefineStoreTests
             Is.All.EqualTo(InventoryStatus.MaterialShort));
         Assert.That((RowOf(sword), RowOf(ore), RowOf(wrong)), Is.EqualTo(("1 +3", "2 +0", "5 +0")));
         Assert.That(CoinsOf(character), Is.EqualTo(Coins));
+    }
+
+    [Test]
+    public void Refines_RefusedOrNot_KeepTheCoinsAccountedFor()
+    {
+        long character = NewCharacter();
+        long sword = Give(character, Sword, 1, 6);
+        long ore = Give(character, Ore, 3);
+        long before = CoinsAccountedFor();
+
+        Refine(character, sword, 6, RefineOutcomeKind.Refined, 7, ore);
+        Refine(character, sword, 6, RefineOutcomeKind.Refined, 7, ore);
+        Refine(character, sword, 7, RefineOutcomeKind.Unchanged, 7, ore, cost: 40);
+        Refine(character, sword, 7, RefineOutcomeKind.Destroyed, 0, ore, cost: 60);
+
+        Assert.That(CoinsAccountedFor(), Is.EqualTo(before));
+        Assert.That(CoinsOf(character), Is.EqualTo(Coins - Cost - 40 - 60));
+        Assert.That(
+            m_sql.Scalar($"SELECT coalesce(sum(coins), 0) FROM refine_attempts WHERE character_id = {character}"),
+            Is.EqualTo(Cost + 40 + 60),
+            "the attempts' coins, the refused one not among them");
     }
 }
 }

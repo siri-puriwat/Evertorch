@@ -22,6 +22,7 @@ public sealed class MigrationUpgradeTests
     private const string AddParties = "20261001131541_AddParties";
     private const string AddBossRewards = "20261002222843_AddBossRewards";
     private const string AddTradesAndStorage = "20261003172540_AddTradesAndStorage";
+    private const string AddMarketBoard = "20261010111957_AddMarketBoard";
     private const string ForeignKeyViolation = "23503";
     private const string CheckViolation = "23514";
     private const string UndefinedTable = "42P01";
@@ -140,6 +141,67 @@ public sealed class MigrationUpgradeTests
             SqlStateOf(sql, Sql.PartyInsert(other, sql.InsertCharacter(sql.InsertAccount(), Sql.UniqueName("Up")))),
             Is.EqualTo(ForeignKeyViolation),
             "the leader's key holds");
+    }
+
+    // Refining adds one table and one ledger type and bounds the refine levels (Persistence §4); the migration changes
+    // no row, a stored level is kept wherever its row is, and the ledger stays append-only.
+    [Test]
+    public void Upgrade_FromAddMarketBoard_KeepsEveryRow_AndAddsRefineAttempts()
+    {
+        using var database = PostgresFixture.Start(targetMigration: AddMarketBoard);
+        var sql = new Sql(database.ConnectionString);
+        long account = sql.InsertAccount();
+        long character = sql.InsertCharacter(account, Sql.UniqueName("Up"));
+        long other = sql.InsertCharacter(sql.InsertAccount(), Sql.UniqueName("Up"));
+        long weapon = sql.Scalar(
+            "INSERT INTO inventory_items (character_id, item_definition_id, quantity, refine_level, version) "
+            + $"VALUES ({character}, 'item.weapon.training_sword', 1, 7, 0) RETURNING id");
+        sql.Execute(Sql.EquipmentInsert(character, "Weapon", weapon));
+        sql.Scalar(Sql.LedgerInsert(Guid.NewGuid(), character, "market_buy"));
+        sql.Execute(Sql.QuestInsert(character, "quest.crawler_hunt", "completed", 5));
+        sql.Execute(Sql.SessionTokenInsert(account));
+        sql.Execute(Sql.SkillInsert(character, "skill.strike", 2));
+        sql.Scalar(Sql.PartyInsert(character, character, other));
+        sql.Execute($"INSERT INTO account_storages (account_id, revision, version) VALUES ({account}, 1, 0)");
+        sql.Execute(
+            "INSERT INTO storage_items (account_id, item_definition_id, quantity, refine_level, version) "
+            + $"VALUES ({account}, 'item.armor.cloth', 1, 4, 0)");
+        long listing = sql.Scalar(Sql.ListingInsert(character, "item.material.gloom_dust", 5, 3, 56));
+        sql.Execute(Sql.SaleInsert(Guid.NewGuid(), listing, character, other, 2, 56));
+        sql.Execute(
+            "INSERT INTO market_prices (item_definition_id, price, listed_ms, settled_at, version) "
+            + "VALUES ('item.material.gloom_dust', 28, 0, now(), 0)");
+        string? refineBefore = SqlStateOf(sql, Sql.LedgerInsert(Guid.NewGuid(), character, "refine"));
+        string? tableBefore = SqlStateOf(sql, "SELECT count(*) FROM refine_attempts");
+        string[] more =
+        {
+            "character_quests", "session_tokens", "character_skills", "parties", "party_members",
+            "account_storages", "storage_items", "market_listings", "market_sales", "market_prices"
+        };
+        string before = Dump(sql, more);
+
+        EvertorchDatabase.ApplyMigrationsAsync(database.ConnectionString, CancellationToken.None)
+            .GetAwaiter()
+            .GetResult();
+
+        IReadOnlyList<string> pending = EvertorchDatabase
+            .GetPendingMigrationsAsync(database.ConnectionString, CancellationToken.None)
+            .GetAwaiter()
+            .GetResult();
+        Assert.That((refineBefore, tableBefore), Is.EqualTo((CheckViolation, UndefinedTable)), "neither existed");
+        Assert.That(pending, Is.Empty);
+        Assert.That(Dump(sql, more), Is.EqualTo(before), "every row as it was, the levels 7 and 4 kept");
+        Assert.That(sql.Scalar("SELECT count(*) FROM refine_attempts"), Is.Zero, "no attempt yet");
+        Assert.That(SqlStateOf(sql, Sql.LedgerInsert(Guid.NewGuid(), character, "refine")), Is.Null, "refine");
+        Assert.That(SqlStateOf(sql, Sql.LedgerInsert(Guid.NewGuid(), character, "gift")), Is.EqualTo(CheckViolation));
+        Assert.That(
+            SqlStateOf(sql, $"UPDATE inventory_items SET refine_level = 256 WHERE id = {weapon}"),
+            Is.EqualTo(CheckViolation),
+            "the levels' new bound");
+        Assert.That(
+            SqlStateOf(sql, $"DELETE FROM economy_ledger WHERE actor_character_id = {character}"),
+            Is.EqualTo("23001"),
+            "still append-only");
     }
 
     // A boss's prize joins the ledger's operation types (Persistence §4, §5); the migration changes no row.
