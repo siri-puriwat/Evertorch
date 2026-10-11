@@ -721,6 +721,129 @@ public sealed class HostileSocketTests
         AssertNoSecretIn(lines);
     }
 
+    // Milestone 16's command from SecretAnna, beside SecretBob of another account, both names words no log may repeat:
+    // at the Smith, a refine of Bobby's row, of gel that has no table, of her sword at a stale level, and at the Broker,
+    // out of reach, each refused and audited, none drawing; while trading, a refine refused; a burst over the item
+    // bucket; then malformed refines, an NPC of 0 among them, until the connection is closed.
+    [Test]
+    public void HostileRefineCommands_AreRefusedThrottledAndScored_AndLeaveNoNameInTheLogs()
+    {
+        using var root = new TemporaryDirectory();
+        var logs = new CapturingLoggerProvider();
+        var store = new InMemoryGameStore();
+        const int itemBurst = 5;
+        using IHost host = StartHost(root, logs, store, $"--Abuse:ItemCommandBurst={itemBurst}");
+        int port = host.Services.GetRequiredService<LiteNetLibServerTransport>().LocalPort;
+        ServerContent content = host.Services.GetRequiredService<ServerContent>();
+        int violationsToClose = new AbuseOptions().ViolationThreshold / ViolationScore.Points;
+        byte[][] malformed =
+        {
+            // A refine at NPC 0, of row 0, and cut short.
+            new byte[] { 0x2D, 0x00, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0 },
+            new byte[] { 0x2D, 0x00, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0 },
+            new byte[] { 0x2D, 0x00, 0x01 }
+        };
+
+        using var anna = new SocketClient(content, "secret-refine-anna", "SecretAnna");
+        using var bobby = new SocketClient(content, "secret-refine-bobby", "SecretBob");
+        store.NextCharacterId = 61;
+        anna.AfterCreate = () =>
+        {
+            store.GiveItems(61, "item.weapon.training_sword", 1, 1, 0);
+            store.GiveItems(61, "item.material.slime_gel", 1, 5, 0);
+            store.GiveItems(61, "item.material.emberstone", 1, 3, 0);
+            store.Edit(61, coins: 50);
+        };
+        anna.EnterWorld(port);
+        store.NextCharacterId = 62;
+        bobby.AfterCreate = () => store.GiveItems(62, "item.weapon.training_sword", 1, 1, 0);
+        bobby.EnterWorld(port);
+        var refused = new List<CommandRejectionReason>();
+        anna.World.CommandRejectedReceived += rejection => refused.Add(rejection.Reason);
+        var bobbyHeard = new List<TradeEventKind>();
+        bobby.Connection.TradeEventReceived += message => bobbyHeard.Add(message.Kind);
+        SocketClients.PumpUntil(
+            () => anna.World.Inventory.IsCurrent && bobby.World.Inventory.IsCurrent
+                && anna.World.Remotes.Values.Any(remote => remote.DefinitionId == "npc.smith")
+                && anna.World.Remotes.Values.Any(remote => remote.DefinitionId == "npc.broker"),
+            anna,
+            bobby);
+        EntityId smith = anna.World.Remotes.Values.Single(remote => remote.DefinitionId == "npc.smith").Entity;
+        EntityId broker = anna.World.Remotes.Values.Single(remote => remote.DefinitionId == "npc.broker").Entity;
+        bobby.TalkTo(smith);
+        SocketClients.PumpUntil(() => bobby.NpcWindows.Contains(smith), anna, bobby);
+        anna.TalkTo(smith);
+        SocketClients.PumpUntil(() => anna.NpcWindows.Contains(smith), anna, bobby);
+        long bobbysSword = bobby.World.Inventory.Rows.Single().InventoryItem;
+        long sword = anna.World.Inventory.Rows.Single(row => row.Item.Value == "item.weapon.training_sword")
+            .InventoryItem;
+        long gel = anna.World.Inventory.Rows.Single(row => row.Item.Value == "item.material.slime_gel").InventoryItem;
+
+        anna.Connection.SendRefine(smith, bobbysSword, 0);
+        anna.Connection.SendRefine(smith, gel, 0);
+        anna.Connection.SendRefine(smith, sword, 3);
+        anna.Connection.SendRefine(broker, sword, 0);
+        SocketClients.PumpUntil(() => refused.Count >= 4, anna, bobby);
+        var atTheSmith = refused.ToList();
+        anna.PumpFor(TimeSpan.FromMilliseconds(1100));
+
+        anna.Connection.SendTradeRequest("SecretBob");
+        SocketClients.PumpUntil(() => bobbyHeard.Contains(TradeEventKind.Requested), anna, bobby);
+        bobby.Connection.SendTradeReply("SecretAnna", true);
+        SocketClients.PumpUntil(() => bobbyHeard.Contains(TradeEventKind.Opened), anna, bobby);
+        refused.Clear();
+        anna.Connection.SendRefine(smith, sword, 0);
+        SocketClients.PumpUntil(() => refused.Count >= 1, anna, bobby);
+        var trading = refused.ToList();
+        anna.Connection.SendTradeCancel();
+        SocketClients.PumpUntil(() => bobbyHeard.Contains(TradeEventKind.Cancelled), anna, bobby);
+        anna.PumpFor(TimeSpan.FromMilliseconds(1100));
+
+        for (int index = 0; index <= itemBurst; index++)
+        {
+            anna.Connection.SendRefine(smith, bobbysSword, 0);
+        }
+
+        anna.PumpFor(TimeSpan.FromMilliseconds(1100));
+        for (int index = 0; index < 2 * violationsToClose; index++)
+        {
+            anna.Link.Send(ProtocolChannel.Control, MessageDelivery.ReliableOrdered,
+                malformed[index % malformed.Length]);
+        }
+
+        bool isClosed = anna.PumpUntil(() => anna.Connection.State == ClientConnectionState.Disconnected);
+        host.StopAsync().GetAwaiter().GetResult();
+
+        IReadOnlyList<string> lines = logs.Lines;
+        Assert.That(
+            atTheSmith,
+            Is.EqualTo(
+                new[]
+                {
+                    CommandRejectionReason.InvalidTarget, CommandRejectionReason.NotAllowedNow,
+                    CommandRejectionReason.InvalidTarget, CommandRejectionReason.OutOfRange
+                }),
+            "Bobby's row; gel without a table; a stale level; the Broker, out of reach");
+        Assert.That(trading, Is.EqualTo(new[] { CommandRejectionReason.NotAllowedNow }), "while trading");
+        Assert.That(isClosed, Is.True, "the connection was closed");
+        Assert.That(anna.Connection.Notice?.Reason, Is.EqualTo(DisconnectReason.Kicked));
+        Assert.That(
+            store.Stored(61).Items.Select(item => (item.ItemDefinitionId, item.Quantity, item.RefineLevel))
+                .OrderBy(item => item.ItemDefinitionId, StringComparer.Ordinal),
+            Is.EqualTo(
+                new[]
+                {
+                    ("item.material.emberstone", 3, 0), ("item.material.slime_gel", 5, 0),
+                    ("item.weapon.training_sword", 1, 0)
+                }),
+            "nothing refined, spent, or moved");
+        Assert.That((store.Stored(61).Coins, store.RefineCommits.Count), Is.EqualTo((50L, 0)));
+        Assert.That(lines.Any(line => line.Contains("had RefineItem refused")), Is.True, "the refusals audited");
+        Assert.That(lines.Any(line => line.Contains("sent RefineItem over the session_item limit")), Is.True);
+        Assert.That(lines.Any(line => line.Contains("ViolationDisconnect")), Is.True);
+        AssertNoSecretIn(lines);
+    }
+
     // Milestone 14's commands from SecretAnna, beside SecretBob of another account, both names words no log may repeat:
     // a trade's commands while no trade is open, a request to no one, and a reply to no request, each refused and
     // audited; then, in an open trade, Bobby's row offered, more than Anna holds, an attack, a skill, a pickup, an
