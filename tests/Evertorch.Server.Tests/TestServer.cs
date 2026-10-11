@@ -69,7 +69,8 @@ internal sealed class TestServer
         bool withNpcs = false,
         bool withAdventurerBuild = true,
         MarketOptions? market = null,
-        IRandomSource? refineRandom = null)
+        IRandomSource? refineRandom = null,
+        int bossHealthPercent = 100)
     {
         Content = Contents.GetOrAdd(
             (withEveryMap, withGrotto, withMonsters, withNpcs),
@@ -92,7 +93,8 @@ internal sealed class TestServer
             MaxQueuedInputs = maxQueuedInputs,
             SnapshotIntervalTicks = snapshotIntervalTicks,
             RandomSeed = randomSeed,
-            ItemDropLifetimeMs = itemDropLifetimeMs
+            ItemDropLifetimeMs = itemDropLifetimeMs,
+            BossHealthPercent = bossHealthPercent
         };
         var authentication = new DevelopmentAuthenticationOptions
         {

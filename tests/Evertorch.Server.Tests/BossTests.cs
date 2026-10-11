@@ -326,5 +326,25 @@ public sealed class BossTests
         Assert.That((plain, soonest), Is.EqualTo((20_000L, 1000L)), "never under a second");
         Assert.That(none.Calls, Is.Zero, "a spawn with no spread draws nothing");
     }
+
+    // The walk's helper (System Architecture §12): a boss spawns with its share of its HP, the other monsters with all
+    // of theirs.
+    [Test]
+    public void Spawn_WithBossHealthPercent_ScalesTheBossAlone()
+    {
+        var server = new TestServer(
+            withEveryMap: true,
+            withGrotto: true,
+            withMonsters: true,
+            withMonsterAi: false,
+            bossHealthPercent: 10);
+        MonsterEntity monarch = MonarchOf(server);
+        MonsterEntity other = GrottoOf(server).Monsters.First(monster => !monster.Definition.IsBoss);
+
+        Assert.That(
+            (monarch.MaxHealth, monarch.CurrentHealth),
+            Is.EqualTo((monarch.Definition.Hp / 10, monarch.Definition.Hp / 10)));
+        Assert.That(other.MaxHealth, Is.EqualTo(other.Definition.Hp));
+    }
 }
 }

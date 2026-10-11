@@ -27,6 +27,7 @@ public sealed class WorldSimulation
     private readonly IRandomSource m_random;
     private readonly JobDefinition m_startingJob;
     private readonly DerivedStats m_startingStats;
+    private readonly int m_bossHealthPercent;
     private long m_lastEntityId;
 
     public WorldSimulation(
@@ -41,6 +42,7 @@ public sealed class WorldSimulation
         m_movementRules = movementRules;
         m_random = random;
         WorldOptions world = options.Value;
+        m_bossHealthPercent = world.BossHealthPercent;
         if (!JobDefinitionId.TryCreate(world.StartingJob, out JobDefinitionId startingJob)
             || !content.Jobs.TryGetValue(startingJob, out JobDefinition? job))
         {
@@ -258,7 +260,8 @@ public sealed class WorldSimulation
             spawn,
             m_placements[map].ChooseSpawnPoint(spawn, m_random),
             MonsterFacing,
-            speed);
+            speed,
+            definition.IsBoss ? Math.Max(1, (int)((long)definition.Hp * m_bossHealthPercent / 100)) : null);
         map.Add(monster);
         return monster;
     }

@@ -18,8 +18,9 @@ public sealed class MonsterEntity : WorldEntity
         MonsterSpawn spawn,
         WorldPosition position,
         WorldDirection facing,
-        float movementSpeed)
-        : base(id, position, facing, movementSpeed, definition.Hp, (float)definition.AttackRange)
+        float movementSpeed,
+        int? maxHealth = null)
+        : base(id, position, facing, movementSpeed, maxHealth ?? definition.Hp, (float)definition.AttackRange)
     {
         Definition = definition;
         Spawn = spawn;

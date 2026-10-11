@@ -71,6 +71,12 @@ public sealed class WorldOptions
     ///     (Gameplay Systems §11).
     /// </summary>
     public float PickupRange { get; set; } = 1.5f;
+
+    /// <summary>
+    ///     The share, in percent, of its maximum HP each boss has, applied when it spawns; a walk's helper that the
+    ///     startup warns of when it is not 100 (System Architecture §12).
+    /// </summary>
+    public int BossHealthPercent { get; set; } = 100;
 }
 
 internal sealed class WorldOptionsValidator : IValidateOptions<WorldOptions>
@@ -109,6 +115,7 @@ internal sealed class WorldOptionsValidator : IValidateOptions<WorldOptions>
         AddRangeFailure(failures, "MaxQueuedInputs", options.MaxQueuedInputs, 1, 64);
         AddRangeFailure(failures, "MaxClientTickDrift", options.MaxClientTickDrift, 1, 100000);
         AddRangeFailure(failures, "SnapshotIntervalTicks", options.SnapshotIntervalTicks, 1, 120);
+        AddRangeFailure(failures, "BossHealthPercent", options.BossHealthPercent, 1, 100);
 
         return failures.Count == 0 ? ValidateOptionsResult.Success : ValidateOptionsResult.Fail(failures);
     }

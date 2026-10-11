@@ -34,6 +34,47 @@ public sealed class ServerHostTests
         return host.Services.GetRequiredService<IOptions<SimulationOptions>>().Value;
     }
 
+    // System Architecture §12: a walk's helper, 1 to 100.
+    [TestCase("0")]
+    [TestCase("101")]
+    public void Start_WithBossHealthPercentOutsideOneToAHundred_FailsNamingTheKey(string percent)
+    {
+        using var root = new TemporaryDirectory();
+        root.Write("appsettings.json", $"{{ \"World\": {{ \"BossHealthPercent\": {percent} }} }}");
+        WriteValidContent(root);
+        using IHost host = TestHosts.CreateBuilder(EphemeralPort, root.Path).Build();
+        Action start = () => host.Start();
+
+        Assert.That(
+            start,
+            Throws.InstanceOf<OptionsValidationException>().With.Message.Contains("World:BossHealthPercent"));
+    }
+
+    // System Architecture §10: the startup warns while bosses start below their HP, and says nothing at 100.
+    [TestCase(10, true)]
+    [TestCase(100, false)]
+    public void Start_WithBossHealthPercent_WarnsOnlyBelowAHundred(int percent, bool isWarned)
+    {
+        using var root = new TemporaryDirectory();
+        WriteValidContent(root);
+        var logs = new CapturingLoggerProvider();
+        HostApplicationBuilder builder = TestHosts.CreateBuilder(
+            new[] { "--Network:Port=0", $"--World:BossHealthPercent={percent}" },
+            root.Path);
+        builder.Logging.AddProvider(logs);
+        using IHost host = builder.Build();
+
+        host.Start();
+        host.StopAsync().GetAwaiter().GetResult();
+
+        string[] warned = logs.Lines.Where(line => line.Contains(" BossHealthScaled: ")).ToArray();
+        Assert.That(warned.Length, Is.EqualTo(isWarned ? 1 : 0));
+        if (isWarned)
+        {
+            Assert.That(warned[0], Does.Contain("10 %"));
+        }
+    }
+
     [TestCase("-0.5")]
     [TestCase("10.5")]
     public void Start_WithPickupRangeOutsideZeroToTen_FailsNamingTheKey(string range)
