@@ -97,6 +97,10 @@ public sealed class VisibilityPhase : ITickPhase
                 // Each spawn, on entering, an attach, a map change, or coming into range, is followed by what the NPC
                 // offers (Network Protocol §9).
                 m_sender.Send(session.Connection, npc.Services);
+                foreach (RefineTable table in npc.RefineTables)
+                {
+                    m_sender.Send(session.Connection, table);
+                }
             }
             else if (entity is ItemDropEntity drop && drop.DroppedTick == tick)
             {

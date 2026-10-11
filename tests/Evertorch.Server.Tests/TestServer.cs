@@ -68,7 +68,8 @@ internal sealed class TestServer
         bool withGrotto = false,
         bool withNpcs = false,
         bool withAdventurerBuild = true,
-        MarketOptions? market = null)
+        MarketOptions? market = null,
+        IRandomSource? refineRandom = null)
     {
         Content = Contents.GetOrAdd(
             (withEveryMap, withGrotto, withMonsters, withNpcs),
@@ -209,6 +210,7 @@ internal sealed class TestServer
             Progression,
             Builds,
             Combat,
+            refineRandom ?? Random,
             Audit,
             ItemActionLog);
         Rewards = new BossRewardSystem(
@@ -789,6 +791,13 @@ internal sealed class TestServer
     {
         byte[] payload = new byte[MarketCollect.EncodedLength];
         new MarketCollect(npc, listing, commandSequence).Write(payload);
+        Inbound.OnPayload(connection, ProtocolChannel.Control, payload);
+    }
+
+    public void SendRefine(ConnectionId connection, EntityId npc, long inventoryItem, byte level, uint commandSequence)
+    {
+        byte[] payload = new byte[RefineItem.EncodedLength];
+        new RefineItem(npc, inventoryItem, level, commandSequence).Write(payload);
         Inbound.OnPayload(connection, ProtocolChannel.Control, payload);
     }
 

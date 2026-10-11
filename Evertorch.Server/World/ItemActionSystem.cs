@@ -14,11 +14,11 @@ namespace Evertorch.Server
 {
 /// <summary>
 ///     Equips, unequips, uses, buys, and sells items, turns in quests, changes jobs, reads, fills, and empties the
-///     account's storage, and reads, lists on, buys from, and collects from the market board (Gameplay Systems §2.2,
-///     §6.1, §11.1–§11.5; Persistence §5). The checks happen on the tick thread; the inventory and the coins change only
-///     through the commit, and the server's copy of them, the statistics, HP and SP, the quests, and the owner learn of
-///     it once its result is back. A commit whose answer was lost is settled from the ledger before the character may
-///     start another inventory operation.
+///     account's storage, reads, lists on, buys from, and collects from the market board, and refines (Gameplay Systems
+///     §2.2, §6.1, §11.1–§11.6; Persistence §5). The checks happen on the tick thread; the inventory and the coins
+///     change only through the commit, and the server's copy of them, the statistics, HP and SP, the quests, and the
+///     owner learn of it once its result is back. A commit whose answer was lost is settled from the ledger before the
+///     character may start another inventory operation.
 /// </summary>
 public sealed class ItemActionSystem : ITickPhase
 {
@@ -51,6 +51,8 @@ public sealed class ItemActionSystem : ITickPhase
     private const string MarketReadOperation = "market read";
     private const string MarketFee = "market fee";
     private const string MarketTax = "market tax";
+    private const string RefineOperation = "refine";
+    private const string RefineLookup = "refine lookup";
     private const string Deposited = "deposit";
     private const string Withdrawn = "withdraw";
     private const int MillisecondsPerSecond = 1000;
@@ -126,6 +128,13 @@ public sealed class ItemActionSystem : ITickPhase
             "Character {Character} on connection {Connection} could not collect listing {Listing}: the loaded content "
             + "has no {Definition}. The listing is kept.");
 
+    private static readonly Action<ILogger, long, string, int, int, string, Guid, Exception?> LogRefined =
+        LoggerMessage.Define<long, string, int, int, string, Guid>(
+            LogLevel.Information,
+            new EventId(1034, "ItemRefined"),
+            "Character {Character} refined {Item} from +{LevelBefore} to +{LevelAfter}: {Outcome} (operation "
+            + "{OperationId}).");
+
     private static readonly Action<ILogger, long, long, int, string, long, Guid, Exception?> LogSold =
         LoggerMessage.Define<long, long, int, string, long, Guid>(
             LogLevel.Information,
@@ -146,6 +155,7 @@ public sealed class ItemActionSystem : ITickPhase
     private readonly CharacterProgression m_progression;
     private readonly CharacterBuilds m_builds;
     private readonly CombatSystem m_combat;
+    private readonly IRandomSource m_random;
     private readonly float m_npcReach;
     private readonly uint m_failedLookupDelayTicks;
     private readonly List<(CharacterSession Character, uint NotBefore)> m_unsettled = new();
@@ -170,6 +180,7 @@ public sealed class ItemActionSystem : ITickPhase
         CharacterProgression progression,
         CharacterBuilds builds,
         CombatSystem combat,
+        IRandomSource random,
         AuditLog audit,
         ILogger<ItemActionSystem> logger)
     {
@@ -186,6 +197,7 @@ public sealed class ItemActionSystem : ITickPhase
         m_progression = progression;
         m_builds = builds;
         m_combat = combat;
+        m_random = random;
         m_npcReach = NpcInteraction.Range + world.Value.AttackRangeTolerance;
         m_stackLimits =
             content.Items.Values.ToDictionary(item => item.Id.Value, item => item.StackLimit, StringComparer.Ordinal);
@@ -629,6 +641,7 @@ public sealed class ItemActionSystem : ITickPhase
             InventoryOperationKind.MarketList => InboundEventKind.MarketList,
             InventoryOperationKind.MarketBuy => InboundEventKind.MarketBuy,
             InventoryOperationKind.MarketCollect => InboundEventKind.MarketCollect,
+            InventoryOperationKind.Refine => InboundEventKind.RefineItem,
             _ => throw NotAnItemAction(operation)
         };
     }
@@ -649,6 +662,7 @@ public sealed class ItemActionSystem : ITickPhase
             InventoryOperationKind.MarketList => MarketListOperation,
             InventoryOperationKind.MarketBuy => MarketBuyOperation,
             InventoryOperationKind.MarketCollect => MarketCollectOperation,
+            InventoryOperationKind.Refine => RefineOperation,
             _ => throw NotAnItemAction(operation)
         };
     }
@@ -669,8 +683,115 @@ public sealed class ItemActionSystem : ITickPhase
             InventoryOperationKind.MarketList => MarketListLookup,
             InventoryOperationKind.MarketBuy => MarketBuyLookup,
             InventoryOperationKind.MarketCollect => MarketCollectLookup,
+            InventoryOperationKind.Refine => RefineLookup,
             _ => throw NotAnItemAction(operation)
         };
+    }
+
+    /// <summary>
+    ///     Checks a refine at the Smith (Gameplay Systems §11.6, in order) and, when it passes and the database takes
+    ///     work, draws its one number and queues the commit of what it decided. A refused command draws nothing. The
+    ///     caller has already refused a dead, leaving, or trading character.
+    /// </summary>
+    public CommandRejectionReason TryRefine(
+        ClientSession session,
+        EntityId npc,
+        long inventoryItem,
+        byte refineLevel,
+        uint commandSequence)
+    {
+        CharacterSession character = session.Character!;
+        if (character.HasInventoryWork)
+        {
+            return CommandRejectionReason.ItemActionInFlight;
+        }
+
+        CommandRejectionReason reach = NpcReach.Check(session, npc, m_npcReach, out NpcEntity? smith);
+        if (reach != CommandRejectionReason.None)
+        {
+            return reach;
+        }
+
+        if (!smith!.Definition.Refines || !character.Inventory.TryGetRow(inventoryItem, out InventoryEntry row))
+        {
+            return CommandRejectionReason.InvalidTarget;
+        }
+
+        RefineDefinitionId? tableId = m_content.Items[row.Item].Refine;
+        if (row.Slot != EquipmentSlot.None
+            || tableId == null
+            || !m_content.RefineTables.TryGetValue(tableId.Value, out RefineTableDefinition? table)
+            || row.RefineLevel >= table.LastLevel)
+        {
+            return CommandRejectionReason.NotAllowedNow;
+        }
+
+        if (row.RefineLevel != refineLevel)
+        {
+            return CommandRejectionReason.InvalidTarget;
+        }
+
+        if (!TryFindOre(character.Inventory, table, out InventoryEntry ore))
+        {
+            return CommandRejectionReason.RequirementNotMet;
+        }
+
+        long coins = table.Steps[row.RefineLevel].Coins;
+        if (character.Inventory.Coins < coins)
+        {
+            return CommandRejectionReason.NotEnoughCoins;
+        }
+
+        // The draw is spent only on a command the database can take (Gameplay Systems §11.6).
+        if (!m_persistence.IsAvailable)
+        {
+            return CommandRejectionReason.ServiceUnavailable;
+        }
+
+        RefineResolution resolution = RefineRules.Resolve(table, row.RefineLevel, m_random.Next(RefineRules.DrawRange));
+        var operation = new InventoryOperation(
+            InventoryOperationKind.Refine,
+            commandSequence,
+            Guid.NewGuid(),
+            reported: new ReportedRow(ore.InventoryItem, ore.Item.Value),
+            item: row.Item,
+            coins: coins,
+            refine: new RefineAttempt(
+                inventoryItem,
+                row.Item,
+                row.RefineLevel,
+                resolution.Level,
+                resolution.Outcome));
+        var commit = new RefineCommit(
+            operation.OperationId,
+            character.Character.Value,
+            inventoryItem,
+            row.Item.Value,
+            row.RefineLevel,
+            resolution.Outcome,
+            resolution.Level,
+            ore.InventoryItem,
+            ore.Item.Value,
+            table.MaterialQuantity,
+            coins,
+            m_time.GetUtcNow().UtcDateTime);
+        return TryCommit(session, operation, (store, cancellation) => store.CommitRefineAsync(commit, cancellation));
+    }
+
+    // The first unworn row of the table's ore that holds an attempt's quantity.
+    private static bool TryFindOre(CharacterInventory inventory, RefineTableDefinition table, out InventoryEntry ore)
+    {
+        foreach (InventoryEntry row in inventory.Rows)
+        {
+            if (row.Item == table.Material && row.Slot == EquipmentSlot.None && row.Quantity >= table.MaterialQuantity)
+            {
+                ore = row;
+                return true;
+            }
+        }
+
+        ore = default!;
+        return false;
     }
 
     // A pickup is the pickup system's; an operation of any other kind reaching here is a server bug.
@@ -1649,10 +1770,14 @@ public sealed class ItemActionSystem : ITickPhase
     private void Settle(CharacterSession character, InventoryResult result)
     {
         // The database refused what the server's settled copy allowed: that copy is out of date, which nothing the
-        // character sent could cause.
+        // character sent could cause. A refine's refusals each keep their reason (Network Protocol §11).
         if (result.Status != InventoryStatus.Committed)
         {
-            Refuse(character, CommandRejectionReason.InvalidTarget);
+            Refuse(
+                character,
+                character.Operation!.Kind == InventoryOperationKind.Refine
+                    ? RefineRefusalOf(result.Status)
+                    : CommandRejectionReason.InvalidTarget);
             return;
         }
 
@@ -1714,11 +1839,56 @@ public sealed class ItemActionSystem : ITickPhase
                 // the board's read tells the rest (Network Protocol §9).
                 PushMarket(character, operation.Item.Value);
                 break;
+            case InventoryOperationKind.Refine:
+                Refined(character, operation);
+                break;
             default:
                 throw NotAnItemAction(operation);
         }
 
         Finish(character);
+    }
+
+    private static CommandRejectionReason RefineRefusalOf(InventoryStatus status)
+    {
+        return status switch
+        {
+            InventoryStatus.MaterialShort => CommandRejectionReason.RequirementNotMet,
+            InventoryStatus.RowWorn => CommandRejectionReason.NotAllowedNow,
+            InventoryStatus.NotEnoughCoins => CommandRejectionReason.NotEnoughCoins,
+            _ => CommandRejectionReason.InvalidTarget
+        };
+    }
+
+    // The refiner alone hears the outcome, after its bag's change, a lost answer's too: the outcome is the operation's
+    // (Network Protocol §9). A worn row never refines, so nothing else changes.
+    private void Refined(CharacterSession character, InventoryOperation operation)
+    {
+        RefineAttempt attempt = operation.Refine!;
+        ClientSession? owner = character.Connection;
+        if (owner != null && owner.State == SessionState.InWorld)
+        {
+            m_sender.Send(
+                owner.Connection,
+                new RefineOutcome(
+                    attempt.InventoryItem,
+                    attempt.Item,
+                    (byte)attempt.LevelBefore,
+                    (byte)attempt.LevelAfter,
+                    attempt.Outcome));
+        }
+
+        LogRefined(
+            m_logger,
+            character.Character.Value,
+            attempt.Item.Value,
+            attempt.LevelBefore,
+            attempt.LevelAfter,
+            RefineOutcomes.WordOf(attempt.Outcome),
+            operation.OperationId,
+            null);
+        m_instruments.RecordRefine(attempt.Outcome);
+        m_instruments.RecordCoins(RefineOperation, operation.Coins);
     }
 
     // Once committed, a cast ends, the job changes with what the commit left worn, the owner hears of new maximums, is

@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using Evertorch.Game;
 using Evertorch.Protocol;
 
@@ -10,11 +12,17 @@ namespace Evertorch.Server
 /// </summary>
 public sealed class NpcEntity : WorldEntity
 {
-    public NpcEntity(EntityId id, NpcDefinition definition, NpcPlacement placement, NpcServices services)
+    public NpcEntity(
+        EntityId id,
+        NpcDefinition definition,
+        NpcPlacement placement,
+        NpcServices services,
+        IReadOnlyList<RefineTable>? refineTables = null)
         : base(id, placement.Position, MovementModel.NormalizeOrZero(placement.Facing.X, placement.Facing.Z), 0f, 0, 0f)
     {
         Definition = definition;
         Services = services;
+        RefineTables = refineTables ?? Array.Empty<RefineTable>();
     }
 
     public NpcDefinition Definition { get; }
@@ -23,6 +31,12 @@ public sealed class NpcEntity : WorldEntity
     ///     Built once, when the map loads: the NPC's content never changes while the server runs.
     /// </summary>
     public NpcServices Services { get; }
+
+    /// <summary>
+    ///     A refiner's tables in index order, built once at load and sent after <see cref="Services" />; empty for any
+    ///     other NPC.
+    /// </summary>
+    public IReadOnlyList<RefineTable> RefineTables { get; }
 
     public override EntityKind Kind => EntityKind.Npc;
 

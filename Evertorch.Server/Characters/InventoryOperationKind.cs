@@ -57,6 +57,11 @@ public enum InventoryOperationKind
     /// <summary>
     ///     A listing's sales less the tax and its unsold units taken back, ending it (Gameplay Systems §11.5).
     /// </summary>
-    MarketCollect = 15
+    MarketCollect = 15,
+
+    /// <summary>
+    ///     A row refined at the Smith for coins and ore, its outcome drawn on the tick thread (Gameplay Systems §11.6).
+    /// </summary>
+    Refine = 16
 }
 }

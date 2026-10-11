@@ -267,7 +267,13 @@ public sealed class WorldSimulation
     {
         NpcDefinition definition = m_content.Npcs[placement.Npc];
         EntityId id = NextEntityId();
-        map.Add(new NpcEntity(id, definition, placement, NpcServicesBuilder.Build(id, definition, m_content)));
+        map.Add(
+            new NpcEntity(
+                id,
+                definition,
+                placement,
+                NpcServicesBuilder.Build(id, definition, m_content),
+                NpcServicesBuilder.BuildRefineTables(id, definition, m_content)));
     }
 
     public ItemDropEntity SpawnItemDrop(

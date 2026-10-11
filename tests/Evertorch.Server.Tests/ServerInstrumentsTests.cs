@@ -751,6 +751,31 @@ public sealed class ServerInstrumentsTests
             Is.EqualTo(new[] { (100d, (object?)"quest reward") }));
     }
 
+    // System Architecture §10: each committed refine counts by its outcome, and its coins are spent as `refine`.
+    [Test]
+    public void Refine_CountsItsAttemptByOutcome_AndItsCoinsAsSpent()
+    {
+        var server = new TestServer(withNpcs: true, refineRandom: new ScriptedRandom(99));
+        using var recorder = new MeterRecorder(server.Instruments.Meter);
+        NpcEntity smith = server.NpcOf("npc.smith");
+        ConnectionId player = server.Connect();
+        server.SignInWithCharacter(player, 1);
+        server.Store.GiveItems(1, "item.weapon.training_sword", 1, 1, 5);
+        long sword = server.Store.Stored(1).Items.Single().Id;
+        server.Store.GiveItems(1, "item.material.emberstone", 1, 1, 5);
+        server.Store.Edit(1, coins: 100);
+        server.SendEnterWorld(player, 1);
+        server.TickUntil(() => server.SessionOf(player).State == SessionState.InWorld);
+        server.Place(player, smith.Position.X + 2f, smith.Position.Z);
+        server.Tick(2);
+
+        server.SendRefine(player, smith.Id, sword, 0, 1);
+        server.TickUntil(() => server.SessionOf(player).Character!.Inventory.Coins == 80);
+
+        Assert.That(Tagged(recorder, "evertorch.refine.attempts", "outcome", "refined"), Is.EqualTo(1));
+        Assert.That(Tagged(recorder, "evertorch.economy.coins", "operation", "refine"), Is.EqualTo(20));
+    }
+
     [Test]
     public void Retreats_AreCountedByMonster_OncePerWalk()
     {

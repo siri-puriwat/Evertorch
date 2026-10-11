@@ -73,6 +73,49 @@ public static class NpcServicesBuilder
     }
 
     /// <summary>
+    ///     A refiner's tables (Network Protocol §9): each table that an item names, in the order of their IDs, with its
+    ///     items in theirs; none for an NPC that does not refine.
+    /// </summary>
+    public static IReadOnlyList<RefineTable> BuildRefineTables(
+        EntityId entity,
+        NpcDefinition npc,
+        ServerContent content)
+    {
+        if (!npc.Refines)
+        {
+            return Array.Empty<RefineTable>();
+        }
+
+        var tables = new List<RefineTable>();
+        foreach (RefineTableDefinition table in content.RefineTables.Values
+                     .OrderBy(table => table.Id.Value, StringComparer.Ordinal))
+        {
+            ItemDefinitionId[] items = content.Items.Values
+                .Where(item => item.Refine == table.Id)
+                .Select(item => item.Id)
+                .OrderBy(item => item.Value, StringComparer.Ordinal)
+                .ToArray();
+            if (items.Length == 0)
+            {
+                continue;
+            }
+
+            tables.Add(
+                new RefineTable(
+                    entity,
+                    (byte)tables.Count,
+                    table.Material,
+                    (byte)table.MaterialQuantity,
+                    table.OnFailure,
+                    (byte)table.DowngradeBy,
+                    table.Steps.Select(step => new RefineTableStep((byte)step.Chance, (uint)step.Coins)).ToArray(),
+                    items));
+        }
+
+        return tables;
+    }
+
+    /// <summary>
     ///     The job level at which <paramref name="job" />'s table ends: a table of n entries caps it at n + 1.
     /// </summary>
     public static int JobCap(ServerContent content, JobDefinition job)

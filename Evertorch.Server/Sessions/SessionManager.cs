@@ -1083,6 +1083,12 @@ public sealed class SessionManager : ITickPhase
                 command.Target,
                 command.InventoryItem,
                 command.CommandSequence),
+            InboundEventKind.RefineItem => m_items.TryRefine(
+                session,
+                command.Target,
+                command.InventoryItem,
+                command.RefineLevel,
+                command.CommandSequence),
             _ => CommandRejectionReason.NotAllowedNow
         };
     }
