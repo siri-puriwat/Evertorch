@@ -245,6 +245,9 @@ public sealed class LiveServerDungeonTests
         server.SendCommand("boss respawn");
         yield return WaitUntil(() => HasLine(client, "The Slime Monarch has appeared."), StepTimeoutSeconds);
         Assert.That(HasLine(client, "The Slime Monarch has appeared."), Is.True, server.JoinOutput());
+
+        // The client can hear the boss appear before the console's reply reaches the output the test reads.
+        yield return WaitUntil(() => server.HasOutput("Brought back: monster.slime_monarch."), StepTimeoutSeconds);
         Assert.That(server.HasOutput("Brought back: monster.slime_monarch."), Is.True, server.JoinOutput());
         Assert.That(client.Connection.MalformedMessages + client.Connection.UnexpectedMessages, Is.Zero);
     }
