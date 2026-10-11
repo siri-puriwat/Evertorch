@@ -766,6 +766,25 @@ public sealed class InboundQueueTests
     }
 
     [Test]
+    public void RefineCommand_ThatIsWellFormed_IsQueuedWithTheNpcTheRowTheLevelAndItsSequence_AndCutShortIsRejected()
+    {
+        InboundQueue queue = CreateQueue(16);
+        byte[] payload = Payload(
+            RefineItem.EncodedLength,
+            bytes => new RefineItem(new EntityId(40), 7, 6, 9).Write(bytes));
+
+        queue.OnPayload(Peer, ProtocolChannel.Control, payload);
+
+        Assert.That(queue.TryDequeue(out InboundEvent command), Is.True);
+        Assert.That(
+            (command.Kind, command.Target, command.InventoryItem, command.RefineLevel, command.CommandSequence),
+            Is.EqualTo((InboundEventKind.RefineItem, new EntityId(40), 7L, (byte)6, 9u)));
+        InboundQueue shortened = CreateQueue(16);
+        shortened.OnPayload(Peer, ProtocolChannel.Control, payload.Take(payload.Length - 1).ToArray());
+        AssertOnlyMalformed(shortened, 1);
+    }
+
+    [Test]
     public void TryDequeue_ReturnsEventsInArrivalOrderAndTracksCount()
     {
         InboundQueue queue = CreateQueue(16);

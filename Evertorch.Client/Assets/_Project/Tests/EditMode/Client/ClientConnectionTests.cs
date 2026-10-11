@@ -881,6 +881,43 @@ public sealed class ClientConnectionTests
     }
 
     [Test]
+    public void RefineMessages_InTheWorld_AreRaised_AndTheCommandGoesOutReliably()
+    {
+        var harness = new Harness();
+        harness.EnterWorld();
+        var heard = new List<string>();
+        harness.Connection.RefineTableReceived += message => heard.Add($"table {message.Index} {message.Ore.Value}");
+        harness.Connection.RefineOutcomeReceived += message => heard.Add($"{message.Outcome} {message.LevelAfter}");
+        var sword = new ItemDefinitionId("item.a");
+        var table = new RefineTable(
+            new EntityId(41),
+            0,
+            new ItemDefinitionId("item.b"),
+            1,
+            RefineFailure.Destroy,
+            0,
+            new[] { new RefineTableStep(100, 20) },
+            new[] { sword });
+        var outcome = new RefineOutcome(5, sword, 6, 7, RefineOutcomeKind.Refined);
+        var smith = new EntityId(41);
+        int before = harness.Transport.Sent.Count;
+
+        harness.Deliver(ProtocolChannel.Control, Encode(table.GetEncodedLength(), table.Write));
+        harness.Deliver(ProtocolChannel.Control, Encode(outcome.GetEncodedLength(), outcome.Write));
+        uint refine = harness.Connection.SendRefine(smith, 5, 6);
+        uint rowless = harness.Connection.SendRefine(smith, 0, 6);
+
+        Assert.That(heard, Is.EqualTo(new[] { "table 0 item.b", "Refined 7" }));
+        Assert.That((refine > 0, rowless), Is.EqualTo((true, 0u)));
+        FakeClientTransport.SentMessage[] sent = harness.Transport.Sent.Skip(before).ToArray();
+        Assert.That(sent, Has.Length.EqualTo(1));
+        Assert.That(sent[0].Delivery, Is.EqualTo(MessageDelivery.ReliableOrdered));
+        Assert.That(RefineItem.TryRead(sent[0].Payload, out RefineItem? read), Is.True);
+        Assert.That((read!.Npc, read.InventoryItem, read.RefineLevel), Is.EqualTo((smith, 5L, (byte)6)));
+        Assert.That(harness.Connection.MalformedMessages + harness.Connection.UnexpectedMessages, Is.Zero);
+    }
+
+    [Test]
     public void SelectionRequests_OutsideSelection_SendNothing()
     {
         var harness = new Harness();

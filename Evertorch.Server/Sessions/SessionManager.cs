@@ -324,6 +324,7 @@ public sealed class SessionManager : ITickPhase
             case InboundEventKind.MarketList:
             case InboundEventKind.MarketBuy:
             case InboundEventKind.MarketCollect:
+            case InboundEventKind.RefineItem:
                 HandleCommand(session, inboundEvent, tick);
                 break;
             default:
@@ -1109,6 +1110,7 @@ public sealed class SessionManager : ITickPhase
             case InboundEventKind.MarketList:
             case InboundEventKind.MarketBuy:
             case InboundEventKind.MarketCollect:
+            case InboundEventKind.RefineItem:
                 return true;
             default:
                 return false;

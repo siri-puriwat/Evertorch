@@ -247,6 +247,12 @@ public enum InboundEventKind
     ///     The collection of the listing <see cref="InboundEvent.InventoryItem" /> at the Broker
     ///     <see cref="InboundEvent.Target" />, carrying a command sequence.
     /// </summary>
-    MarketCollect = 46
+    MarketCollect = 46,
+
+    /// <summary>
+    ///     A refine of the bag's row <see cref="InboundEvent.InventoryItem" /> at the Smith
+    ///     <see cref="InboundEvent.Target" />, from <see cref="InboundEvent.RefineLevel" />, carrying a command sequence.
+    /// </summary>
+    RefineItem = 47
 }
 }

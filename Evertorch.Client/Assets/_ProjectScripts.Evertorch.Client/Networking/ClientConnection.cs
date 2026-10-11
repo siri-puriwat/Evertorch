@@ -202,6 +202,12 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
             case MessageOpcode.MarketEvent:
                 OnMarketEvent(payload);
                 break;
+            case MessageOpcode.RefineTable:
+                OnRefineTable(payload);
+                break;
+            case MessageOpcode.RefineOutcome:
+                OnRefineOutcome(payload);
+                break;
             case MessageOpcode.MvpAwarded:
                 OnMvpAwarded(payload);
                 break;
@@ -1005,6 +1011,24 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
     }
 
     /// <summary>
+    ///     Refines the bag's row <paramref name="inventoryItem" /> at the Smith <paramref name="npc" /> from
+    ///     <paramref name="refineLevel" />, the level the client shows for it; 0 when nothing was sent.
+    /// </summary>
+    public uint SendRefine(EntityId npc, long inventoryItem, byte refineLevel)
+    {
+        if (State != ClientConnectionState.InWorld || npc.Value <= 0 || inventoryItem <= 0)
+        {
+            return 0;
+        }
+
+        uint sequence = NextCommandSequence();
+        SendRouted(
+            MessageOpcode.RefineItem,
+            new RefineItem(npc, inventoryItem, refineLevel, sequence).Write(m_sendBuffer));
+        return sequence;
+    }
+
+    /// <summary>
     ///     The Storekeeper command <paramref name="commandSequence" /> numbered, so a refusal can say what was refused.
     /// </summary>
     public bool TryGetStorageSequence(uint commandSequence, out StorageCommand command)
@@ -1246,6 +1270,16 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
     ///     A listing of the player listed, sold, or collected, while in the world.
     /// </summary>
     public event Action<MarketEvent>? MarketEventReceived;
+
+    /// <summary>
+    ///     A refiner's table, after its services, while in the world.
+    /// </summary>
+    public event Action<RefineTable>? RefineTableReceived;
+
+    /// <summary>
+    ///     What the player's own refine did, after the commit's inventory change, while in the world.
+    /// </summary>
+    public event Action<RefineOutcome>? RefineOutcomeReceived;
 
     /// <summary>
     ///     A boss appeared or fell on the player's map, for the chat log, which outlives the world.
@@ -1580,6 +1614,38 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
         {
             World.Market.OnNotice(message);
             MarketEventReceived?.Invoke(message);
+        }
+    }
+
+    private void OnRefineTable(ReadOnlySpan<byte> payload)
+    {
+        if (!RefineTable.TryRead(payload, out RefineTable? message) || message == null)
+        {
+            MalformedMessages++;
+        }
+        else if (World == null)
+        {
+            UnexpectedMessages++;
+        }
+        else
+        {
+            RefineTableReceived?.Invoke(message);
+        }
+    }
+
+    private void OnRefineOutcome(ReadOnlySpan<byte> payload)
+    {
+        if (!RefineOutcome.TryRead(payload, out RefineOutcome? message) || message == null)
+        {
+            MalformedMessages++;
+        }
+        else if (World == null)
+        {
+            UnexpectedMessages++;
+        }
+        else
+        {
+            RefineOutcomeReceived?.Invoke(message);
         }
     }
 

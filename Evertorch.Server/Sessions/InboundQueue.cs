@@ -526,6 +526,15 @@ public sealed class InboundQueue
                 decoded = InboundEvent.ForMarket(InboundEventKind.MarketCollect, connection, collect!.Npc,
                     collect.CommandSequence, collect.Listing);
                 return true;
+            case MessageOpcode.RefineItem:
+                if (!RefineItem.TryRead(payload, out RefineItem? refine))
+                {
+                    return false;
+                }
+
+                decoded = InboundEvent.ForRefine(connection, refine!.Npc, refine.InventoryItem, refine.RefineLevel,
+                    refine.CommandSequence);
+                return true;
             case MessageOpcode.LearnSkill:
                 if (!LearnSkill.TryRead(payload, out LearnSkill? learn))
                 {

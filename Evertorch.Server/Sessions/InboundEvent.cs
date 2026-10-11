@@ -30,7 +30,8 @@ public readonly struct InboundEvent
         ChatChannel channel = ChatChannel.None,
         string? text = null,
         bool isAccepted = false,
-        uint priceLimit = 0)
+        uint priceLimit = 0,
+        byte refineLevel = 0)
     {
         Kind = kind;
         Connection = connection;
@@ -54,6 +55,7 @@ public readonly struct InboundEvent
         Text = text;
         IsAccepted = isAccepted;
         PriceLimit = priceLimit;
+        RefineLevel = refineLevel;
     }
 
     public InboundEventKind Kind { get; }
@@ -147,6 +149,11 @@ public readonly struct InboundEvent
     ///     For <see cref="InboundEventKind.MarketBuy" />, the most the buyer pays a unit.
     /// </summary>
     public uint PriceLimit { get; }
+
+    /// <summary>
+    ///     For <see cref="InboundEventKind.RefineItem" />, the level the client shows for the row.
+    /// </summary>
+    public byte RefineLevel { get; }
 
     public static InboundEvent Connected(ConnectionId connection)
     {
@@ -496,6 +503,25 @@ public readonly struct InboundEvent
             item: item,
             quantity: quantity,
             priceLimit: priceLimit);
+    }
+
+    public static InboundEvent ForRefine(
+        ConnectionId connection,
+        EntityId npc,
+        long row,
+        byte refineLevel,
+        uint commandSequence)
+    {
+        return new InboundEvent(
+            InboundEventKind.RefineItem,
+            connection,
+            null,
+            default,
+            default,
+            npc,
+            commandSequence,
+            inventoryItem: row,
+            refineLevel: refineLevel);
     }
 
     public static InboundEvent ForCreateCharacter(ConnectionId connection, string name)

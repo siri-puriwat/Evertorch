@@ -85,6 +85,10 @@ public sealed class ServerOutputTests
         ["NpcServices"] = new[]
             { "Entries", "JobChanges", "KeepsMarket", "KeepsStorage", "Npc", "Offers", "OffersReset", "Refines" },
         ["QuestDefinitionId"] = new[] { "Value" },
+        ["RefineOutcome"] = new[] { "InventoryItem", "Item", "LevelAfter", "LevelBefore", "Outcome" },
+        ["RefineTable"] = new[]
+            { "Index", "Items", "LevelsLowered", "Npc", "OnFailure", "Ore", "OreQuantity", "Steps" },
+        ["RefineTableStep"] = new[] { "Chance", "Coins" },
         ["QuestLog"] = new[] { "Entries" },
         ["QuestLogEntry"] = new[] { "Count", "Progress", "Quest", "State" },
         ["ServerHello"] = new[]
@@ -119,16 +123,16 @@ public sealed class ServerOutputTests
         ["WornWeaponChanged"] = new[] { "Entity", "WornWeapon" }
     };
 
-    // An NPC's prices, the board's, and a quest's terms travel on purpose, because the player must see them (Content
-    // Pipeline §5), and so do the derived statistics of the owner's Stats window with what its equipment adds and the
-    // MVP experience a boss's most valuable player gained (Network Protocol §9): exactly these fields may carry a
-    // server-only word.
+    // An NPC's prices, the board's, a refine's chances, and a quest's terms travel on purpose, because the player must
+    // see them (Content Pipeline §5), and so do the derived statistics of the owner's Stats window with what its
+    // equipment adds and the MVP experience a boss's most valuable player gained (Network Protocol §9): exactly these
+    // fields may carry a server-only word.
     private static readonly string[] SentOnPurpose =
     {
         "NpcServiceEntry.BuyPrice", "NpcServiceEntry.SellPrice", "NpcQuestOffer.BaseExperience",
         "CharacterSheet.Defense", "CharacterSheet.Flee", "CharacterSheet.MagicAttack", "CharacterSheet.MagicDefense",
         "CharacterSheet.EquipmentDefense", "CharacterSheet.EquipmentMagicAttack", "MvpAwarded.MvpExperience",
-        "MarketBoardEntry.Price"
+        "RefineTableStep.Chance", "MarketBoardEntry.Price"
     };
 
     // Words of the content's server-only fields (Content Pipeline §5).

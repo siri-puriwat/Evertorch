@@ -50,6 +50,7 @@ public enum MessageOpcode : ushort
     MarketList = 0x002A,
     MarketBuy = 0x002B,
     MarketCollect = 0x002C,
+    RefineItem = 0x002D,
     ServerHello = 0x8001,
     WorldEntered = 0x8003,
     EntitySpawn = 0x8004,
@@ -91,6 +92,8 @@ public enum MessageOpcode : ushort
     StorageChanged = 0x8029,
     MarketBoard = 0x802A,
     MarketMine = 0x802B,
-    MarketEvent = 0x802C
+    MarketEvent = 0x802C,
+    RefineTable = 0x802D,
+    RefineOutcome = 0x802E
 }
 }

@@ -296,6 +296,30 @@ public sealed class MessageFuzzTests
                 ? Encode(message!.GetEncodedLength(), message.Write)
                 : null);
         yield return Case(
+            "RefineItem",
+            Encode(RefineItem.EncodedLength, RefineMessageTests.ItemGolden.Write),
+            payload => RefineItem.TryRead(payload, out RefineItem? message)
+                ? Encode(RefineItem.EncodedLength, message!.Write)
+                : null);
+        yield return Case(
+            "RefineTable",
+            Encode(RefineMessageTests.TableGolden.GetEncodedLength(), RefineMessageTests.TableGolden.Write),
+            payload => RefineTable.TryRead(payload, out RefineTable? message)
+                ? Encode(message!.GetEncodedLength(), message.Write)
+                : null);
+        yield return Case(
+            "RefineTableLargest",
+            Encode(RefineMessageTests.TableLargest.GetEncodedLength(), RefineMessageTests.TableLargest.Write),
+            payload => RefineTable.TryRead(payload, out RefineTable? message)
+                ? Encode(message!.GetEncodedLength(), message.Write)
+                : null);
+        yield return Case(
+            "RefineOutcome",
+            Encode(RefineMessageTests.OutcomeGolden.GetEncodedLength(), RefineMessageTests.OutcomeGolden.Write),
+            payload => RefineOutcome.TryRead(payload, out RefineOutcome? message)
+                ? Encode(message!.GetEncodedLength(), message.Write)
+                : null);
+        yield return Case(
             "TradeSide",
             Encode(TradeMessageTests.SideGolden.GetEncodedLength(), TradeMessageTests.SideGolden.Write),
             payload => TradeSide.TryRead(payload, out TradeSide? message)

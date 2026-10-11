@@ -58,6 +58,7 @@ public static class MessageRouting
             case MessageOpcode.MarketList:
             case MessageOpcode.MarketBuy:
             case MessageOpcode.MarketCollect:
+            case MessageOpcode.RefineItem:
             case MessageOpcode.ServerHello:
             case MessageOpcode.WorldEntered:
             case MessageOpcode.EntitySpawn:
@@ -99,6 +100,8 @@ public static class MessageRouting
             case MessageOpcode.MarketBoard:
             case MessageOpcode.MarketMine:
             case MessageOpcode.MarketEvent:
+            case MessageOpcode.RefineTable:
+            case MessageOpcode.RefineOutcome:
                 return true;
             case MessageOpcode.MoveInput:
             case MessageOpcode.StopMovement:
