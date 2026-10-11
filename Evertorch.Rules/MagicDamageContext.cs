@@ -39,5 +39,13 @@ public readonly struct MagicDamageContext
 
     /// <summary>A skill's share of the rolled attack, applied before defense.</summary>
     public int RatioPercent { get; }
+
+    /// <summary>
+    ///     The same inputs at a skill's share of the rolled attack (Gameplay Systems §9).
+    /// </summary>
+    public MagicDamageContext ForSkill(int ratioPercent)
+    {
+        return new MagicDamageContext(MagicAttack, HardMagicDefense, SoftMagicDefense, Random, ratioPercent);
+    }
 }
 }

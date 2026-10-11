@@ -107,6 +107,12 @@ public sealed class PlayerEntity : WorldEntity
     public ItemEquipment? Armor { get; set; }
 
     /// <summary>
+    ///     What the worn weapon and armor add in combat, refine bonuses included (Gameplay Systems §11.1); only
+    ///     <see cref="WornEquipment.Dress(PlayerEntity, ServerContent, CharacterInventory)" /> sets it.
+    /// </summary>
+    public WornEquipment Equipment { get; set; } = WornEquipment.None;
+
+    /// <summary>
     ///     Set by a job change: the next visibility pass sends the player's spawn, with its new job, to every session
     ///     that already sees it, and clears the flag (Network Protocol §9).
     /// </summary>

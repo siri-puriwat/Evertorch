@@ -1730,9 +1730,7 @@ public sealed class ItemActionSystem : ITickPhase
         int maxHealth = player.MaxHealth;
         int maxSpirit = player.MaxSpirit;
         m_combat.InterruptCast(player);
-        player.Weapon = EquipmentIn(character.Inventory, EquipmentSlot.Weapon);
-        player.SetWornWeapon(ItemIn(character.Inventory, EquipmentSlot.Weapon));
-        player.Armor = EquipmentIn(character.Inventory, EquipmentSlot.Armor);
+        WornEquipment.Dress(player, m_content, character.Inventory);
         m_builds.ChangeJob(
             player,
             character.Connection?.Connection ?? default,
@@ -1770,26 +1768,12 @@ public sealed class ItemActionSystem : ITickPhase
         PlayerEntity player = character.Player;
         int maxHealth = player.MaxHealth;
         int maxSpirit = player.MaxSpirit;
-        player.Weapon = EquipmentIn(character.Inventory, EquipmentSlot.Weapon);
-        player.SetWornWeapon(ItemIn(character.Inventory, EquipmentSlot.Weapon));
-        player.Armor = EquipmentIn(character.Inventory, EquipmentSlot.Armor);
+        WornEquipment.Dress(player, m_content, character.Inventory);
         m_stats.Recalculate(player, m_content.Jobs[player.Job]);
         if (player.MaxHealth != maxHealth || player.MaxSpirit != maxSpirit)
         {
             m_sender.SendHealth(player);
         }
-    }
-
-    private static ItemDefinitionId? ItemIn(CharacterInventory inventory, EquipmentSlot slot)
-    {
-        return inventory.TryGetRow(inventory.WornIn(slot), out InventoryEntry row) ? row.Item : null;
-    }
-
-    private ItemEquipment? EquipmentIn(CharacterInventory inventory, EquipmentSlot slot)
-    {
-        return inventory.TryGetRow(inventory.WornIn(slot), out InventoryEntry row)
-            ? m_content.Items[row.Item].Equipment
-            : null;
     }
 
     private void Refuse(CharacterSession character, CommandRejectionReason reason)

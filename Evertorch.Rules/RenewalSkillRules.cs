@@ -52,13 +52,7 @@ public sealed class RenewalSkillRules : ISkillRules
             throw new ArgumentException($"Magic skill {context.Skill.Id} needs magic damage inputs.", nameof(context));
         }
 
-        MagicDamageContext inputs = context.Magic.Value;
-        var magic = new MagicDamageContext(
-            inputs.MagicAttack,
-            inputs.HardMagicDefense,
-            inputs.SoftMagicDefense,
-            inputs.Random,
-            ratioPercent);
+        MagicDamageContext magic = context.Magic.Value.ForSkill(ratioPercent);
         return new SkillResolution(SkillResult.Hit, new RenewalCombatRules().CalculateMagicDamage(magic).Amount);
     }
 
@@ -71,14 +65,7 @@ public sealed class RenewalSkillRules : ISkillRules
         }
 
         // A skill never crits: with the critical chance taken as 0 the roll still draws what a basic attack draws.
-        HitContext hitInputs = context.Hit.Value;
-        var hit = new HitContext(
-            hitInputs.AttackerHit,
-            0,
-            hitInputs.DefenderFlee,
-            hitInputs.DefenderPerfectDodge,
-            hitInputs.DefenderLuk,
-            hitInputs.Random);
+        HitContext hit = context.Hit.Value.WithoutCritical();
         var combat = new RenewalCombatRules();
         HitResult result = combat.CalculateHit(hit);
         if (!result.DealsDamage)
@@ -88,16 +75,9 @@ public sealed class RenewalSkillRules : ISkillRules
                 0);
         }
 
-        DamageContext damageInputs = context.Damage.Value;
-        var damage = new DamageContext(
-            damageInputs.AttackerKind,
-            damageInputs.StatusAttack,
-            damageInputs.WeaponAttack,
-            damageInputs.HardDefense,
-            damageInputs.SoftDefense,
-            false,
-            damageInputs.Random,
-            ratioPercent);
+        // Copied through the context's own method, so every input of a basic attack, a refine's flat attack among them,
+        // reaches the skill.
+        DamageContext damage = context.Damage.Value.ForSkill(ratioPercent);
         return new SkillResolution(SkillResult.Hit, combat.CalculateDamage(damage).Amount);
     }
 }

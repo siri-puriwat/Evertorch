@@ -38,5 +38,14 @@ public readonly struct HitContext
     public int DefenderLuk { get; }
 
     public IRandomSource Random { get; }
+
+    /// <summary>
+    ///     The same inputs with no chance of a critical, as a skill rolls (Gameplay Systems §9); the critical stage
+    ///     still draws.
+    /// </summary>
+    public HitContext WithoutCritical()
+    {
+        return new HitContext(AttackerHit, 0, DefenderFlee, DefenderPerfectDodge, DefenderLuk, Random);
+    }
 }
 }

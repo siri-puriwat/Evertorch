@@ -195,5 +195,23 @@ public sealed class RenewalSkillRulesTests
         Assert.That(resolution.Result, Is.EqualTo(SkillResult.Miss));
         Assert.That(resolution.Amount, Is.Zero);
     }
+
+    // The pre-Milestone-18 review's pin: a refine's flat attack reaches a skill, inside its ratio.
+    [Test]
+    public void Resolve_Strike_WithAFlatAttack_TakesItInsideTheRatio()
+    {
+        var random = new FixedRandom(0);
+        var context = new SkillContext(
+            Strike,
+            1,
+            AttackerKind.Character,
+            831,
+            new HitContext(182, 25, 102, 0, 0, random),
+            new DamageContext(AttackerKind.Character, 7, 0, 2, 0, false, random, flatAttack: 14));
+
+        SkillResolution resolution = m_rules.Resolve(context);
+
+        Assert.That(resolution.Amount, Is.EqualTo(35), "raw 14 + 14 = 28; x 130 % = 36; x 4002 / 4020 = 35");
+    }
 }
 }

@@ -12,9 +12,15 @@ public readonly struct DamageContext
         int softDefense,
         bool isCritical,
         IRandomSource random,
-        int ratioPercent = 100)
+        int ratioPercent = 100,
+        int flatAttack = 0)
     {
-        if (statusAttack < 0 || weaponAttack < 0 || hardDefense < 0 || softDefense < 0 || ratioPercent < 0)
+        if (statusAttack < 0
+            || weaponAttack < 0
+            || hardDefense < 0
+            || softDefense < 0
+            || ratioPercent < 0
+            || flatAttack < 0)
         {
             throw new ArgumentOutOfRangeException(nameof(statusAttack), "Damage inputs cannot be negative.");
         }
@@ -27,6 +33,7 @@ public readonly struct DamageContext
         IsCritical = isCritical;
         Random = random ?? throw new ArgumentNullException(nameof(random));
         RatioPercent = ratioPercent;
+        FlatAttack = flatAttack;
     }
 
     public AttackerKind AttackerKind { get; }
@@ -51,5 +58,29 @@ public readonly struct DamageContext
     ///     A skill's share of the raw damage, applied before defense; 100 for a basic attack.
     /// </summary>
     public int RatioPercent { get; }
+
+    /// <summary>
+    ///     A character's attack added after its weapon's draw, which no draw varies: its weapon's refine bonus (Gameplay
+    ///     Systems §11.1). Never the weapon's own attack; 0 for a monster.
+    /// </summary>
+    public int FlatAttack { get; }
+
+    /// <summary>
+    ///     The same inputs for a skill's damage: never critical, at the skill's share of the raw damage (Gameplay
+    ///     Systems §9), every other input kept.
+    /// </summary>
+    public DamageContext ForSkill(int ratioPercent)
+    {
+        return new DamageContext(
+            AttackerKind,
+            StatusAttack,
+            WeaponAttack,
+            HardDefense,
+            SoftDefense,
+            false,
+            Random,
+            ratioPercent,
+            FlatAttack);
+    }
 }
 }

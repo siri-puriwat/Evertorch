@@ -137,6 +137,7 @@ internal sealed class TestServer
         Builds = new CharacterBuilds(Content, new RenewalProgressionRules(), stats, sender, Instruments, BuildsLog);
         Lifetime = new CharacterLifetime(
             World,
+            Content,
             Builds,
             Sessions,
             Persistence,

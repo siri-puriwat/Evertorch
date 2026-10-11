@@ -64,8 +64,9 @@ public sealed class RenewalCombatRules : ICombatRules
 
     public DamageResult CalculateDamage(DamageContext context)
     {
+        // A refine's flat attack joins after the weapon's draw, so no draw varies it (Gameplay Systems §11.1).
         long raw = context.AttackerKind == AttackerKind.Character
-            ? 2L * context.StatusAttack + RollWeaponAttack(context)
+            ? 2L * context.StatusAttack + RollWeaponAttack(context) + context.FlatAttack
             : RollMonsterAttack(context) + context.StatusAttack;
         raw = raw * context.RatioPercent / 100;
 

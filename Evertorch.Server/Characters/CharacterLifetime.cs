@@ -30,7 +30,15 @@ public sealed class CharacterLifetime
             "Character {Character} on connection {Connection} entered as {Job} wearing {Item}, a weapon its job cannot "
             + "wield; it stays worn.");
 
+    private static readonly Action<ILogger, long, long, ItemDefinitionId, int, int, Exception?>
+        LogRefineLevelPastTable = LoggerMessage.Define<long, long, ItemDefinitionId, int, int>(
+            LogLevel.Warning,
+            new EventId(1035, "RefineLevelPastTable"),
+            "Character {Character} on connection {Connection} entered wearing {Item} at +{Level}, past the {Last} "
+            + "levels its refine table gives; it counts the table's last bonus, or none without a table.");
+
     private readonly WorldSimulation m_world;
+    private readonly ServerContent m_content;
     private readonly CharacterBuilds m_builds;
     private readonly SessionRegistry m_sessions;
     private readonly PersistenceWorker m_persistence;
@@ -42,6 +50,7 @@ public sealed class CharacterLifetime
 
     public CharacterLifetime(
         WorldSimulation world,
+        ServerContent content,
         CharacterBuilds builds,
         SessionRegistry sessions,
         PersistenceWorker persistence,
@@ -52,6 +61,7 @@ public sealed class CharacterLifetime
         ILogger<CharacterLifetime> logger)
     {
         m_world = world;
+        m_content = content;
         m_builds = builds;
         m_sessions = sessions;
         m_persistence = persistence;
@@ -98,6 +108,7 @@ public sealed class CharacterLifetime
             NextCheckpointTick = tick + m_checkpointIntervalTicks
         };
         LogUnwieldableWeapon(character);
+        LogLevelsPastTheirTables(character);
         m_sessions.AddCharacter(character);
         return character;
     }
@@ -123,6 +134,32 @@ public sealed class CharacterLifetime
             player.Job,
             row.Item,
             null);
+    }
+
+    // Only changed content or a hand-edited row leaves a worn item above its table's last level, or refined without a
+    // table; the item stays worn at its level and counts the table's last bonus, or none (Gameplay Systems §11.1).
+    private void LogLevelsPastTheirTables(CharacterSession character)
+    {
+        foreach (EquipmentSlot slot in new[] { EquipmentSlot.Weapon, EquipmentSlot.Armor })
+        {
+            if (!character.Inventory.TryGetRow(character.Inventory.WornIn(slot), out InventoryEntry row))
+            {
+                continue;
+            }
+
+            int last = WornEquipment.TableOf(m_content, m_content.Items[row.Item])?.LastLevel ?? 0;
+            if (row.RefineLevel > last)
+            {
+                LogRefineLevelPastTable(
+                    m_logger,
+                    character.Character.Value,
+                    character.Connection?.Connection.Value ?? 0,
+                    row.Item,
+                    row.RefineLevel,
+                    last,
+                    null);
+            }
+        }
     }
 
     /// <summary>

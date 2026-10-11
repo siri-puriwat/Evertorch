@@ -233,6 +233,21 @@ public sealed class RenewalCombatRulesTests
         Assert.That(random.RequestedBounds, Is.EqualTo(new[] { 4 }));
     }
 
+    // Refining research note: the training sword at +7 adds a flat 14 after its draw, which the draw never varies.
+    [TestCase(0, 46)]
+    [TestCase(1, 47)]
+    [TestCase(2, 48)]
+    public void CalculateDamage_WithARefinedWeapon_AddsItsFlatAttackAfterTheDraw(int draw, int expected)
+    {
+        var random = new ScriptedRandomSource(draw);
+
+        DamageResult result = Rules.CalculateDamage(
+            new DamageContext(AttackerKind.Character, 7, 20, 2, 0, false, random, flatAttack: 14));
+
+        Assert.That(result.Amount, Is.EqualTo(expected), "raw 14 + 19 to 21 + 14, then the slime's defense 2");
+        Assert.That(random.RequestedBounds, Is.EqualTo(new[] { 3 }), "the weapon's draw alone");
+    }
+
     [Test]
     public void AttackContext_WhenInputsAreInvalid_Throws()
     {
@@ -296,6 +311,30 @@ public sealed class RenewalCombatRulesTests
     }
 
     [Test]
+    public void CalculateDamage_OnTheMantleAtTen_TakesItsDefenseOfNinetyFour()
+    {
+        DamageResult bare = Rules.CalculateDamage(
+            new DamageContext(AttackerKind.Monster, 0, 100, 22, 0, true, new ScriptedRandomSource()));
+        DamageResult refined = Rules.CalculateDamage(
+            new DamageContext(AttackerKind.Monster, 0, 100, 94, 0, true, new ScriptedRandomSource()));
+
+        Assert.That((bare.Amount, refined.Amount), Is.EqualTo((159, 138)),
+            "a top roll of 120: x 4,022 / 4,220 at +0, x 4,094 / 4,940 at +10, then x1.4");
+    }
+
+    [Test]
+    public void CalculateDamage_WithARefinedWeaponCritical_TakesTheTopAndTheFlatAttack()
+    {
+        var random = new ScriptedRandomSource();
+
+        DamageResult result = Rules.CalculateDamage(
+            new DamageContext(AttackerKind.Character, 7, 20, 2, 0, true, random, flatAttack: 14));
+
+        Assert.That((result.Amount, result.IsCritical), Is.EqualTo((67, true)), "raw 49, 48 after defense, x1.4");
+        Assert.That(random.RequestedBounds, Is.Empty);
+    }
+
+    [Test]
     public void CalculateHit_WhenCritical_IgnoresFlee()
     {
         var random = new ScriptedRandomSource(999, 0);
@@ -332,6 +371,20 @@ public sealed class RenewalCombatRulesTests
     }
 
     [Test]
+    public void DamageContext_ForSkill_KeepsEveryInput_ButTheRatioAndTheCritical()
+    {
+        var random = new ScriptedRandomSource();
+        var context = new DamageContext(AttackerKind.Character, 7, 20, 2, 4, true, random, flatAttack: 14);
+
+        DamageContext skill = context.ForSkill(130);
+
+        Assert.That(
+            (skill.AttackerKind, skill.StatusAttack, skill.WeaponAttack, skill.HardDefense, skill.SoftDefense,
+                skill.IsCritical, skill.RatioPercent, skill.FlatAttack, skill.Random),
+            Is.EqualTo((AttackerKind.Character, 7, 20, 2, 4, false, 130, 14, (IRandomSource)random)));
+    }
+
+    [Test]
     public void FirstSliceScenario_AdventurerAgainstTrainingSlime_IsFullyDetermined()
     {
         DerivedStats adventurer = new RenewalCharacterRules().CalculateDerivedStats(
@@ -361,6 +414,22 @@ public sealed class RenewalCombatRulesTests
         Assert.That(hit.HitChancePercent, Is.EqualTo(80));
         Assert.That(hit.Outcome, Is.EqualTo(HitOutcome.Hit));
         Assert.That(damage.Amount, Is.EqualTo(13));
+    }
+
+    [Test]
+    public void HitAndMagicContexts_CopyThemselves_KeepingEveryOtherInput()
+    {
+        var random = new ScriptedRandomSource();
+
+        HitContext hit = new HitContext(182, 25, 102, 3, 4, random).WithoutCritical();
+        MagicDamageContext magic = new MagicDamageContext(50, 1, 2, random).ForSkill(150);
+
+        Assert.That(
+            (hit.AttackerHit, hit.AttackerCritical, hit.DefenderFlee, hit.DefenderPerfectDodge, hit.DefenderLuk),
+            Is.EqualTo((182, 0, 102, 3, 4)));
+        Assert.That(
+            (magic.MagicAttack, magic.HardMagicDefense, magic.SoftMagicDefense, magic.RatioPercent),
+            Is.EqualTo((50, 1, 2, 150)));
     }
 }
 }

@@ -710,7 +710,7 @@ public sealed class CombatSystem : ITickPhase
         int magicAttack = caster switch
         {
             MonsterEntity monster => monster.Definition.MagicAttack,
-            PlayerEntity player => player.Stats.MagicalAttack,
+            PlayerEntity player => player.Stats.MagicalAttack + player.Equipment.MagicAttack,
             _ => 0
         };
         int softMagicDefense = target is PlayerEntity defender ? defender.Stats.SoftMagicDefense : 0;
@@ -746,24 +746,26 @@ public sealed class CombatSystem : ITickPhase
     private DamageContext CreateDamageContext(WorldEntity attacker, WorldEntity target, bool isCritical)
     {
         // Evertorch monsters have no primary statistics, so no soft defense (research note, intentional differences). A
-        // player's weapon adds its attack, and its armor is its hard defense (equipment research note).
+        // player's weapon adds its attack and its refine bonus after the draw, and its armor with its refine bonus is its
+        // hard defense (equipment and refining research notes).
         switch (attacker)
         {
             case PlayerEntity player when target is MonsterEntity monster:
                 return new DamageContext(
                     AttackerKind.Character,
                     player.Stats.PhysicalAttack,
-                    player.Weapon?.Attack ?? 0,
+                    player.Equipment.WeaponAttack,
                     monster.Definition.PhysicalDefense,
                     0,
                     isCritical,
-                    m_random);
+                    m_random,
+                    flatAttack: player.Equipment.FlatAttack);
             case MonsterEntity monster when target is PlayerEntity player:
                 return new DamageContext(
                     AttackerKind.Monster,
                     0,
                     monster.Definition.PhysicalAttack,
-                    player.Armor?.Defense ?? 0,
+                    player.Equipment.HardDefense,
                     player.Stats.SoftDefense,
                     isCritical,
                     m_random);
