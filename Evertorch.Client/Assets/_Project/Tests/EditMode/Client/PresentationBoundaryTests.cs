@@ -20,7 +20,7 @@ public sealed class PresentationBoundaryTests
         + @"|MovementController"
         + @"|LocalPlayerDriver"
         + @"|MovementPredictor|\.Predictor\b|\.IsLocked\b|RequestRespawn|UseSkillSlot|\bUseSkill\(|PressInventoryRow"
-        + @"|BuyFrom|SellTo|OpenMarketAt|ListOnMarketAt|BuyOnMarketAt|CollectListingAt|RefineAt"
+        + @"|BuyFrom|SellTo|OpenMarketAt|ListOnMarketAt|BuyOnMarketAt|CollectListingAt|RefineAt|InsertCardInto"
         + @"|AcceptQuestFrom|TurnInQuestTo|RaiseStat|ToggleStats|LearnSkillLevel|ToggleSkills|ResetBuildAt|ChangeJobAt"
         + @"|\.ActionLock\b"
         + @"|\.On(Spawn|Despawn|Snapshot|TargetChanged|AttackStarted|Damage|EntityDied|EntityRevived|CommandRejected"
@@ -114,7 +114,8 @@ public sealed class PresentationBoundaryTests
             "m_client.LearnSkillLevel(skill);", "client.ToggleSkills();",
             "m_client.ResetBuildAt(npc);", "m_client.ChangeJobAt(npc, job);",
             "m_world.OnWornWeaponChanged(changed);", "remote.WornWeapon = string.Empty;",
-            "m_client.RefineAt(npc, row, 6);", "m_world.OnRefineTable(table);", "m_world.OnCardRemovalFees(fees);"
+            "m_client.RefineAt(npc, row, 6);", "m_world.OnRefineTable(table);", "m_world.OnCardRemovalFees(fees);",
+            "m_client.InsertCardInto(card, row);"
         };
         string[] allowed =
         {

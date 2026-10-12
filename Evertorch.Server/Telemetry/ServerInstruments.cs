@@ -122,6 +122,7 @@ public sealed class ServerInstruments
     private readonly Counter<long> m_marketListings;
     private readonly Counter<long> m_marketSales;
     private readonly Counter<long> m_refineAttempts;
+    private readonly Counter<long> m_cardsInserted;
 
     public ServerInstruments(IMeterFactory meters)
     {
@@ -182,6 +183,10 @@ public sealed class ServerInstruments
             "evertorch.refine.attempts",
             "{attempt}",
             "Refines committed, by outcome.");
+        m_cardsInserted = Meter.CreateCounter<long>(
+            "evertorch.cards.inserted",
+            "{card}",
+            "Cards inserted into a slot.");
         m_jobDuration = Meter.CreateHistogram<double>(
             "evertorch.persistence.job.duration",
             "ms",
@@ -344,6 +349,11 @@ public sealed class ServerInstruments
     public void RecordRefine(RefineOutcomeKind outcome)
     {
         m_refineAttempts.Add(1, new KeyValuePair<string, object?>("outcome", RefineOutcomes.WordOf(outcome)));
+    }
+
+    public void RecordCardInserted()
+    {
+        m_cardsInserted.Add(1);
     }
 
     public void RecordTradeCompleted(long coins)

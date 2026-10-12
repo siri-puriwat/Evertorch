@@ -114,6 +114,7 @@ public sealed class GameClient : MonoBehaviour
     private NpcWindow? m_npcWindow;
     private StatsWindow? m_statsWindow;
     private SkillsWindow? m_skillsWindow;
+    private CardWindow? m_cardWindow;
     private TradeWindow? m_tradeWindow;
     private bool m_hasSaidHeld;
     private SkillBar? m_skillBar;
@@ -279,13 +280,21 @@ public sealed class GameClient : MonoBehaviour
     public SkillDefinitionId TargetingSkill => m_targeting.IsChoosing ? m_targeting.Skill : default;
 
     /// <summary>
-    ///     Whether the NPC, Stats, or Skills window shows at the top left, which the target frame keeps clear of.
+    ///     Whether the NPC, Stats, Skills, trade, or Card window shows at the top left, which the target frame keeps clear
+    ///     of.
     /// </summary>
     public bool IsSideWindowOpen =>
         (m_npcWindow != null && m_npcWindow.IsOpen)
         || (m_statsWindow != null && m_statsWindow.IsOpen)
         || (m_skillsWindow != null && m_skillsWindow.IsOpen)
-        || (m_tradeWindow != null && m_tradeWindow.IsOpen);
+        || (m_tradeWindow != null && m_tradeWindow.IsOpen)
+        || IsCardWindowOpen;
+
+    /// <summary>
+    ///     Whether the Card window keeps the side slot, which Stats, Skills, and Talk do not replace (Prototype Content
+    ///     §2).
+    /// </summary>
+    public bool IsCardWindowOpen => m_cardWindow != null && m_cardWindow.IsOpen;
 
     /// <summary>
     ///     Whether a trade is open, which holds the character still and takes the side slot (Gameplay Systems §16).
@@ -333,6 +342,8 @@ public sealed class GameClient : MonoBehaviour
         m_statsWindow.transform.SetParent(transform, false);
         m_skillsWindow = SkillsWindow.Create(this);
         m_skillsWindow.transform.SetParent(transform, false);
+        m_cardWindow = CardWindow.Create(this);
+        m_cardWindow.transform.SetParent(transform, false);
         m_tradeWindow = TradeWindow.Create(this);
         m_tradeWindow.transform.SetParent(transform, false);
         m_skillBar = SkillBar.Create(this);
@@ -748,8 +759,42 @@ public sealed class GameClient : MonoBehaviour
             && content.TryGetItem(row.Item, out ClientItem? item)
             && item != null)
         {
+            if (item.Type == ItemType.Card)
+            {
+                OpenCardWindow(row.InventoryItem);
+                return;
+            }
+
             InventoryActions.Press(Connection, row, item.Type);
         }
+    }
+
+    /// <summary>
+    ///     Opens the Card window for the card in the bag's row <paramref name="cardRow" />, in place of the NPC, Stats, or
+    ///     Skills window; the trade window keeps the side slot while a trade is open (Prototype Content §2).
+    /// </summary>
+    public void OpenCardWindow(long cardRow)
+    {
+        if (m_cardWindow == null || IsTrading)
+        {
+            return;
+        }
+
+        m_npcWindow?.Close();
+        m_statsWindow?.Close();
+        m_skillsWindow?.Close();
+        m_cardWindow.Open(cardRow);
+    }
+
+    /// <summary>
+    ///     Inserts the card in the bag's row <paramref name="cardItem" /> into the bag's row
+    ///     <paramref name="inventoryItem" /> (Gameplay Systems §11.7). The server checks both rows, the fit, and the free
+    ///     slot, and only its committed change shows the card in place. 0 when nothing was sent, else the command's
+    ///     sequence.
+    /// </summary>
+    public uint InsertCardInto(long cardItem, long inventoryItem)
+    {
+        return Connection?.SendInsertCard(cardItem, inventoryItem) ?? 0;
     }
 
     /// <summary>
@@ -942,8 +987,8 @@ public sealed class GameClient : MonoBehaviour
             return;
         }
 
-        // The trade window keeps the side slot until the trade ends (Prototype Content §2).
-        if (IsTrading)
+        // The trade and Card windows keep the side slot until they close (Prototype Content §2).
+        if (IsTrading || IsCardWindowOpen)
         {
             return;
         }
@@ -969,7 +1014,7 @@ public sealed class GameClient : MonoBehaviour
             return;
         }
 
-        if (IsTrading)
+        if (IsTrading || IsCardWindowOpen)
         {
             return;
         }
@@ -1576,7 +1621,7 @@ public sealed class GameClient : MonoBehaviour
 
     private void OnTalkArrived(EntityId npc)
     {
-        if (IsTrading)
+        if (IsTrading || IsCardWindowOpen)
         {
             return;
         }
@@ -2173,6 +2218,11 @@ public sealed class GameClient : MonoBehaviour
         if (m_skillsWindow != null)
         {
             m_skillsWindow.Close();
+        }
+
+        if (m_cardWindow != null)
+        {
+            m_cardWindow.Close();
         }
 
         m_controller = null;

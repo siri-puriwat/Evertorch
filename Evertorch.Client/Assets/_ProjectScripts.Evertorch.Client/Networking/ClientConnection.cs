@@ -30,6 +30,7 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
     private readonly Dictionary<uint, StorageCommand> m_storageSequences = new();
     private readonly Dictionary<uint, MarketCommand> m_marketSequences = new();
     private readonly Dictionary<uint, RefineRequest> m_refineSequences = new();
+    private readonly Dictionary<uint, CardRequest> m_cardSequences = new();
     private uint m_commandSequence;
 
     public ClientConnection(IClientTransport transport, ClientConnectionSettings settings, IMapProvider maps)
@@ -1048,6 +1049,45 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
     }
 
     /// <summary>
+    ///     Inserts the card in the bag's row <paramref name="cardItem" /> into the bag's row
+    ///     <paramref name="inventoryItem" />; 0 when nothing was sent.
+    /// </summary>
+    public uint SendInsertCard(long cardItem, long inventoryItem)
+    {
+        if (State != ClientConnectionState.InWorld || cardItem <= 0 || inventoryItem <= 0)
+        {
+            return 0;
+        }
+
+        uint sequence = NextCommandSequence();
+        SendRouted(MessageOpcode.InsertCard, new InsertCard(cardItem, inventoryItem, sequence).Write(m_sendBuffer));
+        if (m_cardSequences.Count >= MaxEquipSequences)
+        {
+            m_cardSequences.Clear();
+        }
+
+        ItemDefinitionId card = default;
+        foreach (InventoryEntry row in World?.Inventory.Rows ?? Array.Empty<InventoryEntry>())
+        {
+            if (row.InventoryItem == cardItem)
+            {
+                card = row.Item;
+            }
+        }
+
+        m_cardSequences[sequence] = new CardRequest(cardItem, card, inventoryItem);
+        return sequence;
+    }
+
+    /// <summary>
+    ///     The card command <paramref name="commandSequence" /> numbered, so a refusal can say what was refused.
+    /// </summary>
+    public bool TryGetCardSequence(uint commandSequence, out CardRequest request)
+    {
+        return m_cardSequences.TryGetValue(commandSequence, out request);
+    }
+
+    /// <summary>
     ///     The refine <paramref name="commandSequence" /> numbered, so a refusal can say what was refused.
     /// </summary>
     public bool TryGetRefineSequence(uint commandSequence, out RefineRequest request)
@@ -1489,6 +1529,7 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
             m_storageSequences.Clear();
             m_marketSequences.Clear();
             m_refineSequences.Clear();
+            m_cardSequences.Clear();
         }
 
         // The command sequence belongs to the character, not the connection: after a reconnect it goes on from the

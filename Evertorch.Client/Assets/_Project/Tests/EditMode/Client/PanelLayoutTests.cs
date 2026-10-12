@@ -27,7 +27,8 @@ public sealed class PanelLayoutTests
             TouchControls.ButtonColumnBounds(width), TouchControls.StatsButtonBounds(canvasHeight),
             TouchControls.SkillsButtonBounds(canvasHeight), TouchControls.OverlayToggleBounds(canvasHeight),
             NpcWindow.BoundsFor(canvasHeight, 100, true), StatsWindow.BoundsFor(canvasHeight, true),
-            SkillsWindow.BoundsFor(canvasHeight, 11, true), InventoryWindow.BoundsFor(canvasHeight, 60, true)
+            SkillsWindow.BoundsFor(canvasHeight, 11, true), InventoryWindow.BoundsFor(canvasHeight, 60, true),
+            CardWindow.BoundsFor(canvasHeight, 100, true)
         };
 
         Assert.That(others.Where(chat.Overlaps), Is.Empty);
@@ -163,7 +164,7 @@ public sealed class PanelLayoutTests
         Rect[] windows =
         {
             NpcWindow.BoundsFor(canvasHeight, 100, true), StatsWindow.BoundsFor(canvasHeight, true),
-            SkillsWindow.BoundsFor(canvasHeight, 11, true)
+            SkillsWindow.BoundsFor(canvasHeight, 11, true), CardWindow.BoundsFor(canvasHeight, 100, true)
         };
         Vector2 beside = TargetFrame.XRangeFor(true, true);
 
@@ -214,6 +215,23 @@ public sealed class PanelLayoutTests
         Assert.That(list.yMax, Is.EqualTo(canvasHeight - 64f).Within(1e-3f), "under the status bar");
         Assert.That(prompt.xMax, Is.LessThanOrEqualTo(InventoryWindow.Left), "short of the inventory window");
         Assert.That(PartyList.RowHeightFor(canvasHeight, isTouch), Is.GreaterThanOrEqualTo(24f), "a row stays legible");
+    }
+
+    // The Card window hangs where the NPC window does and stops above the chat and the stick (Prototype Content §2).
+    [TestCase(486f)]
+    [TestCase(607.5f)]
+    [TestCase(1920f)]
+    public void CardWindow_HangsBelowTheStatusBar_AndStopsAboveTheChatAndTheStick(float canvasHeight)
+    {
+        Rect withTouch = CardWindow.BoundsFor(canvasHeight, 100, true);
+        Rect fewRows = CardWindow.BoundsFor(1920f, 4, false);
+
+        Assert.That(withTouch.yMax, Is.EqualTo(canvasHeight - 64f).Within(1e-3f), "below the status bar");
+        Assert.That(withTouch.Overlaps(ChatPanel.BoundsFor(true)), Is.False, "clear of the chat");
+        Assert.That(withTouch.Overlaps(TouchControls.StickBounds), Is.False, "clear of the stick");
+        Assert.That(fewRows.height, Is.EqualTo(2 * 10f + 30f + 6f + 4 * 30f + 3 * 6f).Within(1e-3f),
+            "just tall enough");
+        Assert.That(fewRows.xMax, Is.EqualTo(NpcWindow.Right), "at the NPC window's place");
     }
 
     // The layout table of Prototype Content §2: x 8 to 540 and y 128 to 262 on the desktop, x 226 to 762 and y 128 to

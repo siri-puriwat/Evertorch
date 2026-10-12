@@ -39,6 +39,22 @@ public sealed class InventoryActionsTests
         }
     }
 
+    // A card's press opens the Card window, which the interface does (Prototype Content §2): the sink hears nothing.
+    [Test]
+    public void Press_OfACard_AsksTheServerForNothing_ThoughItsRowIsAButton()
+    {
+        var commands = new Commands();
+
+        uint sequence = InventoryActions.Press(
+            commands,
+            new InventoryEntry(15, new ItemDefinitionId("item.card.forest_crawler"), 2),
+            ItemType.Card);
+
+        Assert.That(sequence, Is.Zero);
+        Assert.That(commands.Sent, Is.Empty);
+        Assert.That(InventoryActions.HasAction(ItemType.Card), Is.True);
+    }
+
     [Test]
     public void Press_OfAConsumable_UsesOneUnit()
     {

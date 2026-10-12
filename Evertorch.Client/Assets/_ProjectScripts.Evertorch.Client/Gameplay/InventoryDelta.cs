@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Evertorch.Game;
+using Evertorch.Protocol;
 
 namespace Evertorch.Client
 {
@@ -17,13 +18,17 @@ public sealed class InventoryDelta
         uint coinsAfter,
         IReadOnlyDictionary<ItemDefinitionId, long> units,
         byte refineLevel = 0,
-        IReadOnlyList<ItemDefinitionId>? cards = null)
+        IReadOnlyList<ItemDefinitionId>? cards = null,
+        ItemDefinitionId insertedCard = default,
+        InventoryEntry insertedInto = default)
     {
         CoinsBefore = coinsBefore;
         CoinsAfter = coinsAfter;
         Units = units ?? throw new ArgumentNullException(nameof(units));
         RefineLevel = refineLevel;
         Cards = cards ?? Array.Empty<ItemDefinitionId>();
+        InsertedCard = insertedCard;
+        InsertedInto = insertedInto;
     }
 
     public uint CoinsBefore { get; }
@@ -41,5 +46,15 @@ public sealed class InventoryDelta
     ///     The cards of the row whose units moved, as the client held it: a sold row's, which its words name.
     /// </summary>
     public IReadOnlyList<ItemDefinitionId> Cards { get; }
+
+    /// <summary>
+    ///     The card that joined a row's cards, which an insertion's words name; default when no row's cards grew.
+    /// </summary>
+    public ItemDefinitionId InsertedCard { get; }
+
+    /// <summary>
+    ///     The row whose cards grew, as the change left it.
+    /// </summary>
+    public InventoryEntry InsertedInto { get; }
 }
 }

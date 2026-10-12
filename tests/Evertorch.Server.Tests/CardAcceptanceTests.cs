@@ -17,12 +17,12 @@ namespace Evertorch.Server.Tests
 ///     The Milestone 17 "Cards and slots" exit criterion's server side end to end (ROADMAP §8): the composed server host
 ///     on a real PostgreSQL 18 and real UDP sockets on loopback, with scripted combat and drops, and two clients of two
 ///     accounts built from the client's production networking and gameplay code. Anna, stored holding a training sword,
-///     cloth armor, and 1,000 coins, enters the training ground beside Bobby, of another account, with 300; each sees the
-///     other by name, and Anna's bag shows what was stored. Anna kills a training slime, whose every drop the script
-///     makes, picks up its gel, and walks up to the Smith; then she leaves, and Bobby sees her go. After a clean stop a
-///     second host on the same database lets both in again, Anna's bag as she left it. Each later line of Milestone 17
-///     adds its steps here: the slime's card, its insertion and removal, the bonuses in the sheet, inspection, the board,
-///     and the cards a refine returns.
+///     cloth armor, a Forest Crawler Card, and 1,000 coins, enters the training ground beside Bobby, of another account,
+///     with 300; each sees the other by name, and Anna's bag shows what was stored. Anna kills a training slime, whose
+///     every drop the script makes but its card, picks up its gel, inserts her card into the sword, and walks up to the
+///     Smith; then she leaves, and Bobby sees her go. After a clean stop a second host on the same database lets both in
+///     again, Anna's bag as she left it, the card in the sword. Each later line of Milestone 17 adds its steps here: the
+///     removal, inspection, the board, and the cards a refine returns.
 /// </summary>
 [TestFixture]
 [NonParallelizable]
@@ -33,6 +33,7 @@ public sealed class CardAcceptanceTests
     private const string SlimeGel = "item.material.slime_gel";
     private const string TrainingSword = "item.weapon.training_sword";
     private const string ClothArmor = "item.armor.cloth";
+    private const string Keen = "item.card.forest_crawler";
     private const string AnnaIdentity = "card-anna";
     private const string AnnaName = "Anna";
     private const string BobbyIdentity = "card-bobby";
@@ -81,6 +82,7 @@ public sealed class CardAcceptanceTests
         {
             StoreItem(AnnaName, TrainingSword);
             StoreItem(AnnaName, ClothArmor);
+            StoreItem(AnnaName, Keen);
             Execute($"UPDATE characters SET currency = {AnnaCoins} WHERE name = '{AnnaName}'");
         };
         bobby.AfterCreate = () => Execute($"UPDATE characters SET currency = {BobbyCoins} WHERE name = '{BobbyName}'");
@@ -100,7 +102,7 @@ public sealed class CardAcceptanceTests
 
         Assert.That(
             Bag(anna),
-            Is.EqualTo(new[] { $"{ClothArmor} x 1", $"{TrainingSword} x 1" }),
+            Is.EqualTo(new[] { $"{ClothArmor} x 1", $"{Keen} x 1", $"{TrainingSword} x 1" }),
             $"{step}: Anna's bag as stored");
         Assert.That(anna.World.Inventory.Coins, Is.EqualTo(AnnaCoins), $"{step}: Anna's coins");
         Assert.That(bobby.World.Inventory.Rows, Is.Empty, $"{step}: Bobby's bag");
@@ -161,6 +163,30 @@ public sealed class CardAcceptanceTests
         world.ItemDroppedReceived -= drops.Add;
     }
 
+    // Anna puts her card into the sword's one slot; her bag's change shows it there, and Bobby hears nothing of it
+    // (Gameplay Systems §11.7).
+    private static void InsertTheCard(SocketClient anna, SocketClient bobby)
+    {
+        const string step = "insert";
+        ClientWorld world = anna.World;
+        long card = world.Inventory.Rows.Single(row => row.Item.Value == Keen).InventoryItem;
+        long sword = world.Inventory.Rows.Single(row => row.Item.Value == TrainingSword).InventoryItem;
+        uint bobbysRevision = bobby.World.Inventory.Revision;
+
+        Assert.That(anna.Connection.SendInsertCard(card, sword), Is.Not.Zero, $"{step}: sent");
+        Assert.That(
+            SocketClients.PumpUntil(
+                () => world.Inventory.Rows.Any(row => row.InventoryItem == sword && row.Cards.Count == 1),
+                anna,
+                bobby),
+            Is.True,
+            $"{step}: the sword holds the card ({world.LastRejection})");
+
+        Assert.That(world.Inventory.Rows.Any(row => row.InventoryItem == card), Is.False,
+            $"{step}: the card's row went");
+        Assert.That(bobby.World.Inventory.Revision, Is.EqualTo(bobbysRevision), $"{step}: Bobby's bag never changed");
+    }
+
     // Anna walks up to the Smith, whose window opens (Gameplay Systems §6.1).
     private static void VisitTheSmith(SocketClient anna, SocketClient bobby)
     {
@@ -205,7 +231,11 @@ public sealed class CardAcceptanceTests
 
     private static string[] Bag(SocketClient client)
     {
-        return client.World.Inventory.Rows.Select(row => $"{row.Item.Value} x {row.Quantity}")
+        return client.World.Inventory.Rows
+            .Select(row => $"{row.Item.Value} x {row.Quantity}"
+                + (row.Cards.Count == 0
+                    ? string.Empty
+                    : $" [{string.Join(", ", row.Cards.Select(card => card.Value))}]"))
             .OrderBy(row => row, StringComparer.Ordinal)
             .ToArray();
     }
@@ -264,6 +294,8 @@ public sealed class CardAcceptanceTests
 
             HuntASlime(anna, bobby);
             AssertCleanTraffic("hunt", anna, bobby);
+            InsertTheCard(anna, bobby);
+            AssertCleanTraffic("insert", anna, bobby);
             VisitTheSmith(anna, bobby);
             hunted = Bag(anna);
             Leave(anna, bobby);
@@ -279,6 +311,7 @@ public sealed class CardAcceptanceTests
             anna.EnterWorld(port);
             bobby.EnterWorld(port);
             Assert.That(Bag(anna), Is.EqualTo(hunted), "restart: Anna's bag as she left it");
+            Assert.That(hunted, Has.Member($"{TrainingSword} x 1 [{Keen}]"), "restart: the card in the sword");
             Assert.That(bobby.World.Inventory.Coins, Is.EqualTo(BobbyCoins), "restart: Bobby's coins");
             AssertCleanTraffic("restart", anna, bobby);
             Stop(host, anna, bobby);

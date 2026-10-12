@@ -1672,6 +1672,62 @@ public sealed class PlayerPanelTests
         Assert.That(sales, Is.EqualTo(new[] { (3L, 1u), (5L, 1u) }), "the unrefined row at one press");
     }
 
+    // Prototype Content §2: a press on a card's bag row opens the Card window in the side slot, which Stats does not
+    // replace; it lists each unworn row the card fits with a free slot, and a first press arms the insertion, a second
+    // sends it.
+    [UnityTest]
+    public IEnumerator CardWindow_FromACardsBagRow_ListsWhatItFits_AndInsertsOnASecondPress()
+    {
+        GameClient client = CreateIdleClient();
+        (ClientWorld world, RecordingConnection recording) = GiveRecordedWorld(client);
+        GiveShop(client);
+        var cardWindow = CardWindow.Create(client);
+        var statsWindow = StatsWindow.Create(client);
+        m_created.Add(cardWindow.gameObject);
+        m_created.Add(statsWindow.gameObject);
+        const BindingFlags field = BindingFlags.NonPublic | BindingFlags.Instance;
+        typeof(GameClient).GetField("m_cardWindow", field)!.SetValue(client, cardWindow);
+        typeof(GameClient).GetField("m_statsWindow", field)!.SetValue(client, statsWindow);
+        InventoryEntry card = new(7, new ItemDefinitionId(Keen), 2);
+        world.Inventory.OnSnapshot(
+            new InventorySnapshot(
+                4,
+                0,
+                0,
+                1,
+                new[]
+                {
+                    card, new InventoryEntry(3, new ItemDefinitionId(IronSword), 1, EquipmentSlot.None, 4),
+                    new InventoryEntry(4, new ItemDefinitionId(IronSword), 1, EquipmentSlot.Weapon),
+                    new InventoryEntry(5, new ItemDefinitionId(Mantle), 1)
+                }));
+
+        client.PressInventoryRow(card);
+        yield return null;
+        string shown = cardWindow.Text;
+        client.ToggleStats();
+        bool isStatsOpen = statsWindow.IsOpen;
+        Assert.That(Press(cardWindow, "+4 Iron Sword [2] · 2 free"), Is.True, cardWindow.Text);
+        yield return null;
+        int sentOnArming = recording.SentOf(MessageOpcode.InsertCard).Count();
+        Assert.That(Press(cardWindow, CardMessages.InsertPrompt), Is.True, cardWindow.Text);
+        yield return null;
+        var inserts = new List<(long, long)>();
+        foreach (byte[] payload in recording.SentOf(MessageOpcode.InsertCard))
+        {
+            Assert.That(InsertCard.TryRead(payload, out InsertCard? insert), Is.True);
+            inserts.Add((insert!.CardItem, insert.InventoryItem));
+        }
+
+        Assert.That(
+            shown,
+            Is.EqualTo("Forest Crawler Card\nAttack +8.\nFits: weapon\n+4 Iron Sword [2] · 2 free"),
+            "the worn sword and the armor left out");
+        Assert.That((client.IsCardWindowOpen, isStatsOpen), Is.EqualTo((true, false)), "Stats does not replace it");
+        Assert.That(sentOnArming, Is.Zero, "the first press arms");
+        Assert.That(inserts, Is.EqualTo(new[] { (7L, 3L) }));
+    }
+
     // Prototype Content §2: selling a carded row asks a second press, "Its cards are lost.", which then sells it.
     [UnityTest]
     public IEnumerator NpcWindow_ForTheQuartermaster_AsksForASecondPressBeforeSellingACardedRow()

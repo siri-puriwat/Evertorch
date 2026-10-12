@@ -371,6 +371,27 @@ public sealed class ServerInstrumentsTests
             "the raise past 99 counts nothing");
     }
 
+    // System Architecture §10: each committed insertion counts one card.
+    [Test]
+    public void CardInsertion_CountsTheCard()
+    {
+        var server = new TestServer();
+        using var recorder = new MeterRecorder(server.Instruments.Meter);
+        ConnectionId player = server.Connect();
+        server.SignInWithCharacter(player, 1);
+        server.Store.GiveItems(1, "item.card.forest_crawler", 1, 1, 5);
+        long card = server.Store.Stored(1).Items.Single().Id;
+        server.Store.GiveItems(1, "item.weapon.iron_sword", 1, 1, 5);
+        long sword = server.Store.Stored(1).Items.Last().Id;
+        server.SendEnterWorld(player, 1);
+        server.TickUntil(() => server.SessionOf(player).State == SessionState.InWorld);
+
+        server.SendInsertCard(player, card, sword, 1);
+        server.TickUntil(() => server.SessionOf(player).Character!.Inventory.Rows.Count == 1);
+
+        Assert.That(Single(recorder, "evertorch.cards.inserted"), Is.EqualTo(1));
+    }
+
     [Test]
     public void Casts_AreCountedByOutcome()
     {

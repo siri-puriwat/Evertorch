@@ -1091,6 +1091,11 @@ public sealed class SessionManager : ITickPhase
                 command.InventoryItem,
                 command.RefineLevel,
                 command.CommandSequence),
+            InboundEventKind.InsertCard => m_items.TryInsertCard(
+                session,
+                command.CardItem,
+                command.InventoryItem,
+                command.CommandSequence),
             _ => CommandRejectionReason.NotAllowedNow
         };
     }

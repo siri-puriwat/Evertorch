@@ -124,6 +124,8 @@ public sealed class ClientInventory
         var units = new Dictionary<ItemDefinitionId, long>();
         byte refineLevel = 0;
         IReadOnlyList<ItemDefinitionId> cards = Array.Empty<ItemDefinitionId>();
+        ItemDefinitionId insertedCard = default;
+        InventoryEntry insertedInto = default;
         foreach (InventoryEntry entry in change.Changes)
         {
             int index = m_rows.FindIndex(row => row.InventoryItem == entry.InventoryItem);
@@ -141,6 +143,13 @@ public sealed class ClientInventory
                 {
                     cards = held;
                 }
+            }
+
+            // A row whose cards grew took a card, which the words name (Prototype Content §2).
+            if (index >= 0 && entry.Cards.Count > m_rows[index].Cards.Count)
+            {
+                insertedCard = entry.Cards[entry.Cards.Count - 1];
+                insertedInto = entry;
             }
 
             Count(units, entry.Item, entry.Quantity);
@@ -164,7 +173,8 @@ public sealed class ClientInventory
         Revision = change.NewRevision;
         Coins = change.Coins;
         Changed?.Invoke();
-        ChangeApplied?.Invoke(new InventoryDelta(coinsBefore, Coins, units, refineLevel, cards));
+        ChangeApplied?.Invoke(
+            new InventoryDelta(coinsBefore, Coins, units, refineLevel, cards, insertedCard, insertedInto));
         return false;
     }
 

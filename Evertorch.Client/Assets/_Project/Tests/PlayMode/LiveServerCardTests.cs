@@ -11,6 +11,7 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
+using UnityEngine.UI;
 using EntityId = Evertorch.Game.EntityId;
 using Object = UnityEngine.Object;
 
@@ -29,6 +30,7 @@ public sealed class LiveServerCardTests
     private const string BobName = "LiveCardBob";
     private const string TrainingSword = "item.weapon.training_sword";
     private const string ClothArmor = "item.armor.cloth";
+    private const string Keen = "item.card.forest_crawler";
     private const string Smith = "npc.smith";
     private const uint AnnCoins = 1000;
     private const float StartTimeoutSeconds = 30f;
@@ -75,13 +77,14 @@ public sealed class LiveServerCardTests
         }
     }
 
-    // The real client, stored holding a training sword, cloth armor, and 1,000 coins, enters with them; another player
-    // of another account enters beside it and is drawn; a walk through the controller up to the Smith opens its
-    // window, as an arrival does, so an editor without focus, which drops a queued click, cannot fail the step
-    // (Gameplay Systems §6.1).
+    // The real client, stored holding a training sword, cloth armor, a Forest Crawler Card, and 1,000 coins, enters with
+    // them; a press of the card's row opens the Card window, and two presses of the sword's row put the card in, which
+    // the bag and the chat then name; another player of another account enters beside it and is drawn; a walk through
+    // the controller up to the Smith opens its window, as an arrival does, so an editor without focus, which drops a
+    // queued click, cannot fail the step (Gameplay Systems §6.1, §11.7).
     [UnityTest]
     [Timeout(TestTimeoutMs)]
-    public IEnumerator Carder_WithEquipmentInTheBag_SeesTheOther_AndOpensTheSmithsWindow()
+    public IEnumerator Carder_WithEquipmentInTheBag_InsertsACard_SeesTheOther_AndOpensTheSmithsWindow()
     {
         string actionsPath = RequirePrerequisites();
         yield return StartDatabaseAndServer();
@@ -92,6 +95,7 @@ public sealed class LiveServerCardTests
         {
             StoreItem(TrainingSword);
             StoreItem(ClothArmor);
+            StoreItem(Keen);
             m_database!.Execute($"UPDATE characters SET currency = {AnnCoins} WHERE name = '{AnnName}'");
         });
         ClientWorld world = client.World!;
@@ -99,8 +103,23 @@ public sealed class LiveServerCardTests
         Assert.That(
             world.Inventory.Rows.Select(row => $"{row.Item.Value} x {row.Quantity}")
                 .OrderBy(row => row, StringComparer.Ordinal),
-            Is.EqualTo(new[] { $"{ClothArmor} x 1", $"{TrainingSword} x 1" }),
+            Is.EqualTo(new[] { $"{ClothArmor} x 1", $"{Keen} x 1", $"{TrainingSword} x 1" }),
             "the stored bag");
+
+        InventoryWindow bag = client.GetComponentsInChildren<InventoryWindow>(true).Single();
+        CardWindow cards = client.GetComponentsInChildren<CardWindow>(true).Single();
+        ChatPanel lines = client.GetComponentsInChildren<ChatPanel>(true).Single();
+        yield return WaitUntil(() => Row(bag, "Forest Crawler Card x 1") != null, StartTimeoutSeconds);
+        Row(bag, "Forest Crawler Card x 1")!.onClick.Invoke();
+        yield return WaitUntil(() => Row(cards, "Training Sword [1] · 1 free") != null, StartTimeoutSeconds);
+        Assert.That(cards.Text, Does.StartWith("Forest Crawler Card\nAttack +8.\nFits: weapon"), "the Card window");
+        Row(cards, "Training Sword [1] · 1 free")!.onClick.Invoke();
+        yield return WaitUntil(() => Row(cards, CardMessages.InsertPrompt) != null, StartTimeoutSeconds);
+        Row(cards, CardMessages.InsertPrompt)!.onClick.Invoke();
+        yield return WaitUntil(() => bag.Text.Contains("Keen Training Sword [1]"), StartTimeoutSeconds);
+        Assert.That(bag.Text, Does.Contain("Keen Training Sword [1]"), $"the card in the sword: {world.LastRejection}");
+        Assert.That(lines.Text, Does.Contain("Forest Crawler Card inserted: Keen Training Sword [1]."));
+        Assert.That(cards.IsOpen, Is.False, "the window closed with the card's row");
 
         yield return EnterTheOther(client, port);
         ClientConnection other = m_other!;
@@ -140,6 +159,12 @@ public sealed class LiveServerCardTests
         Assert.That(window.ShownName, Is.EqualTo("Smith"), $"{window.Text} at {world.Predictor.Position}");
         Assert.That(other.MalformedMessages + other.UnexpectedMessages, Is.Zero, "the other player's traffic");
         Assert.That(client.Connection!.MalformedMessages + client.Connection.UnexpectedMessages, Is.Zero);
+    }
+
+    private static Button? Row(Component window, string name)
+    {
+        return window.GetComponentsInChildren<Button>()
+            .FirstOrDefault(button => button.name == name);
     }
 
     private void StoreItem(string item)

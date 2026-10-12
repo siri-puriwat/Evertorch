@@ -53,6 +53,8 @@ public sealed class ItemActionSystem : ITickPhase
     private const string MarketTax = "market tax";
     private const string RefineOperation = "refine";
     private const string RefineLookup = "refine lookup";
+    private const string CardInsertOperation = "card insert";
+    private const string CardInsertLookup = "card insert lookup";
     private const string Deposited = "deposit";
     private const string Withdrawn = "withdraw";
     private const int MillisecondsPerSecond = 1000;
@@ -127,6 +129,12 @@ public sealed class ItemActionSystem : ITickPhase
             new EventId(2011, "MarketContentMismatch"),
             "Character {Character} on connection {Connection} could not collect listing {Listing}: the loaded content "
             + "has no {Definition}. The listing is kept.");
+
+    private static readonly Action<ILogger, long, string, long, string, int, Guid, Exception?> LogCardInserted =
+        LoggerMessage.Define<long, string, long, string, int, Guid>(
+            LogLevel.Information,
+            new EventId(1037, "CardInserted"),
+            "Character {Character} inserted {Card} into row {Row} ({Item}) at slot {Slot} (operation {OperationId}).");
 
     private static readonly Action<ILogger, long, string, int, int, string, Guid, Exception?> LogRefined =
         LoggerMessage.Define<long, string, int, int, string, Guid>(
@@ -642,6 +650,7 @@ public sealed class ItemActionSystem : ITickPhase
             InventoryOperationKind.MarketBuy => InboundEventKind.MarketBuy,
             InventoryOperationKind.MarketCollect => InboundEventKind.MarketCollect,
             InventoryOperationKind.Refine => InboundEventKind.RefineItem,
+            InventoryOperationKind.InsertCard => InboundEventKind.InsertCard,
             _ => throw NotAnItemAction(operation)
         };
     }
@@ -663,6 +672,7 @@ public sealed class ItemActionSystem : ITickPhase
             InventoryOperationKind.MarketBuy => MarketBuyOperation,
             InventoryOperationKind.MarketCollect => MarketCollectOperation,
             InventoryOperationKind.Refine => RefineOperation,
+            InventoryOperationKind.InsertCard => CardInsertOperation,
             _ => throw NotAnItemAction(operation)
         };
     }
@@ -684,6 +694,7 @@ public sealed class ItemActionSystem : ITickPhase
             InventoryOperationKind.MarketBuy => MarketBuyLookup,
             InventoryOperationKind.MarketCollect => MarketCollectLookup,
             InventoryOperationKind.Refine => RefineLookup,
+            InventoryOperationKind.InsertCard => CardInsertLookup,
             _ => throw NotAnItemAction(operation)
         };
     }
@@ -776,6 +787,64 @@ public sealed class ItemActionSystem : ITickPhase
             coins,
             m_time.GetUtcNow().UtcDateTime);
         return TryCommit(session, operation, (store, cancellation) => store.CommitRefineAsync(commit, cancellation));
+    }
+
+    /// <summary>
+    ///     Checks an insertion of the card in the bag's row <paramref name="cardItem" /> into the bag's row
+    ///     <paramref name="inventoryItem" /> (Gameplay Systems §11.7, in order) and, when it passes, queues its commit. No
+    ///     NPC, fee, or draw is involved. The caller has already refused a dead, leaving, or trading character.
+    /// </summary>
+    public CommandRejectionReason TryInsertCard(
+        ClientSession session,
+        long cardItem,
+        long inventoryItem,
+        uint commandSequence)
+    {
+        CharacterSession character = session.Character!;
+        if (character.HasInventoryWork)
+        {
+            return CommandRejectionReason.ItemActionInFlight;
+        }
+
+        if (!character.Inventory.TryGetRow(cardItem, out InventoryEntry card))
+        {
+            return CommandRejectionReason.InvalidTarget;
+        }
+
+        ItemCard? fits = m_content.Items[card.Item].Card;
+        if (fits == null)
+        {
+            return CommandRejectionReason.NotAllowedNow;
+        }
+
+        if (!character.Inventory.TryGetRow(inventoryItem, out InventoryEntry row))
+        {
+            return CommandRejectionReason.InvalidTarget;
+        }
+
+        ItemDefinition item = m_content.Items[row.Item];
+        if (item.Slot != fits.Fits || row.Slot != EquipmentSlot.None || row.Cards.Count >= item.Slots)
+        {
+            return CommandRejectionReason.NotAllowedNow;
+        }
+
+        var operation = new InventoryOperation(
+            InventoryOperationKind.InsertCard,
+            commandSequence,
+            Guid.NewGuid(),
+            reported: new ReportedRow(inventoryItem, row.Item.Value),
+            item: card.Item);
+        var commit = new InsertCardCommit(
+            operation.OperationId,
+            character.Character.Value,
+            cardItem,
+            card.Item.Value,
+            inventoryItem,
+            row.Item.Value,
+            item.Slots,
+            m_time.GetUtcNow().UtcDateTime);
+        return TryCommit(session, operation,
+            (store, cancellation) => store.CommitInsertCardAsync(commit, cancellation));
     }
 
     // The first unworn row of the table's ore that holds an attempt's quantity.
@@ -1776,9 +1845,12 @@ public sealed class ItemActionSystem : ITickPhase
         {
             Refuse(
                 character,
-                character.Operation!.Kind == InventoryOperationKind.Refine
-                    ? RefineRefusalOf(result.Status)
-                    : CommandRejectionReason.InvalidTarget);
+                character.Operation!.Kind switch
+                {
+                    InventoryOperationKind.Refine => RefineRefusalOf(result.Status),
+                    InventoryOperationKind.InsertCard => CardRefusalOf(result.Status),
+                    _ => CommandRejectionReason.InvalidTarget
+                });
             return;
         }
 
@@ -1843,6 +1915,9 @@ public sealed class ItemActionSystem : ITickPhase
             case InventoryOperationKind.Refine:
                 Refined(character, operation);
                 break;
+            case InventoryOperationKind.InsertCard:
+                CardInserted(character, operation);
+                break;
             default:
                 throw NotAnItemAction(operation);
         }
@@ -1859,6 +1934,35 @@ public sealed class ItemActionSystem : ITickPhase
             InventoryStatus.NotEnoughCoins => CommandRejectionReason.NotEnoughCoins,
             _ => CommandRejectionReason.InvalidTarget
         };
+    }
+
+    // A worn row or one without a free slot is 3; a row gone or changed is 1 (Gameplay Systems §11.7).
+    private static CommandRejectionReason CardRefusalOf(InventoryStatus status)
+    {
+        return status switch
+        {
+            InventoryStatus.RowWorn => CommandRejectionReason.NotAllowedNow,
+            InventoryStatus.NoFreeSlot => CommandRejectionReason.NotAllowedNow,
+            _ => CommandRejectionReason.InvalidTarget
+        };
+    }
+
+    // The owner hears its bag's change alone; nothing is announced, and a worn row never changes, so no statistic does
+    // (Gameplay Systems §11.7).
+    private void CardInserted(CharacterSession character, InventoryOperation operation)
+    {
+        ReportedRow row = operation.Reported!;
+        int slot = character.Inventory.TryGetRow(row.Id, out InventoryEntry held) ? held.Cards.Count : 0;
+        LogCardInserted(
+            m_logger,
+            character.Character.Value,
+            operation.Item.Value,
+            row.Id,
+            row.ItemDefinitionId,
+            slot,
+            operation.OperationId,
+            null);
+        m_instruments.RecordCardInserted();
     }
 
     // The refiner alone hears the outcome, after its bag's change, a lost answer's too: the outcome is the operation's

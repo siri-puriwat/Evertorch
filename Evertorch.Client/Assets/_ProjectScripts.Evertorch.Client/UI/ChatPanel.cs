@@ -387,6 +387,19 @@ public sealed class ChatPanel : MonoBehaviour
 
         if (m_client != null
             && m_client.Connection != null
+            && m_client.Connection.TryGetCardSequence(rejected.CommandSequence, out CardRequest card))
+        {
+            Add(
+                CardMessages.DescribeInsertRefusal(
+                    card,
+                    m_watched != null ? m_watched.Inventory.Rows : new InventoryEntry[0],
+                    rejected.Reason,
+                    m_client.Content));
+            return;
+        }
+
+        if (m_client != null
+            && m_client.Connection != null
             && m_client.Connection.TryGetRefineSequence(rejected.CommandSequence, out RefineRequest refine))
         {
             Add(
@@ -493,7 +506,14 @@ public sealed class ChatPanel : MonoBehaviour
 
     private void OnChangeApplied(InventoryDelta delta)
     {
-        string? line = ShopMessages.Describe(delta, m_client != null ? m_client.Content : null);
+        ClientContent? content = m_client != null ? m_client.Content : null;
+        if (delta.InsertedCard != default)
+        {
+            Add(CardMessages.Inserted(content, delta.InsertedCard, delta.InsertedInto));
+            return;
+        }
+
+        string? line = ShopMessages.Describe(delta, content);
         if (line != null)
         {
             Add(line);

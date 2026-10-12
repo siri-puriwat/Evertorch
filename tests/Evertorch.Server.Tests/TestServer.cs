@@ -810,6 +810,13 @@ internal sealed class TestServer
         Inbound.OnPayload(connection, ProtocolChannel.Control, payload);
     }
 
+    public void SendInsertCard(ConnectionId connection, long cardItem, long inventoryItem, uint commandSequence)
+    {
+        byte[] payload = new byte[InsertCard.EncodedLength];
+        new InsertCard(cardItem, inventoryItem, commandSequence).Write(payload);
+        Inbound.OnPayload(connection, ProtocolChannel.Control, payload);
+    }
+
     public void SendAcceptQuest(ConnectionId connection, EntityId npc, string quest, uint commandSequence)
     {
         var message = new AcceptQuest(npc, new QuestDefinitionId(quest), commandSequence);
