@@ -522,7 +522,7 @@ public sealed class NpcWindow : MonoBehaviour
             long storageItem = row.StorageItem;
             uint held = row.Quantity;
             AddButton(
-                RowText(content, row.Item, row.Quantity, row.RefineLevel),
+                RowText(content, row.Item, row.Quantity, row.RefineLevel, row.Cards),
                 () => client.WithdrawAt(npc, storageItem, Math.Min(Amount, held)));
         }
 
@@ -549,7 +549,7 @@ public sealed class NpcWindow : MonoBehaviour
             long inventoryItem = row.InventoryItem;
             uint held = row.Quantity;
             AddButton(
-                RowText(content, row.Item, row.Quantity, row.RefineLevel),
+                RowText(content, row.Item, row.Quantity, row.RefineLevel, row.Cards),
                 () => client.DepositAt(npc, inventoryItem, Math.Min(Amount, held)));
             listed++;
         }
@@ -778,9 +778,9 @@ public sealed class NpcWindow : MonoBehaviour
             byte level = row.RefineLevel;
             string key = RefineKey(inventoryItem);
             bool asksTwice = table.Steps[level].Chance < 100;
-            AddButton(
+            AddWrappingButton(
                 m_armedKey == key
-                    ? RefineMessages.Prompt(table)
+                    ? RefineMessages.Prompt(table, row.Cards.Count > 0)
                     : RefineMessages.Row(content, row, table, HeldOf(inventory, table.Ore)),
                 () =>
                 {
@@ -837,9 +837,14 @@ public sealed class NpcWindow : MonoBehaviour
         return "sell " + inventoryItem.ToString(CultureInfo.InvariantCulture);
     }
 
-    private static string RowText(ClientContent? content, ItemDefinitionId item, uint quantity, byte refineLevel)
+    private static string RowText(
+        ClientContent? content,
+        ItemDefinitionId item,
+        uint quantity,
+        byte refineLevel,
+        IReadOnlyList<ItemDefinitionId> cards)
     {
-        string name = ShopMessages.ItemName(content, item, refineLevel);
+        string name = ShopMessages.RowName(content, item, refineLevel, cards);
         return quantity == 1 ? name : $"{name} x {quantity}";
     }
 
@@ -977,13 +982,13 @@ public sealed class NpcWindow : MonoBehaviour
     }
 
     // One press sells one; a stack also offers All, which sells the whole row. A refined row fetches its item's price
-    // whatever its level, so its first press only arms the sale.
+    // whatever its level, and a carded row loses its cards, so its first press only arms the sale.
     private void AddSellRow(InventoryEntry row, uint price, ClientContent? content)
     {
-        string name = ShopMessages.ItemName(content, row.Item, row.RefineLevel);
+        string name = ShopMessages.RowName(content, row.Item, row.RefineLevel, row.Cards);
         string key = SellKey(row.InventoryItem);
         string text = m_armedKey == key
-            ? ShopMessages.SellPrompt(content, row.Item, row.RefineLevel, price)
+            ? ShopMessages.SellPrompt(content, row.Item, row.RefineLevel, price, row.Cards)
             : row.Quantity > 1
                 ? $"{name} x {row.Quantity}: {ShopMessages.Coins(price)} each"
                 : $"{name} x 1: {ShopMessages.Coins(price)}";
@@ -991,7 +996,7 @@ public sealed class NpcWindow : MonoBehaviour
         EntityId npc = Npc;
         long inventoryItem = row.InventoryItem;
         uint quantity = row.Quantity;
-        bool asksTwice = row.RefineLevel > 0;
+        bool asksTwice = row.RefineLevel > 0 || row.Cards.Count > 0;
         GameObject line = Ui.CreateRow($"Sell {inventoryItem}", m_rows!);
         GameObject one = CreateButton(
             text,
@@ -1022,6 +1027,16 @@ public sealed class NpcWindow : MonoBehaviour
     private void AddButton(string text, UnityAction onClick)
     {
         m_rowObjects.Add(CreateButton(text, m_rows!, onClick));
+        AppendText(text);
+    }
+
+    // A refine row names a carded item and its ore, which at 12 points can pass the window's width; it takes a second
+    // line within its row rather than spill past the window's edge.
+    private void AddWrappingButton(string text, UnityAction onClick)
+    {
+        GameObject button = CreateButton(text, m_rows!, onClick);
+        button.GetComponentInChildren<TMP_Text>().textWrappingMode = TextWrappingModes.Normal;
+        m_rowObjects.Add(button);
         AppendText(text);
     }
 

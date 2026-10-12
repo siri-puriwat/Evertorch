@@ -188,7 +188,8 @@ public sealed class StatsWindow : MonoBehaviour
         {
             CharacterSheetStat stat = sheet.Stats[index];
             bool canRaise = !m_wasDead && stat.NextCost > 0 && stat.NextCost <= sheet.StatPoints;
-            m_values[index].text = BuildMessages.StatValue(StatAt(index), stat);
+            m_values[index].text =
+                BuildMessages.StatValue(StatAt(index), stat, BuildMessages.EquipmentStat(sheet, index));
             m_costs[index].text = BuildMessages.NextCost(stat);
             m_raises[index].interactable = canRaise;
             m_raises[index].GetComponentInChildren<TMP_Text>().text = canRaise ? "+" : string.Empty;

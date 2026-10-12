@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Evertorch.Game;
 using Evertorch.Protocol;
 
 namespace Evertorch.Client
@@ -121,6 +122,7 @@ public sealed class ClientStorage
         int index = m_rows.FindIndex(entry => entry.StorageItem == row.StorageItem);
         uint before = index >= 0 ? m_rows[index].Quantity : 0;
         byte refineLevel = index >= 0 ? m_rows[index].RefineLevel : row.RefineLevel;
+        IReadOnlyList<ItemDefinitionId> cards = index >= 0 ? m_rows[index].Cards : row.Cards;
         if (row.Quantity == 0)
         {
             if (index >= 0)
@@ -139,7 +141,7 @@ public sealed class ClientStorage
 
         Revision = change.NewRevision;
         Version++;
-        ChangeApplied?.Invoke(new StorageDelta(row.Item, (long)row.Quantity - before, DepositFee, refineLevel));
+        ChangeApplied?.Invoke(new StorageDelta(row.Item, (long)row.Quantity - before, DepositFee, refineLevel, cards));
     }
 
     /// <summary>

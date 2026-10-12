@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using Evertorch.Game;
 
 namespace Evertorch.Client
@@ -8,12 +10,18 @@ namespace Evertorch.Client
 /// </summary>
 public readonly struct StorageDelta
 {
-    public StorageDelta(ItemDefinitionId item, long quantity, uint depositFee, byte refineLevel = 0)
+    public StorageDelta(
+        ItemDefinitionId item,
+        long quantity,
+        uint depositFee,
+        byte refineLevel = 0,
+        IReadOnlyList<ItemDefinitionId>? cards = null)
     {
         Item = item;
         Quantity = quantity;
         DepositFee = depositFee;
         RefineLevel = refineLevel;
+        Cards = cards ?? Array.Empty<ItemDefinitionId>();
     }
 
     public ItemDefinitionId Item { get; }
@@ -23,5 +31,10 @@ public readonly struct StorageDelta
     public uint DepositFee { get; }
 
     public byte RefineLevel { get; }
+
+    /// <summary>
+    ///     The row's cards, as the client held them.
+    /// </summary>
+    public IReadOnlyList<ItemDefinitionId> Cards { get; }
 }
 }

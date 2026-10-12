@@ -180,6 +180,10 @@ public sealed class BuildMessagesTests
             Enumerable.Range(1, 6).Select(stat => BuildMessages.StatName((PrimaryStat)stat)),
             Is.EqualTo(new[] { "STR", "AGI", "VIT", "INT", "DEX", "LUK" }));
         Assert.That(BuildMessages.StatValue(PrimaryStat.Agi, new CharacterSheetStat(11, 3)), Is.EqualTo("AGI 11"));
+        Assert.That(
+            BuildMessages.StatValue(PrimaryStat.Str, new CharacterSheetStat(30, 4), 2),
+            Is.EqualTo("STR 30 + 2"),
+            "what the worn equipment adds, beside the statistic");
         Assert.That(BuildMessages.NextCost(new CharacterSheetStat(11, 3)), Is.EqualTo("next 3"));
         Assert.That(BuildMessages.NextCost(new CharacterSheetStat(99, 0)), Is.EqualTo("max"));
         Assert.That(BuildMessages.Points(7), Is.EqualTo("Points: 7"));

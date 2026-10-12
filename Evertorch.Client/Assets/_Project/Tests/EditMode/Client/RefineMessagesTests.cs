@@ -103,6 +103,10 @@ public sealed class RefineMessagesTests
                 }));
         Assert.That(RefineMessages.Prompt(Table()), Is.EqualTo("Press again to refine. On failure it is destroyed."));
         Assert.That(
+            RefineMessages.Prompt(Table(), true),
+            Is.EqualTo("Press again. On failure it is destroyed; its cards come back to your bag."),
+            "a carded row's cards come back");
+        Assert.That(
             new[]
             {
                 RefineMessages.Describe(new RefineOutcome(5, Sword, 6, 7, RefineOutcomeKind.Refined), content),

@@ -14,7 +14,7 @@ public static class StorageMessages
     /// </summary>
     public static string Describe(StorageDelta delta, ClientContent? content)
     {
-        string name = ShopMessages.ItemName(content, delta.Item, delta.RefineLevel);
+        string name = ShopMessages.RowName(content, delta.Item, delta.RefineLevel, delta.Cards);
         long count = Math.Abs(delta.Quantity);
         string units = count == 1 ? name : $"{name} x {count}";
         if (delta.Quantity < 0)

@@ -123,6 +123,7 @@ public sealed class ClientInventory
         uint coinsBefore = Coins;
         var units = new Dictionary<ItemDefinitionId, long>();
         byte refineLevel = 0;
+        IReadOnlyList<ItemDefinitionId> cards = Array.Empty<ItemDefinitionId>();
         foreach (InventoryEntry entry in change.Changes)
         {
             int index = m_rows.FindIndex(row => row.InventoryItem == entry.InventoryItem);
@@ -131,10 +132,15 @@ public sealed class ClientInventory
                 Count(units, m_rows[index].Item, -m_rows[index].Quantity);
             }
 
-            // An emptied row arrives without its level, so the row held names it.
+            // An emptied row arrives without its level and its cards, so the row held names them.
             if ((index >= 0 ? m_rows[index].Quantity : 0) != entry.Quantity)
             {
                 refineLevel = Math.Max(refineLevel, index >= 0 ? m_rows[index].RefineLevel : entry.RefineLevel);
+                IReadOnlyList<ItemDefinitionId> held = index >= 0 ? m_rows[index].Cards : entry.Cards;
+                if (cards.Count == 0)
+                {
+                    cards = held;
+                }
             }
 
             Count(units, entry.Item, entry.Quantity);
@@ -158,7 +164,7 @@ public sealed class ClientInventory
         Revision = change.NewRevision;
         Coins = change.Coins;
         Changed?.Invoke();
-        ChangeApplied?.Invoke(new InventoryDelta(coinsBefore, Coins, units, refineLevel));
+        ChangeApplied?.Invoke(new InventoryDelta(coinsBefore, Coins, units, refineLevel, cards));
         return false;
     }
 

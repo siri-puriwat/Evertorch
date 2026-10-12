@@ -212,12 +212,12 @@ public sealed class LiveServerCombatTests : InputTestFixture
         InventoryWindow window = client.GetComponentsInChildren<InventoryWindow>(true).Single();
         yield return WaitUntil(() => window.GetComponentsInChildren<Button>().Length == 1, 2f);
         Button[] rows = window.GetComponentsInChildren<Button>();
-        Assert.That(rows.Select(row => row.name), Is.EqualTo(new[] { "Training Sword x 1" }));
+        Assert.That(rows.Select(row => row.name), Is.EqualTo(new[] { "Training Sword [1]" }));
 
         rows[0].onClick.Invoke();
-        yield return WaitUntil(() => window.Text == "Training Sword x 1 (equipped)", 5f);
+        yield return WaitUntil(() => window.Text == "Training Sword [1] (equipped)", 5f);
 
-        Assert.That(window.Text, Is.EqualTo("Training Sword x 1 (equipped)"), world.LastRejection.ToString());
+        Assert.That(window.Text, Is.EqualTo("Training Sword [1] (equipped)"), world.LastRejection.ToString());
         Assert.That(world.Inventory.Rows.Single().Slot, Is.EqualTo(EquipmentSlot.Weapon));
         var swings = new List<AttackStarted>();
         world.AttackStartedReceived += started =>

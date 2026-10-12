@@ -16,12 +16,14 @@ public sealed class InventoryDelta
         uint coinsBefore,
         uint coinsAfter,
         IReadOnlyDictionary<ItemDefinitionId, long> units,
-        byte refineLevel = 0)
+        byte refineLevel = 0,
+        IReadOnlyList<ItemDefinitionId>? cards = null)
     {
         CoinsBefore = coinsBefore;
         CoinsAfter = coinsAfter;
         Units = units ?? throw new ArgumentNullException(nameof(units));
         RefineLevel = refineLevel;
+        Cards = cards ?? Array.Empty<ItemDefinitionId>();
     }
 
     public uint CoinsBefore { get; }
@@ -34,5 +36,10 @@ public sealed class InventoryDelta
     ///     The refine level of the rows whose units moved, the highest of them: a sold row's, which its words name.
     /// </summary>
     public byte RefineLevel { get; }
+
+    /// <summary>
+    ///     The cards of the row whose units moved, as the client held it: a sold row's, which its words name.
+    /// </summary>
+    public IReadOnlyList<ItemDefinitionId> Cards { get; }
 }
 }

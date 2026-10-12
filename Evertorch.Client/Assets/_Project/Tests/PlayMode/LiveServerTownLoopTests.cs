@@ -307,7 +307,7 @@ public sealed class LiveServerTownLoopTests : InputTestFixture
         Assert.That(Press(window, "Training Sword: 50 coins"), Is.True, window.Text);
         yield return WaitUntil(() => town.Inventory.Coins == 50, StepTimeoutSeconds);
         Assert.That(town.Inventory.Coins, Is.EqualTo(50u), $"bought: {town.LastRejection}");
-        Assert.That(lines.Text, Does.Contain("Bought Training Sword for 50 coins."));
+        Assert.That(lines.Text, Does.Contain("Bought Training Sword [1] for 50 coins."));
         Assert.That(town.Inventory.Rows.Select(row => row.Item.Value), Does.Contain(SwordItem));
 
         yield return WaitUntil(() => window.Text.Contains("Slime Gel x 6"), StepTimeoutSeconds);
@@ -323,12 +323,13 @@ public sealed class LiveServerTownLoopTests : InputTestFixture
         Assert.That(lines.Text, Does.Contain("Sold Slime Gel x 5 for 10 coins."));
         Assert.That(town.Inventory.Rows.Select(row => row.Item.Value), Has.No.Member(GelItem));
         yield return WaitUntil(() => window.CoinsText == "Coins: 62", StepTimeoutSeconds);
-        Assert.That(window.Text, Does.EndWith("Sell\nTraining Sword x 1: 25 coins"), "the bought sword can be sold");
+        Assert.That(window.Text, Does.EndWith("Sell\nTraining Sword [1] x 1: 25 coins"),
+            "the bought sword can be sold");
 
         InventoryWindow inventory = client.GetComponentsInChildren<InventoryWindow>(true).Single();
-        inventory.GetComponentsInChildren<Button>().Single(row => row.name == "Training Sword x 1").onClick.Invoke();
-        yield return WaitUntil(() => inventory.Text.Contains("Training Sword x 1 (equipped)"), StepTimeoutSeconds);
-        Assert.That(inventory.Text, Does.Contain("Training Sword x 1 (equipped)"), $"worn: {town.LastRejection}");
+        inventory.GetComponentsInChildren<Button>().Single(row => row.name == "Training Sword [1]").onClick.Invoke();
+        yield return WaitUntil(() => inventory.Text.Contains("Training Sword [1] (equipped)"), StepTimeoutSeconds);
+        Assert.That(inventory.Text, Does.Contain("Training Sword [1] (equipped)"), $"worn: {town.LastRejection}");
         yield return WaitUntil(() => window.Text.EndsWith("Sell\nNothing to sell"), StepTimeoutSeconds);
         Assert.That(window.Text, Does.EndWith("Sell\nNothing to sell"), "a worn sword is not for sale");
 

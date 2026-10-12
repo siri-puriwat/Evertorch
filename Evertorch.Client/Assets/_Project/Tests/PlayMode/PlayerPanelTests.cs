@@ -23,6 +23,11 @@ public sealed class PlayerPanelTests
     private const string Gel = "item.material.slime_gel";
     private const string Sword = "item.weapon.training_sword";
     private const string Potion = "item.consumable.minor_health";
+    private const string IronSword = "item.weapon.iron_sword";
+    private const string Mantle = "item.armor.monarch_mantle";
+    private const string Keen = "item.card.forest_crawler";
+    private const string Arcane = "item.card.spark_wisp";
+    private const string Shelled = "item.card.grotto_crawler";
     private const string Quartermaster = "npc.quartermaster";
     private const string GateWarden = "npc.gate_warden";
     private const string Hunt = "quest.crawler_hunt";
@@ -152,8 +157,59 @@ public sealed class PlayerPanelTests
                     ItemType.Consumable,
                     "pickup_minor_health",
                     "potion")
-            },
+            }.Concat(CardedItems()),
             npcs);
+    }
+
+    // The items whose names are the longest a row shows (Prototype Content §2): the Iron Sword with two slots, the
+    // Monarch Mantle with one, and three cards.
+    private static IEnumerable<ClientItem> CardedItems()
+    {
+        ClientItem Card(string id, string name, EquipmentSlot fits, string prefix)
+        {
+            return new ClientItem(
+                new ItemDefinitionId(id),
+                name,
+                ItemType.Card,
+                "pickup_slime_gel",
+                "item_slime_gel",
+                stackLimit: 999,
+                fits: fits,
+                prefix: prefix,
+                description: "Attack +8.");
+        }
+
+        return new[]
+        {
+            new ClientItem(
+                new ItemDefinitionId(IronSword),
+                "Iron Sword",
+                ItemType.Weapon,
+                "pickup_training_sword",
+                "sword",
+                slots: 2),
+            new ClientItem(
+                new ItemDefinitionId(Mantle),
+                "Monarch Mantle",
+                ItemType.Armor,
+                "pickup_cloth_armor",
+                "armor",
+                slots: 1),
+            Card(Keen, "Forest Crawler Card", EquipmentSlot.Weapon, "Keen"),
+            Card(Arcane, "Spark Wisp Card", EquipmentSlot.Weapon, "Arcane"),
+            Card(Shelled, "Grotto Crawler Card", EquipmentSlot.Armor, "Shelled")
+        };
+    }
+
+    // A label that keeps to its row at 12 points or more: on its lines, within its width and height.
+    private static void AssertFitsItsRow(TMP_Text label, int maxLines)
+    {
+        label.ForceMeshUpdate();
+        Rect rect = ((RectTransform)label.transform).rect;
+        Assert.That(label.fontSize, Is.GreaterThanOrEqualTo(12f), label.text);
+        Assert.That(label.textInfo.lineCount, Is.LessThanOrEqualTo(maxLines), label.text);
+        Assert.That(label.textBounds.size.x, Is.LessThanOrEqualTo(rect.width + 0.5f), label.text);
+        Assert.That(label.textBounds.size.y, Is.LessThanOrEqualTo(rect.height + 0.5f), label.text);
     }
 
     // The Guildmaster's content: the NPC and the three jobs' names.
@@ -1319,15 +1375,15 @@ public sealed class PlayerPanelTests
         yield return null;
         Button[] buttons = window.GetComponentsInChildren<Button>(true);
 
-        Assert.That(window.Text, Is.EqualTo("Slime Gel x 3\nTraining Sword x 1 (equipped)\nTraining Sword x 1"));
+        Assert.That(window.Text, Is.EqualTo("Slime Gel x 3\nTraining Sword (equipped)\nTraining Sword"));
         Assert.That(
             buttons.Select(button => button.name),
-            Is.EqualTo(new[] { "Training Sword x 1 (equipped)", "Training Sword x 1" }),
+            Is.EqualTo(new[] { "Training Sword (equipped)", "Training Sword" }),
             "the gel has no action, so its row is text");
         Assert.That(buttons.Select(button => button.navigation.mode), Is.All.EqualTo(Navigation.Mode.None));
         buttons[1].onClick.Invoke();
         yield return null;
-        Assert.That(window.Text, Does.EndWith("Training Sword x 1"), "a press shows nothing until the server answers");
+        Assert.That(window.Text, Does.EndWith("Training Sword"), "a press shows nothing until the server answers");
     }
 
     // A row above +0 is named with its level, worn or not; at +0 a label stays as it is (Prototype Content §2).
@@ -1356,7 +1412,47 @@ public sealed class PlayerPanelTests
 
         Assert.That(
             window.Text,
-            Is.EqualTo("+7 Training Sword x 1 (equipped)\n+10 Training Sword x 1\nTraining Sword x 1"));
+            Is.EqualTo("+7 Training Sword (equipped)\n+10 Training Sword\nTraining Sword"),
+            "an equipment row drops x 1");
+    }
+
+    // Prototype Content §2: a row is named by its level, its cards, and its slots, and the longest real label keeps to
+    // one line at 12 points or more in the window's 280 units.
+    [UnityTest]
+    public IEnumerator InventoryWindow_NamesACardedRow_AndItsLongestLabelFitsOneLineAtTwelvePoints()
+    {
+        GameClient client = CreateIdleClient();
+        ClientWorld world = GiveWorld(client);
+        GiveShop(client);
+        var window = InventoryWindow.Create(client);
+        m_created.Add(window.gameObject);
+
+        world.Inventory.OnSnapshot(
+            new InventorySnapshot(
+                4,
+                0,
+                0,
+                1,
+                new[]
+                {
+                    new InventoryEntry(2, new ItemDefinitionId(Mantle), 1, EquipmentSlot.Armor, 10,
+                        new[] { new ItemDefinitionId(Shelled) }),
+                    new InventoryEntry(3, new ItemDefinitionId(IronSword), 1, EquipmentSlot.Weapon, 10,
+                        new[] { new ItemDefinitionId(Arcane), new ItemDefinitionId(Arcane) }),
+                    new InventoryEntry(4, new ItemDefinitionId(IronSword), 1)
+                }));
+        yield return null;
+        yield return null;
+
+        Assert.That(
+            window.Text,
+            Is.EqualTo(
+                "+10 Shelled Monarch Mantle [1] (equipped)\n+10 Double Arcane Iron Sword [2] (equipped)\n"
+                + "Iron Sword [2]"));
+        foreach (Button button in window.GetComponentsInChildren<Button>(true).Where(row => row.name != "Close"))
+        {
+            AssertFitsItsRow(button.GetComponentInChildren<TMP_Text>(), 1);
+        }
     }
 
     // Wrapped onto a second line, the worn sword's row spilled out of its row, and the list's mask cut off its top.
@@ -1381,7 +1477,7 @@ public sealed class PlayerPanelTests
         TMP_Text label = window.GetComponentsInChildren<Button>(true).Single().GetComponentInChildren<TMP_Text>();
         label.ForceMeshUpdate();
 
-        Assert.That(label.text, Is.EqualTo("Training Sword x 1 (equipped)"));
+        Assert.That(label.text, Is.EqualTo("Training Sword (equipped)"));
         Assert.That(label.textInfo.lineCount, Is.EqualTo(1), "a long row stays on one line");
         Assert.That(
             label.textBounds.size.y,
@@ -1574,6 +1670,99 @@ public sealed class PlayerPanelTests
         Assert.That(sentOnArming, Is.Zero, "nothing sent on arming");
         Assert.That(afterSale, Does.Contain("\n+7 Training Sword x 1: 25 coins\n"), "the second sells and disarms");
         Assert.That(sales, Is.EqualTo(new[] { (3L, 1u), (5L, 1u) }), "the unrefined row at one press");
+    }
+
+    // Prototype Content §2: selling a carded row asks a second press, "Its cards are lost.", which then sells it.
+    [UnityTest]
+    public IEnumerator NpcWindow_ForTheQuartermaster_AsksForASecondPressBeforeSellingACardedRow()
+    {
+        GameClient client = CreateIdleClient();
+        (ClientWorld world, RecordingConnection recording) = GiveRecordedWorld(client);
+        GiveShop(client);
+        Spawn(world, 13, EntityKind.Npc, Quartermaster, 1000);
+        DrawNpc(client, 13);
+        world.OnNpcServices(QuartermasterServices(13));
+        world.Inventory.OnSnapshot(
+            new InventorySnapshot(
+                4,
+                250,
+                0,
+                1,
+                new[]
+                {
+                    new InventoryEntry(3, new ItemDefinitionId(Sword), 1, EquipmentSlot.None, 0,
+                        new[] { new ItemDefinitionId(Keen) })
+                }));
+        var window = NpcWindow.Create(client);
+        m_created.Add(window.gameObject);
+        window.Open(new EntityId(13));
+        yield return null;
+
+        Assert.That(Press(window, "Keen Training Sword x 1: 25 coins"), Is.True, window.Text);
+        yield return null;
+        int sentOnArming = recording.SentOf(MessageOpcode.SellItem).Count();
+        Assert.That(Press(window, "Press again to sell. Its cards are lost."), Is.True, window.Text);
+        yield return null;
+
+        Assert.That(sentOnArming, Is.Zero, "nothing sent on arming");
+        Assert.That(recording.SentOf(MessageOpcode.SellItem).Count(), Is.EqualTo(1), "the second press sells it");
+    }
+
+    // The Smith's rows name a carded item, warn that its cards come back, and keep to their row at 12 points or more,
+    // the longest real row on two lines.
+    [UnityTest]
+    public IEnumerator NpcWindow_ForTheSmith_NamesACardedRow_AndWarnsThatItsCardsComeBack()
+    {
+        GameClient client = CreateIdleClient();
+        (ClientWorld world, RecordingConnection recording) = GiveRecordedWorld(client);
+        GiveShop(client);
+        Spawn(world, 14, EntityKind.Npc, "npc.smith", 1000);
+        DrawNpc(client, 14);
+        world.OnNpcServices(
+            new NpcServices(new EntityId(14), new NpcServiceEntry[0], new NpcQuestOffer[0], refines: true));
+        var steps = new List<RefineTableStep>();
+        for (int level = 1; level <= 10; level++)
+        {
+            steps.Add(new RefineTableStep(level <= 6 ? (byte)100 : (byte)20, 100));
+        }
+
+        world.OnRefineTable(
+            new RefineTable(
+                new EntityId(14),
+                0,
+                new ItemDefinitionId(Gel),
+                1,
+                RefineFailure.Destroy,
+                0,
+                steps,
+                new[] { new ItemDefinitionId(IronSword) }));
+        InventoryEntry[] rows =
+        {
+            new(3, new ItemDefinitionId(IronSword), 1, EquipmentSlot.None, 9,
+                new[] { new ItemDefinitionId(Arcane), new ItemDefinitionId(Arcane) }),
+            new(6, new ItemDefinitionId(Gel), 999)
+        };
+        foreach (InventorySnapshot part in InventorySnapshot.CreateParts(4, 250, rows))
+        {
+            world.Inventory.OnSnapshot(part);
+        }
+
+        var window = NpcWindow.Create(client);
+        m_created.Add(window.gameObject);
+        window.Open(new EntityId(14));
+        yield return null;
+        yield return null;
+        const string row = "+9 Double Arcane Iron Sword [2] → +10 · 20 % · 100 coins · Slime Gel 1 (999 held)";
+        const string armed = "Press again. On failure it is destroyed; its cards come back to your bag.";
+        Button rowButton = window.GetComponentsInChildren<Button>().Single(button => button.name == row);
+        AssertFitsItsRow(rowButton.GetComponentInChildren<TMP_Text>(), 2);
+
+        Assert.That(Press(window, row), Is.True, window.Text);
+        yield return null;
+        yield return null;
+        Button armedButton = window.GetComponentsInChildren<Button>().Single(button => button.name == armed);
+        AssertFitsItsRow(armedButton.GetComponentInChildren<TMP_Text>(), 2);
+        Assert.That(recording.SentOf(MessageOpcode.RefineItem).Count(), Is.Zero, "a risky refine is armed first");
     }
 
     // The Smith's section (Prototype Content §2): each unworn row its tables name, below the last level, with the next

@@ -169,13 +169,14 @@ public sealed class InventoryWindow : MonoBehaviour
         TextChanges++;
     }
 
-    // A refined row names its level, and a row the open trade offers says how much of it (Prototype Content §2).
-    private static string RowText(InventoryEntry row, ClientItem? item, uint offered)
+    // A row is named by its level, its cards, and its slots, an equipment row drops " x 1", and a row the open trade
+    // offers says how much of it (Prototype Content §2).
+    private static string RowText(InventoryEntry row, ClientItem? item, uint offered, ClientContent? content)
     {
-        string name = ShopMessages.Refined(item != null ? item.DisplayName : row.Item.Value, row.RefineLevel);
-        string text = row.Slot == EquipmentSlot.None
-            ? $"{name} x {row.Quantity}"
-            : $"{name} x {row.Quantity} (equipped)";
+        string name = ShopMessages.RowName(content, row.Item, row.RefineLevel, row.Cards);
+        bool isEquipment = item != null && (item.Type == ItemType.Weapon || item.Type == ItemType.Armor);
+        string text = isEquipment && row.Quantity == 1 ? name : $"{name} x {row.Quantity}";
+        text = row.Slot == EquipmentSlot.None ? text : $"{text} (equipped)";
         return offered > 0 ? $"{text} (offered x {offered})" : text;
     }
 
@@ -188,7 +189,7 @@ public sealed class InventoryWindow : MonoBehaviour
         }
 
         bool isTrading = trade != null && trade.IsOpen;
-        string text = RowText(row, item, isTrading ? trade!.OfferedOf(row.InventoryItem) : 0);
+        string text = RowText(row, item, isTrading ? trade!.OfferedOf(row.InventoryItem) : 0, content);
 
         // While trading a press offers any unworn row, whatever its item does otherwise.
         if ((isTrading && row.Slot == EquipmentSlot.None) || (item != null && InventoryActions.HasAction(item.Type)))

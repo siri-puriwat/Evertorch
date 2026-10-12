@@ -407,19 +407,57 @@ public sealed class ClientContentParserTests
         }
     }
 
+    // Content Pipeline §5: a card's fit, prefix, and description, bounded as the tools bound them, and slots only where
+    // an item holds cards.
+    [TestCase("\"type\":\"material\"",
+        "\"type\":\"card\",\"fits\":\"shield\",\"prefix\":\"Gooey\",\"description\":\"Attack +8.\"",
+        "fits is not weapon or armor")]
+    [TestCase(
+        "\"type\":\"material\"",
+        "\"type\":\"card\",\"fits\":\"weapon\",\"prefix\":\"gooey\",\"description\":\"Attack +8.\"",
+        "prefix is not 1 to 8 letters, the first a capital")]
+    [TestCase(
+        "\"type\":\"material\"",
+        "\"type\":\"card\",\"fits\":\"weapon\",\"prefix\":\"Gooeyness\",\"description\":\"Attack +8.\"",
+        "prefix is not 1 to 8 letters, the first a capital")]
+    [TestCase(
+        "\"type\":\"material\"",
+        "\"type\":\"card\",\"fits\":\"weapon\",\"prefix\":\"Gooey\",\"description\":\"\"",
+        "description is not 1 to 240 printable characters")]
+    [TestCase(
+        "\"type\":\"material\"",
+        "\"type\":\"material\",\"prefix\":\"Gooey\"",
+        "fits, prefix, and description are only for a card")]
+    [TestCase("\"type\":\"material\"", "\"type\":\"material\",\"slots\":1", "slots is outside 0 to 0")]
+    [TestCase("\"type\":\"material\"", "\"type\":\"weapon\",\"slots\":5", "slots is outside 0 to 4")]
+    [TestCase("\"type\":\"material\"", "\"type\":\"armor\",\"slots\":2", "slots is outside 0 to 1")]
+    public void Parse_ForACardOrSlotsOutOfBounds_IsRefusedWithAReason(string oldText, string newText, string expected)
+    {
+        string items = Package.DefaultTexts(Maps)[ClientContentParser.ItemsFile].Replace(oldText, newText);
+        var package = Package.With(ClientContentParser.ItemsFile, items);
+
+        ClientContent? content = ClientContentParser.Parse(package.Manifest, package.Files, out string error);
+
+        Assert.That(content, Is.Null);
+        Assert.That(error, Does.Contain(expected));
+    }
+
     // A card is an item of its own type (Gameplay Systems §11.7).
     [Test]
-    public void Parse_ACard_ReadsItsType()
+    public void Parse_ACard_ReadsItsTypeFitPrefixAndDescription()
     {
         string items = Package.DefaultTexts(Maps)[ClientContentParser.ItemsFile]
-            .Replace("\"type\":\"material\"", "\"type\":\"card\"");
+            .Replace("\"type\":\"material\"",
+                "\"type\":\"card\",\"fits\":\"weapon\",\"prefix\":\"Gooey\",\"description\":\"Attack +8.\"");
         var package = Package.With(ClientContentParser.ItemsFile, items);
 
         ClientContent? content = ClientContentParser.Parse(package.Manifest, package.Files, out string error);
 
         Assert.That(error, Is.Empty);
         Assert.That(content!.TryGetItem(new ItemDefinitionId("item.material.slime_gel"), out ClientItem? gel), Is.True);
-        Assert.That(gel!.Type, Is.EqualTo(ItemType.Card));
+        Assert.That(
+            (gel!.Type, gel.Fits, gel.Prefix, gel.Description, gel.Slots),
+            Is.EqualTo((ItemType.Card, EquipmentSlot.Weapon, "Gooey", "Attack +8.", 0)));
     }
 
     [Test]
@@ -527,7 +565,14 @@ public sealed class ClientContentParserTests
         Assert.That((item!.ModelKey, item.StackLimit), Is.EqualTo(("pickup_slime_gel", 999)));
         Assert.That(content.TryGetItem(new ItemDefinitionId("item.card.forest_crawler"), out ClientItem? card),
             Is.True);
-        Assert.That((card!.Type, card.DisplayName), Is.EqualTo((ItemType.Card, "Forest Crawler Card")));
+        Assert.That(
+            (card!.Type, card.DisplayName, card.Fits, card.Prefix, card.Description),
+            Is.EqualTo((ItemType.Card, "Forest Crawler Card", EquipmentSlot.Weapon, "Keen", "Attack +8.")));
+        Assert.That(
+            content.TryGetItem(new ItemDefinitionId("item.weapon.iron_sword"), out ClientItem? sword)
+                ? sword!.Slots
+                : -1,
+            Is.EqualTo(2));
         Assert.That(content.TryGetNpc(new NpcDefinitionId("npc.gate_warden"), out ClientNpc? warden), Is.True);
         Assert.That((warden!.DisplayName, warden.PrefabKey), Is.EqualTo(("Gate Warden", "npc_gate_warden")));
         Assert.That(

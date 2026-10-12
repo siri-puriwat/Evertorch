@@ -149,7 +149,7 @@ public sealed class LiveServerRefineTests
         Assert.That(window.ShownName, Is.EqualTo("Quartermaster"), $"{window.Text} at {world.Predictor.Position}");
         Assert.That(
             window.Text,
-            Does.Contain($"+{SwordLevel} Training Sword x 1"),
+            Does.Contain($"+{SwordLevel} Training Sword [1] x 1"),
             "the sword among what the shop buys, named with its level");
 
         // The Smith's section lists the sword with the next level's chance and cost; a press at 100 % refines it, and
@@ -170,7 +170,8 @@ public sealed class LiveServerRefineTests
             },
             StartTimeoutSeconds);
         window.Open(smith);
-        string row = $"+{SwordLevel} Training Sword → +{SwordLevel + 1} · 100 % · 20 coins · Emberstone 1 (2 held)";
+        string row =
+            $"+{SwordLevel} Training Sword [1] → +{SwordLevel + 1} · 100 % · 20 coins · Emberstone 1 (2 held)";
         yield return WaitUntil(
             () =>
             {

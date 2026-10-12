@@ -65,7 +65,7 @@ public static class TradeMessages
         var lines = new List<string>(side.Entries.Count + 1);
         foreach (TradeEntry entry in side.Entries)
         {
-            string name = ShopMessages.ItemName(content, entry.Item, entry.RefineLevel);
+            string name = ShopMessages.RowName(content, entry.Item, entry.RefineLevel, entry.Cards);
             lines.Add(entry.Quantity == 1 ? name : $"{name} x {entry.Quantity}");
         }
 

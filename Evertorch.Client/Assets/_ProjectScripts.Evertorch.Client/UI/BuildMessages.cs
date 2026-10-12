@@ -22,11 +22,30 @@ public static class BuildMessages
     }
 
     /// <summary>
-    ///     "STR 5" and "next 2", or "max" at the cap.
+    ///     "STR 5", and "STR 30 + 2" when the worn equipment adds to it (Prototype Content §2).
     /// </summary>
-    public static string StatValue(PrimaryStat stat, CharacterSheetStat value)
+    public static string StatValue(PrimaryStat stat, CharacterSheetStat value, int equipment = 0)
     {
-        return $"{StatName(stat)} {Number(value.Value)}";
+        return equipment > 0
+            ? $"{StatName(stat)} {Number(value.Value)} + {Number(equipment)}"
+            : $"{StatName(stat)} {Number(value.Value)}";
+    }
+
+    /// <summary>
+    ///     What the worn equipment adds to the primary statistic at <paramref name="index" />, in the sheet's order.
+    /// </summary>
+    public static int EquipmentStat(CharacterSheet sheet, int index)
+    {
+        return index switch
+        {
+            0 => sheet.EquipmentStr,
+            1 => sheet.EquipmentAgi,
+            2 => sheet.EquipmentVit,
+            3 => sheet.EquipmentInt,
+            4 => sheet.EquipmentDex,
+            5 => sheet.EquipmentLuk,
+            _ => 0
+        };
     }
 
     public static string NextCost(CharacterSheetStat value)

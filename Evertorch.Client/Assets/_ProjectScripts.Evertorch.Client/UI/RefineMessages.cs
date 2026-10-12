@@ -15,17 +15,20 @@ public static class RefineMessages
     public static string Row(ClientContent? content, InventoryEntry row, RefineTable table, uint held)
     {
         RefineTableStep step = table.Steps[row.RefineLevel];
-        return $"{ShopMessages.ItemName(content, row.Item, row.RefineLevel)} → +{row.RefineLevel + 1}"
+        return $"{ShopMessages.RowName(content, row.Item, row.RefineLevel, row.Cards)} → +{row.RefineLevel + 1}"
             + $" · {step.Chance} % · {ShopMessages.Coins(step.Coins)}"
             + $" · {ShopMessages.ItemName(content, table.Ore)} {table.OreQuantity} ({held} held)";
     }
 
     /// <summary>
-    ///     "Press again to refine. On failure it is destroyed."
+    ///     "Press again to refine. On failure it is destroyed.", and for a carded row a table that destroys warns "On failure
+    ///     it is destroyed; its cards come back to your bag." (Prototype Content §2).
     /// </summary>
-    public static string Prompt(RefineTable table)
+    public static string Prompt(RefineTable table, bool hasCards = false)
     {
-        return $"Press again to refine. {OnFailure(table)}";
+        return hasCards && table.OnFailure == RefineFailure.Destroy
+            ? "Press again. On failure it is destroyed; its cards come back to your bag."
+            : $"Press again to refine. {OnFailure(table)}";
     }
 
     /// <summary>

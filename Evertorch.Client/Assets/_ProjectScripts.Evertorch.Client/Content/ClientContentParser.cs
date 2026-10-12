@@ -27,6 +27,8 @@ public static class ClientContentParser
     public const string QuestsFile = "quests.json";
 
     private const int SupportedSchemaVersion = 1;
+    private const int MaxCardPrefixLength = 8;
+    private const int MaxCardDescriptionLength = 240;
 
     /// <summary>
     ///     The files a manifest lists, or an empty list with <paramref name="error" /> set.
@@ -390,6 +392,23 @@ public static class ClientContentParser
                 return null;
             }
 
+            int maxSlots = type switch
+            {
+                ItemType.Weapon => ContentLimits.MaxWeaponSlots,
+                ItemType.Armor => ContentLimits.MaxArmorSlots,
+                _ => 0
+            };
+            if (item.slots < 0 || item.slots > maxSlots)
+            {
+                error = $"Item '{item.id}': slots is outside 0 to {maxSlots}.";
+                return null;
+            }
+
+            if (!TryParseCard(item, type, out EquipmentSlot fits, out error))
+            {
+                return null;
+            }
+
             items.Add(
                 id,
                 new ClientItem(
@@ -399,10 +418,66 @@ public static class ClientContentParser
                     item.model,
                     item.icon,
                     held,
-                    item.stackLimit));
+                    item.stackLimit,
+                    item.slots,
+                    fits,
+                    item.prefix ?? string.Empty,
+                    item.description ?? string.Empty));
         }
 
         return items;
+    }
+
+    // A card fits a weapon or an armor and names a prefix of 1 to 8 letters, the first a capital, and a description of 1
+    // to 240 printable characters; no other item names any of them.
+    private static bool TryParseCard(ItemDto item, ItemType type, out EquipmentSlot fits, out string error)
+    {
+        fits = EquipmentSlot.None;
+        error = string.Empty;
+        string fitsText = item.fits ?? string.Empty;
+        string prefix = item.prefix ?? string.Empty;
+        string description = item.description ?? string.Empty;
+        if (type != ItemType.Card)
+        {
+            if (fitsText.Length > 0 || prefix.Length > 0 || description.Length > 0)
+            {
+                error = $"Item '{item.id}': fits, prefix, and description are only for a card.";
+                return false;
+            }
+
+            return true;
+        }
+
+        fits = fitsText switch
+        {
+            "weapon" => EquipmentSlot.Weapon,
+            "armor" => EquipmentSlot.Armor,
+            _ => EquipmentSlot.None
+        };
+        if (fits == EquipmentSlot.None)
+        {
+            error = $"Item '{item.id}': fits is not weapon or armor.";
+            return false;
+        }
+
+        if (prefix.Length < 1
+            || prefix.Length > MaxCardPrefixLength
+            || !char.IsUpper(prefix[0])
+            || prefix.Any(letter => letter > 'z' || !char.IsLetter(letter)))
+        {
+            error = $"Item '{item.id}': prefix is not 1 to 8 letters, the first a capital.";
+            return false;
+        }
+
+        if (description.Length < 1
+            || description.Length > MaxCardDescriptionLength
+            || description.Any(character => character < ' '))
+        {
+            error = $"Item '{item.id}': description is not 1 to 240 printable characters.";
+            return false;
+        }
+
+        return true;
     }
 
     private static Dictionary<SkillDefinitionId, ClientSkill>? ParseSkills(byte[] skillsBytes, out string error)
@@ -930,6 +1005,10 @@ public static class ClientContentParser
         public string? icon = string.Empty;
         public string? held = string.Empty;
         public int stackLimit = 0;
+        public int slots = 0;
+        public string? fits = string.Empty;
+        public string? prefix = string.Empty;
+        public string? description = string.Empty;
     }
 
     [Serializable]

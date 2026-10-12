@@ -5,7 +5,8 @@ namespace Evertorch.Client
 {
 /// <summary>
 ///     The client-safe part of an item definition: its name, its type, how many a stack holds, the logical key of its view
-///     as a world drop, its icon, and a weapon's model in a hand.
+///     as a world drop, its icon, a weapon's model in a hand, the cards a weapon or an armor holds, and a card's fit,
+///     prefix, and description, which the player sees.
 /// </summary>
 public sealed class ClientItem
 {
@@ -16,7 +17,11 @@ public sealed class ClientItem
         string modelKey,
         string iconKey,
         string heldKey = "",
-        int stackLimit = 1)
+        int stackLimit = 1,
+        int slots = 0,
+        EquipmentSlot fits = EquipmentSlot.None,
+        string prefix = "",
+        string description = "")
     {
         Id = id;
         DisplayName = displayName ?? throw new ArgumentNullException(nameof(displayName));
@@ -25,6 +30,10 @@ public sealed class ClientItem
         IconKey = iconKey ?? throw new ArgumentNullException(nameof(iconKey));
         HeldKey = heldKey ?? throw new ArgumentNullException(nameof(heldKey));
         StackLimit = stackLimit;
+        Slots = slots;
+        Fits = fits;
+        Prefix = prefix ?? throw new ArgumentNullException(nameof(prefix));
+        Description = description ?? throw new ArgumentNullException(nameof(description));
     }
 
     public ItemDefinitionId Id { get; }
@@ -49,5 +58,25 @@ public sealed class ClientItem
     ///     The most one row holds, so an amount can be clamped before the server would refuse it.
     /// </summary>
     public int StackLimit { get; }
+
+    /// <summary>
+    ///     The cards a weapon or an armor holds, " [2]" in its name (Prototype Content §2); 0 for every other item.
+    /// </summary>
+    public int Slots { get; }
+
+    /// <summary>
+    ///     The kind of item a card fits; <see cref="EquipmentSlot.None" /> for every other item.
+    /// </summary>
+    public EquipmentSlot Fits { get; }
+
+    /// <summary>
+    ///     A card's word in the names of the items holding it, "Keen"; empty for every other item.
+    /// </summary>
+    public string Prefix { get; }
+
+    /// <summary>
+    ///     What a card does, for the Card window; empty for every other item.
+    /// </summary>
+    public string Description { get; }
 }
 }
