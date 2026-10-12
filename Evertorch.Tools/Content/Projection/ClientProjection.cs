@@ -62,6 +62,18 @@ internal static class ClientProjection
                 writer.WriteString("held", authored.Held);
             }
 
+            if (item.Slot != EquipmentSlot.None)
+            {
+                writer.WriteNumber("slots", item.Slots);
+            }
+
+            if (item.Card != null)
+            {
+                writer.WriteString("fits", EnumText.Of(item.Card.Fits));
+                writer.WriteString("prefix", authored.Prefix);
+                writer.WriteString("description", authored.Description);
+            }
+
             writer.WriteEndObject();
         }
 

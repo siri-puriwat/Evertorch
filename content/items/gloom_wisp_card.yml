@@ -1,0 +1,22 @@
+id: item.card.gloom_wisp
+displayName: Gloom Wisp Card
+type: card
+stackLimit: 999
+fits: weapon
+server:
+  # Dropped by the gloom wisp at 0.1 %; no shop trades it, and the board sells it.
+  weight: 1
+  sellPrice: 0
+  market:
+    # It sells to no shop, so its floor is authored.
+    basePrice: 2400
+    floor: 240
+  card:
+    bossDamage: 20
+    removalFee: 600
+client:
+  # The slime gel's look until art for the cards arrives.
+  icon: item_slime_gel
+  model: pickup_slime_gel
+  prefix: Bane
+  description: Damage to bosses +20%.

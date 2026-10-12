@@ -213,11 +213,15 @@ public sealed class MarketAcceptanceTests
         EntityId broker = WalkUpTo(step, Broker, anna, all);
         Read(step, anna, broker, heard, all);
         Assert.That(
-            heard.Boards.Single().Entries.Select(entry => (entry.Item.Value, entry.Price, entry.Stock)),
+            heard.Boards.SelectMany(board => board.Entries)
+                .Select(entry => (entry.Item.Value, entry.Price, entry.Stock)),
             Is.EqualTo(
                 new[]
                 {
                     ("item.armor.leather", 90u, 0u), ("item.armor.monarch_mantle", 1000u, 0u),
+                    ("item.card.forest_crawler", 800u, 0u), ("item.card.gloom_wisp", 2400u, 0u),
+                    ("item.card.grotto_crawler", 2400u, 0u), ("item.card.slime_monarch", 24000u, 0u),
+                    ("item.card.spark_wisp", 800u, 0u), ("item.card.training_slime", 800u, 0u),
                     ("item.material.emberstone", 40u, 0u), (GloomDust, 28u, 0u),
                     ("item.material.grotto_carapace", 24u, 0u), ("item.material.monarch_jelly", 80u, 0u),
                     ("item.material.wardstone", 40u, 0u), ("item.weapon.ash_staff", 120u, 0u), (IronSword, 120u, 0u)

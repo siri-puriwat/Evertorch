@@ -5,6 +5,7 @@ public enum ItemType
     Material,
     Consumable,
     Weapon,
-    Armor
+    Armor,
+    Card
 }
 }

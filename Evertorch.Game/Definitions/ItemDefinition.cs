@@ -12,7 +12,9 @@ public sealed class ItemDefinition
         ItemEquipment? equipment = null,
         ItemEffect? effect = null,
         ItemMarket? market = null,
-        RefineDefinitionId? refine = null)
+        RefineDefinitionId? refine = null,
+        int slots = 0,
+        ItemCard? card = null)
     {
         Id = id;
         DisplayName = displayName;
@@ -24,6 +26,8 @@ public sealed class ItemDefinition
         Effect = effect;
         Market = market;
         Refine = refine;
+        Slots = slots;
+        Card = card;
     }
 
     public ItemDefinitionId Id { get; }
@@ -51,6 +55,14 @@ public sealed class ItemDefinition
     ///     The refine table that refines a weapon or an armor (Gameplay Systems §11.6); null when the item is not refined.
     /// </summary>
     public RefineDefinitionId? Refine { get; }
+
+    /// <summary>
+    ///     The cards a weapon or an armor holds (Gameplay Systems §11.7); 0 for every other type.
+    /// </summary>
+    public int Slots { get; }
+
+    /// <summary>A card's facts; null for every other type.</summary>
+    public ItemCard? Card { get; }
 
     /// <summary>The slot a weapon or an armor fills; <see cref="EquipmentSlot.None" /> for every other type.</summary>
     public EquipmentSlot Slot => Type switch

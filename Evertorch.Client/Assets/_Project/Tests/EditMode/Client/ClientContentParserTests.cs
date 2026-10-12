@@ -230,7 +230,7 @@ public sealed class ClientContentParserTests
         ClientContentParser.ItemsFile,
         "\"type\":\"material\"",
         "\"type\":\"shield\"",
-        "Item 'item.material.slime_gel': type is not material, consumable, weapon, or armor")]
+        "Item 'item.material.slime_gel': type is not material, consumable, weapon, armor, or card")]
     [TestCase(
         ClientContentParser.SkillsFile,
         "\"targetType\":\"self\"",
@@ -407,6 +407,21 @@ public sealed class ClientContentParserTests
         }
     }
 
+    // A card is an item of its own type (Gameplay Systems §11.7).
+    [Test]
+    public void Parse_ACard_ReadsItsType()
+    {
+        string items = Package.DefaultTexts(Maps)[ClientContentParser.ItemsFile]
+            .Replace("\"type\":\"material\"", "\"type\":\"card\"");
+        var package = Package.With(ClientContentParser.ItemsFile, items);
+
+        ClientContent? content = ClientContentParser.Parse(package.Manifest, package.Files, out string error);
+
+        Assert.That(error, Is.Empty);
+        Assert.That(content!.TryGetItem(new ItemDefinitionId("item.material.slime_gel"), out ClientItem? gel), Is.True);
+        Assert.That(gel!.Type, Is.EqualTo(ItemType.Card));
+    }
+
     [Test]
     public void Parse_AVariantBody_ReadsItsLevelScaleTintAndBossFlag()
     {
@@ -510,6 +525,9 @@ public sealed class ClientContentParserTests
         Assert.That(monster!.PrefabKey, Is.EqualTo("monster_training_slime"));
         Assert.That(content.TryGetItem(new ItemDefinitionId("item.material.slime_gel"), out ClientItem? item), Is.True);
         Assert.That((item!.ModelKey, item.StackLimit), Is.EqualTo(("pickup_slime_gel", 999)));
+        Assert.That(content.TryGetItem(new ItemDefinitionId("item.card.forest_crawler"), out ClientItem? card),
+            Is.True);
+        Assert.That((card!.Type, card.DisplayName), Is.EqualTo((ItemType.Card, "Forest Crawler Card")));
         Assert.That(content.TryGetNpc(new NpcDefinitionId("npc.gate_warden"), out ClientNpc? warden), Is.True);
         Assert.That((warden!.DisplayName, warden.PrefabKey), Is.EqualTo(("Gate Warden", "npc_gate_warden")));
         Assert.That(

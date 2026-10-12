@@ -2,6 +2,7 @@ id: item.armor.cloth
 displayName: Cloth Armor
 type: armor
 stackLimit: 1
+slots: 1
 server:
   weight: 60
   sellPrice: 20

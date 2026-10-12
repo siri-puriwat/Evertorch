@@ -137,7 +137,7 @@ public sealed class MarketContentTests
         Assert.That(result.Diagnostics, Is.Empty, Describe(result));
         Assert.That(
             result.Content.Items
-                .Where(item => item.Definition.Market != null)
+                .Where(item => item.Definition.Market != null && item.Definition.Type != ItemType.Card)
                 .Select(item => (item.Definition.Id.Value, item.Definition.Market!.BasePrice,
                     item.Definition.Market.Floor, item.Definition.Market.Ceiling))
                 .OrderBy(terms => terms.Value, StringComparer.Ordinal),
@@ -150,7 +150,8 @@ public sealed class MarketContentTests
                     ("item.material.wardstone", 40, 10, 400), ("item.weapon.ash_staff", 120, 60, 1200),
                     ("item.weapon.iron_sword", 120, 60, 1200)
                 }),
-            "the Umbral Grotto's goods at twice their sell price, the Mantle's and the ores' terms authored");
+            "the Umbral Grotto's goods at twice their sell price, the Mantle's and the ores' terms authored; the cards' "
+            + "are pinned with the cards");
         AuthoredNpc broker = result.Content.Npcs.Single(npc => npc.Definition.KeepsMarket);
         Assert.That(
             (broker.Definition.Id.Value, broker.Definition.DisplayName, broker.Definition.HasShop, broker.Prefab,

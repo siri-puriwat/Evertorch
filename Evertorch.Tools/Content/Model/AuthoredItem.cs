@@ -12,13 +12,17 @@ public sealed class AuthoredItem
         ItemDefinition definition,
         string icon,
         string model,
-        string? held = null)
+        string? held = null,
+        string? prefix = null,
+        string? description = null)
     {
         Source = source;
         Definition = definition;
         Icon = icon;
         Model = model;
         Held = held;
+        Prefix = prefix;
+        Description = description;
     }
 
     public DefinitionSource Source { get; }
@@ -33,5 +37,15 @@ public sealed class AuthoredItem
     ///     A weapon's model in a hand (Content Pipeline §4); null when the item names none.
     /// </summary>
     public string? Held { get; }
+
+    /// <summary>
+    ///     A card's word in the names of the items holding it (Prototype Content §2); null for every other item.
+    /// </summary>
+    public string? Prefix { get; }
+
+    /// <summary>
+    ///     What a card does, for the player (Content Pipeline §4); null for every other item.
+    /// </summary>
+    public string? Description { get; }
 }
 }

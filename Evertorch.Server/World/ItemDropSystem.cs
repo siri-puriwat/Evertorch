@@ -1,4 +1,6 @@
+using System;
 using System.Collections.Generic;
+using System.Linq;
 using Evertorch.Game;
 using Evertorch.Rules;
 using Microsoft.Extensions.Options;
@@ -27,18 +29,25 @@ public sealed class ItemDropSystem : ITickPhase
     private readonly IRandomSource m_random;
     private readonly int m_tickRate;
     private readonly int m_lifetimeMs;
+    private readonly HashSet<ItemDefinitionId> m_cards;
+    private readonly int m_cardChanceScale;
     private readonly List<ItemDropEntity> m_expired = new();
 
     public ItemDropSystem(
         WorldSimulation world,
         IRandomSource random,
+        ServerContent content,
         IOptions<WorldOptions> worldOptions,
+        IOptions<DropOptions> drops,
         IOptions<SimulationOptions> simulation)
     {
         m_world = world;
         m_random = random;
         m_tickRate = simulation.Value.TickRate;
         m_lifetimeMs = worldOptions.Value.ItemDropLifetimeMs;
+        m_cards = new HashSet<ItemDefinitionId>(
+            content.Items.Values.Where(item => item.Type == ItemType.Card).Select(item => item.Id));
+        m_cardChanceScale = drops.Value.CardChanceScale;
     }
 
     public TickPhase Phase => TickPhase.MonsterAi;
@@ -116,7 +125,7 @@ public sealed class ItemDropSystem : ITickPhase
         int placed = 0;
         foreach (MonsterDrop entry in monster.Definition.Drops)
         {
-            if (!IsDropped(m_random.Next(RollScale), entry.Chance))
+            if (!IsDropped(m_random.Next(RollScale), ChanceOf(entry)))
             {
                 continue;
             }
@@ -126,6 +135,14 @@ public sealed class ItemDropSystem : ITickPhase
             m_world.SpawnItemDrop(map, entry.Item, (uint)amount, position, tick, expiresAtMs, killer);
             placed++;
         }
+    }
+
+    // A card's chance times Drops:CardChanceScale, at most certain (Gameplay Systems §10).
+    private double ChanceOf(MonsterDrop entry)
+    {
+        return m_cardChanceScale == 1 || !m_cards.Contains(entry.Item)
+            ? entry.Chance
+            : Math.Min(1d, entry.Chance * m_cardChanceScale);
     }
 
     private long ToMilliseconds(uint tick)

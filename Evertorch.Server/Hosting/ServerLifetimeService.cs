@@ -32,6 +32,13 @@ public sealed class ServerLifetimeService : IHostedService, IDisposable
             new EventId(1036, "BossHealthScaled"),
             "Every boss starts with {Percent} % of its HP (World:BossHealthPercent): a walk's helper, never for play.");
 
+    private static readonly Action<ILogger, int, Exception?> LogCardChanceScaled =
+        LoggerMessage.Define<int>(
+            LogLevel.Warning,
+            new EventId(1039, "CardChanceScaled"),
+            "Every card drops {Scale} times as often, at most always (Drops:CardChanceScale): a walk's helper, never "
+            + "for play.");
+
     private static readonly Action<ILogger, ulong, string, Exception?> LogRandomSeed =
         LoggerMessage.Define<ulong, string>(
             LogLevel.Information,
@@ -56,6 +63,7 @@ public sealed class ServerLifetimeService : IHostedService, IDisposable
     private readonly int m_drainTimeoutMs;
     private readonly int m_joinTimeoutMs;
     private readonly int m_bossHealthPercent;
+    private readonly int m_cardChanceScale;
     private readonly FixedStepLoop m_loop;
     private readonly IHostApplicationLifetime m_lifetime;
     private readonly ILogger<ServerLifetimeService> m_logger;
@@ -76,6 +84,7 @@ public sealed class ServerLifetimeService : IHostedService, IDisposable
         ShutdownRequest shutdown,
         IOptions<PersistenceOptions> persistenceOptions,
         IOptions<WorldOptions> worldOptions,
+        IOptions<DropOptions> dropOptions,
         FixedStepLoop loop,
         IHostApplicationLifetime lifetime,
         ILogger<ServerLifetimeService> logger)
@@ -90,6 +99,7 @@ public sealed class ServerLifetimeService : IHostedService, IDisposable
         m_drainTimeoutMs = persistenceOptions.Value.CommandTimeoutMs;
         m_joinTimeoutMs = persistenceOptions.Value.CommandTimeoutMs;
         m_bossHealthPercent = worldOptions.Value.BossHealthPercent;
+        m_cardChanceScale = dropOptions.Value.CardChanceScale;
         m_loop = loop;
         m_lifetime = lifetime;
         m_logger = logger;
@@ -143,6 +153,11 @@ public sealed class ServerLifetimeService : IHostedService, IDisposable
         if (m_bossHealthPercent != 100)
         {
             LogBossHealthScaled(m_logger, m_bossHealthPercent, null);
+        }
+
+        if (m_cardChanceScale != 1)
+        {
+            LogCardChanceScaled(m_logger, m_cardChanceScale, null);
         }
 
         m_persistence.Start();

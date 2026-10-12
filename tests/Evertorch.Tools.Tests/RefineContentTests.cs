@@ -304,11 +304,11 @@ public sealed class RefineContentTests
         MonsterDefinition wisp = result.Content.Monsters
             .Single(monster => monster.Definition.Id.Value == "monster.gloom_wisp")
             .Definition;
-        MonsterDrop ember = wisp.Drops.Last();
+        MonsterDrop ember = wisp.Drops[wisp.Drops.Count - 2];
         Assert.That(
             (ember.Item.Value, ember.Chance, ember.MinAmount, ember.MaxAmount),
             Is.EqualTo(("item.material.emberstone", 0.08, 1, 1)),
-            "the wisp's Emberstone last, so every earlier draw keeps its place");
+            "the wisp's Emberstone last but its card, so every earlier draw keeps its place");
     }
 
     [Test]

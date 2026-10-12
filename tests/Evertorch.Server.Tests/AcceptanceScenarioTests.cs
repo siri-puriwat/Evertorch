@@ -73,7 +73,12 @@ public sealed class AcceptanceScenarioTests
             contentRootPath,
             m_database.ConnectionString,
             m_certificate);
-        TestHosts.ScriptOutcomes(builder, new SureHitRandom(), new ScriptedRandom(0));
+        // Each slime's gel rolls 0 and draws the smallest amount; its card rolls 999,999 and stays, for each kill a host
+        // sees.
+        TestHosts.ScriptOutcomes(
+            builder,
+            new SureHitRandom(),
+            new ScriptedRandom(0, 0, 0, 999_999, 0, 0, 999_999));
         IHost host = builder.Build();
         host.Start();
         HealthProbe health = host.Services.GetRequiredService<HealthProbe>();

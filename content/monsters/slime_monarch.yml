@@ -44,6 +44,9 @@ drops:
   - item: item.material.wardstone
     chance: 1.0
     amount: { min: 5, max: 10 }
+  - item: item.card.slime_monarch
+    chance: 0.01
+    amount: { min: 1, max: 1 }
 # Its most valuable player's prize, rolled in order with the first success kept: the Mantle at 30 %, else five
 # Monarch Jelly; it goes straight into that player's bag.
 mvpDrops:

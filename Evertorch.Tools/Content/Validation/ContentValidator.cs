@@ -61,6 +61,19 @@ public static class ContentValidator
             table => table.Source,
             diagnostics);
 
+        AuthoredItem[] cards = content.Items.Where(item => item.Definition.Type == ItemType.Card).ToArray();
+        for (int index = ContentLimits.MaxCards; index < cards.Length; index++)
+        {
+            Report(
+                cards[index].Source,
+                "type",
+                string.Format(
+                    CultureInfo.InvariantCulture,
+                    "is one more than the {0} cards a list of removal fees carries",
+                    ContentLimits.MaxCards),
+                diagnostics);
+        }
+
         HashSet<string>[] references =
             { items, monsters, skills, maps, experienceTables, statusEffects, npcs, refineTables };
         foreach (HashSet<string> known in references)

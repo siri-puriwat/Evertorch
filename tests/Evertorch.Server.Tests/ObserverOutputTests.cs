@@ -419,7 +419,7 @@ public sealed class ObserverOutputTests
             withMonsters: true,
             combatRandom: new SureHitRandom(),
             withMonsterAi: false,
-            dropRandom: new ScriptedRandom(0),
+            dropRandom: new ScriptedRandom(0, 0, 0, 999_999),
             withEveryMap: true);
         ConnectionId actor = server.Connect();
         server.SignInWithCharacter(actor, Actor);

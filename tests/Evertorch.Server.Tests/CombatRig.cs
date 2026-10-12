@@ -16,13 +16,18 @@ internal sealed class CombatRig
     private uint m_commandSequence;
     private uint m_inputSequence;
 
-    public CombatRig(float distance = 1.2f, IRandomSource? combatRandom = null, IRandomSource? dropRandom = null)
+    public CombatRig(
+        float distance = 1.2f,
+        IRandomSource? combatRandom = null,
+        IRandomSource? dropRandom = null,
+        int cardChanceScale = 1)
     {
         Server = new TestServer(
             withMonsters: true,
             combatRandom: combatRandom,
             withMonsterAi: false,
-            dropRandom: dropRandom);
+            dropRandom: dropRandom,
+            cardChanceScale: cardChanceScale);
         Player = Server.EnterWorld(1);
         Map = Server.World.Maps.Single();
         Slime = Server.MonstersNear(Map.Definition.SpawnPosition).First();

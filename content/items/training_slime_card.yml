@@ -1,0 +1,24 @@
+id: item.card.training_slime
+displayName: Training Slime Card
+type: card
+stackLimit: 999
+fits: armor
+server:
+  # Dropped by the training slime at 0.1 %; no shop trades it, and the board sells it.
+  weight: 1
+  sellPrice: 0
+  market:
+    # It sells to no shop, so its floor is authored.
+    basePrice: 800
+    floor: 80
+  card:
+    bonus:
+      vit: 1
+    maxHp: 20
+    removalFee: 200
+client:
+  # The slime gel's look until art for the cards arrives.
+  icon: item_slime_gel
+  model: pickup_slime_gel
+  prefix: Hardy
+  description: VIT +1 and max HP +20.

@@ -77,6 +77,27 @@ public static class ContentLimits
     /// </summary>
     public const int MaxRefineItems = 13;
 
+    /// <summary>
+    ///     The most cards a weapon holds, and an armor (Gameplay Systems §11.7).
+    /// </summary>
+    public const int MaxWeaponSlots = 4;
+
+    public const int MaxArmorSlots = 1;
+
+    /// <summary>
+    ///     The most cards content holds, the room of one list of removal fees (Network Protocol §6).
+    /// </summary>
+    public const int MaxCards = 14;
+
+    public const int MaxBossDamagePercent = 100;
+
+    /// <summary>
+    ///     The most a card takes off a boss's damage, in percent; combat caps the worn cards' sum there too.
+    /// </summary>
+    public const int MaxBossDamageReductionPercent = 90;
+
+    public const int MaxCardRemovalFee = 1_000_000;
+
     public const int MaxKillCount = 1000;
     public const int MaxExperience = 1_000_000_000;
     public const int MaxDurationMs = 86_400_000;

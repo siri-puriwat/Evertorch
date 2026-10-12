@@ -16,8 +16,8 @@ public sealed class ClientPickupTests
     [Test]
     public void KillTheSlimeAndPickUpItsGel_EndsWithTheGelInTheCommittedInventory()
     {
-        // The slime's one drop entry rolls 0, below any chance, and draws the smallest amount.
-        var rig = new ClientServerRig(true, new SureHitRandom(), new ScriptedRandom(0));
+        // The slime's gel rolls 0, below any chance, and draws the smallest amount; its card rolls 999,999 and stays.
+        var rig = new ClientServerRig(true, new SureHitRandom(), new ScriptedRandom(0, 0, 0, 999_999));
         SimulatedClient client = rig.AddClient(7, 3, 17);
         client.Link.LatencyMilliseconds = 50;
         rig.ConnectAll();

@@ -2,6 +2,7 @@ id: item.weapon.training_sword
 displayName: Training Sword
 type: weapon
 stackLimit: 1
+slots: 1
 server:
   weight: 50
   sellPrice: 25

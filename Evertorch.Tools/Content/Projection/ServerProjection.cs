@@ -91,6 +91,17 @@ internal static class ServerProjection
             writer.WriteNumber("stackLimit", item.StackLimit);
             writer.WriteNumber("weight", item.Weight);
             writer.WriteNumber("sellPrice", item.SellPrice);
+            if (item.Slot != EquipmentSlot.None)
+            {
+                writer.WriteNumber("slots", item.Slots);
+            }
+
+            if (item.Card != null)
+            {
+                writer.WriteString("fits", EnumText.Of(item.Card.Fits));
+                WriteCard(writer, item.Card);
+            }
+
             if (item.Equipment != null)
             {
                 ItemEquipment equipment = item.Equipment;
@@ -140,6 +151,30 @@ internal static class ServerProjection
         }
 
         EndFile(writer);
+    }
+
+    // Every value a card adds, 0 when absent, so the loader reads each name it knows (Content Pipeline §5).
+    private static void WriteCard(Utf8JsonWriter writer, ItemCard card)
+    {
+        CardBonus bonus = card.Bonus;
+        writer.WriteStartObject("card");
+        writer.WriteStartObject("bonus");
+        writer.WriteNumber("str", bonus.Stats.Str);
+        writer.WriteNumber("agi", bonus.Stats.Agi);
+        writer.WriteNumber("vit", bonus.Stats.Vit);
+        writer.WriteNumber("int", bonus.Stats.Int);
+        writer.WriteNumber("dex", bonus.Stats.Dex);
+        writer.WriteNumber("luk", bonus.Stats.Luk);
+        writer.WriteEndObject();
+        writer.WriteNumber("attack", bonus.Attack);
+        writer.WriteNumber("magicAttack", bonus.MagicAttack);
+        writer.WriteNumber("defense", bonus.Defense);
+        writer.WriteNumber("maxHp", bonus.MaxHp);
+        writer.WriteNumber("maxSp", bonus.MaxSp);
+        writer.WriteNumber("bossDamage", bonus.BossDamagePercent);
+        writer.WriteNumber("bossDamageReduction", bonus.BossDamageReductionPercent);
+        writer.WriteNumber("removalFee", card.RemovalFee);
+        writer.WriteEndObject();
     }
 
     private static void WriteJobs(Utf8JsonWriter writer, ContentSet content)

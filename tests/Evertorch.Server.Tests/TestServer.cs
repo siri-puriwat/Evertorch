@@ -70,7 +70,8 @@ internal sealed class TestServer
         bool withAdventurerBuild = true,
         MarketOptions? market = null,
         IRandomSource? refineRandom = null,
-        int bossHealthPercent = 100)
+        int bossHealthPercent = 100,
+        int cardChanceScale = 1)
     {
         Content = Contents.GetOrAdd(
             (withEveryMap, withGrotto, withMonsters, withNpcs),
@@ -177,7 +178,13 @@ internal sealed class TestServer
             new DevelopmentTokenValidator(Options.Create(authentication), Time),
             new ProductionTokenValidator(Time));
         var handshake = new HandshakeValidator(compatibility, tokens, Content);
-        Drops = new ItemDropSystem(World, dropRandom ?? Random, Options.Create(world), simulation);
+        Drops = new ItemDropSystem(
+            World,
+            dropRandom ?? Random,
+            Content,
+            Options.Create(world),
+            Options.Create(new DropOptions { CardChanceScale = cardChanceScale }),
+            simulation);
         StatusEffects = new StatusEffectSystem(World, Sessions, Content, stats, sender, Instruments, simulation);
         Bosses = new BossAnnouncer(Sessions, sender, Instruments, BossLog);
         Combat = new CombatSystem(

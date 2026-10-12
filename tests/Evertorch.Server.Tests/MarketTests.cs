@@ -670,23 +670,27 @@ public sealed class MarketTests
         Assert.That(server.Store.MarketReads.Count, Is.EqualTo(reads + 1),
             "the second was answered by the first's read");
         Assert.That(
-            Boards(server, seller).Single().Entries.Select(entry => (entry.Item.Value, entry.Price, entry.Stock)),
+            Boards(server, seller).SelectMany(board => board.Entries)
+                .Select(entry => (entry.Item.Value, entry.Price, entry.Stock)),
             Is.EqualTo(
                 new[]
                 {
                     ("item.armor.leather", 90u, 0u), ("item.armor.monarch_mantle", 1000u, 0u),
+                    ("item.card.forest_crawler", 800u, 0u), ("item.card.gloom_wisp", 2400u, 0u),
+                    ("item.card.grotto_crawler", 2400u, 0u), ("item.card.slime_monarch", 24000u, 0u),
+                    ("item.card.spark_wisp", 800u, 0u), ("item.card.training_slime", 800u, 0u),
                     ("item.material.emberstone", 40u, 0u), (Dust, 28u, 0u),
                     ("item.material.grotto_carapace", 24u, 0u), ("item.material.monarch_jelly", 80u, 0u),
                     ("item.material.wardstone", 40u, 0u), ("item.weapon.ash_staff", 120u, 0u), (Sword, 120u, 0u)
                 }),
-            "every listable item at its price; its own listing is not stock it may buy");
+            "every listable item at its price, in two messages of at most 13; its own listing is not stock it may buy");
         MarketListingEntry mine = Mines(server, seller).Single().Entries.Single();
         Assert.That(
             (mine.Listing, mine.Item.Value, mine.UnitsLeft, mine.UnitsSold, mine.CoinsWaiting, mine.SecondsLeft),
             Is.EqualTo((listing, Dust, 10u, 0u, 0u, 259_200u)));
         Assert.That(
             Told(server, seller),
-            Is.EqualTo(new[] { MessageOpcode.MarketBoard, MessageOpcode.MarketMine }));
+            Is.EqualTo(new[] { MessageOpcode.MarketBoard, MessageOpcode.MarketBoard, MessageOpcode.MarketMine }));
     }
 
     [Test]

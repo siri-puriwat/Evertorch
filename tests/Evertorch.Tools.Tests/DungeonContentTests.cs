@@ -216,9 +216,9 @@ public sealed class DungeonContentTests
                 {
                     ("item.material.grotto_carapace", 0.6), ("item.weapon.iron_sword", 0.05),
                     ("item.armor.leather", 0.05), ("item.consumable.minor_health", 0.25),
-                    ("item.material.wardstone", 0.08)
+                    ("item.material.wardstone", 0.08), ("item.card.grotto_crawler", 0.001)
                 }),
-            "Wardstone last, so every earlier draw keeps its place");
+            "Wardstone, then the card, last, so every earlier draw keeps its place");
         MonsterSpawn spawn = MapOf(result, Grotto).MonsterSpawns
             .Single(candidate => candidate.Monster == definition.Id);
         Assert.That(spawn.Count, Is.EqualTo(6));
@@ -256,9 +256,10 @@ public sealed class DungeonContentTests
                 {
                     ("item.material.monarch_jelly", 1d), ("item.weapon.iron_sword", 0.25),
                     ("item.weapon.ash_staff", 0.25), ("item.armor.leather", 0.25),
-                    ("item.material.emberstone", 1d), ("item.material.wardstone", 1d)
+                    ("item.material.emberstone", 1d), ("item.material.wardstone", 1d),
+                    ("item.card.slime_monarch", 0.01)
                 }),
-            "both ores last, so every earlier draw keeps its place");
+            "both ores, then the card, last, so every earlier draw keeps its place");
         Assert.That(
             (slam.TargetType, slam.DamageType, slam.AreaRadius, slam.Levels.Single().FixedCastMs),
             Is.EqualTo((SkillTargetType.Self, (SkillDamageType?)SkillDamageType.Magical, 4d, 1500)));

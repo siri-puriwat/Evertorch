@@ -373,7 +373,7 @@ public static class ClientContentParser
 
             if (!TryParseItemType(item.type, out ItemType type))
             {
-                error = $"Item '{item.id}': type is not material, consumable, weapon, or armor.";
+                error = $"Item '{item.id}': type is not material, consumable, weapon, armor, or card.";
                 return null;
             }
 
@@ -593,6 +593,9 @@ public static class ClientContentParser
                 return true;
             case "armor":
                 type = ItemType.Armor;
+                return true;
+            case "card":
+                type = ItemType.Card;
                 return true;
             default:
                 type = ItemType.Material;

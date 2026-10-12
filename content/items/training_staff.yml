@@ -2,6 +2,7 @@ id: item.weapon.training_staff
 displayName: Training Staff
 type: weapon
 stackLimit: 1
+slots: 1
 server:
   weight: 40
   sellPrice: 25

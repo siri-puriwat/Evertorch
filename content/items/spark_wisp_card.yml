@@ -1,0 +1,24 @@
+id: item.card.spark_wisp
+displayName: Spark Wisp Card
+type: card
+stackLimit: 999
+fits: weapon
+server:
+  # Dropped by the spark wisp at 0.1 %; no shop trades it, and the board sells it.
+  weight: 1
+  sellPrice: 0
+  market:
+    # It sells to no shop, so its floor is authored.
+    basePrice: 800
+    floor: 80
+  card:
+    bonus:
+      int: 1
+    magicAttack: 10
+    removalFee: 200
+client:
+  # The slime gel's look until art for the cards arrives.
+  icon: item_slime_gel
+  model: pickup_slime_gel
+  prefix: Arcane
+  description: INT +1 and magic attack +10.

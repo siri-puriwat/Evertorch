@@ -653,8 +653,8 @@ public sealed class TownLoopAcceptanceTests
             $"{step}: back on the ground");
     }
 
-    // Back in town the player walks up to the Quartermaster and sells what the hunt brought back but the potions and
-    // what it wears, then buys a new training sword and cloth armor and wears them (Gameplay Systems §11.3). Each
+    // Back in town the player walks up to the Quartermaster and sells what the hunt brought back but the potions, what it
+    // wears, and the cards no shop buys, then buys a new training sword and cloth armor and wears them (Gameplay Systems §11.3). Each
     // purchase and sale answers with the coins, one operation at a time.
     private static void ShopAtTheQuartermaster(ServerContent content, IAdminCommandService admin, SocketClient client)
     {
@@ -673,7 +673,9 @@ public sealed class TownLoopAcceptanceTests
         uint start = world.Inventory.Coins;
         uint earned = 0;
         foreach (InventoryEntry row in world.Inventory.Rows
-                     .Where(row => row.Slot == EquipmentSlot.None && row.Item.Value != MinorHealth)
+                     .Where(row => row.Slot == EquipmentSlot.None
+                         && row.Item.Value != MinorHealth
+                         && content.Items[row.Item].SellPrice > 0)
                      .ToList())
         {
             uint fetches = row.Quantity * (uint)content.Items[row.Item].SellPrice;

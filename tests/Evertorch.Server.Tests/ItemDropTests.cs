@@ -45,8 +45,8 @@ public sealed class ItemDropTests
         return new NavigationGrid(columns, rows, 1f, 0f, 0f, 0.3f, 0.4f, cells);
     }
 
-    // The slime's table is one entry: slime gel, chance 0.70, amount 1–2. The drop draws are its roll, then its
-    // amount; anything drawn after that falls back to a roll that never drops.
+    // The slime's table is slime gel, chance 0.70, amount 1–2, then its card at 0.001. The drop draws are the gel's
+    // roll, then its amount; anything drawn after that falls back to a roll that never drops.
     private static CombatRig KillTheSlime(params int[] dropDraws)
     {
         var rig = new CombatRig(combatRandom: new SureHitRandom(), dropRandom: new ScriptedRandom(999_999, dropDraws));
@@ -76,10 +76,32 @@ public sealed class ItemDropTests
         Assert.That(ItemDropSystem.IsDropped(draw, chance), Is.EqualTo(expected));
     }
 
+    // Drops:CardChanceScale moves the card's threshold, never the draws (Gameplay Systems §10): a roll that misses at
+    // 0.1 % drops it at 1,000 times, capped at certain, and the gel's roll is the same at either scale.
+    [TestCase(1, 1)]
+    [TestCase(1000, 2)]
+    public void Death_WithTheCardsChanceScaled_DropsTheCardOnTheSameDraws(int scale, int dropped)
+    {
+        var random = new ScriptedRandom(0, 699_999, 1, 999_999);
+        var rig = new CombatRig(combatRandom: new SureHitRandom(), dropRandom: random, cardChanceScale: scale);
+        rig.Slime.CurrentHealth = 1;
+        rig.Attack(rig.Slime.Id);
+        for (int index = 0; index < 200 && !rig.Slime.IsDead; index++)
+        {
+            rig.Server.Tick();
+        }
+
+        Assert.That(rig.Slime.IsDead, Is.True);
+        Assert.That(
+            rig.Map.ItemDrops.Select(drop => (drop.DefinitionId, drop.Amount)),
+            Is.EqualTo(new[] { (SlimeGel, 2u), ("item.card.training_slime", 1u) }.Take(dropped)));
+        Assert.That(random.Calls, Is.EqualTo(dropped + 2), "an amount drawn only for what drops");
+    }
+
     [Test]
     public void Death_WithADrawAtTheChance_DropsNothingAndDrawsNoAmount()
     {
-        var random = new ScriptedRandom(0, 700_000);
+        var random = new ScriptedRandom(999_999, 700_000);
         var rig = new CombatRig(combatRandom: new SureHitRandom(), dropRandom: random);
         rig.Slime.CurrentHealth = 1;
         rig.Attack(rig.Slime.Id);
@@ -90,7 +112,7 @@ public sealed class ItemDropTests
 
         Assert.That(rig.Slime.IsDead, Is.True);
         Assert.That(rig.Map.ItemDrops, Is.Empty);
-        Assert.That(random.Calls, Is.EqualTo(1));
+        Assert.That(random.Calls, Is.EqualTo(2), "the gel's roll and the card's");
         Assert.That(rig.Server.Transport.ControlOpcodesSentTo(rig.Player), Has.No.Member(MessageOpcode.ItemDropped));
     }
 

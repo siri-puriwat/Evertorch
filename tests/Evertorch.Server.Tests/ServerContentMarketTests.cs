@@ -78,7 +78,7 @@ public sealed class ServerContentMarketTests
         ServerContent content = ServerContentLoader.Load(PackageFixture.BuildRepositoryPackage());
 
         Assert.That(
-            content.Items.Values.Where(item => item.Market != null)
+            content.Items.Values.Where(item => item.Market != null && item.Type != ItemType.Card)
                 .Select(item => (item.Id.Value, item.Market!.BasePrice, item.Market.Floor, item.Market.Ceiling))
                 .OrderBy(terms => terms.Value, StringComparer.Ordinal),
             Is.EqualTo(

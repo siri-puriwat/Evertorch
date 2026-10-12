@@ -207,6 +207,13 @@ public static class ServerContentLoader
             maps.Count == declaredMaps.Count,
             problems);
         CheckRefineTables(items, refineTables.Values, declaredItems, declaredRefineTables, problems);
+        int cards = items.Values.Count(item => item.Type == ItemType.Card);
+        if (cards > ContentLimits.MaxCards)
+        {
+            problems.Add(
+                $"{ItemsFile}: holds {cards} cards, more than the {ContentLimits.MaxCards} a list of removal fees "
+                + "carries");
+        }
 
         if (problems.Count != 0)
         {
@@ -397,6 +404,36 @@ public static class ServerContentLoader
             entry.Report("stackLimit", "must be 1 for a weapon or armor");
         }
 
+        int slots = 0;
+        if (entry.Has("slots"))
+        {
+            slots = entry.RequiredInt(
+                "slots",
+                0,
+                type == ItemType.Armor ? ContentLimits.MaxArmorSlots : ContentLimits.MaxWeaponSlots);
+            if (!isEquipment)
+            {
+                entry.Report("slots", "is only for a weapon or armor");
+            }
+        }
+        else if (isEquipment)
+        {
+            entry.Report("slots", "required property is missing for a weapon or armor");
+        }
+
+        ItemCard? card = null;
+        if (type == ItemType.Card)
+        {
+            card = ReadCard(entry);
+        }
+        else
+        {
+            foreach (string name in new[] { "fits", "card" }.Where(entry.Has))
+            {
+                entry.Report(name, "is only for a card");
+            }
+        }
+
         if (entry.Has("equipment"))
         {
             equipment = ReadEquipment(entry.RequiredObject("equipment"), type == ItemType.Weapon);
@@ -441,8 +478,59 @@ public static class ServerContentLoader
 
         return problems.Count == problemsBefore
             ? new ItemDefinition(id, displayName, type, stackLimit, weight, sellPrice, equipment, effect, market,
-                refine)
+                refine, slots, card)
             : null;
+    }
+
+    // A card's fit and every value it adds, at least one above 0, and its fee, as the tools wrote them (Content
+    // Pipeline §7).
+    private static ItemCard? ReadCard(PackageObjectReader entry)
+    {
+        EquipmentSlot fits = entry.RequiredEnum<EquipmentSlot>("fits");
+        if (fits == EquipmentSlot.None && entry.Has("fits"))
+        {
+            entry.Report("fits", "must be weapon or armor");
+        }
+
+        PackageObjectReader? values = entry.RequiredObject("card");
+        PackageObjectReader? stats = values?.RequiredObject("bonus");
+        if (values == null || stats == null)
+        {
+            return null;
+        }
+
+        var bonus = new CardBonus(
+            new PrimaryStats(
+                stats.RequiredInt("str", 0, ContentLimits.MaxStat),
+                stats.RequiredInt("agi", 0, ContentLimits.MaxStat),
+                stats.RequiredInt("vit", 0, ContentLimits.MaxStat),
+                stats.RequiredInt("int", 0, ContentLimits.MaxStat),
+                stats.RequiredInt("dex", 0, ContentLimits.MaxStat),
+                stats.RequiredInt("luk", 0, ContentLimits.MaxStat)),
+            values.RequiredInt("attack", 0, ContentLimits.MaxStat),
+            values.RequiredInt("magicAttack", 0, ContentLimits.MaxStat),
+            values.RequiredInt("defense", 0, ContentLimits.MaxStat),
+            values.RequiredInt("maxHp", 0, ContentLimits.MaxStat),
+            values.RequiredInt("maxSp", 0, ContentLimits.MaxStat),
+            values.RequiredInt("bossDamage", 0, ContentLimits.MaxBossDamagePercent),
+            values.RequiredInt("bossDamageReduction", 0, ContentLimits.MaxBossDamageReductionPercent));
+        int removalFee = values.RequiredInt("removalFee", 0, ContentLimits.MaxCardRemovalFee);
+        stats.ReportUnexpectedProperties();
+        values.ReportUnexpectedProperties();
+        PrimaryStats added = bonus.Stats;
+        bool addsAny = new[]
+            {
+                added.Str, added.Agi, added.Vit, added.Int, added.Dex, added.Luk, bonus.Attack, bonus.MagicAttack,
+                bonus.Defense, bonus.MaxHp, bonus.MaxSp, bonus.BossDamagePercent, bonus.BossDamageReductionPercent
+            }
+            .Any(value => value > 0);
+        if (!addsAny)
+        {
+            entry.Report("card", "must add at least one value above 0");
+            return null;
+        }
+
+        return fits == EquipmentSlot.None ? null : new ItemCard(fits, bonus, removalFee);
     }
 
     // A listable item's terms as the tools resolved them, held to the same rules (Content Pipeline §7): the floor from

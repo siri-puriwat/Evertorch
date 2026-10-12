@@ -40,14 +40,18 @@ public sealed class ContentProjectionTests
         "attack", "attackSpeedPenalty", "defense", "bonus", "sp", "shop", "price", "npcs", "npc", "giver", "objective",
         "kill", "monster", "count", "currency", "jobExperienceTable", "jobExperience", "guild", "reset", "maxLevel",
         "requires", "baseJob", "weapons", "weaponType", "jobChange", "assist", "assistRadius", "respawnVarianceMs",
-        "areaRadius", "mvpExperience", "mvpDrops"
+        "areaRadius", "mvpExperience", "mvpDrops", "card", "maxHp", "maxSp", "bossDamage", "bossDamageReduction",
+        "removalFee"
     };
 
     // The client package's allow-list (Content Pipeline §5), by file: a name not reviewed here fails.
     private static readonly Dictionary<string, string[]> ReviewedClientFieldNames = new()
     {
         ["items.json"] = new[]
-            { "schemaVersion", "definitions", "id", "displayName", "type", "stackLimit", "icon", "model", "held" },
+        {
+            "schemaVersion", "definitions", "id", "displayName", "type", "stackLimit", "icon", "model", "held",
+            "slots", "fits", "prefix", "description"
+        },
         ["jobs.json"] = new[] { "schemaVersion", "definitions", "id", "displayName", "prefab" },
         ["manifest.json"] = new[] { "schemaVersion", "clientContentVersion", "files", "path", "sha256" },
         ["maps.json"] = new[]

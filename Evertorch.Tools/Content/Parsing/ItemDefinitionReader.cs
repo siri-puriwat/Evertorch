@@ -1,10 +1,18 @@
 using System.Collections.Generic;
+using System.Globalization;
+using System.Linq;
+using System.Text.RegularExpressions;
 using Evertorch.Game;
 
 namespace Evertorch.Tools
 {
 internal static class ItemDefinitionReader
 {
+    private const int MaxDescriptionLength = 240;
+
+    private static readonly Regex Prefix = new("^[A-Z][A-Za-z]{0,7}$", RegexOptions.CultureInvariant);
+    private static readonly Regex Number = new("[0-9]+", RegexOptions.CultureInvariant);
+
     public static AuthoredItem? Read(
         YamlFieldReader root,
         List<ContentDiagnostic> diagnostics,
@@ -24,6 +32,8 @@ internal static class ItemDefinitionReader
         string displayName = root.RequiredString("displayName");
         ItemType type = root.RequiredEnum<ItemType>("type");
         int stackLimit = root.RequiredInt("stackLimit", 1, ContentLimits.MaxStack);
+        int slots = ReadSlots(root, type);
+        EquipmentSlot fits = ReadFits(root, type);
 
         YamlFieldReader server = root.RequiredMapping("server");
         int weight = server.RequiredInt("weight", 0, ContentLimits.MaxStack);
@@ -51,6 +61,17 @@ internal static class ItemDefinitionReader
         else if (server.Has("effect"))
         {
             server.ReportField("effect", "is only for a consumable");
+        }
+
+        CardBonus? bonus = null;
+        int removalFee = 0;
+        if (type == ItemType.Card)
+        {
+            bonus = ReadCard(server.RequiredMapping("card"), out removalFee);
+        }
+        else if (server.Has("card"))
+        {
+            server.ReportField("card", "is only for a card");
         }
 
         ItemMarket? market = server.Has("market")
@@ -90,6 +111,21 @@ internal static class ItemDefinitionReader
             }
         }
 
+        string? prefix = null;
+        string? description = null;
+        if (type == ItemType.Card)
+        {
+            prefix = ReadPrefix(client);
+            description = ReadDescription(client, bonus);
+        }
+        else
+        {
+            foreach (string key in new[] { "prefix", "description" }.Where(client.Has))
+            {
+                client.ReportField(key, "is only for a card");
+            }
+        }
+
         root.ReportUnknownFields();
         if (diagnostics.Count != errorsBefore)
         {
@@ -106,8 +142,164 @@ internal static class ItemDefinitionReader
             equipment,
             effect,
             market,
-            refine);
-        return new AuthoredItem(root.ToSource(), definition, icon, model, held);
+            refine,
+            slots,
+            type == ItemType.Card ? new ItemCard(fits, bonus!, removalFee) : null);
+        return new AuthoredItem(root.ToSource(), definition, icon, model, held, prefix, description);
+    }
+
+    // A weapon holds up to four cards and an armor one (Content Pipeline §4); 0 when absent.
+    private static int ReadSlots(YamlFieldReader root, ItemType type)
+    {
+        if (!root.Has("slots"))
+        {
+            return 0;
+        }
+
+        switch (type)
+        {
+            case ItemType.Weapon:
+                return root.RequiredInt("slots", 0, ContentLimits.MaxWeaponSlots);
+            case ItemType.Armor:
+                return root.RequiredInt("slots", 0, ContentLimits.MaxArmorSlots);
+            default:
+                root.ReportField("slots", "is only for a weapon or armor");
+                return 0;
+        }
+    }
+
+    // A card fits a weapon or an armor, and no other item names a fit.
+    private static EquipmentSlot ReadFits(YamlFieldReader root, ItemType type)
+    {
+        if (type != ItemType.Card)
+        {
+            if (root.Has("fits"))
+            {
+                root.ReportField("fits", "is only for a card");
+            }
+
+            return EquipmentSlot.None;
+        }
+
+        switch (root.RequiredString("fits"))
+        {
+            case "weapon":
+                return EquipmentSlot.Weapon;
+            case "armor":
+                return EquipmentSlot.Armor;
+            case "":
+                return EquipmentSlot.None;
+            default:
+                root.ReportField("fits", "must be weapon or armor");
+                return EquipmentSlot.None;
+        }
+    }
+
+    // What a card adds while worn, each value optional and 0 when absent, at least one above 0, and the fee to take it
+    // out (Content Pipeline §4).
+    private static CardBonus? ReadCard(YamlFieldReader card, out int removalFee)
+    {
+        var stats = new PrimaryStats(0, 0, 0, 0, 0, 0);
+        if (card.Has("bonus"))
+        {
+            YamlFieldReader values = card.RequiredMapping("bonus");
+            stats = new PrimaryStats(
+                OptionalStat(values, "str"),
+                OptionalStat(values, "agi"),
+                OptionalStat(values, "vit"),
+                OptionalStat(values, "int"),
+                OptionalStat(values, "dex"),
+                OptionalStat(values, "luk"));
+        }
+
+        var bonus = new CardBonus(
+            stats,
+            OptionalStat(card, "attack"),
+            OptionalStat(card, "magicAttack"),
+            OptionalStat(card, "defense"),
+            OptionalStat(card, "maxHp"),
+            OptionalStat(card, "maxSp"),
+            card.Has("bossDamage") ? card.RequiredInt("bossDamage", 0, ContentLimits.MaxBossDamagePercent) : 0,
+            card.Has("bossDamageReduction")
+                ? card.RequiredInt("bossDamageReduction", 0, ContentLimits.MaxBossDamageReductionPercent)
+                : 0);
+        removalFee = card.RequiredInt("removalFee", 0, ContentLimits.MaxCardRemovalFee);
+        if (!ValuesOf(bonus).Any(value => value > 0))
+        {
+            card.ReportField("bonus", "must add at least one value above 0");
+            return null;
+        }
+
+        return bonus;
+    }
+
+    // Every value a card adds, in its fields' order.
+    private static IEnumerable<int> ValuesOf(CardBonus bonus)
+    {
+        return new[]
+        {
+            bonus.Stats.Str, bonus.Stats.Agi, bonus.Stats.Vit, bonus.Stats.Int, bonus.Stats.Dex, bonus.Stats.Luk,
+            bonus.Attack, bonus.MagicAttack, bonus.Defense, bonus.MaxHp, bonus.MaxSp, bonus.BossDamagePercent,
+            bonus.BossDamageReductionPercent
+        };
+    }
+
+    // The word an item's name takes for the card, "+7 Keen Iron Sword [2]" (Prototype Content §2).
+    private static string? ReadPrefix(YamlFieldReader client)
+    {
+        string prefix = client.RequiredString("prefix");
+        if (prefix.Length == 0)
+        {
+            return null;
+        }
+
+        if (!Prefix.IsMatch(prefix))
+        {
+            client.ReportField("prefix", "must be 1 to 8 letters, the first a capital");
+            return null;
+        }
+
+        return prefix;
+    }
+
+    // Written for the player, who reads in it what the card does: every value above 0 stands in it as a number.
+    private static string? ReadDescription(YamlFieldReader client, CardBonus? bonus)
+    {
+        string description = client.RequiredString("description");
+        if (description.Length == 0)
+        {
+            return null;
+        }
+
+        if (description.Length > MaxDescriptionLength || description.Any(character => character < ' '))
+        {
+            client.ReportField(
+                "description",
+                string.Format(
+                    CultureInfo.InvariantCulture,
+                    "must be 1 to {0} printable characters",
+                    MaxDescriptionLength));
+            return null;
+        }
+
+        if (bonus != null)
+        {
+            var stated = new HashSet<string>(
+                Number.Matches(description).Select(match => match.Value.TrimStart('0')));
+            int[] missing = ValuesOf(bonus)
+                .Where(value => value > 0 && !stated.Contains(value.ToString(CultureInfo.InvariantCulture)))
+                .ToArray();
+            if (missing.Length > 0)
+            {
+                client.ReportField(
+                    "description",
+                    "must state every value of the card above 0, and leaves out "
+                    + string.Join(", ", missing.Select(value => value.ToString(CultureInfo.InvariantCulture))));
+                return null;
+            }
+        }
+
+        return description;
     }
 
     // A weapon has an attack, an attack-speed penalty within the job's limit, and a type, armor a defense; either may
