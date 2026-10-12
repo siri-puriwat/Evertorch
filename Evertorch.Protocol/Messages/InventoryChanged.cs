@@ -29,6 +29,10 @@ public sealed class InventoryChanged
         PriorRevision = priorRevision;
         NewRevision = newRevision;
         Coins = coins;
+        if (GetEncodedLength() > ProtocolLimits.MaxReliableMessageBytes)
+        {
+            throw new ArgumentException("A change fits one reliable message.", nameof(changes));
+        }
     }
 
     public uint PriorRevision { get; }
@@ -49,7 +53,8 @@ public sealed class InventoryChanged
     {
         message = null;
         var reader = new WireReader(source);
-        if (!reader.TryReadOpcode(MessageOpcode.InventoryChanged)
+        if (source.Length > ProtocolLimits.MaxReliableMessageBytes
+            || !reader.TryReadOpcode(MessageOpcode.InventoryChanged)
             || !reader.TryReadUInt32(out uint priorRevision)
             || !reader.TryReadUInt32(out uint newRevision)
             || !reader.TryReadUInt32(out uint coins)

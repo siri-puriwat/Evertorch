@@ -969,7 +969,8 @@ public sealed class ItemActionSystem : ITickPhase
             row.Id,
             new ItemDefinitionId(row.ItemDefinitionId),
             (uint)row.Quantity,
-            (byte)row.RefineLevel);
+            (byte)row.RefineLevel,
+            row.Quantity == 0 ? null : CharacterInventory.CardsOf(row.Cards));
     }
 
     // The read answers the command that asked for it with the storage's parts, or refuses it with 6 when the database

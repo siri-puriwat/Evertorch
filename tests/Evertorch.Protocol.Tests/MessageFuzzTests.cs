@@ -242,6 +242,14 @@ public sealed class MessageFuzzTests
                 ? Encode(message!.GetEncodedLength(), message.Write)
                 : null);
         yield return Case(
+            "StorageChanged with a card",
+            Encode(
+                CardWireTests.CardedStorageChanged.GetEncodedLength(),
+                CardWireTests.CardedStorageChanged.Write),
+            payload => StorageChanged.TryRead(payload, out StorageChanged? message)
+                ? Encode(message!.GetEncodedLength(), message.Write)
+                : null);
+        yield return Case(
             "MarketOpen",
             Encode(MarketOpen.EncodedLength, MarketMessageTests.OpenGolden.Write),
             payload => MarketOpen.TryRead(payload, out MarketOpen? message)
@@ -322,6 +330,12 @@ public sealed class MessageFuzzTests
         yield return Case(
             "TradeSide",
             Encode(TradeMessageTests.SideGolden.GetEncodedLength(), TradeMessageTests.SideGolden.Write),
+            payload => TradeSide.TryRead(payload, out TradeSide? message)
+                ? Encode(message!.GetEncodedLength(), message.Write)
+                : null);
+        yield return Case(
+            "TradeSide with cards",
+            Encode(CardWireTests.CardedSide.GetEncodedLength(), CardWireTests.CardedSide.Write),
             payload => TradeSide.TryRead(payload, out TradeSide? message)
                 ? Encode(message!.GetEncodedLength(), message.Write)
                 : null);
@@ -544,6 +558,29 @@ public sealed class MessageFuzzTests
                     {
                         new InventoryEntry(11, new ItemDefinitionId("item.material.slime_gel"), 999),
                         new InventoryEntry(12, new ItemDefinitionId("item.a"), 1)
+                    })),
+            payload => InventorySnapshot.TryRead(payload, out InventorySnapshot? message) ? Encode(message!) : null);
+        yield return Case(
+            "InventorySnapshot with cards",
+            Encode(
+                new InventorySnapshot(
+                    7,
+                    250,
+                    0,
+                    1,
+                    new[]
+                    {
+                        new InventoryEntry(
+                            12,
+                            new ItemDefinitionId("item.weapon.iron_sword"),
+                            1,
+                            EquipmentSlot.None,
+                            7,
+                            new[]
+                            {
+                                new ItemDefinitionId("item.card.forest_crawler"),
+                                new ItemDefinitionId("item.card.gloom_wisp")
+                            })
                     })),
             payload => InventorySnapshot.TryRead(payload, out InventorySnapshot? message) ? Encode(message!) : null);
         yield return Case(

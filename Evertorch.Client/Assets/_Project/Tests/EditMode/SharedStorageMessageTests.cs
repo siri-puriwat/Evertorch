@@ -31,14 +31,14 @@ public sealed class SharedStorageMessageTests
     {
         0x28, 0x80, 0x03, 0x00, 0x00, 0x00, 0x14, 0x00, 0x00, 0x00, 0x00, 0x01, 0x01,
         0x09, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x06, 0x00, 0x69, 0x74, 0x65, 0x6D, 0x2E, 0x61,
-        0x0A, 0x00, 0x00, 0x00, 0x00
+        0x0A, 0x00, 0x00, 0x00, 0x00, 0x00
     };
 
     private static readonly byte[] StorageChangedBytes =
     {
         0x29, 0x80, 0x03, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00,
         0x09, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x06, 0x00, 0x69, 0x74, 0x65, 0x6D, 0x2E, 0x61,
-        0x00, 0x00, 0x00, 0x00, 0x00
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00
     };
 
     private static readonly ItemDefinitionId ItemA = new("item.a");
@@ -86,7 +86,7 @@ public sealed class SharedStorageMessageTests
         Assert.That((change!.NewRevision, change.Row.Quantity), Is.EqualTo((4u, 0u)));
     }
 
-    // Twelve rows with the longest IDs fill a part to 961 bytes, within one datagram (Network Protocol §6).
+    // Twelve rows with the longest IDs and no card fill a part to 973 bytes, within one datagram (Network Protocol §6).
     [Test]
     public void TheLargestPart_IsNineHundredSixtyOneBytes()
     {
@@ -95,7 +95,7 @@ public sealed class SharedStorageMessageTests
             .Select(row => new StorageEntry(row, longest, 1_000_000))
             .ToArray();
 
-        Assert.That(new StorageSnapshot(uint.MaxValue, 1_000_000, 0, 1, rows).GetEncodedLength(), Is.EqualTo(961));
+        Assert.That(new StorageSnapshot(uint.MaxValue, 1_000_000, 0, 1, rows).GetEncodedLength(), Is.EqualTo(973));
     }
 }
 }

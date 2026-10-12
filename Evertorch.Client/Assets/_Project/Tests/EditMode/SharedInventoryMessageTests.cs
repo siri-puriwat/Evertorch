@@ -20,7 +20,7 @@ public sealed class SharedInventoryMessageTests
         0x0F, 0x80, 0x07, 0x00, 0x00, 0x00, 0xFA, 0x00, 0x00, 0x00, 0x01, 0x03, 0x01,
         0x0B, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x06, 0x00,
         0x69, 0x74, 0x65, 0x6D, 0x2E, 0x61, 0x02, 0x00, 0x00, 0x00,
-        0x01, 0x00
+        0x01, 0x00, 0x00
     };
 
     // From revision 7 to 8 with 250 coins.
@@ -29,7 +29,18 @@ public sealed class SharedInventoryMessageTests
         0x10, 0x80, 0x07, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0xFA, 0x00, 0x00, 0x00, 0x01,
         0x0B, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x06, 0x00,
         0x69, 0x74, 0x65, 0x6D, 0x2E, 0x61, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00
+        0x00, 0x00, 0x00
+    };
+
+    // From revision 7 to 8 with 250 coins: row 11, item.a x 1 at +7, holding item.k then item.b (protocol 42).
+    private static readonly byte[] CardedChangedBytes =
+    {
+        0x10, 0x80, 0x07, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0xFA, 0x00, 0x00, 0x00, 0x01,
+        0x0B, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x06, 0x00,
+        0x69, 0x74, 0x65, 0x6D, 0x2E, 0x61, 0x01, 0x00, 0x00, 0x00,
+        0x00, 0x07, 0x02,
+        0x06, 0x00, 0x69, 0x74, 0x65, 0x6D, 0x2E, 0x6B,
+        0x06, 0x00, 0x69, 0x74, 0x65, 0x6D, 0x2E, 0x62
     };
 
     // From revision 7 to 8, where only the coins moved, to 250.
@@ -76,6 +87,31 @@ public sealed class SharedInventoryMessageTests
     }
 
     [Test]
+    public void InventoryChanged_OfACardedRow_WritesAndReadsItsCards()
+    {
+        var message = new InventoryChanged(
+            7,
+            8,
+            250,
+            new[]
+            {
+                new InventoryEntry(
+                    11,
+                    new ItemDefinitionId("item.a"),
+                    1,
+                    EquipmentSlot.None,
+                    7,
+                    new[] { new ItemDefinitionId("item.k"), new ItemDefinitionId("item.b") })
+            });
+        byte[] buffer = new byte[message.GetEncodedLength()];
+        message.Write(buffer);
+
+        Assert.That(buffer, Is.EqualTo(CardedChangedBytes));
+        Assert.That(InventoryChanged.TryRead(CardedChangedBytes, out InventoryChanged? read), Is.True);
+        Assert.That(read!.Changes[0].Cards[1].Value, Is.EqualTo("item.b"));
+    }
+
+    [Test]
     public void InventoryChanged_WhereOnlyTheCoinsMoved_MatchesGoldenBytes()
     {
         var message = new InventoryChanged(7, 8, 250, new InventoryEntry[0]);
@@ -117,7 +153,7 @@ public sealed class SharedInventoryMessageTests
     }
 
     [Test]
-    public void InventorySnapshot_AtItsLargest_Is973Bytes()
+    public void InventorySnapshot_AtItsLargestWithoutACard_Is985Bytes()
     {
         var item = new ItemDefinitionId($"item.{new string('a', 59)}");
         InventoryEntry[] entries = Enumerable.Range(1, InventorySnapshot.MaxEntries)
@@ -126,7 +162,7 @@ public sealed class SharedInventoryMessageTests
 
         Assert.That(
             new InventorySnapshot(uint.MaxValue, 1_000_000_000, 0, 1, entries).GetEncodedLength(),
-            Is.EqualTo(973));
+            Is.EqualTo(985));
     }
 
     [Test]

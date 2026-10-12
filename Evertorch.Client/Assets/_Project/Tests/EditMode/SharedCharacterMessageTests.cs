@@ -49,7 +49,8 @@ public sealed class SharedCharacterMessageTests
         0x07, 0x00, 0x02, 0x00,
         0x05, 0x02, 0x0B, 0x03, 0x63, 0x00, 0x05, 0x02, 0x15, 0x04, 0x01, 0x02,
         0x2E, 0x00, 0x0C, 0x00, 0x05, 0x00, 0x06, 0x00, 0xBC, 0x00, 0x7D, 0x00, 0x0D, 0x00, 0x9A, 0x00,
-        0x21, 0x00, 0x12, 0x00, 0x1C, 0x00
+        0x21, 0x00, 0x12, 0x00, 0x1C, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00
     };
 
     private static byte[] BuildList()
@@ -142,7 +143,11 @@ public sealed class SharedCharacterMessageTests
             154,
             33,
             18,
-            28);
+            28,
+            0,
+            0,
+            1,
+            3);
         byte[] buffer = new byte[sheet.GetEncodedLength()];
         sheet.Write(buffer);
 
@@ -157,6 +162,7 @@ public sealed class SharedCharacterMessageTests
         Assert.That(
             (read.EquipmentAttack, read.EquipmentMagicAttack, read.EquipmentDefense),
             Is.EqualTo(((ushort)33, (ushort)18, (ushort)28)));
+        Assert.That((read.EquipmentVit, read.EquipmentInt), Is.EqualTo(((ushort)1, (ushort)3)));
         Assert.That((read.JobLevel, read.Job.Value, read.SkillPoints), Is.EqualTo(((ushort)3, "job.a", (ushort)2)));
     }
 

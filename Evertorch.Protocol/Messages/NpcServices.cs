@@ -32,7 +32,7 @@ public sealed class NpcServices
     ///     What one reliable message may carry, LiteNetLib's first MTU less its header; the content keeps every NPC's
     ///     services within it (Content Pipeline §4).
     /// </summary>
-    public const int MaxEncodedLength = 1020;
+    public const int MaxEncodedLength = ProtocolLimits.MaxReliableMessageBytes;
 
     // The services byte after the offers: bit 0, the build's reset; bit 1, the account's storage; bit 2, the market
     // board; bit 3, refining; the other bits are not yet defined.

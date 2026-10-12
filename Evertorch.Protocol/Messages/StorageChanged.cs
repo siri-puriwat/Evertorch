@@ -26,7 +26,8 @@ public sealed class StorageChanged
     {
         message = null;
         var reader = new WireReader(source);
-        if (!reader.TryReadOpcode(MessageOpcode.StorageChanged)
+        if (source.Length > ProtocolLimits.MaxReliableMessageBytes
+            || !reader.TryReadOpcode(MessageOpcode.StorageChanged)
             || !reader.TryReadUInt32(out uint prior)
             || !reader.TryReadUInt32(out uint next)
             || !StorageEntry.TryRead(ref reader, true, out StorageEntry row)

@@ -6,12 +6,16 @@ namespace Evertorch.Protocol
 {
 /// <summary>
 ///     One part of the owner's whole inventory at a revision (Network Protocol §6, §9). An inventory of up to 100 rows
-///     travels as consecutive parts of at most <see cref="MaxEntries" /> rows with the same revision and coins, so every
-///     part fits one datagram; the client applies it when the last part arrives. An empty inventory is one empty part.
+///     travels as consecutive parts of at most <see cref="MaxEntries" /> rows and
+///     <see cref="ProtocolLimits.MaxReliableMessageBytes" /> bytes with the same revision and coins, so every part fits
+///     one datagram however many cards its rows hold; the client applies it when the last part arrives. An empty
+///     inventory is one empty part.
 /// </summary>
 public sealed class InventorySnapshot
 {
     public const int MaxEntries = 12;
+
+    private const int HeaderLength = sizeof(ushort) + 2 * sizeof(uint) + 3 * sizeof(byte);
 
     public InventorySnapshot(
         uint revision,
@@ -35,6 +39,10 @@ public sealed class InventorySnapshot
         Coins = coins;
         Part = part;
         PartCount = partCount;
+        if (GetEncodedLength() > ProtocolLimits.MaxReliableMessageBytes)
+        {
+            throw new ArgumentException("A part fits one reliable message.", nameof(entries));
+        }
     }
 
     public uint Revision { get; }
@@ -56,7 +64,8 @@ public sealed class InventorySnapshot
     public bool IsLast => Part == PartCount - 1;
 
     /// <summary>
-    ///     Splits a whole inventory into the consecutive parts that carry it; an empty inventory is one empty part.
+    ///     Splits a whole inventory into the consecutive parts that carry it, each filled in row order until the next row
+    ///     would pass a part's rows or bytes; an empty inventory is one empty part.
     /// </summary>
     public static IReadOnlyList<InventorySnapshot> CreateParts(
         uint revision,
@@ -68,24 +77,15 @@ public sealed class InventorySnapshot
             throw new ArgumentNullException(nameof(entries));
         }
 
-        int partCount = Math.Max(1, (entries.Count + MaxEntries - 1) / MaxEntries);
-        if (partCount > byte.MaxValue)
+        List<List<InventoryEntry>> slices = WireParts.Pack(
+            entries,
+            HeaderLength,
+            MaxEntries,
+            entry => entry.GetEncodedLength());
+        var parts = new InventorySnapshot[slices.Count];
+        for (int part = 0; part < parts.Length; part++)
         {
-            throw new ArgumentException("An inventory this large cannot be numbered in parts.", nameof(entries));
-        }
-
-        var parts = new InventorySnapshot[partCount];
-        for (int part = 0; part < partCount; part++)
-        {
-            int start = part * MaxEntries;
-            int count = Math.Min(MaxEntries, entries.Count - start);
-            var slice = new InventoryEntry[Math.Max(0, count)];
-            for (int index = 0; index < slice.Length; index++)
-            {
-                slice[index] = entries[start + index];
-            }
-
-            parts[part] = new InventorySnapshot(revision, coins, (byte)part, (byte)partCount, slice);
+            parts[part] = new InventorySnapshot(revision, coins, (byte)part, (byte)parts.Length, slices[part]);
         }
 
         return parts;
@@ -95,7 +95,8 @@ public sealed class InventorySnapshot
     {
         message = null;
         var reader = new WireReader(source);
-        if (!reader.TryReadOpcode(MessageOpcode.InventorySnapshot)
+        if (source.Length > ProtocolLimits.MaxReliableMessageBytes
+            || !reader.TryReadOpcode(MessageOpcode.InventorySnapshot)
             || !reader.TryReadUInt32(out uint revision)
             || !reader.TryReadUInt32(out uint coins)
             || !reader.TryReadByte(out byte part)
@@ -129,7 +130,7 @@ public sealed class InventorySnapshot
 
     public int GetEncodedLength()
     {
-        int length = sizeof(ushort) + 2 * sizeof(uint) + 3 * sizeof(byte);
+        int length = HeaderLength;
         foreach (InventoryEntry entry in Entries)
         {
             length += entry.GetEncodedLength();

@@ -50,6 +50,7 @@ public sealed class StorageMessageTests
         0x09, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         0x06, 0x00, 0x69, 0x74, 0x65, 0x6D, 0x2E, 0x61,
         0x0A, 0x00, 0x00, 0x00,
+        0x00,
         0x00
     };
 
@@ -62,6 +63,7 @@ public sealed class StorageMessageTests
         0x09, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         0x06, 0x00, 0x69, 0x74, 0x65, 0x6D, 0x2E, 0x61,
         0x00, 0x00, 0x00, 0x00,
+        0x00,
         0x00
     };
 
@@ -224,8 +226,8 @@ public sealed class StorageMessageTests
         Assert.That(StorageSnapshot.TryRead(SnapshotBytes.Concat(new byte[] { 0 }).ToArray(), out _), Is.False);
     }
 
-    // Twelve rows with the longest IDs fill a part to 961 bytes and a change to 89, each within one datagram's 1,020
-    // (Network Protocol §6).
+    // Twelve rows with the longest IDs and no card fill a part to 973 bytes and a change to 90, each within one
+    // datagram's 1,020 (Network Protocol §6).
     [Test]
     public void TheLargestParts_FitOneDatagram()
     {
@@ -233,7 +235,7 @@ public sealed class StorageMessageTests
         var snapshot = new StorageSnapshot(uint.MaxValue, ContentLimits.MaxDepositFee, 0, 1, rows);
         var changed = new StorageChanged(uint.MaxValue - 1, uint.MaxValue, Longest(1));
 
-        Assert.That((snapshot.GetEncodedLength(), changed.GetEncodedLength()), Is.EqualTo((961, 89)));
+        Assert.That((snapshot.GetEncodedLength(), changed.GetEncodedLength()), Is.EqualTo((973, 90)));
         Assert.That(
             StorageSnapshot.TryRead(Encode(snapshot.GetEncodedLength(), bytes => snapshot.Write(bytes)), out _),
             Is.True);

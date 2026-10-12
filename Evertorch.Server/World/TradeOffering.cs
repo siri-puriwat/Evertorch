@@ -62,10 +62,10 @@ public sealed class TradeOffering
     }
 
     /// <summary>
-    ///     The side as a trader sees it: its owner's with the rows' IDs, the partner's without them. A row the owner no
-    ///     longer holds is left out.
+    ///     The side as a trader sees it, in the parts that carry it: its owner's with the rows' IDs, the partner's without
+    ///     them, each row with its level and cards. A row the owner no longer holds is left out.
     /// </summary>
-    public TradeSide ToMessage(CharacterInventory inventory, TradeSideOwner seenAs)
+    public IReadOnlyList<TradeSide> ToMessages(CharacterInventory inventory, TradeSideOwner seenAs)
     {
         var entries = new List<TradeEntry>(m_order.Count);
         foreach (long row in m_order)
@@ -76,11 +76,12 @@ public sealed class TradeOffering
                     seenAs == TradeSideOwner.Own ? row : 0,
                     held.Item,
                     m_rows[row],
-                    held.RefineLevel));
+                    held.RefineLevel,
+                    held.Cards));
             }
         }
 
-        return new TradeSide(seenAs, IsLocked, IsConfirmed, Coins, entries);
+        return TradeSide.CreateParts(seenAs, IsLocked, IsConfirmed, Coins, entries);
     }
 }
 }

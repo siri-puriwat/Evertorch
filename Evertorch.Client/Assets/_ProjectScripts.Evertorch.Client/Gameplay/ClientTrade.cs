@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Evertorch.Protocol;
 
 namespace Evertorch.Client
@@ -19,6 +20,10 @@ public sealed class ClientTrade
 
     private static readonly TradeSide EmptyTheirs =
         new(TradeSideOwner.Partner, false, false, 0, Array.Empty<TradeEntry>());
+
+    // A side's rows as its parts arrive, held until the last (Network Protocol §6).
+    private readonly List<TradeEntry> m_ownParts = new();
+    private readonly List<TradeEntry> m_theirParts = new();
 
     private string? m_answered;
     private double m_answeredEndsAt;
@@ -68,6 +73,8 @@ public sealed class ClientTrade
                 Partner = message.Name;
                 Own = EmptyOwn;
                 Theirs = EmptyTheirs;
+                m_ownParts.Clear();
+                m_theirParts.Clear();
                 break;
             case TradeEventKind.Cancelled:
             case TradeEventKind.Completed:
@@ -75,6 +82,8 @@ public sealed class ClientTrade
                 Partner = null;
                 Own = EmptyOwn;
                 Theirs = EmptyTheirs;
+                m_ownParts.Clear();
+                m_theirParts.Clear();
                 break;
         }
     }
@@ -91,13 +100,30 @@ public sealed class ClientTrade
             return;
         }
 
+        List<TradeEntry> rows = side.Owner == TradeSideOwner.Own ? m_ownParts : m_theirParts;
+        if (side.Part == 0)
+        {
+            rows.Clear();
+        }
+
+        rows.AddRange(side.Entries);
+        if (!side.IsLast)
+        {
+            return;
+        }
+
+        // Every part of a side carries its flags and coins; the last completes its rows.
+        TradeSide whole = side.PartCount == 1
+            ? side
+            : new TradeSide(side.Owner, side.IsLocked, side.IsConfirmed, side.Coins, rows.ToArray());
+        rows.Clear();
         if (side.Owner == TradeSideOwner.Own)
         {
-            Own = side;
+            Own = whole;
         }
         else
         {
-            Theirs = side;
+            Theirs = whole;
         }
     }
 

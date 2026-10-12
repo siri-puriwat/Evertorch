@@ -51,11 +51,14 @@ public sealed class TradeMessageTests
         0x02,
         0x01,
         0x00,
+        0x00,
+        0x01,
         0x64, 0x00, 0x00, 0x00,
         0x01,
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         0x06, 0x00, 0x69, 0x74, 0x65, 0x6D, 0x2E, 0x61,
         0x03, 0x00, 0x00, 0x00,
+        0x00,
         0x00
     };
 
@@ -218,9 +221,9 @@ public sealed class TradeMessageTests
             Is.EqualTo(new[] { (0L, "item.a", 3u, (byte)0) }));
     }
 
-    // Ten rows at every limit fit one message and the WebSocket's 1,020 bytes (Network Protocol §7).
+    // Ten rows at every limit without a card fit one message and the WebSocket's 1,020 bytes (Network Protocol §6, §7).
     [Test]
-    public void Side_OfTenAtEveryLimit_IsEightHundredBytes_AndTheLargestEventTwentyNine()
+    public void Side_OfTenAtEveryLimit_IsEightHundredTwelveBytes_AndTheLargestEventTwentyNine()
     {
         TradeEntry[] entries = Enumerable.Range(0, TradeSide.MaxEntries)
             .Select(index => new TradeEntry(
@@ -233,7 +236,7 @@ public sealed class TradeMessageTests
 
         byte[] bytes = Encode(new TradeSide(TradeSideOwner.Own, true, true, ContentLimits.MaxCurrency, entries));
 
-        Assert.That(bytes, Has.Length.EqualTo(800));
+        Assert.That(bytes, Has.Length.EqualTo(812));
         Assert.That(TradeSide.TryRead(bytes, out TradeSide? read), Is.True);
         Assert.That(read!.Entries, Has.Count.EqualTo(10));
         Assert.That(Encode(new TradeEvent(TradeEventKind.Unsaved, longest, CommandRejectionReason.ServiceUnavailable)),
@@ -247,18 +250,24 @@ public sealed class TradeMessageTests
     {
         var item = new ItemDefinitionId("item.a");
         byte[] elevenRows = Encode(Side(TradeSideOwner.Own, new TradeEntry(1, item, 1)));
-        elevenRows[9] = 11;
+        elevenRows[11] = 11;
         byte[] unknownOwner = (byte[])SideBytes.Clone();
         unknownOwner[2] = 3;
         byte[] lockedTwice = (byte[])SideBytes.Clone();
         lockedTwice[3] = 2;
         byte[] pastTheCap = Encode(new TradeSide(TradeSideOwner.Own, false, false, 0, Array.Empty<TradeEntry>()));
-        BitConverter.GetBytes(ContentLimits.MaxCurrency + 1).CopyTo(pastTheCap, 5);
+        BitConverter.GetBytes(ContentLimits.MaxCurrency + 1).CopyTo(pastTheCap, 7);
+        byte[] pastItsCount = (byte[])SideBytes.Clone();
+        pastItsCount[5] = 1;
+        byte[] noParts = (byte[])SideBytes.Clone();
+        noParts[6] = 0;
 
         Assert.That(TradeSide.TryRead(elevenRows, out _), Is.False, "more than ten rows");
         Assert.That(TradeSide.TryRead(unknownOwner, out _), Is.False, "an unknown owner");
         Assert.That(TradeSide.TryRead(lockedTwice, out _), Is.False, "a flag beyond 1");
         Assert.That(TradeSide.TryRead(pastTheCap, out _), Is.False, "coins past the cap");
+        Assert.That(TradeSide.TryRead(pastItsCount, out _), Is.False, "a part at its count");
+        Assert.That(TradeSide.TryRead(noParts, out _), Is.False, "no parts");
         Assert.That(TradeSide.TryRead(Encode(Side(TradeSideOwner.Partner, new TradeEntry(5, item, 1))), out _),
             Is.False, "a row's ID on the partner's side");
         Assert.That(TradeSide.TryRead(Encode(Side(TradeSideOwner.Own, new TradeEntry(0, item, 1))), out _),

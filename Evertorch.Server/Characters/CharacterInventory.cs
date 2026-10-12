@@ -139,6 +139,20 @@ public sealed class CharacterInventory
         Coins = coins;
     }
 
+    /// <summary>
+    ///     A stored row's cards as the wire names them, in slot order; the load checked that the content defines each.
+    /// </summary>
+    public static ItemDefinitionId[] CardsOf(IReadOnlyList<string> cards)
+    {
+        var ids = new ItemDefinitionId[cards.Count];
+        for (int index = 0; index < ids.Length; index++)
+        {
+            ids[index] = new ItemDefinitionId(cards[index]);
+        }
+
+        return ids;
+    }
+
     public IReadOnlyList<InventorySnapshot> CreateSnapshot()
     {
         return InventorySnapshot.CreateParts(Revision, (uint)Coins, m_rows);
@@ -151,7 +165,8 @@ public sealed class CharacterInventory
             new ItemDefinitionId(stored.ItemDefinitionId),
             (uint)stored.Quantity,
             stored.Quantity == 0 ? EquipmentSlot.None : SlotOf(stored),
-            stored.Quantity == 0 ? (byte)0 : (byte)stored.RefineLevel);
+            stored.Quantity == 0 ? (byte)0 : (byte)stored.RefineLevel,
+            stored.Quantity == 0 ? null : CardsOf(stored.Cards));
         int index = m_rows.FindIndex(existing => existing.InventoryItem == row.InventoryItem);
         if (row.Quantity == 0)
         {

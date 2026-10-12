@@ -6,12 +6,15 @@ namespace Evertorch.Protocol
 {
 /// <summary>
 ///     One part of the account's storage at a revision, with the Storekeeper's deposit fee (Network Protocol §6, §9).
-///     Up to 300 rows travel as consecutive parts of at most <see cref="MaxEntries" /> rows with the same revision and
-///     fee; the client takes it when the last part arrives. An empty storage is one empty part.
+///     Up to 300 rows travel as consecutive parts of at most <see cref="MaxEntries" /> rows and
+///     <see cref="ProtocolLimits.MaxReliableMessageBytes" /> bytes with the same revision and fee; the client takes it
+///     when the last part arrives. An empty storage is one empty part.
 /// </summary>
 public sealed class StorageSnapshot
 {
     public const int MaxEntries = 12;
+
+    private const int HeaderLength = sizeof(ushort) + 2 * sizeof(uint) + 3 * sizeof(byte);
 
     public StorageSnapshot(
         uint revision,
@@ -35,6 +38,10 @@ public sealed class StorageSnapshot
         DepositFee = depositFee;
         Part = part;
         PartCount = partCount;
+        if (GetEncodedLength() > ProtocolLimits.MaxReliableMessageBytes)
+        {
+            throw new ArgumentException("A part fits one reliable message.", nameof(entries));
+        }
     }
 
     public uint Revision { get; }
@@ -53,7 +60,8 @@ public sealed class StorageSnapshot
     public bool IsLast => Part == PartCount - 1;
 
     /// <summary>
-    ///     Splits a whole storage into the consecutive parts that carry it; an empty storage is one empty part.
+    ///     Splits a whole storage into the consecutive parts that carry it, each filled in row order until the next row
+    ///     would pass a part's rows or bytes; an empty storage is one empty part.
     /// </summary>
     public static IReadOnlyList<StorageSnapshot> CreateParts(
         uint revision,
@@ -65,24 +73,15 @@ public sealed class StorageSnapshot
             throw new ArgumentNullException(nameof(entries));
         }
 
-        int partCount = Math.Max(1, (entries.Count + MaxEntries - 1) / MaxEntries);
-        if (partCount > byte.MaxValue)
+        List<List<StorageEntry>> slices = WireParts.Pack(
+            entries,
+            HeaderLength,
+            MaxEntries,
+            entry => entry.GetEncodedLength());
+        var parts = new StorageSnapshot[slices.Count];
+        for (int part = 0; part < parts.Length; part++)
         {
-            throw new ArgumentException("A storage this large cannot be numbered in parts.", nameof(entries));
-        }
-
-        var parts = new StorageSnapshot[partCount];
-        for (int part = 0; part < partCount; part++)
-        {
-            int start = part * MaxEntries;
-            int count = Math.Min(MaxEntries, entries.Count - start);
-            var slice = new StorageEntry[Math.Max(0, count)];
-            for (int index = 0; index < slice.Length; index++)
-            {
-                slice[index] = entries[start + index];
-            }
-
-            parts[part] = new StorageSnapshot(revision, depositFee, (byte)part, (byte)partCount, slice);
+            parts[part] = new StorageSnapshot(revision, depositFee, (byte)part, (byte)parts.Length, slices[part]);
         }
 
         return parts;
@@ -92,7 +91,8 @@ public sealed class StorageSnapshot
     {
         message = null;
         var reader = new WireReader(source);
-        if (!reader.TryReadOpcode(MessageOpcode.StorageSnapshot)
+        if (source.Length > ProtocolLimits.MaxReliableMessageBytes
+            || !reader.TryReadOpcode(MessageOpcode.StorageSnapshot)
             || !reader.TryReadUInt32(out uint revision)
             || !reader.TryReadUInt32(out uint fee)
             || !reader.TryReadByte(out byte part)
@@ -126,7 +126,7 @@ public sealed class StorageSnapshot
 
     public int GetEncodedLength()
     {
-        int length = sizeof(ushort) + 2 * sizeof(uint) + 3 * sizeof(byte);
+        int length = HeaderLength;
         foreach (StorageEntry entry in Entries)
         {
             length += entry.GetEncodedLength();

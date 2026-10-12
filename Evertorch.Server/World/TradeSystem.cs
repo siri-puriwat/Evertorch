@@ -651,8 +651,8 @@ public sealed class TradeSystem : ITickPhase
     {
         Trader owner = side == trade.First.Offer ? trade.First : trade.Second;
         Trader partner = side == trade.First.Offer ? trade.Second : trade.First;
-        Show(owner, side.ToMessage(owner.Character.Inventory, TradeSideOwner.Own));
-        Show(partner, side.ToMessage(owner.Character.Inventory, TradeSideOwner.Partner));
+        Show(owner, side.ToMessages(owner.Character.Inventory, TradeSideOwner.Own));
+        Show(partner, side.ToMessages(owner.Character.Inventory, TradeSideOwner.Partner));
     }
 
     private bool TryGetOwnSide(ClientSession session, out OpenTrade? trade, out TradeOffering? side)
@@ -747,11 +747,16 @@ public sealed class TradeSystem : ITickPhase
         }
     }
 
-    private void Show(Trader trader, TradeSide message)
+    private void Show(Trader trader, IReadOnlyList<TradeSide> parts)
     {
-        if (ReferenceEquals(trader.Character.Connection, trader.Connection))
+        if (!ReferenceEquals(trader.Character.Connection, trader.Connection))
         {
-            m_sender.Send(trader.Connection.Connection, message);
+            return;
+        }
+
+        foreach (TradeSide part in parts)
+        {
+            m_sender.Send(trader.Connection.Connection, part);
         }
     }
 

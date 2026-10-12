@@ -28,7 +28,7 @@ public sealed class CharacterSheet : IEquatable<CharacterSheet>
     /// </summary>
     public const int MaxEncodedLength = sizeof(ushort) + sizeof(ushort) + sizeof(ushort)
         + ProtocolLimits.MaxDefinitionIdBytes + 2 * sizeof(ulong) + 2 * sizeof(ushort) + StatCount * 2 * sizeof(byte)
-        + 11 * sizeof(ushort);
+        + 17 * sizeof(ushort);
 
     public CharacterSheet(
         ushort jobLevel,
@@ -48,7 +48,13 @@ public sealed class CharacterSheet : IEquatable<CharacterSheet>
         ushort attackSpeed,
         ushort equipmentAttack = 0,
         ushort equipmentMagicAttack = 0,
-        ushort equipmentDefense = 0)
+        ushort equipmentDefense = 0,
+        ushort equipmentStr = 0,
+        ushort equipmentAgi = 0,
+        ushort equipmentVit = 0,
+        ushort equipmentInt = 0,
+        ushort equipmentDex = 0,
+        ushort equipmentLuk = 0)
     {
         if (stats == null)
         {
@@ -83,6 +89,12 @@ public sealed class CharacterSheet : IEquatable<CharacterSheet>
         EquipmentAttack = equipmentAttack;
         EquipmentMagicAttack = equipmentMagicAttack;
         EquipmentDefense = equipmentDefense;
+        EquipmentStr = equipmentStr;
+        EquipmentAgi = equipmentAgi;
+        EquipmentVit = equipmentVit;
+        EquipmentInt = equipmentInt;
+        EquipmentDex = equipmentDex;
+        EquipmentLuk = equipmentLuk;
     }
 
     public ushort JobLevel { get; }
@@ -146,6 +158,21 @@ public sealed class CharacterSheet : IEquatable<CharacterSheet>
     /// </summary>
     public ushort EquipmentDefense { get; }
 
+    /// <summary>
+    ///     What the worn equipment adds to each primary statistic (Gameplay Systems §2), shown beside it as "STR 30 + 2".
+    /// </summary>
+    public ushort EquipmentStr { get; }
+
+    public ushort EquipmentAgi { get; }
+
+    public ushort EquipmentVit { get; }
+
+    public ushort EquipmentInt { get; }
+
+    public ushort EquipmentDex { get; }
+
+    public ushort EquipmentLuk { get; }
+
     public bool Equals(CharacterSheet? other)
     {
         if (other == null)
@@ -177,7 +204,13 @@ public sealed class CharacterSheet : IEquatable<CharacterSheet>
             && AttackSpeed == other.AttackSpeed
             && EquipmentAttack == other.EquipmentAttack
             && EquipmentMagicAttack == other.EquipmentMagicAttack
-            && EquipmentDefense == other.EquipmentDefense;
+            && EquipmentDefense == other.EquipmentDefense
+            && EquipmentStr == other.EquipmentStr
+            && EquipmentAgi == other.EquipmentAgi
+            && EquipmentVit == other.EquipmentVit
+            && EquipmentInt == other.EquipmentInt
+            && EquipmentDex == other.EquipmentDex
+            && EquipmentLuk == other.EquipmentLuk;
     }
 
     public static bool TryRead(ReadOnlySpan<byte> source, out CharacterSheet? message)
@@ -223,6 +256,12 @@ public sealed class CharacterSheet : IEquatable<CharacterSheet>
             || !reader.TryReadUInt16(out ushort equipmentAttack)
             || !reader.TryReadUInt16(out ushort equipmentMagicAttack)
             || !reader.TryReadUInt16(out ushort equipmentDefense)
+            || !reader.TryReadUInt16(out ushort equipmentStr)
+            || !reader.TryReadUInt16(out ushort equipmentAgi)
+            || !reader.TryReadUInt16(out ushort equipmentVit)
+            || !reader.TryReadUInt16(out ushort equipmentInt)
+            || !reader.TryReadUInt16(out ushort equipmentDex)
+            || !reader.TryReadUInt16(out ushort equipmentLuk)
             || !reader.IsAtEnd)
         {
             return false;
@@ -246,7 +285,13 @@ public sealed class CharacterSheet : IEquatable<CharacterSheet>
             attackSpeed,
             equipmentAttack,
             equipmentMagicAttack,
-            equipmentDefense);
+            equipmentDefense,
+            equipmentStr,
+            equipmentAgi,
+            equipmentVit,
+            equipmentInt,
+            equipmentDex,
+            equipmentLuk);
         return true;
     }
 
@@ -277,6 +322,12 @@ public sealed class CharacterSheet : IEquatable<CharacterSheet>
         writer.WriteUInt16(EquipmentAttack);
         writer.WriteUInt16(EquipmentMagicAttack);
         writer.WriteUInt16(EquipmentDefense);
+        writer.WriteUInt16(EquipmentStr);
+        writer.WriteUInt16(EquipmentAgi);
+        writer.WriteUInt16(EquipmentVit);
+        writer.WriteUInt16(EquipmentInt);
+        writer.WriteUInt16(EquipmentDex);
+        writer.WriteUInt16(EquipmentLuk);
         return writer.Position;
     }
 

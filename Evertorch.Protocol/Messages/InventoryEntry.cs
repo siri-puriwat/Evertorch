@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using Evertorch.Game;
 
@@ -5,22 +6,26 @@ namespace Evertorch.Protocol
 {
 /// <summary>
 ///     One inventory row as the owner sees it: its stable ID, what it holds, how many, the equipment slot it is worn in,
-///     and its refine level.
+///     its refine level, and its cards.
 /// </summary>
 public readonly struct InventoryEntry
 {
+    private readonly ItemDefinitionId[]? m_cards;
+
     public InventoryEntry(
         long inventoryItem,
         ItemDefinitionId item,
         uint quantity,
         EquipmentSlot slot = EquipmentSlot.None,
-        byte refineLevel = 0)
+        byte refineLevel = 0,
+        IReadOnlyList<ItemDefinitionId>? cards = null)
     {
         InventoryItem = inventoryItem;
         Item = item;
         Quantity = quantity;
         Slot = slot;
         RefineLevel = refineLevel;
+        m_cards = WireCards.Of(cards, quantity);
     }
 
     public long InventoryItem { get; }
@@ -43,12 +48,19 @@ public readonly struct InventoryEntry
     /// </summary>
     public byte RefineLevel { get; }
 
+    /// <summary>
+    ///     The cards in the row's slots, in slot order (Network Protocol §6); empty, never null, on a row without any and
+    ///     on a default row.
+    /// </summary>
+    public IReadOnlyList<ItemDefinitionId> Cards => m_cards ?? Array.Empty<ItemDefinitionId>();
+
     internal int GetEncodedLength()
     {
         return sizeof(long)
             + WireText.GetEncodedLength(Item.Value, ProtocolLimits.MaxDefinitionIdBytes)
             + sizeof(uint)
-            + 2 * sizeof(byte);
+            + 2 * sizeof(byte)
+            + WireCards.GetEncodedLength(Cards);
     }
 
     internal void Write(ref WireWriter writer)
@@ -58,6 +70,7 @@ public readonly struct InventoryEntry
         writer.WriteUInt32(Quantity);
         writer.WriteByte((byte)Slot);
         writer.WriteByte(RefineLevel);
+        WireCards.Write(ref writer, Cards);
     }
 
     internal static bool TryRead(ref WireReader reader, bool allowsZero, out InventoryEntry entry)
@@ -68,6 +81,7 @@ public readonly struct InventoryEntry
             || !reader.TryReadUInt32(out uint quantity)
             || !reader.TryReadByte(out byte slot)
             || !reader.TryReadByte(out byte refineLevel)
+            || !WireCards.TryRead(ref reader, quantity, out ItemDefinitionId[] cards)
             || inventoryItem <= 0
             || (quantity == 0 && !allowsZero)
             || slot > (byte)EquipmentSlot.Armor
@@ -78,7 +92,7 @@ public readonly struct InventoryEntry
             return false;
         }
 
-        entry = new InventoryEntry(inventoryItem, item, quantity, (EquipmentSlot)slot, refineLevel);
+        entry = new InventoryEntry(inventoryItem, item, quantity, (EquipmentSlot)slot, refineLevel, cards);
         return true;
     }
 

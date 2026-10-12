@@ -13,6 +13,17 @@ public static class ProtocolLimits
     public const int MaxNoticeMessageBytes = 128;
 
     /// <summary>
+    ///     The most cards a row holds: a weapon's four slots (Gameplay Systems §11.7).
+    /// </summary>
+    public const int MaxCardsPerItem = ContentLimits.MaxWeaponSlots;
+
+    /// <summary>
+    ///     What one reliable message may carry, LiteNetLib's first MTU less its header. A message whose rows carry cards
+    ///     is held to it, and its reader checks it first (Network Protocol §6).
+    /// </summary>
+    public const int MaxReliableMessageBytes = 1020;
+
+    /// <summary>
     ///     A character name: at most 23 characters, all ASCII under <see cref="CharacterNames" />.
     /// </summary>
     public const int MaxCharacterNameBytes = CharacterNames.MaxLength;

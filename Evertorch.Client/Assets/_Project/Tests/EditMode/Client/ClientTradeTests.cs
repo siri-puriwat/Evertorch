@@ -57,6 +57,28 @@ public sealed class ClientTradeTests
         Assert.That((trade.Requester, trade.Partner, trade.IsOpen), Is.EqualTo(((string?)null, "Cora", true)));
     }
 
+    // A side whose carded rows pass one message arrives in parts; the client shows it whole once the last arrives
+    // (Network Protocol §6).
+    [Test]
+    public void ASideInParts_IsShownWhole_OnceItsLastPartArrives()
+    {
+        var trade = new ClientTrade();
+        trade.Apply(new TradeEvent(TradeEventKind.Opened, "Bobby"));
+        var card = new ItemDefinitionId("item.card.forest_crawler");
+        var sword = new ItemDefinitionId("item.weapon.iron_sword");
+        TradeEntry[] rows = { new(0, sword, 1, 4, new[] { card }), new(0, sword, 1), new(0, Gel, 5) };
+
+        trade.Apply(new TradeSide(TradeSideOwner.Partner, true, false, 30, new[] { rows[0], rows[1] }, 0, 2));
+        int shownEarly = trade.Theirs.Entries.Count;
+        trade.Apply(new TradeSide(TradeSideOwner.Partner, true, false, 30, new[] { rows[2] }, 1, 2));
+
+        Assert.That(shownEarly, Is.Zero, "nothing until the last part");
+        Assert.That(trade.Theirs.Entries.Count, Is.EqualTo(3));
+        Assert.That((trade.Theirs.IsLocked, trade.Theirs.Coins), Is.EqualTo((true, 30u)));
+        Assert.That(trade.Theirs.Entries[0].Cards[0], Is.EqualTo(card));
+        Assert.That(trade.Own.Entries, Is.Empty, "the player's own side untouched");
+    }
+
     [Test]
     public void Refusals_OfTradeCommands_SayWhatWasRefused()
     {

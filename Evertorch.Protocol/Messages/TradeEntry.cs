@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using Evertorch.Game;
 
 namespace Evertorch.Protocol
@@ -8,12 +10,20 @@ namespace Evertorch.Protocol
 /// </summary>
 public readonly struct TradeEntry
 {
-    public TradeEntry(long inventoryItem, ItemDefinitionId item, uint quantity, byte refineLevel = 0)
+    private readonly ItemDefinitionId[]? m_cards;
+
+    public TradeEntry(
+        long inventoryItem,
+        ItemDefinitionId item,
+        uint quantity,
+        byte refineLevel = 0,
+        IReadOnlyList<ItemDefinitionId>? cards = null)
     {
         InventoryItem = inventoryItem;
         Item = item;
         Quantity = quantity;
         RefineLevel = refineLevel;
+        m_cards = WireCards.Of(cards, quantity);
     }
 
     /// <summary>
@@ -33,12 +43,18 @@ public readonly struct TradeEntry
     /// </summary>
     public byte RefineLevel { get; }
 
+    /// <summary>
+    ///     The row's cards in slot order (Network Protocol §6); empty, never null, on a row without any.
+    /// </summary>
+    public IReadOnlyList<ItemDefinitionId> Cards => m_cards ?? Array.Empty<ItemDefinitionId>();
+
     internal int GetEncodedLength()
     {
         return sizeof(long)
             + WireText.GetEncodedLength(Item.Value, ProtocolLimits.MaxDefinitionIdBytes)
             + sizeof(uint)
-            + sizeof(byte);
+            + sizeof(byte)
+            + WireCards.GetEncodedLength(Cards);
     }
 
     internal void Write(ref WireWriter writer)
@@ -47,6 +63,7 @@ public readonly struct TradeEntry
         writer.WriteString(Item.Value, ProtocolLimits.MaxDefinitionIdBytes);
         writer.WriteUInt32(Quantity);
         writer.WriteByte(RefineLevel);
+        WireCards.Write(ref writer, Cards);
     }
 
     internal static bool TryRead(ref WireReader reader, bool isPartners, out TradeEntry entry)
@@ -56,6 +73,7 @@ public readonly struct TradeEntry
             || !reader.TryReadString(ProtocolLimits.MaxDefinitionIdBytes, out string itemText)
             || !reader.TryReadUInt32(out uint quantity)
             || !reader.TryReadByte(out byte refineLevel)
+            || !WireCards.TryRead(ref reader, quantity, out ItemDefinitionId[] cards)
             || (isPartners ? inventoryItem != 0 : inventoryItem <= 0)
             || quantity == 0
             || (refineLevel > 0 && quantity > 1)
@@ -64,7 +82,7 @@ public readonly struct TradeEntry
             return false;
         }
 
-        entry = new TradeEntry(inventoryItem, item, quantity, refineLevel);
+        entry = new TradeEntry(inventoryItem, item, quantity, refineLevel, cards);
         return true;
     }
 }
