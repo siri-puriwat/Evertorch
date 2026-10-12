@@ -295,6 +295,174 @@ public sealed class HostileSocketTests
         AssertNoSecretIn(lines);
     }
 
+    // Milestone 17's commands from SecretAnna, beside SecretBob of another account, both names words no log may repeat:
+    // at the Smith, a card into Bobby's sword, into her worn armor, and into gel, a removal from Bobby's sword, of a
+    // card her sword does not hold, and at the Broker, out of reach, an inspection of the Smith and of no one seen, each
+    // refused and audited; while trading, an insertion and a removal refused and an inspection answered; bursts over the
+    // item bucket and the inspect bucket; then malformed card commands and inspections until the connection is closed.
+    [Test]
+    public void HostileCardCommands_AreRefusedThrottledAndScored_AndLeaveNoNameInTheLogs()
+    {
+        using var root = new TemporaryDirectory();
+        var logs = new CapturingLoggerProvider();
+        var store = new InMemoryGameStore();
+        const int itemBurst = 8;
+        using IHost host = StartHost(root, logs, store, $"--Abuse:ItemCommandBurst={itemBurst}");
+        int port = host.Services.GetRequiredService<LiteNetLibServerTransport>().LocalPort;
+        ServerContent content = host.Services.GetRequiredService<ServerContent>();
+        var abuse = new AbuseOptions();
+        int violationsToClose = abuse.ViolationThreshold / ViolationScore.Points;
+        byte[][] malformed =
+        {
+            // An insertion of row 0, a removal at slot 0, an inspection of entity 0, and each cut short.
+            new byte[] { 0x2E, 0x00, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0 },
+            new byte[]
+            {
+                0x2F, 0x00, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0x06, 0x00, 0x69, 0x74, 0x65, 0x6D,
+                0x2E, 0x6B, 1, 0, 0, 0
+            },
+            new byte[] { 0x30, 0x00, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0 }, new byte[] { 0x2E, 0x00, 0x01 },
+            new byte[] { 0x2F, 0x00, 0x01 }, new byte[] { 0x30, 0x00, 0x01 }
+        };
+
+        using var anna = new SocketClient(content, "secret-card-anna", "SecretAnna");
+        using var bobby = new SocketClient(content, "secret-card-bobby", "SecretBob");
+        store.NextCharacterId = 71;
+        anna.AfterCreate = () =>
+        {
+            store.GiveItems(71, "item.weapon.iron_sword", 1, 1, 0);
+            store.GiveItems(71, "item.armor.cloth", 1, 1, 0);
+            store.Wear(71, store.Stored(71).Items.Last().Id, "Armor");
+            store.GiveItems(71, "item.card.forest_crawler", 1, 2, 0);
+            store.GiveItems(71, "item.material.slime_gel", 1, 5, 0);
+            store.Edit(71, coins: 1000);
+        };
+        anna.EnterWorld(port);
+        store.NextCharacterId = 72;
+        bobby.AfterCreate = () =>
+        {
+            store.GiveItems(72, "item.weapon.iron_sword", 1, 1, 0);
+            store.Card(72, store.Stored(72).Items.Last().Id, "item.card.forest_crawler");
+        };
+        bobby.EnterWorld(port);
+        var refused = new List<CommandRejectionReason>();
+        anna.World.CommandRejectedReceived += rejection => refused.Add(rejection.Reason);
+        var inspected = new List<InspectedEquipment>();
+        anna.Connection.InspectedEquipmentReceived += inspected.Add;
+        var bobbyHeard = new List<TradeEventKind>();
+        bobby.Connection.TradeEventReceived += message => bobbyHeard.Add(message.Kind);
+        SocketClients.PumpUntil(
+            () => anna.World.Inventory.IsCurrent && bobby.World.Inventory.IsCurrent
+                && anna.World.Remotes.Values.Any(remote => remote.DefinitionId == "npc.smith")
+                && anna.World.Remotes.Values.Any(remote => remote.DefinitionId == "npc.broker")
+                && anna.World.Remotes.ContainsKey(bobby.World.LocalEntity),
+            anna,
+            bobby);
+        EntityId smith = anna.World.Remotes.Values.Single(remote => remote.DefinitionId == "npc.smith").Entity;
+        EntityId broker = anna.World.Remotes.Values.Single(remote => remote.DefinitionId == "npc.broker").Entity;
+        bobby.TalkTo(smith);
+        SocketClients.PumpUntil(() => bobby.NpcWindows.Contains(smith), anna, bobby);
+        anna.TalkTo(smith);
+        SocketClients.PumpUntil(() => anna.NpcWindows.Contains(smith), anna, bobby);
+        long bobbysSword = bobby.World.Inventory.Rows.Single().InventoryItem;
+
+        long Row(string item)
+        {
+            return anna.World.Inventory.Rows.Single(row => row.Item.Value == item).InventoryItem;
+        }
+
+        long sword = Row("item.weapon.iron_sword");
+        long keen = Row("item.card.forest_crawler");
+        var keenId = new ItemDefinitionId("item.card.forest_crawler");
+
+        anna.Connection.SendInsertCard(keen, bobbysSword);
+        anna.Connection.SendInsertCard(keen, Row("item.armor.cloth"));
+        anna.Connection.SendInsertCard(keen, Row("item.material.slime_gel"));
+        anna.Connection.SendRemoveCard(smith, bobbysSword, 1, keenId);
+        anna.Connection.SendRemoveCard(smith, sword, 1, keenId);
+        anna.Connection.SendRemoveCard(broker, sword, 1, keenId);
+        anna.Connection.SendInspectPlayer(smith);
+        anna.Connection.SendInspectPlayer(new EntityId(999_999));
+        SocketClients.PumpUntil(() => refused.Count >= 8, anna, bobby);
+        var atTheSmith = refused.ToList();
+        anna.PumpFor(TimeSpan.FromMilliseconds(1100));
+
+        anna.Connection.SendTradeRequest("SecretBob");
+        SocketClients.PumpUntil(() => bobbyHeard.Contains(TradeEventKind.Requested), anna, bobby);
+        bobby.Connection.SendTradeReply("SecretAnna", true);
+        SocketClients.PumpUntil(() => bobbyHeard.Contains(TradeEventKind.Opened), anna, bobby);
+        refused.Clear();
+        anna.Connection.SendInsertCard(keen, sword);
+        anna.Connection.SendRemoveCard(smith, sword, 1, keenId);
+        anna.Connection.SendInspectPlayer(bobby.World.LocalEntity);
+        SocketClients.PumpUntil(() => refused.Count >= 2 && inspected.Count >= 1, anna, bobby);
+        var trading = refused.ToList();
+        anna.Connection.SendTradeCancel();
+        SocketClients.PumpUntil(() => bobbyHeard.Contains(TradeEventKind.Cancelled), anna, bobby);
+        anna.PumpFor(TimeSpan.FromMilliseconds(1100));
+
+        for (int index = 0; index <= itemBurst; index++)
+        {
+            anna.Connection.SendInsertCard(keen, bobbysSword);
+        }
+
+        anna.PumpFor(TimeSpan.FromMilliseconds(1100));
+        for (int index = 0; index <= abuse.InspectCommandBurst; index++)
+        {
+            anna.Connection.SendInspectPlayer(smith);
+        }
+
+        anna.PumpFor(TimeSpan.FromMilliseconds(1100));
+        for (int index = 0; index < 2 * violationsToClose; index++)
+        {
+            anna.Link.Send(ProtocolChannel.Control, MessageDelivery.ReliableOrdered,
+                malformed[index % malformed.Length]);
+        }
+
+        bool isClosed = anna.PumpUntil(() => anna.Connection.State == ClientConnectionState.Disconnected);
+        host.StopAsync().GetAwaiter().GetResult();
+
+        IReadOnlyList<string> lines = logs.Lines;
+        Assert.That(
+            atTheSmith,
+            Is.EqualTo(
+                new[]
+                {
+                    CommandRejectionReason.InvalidTarget, CommandRejectionReason.NotAllowedNow,
+                    CommandRejectionReason.NotAllowedNow, CommandRejectionReason.InvalidTarget,
+                    CommandRejectionReason.InvalidTarget, CommandRejectionReason.OutOfRange,
+                    CommandRejectionReason.InvalidTarget, CommandRejectionReason.InvalidTarget
+                }),
+            "Bobby's sword; her worn armor; gel; Bobby's sword; no card at the slot; the Broker; the Smith; no one");
+        Assert.That(
+            trading,
+            Is.EqualTo(new[] { CommandRejectionReason.NotAllowedNow, CommandRejectionReason.NotAllowedNow }),
+            "an insertion and a removal while trading");
+        Assert.That(inspected.Single().Entity, Is.EqualTo(bobby.World.LocalEntity), "an inspection answered");
+        Assert.That(isClosed, Is.True, "the connection was closed");
+        Assert.That(anna.Connection.Notice?.Reason, Is.EqualTo(DisconnectReason.Kicked));
+        Assert.That(
+            store.Stored(71).Items.Select(item => (item.ItemDefinitionId, item.Quantity, item.Cards.Count))
+                .OrderBy(item => item.ItemDefinitionId, StringComparer.Ordinal),
+            Is.EqualTo(
+                new[]
+                {
+                    ("item.armor.cloth", 1, 0), ("item.card.forest_crawler", 2, 0), ("item.material.slime_gel", 5, 0),
+                    ("item.weapon.iron_sword", 1, 0)
+                }),
+            "nothing inserted or taken out");
+        Assert.That(
+            (store.Stored(71).Coins, store.Stored(72).Items.Single().Cards.Count, store.CardCommits.Count),
+            Is.EqualTo((1000L, 1, 0)));
+        Assert.That(lines.Any(line => line.Contains("had InsertCard refused")), Is.True, "the refusals audited");
+        Assert.That(lines.Any(line => line.Contains("had RemoveCard refused")), Is.True);
+        Assert.That(lines.Any(line => line.Contains("had InspectPlayer refused")), Is.True);
+        Assert.That(lines.Any(line => line.Contains("sent InsertCard over the session_item limit")), Is.True);
+        Assert.That(lines.Any(line => line.Contains("sent InspectPlayer over the session_inspect limit")), Is.True);
+        Assert.That(lines.Any(line => line.Contains("ViolationDisconnect")), Is.True);
+        AssertNoSecretIn(lines);
+    }
+
     // Milestone 12's commands from a player beside a bystander: lines said nearby and whispered, carrying words no log
     // may repeat, delivered; a whisper and an invite to no one, party chat, a departure, and a removal without a party,
     // each refused and audited; a burst of departures over the party bucket and of lines over the chat bucket; then
