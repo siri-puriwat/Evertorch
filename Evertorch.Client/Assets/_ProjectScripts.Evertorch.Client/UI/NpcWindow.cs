@@ -657,6 +657,7 @@ public sealed class NpcWindow : MonoBehaviour
         {
             if (row.Slot != EquipmentSlot.None
                 || row.RefineLevel > 0
+                || row.Cards.Count > 0
                 || !market.TryGetEntry(row.Item, out MarketBoardEntry entry))
             {
                 continue;

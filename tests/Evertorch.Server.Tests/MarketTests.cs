@@ -22,6 +22,7 @@ public sealed class MarketTests
     private const string Dust = "item.material.gloom_dust";
     private const string Sword = "item.weapon.iron_sword";
     private const string Gel = "item.material.slime_gel";
+    private const string Keen = "item.card.forest_crawler";
     private const long Seller = 1;
     private const long Buyer = 2;
 
@@ -183,6 +184,8 @@ public sealed class MarketTests
             .SetName("List of a worn row without coins is 3");
         yield return new TestCaseData(0L, 2f, Broker, "refined", 1u, CommandRejectionReason.NotAllowedNow)
             .SetName("List of a refined row without coins is 3");
+        yield return new TestCaseData(0L, 2f, Broker, "carded", 1u, CommandRejectionReason.NotAllowedNow)
+            .SetName("List of a carded row without coins is 3");
         yield return new TestCaseData(0L, 2f, Broker, "gel", 1u, CommandRejectionReason.NotAllowedNow)
             .SetName("List of an item the board does not take without coins is 3");
         yield return new TestCaseData(0L, 2f, Broker, "dust", 11u, CommandRejectionReason.NotAllowedNow)
@@ -205,12 +208,13 @@ public sealed class MarketTests
         {
             store.GiveItems(Seller, Dust, 1, 10, 5);
             store.GiveItems(Seller, Gel, 1, 10, 5);
-            store.GiveItems(Seller, Sword, 2, 1, 5);
+            store.GiveItems(Seller, Sword, 3, 1, 5);
             long[] swords = store.Stored(Seller).Items.Where(item => item.ItemDefinitionId == Sword)
                 .Select(item => item.Id)
                 .ToArray();
             store.Wear(Seller, swords[0], "Weapon");
             store.Refine(Seller, swords[1], 1);
+            store.Card(Seller, swords[2], Keen);
         }, distance, npc);
         CharacterInventory bag = server.SessionOf(player).Character!.Inventory;
         long id = row switch
@@ -219,6 +223,7 @@ public sealed class MarketTests
             "gel" => RowOf(server, player, Gel),
             "worn" => bag.WornIn(EquipmentSlot.Weapon),
             "refined" => bag.Rows.Single(entry => entry.RefineLevel > 0).InventoryItem,
+            "carded" => bag.Rows.Single(entry => entry.Cards.Count > 0).InventoryItem,
             _ => 999999
         };
 
@@ -557,6 +562,26 @@ public sealed class MarketTests
             Is.EqualTo((0, 0)),
             "nothing reached the store");
         AssertNotScored(server, seller);
+    }
+
+    // Owner decision 8 of Milestone 17: a card is a good like any other, listed by the unit and bought by another
+    // account.
+    [Test]
+    public void List_OfACard_PutsItOnTheBoard_ForAnotherAccount()
+    {
+        var server = new TestServer(withNpcs: true);
+        ConnectionId seller = Enter(server, Seller, 100, Holding(Seller, Keen, 2));
+        ConnectionId buyer = Enter(server, Buyer, 0);
+
+        server.SendMarketList(seller, BrokerOf(server), RowOf(server, seller, Keen), 2, 1);
+        Assert.That(Answer(server, seller), Is.EqualTo(CommandRejectionReason.None), "listed");
+        server.SendMarketOpen(buyer, BrokerOf(server), 1);
+        Assert.That(Answer(server, buyer), Is.EqualTo(CommandRejectionReason.None), "read");
+
+        Assert.That(
+            Boards(server, buyer).SelectMany(board => board.Entries).Single(entry => entry.Item.Value == Keen).Stock,
+            Is.EqualTo(2u));
+        Assert.That(server.SessionOf(seller).Character!.Inventory.Rows.Any(row => row.Item.Value == Keen), Is.False);
     }
 
     [Test]

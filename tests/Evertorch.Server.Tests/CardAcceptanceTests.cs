@@ -21,10 +21,10 @@ namespace Evertorch.Server.Tests
 ///     coins, enters the training ground beside Bobby, of another account, with 300; each sees the other by name, and
 ///     Anna's bag shows what was stored. Anna kills a training slime, whose every drop the script makes but its card,
 ///     picks up its gel, inserts her card into the sword and wears it, which Bobby inspects and she does not hear, takes
-///     it off, and walks up to the Smith; there she takes the card out again
-///     for its fee, and refines the staff, which the scripted draw destroys, and its card comes back to her bag. Then she
-///     leaves, and Bobby sees her go. After a clean stop a second host on the same database lets both in again, Anna's
-///     bag as she left it. The board's line adds its steps here.
+///     it off, and walks up to the Smith; there she takes the card out again for its fee, and refines the staff, which
+///     the scripted draw destroys, and its card comes back to her bag. At the Broker she lists the Forest Crawler Card,
+///     which Bobby finds on the board. Then she leaves, and Bobby sees her go. After a clean stop a second host on the
+///     same database lets both in again, Anna's bag and coins as she left them.
 /// </summary>
 [TestFixture]
 [NonParallelizable]
@@ -32,6 +32,7 @@ public sealed class CardAcceptanceTests
 {
     private const string TrainingGround = "map.training_ground";
     private const string Smith = "npc.smith";
+    private const string Broker = "npc.broker";
     private const string SlimeGel = "item.material.slime_gel";
     private const string TrainingSword = "item.weapon.training_sword";
     private const string ClothArmor = "item.armor.cloth";
@@ -320,6 +321,62 @@ public sealed class CardAcceptanceTests
         Assert.That(world.Inventory.Coins, Is.EqualTo(AnnaCoins - 200 - 20), $"{step}: the refine's coins");
     }
 
+    // At the Broker Anna lists her Forest Crawler Card, a good like any other, and Bobby, of another account, finds it
+    // on the board (Gameplay Systems §11.5; owner decision 8).
+    private static void ListTheCard(SocketClient anna, SocketClient bobby)
+    {
+        const string step = "board";
+        var notices = new List<MarketEvent>();
+        var boards = new List<MarketBoard>();
+        anna.Connection.MarketEventReceived += notices.Add;
+        bobby.Connection.MarketBoardReceived += boards.Add;
+        EntityId broker = WalkUpTo(step, anna, bobby);
+        WalkUpTo(step, bobby, anna);
+        long card = anna.World.Inventory.Rows.Single(row => row.Item.Value == Keen).InventoryItem;
+
+        Assert.That(anna.Connection.SendMarketList(broker, card, 1), Is.Not.Zero, $"{step}: listed");
+        Assert.That(
+            SocketClients.PumpUntil(() => notices.Count == 1, anna, bobby),
+            Is.True,
+            $"{step}: the listing told ({anna.World.LastRejection})");
+        Assert.That(bobby.Connection.SendMarketOpen(broker), Is.Not.Zero, $"{step}: read");
+        Assert.That(
+            SocketClients.PumpUntil(() => bobby.World.Market.IsCurrent && boards.Count > 0, anna, bobby),
+            Is.True,
+            $"{step}: Bobby read the board ({bobby.World.LastRejection})");
+        anna.Connection.MarketEventReceived -= notices.Add;
+        bobby.Connection.MarketBoardReceived -= boards.Add;
+
+        Assert.That(
+            (notices.Single().Kind, notices.Single().Item.Value, notices.Single().Quantity),
+            Is.EqualTo((MarketEventKind.Listed, Keen, 1u)),
+            $"{step}: Anna told of her listing");
+        Assert.That(
+            boards.SelectMany(board => board.Entries).Single(entry => entry.Item.Value == Keen).Stock,
+            Is.EqualTo(1u),
+            $"{step}: the card on the board for Bobby");
+        Assert.That(boards, Has.Count.EqualTo(2), $"{step}: fifteen goods in two messages");
+        Assert.That(anna.World.Inventory.Rows.Any(row => row.Item.Value == Keen), Is.False, $"{step}: the card left");
+    }
+
+    // Walks the client up to the Broker through the client's own talk, whose window then opens.
+    private static EntityId WalkUpTo(string step, SocketClient client, SocketClient other)
+    {
+        ClientWorld world = client.World;
+        Assert.That(
+            SocketClients.PumpUntil(() => world.Remotes.Values.Any(remote => remote.DefinitionId == Broker), client,
+                other),
+            Is.True,
+            $"{step}: the Broker in view");
+        EntityId broker = world.Remotes.Values.Single(remote => remote.DefinitionId == Broker).Entity;
+        client.TalkTo(broker);
+        Assert.That(
+            SocketClients.PumpUntil(() => client.NpcWindows.Contains(broker), client, other),
+            Is.True,
+            $"{step}: walked up to the Broker, at {world.Predictor.Position}");
+        return broker;
+    }
+
     // Anna leaves; with no grace her character leaves the world at once, and Bobby sees her go.
     private static void Leave(SocketClient anna, SocketClient bobby)
     {
@@ -395,6 +452,7 @@ public sealed class CardAcceptanceTests
 
         ServerContent content;
         string[] hunted;
+        uint coins;
         using (IHost host = StartHost(root.Path))
         {
             content = host.Services.GetRequiredService<ServerContent>();
@@ -418,7 +476,10 @@ public sealed class CardAcceptanceTests
             AssertCleanTraffic("remove", anna, bobby);
             LoseTheStaff(anna, bobby);
             AssertCleanTraffic("refine", anna, bobby);
+            ListTheCard(anna, bobby);
+            AssertCleanTraffic("refine", anna, bobby);
             hunted = Bag(anna);
+            coins = anna.World.Inventory.Coins;
             Leave(anna, bobby);
             AssertCleanTraffic("away", anna, bobby);
             Stop(host, bobby);
@@ -434,9 +495,10 @@ public sealed class CardAcceptanceTests
             Assert.That(Bag(anna), Is.EqualTo(hunted), "restart: Anna's bag as she left it");
             Assert.That(
                 hunted,
-                Is.SupersetOf(new[] { $"{TrainingSword} x 1", $"{Keen} x 1", $"{Arcane} x 1" }),
-                "restart: both cards back in the bag, the sword's slot free");
-            Assert.That(anna.World.Inventory.Coins, Is.EqualTo(AnnaCoins - 200 - 20), "restart: Anna's coins");
+                Is.SupersetOf(new[] { $"{TrainingSword} x 1", $"{Arcane} x 1" }).And.No.Member($"{Keen} x 1"),
+                "restart: the staff's card back in the bag, the sword's slot free, Keen on the board");
+            Assert.That(anna.World.Inventory.Coins, Is.EqualTo(coins), "restart: Anna's coins");
+            Assert.That(coins, Is.LessThan(AnnaCoins - 200 - 20), "restart: the listing's fee paid");
             Assert.That(bobby.World.Inventory.Coins, Is.EqualTo(BobbyCoins), "restart: Bobby's coins");
             AssertCleanTraffic("restart", anna, bobby);
             Stop(host, anna, bobby);

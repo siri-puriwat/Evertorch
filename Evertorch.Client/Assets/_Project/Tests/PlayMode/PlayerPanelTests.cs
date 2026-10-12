@@ -1776,6 +1776,49 @@ public sealed class PlayerPanelTests
         Assert.That((inspectWindow.IsOpen, statsWindow.IsOpen), Is.EqualTo((false, true)), "Stats replaces it");
     }
 
+    // The Broker's "List from the bag" leaves a carded row out, as it does a worn or refined one, and lists a card like
+    // any good (Gameplay Systems §11.5, §11.7).
+    [UnityTest]
+    public IEnumerator NpcWindow_ForTheBroker_LeavesACardedRowOutOfTheBag_AndListsTheCards()
+    {
+        GameClient client = CreateIdleClient();
+        (ClientWorld world, RecordingConnection _) = GiveRecordedWorld(client);
+        GiveShop(client);
+        Spawn(world, 15, EntityKind.Npc, "npc.broker", 1000);
+        DrawNpc(client, 15);
+        world.OnNpcServices(
+            new NpcServices(new EntityId(15), new NpcServiceEntry[0], new NpcQuestOffer[0], keepsMarket: true));
+        InventoryEntry[] rows =
+        {
+            new(3, new ItemDefinitionId(IronSword), 1, EquipmentSlot.None, 0, new[] { new ItemDefinitionId(Keen) }),
+            new(4, new ItemDefinitionId(IronSword), 1), new(5, new ItemDefinitionId(Keen), 2)
+        };
+        foreach (InventorySnapshot part in InventorySnapshot.CreateParts(4, 100, rows))
+        {
+            world.Inventory.OnSnapshot(part);
+        }
+
+        var window = NpcWindow.Create(client);
+        m_created.Add(window.gameObject);
+        window.Open(new EntityId(15));
+        yield return null;
+        world.Market.OnBoard(
+            new MarketBoard(
+                new[]
+                {
+                    new MarketBoardEntry(new ItemDefinitionId(Keen), 800, 0),
+                    new MarketBoardEntry(new ItemDefinitionId(IronSword), 120, 0)
+                }));
+        world.Market.OnMine(new MarketMine(new MarketListingEntry[0]));
+        yield return null;
+        yield return null;
+
+        Assert.That(
+            window.Text,
+            Does.EndWith("List from the bag\nList Iron Sword\nList Forest Crawler Card x 2"),
+            "the carded sword left out");
+    }
+
     // Prototype Content §2: selling a carded row asks a second press, "Its cards are lost.", which then sells it.
     [UnityTest]
     public IEnumerator NpcWindow_ForTheQuartermaster_AsksForASecondPressBeforeSellingACardedRow()

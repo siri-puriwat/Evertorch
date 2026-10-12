@@ -1460,8 +1460,14 @@ public sealed class ItemActionSystem : ITickPhase
             return CommandRejectionReason.InvalidTarget;
         }
 
+        // A refined or carded row is one of a kind, which the board, selling units of an item, cannot carry
+        // (Gameplay Systems §11.5, §11.7).
         ItemMarket? terms = m_content.Items[row.Item].Market;
-        if (row.Slot != EquipmentSlot.None || row.RefineLevel > 0 || terms == null || quantity > row.Quantity)
+        if (row.Slot != EquipmentSlot.None
+            || row.RefineLevel > 0
+            || row.Cards.Count > 0
+            || terms == null
+            || quantity > row.Quantity)
         {
             return CommandRejectionReason.NotAllowedNow;
         }
