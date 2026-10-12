@@ -78,12 +78,14 @@ public sealed class RenewalCombatRules : ICombatRules
             amount = amount * 14 / 10;
         }
 
+        amount = context.Modifiers.Apply(amount);
         return new DamageResult((int)Math.Min(int.MaxValue, amount), context.IsCritical);
     }
 
     /// <summary>
     ///     Magic as the skills research note reads it: the magic attack rolled between 80 % and 120 %, the ratio, then
-    ///     hard magic defense as a ratio and soft magic defense subtracted, at least 1. Magic never misses or crits.
+    ///     hard magic defense as a ratio and soft magic defense subtracted, at least 1, then the boss modifiers. Magic
+    ///     never misses or crits.
     /// </summary>
     public DamageResult CalculateMagicDamage(MagicDamageContext context)
     {
@@ -93,7 +95,8 @@ public sealed class RenewalCombatRules : ICombatRules
         long reduced = raw * (MagicDefenseScale + context.HardMagicDefense)
             / (MagicDefenseScale + 10L * context.HardMagicDefense)
             - context.SoftMagicDefense;
-        return new DamageResult((int)Math.Min(int.MaxValue, Math.Max(1, reduced)), false);
+        long amount = context.Modifiers.Apply(Math.Max(1, reduced));
+        return new DamageResult((int)Math.Min(int.MaxValue, amount), false);
     }
 
     // An armed character's swing draws once more (equipment research note): every weapon is weapon level 1 and varies

@@ -12,7 +12,8 @@ public readonly struct MagicDamageContext
         int hardMagicDefense,
         int softMagicDefense,
         IRandomSource random,
-        int ratioPercent = 100)
+        int ratioPercent = 100,
+        DamageModifiers modifiers = default)
     {
         if (magicAttack < 0 || hardMagicDefense < 0 || softMagicDefense < 0 || ratioPercent < 0)
         {
@@ -24,6 +25,7 @@ public readonly struct MagicDamageContext
         SoftMagicDefense = softMagicDefense;
         Random = random ?? throw new ArgumentNullException(nameof(random));
         RatioPercent = ratioPercent;
+        Modifiers = modifiers;
     }
 
     /// <summary>The value rolled between 80 % and 120 %: a monster's defined magic attack.</summary>
@@ -41,11 +43,22 @@ public readonly struct MagicDamageContext
     public int RatioPercent { get; }
 
     /// <summary>
+    ///     The boss modifiers, the last step of the damage; the default changes nothing.
+    /// </summary>
+    public DamageModifiers Modifiers { get; }
+
+    /// <summary>
     ///     The same inputs at a skill's share of the rolled attack (Gameplay Systems §9).
     /// </summary>
     public MagicDamageContext ForSkill(int ratioPercent)
     {
-        return new MagicDamageContext(MagicAttack, HardMagicDefense, SoftMagicDefense, Random, ratioPercent);
+        return new MagicDamageContext(
+            MagicAttack,
+            HardMagicDefense,
+            SoftMagicDefense,
+            Random,
+            ratioPercent,
+            Modifiers);
     }
 }
 }

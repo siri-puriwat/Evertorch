@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Evertorch.Game;
 using Evertorch.Persistence;
 using Evertorch.Protocol;
@@ -36,6 +37,13 @@ public sealed class CharacterLifetime
             new EventId(1035, "RefineLevelPastTable"),
             "Character {Character} on connection {Connection} entered wearing {Item} at +{Level}, past the {Last} "
             + "levels its refine table gives; it counts the table's last bonus, or none without a table.");
+
+    private static readonly Action<ILogger, long, long, ItemDefinitionId, int, int, string, Exception?>
+        LogCardOutOfPlace = LoggerMessage.Define<long, long, ItemDefinitionId, int, int, string>(
+            LogLevel.Warning,
+            new EventId(1040, "CardOutOfPlace"),
+            "Character {Character} on connection {Connection} entered wearing {Item} with {Cards} cards in its {Slots} "
+            + "slots, of which these no longer fit it: {Misfits}; every card stays and counts.");
 
     private readonly WorldSimulation m_world;
     private readonly ServerContent m_content;
@@ -109,6 +117,7 @@ public sealed class CharacterLifetime
         };
         LogUnwieldableWeapon(character);
         LogLevelsPastTheirTables(character);
+        LogCardsOutOfPlace(character);
         m_sessions.AddCharacter(character);
         return character;
     }
@@ -160,6 +169,43 @@ public sealed class CharacterLifetime
                     null);
             }
         }
+    }
+
+    // Only changed content leaves a worn card its item no longer fits, or more cards than the item's slots; they stay
+    // and count (Gameplay Systems §11.1).
+    private void LogCardsOutOfPlace(CharacterSession character)
+    {
+        foreach (EquipmentSlot slot in new[] { EquipmentSlot.Weapon, EquipmentSlot.Armor })
+        {
+            if (!character.Inventory.TryGetRow(character.Inventory.WornIn(slot), out InventoryEntry row)
+                || row.Cards.Count == 0)
+            {
+                continue;
+            }
+
+            ItemDefinition item = m_content.Items[row.Item];
+            string[] misfits = row.Cards
+                .Where(card => !Fits(card, slot))
+                .Select(card => card.Value)
+                .ToArray();
+            if (misfits.Length > 0 || row.Cards.Count > item.Slots)
+            {
+                LogCardOutOfPlace(
+                    m_logger,
+                    character.Character.Value,
+                    character.Connection?.Connection.Value ?? 0,
+                    row.Item,
+                    row.Cards.Count,
+                    item.Slots,
+                    misfits.Length == 0 ? "none" : string.Join(", ", misfits),
+                    null);
+            }
+        }
+    }
+
+    private bool Fits(ItemDefinitionId card, EquipmentSlot slot)
+    {
+        return m_content.Items.TryGetValue(card, out ItemDefinition? held) && held.Card?.Fits == slot;
     }
 
     /// <summary>

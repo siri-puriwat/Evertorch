@@ -146,8 +146,10 @@ public sealed class WorldSimulation
 
         ItemDefinitionId? wornWeapon = null;
         int weaponLevel = 0;
+        IReadOnlyList<ItemDefinitionId>? weaponCards = null;
         ItemDefinitionId? wornArmor = null;
         int armorLevel = 0;
+        IReadOnlyList<ItemDefinitionId>? armorCards = null;
         foreach (StoredItem item in stored.Items)
         {
             if (!ItemDefinitionId.TryCreate(item.ItemDefinitionId, out ItemDefinitionId itemId)
@@ -180,11 +182,13 @@ public sealed class WorldSimulation
             {
                 wornWeapon = itemId;
                 weaponLevel = item.RefineLevel;
+                weaponCards = CharacterInventory.CardsOf(item.Cards);
             }
             else if (slot == EquipmentSlot.Armor)
             {
                 wornArmor = itemId;
                 armorLevel = item.RefineLevel;
+                armorCards = CharacterInventory.CardsOf(item.Cards);
             }
         }
 
@@ -235,7 +239,7 @@ public sealed class WorldSimulation
 
         // Equipment loads with the character and counts from its first tick (Gameplay Systems §11.1), so the stored
         // HP and SP are held to the maximums it gives.
-        WornEquipment.Dress(player, m_content, wornWeapon, weaponLevel, wornArmor, armorLevel);
+        WornEquipment.Dress(player, m_content, wornWeapon, weaponLevel, wornArmor, armorLevel, weaponCards, armorCards);
         m_stats.Recalculate(player, job);
         player.CurrentHealth = wasDead ? player.MaxHealth : Math.Min(stored.Health, player.MaxHealth);
         player.CurrentSpirit = wasDead ? player.MaxSpirit : Math.Min(stored.Spirit, player.MaxSpirit);

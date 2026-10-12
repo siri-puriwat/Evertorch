@@ -62,5 +62,32 @@ public sealed class CardBonus
 
     /// <summary>Less damage from a boss, in percent; combat caps the sum at 90.</summary>
     public int BossDamageReductionPercent { get; }
+
+    /// <summary>
+    ///     Both bonuses together, as the cards of every worn row add up (Gameplay Systems §11.1).
+    /// </summary>
+    public CardBonus Plus(CardBonus other)
+    {
+        if (other == null)
+        {
+            throw new ArgumentNullException(nameof(other));
+        }
+
+        return new CardBonus(
+            new PrimaryStats(
+                Stats.Str + other.Stats.Str,
+                Stats.Agi + other.Stats.Agi,
+                Stats.Vit + other.Stats.Vit,
+                Stats.Int + other.Stats.Int,
+                Stats.Dex + other.Stats.Dex,
+                Stats.Luk + other.Stats.Luk),
+            Attack + other.Attack,
+            MagicAttack + other.MagicAttack,
+            Defense + other.Defense,
+            MaxHp + other.MaxHp,
+            MaxSp + other.MaxSp,
+            BossDamagePercent + other.BossDamagePercent,
+            BossDamageReductionPercent + other.BossDamageReductionPercent);
+    }
 }
 }

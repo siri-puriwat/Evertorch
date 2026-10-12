@@ -113,6 +113,13 @@ public sealed class PlayerEntity : WorldEntity
     public WornEquipment Equipment { get; set; } = WornEquipment.None;
 
     /// <summary>
+    ///     What the worn rows' cards add, summed (Gameplay Systems §11.1): their statistics and maxima, which the
+    ///     statistics take, and the boss modifiers, which combat takes; their attack, magic attack, and defense are in
+    ///     <see cref="Equipment" />. Only <see cref="WornEquipment" />'s <c>Dress</c> sets it.
+    /// </summary>
+    public CardBonus CardBonus { get; set; } = CardBonus.None;
+
+    /// <summary>
     ///     Set by a job change: the next visibility pass sends the player's spawn, with its new job, to every session
     ///     that already sees it, and clears the flag (Network Protocol §9).
     /// </summary>

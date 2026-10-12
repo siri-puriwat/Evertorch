@@ -205,6 +205,7 @@ public sealed class CharacterBuilds
         WornEquipment worn = player.Equipment;
         PrimaryStats weapon = player.Weapon?.Bonus ?? default;
         PrimaryStats armor = player.Armor?.Bonus ?? default;
+        PrimaryStats cards = player.CardBonus.Stats;
         return new CharacterSheet(
             (ushort)Math.Min(ushort.MaxValue, player.JobLevel),
             player.Job,
@@ -224,12 +225,12 @@ public sealed class CharacterBuilds
             Clamp(worn.WeaponAttack + worn.FlatAttack),
             Clamp(worn.MagicAttack),
             Clamp(worn.HardDefense),
-            Clamp(weapon.Str + armor.Str),
-            Clamp(weapon.Agi + armor.Agi),
-            Clamp(weapon.Vit + armor.Vit),
-            Clamp(weapon.Int + armor.Int),
-            Clamp(weapon.Dex + armor.Dex),
-            Clamp(weapon.Luk + armor.Luk));
+            Clamp(weapon.Str + armor.Str + cards.Str),
+            Clamp(weapon.Agi + armor.Agi + cards.Agi),
+            Clamp(weapon.Vit + armor.Vit + cards.Vit),
+            Clamp(weapon.Int + armor.Int + cards.Int),
+            Clamp(weapon.Dex + armor.Dex + cards.Dex),
+            Clamp(weapon.Luk + armor.Luk + cards.Luk));
     }
 
     /// <summary>

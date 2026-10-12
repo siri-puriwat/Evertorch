@@ -49,29 +49,56 @@ public sealed class CharacterStats
             percent = percent.Plus(effect.StatPercent);
         }
 
-        // A status effect's percentage is of the statistic without the equipment's bonuses (equipment research note).
-        PrimaryStats primary = WithBonus(
-            WithBonus(m_rules.ApplyStatPercent(player.Primary, percent), player.Weapon),
-            player.Armor);
-        DerivedStats stats = Calculate(job, player.Level, primary, player.Weapon);
+        // A status effect's percentage is of the statistic without the equipment's bonuses (equipment research note),
+        // and the worn cards add theirs as the items do.
+        CardBonus cards = player.CardBonus;
+        PrimaryStats primary = Plus(
+            Plus(Plus(m_rules.ApplyStatPercent(player.Primary, percent), player.Weapon?.Bonus), player.Armor?.Bonus),
+            cards.Stats);
+        DerivedStats stats = WithMaxima(Calculate(job, player.Level, primary, player.Weapon), cards);
         player.ApplyStats(stats, m_rules.CalculateRegeneration(primary, stats));
     }
 
-    private static PrimaryStats WithBonus(PrimaryStats stats, ItemEquipment? worn)
+    private static PrimaryStats Plus(PrimaryStats stats, PrimaryStats? bonus)
     {
-        if (worn == null)
+        if (!bonus.HasValue)
         {
             return stats;
         }
 
-        PrimaryStats bonus = worn.Bonus;
+        PrimaryStats added = bonus.Value;
         return new PrimaryStats(
-            stats.Str + bonus.Str,
-            stats.Agi + bonus.Agi,
-            stats.Vit + bonus.Vit,
-            stats.Int + bonus.Int,
-            stats.Dex + bonus.Dex,
-            stats.Luk + bonus.Luk);
+            stats.Str + added.Str,
+            stats.Agi + added.Agi,
+            stats.Vit + added.Vit,
+            stats.Int + added.Int,
+            stats.Dex + added.Dex,
+            stats.Luk + added.Luk);
+    }
+
+    // The cards' maximum HP and SP come after the VIT and INT scaling (Gameplay Systems §2).
+    private static DerivedStats WithMaxima(DerivedStats stats, CardBonus cards)
+    {
+        if (cards.MaxHp == 0 && cards.MaxSp == 0)
+        {
+            return stats;
+        }
+
+        return new DerivedStats(
+            stats.MaxHp + cards.MaxHp,
+            stats.MaxSp + cards.MaxSp,
+            stats.PhysicalAttack,
+            stats.MagicalAttack,
+            stats.SoftDefense,
+            stats.SoftMagicDefense,
+            stats.Hit,
+            stats.Flee,
+            stats.Critical,
+            stats.PerfectDodge,
+            stats.AttackSpeed,
+            stats.MovementSpeed,
+            stats.VariableCastPermille,
+            stats.FixedCastPermille);
     }
 }
 }

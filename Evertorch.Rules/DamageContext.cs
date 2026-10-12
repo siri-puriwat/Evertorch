@@ -13,7 +13,8 @@ public readonly struct DamageContext
         bool isCritical,
         IRandomSource random,
         int ratioPercent = 100,
-        int flatAttack = 0)
+        int flatAttack = 0,
+        DamageModifiers modifiers = default)
     {
         if (statusAttack < 0
             || weaponAttack < 0
@@ -34,6 +35,7 @@ public readonly struct DamageContext
         Random = random ?? throw new ArgumentNullException(nameof(random));
         RatioPercent = ratioPercent;
         FlatAttack = flatAttack;
+        Modifiers = modifiers;
     }
 
     public AttackerKind AttackerKind { get; }
@@ -60,10 +62,15 @@ public readonly struct DamageContext
     public int RatioPercent { get; }
 
     /// <summary>
-    ///     A character's attack added after its weapon's draw, which no draw varies: its weapon's refine bonus (Gameplay
-    ///     Systems §11.1). Never the weapon's own attack; 0 for a monster.
+    ///     A character's attack added after its weapon's draw, which no draw varies: its weapon's refine bonus and its worn
+    ///     cards' attack (Gameplay Systems §11.1). Never the weapon's own attack; 0 for a monster.
     /// </summary>
     public int FlatAttack { get; }
+
+    /// <summary>
+    ///     The boss modifiers, the last step of the damage; the default changes nothing.
+    /// </summary>
+    public DamageModifiers Modifiers { get; }
 
     /// <summary>
     ///     The same inputs for a skill's damage: never critical, at the skill's share of the raw damage (Gameplay
@@ -80,7 +87,8 @@ public readonly struct DamageContext
             false,
             Random,
             ratioPercent,
-            FlatAttack);
+            FlatAttack,
+            Modifiers);
     }
 }
 }

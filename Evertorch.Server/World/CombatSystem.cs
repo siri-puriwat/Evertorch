@@ -714,7 +714,21 @@ public sealed class CombatSystem : ITickPhase
             _ => 0
         };
         int softMagicDefense = target is PlayerEntity defender ? defender.Stats.SoftMagicDefense : 0;
-        return new MagicDamageContext(magicAttack, 0, softMagicDefense, m_random);
+        return new MagicDamageContext(magicAttack, 0, softMagicDefense, m_random, 100, ModifiersOf(caster, target));
+    }
+
+    // The worn cards' boss modifiers (Gameplay Systems §11.1): the attacker's damage to a boss, or the defender's
+    // reduction of a boss's damage; none between a player and an ordinary monster.
+    private static DamageModifiers ModifiersOf(WorldEntity attacker, WorldEntity target)
+    {
+        return attacker switch
+        {
+            PlayerEntity player when target is MonsterEntity { Definition: { IsBoss: true } } =>
+                new DamageModifiers(player.CardBonus.BossDamagePercent, 0),
+            MonsterEntity { Definition: { IsBoss: true } } when target is PlayerEntity player =>
+                new DamageModifiers(0, player.CardBonus.BossDamageReductionPercent),
+            _ => default
+        };
     }
 
     private HitContext CreateHitContext(WorldEntity attacker, WorldEntity target)
@@ -759,7 +773,8 @@ public sealed class CombatSystem : ITickPhase
                     0,
                     isCritical,
                     m_random,
-                    flatAttack: player.Equipment.FlatAttack);
+                    flatAttack: player.Equipment.FlatAttack,
+                    modifiers: ModifiersOf(attacker, target));
             case MonsterEntity monster when target is PlayerEntity player:
                 return new DamageContext(
                     AttackerKind.Monster,
@@ -768,7 +783,8 @@ public sealed class CombatSystem : ITickPhase
                     player.Equipment.HardDefense,
                     player.Stats.SoftDefense,
                     isCritical,
-                    m_random);
+                    m_random,
+                    modifiers: ModifiersOf(attacker, target));
             default:
                 throw new InvalidOperationException(
                     $"No basic attack is defined from {attacker.Kind} {attacker.Id} to {target.Kind} {target.Id}.");

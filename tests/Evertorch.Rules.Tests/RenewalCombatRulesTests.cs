@@ -248,6 +248,54 @@ public sealed class RenewalCombatRulesTests
         Assert.That(random.RequestedBounds, Is.EqualTo(new[] { 3 }), "the weapon's draw alone");
     }
 
+    // Gameplay Systems §11.1: damage to a boss grows by the worn cards' percentage after everything else, rounded down,
+    // and draws nothing more.
+    [TestCase(0, 55)]
+    [TestCase(1, 56)]
+    [TestCase(2, 57)]
+    public void CalculateDamage_ToABoss_GrowsByTheCardsPercent_Last(int draw, int expected)
+    {
+        var random = new ScriptedRandomSource(draw);
+
+        DamageResult result = Rules.CalculateDamage(
+            new DamageContext(
+                AttackerKind.Character,
+                7,
+                20,
+                2,
+                0,
+                false,
+                random,
+                flatAttack: 14,
+                modifiers: new DamageModifiers(20, 0)));
+
+        Assert.That(result.Amount, Is.EqualTo(expected), "46 to 48 times 120 %");
+        Assert.That(random.RequestedBounds, Is.EqualTo(new[] { 3 }), "the weapon's draw alone");
+    }
+
+    // A boss's damage shrinks by the defender's reduction, at most 90 %, rounded down, and at least 1.
+    [TestCase(100, 25, 75)]
+    [TestCase(100, 90, 10)]
+    [TestCase(100, 95, 10)]
+    [TestCase(5, 90, 1)]
+    public void CalculateDamage_FromABoss_ShrinksByTheReduction_CappedAtNinety(int attack, int reduction, int expected)
+    {
+        var random = new ScriptedRandomSource(attack * 20 / 100);
+
+        DamageResult result = Rules.CalculateDamage(
+            new DamageContext(
+                AttackerKind.Monster,
+                0,
+                attack,
+                0,
+                0,
+                false,
+                random,
+                modifiers: new DamageModifiers(0, reduction)));
+
+        Assert.That(result.Amount, Is.EqualTo(expected));
+    }
+
     [Test]
     public void AttackContext_WhenInputsAreInvalid_Throws()
     {
@@ -268,6 +316,24 @@ public sealed class RenewalCombatRulesTests
 
         Assert.That((result.Amount, result.IsCritical), Is.EqualTo((47, true)), "raw 35, 34 after defense, x1.4");
         Assert.That(random.RequestedBounds, Is.Empty);
+    }
+
+    [Test]
+    public void CalculateDamage_CriticalOnABoss_MultipliesTheCriticalAndThenTheCards()
+    {
+        DamageResult result = Rules.CalculateDamage(
+            new DamageContext(
+                AttackerKind.Character,
+                7,
+                20,
+                2,
+                0,
+                true,
+                new ScriptedRandomSource(),
+                flatAttack: 14,
+                modifiers: new DamageModifiers(20, 0)));
+
+        Assert.That(result.Amount, Is.EqualTo(48 * 14 / 10 * 120 / 100), "the critical's 48, then 40 %, then 20 %");
     }
 
     [Test]
@@ -356,6 +422,18 @@ public sealed class RenewalCombatRulesTests
     }
 
     [Test]
+    public void CalculateMagicDamage_ToAndFromABoss_TakesTheModifiersLast()
+    {
+        DamageResult toBoss = Rules.CalculateMagicDamage(
+            new MagicDamageContext(50, 0, 0, new ScriptedRandomSource(10), modifiers: new DamageModifiers(20, 0)));
+        DamageResult fromBoss = Rules.CalculateMagicDamage(
+            new MagicDamageContext(50, 0, 0, new ScriptedRandomSource(10), modifiers: new DamageModifiers(0, 25)));
+        DamageResult plain = Rules.CalculateMagicDamage(new MagicDamageContext(50, 0, 0, new ScriptedRandomSource(10)));
+
+        Assert.That((plain.Amount, toBoss.Amount, fromBoss.Amount), Is.EqualTo((50, 60, 37)));
+    }
+
+    [Test]
     public void Contexts_WhenInputsAreInvalid_Throw()
     {
         var random = new ScriptedRandomSource();
@@ -374,7 +452,16 @@ public sealed class RenewalCombatRulesTests
     public void DamageContext_ForSkill_KeepsEveryInput_ButTheRatioAndTheCritical()
     {
         var random = new ScriptedRandomSource();
-        var context = new DamageContext(AttackerKind.Character, 7, 20, 2, 4, true, random, flatAttack: 14);
+        var context = new DamageContext(
+            AttackerKind.Character,
+            7,
+            20,
+            2,
+            4,
+            true,
+            random,
+            flatAttack: 14,
+            modifiers: new DamageModifiers(20, 5));
 
         DamageContext skill = context.ForSkill(130);
 
@@ -382,6 +469,18 @@ public sealed class RenewalCombatRulesTests
             (skill.AttackerKind, skill.StatusAttack, skill.WeaponAttack, skill.HardDefense, skill.SoftDefense,
                 skill.IsCritical, skill.RatioPercent, skill.FlatAttack, skill.Random),
             Is.EqualTo((AttackerKind.Character, 7, 20, 2, 4, false, 130, 14, (IRandomSource)random)));
+        Assert.That(
+            (skill.Modifiers.BossDamagePercent, skill.Modifiers.BossDamageReductionPercent),
+            Is.EqualTo((20, 5)));
+    }
+
+    [Test]
+    public void DamageModifiers_ByDefault_ChangeNothing_AndRefuseANegative()
+    {
+        Action negative = () => _ = new DamageModifiers(-1, 0);
+
+        Assert.That((default(DamageModifiers).Apply(1), default(DamageModifiers).Apply(4567)), Is.EqualTo((1L, 4567L)));
+        Assert.That(negative, Throws.InstanceOf<ArgumentOutOfRangeException>());
     }
 
     [Test]
@@ -422,14 +521,16 @@ public sealed class RenewalCombatRulesTests
         var random = new ScriptedRandomSource();
 
         HitContext hit = new HitContext(182, 25, 102, 3, 4, random).WithoutCritical();
-        MagicDamageContext magic = new MagicDamageContext(50, 1, 2, random).ForSkill(150);
+        MagicDamageContext magic = new MagicDamageContext(50, 1, 2, random, modifiers: new DamageModifiers(0, 25))
+            .ForSkill(150);
 
         Assert.That(
             (hit.AttackerHit, hit.AttackerCritical, hit.DefenderFlee, hit.DefenderPerfectDodge, hit.DefenderLuk),
             Is.EqualTo((182, 0, 102, 3, 4)));
         Assert.That(
-            (magic.MagicAttack, magic.HardMagicDefense, magic.SoftMagicDefense, magic.RatioPercent),
-            Is.EqualTo((50, 1, 2, 150)));
+            (magic.MagicAttack, magic.HardMagicDefense, magic.SoftMagicDefense, magic.RatioPercent,
+                magic.Modifiers.BossDamageReductionPercent),
+            Is.EqualTo((50, 1, 2, 150, 25)));
     }
 }
 }
