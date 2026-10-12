@@ -101,6 +101,11 @@ public sealed class VisibilityPhase : ITickPhase
                 {
                     m_sender.Send(session.Connection, table);
                 }
+
+                if (npc.CardRemovalFees != null)
+                {
+                    m_sender.Send(session.Connection, npc.CardRemovalFees);
+                }
             }
             else if (entity is ItemDropEntity drop && drop.DroppedTick == tick)
             {

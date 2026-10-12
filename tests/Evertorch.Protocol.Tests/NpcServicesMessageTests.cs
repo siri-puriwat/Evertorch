@@ -337,7 +337,7 @@ public sealed class NpcServicesMessageTests
     }
 
     [Test]
-    public void NpcServices_WithTheResetStorageMarketAndRefineBits_OffersThem_AndRefusesAnyOtherBit()
+    public void NpcServices_WithTheResetStorageMarketRefineAndCardBits_OffersThem_AndRefusesAnyOtherBit()
     {
         var guildmaster = new NpcServices(new EntityId(7), new NpcServiceEntry[0], new NpcQuestOffer[0], true);
         byte[] written = new byte[guildmaster.GetEncodedLength()];
@@ -357,7 +357,9 @@ public sealed class NpcServicesMessageTests
         Assert.That(
             (read!.OffersReset, read.KeepsStorage, read.KeepsMarket, read.Refines),
             Is.EqualTo((true, true, true, true)));
-        Assert.That(NpcServices.TryRead(WireMatrix.With(ServicesBytes, ServicesByte, 0x10), out _), Is.False);
+        Assert.That(NpcServices.TryRead(WireMatrix.With(ServicesBytes, ServicesByte, 0x18), out read), Is.True);
+        Assert.That((read!.Refines, read.RemovesCards), Is.EqualTo((true, true)), "the Smith takes cards out");
+        Assert.That(NpcServices.TryRead(WireMatrix.With(ServicesBytes, ServicesByte, 0x20), out _), Is.False);
         Assert.That(NpcServices.TryRead(WireMatrix.With(ServicesBytes, ServicesByte, 0x81), out _), Is.False);
 
         var storekeeper = new NpcServices(

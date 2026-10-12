@@ -11,7 +11,7 @@ namespace Evertorch.Server
 ///     its stock at the stock's prices and buys every item whose sell price is above 0 at that price (Gameplay Systems
 ///     §11.3); it gives every quest that names it, it resets a build when its content says so, and when it changes
 ///     jobs, it offers every first job at its base job's cap (§6.1). A Storekeeper says it keeps storage (§11.4), a
-///     Broker that it keeps the board (§11.5), and a Smith that it refines (§11.6).
+///     Broker that it keeps the board (§11.5), and a Smith that it refines (§11.6) and takes cards out (§11.7).
 /// </summary>
 public static class NpcServicesBuilder
 {
@@ -69,7 +69,27 @@ public static class NpcServicesBuilder
             jobChanges,
             npc.KeepsStorage,
             npc.KeepsMarket,
+            npc.Refines,
             npc.Refines);
+    }
+
+    /// <summary>
+    ///     What a refiner takes to take each card out (Network Protocol §9), ordered by card ID; null for an NPC that
+    ///     does not refine, or when the content holds no card. The Smith that refines also takes cards out.
+    /// </summary>
+    public static CardRemovalFees? BuildCardRemovalFees(EntityId entity, NpcDefinition npc, ServerContent content)
+    {
+        if (!npc.Refines)
+        {
+            return null;
+        }
+
+        CardRemovalFee[] fees = content.Items.Values
+            .Where(item => item.Card != null)
+            .OrderBy(item => item.Id.Value, StringComparer.Ordinal)
+            .Select(item => new CardRemovalFee(item.Id, (uint)item.Card!.RemovalFee))
+            .ToArray();
+        return fees.Length == 0 ? null : new CardRemovalFees(entity, fees);
     }
 
     /// <summary>

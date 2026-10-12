@@ -17,12 +17,14 @@ public sealed class NpcEntity : WorldEntity
         NpcDefinition definition,
         NpcPlacement placement,
         NpcServices services,
-        IReadOnlyList<RefineTable>? refineTables = null)
+        IReadOnlyList<RefineTable>? refineTables = null,
+        CardRemovalFees? cardRemovalFees = null)
         : base(id, placement.Position, MovementModel.NormalizeOrZero(placement.Facing.X, placement.Facing.Z), 0f, 0, 0f)
     {
         Definition = definition;
         Services = services;
         RefineTables = refineTables ?? Array.Empty<RefineTable>();
+        CardRemovalFees = cardRemovalFees;
     }
 
     public NpcDefinition Definition { get; }
@@ -37,6 +39,11 @@ public sealed class NpcEntity : WorldEntity
     ///     other NPC.
     /// </summary>
     public IReadOnlyList<RefineTable> RefineTables { get; }
+
+    /// <summary>
+    ///     A card remover's fees, built once at load and sent after <see cref="RefineTables" />; null for any other NPC.
+    /// </summary>
+    public CardRemovalFees? CardRemovalFees { get; }
 
     public override EntityKind Kind => EntityKind.Npc;
 

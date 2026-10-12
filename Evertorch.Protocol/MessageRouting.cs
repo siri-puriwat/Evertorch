@@ -59,6 +59,8 @@ public static class MessageRouting
             case MessageOpcode.MarketBuy:
             case MessageOpcode.MarketCollect:
             case MessageOpcode.RefineItem:
+            case MessageOpcode.InsertCard:
+            case MessageOpcode.RemoveCard:
             case MessageOpcode.ServerHello:
             case MessageOpcode.WorldEntered:
             case MessageOpcode.EntitySpawn:
@@ -102,6 +104,7 @@ public static class MessageRouting
             case MessageOpcode.MarketEvent:
             case MessageOpcode.RefineTable:
             case MessageOpcode.RefineOutcome:
+            case MessageOpcode.CardRemovalFees:
                 return true;
             case MessageOpcode.MoveInput:
             case MessageOpcode.StopMovement:

@@ -535,6 +535,24 @@ public sealed class InboundQueue
                 decoded = InboundEvent.ForRefine(connection, refine!.Npc, refine.InventoryItem, refine.RefineLevel,
                     refine.CommandSequence);
                 return true;
+            case MessageOpcode.InsertCard:
+                if (!InsertCard.TryRead(payload, out InsertCard? insert))
+                {
+                    return false;
+                }
+
+                decoded = InboundEvent.ForInsertCard(connection, insert!.CardItem, insert.InventoryItem,
+                    insert.CommandSequence);
+                return true;
+            case MessageOpcode.RemoveCard:
+                if (!RemoveCard.TryRead(payload, out RemoveCard? remove))
+                {
+                    return false;
+                }
+
+                decoded = InboundEvent.ForRemoveCard(connection, remove!.Npc, remove.InventoryItem, remove.Slot,
+                    remove.Card, remove.CommandSequence);
+                return true;
             case MessageOpcode.LearnSkill:
                 if (!LearnSkill.TryRead(payload, out LearnSkill? learn))
                 {

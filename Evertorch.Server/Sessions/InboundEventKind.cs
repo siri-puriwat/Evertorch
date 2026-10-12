@@ -253,6 +253,19 @@ public enum InboundEventKind
     ///     A refine of the bag's row <see cref="InboundEvent.InventoryItem" /> at the Smith
     ///     <see cref="InboundEvent.Target" />, from <see cref="InboundEvent.RefineLevel" />, carrying a command sequence.
     /// </summary>
-    RefineItem = 47
+    RefineItem = 47,
+
+    /// <summary>
+    ///     An insertion of the card in the bag's row <see cref="InboundEvent.CardItem" /> into the bag's row
+    ///     <see cref="InboundEvent.InventoryItem" />, carrying a command sequence.
+    /// </summary>
+    InsertCard = 48,
+
+    /// <summary>
+    ///     A removal of the card <see cref="InboundEvent.Item" /> from slot <see cref="InboundEvent.CardSlot" /> of the
+    ///     bag's row <see cref="InboundEvent.InventoryItem" /> at the Smith <see cref="InboundEvent.Target" />, carrying a
+    ///     command sequence.
+    /// </summary>
+    RemoveCard = 49
 }
 }

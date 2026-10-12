@@ -115,6 +115,40 @@ public sealed class RefineTests
         Assert.That(Outcomes(server, player), Is.Empty);
     }
 
+    // Network Protocol §9: the Smith also takes cards out, and its fees follow its tables, every card by its ID; no
+    // other NPC sends any.
+    [Test]
+    public void Entering_TellsTheSmithsCardFeesAfterItsTables_AndNoOtherNpcSendsAny()
+    {
+        var server = new TestServer(withNpcs: true);
+        ConnectionId player = server.EnterWorld(1);
+        server.Tick(5);
+        EntityId smith = server.NpcOf(Smith).Id;
+        InMemoryServerTransport.SentMessage[] sent = server.Transport.ControlSentTo(player).ToArray();
+        int lastTable = Array.FindLastIndex(sent, message => message.Opcode == MessageOpcode.RefineTable);
+        CardRemovalFees[] fees = sent.Where(message => message.Opcode == MessageOpcode.CardRemovalFees)
+            .Select(message => CardRemovalFees.TryRead(message.Payload, out CardRemovalFees? read) ? read! : null!)
+            .ToArray();
+        NpcServices[] services = sent.Where(message => message.Opcode == MessageOpcode.NpcServices)
+            .Select(message => NpcServices.TryRead(message.Payload, out NpcServices? read) ? read! : null!)
+            .ToArray();
+
+        Assert.That(sent[lastTable + 1].Opcode, Is.EqualTo(MessageOpcode.CardRemovalFees), "right after its tables");
+        Assert.That(fees.Single().Npc, Is.EqualTo(smith));
+        Assert.That(
+            fees.Single().Entries.Select(entry => (entry.Card.Value, entry.Fee)),
+            Is.EqualTo(
+                new[]
+                {
+                    ("item.card.forest_crawler", 200u), ("item.card.gloom_wisp", 600u),
+                    ("item.card.grotto_crawler", 600u), ("item.card.slime_monarch", 5000u),
+                    ("item.card.spark_wisp", 200u), ("item.card.training_slime", 200u)
+                }));
+        Assert.That(
+            services.Where(service => service.RemovesCards).Select(service => service.Npc),
+            Is.EqualTo(new[] { smith }));
+    }
+
     // Network Protocol §9: a refiner's three tables follow its services, in the order of their IDs, each with its items;
     // no other NPC sends one.
     [Test]

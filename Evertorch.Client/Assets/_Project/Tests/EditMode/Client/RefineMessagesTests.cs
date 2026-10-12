@@ -123,6 +123,27 @@ public sealed class RefineMessagesTests
     }
 
     [Test]
+    public void TheWorld_KeepsASeenSmithsCardFees_UntilItDespawns_AndIgnoresAnUnknownOnes()
+    {
+        ClientWorld world = ClientWorldFixture.Create(ClientTestGrids.CreateYard(), ClientTestGrids.Center(1, 1));
+        var fees = new CardRemovalFees(
+            Smith,
+            new[] { new CardRemovalFee(new ItemDefinitionId("item.card.forest_crawler"), 200) });
+        world.OnCardRemovalFees(fees);
+        int unknown = world.UnknownEntityEvents;
+        world.OnSpawn(SmithSpawn());
+        int version = world.RefineTablesVersion;
+        world.OnCardRemovalFees(fees);
+        uint kept = world.CardRemovalFeesOf(Smith)[0].Fee;
+        bool isNewVersion = world.RefineTablesVersion > version;
+        world.OnDespawn(new EntityDespawn(Smith, DespawnReason.OutOfRange));
+
+        Assert.That(unknown, Is.EqualTo(1), "fees of an entity not seen");
+        Assert.That((kept, isNewVersion), Is.EqualTo((200u, true)));
+        Assert.That(world.CardRemovalFeesOf(Smith), Is.Empty, "gone with the Smith");
+    }
+
+    [Test]
     public void TheWorld_KeepsASeenSmithsTables_UntilItDespawns_AndIgnoresAnUnknownOnes()
     {
         ClientWorld world = ClientWorldFixture.Create(ClientTestGrids.CreateYard(), ClientTestGrids.Center(1, 1));

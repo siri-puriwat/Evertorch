@@ -31,7 +31,9 @@ public readonly struct InboundEvent
         string? text = null,
         bool isAccepted = false,
         uint priceLimit = 0,
-        byte refineLevel = 0)
+        byte refineLevel = 0,
+        long cardItem = 0,
+        byte cardSlot = 0)
     {
         Kind = kind;
         Connection = connection;
@@ -56,6 +58,8 @@ public readonly struct InboundEvent
         IsAccepted = isAccepted;
         PriceLimit = priceLimit;
         RefineLevel = refineLevel;
+        CardItem = cardItem;
+        CardSlot = cardSlot;
     }
 
     public InboundEventKind Kind { get; }
@@ -154,6 +158,16 @@ public readonly struct InboundEvent
     ///     For <see cref="InboundEventKind.RefineItem" />, the level the client shows for the row.
     /// </summary>
     public byte RefineLevel { get; }
+
+    /// <summary>
+    ///     For <see cref="InboundEventKind.InsertCard" />, the bag's row holding the card.
+    /// </summary>
+    public long CardItem { get; }
+
+    /// <summary>
+    ///     For <see cref="InboundEventKind.RemoveCard" />, the card's slot, from 1.
+    /// </summary>
+    public byte CardSlot { get; }
 
     public static InboundEvent Connected(ConnectionId connection)
     {
@@ -522,6 +536,45 @@ public readonly struct InboundEvent
             commandSequence,
             inventoryItem: row,
             refineLevel: refineLevel);
+    }
+
+    public static InboundEvent ForInsertCard(
+        ConnectionId connection,
+        long cardItem,
+        long row,
+        uint commandSequence)
+    {
+        return new InboundEvent(
+            InboundEventKind.InsertCard,
+            connection,
+            null,
+            default,
+            default,
+            default,
+            commandSequence,
+            inventoryItem: row,
+            cardItem: cardItem);
+    }
+
+    public static InboundEvent ForRemoveCard(
+        ConnectionId connection,
+        EntityId npc,
+        long row,
+        byte slot,
+        ItemDefinitionId card,
+        uint commandSequence)
+    {
+        return new InboundEvent(
+            InboundEventKind.RemoveCard,
+            connection,
+            null,
+            default,
+            default,
+            npc,
+            commandSequence,
+            inventoryItem: row,
+            item: card,
+            cardSlot: slot);
     }
 
     public static InboundEvent ForCreateCharacter(ConnectionId connection, string name)

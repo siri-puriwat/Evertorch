@@ -291,7 +291,8 @@ public sealed class WorldSimulation
                 definition,
                 placement,
                 NpcServicesBuilder.Build(id, definition, m_content),
-                NpcServicesBuilder.BuildRefineTables(id, definition, m_content)));
+                NpcServicesBuilder.BuildRefineTables(id, definition, m_content),
+                NpcServicesBuilder.BuildCardRemovalFees(id, definition, m_content)));
     }
 
     public ItemDropEntity SpawnItemDrop(

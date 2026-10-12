@@ -8,7 +8,8 @@ namespace Evertorch.Protocol
 ///     What an NPC offers, sent right after every spawn of the NPC to a client (Network Protocol §6, §9): each item it
 ///     trades with the price it sells for and the price it pays, each quest it gives with its objective and reward,
 ///     whether it resets a build, each job change it offers, whether it keeps the account's storage, whether it keeps
-///     the market board, and whether it refines; a refiner's tables follow as messages of their own.
+///     the market board, whether it refines, and whether it takes cards out; a refiner's tables and a remover's fees
+///     follow as messages of their own.
 ///     A shop's prices and a quest's terms travel on purpose, because the player must see them (Content Pipeline §5).
 /// </summary>
 public sealed class NpcServices
@@ -35,11 +36,12 @@ public sealed class NpcServices
     public const int MaxEncodedLength = ProtocolLimits.MaxReliableMessageBytes;
 
     // The services byte after the offers: bit 0, the build's reset; bit 1, the account's storage; bit 2, the market
-    // board; bit 3, refining; the other bits are not yet defined.
+    // board; bit 3, refining; bit 4, taking cards out; the other bits are not yet defined.
     private const byte ResetService = 1;
     private const byte StorageService = 2;
     private const byte MarketService = 4;
     private const byte RefineService = 8;
+    private const byte CardRemovalService = 16;
 
     public NpcServices(
         EntityId npc,
@@ -49,7 +51,8 @@ public sealed class NpcServices
         IReadOnlyList<NpcJobChangeOffer>? jobChanges = null,
         bool keepsStorage = false,
         bool keepsMarket = false,
-        bool refines = false)
+        bool refines = false,
+        bool removesCards = false)
     {
         if (entries == null)
         {
@@ -87,6 +90,7 @@ public sealed class NpcServices
         KeepsStorage = keepsStorage;
         KeepsMarket = keepsMarket;
         Refines = refines;
+        RemovesCards = removesCards;
         if (GetEncodedLength() > MaxEncodedLength)
         {
             throw new ArgumentException($"An NPC's services must fit {MaxEncodedLength} bytes.", nameof(entries));
@@ -130,6 +134,11 @@ public sealed class NpcServices
     ///     Whether the NPC refines (Gameplay Systems §11.6); its tables follow these services.
     /// </summary>
     public bool Refines { get; }
+
+    /// <summary>
+    ///     Whether the NPC takes cards out (Gameplay Systems §11.7); its fees follow these services and its tables.
+    /// </summary>
+    public bool RemovesCards { get; }
 
     public static bool TryRead(ReadOnlySpan<byte> source, out NpcServices? message)
     {
@@ -189,7 +198,8 @@ public sealed class NpcServices
         }
 
         if (!reader.TryReadByte(out byte services)
-            || (services & ~(ResetService | StorageService | MarketService | RefineService)) != 0
+            || (services & ~(ResetService | StorageService | MarketService | RefineService | CardRemovalService))
+            != 0
             || !reader.TryReadByte(out byte jobChangeCount)
             || jobChangeCount > MaxJobChanges)
         {
@@ -227,7 +237,8 @@ public sealed class NpcServices
             jobChanges,
             (services & StorageService) != 0,
             (services & MarketService) != 0,
-            (services & RefineService) != 0);
+            (services & RefineService) != 0,
+            (services & CardRemovalService) != 0);
         return true;
     }
 
@@ -287,7 +298,8 @@ public sealed class NpcServices
             (byte)((OffersReset ? ResetService : 0)
                 | (KeepsStorage ? StorageService : 0)
                 | (KeepsMarket ? MarketService : 0)
-                | (Refines ? RefineService : 0)));
+                | (Refines ? RefineService : 0)
+                | (RemovesCards ? CardRemovalService : 0)));
         writer.WriteByte((byte)JobChanges.Count);
         foreach (NpcJobChangeOffer change in JobChanges)
         {

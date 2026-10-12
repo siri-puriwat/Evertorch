@@ -310,6 +310,24 @@ public sealed class MessageFuzzTests
                 ? Encode(RefineItem.EncodedLength, message!.Write)
                 : null);
         yield return Case(
+            "InsertCard",
+            Encode(InsertCard.EncodedLength, CardMessageTests.InsertGolden.Write),
+            payload => InsertCard.TryRead(payload, out InsertCard? message)
+                ? Encode(InsertCard.EncodedLength, message!.Write)
+                : null);
+        yield return Case(
+            "RemoveCard",
+            Encode(CardMessageTests.RemoveGolden.GetEncodedLength(), CardMessageTests.RemoveGolden.Write),
+            payload => RemoveCard.TryRead(payload, out RemoveCard? message)
+                ? Encode(message!.GetEncodedLength(), message.Write)
+                : null);
+        yield return Case(
+            "CardRemovalFees",
+            Encode(CardMessageTests.FeesGolden.GetEncodedLength(), CardMessageTests.FeesGolden.Write),
+            payload => CardRemovalFees.TryRead(payload, out CardRemovalFees? message)
+                ? Encode(message!.GetEncodedLength(), message.Write)
+                : null);
+        yield return Case(
             "RefineTable",
             Encode(RefineMessageTests.TableGolden.GetEncodedLength(), RefineMessageTests.TableGolden.Write),
             payload => RefineTable.TryRead(payload, out RefineTable? message)

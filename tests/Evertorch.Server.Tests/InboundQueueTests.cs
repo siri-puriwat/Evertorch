@@ -529,6 +529,32 @@ public sealed class InboundQueueTests
     }
 
     [Test]
+    public void CardCommands_ThatAreWellFormed_AreQueuedWithTheirRowsSlotAndCard_AndCutShortAreRejected()
+    {
+        InboundQueue queue = CreateQueue(16);
+        byte[] insert = Payload(InsertCard.EncodedLength, bytes => new InsertCard(5, 7, 9).Write(bytes));
+        var removal = new RemoveCard(new EntityId(40), 7, 2, new ItemDefinitionId("item.card.forest_crawler"), 10);
+        byte[] remove = Payload(removal.GetEncodedLength(), bytes => removal.Write(bytes));
+
+        queue.OnPayload(Peer, ProtocolChannel.Control, insert);
+        queue.OnPayload(Peer, ProtocolChannel.Control, remove);
+
+        Assert.That(queue.TryDequeue(out InboundEvent inserted), Is.True);
+        Assert.That(queue.TryDequeue(out InboundEvent removed), Is.True);
+        Assert.That(
+            (inserted.Kind, inserted.CardItem, inserted.InventoryItem, inserted.CommandSequence),
+            Is.EqualTo((InboundEventKind.InsertCard, 5L, 7L, 9u)));
+        Assert.That(
+            (removed.Kind, removed.Target, removed.InventoryItem, removed.CardSlot, removed.Item.Value,
+                removed.CommandSequence),
+            Is.EqualTo((InboundEventKind.RemoveCard, new EntityId(40), 7L, (byte)2, "item.card.forest_crawler", 10u)));
+        InboundQueue shortened = CreateQueue(16);
+        shortened.OnPayload(Peer, ProtocolChannel.Control, insert.Take(insert.Length - 1).ToArray());
+        shortened.OnPayload(Peer, ProtocolChannel.Control, remove.Take(remove.Length - 1).ToArray());
+        AssertOnlyMalformed(shortened, 2);
+    }
+
+    [Test]
     public void Chat_ThatIsWellFormed_IsQueuedWithItsChannelRecipientTextAndSequence()
     {
         InboundQueue queue = CreateQueue(16);

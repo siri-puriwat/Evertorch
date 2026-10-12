@@ -14,6 +14,7 @@ public sealed class ClientWorld
     private readonly Dictionary<EntityId, RemoteEntity> m_remotes = new();
     private readonly Dictionary<EntityId, NpcServices> m_npcServices = new();
     private readonly Dictionary<EntityId, List<RefineTable>> m_refineTables = new();
+    private readonly Dictionary<EntityId, CardRemovalFees> m_cardRemovalFees = new();
 
     // The tick of each entity's latest death or revival. Snapshots are unreliable and the events reliable, so a
     // snapshot from before either can still arrive afterwards; it must neither raise a corpse nor put a revived body
@@ -218,7 +219,8 @@ public sealed class ClientWorld
     public CommandRejectionReason LastRejection { get; private set; }
 
     /// <summary>
-    ///     Grows with every refine table kept, so a window can tell when to write its rows again.
+    ///     Grows with every refine table and every list of removal fees kept, so a window can tell when to write its rows
+    ///     again.
     /// </summary>
     public int RefineTablesVersion { get; private set; }
 
@@ -308,6 +310,7 @@ public sealed class ClientWorld
             m_remotes.Remove(spawn.Entity);
             m_npcServices.Remove(spawn.Entity);
             m_refineTables.Remove(spawn.Entity);
+            m_cardRemovalFees.Remove(spawn.Entity);
             RemoteDespawned?.Invoke(replaced);
         }
 
@@ -346,6 +349,7 @@ public sealed class ClientWorld
             m_remotes.Remove(despawn.Entity);
             m_npcServices.Remove(despawn.Entity);
             m_refineTables.Remove(despawn.Entity);
+            m_cardRemovalFees.Remove(despawn.Entity);
             EndLocalCastAt(despawn.Entity);
             RemoteDespawned?.Invoke(remote);
         }
@@ -470,6 +474,37 @@ public sealed class ClientWorld
         tables.Add(table);
         tables.Sort((left, right) => left.Index.CompareTo(right.Index));
         RefineTablesVersion++;
+    }
+
+    /// <summary>
+    ///     Keeps a remover's fees until the NPC despawns (Network Protocol §9); fees of an entity this client has no NPC
+    ///     spawn for are counted and ignored.
+    /// </summary>
+    public void OnCardRemovalFees(CardRemovalFees fees)
+    {
+        if (fees == null)
+        {
+            throw new ArgumentNullException(nameof(fees));
+        }
+
+        if (!m_remotes.TryGetValue(fees.Npc, out RemoteEntity? remote) || remote.Kind != EntityKind.Npc)
+        {
+            UnknownEntityEvents++;
+            return;
+        }
+
+        m_cardRemovalFees[fees.Npc] = fees;
+        RefineTablesVersion++;
+    }
+
+    /// <summary>
+    ///     The fees kept for <paramref name="npc" />, by card ID; none for an NPC that does not take cards out.
+    /// </summary>
+    public IReadOnlyList<CardRemovalFee> CardRemovalFeesOf(EntityId npc)
+    {
+        return m_cardRemovalFees.TryGetValue(npc, out CardRemovalFees? fees)
+            ? fees.Entries
+            : Array.Empty<CardRemovalFee>();
     }
 
     /// <summary>

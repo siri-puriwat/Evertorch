@@ -67,6 +67,8 @@ public sealed class SessionCommandLimits
             case InboundEventKind.MarketBuy:
             case InboundEventKind.MarketCollect:
             case InboundEventKind.RefineItem:
+            case InboundEventKind.InsertCard:
+            case InboundEventKind.RemoveCard:
                 limit = ServerInstruments.ItemCommandLimit;
                 return m_item.TryTake(tick);
             case InboundEventKind.CreateCharacter:

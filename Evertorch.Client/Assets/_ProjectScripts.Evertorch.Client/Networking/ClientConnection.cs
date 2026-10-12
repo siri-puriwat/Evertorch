@@ -209,6 +209,9 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
             case MessageOpcode.RefineOutcome:
                 OnRefineOutcome(payload);
                 break;
+            case MessageOpcode.CardRemovalFees:
+                OnCardRemovalFees(payload);
+                break;
             case MessageOpcode.MvpAwarded:
                 OnMvpAwarded(payload);
                 break;
@@ -1656,6 +1659,22 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
         {
             World.OnRefineTable(message);
             RefineTableReceived?.Invoke(message);
+        }
+    }
+
+    private void OnCardRemovalFees(ReadOnlySpan<byte> payload)
+    {
+        if (!CardRemovalFees.TryRead(payload, out CardRemovalFees? message) || message == null)
+        {
+            MalformedMessages++;
+        }
+        else if (World == null)
+        {
+            UnexpectedMessages++;
+        }
+        else
+        {
+            World.OnCardRemovalFees(message);
         }
     }
 

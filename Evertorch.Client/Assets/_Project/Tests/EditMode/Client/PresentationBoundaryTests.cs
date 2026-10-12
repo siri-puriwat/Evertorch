@@ -26,7 +26,7 @@ public sealed class PresentationBoundaryTests
         + @"|\.On(Spawn|Despawn|Snapshot|TargetChanged|AttackStarted|Damage|EntityDied|EntityRevived|CommandRejected"
         + @"|ItemDropped|ItemPickedUp|CharacterHealth|CharacterProgress|SkillCastStarted|SkillResolved|SkillList"
         + @"|StatusEffects|NpcServices|QuestLog|CharacterSheet|LocalCancel|WornWeaponChanged|Changed|RefineTable"
-        + @"|RefineOutcome)\("
+        + @"|RefineOutcome|CardRemovalFees)\("
         + @"|\.(Advance|CollectTargetCandidates|CollectPlayerCandidates|CollectDropCandidates|CollectNpcCandidates)\("
         + @"|\.(HealthPermille|StateFlags|CurrentHealth|Target|LastRejection|LocalHealth|LocalMaximumHealth|IsDead"
         + @"|LocalSpirit|LocalMaximumSpirit|Level|Experience|ExperienceToNextLevel|WornWeapon)\s*=(?![=>])");
@@ -43,7 +43,8 @@ public sealed class PresentationBoundaryTests
         + @"|InventoryResyncRequest|EquipItem|UnequipItem|UseItem|BuyItem|SellItem|AcceptQuest|CompleteQuest"
         + @"|AllocateStat|LearnSkill|ResetBuild|ChangeJob|ChatSend|PartyInvite|PartyReply|PartyLeave|PartyKick"
         + @"|PartyLead|TradeRequest|TradeReply|TradeOffer|TradeLock|TradeConfirm|TradeCancel|StorageOpen"
-        + @"|StorageDeposit|StorageWithdraw|MarketOpen|MarketList|MarketBuy|MarketCollect|RefineItem)\s*\("
+        + @"|StorageDeposit|StorageWithdraw|MarketOpen|MarketList|MarketBuy|MarketCollect|RefineItem|InsertCard"
+        + @"|RemoveCard)\s*\("
         + @"|\.Connection\??\.(Connect|Disconnect|EnterWorld|CreateCharacter|Poll)\("
         + @"|\.Controller\??\.(Cancel\w*|Tick)\("
         + @"|\.(SetManualDirection|TryMoveTo|Chase\w*|StopChase|CancelPath|NextTick|Reconcile|Teleport"
@@ -52,7 +53,7 @@ public sealed class PresentationBoundaryTests
         + @"|\.On(Spawn|Despawn|Snapshot|TargetChanged|AttackStarted|Damage|EntityDied|EntityRevived|CommandRejected"
         + @"|ItemDropped|ItemPickedUp|CharacterHealth|CharacterProgress|SkillCastStarted|SkillResolved|SkillList"
         + @"|StatusEffects|NpcServices|QuestLog|CharacterSheet|LocalCancel|WornWeaponChanged|Changed|RefineTable"
-        + @"|RefineOutcome)\("
+        + @"|RefineOutcome|CardRemovalFees)\("
         + @"|\.(Advance|CollectTargetCandidates|CollectPlayerCandidates|CollectDropCandidates|CollectNpcCandidates)\("
         + @"|\.(Target|LastRejection|LocalHealth|LocalMaximumHealth|HealthPermille|StateFlags|CurrentHealth|IsLocked"
         + @"|IsDead|LocalSpirit|LocalMaximumSpirit|Level|Experience|ExperienceToNextLevel|WornWeapon)\s*=(?![=>])");
@@ -113,7 +114,7 @@ public sealed class PresentationBoundaryTests
             "m_client.LearnSkillLevel(skill);", "client.ToggleSkills();",
             "m_client.ResetBuildAt(npc);", "m_client.ChangeJobAt(npc, job);",
             "m_world.OnWornWeaponChanged(changed);", "remote.WornWeapon = string.Empty;",
-            "m_client.RefineAt(npc, row, 6);", "m_world.OnRefineTable(table);"
+            "m_client.RefineAt(npc, row, 6);", "m_world.OnRefineTable(table);", "m_world.OnCardRemovalFees(fees);"
         };
         string[] allowed =
         {
@@ -156,7 +157,8 @@ public sealed class PresentationBoundaryTests
             "var turnIn = new CompleteQuest(npc, quest, 9);", "var raise = new AllocateStat(PrimaryStat.Agi, 1, 10);",
             "var learn = new LearnSkill(skill, 11);", "var reset = new ResetBuild(npc, 12);",
             "var change = new ChangeJob(npc, job, 13);", "var refine = new RefineItem(npc, row, 6, 14);",
-            "world.OnRefineOutcome(outcome);"
+            "world.OnRefineOutcome(outcome);", "var insert = new InsertCard(5, row, 15);",
+            "var remove = new RemoveCard(npc, row, 1, card, 16);", "world.OnCardRemovalFees(fees);"
         };
         string[] allowed =
         {
