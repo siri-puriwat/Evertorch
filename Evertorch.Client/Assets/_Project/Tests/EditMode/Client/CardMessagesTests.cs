@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using Evertorch.Game;
 using Evertorch.Protocol;
 using NUnit.Framework;
@@ -6,8 +7,9 @@ using NUnit.Framework;
 namespace Evertorch.Client.Tests.EditMode
 {
 /// <summary>
-///     The words of the cards (Prototype Content §2): what a card fits, a row's free slots, an insertion's line, its
-///     refusals chosen from the client's own rows, and the change that reports a row whose cards grew.
+///     The words of the cards (Prototype Content §2): what a card fits, a row's free slots, the Smith's rows, an
+///     insertion's and a removal's lines, their refusals chosen from the client's own rows, and the changes that report
+///     a row whose cards grew or shrank and the rows a change emptied.
 /// </summary>
 [TestFixture]
 public sealed class CardMessagesTests
@@ -15,6 +17,7 @@ public sealed class CardMessagesTests
     private static readonly ItemDefinitionId Sword = new("item.weapon.iron_sword");
     private static readonly ItemDefinitionId Cloth = new("item.armor.cloth");
     private static readonly ItemDefinitionId Keen = new("item.card.forest_crawler");
+    private static readonly ItemDefinitionId Bane = new("item.card.gloom_wisp");
     private static readonly ItemDefinitionId Gel = new("item.material.slime_gel");
 
     private static ClientContent Content()
@@ -33,6 +36,16 @@ public sealed class CardMessagesTests
                 fits: EquipmentSlot.Weapon,
                 prefix: "Keen",
                 description: "Attack +8."),
+            [Bane] = new(
+                Bane,
+                "Gloom Wisp Card",
+                ItemType.Card,
+                "pickup_slime_gel",
+                "item_slime_gel",
+                stackLimit: 999,
+                fits: EquipmentSlot.Weapon,
+                prefix: "Bane",
+                description: "Damage to bosses +20 %."),
             [Gel] = new(Gel, "Slime Gel", ItemType.Material, "pickup_slime_gel", "gel")
         };
         return new ClientContent(
@@ -43,6 +56,30 @@ public sealed class CardMessagesTests
             items,
             new Dictionary<SkillDefinitionId, ClientSkill>(),
             new Dictionary<StatusDefinitionId, ClientStatusEffect>());
+    }
+
+    [Test]
+    public void AChange_ThatEmptiesACardedRow_KeepsItAsHeld_AndReportsNoCardMoved()
+    {
+        var inventory = new ClientInventory();
+        inventory.OnSnapshot(
+            new InventorySnapshot(
+                4,
+                1000,
+                0,
+                1,
+                new[] { new InventoryEntry(2, Sword, 1, EquipmentSlot.None, 7, new[] { Keen }) }));
+        var deltas = new List<InventoryDelta>();
+        inventory.ChangeApplied += deltas.Add;
+
+        inventory.OnChanged(
+            new InventoryChanged(4, 5, 980, new[] { new InventoryEntry(2, Sword, 0), new InventoryEntry(9, Keen, 1) }));
+
+        InventoryEntry emptied = deltas.Single().Emptied.Single();
+        Assert.That((emptied.InventoryItem, emptied.Cards.Count), Is.EqualTo((2L, 1)));
+        Assert.That(
+            (deltas[0].RemovedCard, deltas[0].InsertedCard),
+            Is.EqualTo((default(ItemDefinitionId), default(ItemDefinitionId))));
     }
 
     [Test]
@@ -70,6 +107,37 @@ public sealed class CardMessagesTests
         Assert.That(
             (deltas[0].InsertedCard, deltas[0].InsertedInto.InventoryItem),
             Is.EqualTo((Keen, 2L)));
+    }
+
+    [Test]
+    public void AChange_ThatShrinksARowsCards_ReportsTheCardAndTheRowAsItWas()
+    {
+        var inventory = new ClientInventory();
+        inventory.OnSnapshot(
+            new InventorySnapshot(
+                4,
+                1000,
+                0,
+                1,
+                new[] { new InventoryEntry(2, Sword, 1, EquipmentSlot.None, 0, new[] { Keen, Bane }) }));
+        var deltas = new List<InventoryDelta>();
+        inventory.ChangeApplied += deltas.Add;
+
+        inventory.OnChanged(
+            new InventoryChanged(
+                4,
+                5,
+                800,
+                new[]
+                {
+                    new InventoryEntry(2, Sword, 1, EquipmentSlot.None, 0, new[] { Bane }),
+                    new InventoryEntry(9, Keen, 1)
+                }));
+
+        Assert.That(deltas, Has.Count.EqualTo(1));
+        Assert.That(
+            (deltas[0].RemovedCard, deltas[0].RemovedFrom.Cards.Count, deltas[0].InsertedCard, deltas[0].Emptied.Count),
+            Is.EqualTo((Keen, 2, default(ItemDefinitionId), 0)));
     }
 
     [Test]
@@ -106,6 +174,37 @@ public sealed class CardMessagesTests
     }
 
     [Test]
+    public void ARefusedRemoval_AsksForAWornRowToBeTakenOff_AndOtherwiseSaysWhy()
+    {
+        ClientContent content = Content();
+        InventoryEntry[] rows =
+        {
+            new(2, Sword, 1, EquipmentSlot.Weapon, 0, new[] { Keen }),
+            new(3, Sword, 1, EquipmentSlot.None, 0, new[] { Keen })
+        };
+
+        string Refusal(long row, CommandRejectionReason reason)
+        {
+            return CardMessages.DescribeRemoveRefusal(new CardRequest(0, Keen, row, 1), rows, reason, content);
+        }
+
+        Assert.That(
+            new[]
+            {
+                Refusal(2, CommandRejectionReason.NotAllowedNow), Refusal(3, CommandRejectionReason.NotEnoughCoins),
+                Refusal(3, CommandRejectionReason.InventoryFull)
+            },
+            Is.EqualTo(
+                new[]
+                {
+                    "Take off Keen Iron Sword [2] first.",
+                    RejectionMessages.Describe(CommandRejectionReason.NotEnoughCoins, false),
+                    RejectionMessages.Describe(CommandRejectionReason.InventoryFull, false)
+                }));
+        Assert.That(new CardRequest(0, Keen, 2, 1).IsRemoval, Is.True);
+    }
+
+    [Test]
     public void FreeSlots_CountOnlyAnUnwornRowOfTheKindTheCardFits()
     {
         ClientContent content = Content();
@@ -138,6 +237,18 @@ public sealed class CardMessagesTests
         Assert.That(
             CardMessages.Inserted(Content(), Keen, row),
             Is.EqualTo("Forest Crawler Card inserted: Keen Iron Sword [2]."));
+    }
+
+    [Test]
+    public void TheSmithsRow_AndARemoval_NameTheCard_TheRowAsItWas_AndTheFee()
+    {
+        var row = new InventoryEntry(2, Sword, 1, EquipmentSlot.None, 0, new[] { Keen, Bane });
+
+        Assert.That(
+            (CardMessages.TakeOut(Content(), Keen, 200), CardMessages.Removed(Content(), Keen, row, 200)),
+            Is.EqualTo(
+                ("Take out Forest Crawler Card · 200 coins",
+                    "Took Forest Crawler Card out of Keen Bane Iron Sword [2] for 200 coins.")));
     }
 }
 }

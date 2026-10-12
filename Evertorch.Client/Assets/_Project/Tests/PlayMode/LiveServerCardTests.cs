@@ -81,10 +81,11 @@ public sealed class LiveServerCardTests
     // them; a press of the card's row opens the Card window, and two presses of the sword's row put the card in, which
     // the bag and the chat then name; another player of another account enters beside it and is drawn; a walk through
     // the controller up to the Smith opens its window, as an arrival does, so an editor without focus, which drops a
-    // queued click, cannot fail the step (Gameplay Systems §6.1, §11.7).
+    // queued click, cannot fail the step; one press of its Cards row takes the card out again for 200 coins
+    // (Gameplay Systems §6.1, §11.7).
     [UnityTest]
     [Timeout(TestTimeoutMs)]
-    public IEnumerator Carder_WithEquipmentInTheBag_InsertsACard_SeesTheOther_AndOpensTheSmithsWindow()
+    public IEnumerator Carder_WithEquipmentInTheBag_InsertsACard_AndTakesItOutAtTheSmith()
     {
         string actionsPath = RequirePrerequisites();
         yield return StartDatabaseAndServer();
@@ -157,6 +158,27 @@ public sealed class LiveServerCardTests
             },
             StartTimeoutSeconds);
         Assert.That(window.ShownName, Is.EqualTo("Smith"), $"{window.Text} at {world.Predictor.Position}");
+        const string takeOut = "Take out Forest Crawler Card · 200 coins";
+        yield return WaitUntil(
+            () =>
+            {
+                other.Poll();
+                return Row(window, takeOut) != null;
+            },
+            StartTimeoutSeconds);
+        Assert.That(window.Text, Does.Contain("Cards\nKeen Training Sword [1]\n" + takeOut),
+            "the Smith's Cards section");
+        Row(window, takeOut)!.onClick.Invoke();
+        yield return WaitUntil(
+            () =>
+            {
+                other.Poll();
+                return bag.Text.Contains("Forest Crawler Card x 1");
+            },
+            StartTimeoutSeconds);
+        Assert.That(bag.Text, Does.Contain("Forest Crawler Card x 1"), $"the card back: {world.LastRejection}");
+        Assert.That(world.Inventory.Coins, Is.EqualTo(AnnCoins - 200), "the fee");
+        Assert.That(lines.Text, Does.Contain("Took Forest Crawler Card out of Keen Training Sword [1] for 200 coins."));
         Assert.That(other.MalformedMessages + other.UnexpectedMessages, Is.Zero, "the other player's traffic");
         Assert.That(client.Connection!.MalformedMessages + client.Connection.UnexpectedMessages, Is.Zero);
     }

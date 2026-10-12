@@ -798,6 +798,17 @@ public sealed class GameClient : MonoBehaviour
     }
 
     /// <summary>
+    ///     Takes <paramref name="card" /> out of <paramref name="slot" /> of the bag's row
+    ///     <paramref name="inventoryItem" /> at the Smith <paramref name="npc" /> (Gameplay Systems §11.7). The server
+    ///     checks the row, the card there, the fee, and the room, and only its committed change shows the card back in
+    ///     the bag. 0 when nothing was sent, else the command's sequence.
+    /// </summary>
+    public uint RemoveCardAt(EntityId npc, long inventoryItem, byte slot, ItemDefinitionId card)
+    {
+        return Connection?.SendRemoveCard(npc, inventoryItem, slot, card) ?? 0;
+    }
+
+    /// <summary>
     ///     Asks the NPC for <paramref name="quantity" /> of <paramref name="item" /> (Gameplay Systems §11.3). The server
     ///     checks the catalogue, the coins, and the room, and only its committed change shows the purchase.
     /// </summary>

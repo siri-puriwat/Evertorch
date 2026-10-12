@@ -17,12 +17,13 @@ namespace Evertorch.Server.Tests
 ///     The Milestone 17 "Cards and slots" exit criterion's server side end to end (ROADMAP §8): the composed server host
 ///     on a real PostgreSQL 18 and real UDP sockets on loopback, with scripted combat and drops, and two clients of two
 ///     accounts built from the client's production networking and gameplay code. Anna, stored holding a training sword,
-///     cloth armor, a Forest Crawler Card, and 1,000 coins, enters the training ground beside Bobby, of another account,
-///     with 300; each sees the other by name, and Anna's bag shows what was stored. Anna kills a training slime, whose
-///     every drop the script makes but its card, picks up its gel, inserts her card into the sword, and walks up to the
-///     Smith; then she leaves, and Bobby sees her go. After a clean stop a second host on the same database lets both in
-///     again, Anna's bag as she left it, the card in the sword. Each later line of Milestone 17 adds its steps here: the
-///     removal, inspection, the board, and the cards a refine returns.
+///     cloth armor, a Forest Crawler Card, a +7 training staff carrying a Spark Wisp Card, an Emberstone, and 1,000
+///     coins, enters the training ground beside Bobby, of another account, with 300; each sees the other by name, and
+///     Anna's bag shows what was stored. Anna kills a training slime, whose every drop the script makes but its card,
+///     picks up its gel, inserts her card into the sword, and walks up to the Smith; there she takes the card out again
+///     for its fee, and refines the staff, which the scripted draw destroys, and its card comes back to her bag. Then she
+///     leaves, and Bobby sees her go. After a clean stop a second host on the same database lets both in again, Anna's
+///     bag as she left it. Each later line of Milestone 17 adds its steps here: inspection and the board.
 /// </summary>
 [TestFixture]
 [NonParallelizable]
@@ -34,6 +35,9 @@ public sealed class CardAcceptanceTests
     private const string TrainingSword = "item.weapon.training_sword";
     private const string ClothArmor = "item.armor.cloth";
     private const string Keen = "item.card.forest_crawler";
+    private const string Arcane = "item.card.spark_wisp";
+    private const string TrainingStaff = "item.weapon.training_staff";
+    private const string Emberstone = "item.material.emberstone";
     private const string AnnaIdentity = "card-anna";
     private const string AnnaName = "Anna";
     private const string BobbyIdentity = "card-bobby";
@@ -58,7 +62,8 @@ public sealed class CardAcceptanceTests
     }
 
     // No reconnect grace, so a player who leaves is out of the world at once. Every hit lands and every drop entry
-    // drops at its least amount, since network timing decides which draw each roll gets (Coding Standards §10).
+    // drops at its least amount, and every refine past its safe level fails, since network timing decides which draw
+    // each roll gets (Coding Standards §10).
     private IHost StartHost(string contentRootPath)
     {
         HostApplicationBuilder builder = TestHosts.CreateBuilderWithDatabase(
@@ -69,7 +74,7 @@ public sealed class CardAcceptanceTests
             },
             contentRootPath,
             m_database.ConnectionString);
-        TestHosts.ScriptOutcomes(builder, new SureHitRandom(), new ScriptedRandom(0));
+        TestHosts.ScriptOutcomes(builder, new SureHitRandom(), new ScriptedRandom(0), new ScriptedRandom(99));
         IHost host = builder.Build();
         host.Start();
         return host;
@@ -83,6 +88,11 @@ public sealed class CardAcceptanceTests
             StoreItem(AnnaName, TrainingSword);
             StoreItem(AnnaName, ClothArmor);
             StoreItem(AnnaName, Keen);
+            StoreItem(AnnaName, Emberstone);
+            Execute(
+                "INSERT INTO inventory_items (character_id, item_definition_id, quantity, refine_level, "
+                + $"instance_data_json, version) SELECT id, '{TrainingStaff}', 1, 7, "
+                + $"'{{\"cards\": [\"{Arcane}\"]}}'::jsonb, 0 FROM characters WHERE name = '{AnnaName}'");
             Execute($"UPDATE characters SET currency = {AnnaCoins} WHERE name = '{AnnaName}'");
         };
         bobby.AfterCreate = () => Execute($"UPDATE characters SET currency = {BobbyCoins} WHERE name = '{BobbyName}'");
@@ -102,7 +112,12 @@ public sealed class CardAcceptanceTests
 
         Assert.That(
             Bag(anna),
-            Is.EqualTo(new[] { $"{ClothArmor} x 1", $"{Keen} x 1", $"{TrainingSword} x 1" }),
+            Is.EqualTo(
+                new[]
+                {
+                    $"{ClothArmor} x 1", $"{Keen} x 1", $"{Emberstone} x 1", $"{TrainingStaff} x 1 [{Arcane}]",
+                    $"{TrainingSword} x 1"
+                }),
             $"{step}: Anna's bag as stored");
         Assert.That(anna.World.Inventory.Coins, Is.EqualTo(AnnaCoins), $"{step}: Anna's coins");
         Assert.That(bobby.World.Inventory.Rows, Is.Empty, $"{step}: Bobby's bag");
@@ -205,6 +220,63 @@ public sealed class CardAcceptanceTests
             $"{step}: Anna walked up to it, at {world.Predictor.Position}");
     }
 
+    // At the Smith Anna takes her card out of the sword for its fee of 200; her bag's change shows it back in a row of
+    // its own, and Bobby hears nothing of it (Gameplay Systems §11.7).
+    private static void TakeTheCardOut(SocketClient anna, SocketClient bobby)
+    {
+        const string step = "remove";
+        ClientWorld world = anna.World;
+        EntityId smith = world.Remotes.Values.Single(remote => remote.DefinitionId == Smith).Entity;
+        long sword = world.Inventory.Rows.Single(row => row.Item.Value == TrainingSword).InventoryItem;
+        uint bobbysRevision = bobby.World.Inventory.Revision;
+
+        Assert.That(
+            SocketClients.PumpUntil(() => world.CardRemovalFeesOf(smith).Count > 0, anna, bobby),
+            Is.True,
+            $"{step}: the Smith's fees");
+        Assert.That(
+            anna.Connection.SendRemoveCard(smith, sword, 1, new ItemDefinitionId(Keen)),
+            Is.Not.Zero,
+            $"{step}: sent");
+        Assert.That(
+            SocketClients.PumpUntil(() => world.Inventory.Rows.Any(row => row.Item.Value == Keen), anna, bobby),
+            Is.True,
+            $"{step}: the card back in the bag ({world.LastRejection})");
+
+        Assert.That(
+            world.Inventory.Rows.Single(row => row.InventoryItem == sword).Cards,
+            Is.Empty,
+            $"{step}: the sword's slot free");
+        Assert.That(world.Inventory.Coins, Is.EqualTo(AnnaCoins - 200), $"{step}: the fee");
+        Assert.That(bobby.World.Inventory.Revision, Is.EqualTo(bobbysRevision), $"{step}: Bobby's bag never changed");
+    }
+
+    // Anna refines the +7 staff, which the scripted draw destroys; its card comes back to her bag (Gameplay Systems
+    // §11.6, owner decision 13).
+    private static void LoseTheStaff(SocketClient anna, SocketClient bobby)
+    {
+        const string step = "refine";
+        ClientWorld world = anna.World;
+        EntityId smith = world.Remotes.Values.Single(remote => remote.DefinitionId == Smith).Entity;
+        long staff = world.Inventory.Rows.Single(row => row.Item.Value == TrainingStaff).InventoryItem;
+        var outcomes = new List<RefineOutcome>();
+        world.RefineOutcomeReceived += outcomes.Add;
+
+        Assert.That(anna.Connection.SendRefine(smith, staff, 7), Is.Not.Zero, $"{step}: sent");
+        Assert.That(
+            SocketClients.PumpUntil(() => outcomes.Count == 1, anna, bobby),
+            Is.True,
+            $"{step}: the outcome ({world.LastRejection})");
+        world.RefineOutcomeReceived -= outcomes.Add;
+
+        Assert.That(outcomes.Single().Outcome, Is.EqualTo(RefineOutcomeKind.Destroyed), $"{step}: destroyed");
+        Assert.That(
+            world.Inventory.Rows.Select(row => row.Item.Value),
+            Has.Member(Arcane).And.No.Member(TrainingStaff).And.No.Member(Emberstone),
+            $"{step}: the card back, the staff and the ore gone");
+        Assert.That(world.Inventory.Coins, Is.EqualTo(AnnaCoins - 200 - 20), $"{step}: the refine's coins");
+    }
+
     // Anna leaves; with no grace her character leaves the world at once, and Bobby sees her go.
     private static void Leave(SocketClient anna, SocketClient bobby)
     {
@@ -297,6 +369,10 @@ public sealed class CardAcceptanceTests
             InsertTheCard(anna, bobby);
             AssertCleanTraffic("insert", anna, bobby);
             VisitTheSmith(anna, bobby);
+            TakeTheCardOut(anna, bobby);
+            AssertCleanTraffic("remove", anna, bobby);
+            LoseTheStaff(anna, bobby);
+            AssertCleanTraffic("refine", anna, bobby);
             hunted = Bag(anna);
             Leave(anna, bobby);
             AssertCleanTraffic("away", anna, bobby);
@@ -311,7 +387,11 @@ public sealed class CardAcceptanceTests
             anna.EnterWorld(port);
             bobby.EnterWorld(port);
             Assert.That(Bag(anna), Is.EqualTo(hunted), "restart: Anna's bag as she left it");
-            Assert.That(hunted, Has.Member($"{TrainingSword} x 1 [{Keen}]"), "restart: the card in the sword");
+            Assert.That(
+                hunted,
+                Is.SupersetOf(new[] { $"{TrainingSword} x 1", $"{Keen} x 1", $"{Arcane} x 1" }),
+                "restart: both cards back in the bag, the sword's slot free");
+            Assert.That(anna.World.Inventory.Coins, Is.EqualTo(AnnaCoins - 200 - 20), "restart: Anna's coins");
             Assert.That(bobby.World.Inventory.Coins, Is.EqualTo(BobbyCoins), "restart: Bobby's coins");
             AssertCleanTraffic("restart", anna, bobby);
             Stop(host, anna, bobby);

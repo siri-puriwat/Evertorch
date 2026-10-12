@@ -123,6 +123,7 @@ public sealed class ServerInstruments
     private readonly Counter<long> m_marketSales;
     private readonly Counter<long> m_refineAttempts;
     private readonly Counter<long> m_cardsInserted;
+    private readonly Counter<long> m_cardsRemoved;
 
     public ServerInstruments(IMeterFactory meters)
     {
@@ -187,6 +188,10 @@ public sealed class ServerInstruments
             "evertorch.cards.inserted",
             "{card}",
             "Cards inserted into a slot.");
+        m_cardsRemoved = Meter.CreateCounter<long>(
+            "evertorch.cards.removed",
+            "{card}",
+            "Cards taken out of a slot at the Smith.");
         m_jobDuration = Meter.CreateHistogram<double>(
             "evertorch.persistence.job.duration",
             "ms",
@@ -354,6 +359,11 @@ public sealed class ServerInstruments
     public void RecordCardInserted()
     {
         m_cardsInserted.Add(1);
+    }
+
+    public void RecordCardRemoved()
+    {
+        m_cardsRemoved.Add(1);
     }
 
     public void RecordTradeCompleted(long coins)

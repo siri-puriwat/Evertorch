@@ -48,15 +48,17 @@ public static class RefineMessages
 
     /// <summary>
     ///     "Refined Iron Sword to +7." or "The refine failed: +6 Iron Sword was destroyed.", "… fell to +5.", or "… is
-    ///     unchanged."
+    ///     unchanged."; a destroyed row that held cards adds "Its cards are back in your bag."
     /// </summary>
-    public static string Describe(RefineOutcome outcome, ClientContent? content)
+    public static string Describe(RefineOutcome outcome, ClientContent? content, bool hadCards = false)
     {
         string name = ShopMessages.ItemName(content, outcome.Item);
         string before = ShopMessages.ItemName(content, outcome.Item, outcome.LevelBefore);
         return outcome.Outcome switch
         {
             RefineOutcomeKind.Refined => $"Refined {name} to +{outcome.LevelAfter}.",
+            RefineOutcomeKind.Destroyed when hadCards =>
+                $"The refine failed: {before} was destroyed. Its cards are back in your bag.",
             RefineOutcomeKind.Destroyed => $"The refine failed: {before} was destroyed.",
             RefineOutcomeKind.Lowered => $"The refine failed: {before} fell to +{outcome.LevelAfter}.",
             _ => $"The refine failed: {before} is unchanged."

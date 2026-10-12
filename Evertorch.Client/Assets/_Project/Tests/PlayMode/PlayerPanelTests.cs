@@ -1821,6 +1821,74 @@ public sealed class PlayerPanelTests
         Assert.That(recording.SentOf(MessageOpcode.RefineItem).Count(), Is.Zero, "a risky refine is armed first");
     }
 
+    // The Smith's Cards section (Prototype Content §2): each unworn carded row by its name, and for each of its cards
+    // "Take out … · fee", sent at one press, the longest real row on one line at 12 points or more; a worn row and a
+    // row without cards are left out.
+    [UnityTest]
+    public IEnumerator NpcWindow_ForTheSmith_ListsEachCardOfAnUnwornRow_AndTakesItOutAtOnePress()
+    {
+        GameClient client = CreateIdleClient();
+        (ClientWorld world, RecordingConnection recording) = GiveRecordedWorld(client);
+        GiveShop(client);
+        Spawn(world, 14, EntityKind.Npc, "npc.smith", 1000);
+        DrawNpc(client, 14);
+        world.OnNpcServices(
+            new NpcServices(
+                new EntityId(14),
+                new NpcServiceEntry[0],
+                new NpcQuestOffer[0],
+                refines: true,
+                removesCards: true));
+        world.OnCardRemovalFees(
+            new CardRemovalFees(
+                new EntityId(14),
+                new[]
+                {
+                    new CardRemovalFee(new ItemDefinitionId(Keen), 200),
+                    new CardRemovalFee(new ItemDefinitionId(Arcane), 200),
+                    new CardRemovalFee(new ItemDefinitionId(Shelled), 600)
+                }));
+        InventoryEntry[] rows =
+        {
+            new(3, new ItemDefinitionId(IronSword), 1, EquipmentSlot.None, 0,
+                new[] { new ItemDefinitionId(Keen), new ItemDefinitionId(Arcane) }),
+            new(4, new ItemDefinitionId(IronSword), 1, EquipmentSlot.Weapon, 0, new[] { new ItemDefinitionId(Keen) }),
+            new(5, new ItemDefinitionId(Mantle), 1, EquipmentSlot.None, 0, new[] { new ItemDefinitionId(Shelled) }),
+            new(6, new ItemDefinitionId(Gel), 3)
+        };
+        foreach (InventorySnapshot part in InventorySnapshot.CreateParts(4, 900, rows))
+        {
+            world.Inventory.OnSnapshot(part);
+        }
+
+        var window = NpcWindow.Create(client);
+        m_created.Add(window.gameObject);
+        window.Open(new EntityId(14));
+        yield return null;
+        yield return null;
+        const string longest = "Take out Grotto Crawler Card · 600 coins";
+        Button longestButton = window.GetComponentsInChildren<Button>().Single(button => button.name == longest);
+        AssertFitsItsRow(longestButton.GetComponentInChildren<TMP_Text>(), 1);
+        string shown = window.Text;
+
+        Assert.That(Press(window, "Take out Spark Wisp Card · 200 coins"), Is.True, window.Text);
+        yield return null;
+        var removals = new List<(EntityId, long, byte, string)>();
+        foreach (byte[] payload in recording.SentOf(MessageOpcode.RemoveCard))
+        {
+            Assert.That(RemoveCard.TryRead(payload, out RemoveCard? removal), Is.True);
+            removals.Add((removal!.Npc, removal.InventoryItem, removal.Slot, removal.Card.Value));
+        }
+
+        Assert.That(
+            shown,
+            Does.EndWith(
+                "\nCards\nKeen Arcane Iron Sword [2]\nTake out Forest Crawler Card · 200 coins"
+                + "\nTake out Spark Wisp Card · 200 coins\nShelled Monarch Mantle [1]\n" + longest),
+            "the worn sword and the gel left out");
+        Assert.That(removals, Is.EqualTo(new[] { (new EntityId(14), 3L, (byte)2, Arcane) }), "sent at one press");
+    }
+
     // The Smith's section (Prototype Content §2): each unworn row its tables name, below the last level, with the next
     // level's chance and cost and the ore held; a press at 100 % refines, and below it the first press only arms the
     // refine and says what a failure does.

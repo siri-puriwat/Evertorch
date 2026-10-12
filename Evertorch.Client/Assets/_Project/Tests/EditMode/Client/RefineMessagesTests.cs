@@ -120,6 +120,10 @@ public sealed class RefineMessagesTests
                     "Refined Iron Sword to +7.", "The refine failed: +6 Iron Sword was destroyed.",
                     "The refine failed: +6 Iron Sword fell to +5.", "The refine failed: +6 Iron Sword is unchanged."
                 }));
+        Assert.That(
+            RefineMessages.Describe(new RefineOutcome(5, Sword, 6, 0, RefineOutcomeKind.Destroyed), content, true),
+            Is.EqualTo("The refine failed: +6 Iron Sword was destroyed. Its cards are back in your bag."),
+            "a carded row's cards came back");
     }
 
     [Test]

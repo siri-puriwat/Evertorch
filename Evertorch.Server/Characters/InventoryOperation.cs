@@ -56,13 +56,18 @@ public sealed class InventoryOperation
     /// </summary>
     public ReportedRow? Reported { get; }
 
-    /// <summary>The item a use consumes, or a purchase or a sale moves; default for every other kind.</summary>
+    /// <summary>
+    ///     The item a use consumes, a purchase or a sale moves, or the card an insertion or a removal moves; default for
+    ///     every other kind.
+    /// </summary>
     public ItemDefinitionId Item { get; }
 
-    /// <summary>How many a purchase or a sale moves; 0 for every other kind.</summary>
+    /// <summary>How many a purchase or a sale moves, or the slot a removal empties; 0 for every other kind.</summary>
     public int Quantity { get; }
 
-    /// <summary>The coins a purchase or a refine costs, or a sale or a turn-in fetches; 0 for every other kind.</summary>
+    /// <summary>
+    ///     The coins a purchase, a refine, or a removal costs, or a sale or a turn-in fetches; 0 for every other kind.
+    /// </summary>
     public long Coins { get; }
 
     /// <summary>The quest a turn-in completes; default for every other kind.</summary>

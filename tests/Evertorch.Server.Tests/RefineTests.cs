@@ -19,24 +19,28 @@ public sealed class RefineTests
     private const string Smith = "npc.smith";
     private const string Quartermaster = "npc.quartermaster";
     private const string Sword = "item.weapon.training_sword";
+    private const string IronSword = "item.weapon.iron_sword";
+    private const string Keen = "item.card.forest_crawler";
+    private const string Bane = "item.card.gloom_wisp";
     private const string Ember = "item.material.emberstone";
     private const string Gel = "item.material.slime_gel";
     private const string WeaponSlot = "Weapon";
 
-    // Character 1 holds a training sword at the level, two Emberstones, and the coins, enters, and stands 2 m west of
-    // the NPC.
+    // Character 1 holds a training sword, or the item named, at the level, two Emberstones, and the coins, enters, and
+    // stands 2 m west of the NPC.
     private static (TestServer Server, ConnectionId Player, long Sword) Enter(
         ScriptedRandom random,
         int level = 0,
         long coins = 100,
         int ore = 2,
         string npc = Smith,
-        Action<InMemoryGameStore, long>? prepare = null)
+        Action<InMemoryGameStore, long>? prepare = null,
+        string item = Sword)
     {
         var server = new TestServer(withNpcs: true, refineRandom: random);
         ConnectionId player = server.Connect();
         server.SignInWithCharacter(player, 1);
-        server.Store.GiveItems(1, Sword, 1, 1, 5);
+        server.Store.GiveItems(1, item, 1, 1, 5);
         long sword = server.Store.Stored(1).Items.Single().Id;
         server.Store.Refine(1, sword, level);
         if (ore > 0)
@@ -219,6 +223,54 @@ public sealed class RefineTests
         Assert.That(server.Store.RefineAttempts.Values.Single().Outcome, Is.EqualTo(RefineOutcomeKind.Refined));
     }
 
+    // At a safe level nothing can be destroyed, so a full bag refines a carded row.
+    [Test]
+    public void Refine_OfACardedRowAtASafeLevel_NeedsNoRoomForItsCards()
+    {
+        var random = new ScriptedRandom(0);
+        (TestServer server, ConnectionId player, long sword) = Enter(
+            random,
+            0,
+            1000,
+            prepare: (store, row) =>
+            {
+                store.Card(1, row, Keen, Bane);
+                store.GiveItems(1, Gel, 98, 1, 5);
+            },
+            item: IronSword);
+
+        server.SendRefine(player, server.NpcOf(Smith).Id, sword, 0, 1);
+        CommandRejectionReason answer = Answer(server, player);
+
+        Assert.That(answer, Is.EqualTo(CommandRejectionReason.None));
+        Assert.That(Outcomes(server, player).Single().Outcome, Is.EqualTo(RefineOutcomeKind.Refined));
+    }
+
+    // A carded Iron Sword past its safe level, in a bag of 100 rows: once it and its row are gone, Keen takes the row it
+    // leaves and Bane has none, so the refine is refused before its draw, whatever the draw would be (Gameplay Systems
+    // §11.6, §11.7).
+    [Test]
+    public void Refine_OfACardedRowItCouldDestroy_WithoutRoomForItsCards_IsRefusedWithFive_AndDrawsNothing()
+    {
+        var random = new ScriptedRandom(0);
+        (TestServer server, ConnectionId player, long sword) = Enter(
+            random,
+            7,
+            1000,
+            prepare: (store, row) =>
+            {
+                store.Card(1, row, Keen, Bane);
+                store.GiveItems(1, Gel, 98, 1, 5);
+            },
+            item: IronSword);
+
+        server.SendRefine(player, server.NpcOf(Smith).Id, sword, 7, 1);
+        CommandRejectionReason answer = Answer(server, player);
+
+        Assert.That(answer, Is.EqualTo(CommandRejectionReason.InventoryFull));
+        Assert.That(random.Calls, Is.Zero, "a refused command draws nothing");
+    }
+
     // Past the training table's safe level a draw at or above the chance fails, and the table destroys the item.
     [Test]
     public void Refine_PastTheSafeLevel_WithAFailingDraw_DestroysTheRow_AndSaysSo()
@@ -236,6 +288,38 @@ public sealed class RefineTests
         Assert.That(
             (outcome.LevelBefore, outcome.LevelAfter, outcome.Outcome),
             Is.EqualTo(((byte)7, (byte)0, RefineOutcomeKind.Destroyed)));
+    }
+
+    // Owner decision 13: a destroyed row's cards come back to the bag, each in a row of its own here, logged after the
+    // refine by CardsReturned (Gameplay Systems §11.6).
+    [Test]
+    public void Refine_ThatDestroysACardedRow_ReturnsItsCardsToTheBag_AndLogsThem()
+    {
+        var random = new ScriptedRandom(99);
+        (TestServer server, ConnectionId player, long sword) = Enter(
+            random,
+            7,
+            1000,
+            prepare: (store, row) => store.Card(1, row, Keen, Bane),
+            item: IronSword);
+        CharacterSession character = server.SessionOf(player).Character!;
+
+        server.SendRefine(player, server.NpcOf(Smith).Id, sword, 7, 1);
+        CommandRejectionReason answer = Answer(server, player);
+
+        Assert.That(answer, Is.EqualTo(CommandRejectionReason.None));
+        Assert.That(Outcomes(server, player).Single().Outcome, Is.EqualTo(RefineOutcomeKind.Destroyed));
+        Assert.That(
+            character.Inventory.Rows.Select(row => $"{row.Item.Value} x {row.Quantity}"),
+            Is.EquivalentTo(new[] { $"{Ember} x 1", $"{Keen} x 1", $"{Bane} x 1" }));
+        Assert.That(
+            server.Store.CardChanges.Values.Single().Select(change => (change.Change, change.Card, change.Slot)),
+            Is.EqualTo(new[] { ("return", Keen, 1), ("return", Bane, 2) }));
+        Assert.That(
+            server.ItemActionLog.Entries.Where(entry => entry.EventId.Id is 1034 or 1041)
+                .Select(entry =>
+                    entry.EventId.Id == 1041 ? $"{entry.Fields["Item"]}: {entry.Fields["Cards"]}" : "1034"),
+            Is.EqualTo(new[] { "1034", $"{IronSword}: {Keen}, {Bane}" }));
     }
 
     // The review's finding (session task T17): a refine the writer cannot queue, its queue full, is refused with 6

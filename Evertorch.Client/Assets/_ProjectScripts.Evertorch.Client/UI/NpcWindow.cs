@@ -428,6 +428,11 @@ public sealed class NpcWindow : MonoBehaviour
             ListRefinable(world.RefineTablesOf(Npc), inventory, content);
         }
 
+        if (services != null && services.RemovesCards)
+        {
+            ListCards(world.CardRemovalFeesOf(Npc), inventory, content);
+        }
+
         if (shop != null)
         {
             ListForSale(shop, content);
@@ -800,6 +805,65 @@ public sealed class NpcWindow : MonoBehaviour
         {
             AddLine("Nothing to refine");
         }
+    }
+
+    // The Smith's Cards section (Gameplay Systems §11.7): each unworn carded row by its name, and for each of its
+    // cards a press that takes it out for the fee the Smith listed. A card the Smith lists no fee for stays.
+    private void ListCards(IReadOnlyList<CardRemovalFee> fees, ClientInventory inventory, ClientContent? content)
+    {
+        AddHeading("Cards");
+        if (!inventory.IsCurrent || fees.Count == 0)
+        {
+            AddLine("Waiting for the server");
+            return;
+        }
+
+        GameClient client = m_client!;
+        EntityId npc = Npc;
+        int listed = 0;
+        foreach (InventoryEntry row in inventory.Rows)
+        {
+            if (row.Slot != EquipmentSlot.None || row.Cards.Count == 0)
+            {
+                continue;
+            }
+
+            AddLine(ShopMessages.RowName(content, row.Item, row.RefineLevel, row.Cards));
+            long inventoryItem = row.InventoryItem;
+            for (int index = 0; index < row.Cards.Count; index++)
+            {
+                ItemDefinitionId card = row.Cards[index];
+                byte slot = (byte)(index + 1);
+                if (TryFeeOf(fees, card, out uint fee))
+                {
+                    AddButton(
+                        CardMessages.TakeOut(content, card, fee),
+                        () => client.RemoveCardAt(npc, inventoryItem, slot, card));
+                }
+            }
+
+            listed++;
+        }
+
+        if (listed == 0)
+        {
+            AddLine("No cards to take out");
+        }
+    }
+
+    private static bool TryFeeOf(IReadOnlyList<CardRemovalFee> fees, ItemDefinitionId card, out uint fee)
+    {
+        foreach (CardRemovalFee entry in fees)
+        {
+            if (entry.Card == card)
+            {
+                fee = entry.Fee;
+                return true;
+            }
+        }
+
+        fee = 0;
+        return false;
     }
 
     private static RefineTable? TableFor(IReadOnlyList<RefineTable> tables, ItemDefinitionId item)

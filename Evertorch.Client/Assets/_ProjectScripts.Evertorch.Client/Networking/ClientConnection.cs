@@ -1080,6 +1080,34 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
     }
 
     /// <summary>
+    ///     Takes <paramref name="card" />, the card the client shows at <paramref name="slot" /> of the bag's row
+    ///     <paramref name="inventoryItem" />, out at the Smith <paramref name="npc" />; 0 when nothing was sent.
+    /// </summary>
+    public uint SendRemoveCard(EntityId npc, long inventoryItem, byte slot, ItemDefinitionId card)
+    {
+        if (State != ClientConnectionState.InWorld
+            || npc.Value <= 0
+            || inventoryItem <= 0
+            || slot < 1
+            || slot > ProtocolLimits.MaxCardsPerItem
+            || card == default)
+        {
+            return 0;
+        }
+
+        uint sequence = NextCommandSequence();
+        var message = new RemoveCard(npc, inventoryItem, slot, card, sequence);
+        SendRouted(MessageOpcode.RemoveCard, message.Write(m_sendBuffer));
+        if (m_cardSequences.Count >= MaxEquipSequences)
+        {
+            m_cardSequences.Clear();
+        }
+
+        m_cardSequences[sequence] = new CardRequest(0, card, inventoryItem, slot);
+        return sequence;
+    }
+
+    /// <summary>
     ///     The card command <paramref name="commandSequence" /> numbered, so a refusal can say what was refused.
     /// </summary>
     public bool TryGetCardSequence(uint commandSequence, out CardRequest request)

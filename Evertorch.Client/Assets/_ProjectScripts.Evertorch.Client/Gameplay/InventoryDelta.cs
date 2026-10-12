@@ -20,7 +20,10 @@ public sealed class InventoryDelta
         byte refineLevel = 0,
         IReadOnlyList<ItemDefinitionId>? cards = null,
         ItemDefinitionId insertedCard = default,
-        InventoryEntry insertedInto = default)
+        InventoryEntry insertedInto = default,
+        ItemDefinitionId removedCard = default,
+        InventoryEntry removedFrom = default,
+        IReadOnlyList<InventoryEntry>? emptied = null)
     {
         CoinsBefore = coinsBefore;
         CoinsAfter = coinsAfter;
@@ -29,6 +32,9 @@ public sealed class InventoryDelta
         Cards = cards ?? Array.Empty<ItemDefinitionId>();
         InsertedCard = insertedCard;
         InsertedInto = insertedInto;
+        RemovedCard = removedCard;
+        RemovedFrom = removedFrom;
+        Emptied = emptied ?? Array.Empty<InventoryEntry>();
     }
 
     public uint CoinsBefore { get; }
@@ -56,5 +62,20 @@ public sealed class InventoryDelta
     ///     The row whose cards grew, as the change left it.
     /// </summary>
     public InventoryEntry InsertedInto { get; }
+
+    /// <summary>
+    ///     The card that left a row's cards, which a removal's words name; default when no row's cards shrank.
+    /// </summary>
+    public ItemDefinitionId RemovedCard { get; }
+
+    /// <summary>
+    ///     The row whose cards shrank, as the client held it before the change.
+    /// </summary>
+    public InventoryEntry RemovedFrom { get; }
+
+    /// <summary>
+    ///     The rows the change emptied, as the client held them: a destroyed row's cards, which its refine's words name.
+    /// </summary>
+    public IReadOnlyList<InventoryEntry> Emptied { get; }
 }
 }

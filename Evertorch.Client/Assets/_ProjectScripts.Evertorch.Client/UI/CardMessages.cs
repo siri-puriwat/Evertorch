@@ -5,8 +5,8 @@ using Evertorch.Protocol;
 namespace Evertorch.Client
 {
 /// <summary>
-///     The words of the cards (Prototype Content §2): what a card fits, the free slots of a row it fits, an insertion's
-///     line, and the refusals of an insertion, chosen from the client's own rows.
+///     The words of the cards (Prototype Content §2): what a card fits, the free slots of a row it fits, the Smith's
+///     rows, an insertion's and a removal's lines, and their refusals, chosen from the client's own rows.
 /// </summary>
 public static class CardMessages
 {
@@ -51,6 +51,40 @@ public static class CardMessages
     {
         return $"{ShopMessages.ItemName(content, card)} inserted: "
             + $"{ShopMessages.RowName(content, row.Item, row.RefineLevel, row.Cards)}.";
+    }
+
+    /// <summary>
+    ///     "Take out Forest Crawler Card · 200 coins", a row of the Smith's Cards section.
+    /// </summary>
+    public static string TakeOut(ClientContent? content, ItemDefinitionId card, uint fee)
+    {
+        return $"Take out {ShopMessages.ItemName(content, card)} · {ShopMessages.Coins(fee)}";
+    }
+
+    /// <summary>
+    ///     "Took Forest Crawler Card out of Keen Iron Sword [2] for 200 coins.", the row named as it was.
+    /// </summary>
+    public static string Removed(ClientContent? content, ItemDefinitionId card, InventoryEntry row, long fee)
+    {
+        return $"Took {ShopMessages.ItemName(content, card)} out of "
+            + $"{ShopMessages.RowName(content, row.Item, row.RefineLevel, row.Cards)} for {ShopMessages.Coins(fee)}.";
+    }
+
+    /// <summary>
+    ///     The words for a refused removal of <paramref name="request" />: a worn row asks to be taken off first, and any
+    ///     other reason reads as any refusal.
+    /// </summary>
+    public static string DescribeRemoveRefusal(
+        CardRequest request,
+        IReadOnlyList<InventoryEntry> rows,
+        CommandRejectionReason reason,
+        ClientContent? content)
+    {
+        return reason == CommandRejectionReason.NotAllowedNow
+            && TryFind(rows, request.InventoryItem, out InventoryEntry row)
+            && row.Slot != EquipmentSlot.None
+                ? $"Take off {ShopMessages.RowName(content, row.Item, row.RefineLevel, row.Cards)} first."
+                : RejectionMessages.Describe(reason, false);
     }
 
     /// <summary>

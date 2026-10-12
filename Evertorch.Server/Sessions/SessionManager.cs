@@ -1096,6 +1096,13 @@ public sealed class SessionManager : ITickPhase
                 command.CardItem,
                 command.InventoryItem,
                 command.CommandSequence),
+            InboundEventKind.RemoveCard => m_items.TryRemoveCard(
+                session,
+                command.Target,
+                command.InventoryItem,
+                command.CardSlot,
+                command.Item,
+                command.CommandSequence),
             _ => CommandRejectionReason.NotAllowedNow
         };
     }

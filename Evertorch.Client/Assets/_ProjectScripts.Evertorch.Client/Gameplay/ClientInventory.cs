@@ -126,6 +126,9 @@ public sealed class ClientInventory
         IReadOnlyList<ItemDefinitionId> cards = Array.Empty<ItemDefinitionId>();
         ItemDefinitionId insertedCard = default;
         InventoryEntry insertedInto = default;
+        ItemDefinitionId removedCard = default;
+        InventoryEntry removedFrom = default;
+        var emptied = new List<InventoryEntry>();
         foreach (InventoryEntry entry in change.Changes)
         {
             int index = m_rows.FindIndex(row => row.InventoryItem == entry.InventoryItem);
@@ -152,11 +155,19 @@ public sealed class ClientInventory
                 insertedInto = entry;
             }
 
+            // A row still held whose cards shrank gave one up at the Smith, which the words name with the row as it was.
+            if (index >= 0 && entry.Quantity > 0 && entry.Cards.Count < m_rows[index].Cards.Count)
+            {
+                removedCard = FirstMissing(m_rows[index].Cards, entry.Cards);
+                removedFrom = m_rows[index];
+            }
+
             Count(units, entry.Item, entry.Quantity);
             if (entry.Quantity == 0)
             {
                 if (index >= 0)
                 {
+                    emptied.Add(m_rows[index]);
                     m_rows.RemoveAt(index);
                 }
             }
@@ -174,8 +185,33 @@ public sealed class ClientInventory
         Coins = change.Coins;
         Changed?.Invoke();
         ChangeApplied?.Invoke(
-            new InventoryDelta(coinsBefore, Coins, units, refineLevel, cards, insertedCard, insertedInto));
+            new InventoryDelta(
+                coinsBefore,
+                Coins,
+                units,
+                refineLevel,
+                cards,
+                insertedCard,
+                insertedInto,
+                removedCard,
+                removedFrom,
+                emptied));
         return false;
+    }
+
+    // The later cards move down a slot, so the first slot whose card differs held the one taken out.
+    private static ItemDefinitionId FirstMissing(IReadOnlyList<ItemDefinitionId> held,
+        IReadOnlyList<ItemDefinitionId> now)
+    {
+        for (int slot = 0; slot < held.Count; slot++)
+        {
+            if (slot >= now.Count || held[slot] != now[slot])
+            {
+                return held[slot];
+            }
+        }
+
+        return default;
     }
 
     private static void Count(Dictionary<ItemDefinitionId, long> units, ItemDefinitionId item, long added)

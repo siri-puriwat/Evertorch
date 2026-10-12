@@ -52,6 +52,7 @@ public sealed class ChatPanel : MonoBehaviour
     private ClientWorld? m_watched;
     private IReadOnlyList<QuestLogEntry>? m_lastQuests;
     private IReadOnlyList<SkillListEntry>? m_lastSkills;
+    private IReadOnlyList<InventoryEntry> m_lastEmptied = new InventoryEntry[0];
     private GameObject? m_panel;
     private RectTransform? m_panelRect;
     private TMP_InputField? m_input;
@@ -389,12 +390,11 @@ public sealed class ChatPanel : MonoBehaviour
             && m_client.Connection != null
             && m_client.Connection.TryGetCardSequence(rejected.CommandSequence, out CardRequest card))
         {
+            IReadOnlyList<InventoryEntry> rows = m_watched != null ? m_watched.Inventory.Rows : new InventoryEntry[0];
             Add(
-                CardMessages.DescribeInsertRefusal(
-                    card,
-                    m_watched != null ? m_watched.Inventory.Rows : new InventoryEntry[0],
-                    rejected.Reason,
-                    m_client.Content));
+                card.IsRemoval
+                    ? CardMessages.DescribeRemoveRefusal(card, rows, rejected.Reason, m_client.Content)
+                    : CardMessages.DescribeInsertRefusal(card, rows, rejected.Reason, m_client.Content));
             return;
         }
 
@@ -507,9 +507,21 @@ public sealed class ChatPanel : MonoBehaviour
     private void OnChangeApplied(InventoryDelta delta)
     {
         ClientContent? content = m_client != null ? m_client.Content : null;
+        m_lastEmptied = delta.Emptied;
         if (delta.InsertedCard != default)
         {
             Add(CardMessages.Inserted(content, delta.InsertedCard, delta.InsertedInto));
+            return;
+        }
+
+        if (delta.RemovedCard != default)
+        {
+            Add(
+                CardMessages.Removed(
+                    content,
+                    delta.RemovedCard,
+                    delta.RemovedFrom,
+                    (long)delta.CoinsBefore - delta.CoinsAfter));
             return;
         }
 
@@ -525,9 +537,17 @@ public sealed class ChatPanel : MonoBehaviour
         Add(StorageMessages.Describe(delta, m_client != null ? m_client.Content : null));
     }
 
+    // The server sends a refine's bag change just before its outcome, so the rows that change emptied say whether a
+    // destroyed row held cards (Network Protocol §9).
     private void OnRefineOutcome(RefineOutcome outcome)
     {
-        Add(RefineMessages.Describe(outcome, m_client != null ? m_client.Content : null));
+        bool hadCards = false;
+        foreach (InventoryEntry row in m_lastEmptied)
+        {
+            hadCards |= row.InventoryItem == outcome.InventoryItem && row.Cards.Count > 0;
+        }
+
+        Add(RefineMessages.Describe(outcome, m_client != null ? m_client.Content : null, hadCards));
     }
 
     private void OnMarketNotice(MarketEvent notice)

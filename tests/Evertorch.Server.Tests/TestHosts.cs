@@ -70,14 +70,23 @@ internal static class TestHosts
     }
 
     /// <summary>
-    ///     Gives combat and drops their own random sources. The host draws every outcome from one source, and over
-    ///     real sockets the network's timing decides which draw each roll gets, so a seed alone cannot script a fight.
-    ///     Monster placement and AI keep the server's own source.
+    ///     Gives combat and drops their own random sources, and a refine's draw too when one is given. The host draws
+    ///     every outcome from one source, and over real sockets the network's timing decides which draw each roll gets,
+    ///     so a seed alone cannot script a fight. Monster placement and AI keep the server's own source.
     /// </summary>
-    public static void ScriptOutcomes(HostApplicationBuilder builder, IRandomSource combat, IRandomSource drops)
+    public static void ScriptOutcomes(
+        HostApplicationBuilder builder,
+        IRandomSource combat,
+        IRandomSource drops,
+        IRandomSource? refines = null)
     {
         builder.Services.AddSingleton(services => ActivatorUtilities.CreateInstance<ItemDropSystem>(services, drops));
         builder.Services.AddSingleton(services => ActivatorUtilities.CreateInstance<CombatSystem>(services, combat));
+        if (refines != null)
+        {
+            builder.Services.AddSingleton(services =>
+                ActivatorUtilities.CreateInstance<ItemActionSystem>(services, refines));
+        }
     }
 
     // Appended after the harness's own switches, so they win; the tests' hash cost goes first, so a test may raise it.

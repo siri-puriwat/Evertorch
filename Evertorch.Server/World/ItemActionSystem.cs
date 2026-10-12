@@ -55,6 +55,9 @@ public sealed class ItemActionSystem : ITickPhase
     private const string RefineLookup = "refine lookup";
     private const string CardInsertOperation = "card insert";
     private const string CardInsertLookup = "card insert lookup";
+    private const string CardRemoveOperation = "card remove";
+    private const string CardRemoveLookup = "card remove lookup";
+    private const string CardRemovalCoins = "card removal";
     private const string Deposited = "deposit";
     private const string Withdrawn = "withdraw";
     private const int MillisecondsPerSecond = 1000;
@@ -135,6 +138,20 @@ public sealed class ItemActionSystem : ITickPhase
             LogLevel.Information,
             new EventId(1037, "CardInserted"),
             "Character {Character} inserted {Card} into row {Row} ({Item}) at slot {Slot} (operation {OperationId}).");
+
+    // A log message takes six values, so the removed card's item is the operation's to name, by its card_changes row.
+    private static readonly Action<ILogger, long, string, long, int, long, Guid, Exception?> LogCardRemoved =
+        LoggerMessage.Define<long, string, long, int, long, Guid>(
+            LogLevel.Information,
+            new EventId(1038, "CardRemoved"),
+            "Character {Character} took {Card} out of row {Row} at slot {Slot} for {Fee} coins (operation "
+            + "{OperationId}).");
+
+    private static readonly Action<ILogger, long, string, string, Guid, Exception?> LogCardsReturned =
+        LoggerMessage.Define<long, string, string, Guid>(
+            LogLevel.Information,
+            new EventId(1041, "CardsReturned"),
+            "Character {Character} got the cards of the destroyed {Item} back: {Cards} (operation {OperationId}).");
 
     private static readonly Action<ILogger, long, string, int, int, string, Guid, Exception?> LogRefined =
         LoggerMessage.Define<long, string, int, int, string, Guid>(
@@ -609,6 +626,66 @@ public sealed class ItemActionSystem : ITickPhase
         return TryCommit(session, operation, (store, cancellation) => store.CommitJobChangeAsync(commit, cancellation));
     }
 
+    // Each card's stack limit, which its return to the bag needs; a card the content no longer holds as an item has
+    // none, and the store refuses the refine.
+    private Dictionary<string, int> CardLimitsOf(IReadOnlyList<ItemDefinitionId> cards)
+    {
+        var limits = new Dictionary<string, int>(StringComparer.Ordinal);
+        foreach (ItemDefinitionId card in cards)
+        {
+            if (m_content.Items.TryGetValue(card, out ItemDefinition? definition))
+            {
+                limits[card.Value] = definition.StackLimit;
+            }
+        }
+
+        return limits;
+    }
+
+    // As the store returns them: the bag after the destroyed row and an emptied ore leave, each card merged into a stack
+    // of it below its limit or in a row of its own within the bag's rows.
+    private static bool HasRoomForCards(
+        CharacterInventory inventory,
+        InventoryEntry destroyed,
+        InventoryEntry ore,
+        int oreQuantity,
+        IReadOnlyDictionary<string, int> limits)
+    {
+        var bag = new List<(ItemDefinitionId Item, long Quantity)>();
+        foreach (InventoryEntry row in inventory.Rows)
+        {
+            if (row.InventoryItem != destroyed.InventoryItem
+                && !(row.InventoryItem == ore.InventoryItem && ore.Quantity == oreQuantity))
+            {
+                bag.Add((row.Item, row.Quantity));
+            }
+        }
+
+        foreach (ItemDefinitionId card in destroyed.Cards)
+        {
+            if (!limits.TryGetValue(card.Value, out int limit))
+            {
+                return false;
+            }
+
+            int stack = limit == 1 ? -1 : bag.FindIndex(held => held.Item == card && held.Quantity < limit);
+            if (stack >= 0)
+            {
+                bag[stack] = (card, bag[stack].Quantity + 1);
+            }
+            else if (bag.Count < PickupSystem.MaxInventoryRows)
+            {
+                bag.Add((card, 1));
+            }
+            else
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     // A stackable item merges into its one row; any other takes a new row.
     private static bool HasRoomFor(CharacterInventory inventory, ItemDefinition item, uint quantity)
     {
@@ -651,6 +728,7 @@ public sealed class ItemActionSystem : ITickPhase
             InventoryOperationKind.MarketCollect => InboundEventKind.MarketCollect,
             InventoryOperationKind.Refine => InboundEventKind.RefineItem,
             InventoryOperationKind.InsertCard => InboundEventKind.InsertCard,
+            InventoryOperationKind.RemoveCard => InboundEventKind.RemoveCard,
             _ => throw NotAnItemAction(operation)
         };
     }
@@ -673,6 +751,7 @@ public sealed class ItemActionSystem : ITickPhase
             InventoryOperationKind.MarketCollect => MarketCollectOperation,
             InventoryOperationKind.Refine => RefineOperation,
             InventoryOperationKind.InsertCard => CardInsertOperation,
+            InventoryOperationKind.RemoveCard => CardRemoveOperation,
             _ => throw NotAnItemAction(operation)
         };
     }
@@ -695,6 +774,7 @@ public sealed class ItemActionSystem : ITickPhase
             InventoryOperationKind.MarketCollect => MarketCollectLookup,
             InventoryOperationKind.Refine => RefineLookup,
             InventoryOperationKind.InsertCard => CardInsertLookup,
+            InventoryOperationKind.RemoveCard => CardRemoveLookup,
             _ => throw NotAnItemAction(operation)
         };
     }
@@ -753,6 +833,17 @@ public sealed class ItemActionSystem : ITickPhase
             return CommandRejectionReason.NotEnoughCoins;
         }
 
+        // A carded row the draw could destroy needs room for its cards first, so no refusal hangs on the outcome
+        // (Gameplay Systems §11.6).
+        Dictionary<string, int> cardLimits = CardLimitsOf(row.Cards);
+        if (row.Cards.Count > 0
+            && table.OnFailure == RefineFailure.Destroy
+            && table.Steps[row.RefineLevel].Chance < RefineRules.DrawRange
+            && !HasRoomForCards(character.Inventory, row, ore, table.MaterialQuantity, cardLimits))
+        {
+            return CommandRejectionReason.InventoryFull;
+        }
+
         // The draw is spent only on a command the writer can take (Gameplay Systems §11.6).
         if (!m_persistence.CanEnqueue)
         {
@@ -772,7 +863,8 @@ public sealed class ItemActionSystem : ITickPhase
                 row.Item,
                 row.RefineLevel,
                 resolution.Level,
-                resolution.Outcome));
+                resolution.Outcome,
+                row.Cards));
         var commit = new RefineCommit(
             operation.OperationId,
             character.Character.Value,
@@ -785,8 +877,90 @@ public sealed class ItemActionSystem : ITickPhase
             ore.Item.Value,
             table.MaterialQuantity,
             coins,
-            m_time.GetUtcNow().UtcDateTime);
+            m_time.GetUtcNow().UtcDateTime,
+            cardLimits,
+            PickupSystem.MaxInventoryRows);
         return TryCommit(session, operation, (store, cancellation) => store.CommitRefineAsync(commit, cancellation));
+    }
+
+    /// <summary>
+    ///     Checks a removal at the Smith <paramref name="npc" /> of the card <paramref name="card" /> at
+    ///     <paramref name="slot" /> of the bag's row <paramref name="inventoryItem" /> (Gameplay Systems §11.7, in order)
+    ///     and, when it passes, queues its commit. The caller has already refused a dead, leaving, or trading character.
+    /// </summary>
+    public CommandRejectionReason TryRemoveCard(
+        ClientSession session,
+        EntityId npc,
+        long inventoryItem,
+        int slot,
+        ItemDefinitionId card,
+        uint commandSequence)
+    {
+        CharacterSession character = session.Character!;
+        if (character.HasInventoryWork)
+        {
+            return CommandRejectionReason.ItemActionInFlight;
+        }
+
+        CommandRejectionReason reach = NpcReach.Check(session, npc, m_npcReach, out NpcEntity? smith);
+        if (reach != CommandRejectionReason.None)
+        {
+            return reach;
+        }
+
+        if (!smith!.Definition.Refines || !character.Inventory.TryGetRow(inventoryItem, out InventoryEntry row))
+        {
+            return CommandRejectionReason.InvalidTarget;
+        }
+
+        if (row.Slot != EquipmentSlot.None)
+        {
+            return CommandRejectionReason.NotAllowedNow;
+        }
+
+        if (slot < 1 || slot > row.Cards.Count || row.Cards[slot - 1] != card)
+        {
+            return CommandRejectionReason.InvalidTarget;
+        }
+
+        // A card the content no longer holds as a card has no fee and no stack, so it stays where it is.
+        if (!m_content.Items.TryGetValue(card, out ItemDefinition? definition) || definition.Card == null)
+        {
+            return CommandRejectionReason.NotAllowedNow;
+        }
+
+        long fee = definition.Card.RemovalFee;
+        if (character.Inventory.Coins < fee)
+        {
+            return CommandRejectionReason.NotEnoughCoins;
+        }
+
+        if (!HasRoomFor(character.Inventory, definition, 1))
+        {
+            return CommandRejectionReason.InventoryFull;
+        }
+
+        var operation = new InventoryOperation(
+            InventoryOperationKind.RemoveCard,
+            commandSequence,
+            Guid.NewGuid(),
+            reported: new ReportedRow(inventoryItem, row.Item.Value),
+            item: card,
+            quantity: slot,
+            coins: fee);
+        var commit = new RemoveCardCommit(
+            operation.OperationId,
+            character.Character.Value,
+            inventoryItem,
+            row.Item.Value,
+            slot,
+            card.Value,
+            fee,
+            definition.StackLimit,
+            PickupSystem.MaxInventoryRows,
+            m_time.GetUtcNow().UtcDateTime);
+        return TryCommit(session, operation,
+            (store, cancellation) => store.CommitRemoveCardAsync(commit, cancellation));
     }
 
     /// <summary>
@@ -1849,6 +2023,7 @@ public sealed class ItemActionSystem : ITickPhase
                 {
                     InventoryOperationKind.Refine => RefineRefusalOf(result.Status),
                     InventoryOperationKind.InsertCard => CardRefusalOf(result.Status),
+                    InventoryOperationKind.RemoveCard => CardRefusalOf(result.Status),
                     _ => CommandRejectionReason.InvalidTarget
                 });
             return;
@@ -1918,6 +2093,9 @@ public sealed class ItemActionSystem : ITickPhase
             case InventoryOperationKind.InsertCard:
                 CardInserted(character, operation);
                 break;
+            case InventoryOperationKind.RemoveCard:
+                CardRemoved(character, operation);
+                break;
             default:
                 throw NotAnItemAction(operation);
         }
@@ -1932,17 +2110,21 @@ public sealed class ItemActionSystem : ITickPhase
             InventoryStatus.MaterialShort => CommandRejectionReason.RequirementNotMet,
             InventoryStatus.RowWorn => CommandRejectionReason.NotAllowedNow,
             InventoryStatus.NotEnoughCoins => CommandRejectionReason.NotEnoughCoins,
+            InventoryStatus.InventoryFull => CommandRejectionReason.InventoryFull,
             _ => CommandRejectionReason.InvalidTarget
         };
     }
 
-    // A worn row or one without a free slot is 3; a row gone or changed is 1 (Gameplay Systems §11.7).
+    // A worn row or one without a free slot is 3, coins short 10, a bag without room 5; a row gone or changed is 1
+    // (Gameplay Systems §11.7).
     private static CommandRejectionReason CardRefusalOf(InventoryStatus status)
     {
         return status switch
         {
             InventoryStatus.RowWorn => CommandRejectionReason.NotAllowedNow,
             InventoryStatus.NoFreeSlot => CommandRejectionReason.NotAllowedNow,
+            InventoryStatus.NotEnoughCoins => CommandRejectionReason.NotEnoughCoins,
+            InventoryStatus.InventoryFull => CommandRejectionReason.InventoryFull,
             _ => CommandRejectionReason.InvalidTarget
         };
     }
@@ -1963,6 +2145,21 @@ public sealed class ItemActionSystem : ITickPhase
             operation.OperationId,
             null);
         m_instruments.RecordCardInserted();
+    }
+
+    private void CardRemoved(CharacterSession character, InventoryOperation operation)
+    {
+        LogCardRemoved(
+            m_logger,
+            character.Character.Value,
+            operation.Item.Value,
+            operation.Reported!.Id,
+            operation.Quantity,
+            operation.Coins,
+            operation.OperationId,
+            null);
+        m_instruments.RecordCardRemoved();
+        m_instruments.RecordCoins(CardRemovalCoins, operation.Coins);
     }
 
     // The refiner alone hears the outcome, after its bag's change, a lost answer's too: the outcome is the operation's
@@ -1992,6 +2189,17 @@ public sealed class ItemActionSystem : ITickPhase
             RefineOutcomes.WordOf(attempt.Outcome),
             operation.OperationId,
             null);
+        if (attempt.Outcome == RefineOutcomeKind.Destroyed && attempt.Cards.Count > 0)
+        {
+            LogCardsReturned(
+                m_logger,
+                character.Character.Value,
+                attempt.Item.Value,
+                string.Join(", ", attempt.Cards.Select(card => card.Value)),
+                operation.OperationId,
+                null);
+        }
+
         m_instruments.RecordRefine(attempt.Outcome);
         m_instruments.RecordCoins(RefineOperation, operation.Coins);
     }

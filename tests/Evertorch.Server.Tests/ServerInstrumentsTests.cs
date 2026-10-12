@@ -392,6 +392,31 @@ public sealed class ServerInstrumentsTests
         Assert.That(Single(recorder, "evertorch.cards.inserted"), Is.EqualTo(1));
     }
 
+    // System Architecture §10: each committed removal counts one card, and its fee is spent as `card removal`.
+    [Test]
+    public void CardRemoval_CountsTheCard_AndItsFeeAsSpent()
+    {
+        var server = new TestServer(withNpcs: true);
+        using var recorder = new MeterRecorder(server.Instruments.Meter);
+        NpcEntity smith = server.NpcOf("npc.smith");
+        ConnectionId player = server.Connect();
+        server.SignInWithCharacter(player, 1);
+        server.Store.GiveItems(1, "item.weapon.iron_sword", 1, 1, 5);
+        long sword = server.Store.Stored(1).Items.Single().Id;
+        server.Store.Card(1, sword, "item.card.forest_crawler");
+        server.Store.Edit(1, coins: 500);
+        server.SendEnterWorld(player, 1);
+        server.TickUntil(() => server.SessionOf(player).State == SessionState.InWorld);
+        server.Place(player, smith.Position.X + 2f, smith.Position.Z);
+        server.Tick(2);
+
+        server.SendRemoveCard(player, smith.Id, sword, 1, "item.card.forest_crawler", 1);
+        server.TickUntil(() => server.SessionOf(player).Character!.Inventory.Coins == 300);
+
+        Assert.That(Single(recorder, "evertorch.cards.removed"), Is.EqualTo(1));
+        Assert.That(Tagged(recorder, "evertorch.economy.coins", "operation", "card removal"), Is.EqualTo(200));
+    }
+
     [Test]
     public void Casts_AreCountedByOutcome()
     {

@@ -67,6 +67,11 @@ public enum InventoryOperationKind
     /// <summary>
     ///     A card from one bag row into another row's free slot (Gameplay Systems §11.7).
     /// </summary>
-    InsertCard = 17
+    InsertCard = 17,
+
+    /// <summary>
+    ///     A card taken out of a row at the Smith for its fee, back into the bag (Gameplay Systems §11.7).
+    /// </summary>
+    RemoveCard = 18
 }
 }
