@@ -136,6 +136,25 @@ public sealed class WornEquipment
     }
 
     /// <summary>
+    ///     What an inspection of the player <paramref name="entity" /> shows (Gameplay Systems §11.7): the worn weapon and
+    ///     armor in the character's settled inventory, each with its refine level and cards.
+    /// </summary>
+    public static InspectedEquipment InspectionOf(EntityId entity, CharacterInventory inventory)
+    {
+        return new InspectedEquipment(
+            entity,
+            InspectedIn(inventory, EquipmentSlot.Weapon),
+            InspectedIn(inventory, EquipmentSlot.Armor));
+    }
+
+    private static InspectedItem InspectedIn(CharacterInventory inventory, EquipmentSlot slot)
+    {
+        return inventory.TryGetRow(inventory.WornIn(slot), out InventoryEntry row)
+            ? new InspectedItem(row.Item, row.RefineLevel, row.Cards)
+            : default;
+    }
+
+    /// <summary>
     ///     The refine table of <paramref name="item" />, or null when it names none or the content lacks it.
     /// </summary>
     public static RefineTableDefinition? TableOf(ServerContent content, ItemDefinition? item)

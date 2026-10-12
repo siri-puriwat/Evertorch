@@ -61,6 +61,7 @@ public sealed class MessageRoutingTests
     [TestCase(MessageOpcode.RefineItem)]
     [TestCase(MessageOpcode.InsertCard)]
     [TestCase(MessageOpcode.RemoveCard)]
+    [TestCase(MessageOpcode.InspectPlayer)]
     [TestCase(MessageOpcode.ServerHello)]
     [TestCase(MessageOpcode.WorldEntered)]
     [TestCase(MessageOpcode.EntitySpawn)]
@@ -105,6 +106,7 @@ public sealed class MessageRoutingTests
     [TestCase(MessageOpcode.RefineTable)]
     [TestCase(MessageOpcode.RefineOutcome)]
     [TestCase(MessageOpcode.CardRemovalFees)]
+    [TestCase(MessageOpcode.InspectedEquipment)]
     public void TryGetRoute_ForSessionAndLifecycleMessages_IsReliableOrderedOnControl(MessageOpcode opcode)
     {
         MessageRouting.TryGetRoute(opcode, out ProtocolChannel channel, out MessageDelivery delivery);
@@ -165,6 +167,8 @@ public sealed class MessageRoutingTests
     [TestCase(MessageOpcode.InsertCard, true)]
     [TestCase(MessageOpcode.RemoveCard, true)]
     [TestCase(MessageOpcode.CardRemovalFees, false)]
+    [TestCase(MessageOpcode.InspectPlayer, true)]
+    [TestCase(MessageOpcode.InspectedEquipment, false)]
     [TestCase(MessageOpcode.Respawn, true)]
     [TestCase(MessageOpcode.MoveInput, true)]
     [TestCase(MessageOpcode.StopMovement, true)]
@@ -215,6 +219,7 @@ public sealed class MessageRoutingTests
             "TradeCancel=0x0025", "StorageOpen=0x0026", "StorageDeposit=0x0027", "StorageWithdraw=0x0028",
             "MarketOpen=0x0029", "MarketList=0x002A", "MarketBuy=0x002B", "MarketCollect=0x002C",
             "RefineItem=0x002D", "InsertCard=0x002E", "RemoveCard=0x002F",
+            "InspectPlayer=0x0030",
             "ServerHello=0x8001", "WorldEntered=0x8003",
             "EntitySpawn=0x8004", "EntityDespawn=0x8005", "EntitySnapshot=0x8006", "TargetChanged=0x8007",
             "AttackStarted=0x8008", "Damage=0x8009", "EntityDied=0x800A", "SkillCastStarted=0x800B",
@@ -229,7 +234,8 @@ public sealed class MessageRoutingTests
             "WornWeaponChanged=0x8020", "PartyEvent=0x8021", "PartyRoster=0x8022", "PartyMemberStatus=0x8023",
             "BossAnnouncement=0x8024", "MvpAwarded=0x8025", "TradeEvent=0x8026", "TradeSide=0x8027",
             "StorageSnapshot=0x8028", "StorageChanged=0x8029", "MarketBoard=0x802A", "MarketMine=0x802B",
-            "MarketEvent=0x802C", "RefineTable=0x802D", "RefineOutcome=0x802E", "CardRemovalFees=0x802F"
+            "MarketEvent=0x802C", "RefineTable=0x802D", "RefineOutcome=0x802E", "CardRemovalFees=0x802F",
+            "InspectedEquipment=0x8030"
         };
 
         string[] actual = ((MessageOpcode[])Enum.GetValues(typeof(MessageOpcode)))
@@ -250,9 +256,9 @@ public sealed class MessageRoutingTests
     }
 
     [Test]
-    public void ProtocolVersion_IsFortyThree()
+    public void ProtocolVersion_IsFortyFour()
     {
-        Assert.That(ProtocolConstants.ProtocolVersion, Is.EqualTo(43));
+        Assert.That(ProtocolConstants.ProtocolVersion, Is.EqualTo(44));
     }
 
     [Test]

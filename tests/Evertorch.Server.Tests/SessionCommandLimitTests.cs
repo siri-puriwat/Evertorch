@@ -197,7 +197,8 @@ public sealed class SessionCommandLimitTests
             [InboundEventKind.MarketCollect] = ServerInstruments.ItemCommandLimit,
             [InboundEventKind.RefineItem] = ServerInstruments.ItemCommandLimit,
             [InboundEventKind.InsertCard] = ServerInstruments.ItemCommandLimit,
-            [InboundEventKind.RemoveCard] = ServerInstruments.ItemCommandLimit
+            [InboundEventKind.RemoveCard] = ServerInstruments.ItemCommandLimit,
+            [InboundEventKind.InspectPlayer] = ServerInstruments.InspectCommandLimit
         };
         var limits = new SessionCommandLimits(Defaults, TestServer.TickRate, 0);
 

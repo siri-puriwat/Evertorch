@@ -21,7 +21,7 @@ public sealed class PresentationBoundaryTests
         + @"|LocalPlayerDriver"
         + @"|MovementPredictor|\.Predictor\b|\.IsLocked\b|RequestRespawn|UseSkillSlot|\bUseSkill\(|PressInventoryRow"
         + @"|BuyFrom|SellTo|OpenMarketAt|ListOnMarketAt|BuyOnMarketAt|CollectListingAt|RefineAt|InsertCardInto"
-        + @"|RemoveCardAt"
+        + @"|RemoveCardAt|InspectPlayer"
         + @"|AcceptQuestFrom|TurnInQuestTo|RaiseStat|ToggleStats|LearnSkillLevel|ToggleSkills|ResetBuildAt|ChangeJobAt"
         + @"|\.ActionLock\b"
         + @"|\.On(Spawn|Despawn|Snapshot|TargetChanged|AttackStarted|Damage|EntityDied|EntityRevived|CommandRejected"
@@ -45,7 +45,7 @@ public sealed class PresentationBoundaryTests
         + @"|AllocateStat|LearnSkill|ResetBuild|ChangeJob|ChatSend|PartyInvite|PartyReply|PartyLeave|PartyKick"
         + @"|PartyLead|TradeRequest|TradeReply|TradeOffer|TradeLock|TradeConfirm|TradeCancel|StorageOpen"
         + @"|StorageDeposit|StorageWithdraw|MarketOpen|MarketList|MarketBuy|MarketCollect|RefineItem|InsertCard"
-        + @"|RemoveCard)\s*\("
+        + @"|RemoveCard|InspectPlayer)\s*\("
         + @"|\.Connection\??\.(Connect|Disconnect|EnterWorld|CreateCharacter|Poll)\("
         + @"|\.Controller\??\.(Cancel\w*|Tick)\("
         + @"|\.(SetManualDirection|TryMoveTo|Chase\w*|StopChase|CancelPath|NextTick|Reconcile|Teleport"
@@ -116,7 +116,8 @@ public sealed class PresentationBoundaryTests
             "m_client.ResetBuildAt(npc);", "m_client.ChangeJobAt(npc, job);",
             "m_world.OnWornWeaponChanged(changed);", "remote.WornWeapon = string.Empty;",
             "m_client.RefineAt(npc, row, 6);", "m_world.OnRefineTable(table);", "m_world.OnCardRemovalFees(fees);",
-            "m_client.InsertCardInto(card, row);", "m_client.RemoveCardAt(npc, row, 1, card);"
+            "m_client.InsertCardInto(card, row);", "m_client.RemoveCardAt(npc, row, 1, card);",
+            "m_client.InspectPlayerNamed(name);"
         };
         string[] allowed =
         {
@@ -160,7 +161,8 @@ public sealed class PresentationBoundaryTests
             "var learn = new LearnSkill(skill, 11);", "var reset = new ResetBuild(npc, 12);",
             "var change = new ChangeJob(npc, job, 13);", "var refine = new RefineItem(npc, row, 6, 14);",
             "world.OnRefineOutcome(outcome);", "var insert = new InsertCard(5, row, 15);",
-            "var remove = new RemoveCard(npc, row, 1, card, 16);", "world.OnCardRemovalFees(fees);"
+            "var remove = new RemoveCard(npc, row, 1, card, 16);", "world.OnCardRemovalFees(fees);",
+            "var inspect = new InspectPlayer(entity, 17);"
         };
         string[] allowed =
         {

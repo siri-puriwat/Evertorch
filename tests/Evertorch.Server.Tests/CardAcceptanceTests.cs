@@ -20,10 +20,11 @@ namespace Evertorch.Server.Tests
 ///     cloth armor, a Forest Crawler Card, a +7 training staff carrying a Spark Wisp Card, an Emberstone, and 1,000
 ///     coins, enters the training ground beside Bobby, of another account, with 300; each sees the other by name, and
 ///     Anna's bag shows what was stored. Anna kills a training slime, whose every drop the script makes but its card,
-///     picks up its gel, inserts her card into the sword, and walks up to the Smith; there she takes the card out again
+///     picks up its gel, inserts her card into the sword and wears it, which Bobby inspects and she does not hear, takes
+///     it off, and walks up to the Smith; there she takes the card out again
 ///     for its fee, and refines the staff, which the scripted draw destroys, and its card comes back to her bag. Then she
 ///     leaves, and Bobby sees her go. After a clean stop a second host on the same database lets both in again, Anna's
-///     bag as she left it. Each later line of Milestone 17 adds its steps here: inspection and the board.
+///     bag as she left it. The board's line adds its steps here.
 /// </summary>
 [TestFixture]
 [NonParallelizable]
@@ -202,6 +203,48 @@ public sealed class CardAcceptanceTests
         Assert.That(bobby.World.Inventory.Revision, Is.EqualTo(bobbysRevision), $"{step}: Bobby's bag never changed");
     }
 
+    // Anna wears the carded sword; Bobby inspects her and sees it with its card, and she hears nothing of it; then she
+    // takes it off again (Gameplay Systems §11.7).
+    private static void InspectAnna(SocketClient anna, SocketClient bobby)
+    {
+        const string step = "inspect";
+        ClientWorld world = anna.World;
+        long sword = world.Inventory.Rows.Single(row => row.Item.Value == TrainingSword).InventoryItem;
+        var seen = new List<InspectedEquipment>();
+        var heard = new List<InspectedEquipment>();
+        bobby.Connection.InspectedEquipmentReceived += seen.Add;
+        anna.Connection.InspectedEquipmentReceived += heard.Add;
+
+        Assert.That(anna.Connection.SendEquip(sword), Is.Not.Zero, $"{step}: worn");
+        Assert.That(
+            SocketClients.PumpUntil(
+                () => world.Inventory.Rows.Any(row => row.InventoryItem == sword && row.Slot == EquipmentSlot.Weapon),
+                anna,
+                bobby),
+            Is.True,
+            $"{step}: the sword worn ({world.LastRejection})");
+        Assert.That(bobby.Connection.SendInspectPlayer(world.LocalEntity), Is.Not.Zero, $"{step}: asked");
+        Assert.That(SocketClients.PumpUntil(() => seen.Count == 1, anna, bobby), Is.True, $"{step}: answered");
+        Assert.That(anna.Connection.SendUnequip(EquipmentSlot.Weapon), Is.Not.Zero, $"{step}: taken off");
+        Assert.That(
+            SocketClients.PumpUntil(
+                () => world.Inventory.Rows.Any(row => row.InventoryItem == sword && row.Slot == EquipmentSlot.None),
+                anna,
+                bobby),
+            Is.True,
+            $"{step}: the sword in the bag again");
+        bobby.Connection.InspectedEquipmentReceived -= seen.Add;
+        anna.Connection.InspectedEquipmentReceived -= heard.Add;
+
+        InspectedEquipment answer = seen.Single();
+        Assert.That(
+            (answer.Entity, answer.Weapon.Item.Value, answer.Weapon.Cards.Select(card => card.Value).Single()),
+            Is.EqualTo((world.LocalEntity, TrainingSword, Keen)),
+            $"{step}: the sword and its card");
+        Assert.That(answer.Armor.IsEmpty, Is.True, $"{step}: no armor worn");
+        Assert.That(heard, Is.Empty, $"{step}: Anna hears nothing");
+    }
+
     // Anna walks up to the Smith, whose window opens (Gameplay Systems §6.1).
     private static void VisitTheSmith(SocketClient anna, SocketClient bobby)
     {
@@ -368,6 +411,8 @@ public sealed class CardAcceptanceTests
             AssertCleanTraffic("hunt", anna, bobby);
             InsertTheCard(anna, bobby);
             AssertCleanTraffic("insert", anna, bobby);
+            InspectAnna(anna, bobby);
+            AssertCleanTraffic("inspect", anna, bobby);
             VisitTheSmith(anna, bobby);
             TakeTheCardOut(anna, bobby);
             AssertCleanTraffic("remove", anna, bobby);

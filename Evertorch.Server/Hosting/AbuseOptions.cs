@@ -99,6 +99,13 @@ public sealed class AbuseOptions
     public int ReadCommandBurst { get; set; } = 3;
 
     /// <summary>
+    ///     Inspections per second, per connection: each sends a message of up to 674 bytes (Network Protocol §11).
+    /// </summary>
+    public int InspectCommandsPerSecond { get; set; } = 1;
+
+    public int InspectCommandBurst { get; set; } = 3;
+
+    /// <summary>
     ///     Violation score at which a connection is closed; each violation adds <see cref="ViolationScore.Points" />.
     /// </summary>
     public int ViolationThreshold { get; set; } = 100;
@@ -164,6 +171,8 @@ public sealed class AbuseOptionsValidator : IValidateOptions<AbuseOptions>
         AddRangeFailure(failures, "TradeCommandBurst", options.TradeCommandBurst, 1, 10000);
         AddRangeFailure(failures, "ReadCommandsPerSecond", options.ReadCommandsPerSecond, 1, 1000);
         AddRangeFailure(failures, "ReadCommandBurst", options.ReadCommandBurst, 1, 10000);
+        AddRangeFailure(failures, "InspectCommandsPerSecond", options.InspectCommandsPerSecond, 1, 1000);
+        AddRangeFailure(failures, "InspectCommandBurst", options.InspectCommandBurst, 1, 10000);
         AddRangeFailure(failures, "ViolationThreshold", options.ViolationThreshold, 1, 1000000);
         AddRangeFailure(failures, "ViolationDecayPerSecond", options.ViolationDecayPerSecond, 0, 1000000);
         AddRangeFailure(failures, "KickCooldownMs", options.KickCooldownMs, 0, 86400000);

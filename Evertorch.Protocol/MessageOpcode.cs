@@ -53,6 +53,7 @@ public enum MessageOpcode : ushort
     RefineItem = 0x002D,
     InsertCard = 0x002E,
     RemoveCard = 0x002F,
+    InspectPlayer = 0x0030,
     ServerHello = 0x8001,
     WorldEntered = 0x8003,
     EntitySpawn = 0x8004,
@@ -97,6 +98,7 @@ public enum MessageOpcode : ushort
     MarketEvent = 0x802C,
     RefineTable = 0x802D,
     RefineOutcome = 0x802E,
-    CardRemovalFees = 0x802F
+    CardRemovalFees = 0x802F,
+    InspectedEquipment = 0x8030
 }
 }

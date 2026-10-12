@@ -32,6 +32,7 @@ public sealed class ServerInstruments
     public const string PartyCommandLimit = "session_party";
     public const string TradeCommandLimit = "session_trade";
     public const string ReadCommandLimit = "session_read";
+    public const string InspectCommandLimit = "session_inspect";
     public const string AdmissionLimit = "admission";
     public const string SignInAddressLimit = "sign_in_address";
     public const string SignInLoginLimit = "sign_in_login";

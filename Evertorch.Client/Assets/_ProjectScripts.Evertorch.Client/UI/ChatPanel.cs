@@ -278,6 +278,10 @@ public sealed class ChatPanel : MonoBehaviour
         {
             m_client?.RequestTrade(request.Trader);
         }
+        else if (request.Inspected != null)
+        {
+            m_client?.InspectPlayerNamed(request.Inspected);
+        }
         else if (request.Invitee != null)
         {
             m_client?.InviteToParty(request.Invitee);

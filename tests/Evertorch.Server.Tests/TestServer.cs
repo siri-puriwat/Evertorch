@@ -831,6 +831,13 @@ internal sealed class TestServer
         Inbound.OnPayload(connection, ProtocolChannel.Control, payload);
     }
 
+    public void SendInspectPlayer(ConnectionId connection, EntityId entity, uint commandSequence)
+    {
+        byte[] payload = new byte[InspectPlayer.EncodedLength];
+        new InspectPlayer(entity, commandSequence).Write(payload);
+        Inbound.OnPayload(connection, ProtocolChannel.Control, payload);
+    }
+
     public void SendAcceptQuest(ConnectionId connection, EntityId npc, string quest, uint commandSequence)
     {
         var message = new AcceptQuest(npc, new QuestDefinitionId(quest), commandSequence);

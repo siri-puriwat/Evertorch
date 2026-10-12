@@ -213,6 +213,9 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
             case MessageOpcode.CardRemovalFees:
                 OnCardRemovalFees(payload);
                 break;
+            case MessageOpcode.InspectedEquipment:
+                OnInspectedEquipment(payload);
+                break;
             case MessageOpcode.MvpAwarded:
                 OnMvpAwarded(payload);
                 break;
@@ -1108,6 +1111,21 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
     }
 
     /// <summary>
+    ///     Asks to see what the player <paramref name="entity" /> wears; 0 when nothing was sent.
+    /// </summary>
+    public uint SendInspectPlayer(EntityId entity)
+    {
+        if (State != ClientConnectionState.InWorld || entity.Value <= 0)
+        {
+            return 0;
+        }
+
+        uint sequence = NextCommandSequence();
+        SendRouted(MessageOpcode.InspectPlayer, new InspectPlayer(entity, sequence).Write(m_sendBuffer));
+        return sequence;
+    }
+
+    /// <summary>
     ///     The card command <paramref name="commandSequence" /> numbered, so a refusal can say what was refused.
     /// </summary>
     public bool TryGetCardSequence(uint commandSequence, out CardRequest request)
@@ -1375,6 +1393,11 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
     ///     What the player's own refine did, after the commit's inventory change, while in the world.
     /// </summary>
     public event Action<RefineOutcome>? RefineOutcomeReceived;
+
+    /// <summary>
+    ///     What another player wears, the answer to the player's own inspection, while in the world.
+    /// </summary>
+    public event Action<InspectedEquipment>? InspectedEquipmentReceived;
 
     /// <summary>
     ///     A boss appeared or fell on the player's map, for the chat log, which outlives the world.
@@ -1744,6 +1767,22 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
         else
         {
             World.OnCardRemovalFees(message);
+        }
+    }
+
+    private void OnInspectedEquipment(ReadOnlySpan<byte> payload)
+    {
+        if (!InspectedEquipment.TryRead(payload, out InspectedEquipment? message) || message == null)
+        {
+            MalformedMessages++;
+        }
+        else if (World == null)
+        {
+            UnexpectedMessages++;
+        }
+        else
+        {
+            InspectedEquipmentReceived?.Invoke(message);
         }
     }
 

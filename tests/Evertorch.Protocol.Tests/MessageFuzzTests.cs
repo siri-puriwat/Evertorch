@@ -328,6 +328,18 @@ public sealed class MessageFuzzTests
                 ? Encode(message!.GetEncodedLength(), message.Write)
                 : null);
         yield return Case(
+            "InspectPlayer",
+            Encode(InspectPlayer.EncodedLength, InspectMessageTests.InspectGolden.Write),
+            payload => InspectPlayer.TryRead(payload, out InspectPlayer? message)
+                ? Encode(InspectPlayer.EncodedLength, message!.Write)
+                : null);
+        yield return Case(
+            "InspectedEquipment",
+            Encode(InspectMessageTests.EquipmentGolden.GetEncodedLength(), InspectMessageTests.EquipmentGolden.Write),
+            payload => InspectedEquipment.TryRead(payload, out InspectedEquipment? message)
+                ? Encode(message!.GetEncodedLength(), message.Write)
+                : null);
+        yield return Case(
             "RefineTable",
             Encode(RefineMessageTests.TableGolden.GetEncodedLength(), RefineMessageTests.TableGolden.Write),
             payload => RefineTable.TryRead(payload, out RefineTable? message)

@@ -577,6 +577,18 @@ public readonly struct InboundEvent
             cardSlot: slot);
     }
 
+    public static InboundEvent ForInspectPlayer(ConnectionId connection, EntityId entity, uint commandSequence)
+    {
+        return new InboundEvent(
+            InboundEventKind.InspectPlayer,
+            connection,
+            null,
+            default,
+            default,
+            entity,
+            commandSequence);
+    }
+
     public static InboundEvent ForCreateCharacter(ConnectionId connection, string name)
     {
         return new InboundEvent(InboundEventKind.CreateCharacter, connection, null, default, default, name: name);

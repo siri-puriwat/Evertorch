@@ -61,6 +61,7 @@ public static class MessageRouting
             case MessageOpcode.RefineItem:
             case MessageOpcode.InsertCard:
             case MessageOpcode.RemoveCard:
+            case MessageOpcode.InspectPlayer:
             case MessageOpcode.ServerHello:
             case MessageOpcode.WorldEntered:
             case MessageOpcode.EntitySpawn:
@@ -105,6 +106,7 @@ public static class MessageRouting
             case MessageOpcode.RefineTable:
             case MessageOpcode.RefineOutcome:
             case MessageOpcode.CardRemovalFees:
+            case MessageOpcode.InspectedEquipment:
                 return true;
             case MessageOpcode.MoveInput:
             case MessageOpcode.StopMovement:

@@ -90,6 +90,8 @@ public sealed class ServerOutputTests
         },
         ["CardRemovalFees"] = new[] { "Entries", "Npc" },
         ["CardRemovalFee"] = new[] { "Card", "Fee" },
+        ["InspectedEquipment"] = new[] { "Armor", "Entity", "Weapon" },
+        ["InspectedItem"] = new[] { "Cards", "IsEmpty", "Item", "RefineLevel" },
         ["QuestDefinitionId"] = new[] { "Value" },
         ["RefineOutcome"] = new[] { "InventoryItem", "Item", "LevelAfter", "LevelBefore", "Outcome" },
         ["RefineTable"] = new[]

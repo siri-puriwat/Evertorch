@@ -266,6 +266,11 @@ public enum InboundEventKind
     ///     bag's row <see cref="InboundEvent.InventoryItem" /> at the Smith <see cref="InboundEvent.Target" />, carrying a
     ///     command sequence.
     /// </summary>
-    RemoveCard = 49
+    RemoveCard = 49,
+
+    /// <summary>
+    ///     An inspection of what the player <see cref="InboundEvent.Target" /> wears, carrying a command sequence.
+    /// </summary>
+    InspectPlayer = 50
 }
 }

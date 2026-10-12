@@ -24,6 +24,8 @@ public sealed class TargetFrame : MonoBehaviour
 
     public const string Trade = "Trade";
 
+    public const string Inspect = "Inspect";
+
     /// <summary>
     ///     The name of the Follow button's object; its label reads Unfollow while the member shown is followed.
     /// </summary>
@@ -60,6 +62,7 @@ public sealed class TargetFrame : MonoBehaviour
     private TMP_Text? m_detail;
     private GameObject? m_invite;
     private GameObject? m_trade;
+    private GameObject? m_inspect;
     private GameObject? m_follow;
     private TMP_Text? m_followLabel;
     private bool m_isShownFollowing;
@@ -113,6 +116,7 @@ public sealed class TargetFrame : MonoBehaviour
             m_targetName = target.Name;
             UiBuilder.SetActive(m_invite!, CanInvite(m_client, target.Name));
             UiBuilder.SetActive(m_trade!, CanTrade(m_client, target.Name));
+            UiBuilder.SetActive(m_inspect!, CanInspect(m_client, target.Name));
             bool canFollow = CanFollow(m_client, target.Name);
             UiBuilder.SetActive(m_follow!, canFollow);
             if (canFollow)
@@ -127,6 +131,7 @@ public sealed class TargetFrame : MonoBehaviour
         UiBuilder.SetActive(m_invite!, false);
         UiBuilder.SetActive(m_follow!, false);
         UiBuilder.SetActive(m_trade!, false);
+        UiBuilder.SetActive(m_inspect!, false);
 
         float ratio = target.HealthPermille / 1000f;
         bool isDead = target.IsDead;
@@ -208,6 +213,14 @@ public sealed class TargetFrame : MonoBehaviour
         return CharacterNames.IsValid(name)
             && !string.Equals(name, client.PlayedCharacter?.Name, StringComparison.OrdinalIgnoreCase)
             && !client.IsTrading;
+    }
+
+    /// <summary>
+    ///     Whether Inspect shows for the player named <paramref name="name" />: someone else, while no trade is open.
+    /// </summary>
+    public static bool CanInspect(GameClient client, string name)
+    {
+        return CanTrade(client, name);
     }
 
     /// <summary>
@@ -409,7 +422,7 @@ public sealed class TargetFrame : MonoBehaviour
 
         m_detail = Ui.CreateLabel("Detail", panel);
         m_detail.alignment = TextAlignmentOptions.Center;
-        // Invite and Follow never show together, so with Trade they keep one row's height.
+        // Invite and Follow never show together, so with Trade and Inspect they keep one row's height.
         GameObject actions = Ui.CreateRow("Actions", panel);
         m_invite = Ui.CreateButton(Invite, actions.transform, () => client.InviteToParty(m_targetName));
         m_invite.SetActive(false);
@@ -418,6 +431,15 @@ public sealed class TargetFrame : MonoBehaviour
         m_follow.SetActive(false);
         m_trade = Ui.CreateButton(Trade, actions.transform, () => client.RequestTrade(m_targetName));
         m_trade.SetActive(false);
+        m_inspect = Ui.CreateButton(Inspect, actions.transform, () => client.InspectPlayerNamed(m_targetName));
+        m_inspect.SetActive(false);
+
+        // The row's buttons share its width; a button without a width of its own would take none.
+        foreach (GameObject button in new[] { m_invite, m_follow, m_trade, m_inspect })
+        {
+            button.GetComponent<LayoutElement>().flexibleWidth = 1f;
+        }
+
         m_panel.SetActive(false);
     }
 

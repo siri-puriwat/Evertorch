@@ -80,6 +80,9 @@ public sealed class GameClient : MonoBehaviour
     // A read of storage costs the server a query, so the client keeps a stricter bucket than its own (Network Protocol
     // §11).
     private readonly ChatThrottle m_readThrottle = new(ChatThrottle.ReadBurst);
+
+    // An inspection is scored when throttled too (Network Protocol §11).
+    private readonly ChatThrottle m_inspectThrottle = new(ChatThrottle.ReadBurst);
     private IClientTransport? m_socket;
     private ManualMoveSource? m_manualSource;
     private PointerMoveSource? m_pointerSource;
@@ -115,6 +118,7 @@ public sealed class GameClient : MonoBehaviour
     private StatsWindow? m_statsWindow;
     private SkillsWindow? m_skillsWindow;
     private CardWindow? m_cardWindow;
+    private InspectWindow? m_inspectWindow;
     private TradeWindow? m_tradeWindow;
     private bool m_hasSaidHeld;
     private SkillBar? m_skillBar;
@@ -280,15 +284,21 @@ public sealed class GameClient : MonoBehaviour
     public SkillDefinitionId TargetingSkill => m_targeting.IsChoosing ? m_targeting.Skill : default;
 
     /// <summary>
-    ///     Whether the NPC, Stats, Skills, trade, or Card window shows at the top left, which the target frame keeps clear
-    ///     of.
+    ///     Whether the NPC, Stats, Skills, trade, Card, or Inspect window shows at the top left, which the target frame
+    ///     keeps clear of.
     /// </summary>
     public bool IsSideWindowOpen =>
         (m_npcWindow != null && m_npcWindow.IsOpen)
         || (m_statsWindow != null && m_statsWindow.IsOpen)
         || (m_skillsWindow != null && m_skillsWindow.IsOpen)
         || (m_tradeWindow != null && m_tradeWindow.IsOpen)
-        || IsCardWindowOpen;
+        || IsCardWindowOpen
+        || IsInspectWindowOpen;
+
+    /// <summary>
+    ///     Whether the Inspect window shows what another player wears.
+    /// </summary>
+    public bool IsInspectWindowOpen => m_inspectWindow != null && m_inspectWindow.IsOpen;
 
     /// <summary>
     ///     Whether the Card window keeps the side slot, which Stats, Skills, and Talk do not replace (Prototype Content
@@ -344,6 +354,8 @@ public sealed class GameClient : MonoBehaviour
         m_skillsWindow.transform.SetParent(transform, false);
         m_cardWindow = CardWindow.Create(this);
         m_cardWindow.transform.SetParent(transform, false);
+        m_inspectWindow = InspectWindow.Create(this);
+        m_inspectWindow.transform.SetParent(transform, false);
         m_tradeWindow = TradeWindow.Create(this);
         m_tradeWindow.transform.SetParent(transform, false);
         m_skillBar = SkillBar.Create(this);
@@ -658,6 +670,7 @@ public sealed class GameClient : MonoBehaviour
             Connection.ChatLineReceived -= OnChatLine;
             Connection.PartyEventReceived -= OnPartyEvent;
             Connection.TradeEventReceived -= OnTradeEvent;
+            Connection.InspectedEquipmentReceived -= OnInspectedEquipment;
             Connection.BossAnnouncementReceived -= OnBossAnnouncement;
             Connection.MvpAwardedReceived -= OnMvpAwarded;
             Connection.PartyRosterReceived -= Party.Apply;
@@ -691,6 +704,7 @@ public sealed class GameClient : MonoBehaviour
         Connection.ChatLineReceived += OnChatLine;
         Connection.PartyEventReceived += OnPartyEvent;
         Connection.TradeEventReceived += OnTradeEvent;
+        Connection.InspectedEquipmentReceived += OnInspectedEquipment;
         Connection.BossAnnouncementReceived += OnBossAnnouncement;
         Connection.MvpAwardedReceived += OnMvpAwarded;
         Connection.PartyRosterReceived += Party.Apply;
@@ -783,6 +797,7 @@ public sealed class GameClient : MonoBehaviour
         m_npcWindow?.Close();
         m_statsWindow?.Close();
         m_skillsWindow?.Close();
+        m_inspectWindow?.Close();
         m_cardWindow.Open(cardRow);
     }
 
@@ -1006,6 +1021,7 @@ public sealed class GameClient : MonoBehaviour
 
         m_npcWindow?.Close();
         m_skillsWindow?.Close();
+        m_inspectWindow?.Close();
         m_statsWindow.Open();
     }
 
@@ -1032,6 +1048,7 @@ public sealed class GameClient : MonoBehaviour
 
         m_npcWindow?.Close();
         m_statsWindow?.Close();
+        m_inspectWindow?.Close();
         m_skillsWindow.Open();
     }
 
@@ -1639,6 +1656,7 @@ public sealed class GameClient : MonoBehaviour
 
         m_statsWindow?.Close();
         m_skillsWindow?.Close();
+        m_inspectWindow?.Close();
         m_npcWindow?.Open(npc);
     }
 
@@ -1951,6 +1969,8 @@ public sealed class GameClient : MonoBehaviour
             m_npcWindow?.Close();
             m_statsWindow?.Close();
             m_skillsWindow?.Close();
+            m_cardWindow?.Close();
+            m_inspectWindow?.Close();
         }
 
         string? line = TradeMessages.Describe(message);
@@ -2015,6 +2035,73 @@ public sealed class GameClient : MonoBehaviour
         }
 
         return Connection != null && TakeTradeToken() ? Connection.SendTradeRequest(name) : 0;
+    }
+
+    /// <summary>
+    ///     Asks to see what the player named <paramref name="name" /> wears, the chat's <c>/inspect</c> and the target
+    ///     frame's Inspect; only a player in view can be inspected. 0 when nothing was sent, else the command's sequence.
+    /// </summary>
+    public uint InspectPlayerNamed(string name)
+    {
+        if (m_world != null)
+        {
+            foreach (KeyValuePair<EntityId, RemoteEntity> pair in m_world.Remotes)
+            {
+                if (pair.Value.Kind == EntityKind.Player
+                    && string.Equals(pair.Value.Name, name, StringComparison.OrdinalIgnoreCase))
+                {
+                    return InspectPlayer(pair.Key);
+                }
+            }
+        }
+
+        ChatLog.AddSystem($"{name} is not in view.");
+        return 0;
+    }
+
+    /// <summary>
+    ///     Asks to see the weapon and the armor the player <paramref name="entity" /> wears (Gameplay Systems §11.7); the
+    ///     answer opens the Inspect window. The trade window keeps the side slot, so nothing is asked while trading.
+    /// </summary>
+    public uint InspectPlayer(EntityId entity)
+    {
+        if (Connection == null)
+        {
+            return 0;
+        }
+
+        if (IsTrading)
+        {
+            ChatLog.AddSystem("You cannot inspect while trading.");
+            return 0;
+        }
+
+        if (!m_inspectThrottle.TryTake(Time.realtimeSinceStartupAsDouble))
+        {
+            ChatLog.AddSystem("You are doing that too fast.");
+            return 0;
+        }
+
+        return Connection.SendInspectPlayer(entity);
+    }
+
+    // The answer opens the Inspect window in place of the NPC, Stats, Skills, or Card window; a trade opened since the
+    // asking keeps the side slot, so its answer is not shown.
+    private void OnInspectedEquipment(InspectedEquipment message)
+    {
+        if (m_inspectWindow == null || m_world == null || IsTrading)
+        {
+            return;
+        }
+
+        string name = m_world.Remotes.TryGetValue(message.Entity, out RemoteEntity? remote)
+            ? remote.Name
+            : string.Empty;
+        m_npcWindow?.Close();
+        m_statsWindow?.Close();
+        m_skillsWindow?.Close();
+        m_cardWindow?.Close();
+        m_inspectWindow.Open(message, name);
     }
 
     /// <summary>
@@ -2234,6 +2321,11 @@ public sealed class GameClient : MonoBehaviour
         if (m_cardWindow != null)
         {
             m_cardWindow.Close();
+        }
+
+        if (m_inspectWindow != null)
+        {
+            m_inspectWindow.Close();
         }
 
         m_controller = null;

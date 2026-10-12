@@ -327,6 +327,7 @@ public sealed class SessionManager : ITickPhase
             case InboundEventKind.RefineItem:
             case InboundEventKind.InsertCard:
             case InboundEventKind.RemoveCard:
+            case InboundEventKind.InspectPlayer:
                 HandleCommand(session, inboundEvent, tick);
                 break;
             default:
@@ -963,6 +964,22 @@ public sealed class SessionManager : ITickPhase
         }
     }
 
+    // An inspection reads the target's worn rows on the tick thread and answers the asker alone; the inspected hears
+    // nothing, and a trade does not stop it, since it changes nothing (Gameplay Systems §11.7).
+    private CommandRejectionReason TryInspect(ClientSession session, EntityId target)
+    {
+        if (!session.KnownEntities.Contains(target)
+            || session.Map == null
+            || !session.Map.TryGetPlayer(target, out PlayerEntity? player)
+            || !m_sessions.TryGetCharacter(player!.Character, out CharacterSession? inspected))
+        {
+            return CommandRejectionReason.InvalidTarget;
+        }
+
+        m_sender.Send(session.Connection, WornEquipment.InspectionOf(target, inspected!.Inventory));
+        return CommandRejectionReason.None;
+    }
+
     // Every refusal of a sequenced command is answered with its own sequence (Network Protocol §11); only a stale
     // sequence, which only a faulty or hostile client sends, goes unanswered.
     private CommandRejectionReason Apply(ClientSession session, InboundEvent command, uint tick)
@@ -1096,6 +1113,7 @@ public sealed class SessionManager : ITickPhase
                 command.CardItem,
                 command.InventoryItem,
                 command.CommandSequence),
+            InboundEventKind.InspectPlayer => TryInspect(session, command.Target),
             InboundEventKind.RemoveCard => m_items.TryRemoveCard(
                 session,
                 command.Target,

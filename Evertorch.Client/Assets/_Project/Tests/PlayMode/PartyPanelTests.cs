@@ -215,6 +215,66 @@ public sealed class PartyPanelTests
         Assert.That(frame.GetComponentsInChildren<Button>().Any(button => button.name == TargetFrame.Invite), Is.False);
     }
 
+    // Inspect stands beside Invite and Trade for another player and asks for that player's entity; the frame keeps its
+    // tallest height and every label its row at 12 points or more (Prototype Content §2).
+    [UnityTest]
+    public IEnumerator TargetFrame_OffersInspect_ForAnotherPlayer_AndAsksForThatPlayer()
+    {
+        (GameClient client, RecordingConnection recording) = Enter();
+        TargetFrame frame = Track(TargetFrame.Create(client));
+        ClientWorld world = client.World!;
+        world.OnSpawn(
+            new EntitySpawn(
+                new EntityId(7),
+                EntityKind.Player,
+                Adventurer.Value,
+                new WorldPosition(2.5f, 0f, 2.5f),
+                new WorldDirection(0f, 1f),
+                EntityStateFlags.None,
+                1000,
+                string.Empty,
+                "Bobby"));
+        world.OnTargetChanged(new TargetChanged(Local, new EntityId(7)));
+        yield return null;
+        yield return null;
+        float height = ((RectTransform)frame.GetComponentsInChildren<Image>()[0].transform).rect.height;
+        Button[] shown = frame.GetComponentsInChildren<Button>();
+
+        Assert.That(
+            shown.Select(button => button.name),
+            Is.EqualTo(new[] { TargetFrame.Invite, TargetFrame.Trade, TargetFrame.Inspect }));
+        foreach (Button button in shown)
+        {
+            TMP_Text label = button.GetComponentInChildren<TMP_Text>();
+            label.ForceMeshUpdate();
+            Assert.That(((RectTransform)button.transform).rect.width, Is.GreaterThan(60f), "a share of the row");
+            Assert.That(label.fontSize, Is.GreaterThanOrEqualTo(12f), label.text);
+            Assert.That(label.textBounds.size.x,
+                Is.LessThanOrEqualTo(((RectTransform)label.transform).rect.width + 0.5f),
+                label.text);
+        }
+
+        Assert.That(Click(frame, TargetFrame.Inspect), Is.True);
+        yield return null;
+
+        Assert.That(height, Is.LessThanOrEqualTo(TargetFrame.TallestHeight + 0.01f), "within the layout's height");
+        byte[] inspect = recording.SentOf(MessageOpcode.InspectPlayer).Single();
+        Assert.That(InspectPlayer.TryRead(inspect, out InspectPlayer? read), Is.True);
+        Assert.That(read!.Entity, Is.EqualTo(new EntityId(7)));
+    }
+
+    [Test]
+    public void SlashInspect_OfAPlayerOutOfView_IsAnsweredByTheClient()
+    {
+        (GameClient client, RecordingConnection recording) = Enter();
+
+        uint sent = client.InspectPlayerNamed("Bobby");
+
+        Assert.That(sent, Is.Zero);
+        Assert.That(client.ChatLog.Lines.Select(line => line.Text), Is.EqualTo(new[] { "Bobby is not in view." }));
+        Assert.That(recording.SentOf(MessageOpcode.InspectPlayer), Is.Empty);
+    }
+
     [Test]
     public void SlashInviteForOneself_OrANameNoOneHas_IsAnsweredByTheClient()
     {

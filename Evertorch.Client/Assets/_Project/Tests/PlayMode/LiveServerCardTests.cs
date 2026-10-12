@@ -81,8 +81,8 @@ public sealed class LiveServerCardTests
     // them; a press of the card's row opens the Card window, and two presses of the sword's row put the card in, which
     // the bag and the chat then name; another player of another account enters beside it and is drawn; a walk through
     // the controller up to the Smith opens its window, as an arrival does, so an editor without focus, which drops a
-    // queued click, cannot fail the step; one press of its Cards row takes the card out again for 200 coins
-    // (Gameplay Systems §6.1, §11.7).
+    // queued click, cannot fail the step; one press of its Cards row takes the card out again for 200 coins. The
+    // other player, inspected by name, wears nothing (Gameplay Systems §6.1, §11.7).
     [UnityTest]
     [Timeout(TestTimeoutMs)]
     public IEnumerator Carder_WithEquipmentInTheBag_InsertsACard_AndTakesItOutAtTheSmith()
@@ -133,6 +133,16 @@ public sealed class LiveServerCardTests
             },
             StartTimeoutSeconds);
         Assert.That(client.RemoteViews.ContainsKey(seen), Is.True, $"{client.Status} {server.JoinOutput()}");
+        InspectWindow inspect = client.GetComponentsInChildren<InspectWindow>(true).Single();
+        Assert.That(client.InspectPlayerNamed(BobName), Is.Not.Zero, "asked");
+        yield return WaitUntil(
+            () =>
+            {
+                other.Poll();
+                return inspect.IsOpen;
+            },
+            StartTimeoutSeconds);
+        Assert.That(inspect.Text, Is.EqualTo($"{BobName}\nWeapon: none\nArmor: none"), "the other wears nothing");
 
         NpcWindow window = client.GetComponentsInChildren<NpcWindow>(true).Single();
         yield return WaitUntil(() => NpcView(client, Smith)?.HasBody == true, StartTimeoutSeconds);

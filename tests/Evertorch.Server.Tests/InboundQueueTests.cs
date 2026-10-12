@@ -673,6 +673,24 @@ public sealed class InboundQueueTests
     }
 
     [Test]
+    public void Inspection_ThatIsWellFormed_IsQueuedWithItsPlayer_AndCutShortIsRejected()
+    {
+        InboundQueue queue = CreateQueue(16);
+        byte[] inspect = Payload(InspectPlayer.EncodedLength,
+            bytes => new InspectPlayer(new EntityId(12), 4).Write(bytes));
+
+        queue.OnPayload(Peer, ProtocolChannel.Control, inspect);
+
+        Assert.That(queue.TryDequeue(out InboundEvent inspected), Is.True);
+        Assert.That(
+            (inspected.Kind, inspected.Target, inspected.CommandSequence),
+            Is.EqualTo((InboundEventKind.InspectPlayer, new EntityId(12), 4u)));
+        InboundQueue shortened = CreateQueue(16);
+        shortened.OnPayload(Peer, ProtocolChannel.Control, inspect.Take(inspect.Length - 1).ToArray());
+        AssertOnlyMalformed(shortened, 1);
+    }
+
+    [Test]
     public void ItemAndSkillCommands_ThatAreWellFormed_AreQueuedAsCommands()
     {
         InboundQueue queue = CreateQueue(16);

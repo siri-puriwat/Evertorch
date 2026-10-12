@@ -16,6 +16,7 @@ public sealed class SessionCommandLimits
     private readonly TickBucket m_party;
     private readonly TickBucket m_trade;
     private readonly TickBucket m_read;
+    private readonly TickBucket m_inspect;
 
     public SessionCommandLimits(AbuseOptions options, int tickRate, uint tick)
     {
@@ -28,6 +29,7 @@ public sealed class SessionCommandLimits
         m_party = new TickBucket(options.PartyCommandsPerSecond, options.PartyCommandBurst, tickRate, tick);
         m_trade = new TickBucket(options.TradeCommandsPerSecond, options.TradeCommandBurst, tickRate, tick);
         m_read = new TickBucket(options.ReadCommandsPerSecond, options.ReadCommandBurst, tickRate, tick);
+        m_inspect = new TickBucket(options.InspectCommandsPerSecond, options.InspectCommandBurst, tickRate, tick);
     }
 
     /// <summary>
@@ -97,6 +99,9 @@ public sealed class SessionCommandLimits
             case InboundEventKind.MarketOpen:
                 limit = ServerInstruments.ReadCommandLimit;
                 return m_read.TryTake(tick);
+            case InboundEventKind.InspectPlayer:
+                limit = ServerInstruments.InspectCommandLimit;
+                return m_inspect.TryTake(tick);
             default:
                 limit = string.Empty;
                 return true;

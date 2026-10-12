@@ -51,7 +51,7 @@ public sealed class ClientAuthorityTests
                     "PartyInvite", "PartyReply", "PartyLeave", "PartyKick", "PartyLead", "TradeRequest",
                     "TradeReply", "TradeOffer", "TradeLock", "TradeConfirm", "TradeCancel", "StorageOpen",
                     "StorageDeposit", "StorageWithdraw", "MarketOpen", "MarketList", "MarketBuy", "MarketCollect",
-                    "RefineItem", "InsertCard", "RemoveCard"
+                    "RefineItem", "InsertCard", "RemoveCard", "InspectPlayer"
                 }),
             "a new client message must be checked against the rules below before it joins this list");
     }

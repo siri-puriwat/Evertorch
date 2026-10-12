@@ -553,6 +553,14 @@ public sealed class InboundQueue
                 decoded = InboundEvent.ForRemoveCard(connection, remove!.Npc, remove.InventoryItem, remove.Slot,
                     remove.Card, remove.CommandSequence);
                 return true;
+            case MessageOpcode.InspectPlayer:
+                if (!InspectPlayer.TryRead(payload, out InspectPlayer? inspect))
+                {
+                    return false;
+                }
+
+                decoded = InboundEvent.ForInspectPlayer(connection, inspect!.Entity, inspect.CommandSequence);
+                return true;
             case MessageOpcode.LearnSkill:
                 if (!LearnSkill.TryRead(payload, out LearnSkill? learn))
                 {

@@ -1728,6 +1728,54 @@ public sealed class PlayerPanelTests
         Assert.That(inserts, Is.EqualTo(new[] { (7L, 3L) }));
     }
 
+    // The answer to an inspection opens the Inspect window in place of the Stats window, naming the player and each
+    // worn item with its cards, each line on one row at 12 points or more; Stats then replaces it (Prototype Content §2).
+    [UnityTest]
+    public IEnumerator InspectWindow_OnTheAnswer_NamesThePlayersWornItems_InPlaceOfStats()
+    {
+        GameClient client = CreateIdleClient();
+        (ClientWorld world, RecordingConnection _) = GiveRecordedWorld(client);
+        GiveShop(client);
+        var inspectWindow = InspectWindow.Create(client);
+        var statsWindow = StatsWindow.Create(client);
+        m_created.Add(inspectWindow.gameObject);
+        m_created.Add(statsWindow.gameObject);
+        const BindingFlags field = BindingFlags.NonPublic | BindingFlags.Instance;
+        typeof(GameClient).GetField("m_inspectWindow", field)!.SetValue(client, inspectWindow);
+        typeof(GameClient).GetField("m_statsWindow", field)!.SetValue(client, statsWindow);
+        Spawn(world, 7, EntityKind.Player, "job.adventurer", 1000, "Bobby");
+        client.ToggleStats();
+        var answer = new InspectedEquipment(
+            new EntityId(7),
+            new InspectedItem(
+                new ItemDefinitionId(IronSword),
+                7,
+                new[] { new ItemDefinitionId(Keen), new ItemDefinitionId(Arcane) }),
+            new InspectedItem(new ItemDefinitionId(Mantle), 0, new[] { new ItemDefinitionId(Shelled) }));
+
+        typeof(GameClient).GetMethod("OnInspectedEquipment", field)!.Invoke(client, new object[] { answer });
+        yield return null;
+        yield return null;
+        string shown = inspectWindow.Text;
+        bool isStatsOpen = statsWindow.IsOpen;
+        foreach (TMP_Text label in inspectWindow.GetComponentsInChildren<TMP_Text>()
+                     .Where(label => label.name == "Row"))
+        {
+            AssertFitsItsRow(label, 1);
+        }
+
+        client.ToggleStats();
+        yield return null;
+
+        Assert.That(
+            shown,
+            Is.EqualTo(
+                "Bobby\nWeapon: +7 Keen Arcane Iron Sword [2]\n· Forest Crawler Card\n· Spark Wisp Card"
+                + "\nArmor: Shelled Monarch Mantle [1]\n· Grotto Crawler Card"));
+        Assert.That(isStatsOpen, Is.False, "the answer took the Stats window's place");
+        Assert.That((inspectWindow.IsOpen, statsWindow.IsOpen), Is.EqualTo((false, true)), "Stats replaces it");
+    }
+
     // Prototype Content §2: selling a carded row asks a second press, "Its cards are lost.", which then sells it.
     [UnityTest]
     public IEnumerator NpcWindow_ForTheQuartermaster_AsksForASecondPressBeforeSellingACardedRow()

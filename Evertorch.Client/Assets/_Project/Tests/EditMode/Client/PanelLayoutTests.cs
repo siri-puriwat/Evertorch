@@ -28,7 +28,7 @@ public sealed class PanelLayoutTests
             TouchControls.SkillsButtonBounds(canvasHeight), TouchControls.OverlayToggleBounds(canvasHeight),
             NpcWindow.BoundsFor(canvasHeight, 100, true), StatsWindow.BoundsFor(canvasHeight, true),
             SkillsWindow.BoundsFor(canvasHeight, 11, true), InventoryWindow.BoundsFor(canvasHeight, 60, true),
-            CardWindow.BoundsFor(canvasHeight, 100, true)
+            CardWindow.BoundsFor(canvasHeight, 100, true), InspectWindow.BoundsFor(canvasHeight, 10, true)
         };
 
         Assert.That(others.Where(chat.Overlaps), Is.Empty);
@@ -164,7 +164,8 @@ public sealed class PanelLayoutTests
         Rect[] windows =
         {
             NpcWindow.BoundsFor(canvasHeight, 100, true), StatsWindow.BoundsFor(canvasHeight, true),
-            SkillsWindow.BoundsFor(canvasHeight, 11, true), CardWindow.BoundsFor(canvasHeight, 100, true)
+            SkillsWindow.BoundsFor(canvasHeight, 11, true), CardWindow.BoundsFor(canvasHeight, 100, true),
+            InspectWindow.BoundsFor(canvasHeight, 10, true)
         };
         Vector2 beside = TargetFrame.XRangeFor(true, true);
 
@@ -215,6 +216,23 @@ public sealed class PanelLayoutTests
         Assert.That(list.yMax, Is.EqualTo(canvasHeight - 64f).Within(1e-3f), "under the status bar");
         Assert.That(prompt.xMax, Is.LessThanOrEqualTo(InventoryWindow.Left), "short of the inventory window");
         Assert.That(PartyList.RowHeightFor(canvasHeight, isTouch), Is.GreaterThanOrEqualTo(24f), "a row stays legible");
+    }
+
+    // The Inspect window hangs where the NPC window does and stops above the chat and the stick; its ten lines at most,
+    // two items with four cards each, scroll on the smallest canvas (Prototype Content §2).
+    [TestCase(486f)]
+    [TestCase(607.5f)]
+    [TestCase(1920f)]
+    public void InspectWindow_HangsBelowTheStatusBar_AndStopsAboveTheChatAndTheStick(float canvasHeight)
+    {
+        Rect withTouch = InspectWindow.BoundsFor(canvasHeight, 10, true);
+        Rect fewRows = InspectWindow.BoundsFor(1920f, 2, false);
+
+        Assert.That(withTouch.yMax, Is.EqualTo(canvasHeight - 64f).Within(1e-3f), "below the status bar");
+        Assert.That(withTouch.Overlaps(ChatPanel.BoundsFor(true)), Is.False, "clear of the chat");
+        Assert.That(withTouch.Overlaps(TouchControls.StickBounds), Is.False, "clear of the stick");
+        Assert.That(fewRows.height, Is.EqualTo(2 * 10f + 30f + 6f + 2 * 30f + 6f).Within(1e-3f), "just tall enough");
+        Assert.That(fewRows.xMax, Is.EqualTo(NpcWindow.Right), "at the NPC window's place");
     }
 
     // The Card window hangs where the NPC window does and stops above the chat and the stick (Prototype Content §2).
