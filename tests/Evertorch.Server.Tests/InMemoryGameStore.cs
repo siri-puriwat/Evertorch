@@ -17,6 +17,10 @@ internal sealed class InMemoryGameStore : IGameStore
     // The coin cap, as the PostgreSQL schema holds it.
     private const long MaxCoins = 1_000_000_000;
 
+    private const string CardInsert = "insert";
+    private const string CardRemove = "remove";
+    private const string CardReturn = "return";
+
     private readonly object m_gate = new();
     private readonly Dictionary<string, long> m_accounts = new(StringComparer.Ordinal);
     private readonly HashSet<string> m_disabledLogins = new(StringComparer.Ordinal);
@@ -171,6 +175,27 @@ internal sealed class InMemoryGameStore : IGameStore
     ///     Every refine commit attempted, in order.
     /// </summary>
     public List<RefineCommit> RefineCommits { get; } = new();
+
+    /// <summary>
+    ///     How many of the next insertions and removals commit and then throw as if the answer was lost.
+    /// </summary>
+    public int AmbiguousCardFailures { get; set; }
+
+    /// <summary>
+    ///     Every insertion and removal commit attempted, in order, by operation ID.
+    /// </summary>
+    public List<Guid> CardCommits { get; } = new();
+
+    /// <summary>
+    ///     Each committed change of a row's cards as <c>card_changes</c> records it, by operation ID: the change, the
+    ///     card, the carded row, the slot, the card's bag row, and the fee.
+    /// </summary>
+    public Dictionary<Guid, List<CardChangeEntry>> CardChanges { get; } = new();
+
+    /// <summary>
+    ///     The cards each committed sale lost, as its ledger row's metadata names them, by operation ID.
+    /// </summary>
+    public Dictionary<Guid, IReadOnlyList<string>> SaleCards { get; } = new();
 
     /// <summary>
     ///     Each committed refine's attempt as <c>refine_attempts</c> records it: the outcome, the levels before and
@@ -917,6 +942,28 @@ internal sealed class InMemoryGameStore : IGameStore
         }
     }
 
+    public Task<InventoryResult> CommitInsertCardAsync(InsertCardCommit insert, CancellationToken cancellationToken)
+    {
+        ThrowIfUnavailable();
+        lock (m_gate)
+        {
+            CardCommits.Add(insert.OperationId);
+            InventoryResult result = Find(insert.OperationId, insert.CharacterId, insert.ReportRows) ?? Insert(insert);
+            return Task.FromResult(LoseCardAnswer(result));
+        }
+    }
+
+    public Task<InventoryResult> CommitRemoveCardAsync(RemoveCardCommit remove, CancellationToken cancellationToken)
+    {
+        ThrowIfUnavailable();
+        lock (m_gate)
+        {
+            CardCommits.Add(remove.OperationId);
+            InventoryResult result = Find(remove.OperationId, remove.CharacterId, remove.ReportRows) ?? Remove(remove);
+            return Task.FromResult(LoseCardAnswer(result));
+        }
+    }
+
     public Task<IReadOnlyList<string>> ListStoredDefinitionIdsAsync(CancellationToken cancellationToken)
     {
         ThrowIfUnavailable();
@@ -1630,10 +1677,19 @@ internal sealed class InMemoryGameStore : IGameStore
 
         // A turn-in's ledger row names no inventory row; each reported row comes back under its own item, as the
         // PostgreSQL store reads it.
-        IEnumerable<ReportedRow> named = entry.Item == 0
-            ? reported
-            : new[] { new ReportedRow(entry.Item, entry.ItemDefinition) }
-                .Concat(reported.Where(other => other.Id != entry.Item));
+        var named = (entry.Item == 0
+                ? reported
+                : new[] { new ReportedRow(entry.Item, entry.ItemDefinition) }
+                    .Concat(reported.Where(other => other.Id != entry.Item)))
+            .ToList();
+        if (CardChanges.TryGetValue(operationId, out List<CardChangeEntry>? changes))
+        {
+            foreach (CardChangeEntry change in changes.Where(change => named.All(other => other.Id != change.CardRow)))
+            {
+                named.Add(new ReportedRow(change.CardRow, change.Card));
+            }
+        }
+
         return new InventoryResult(
             InventoryStatus.Committed,
             row.InventoryRevision,
@@ -1795,6 +1851,11 @@ internal sealed class InMemoryGameStore : IGameStore
         }
 
         StoredItem sold = row.Items[index];
+        if (sold.Cards.Count > 0)
+        {
+            SaleCards.Add(sell.OperationId, sold.Cards);
+        }
+
         if (sold.Quantity == sell.Quantity)
         {
             row.Items.RemoveAt(index);
@@ -1847,6 +1908,19 @@ internal sealed class InMemoryGameStore : IGameStore
         }
 
         StoredItem refined = row.Items[index];
+        IReadOnlyList<string> cards = refine.Outcome == RefineOutcomeKind.Destroyed
+            ? refined.Cards
+            : Array.Empty<string>();
+        if (cards.Any(card => !refine.CardStackLimits.ContainsKey(card)))
+        {
+            return Unchanged(InventoryStatus.Refused, row);
+        }
+
+        if (!HasRoomForCards(row, cards, refine, ore))
+        {
+            return Unchanged(InventoryStatus.InventoryFull, row);
+        }
+
         Take(row, ore, refine.MaterialQuantity);
         int target = row.Items.FindIndex(item => item.Id == refine.InventoryItemId);
         switch (refine.Outcome)
@@ -1870,6 +1944,14 @@ internal sealed class InMemoryGameStore : IGameStore
                 throw new ArgumentOutOfRangeException(nameof(refine), refine.Outcome, "A refine needs an outcome.");
         }
 
+        var returned = new List<long>();
+        for (int slot = 0; slot < cards.Count; slot++)
+        {
+            long kept = PutCard(row, cards[slot], refine.CardStackLimits[cards[slot]]);
+            Record(refine.OperationId, new CardChangeEntry(CardReturn, cards[slot], refined.Id, slot + 1, kept, 0));
+            returned.Add(kept);
+        }
+
         row.Coins -= refine.Coins;
         row.InventoryRevision = unchecked(row.InventoryRevision + 1);
         m_ledger.Add(refine.OperationId, new LedgerEntry(refine.CharacterId, refined.Id, refined.ItemDefinitionId));
@@ -1885,10 +1967,189 @@ internal sealed class InMemoryGameStore : IGameStore
             row.InventoryRevision,
             row.Coins,
             new[]
+                {
+                    row.Read(refined.Id, refined.ItemDefinitionId),
+                    row.Read(ore.Id, ore.ItemDefinitionId)
+                }
+                .Concat(returned.Distinct().Select(kept => row.Read(kept)))
+                .ToList());
+    }
+
+    // The bag after the ore and the destroyed row leave, with room for each card in a stack of it or a row of its own.
+    private static bool HasRoomForCards(Row row, IReadOnlyList<string> cards, RefineCommit refine, StoredItem ore)
+    {
+        var bag = row.Items
+            .Where(item => item.Id != refine.InventoryItemId
+                && !(item.Id == ore.Id && ore.Quantity == refine.MaterialQuantity))
+            .Select(item => (item.ItemDefinitionId, item.Quantity))
+            .ToList();
+        foreach (string card in cards)
+        {
+            int limit = refine.CardStackLimits[card];
+            int stack = limit == 1 ? -1 : bag.FindIndex(item => item.ItemDefinitionId == card && item.Quantity < limit);
+            if (stack >= 0)
             {
-                row.Read(refined.Id, refined.ItemDefinitionId),
-                row.Read(ore.Id, ore.ItemDefinitionId)
+                bag[stack] = (card, bag[stack].Quantity + 1);
+            }
+            else if (bag.Count < refine.MaxRows)
+            {
+                bag.Add((card, 1));
+            }
+            else
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    // As the PostgreSQL store checks it: the card's row and the item's, unworn, with a free slot; the card leaves its
+    // row and joins the item's cards.
+    private InventoryResult Insert(InsertCardCommit insert)
+    {
+        Row row = m_characters[insert.CharacterId];
+        int card = row.Items.FindIndex(item => item.Id == insert.CardItemId);
+        int index = row.Items.FindIndex(item => item.Id == insert.InventoryItemId);
+        if (card < 0
+            || index < 0
+            || card == index
+            || row.Items[card].ItemDefinitionId != insert.CardDefinitionId
+            || row.Items[index].ItemDefinitionId != insert.ItemDefinitionId)
+        {
+            return Unchanged(InventoryStatus.Refused, row);
+        }
+
+        if (row.Equipment.ContainsValue(insert.InventoryItemId))
+        {
+            return Unchanged(InventoryStatus.RowWorn, row);
+        }
+
+        StoredItem carded = row.Items[index];
+        if (carded.Cards.Count >= insert.Slots)
+        {
+            return Unchanged(InventoryStatus.NoFreeSlot, row);
+        }
+
+        var cards = carded.Cards.Append(insert.CardDefinitionId).ToList();
+        row.Items[index] = new StoredItem(
+            carded.Id,
+            carded.ItemDefinitionId,
+            carded.Quantity,
+            null,
+            carded.RefineLevel,
+            cards);
+        Take(row, row.Items[card], 1);
+        row.InventoryRevision = unchecked(row.InventoryRevision + 1);
+        m_ledger.Add(insert.OperationId,
+            new LedgerEntry(insert.CharacterId, insert.CardItemId, insert.CardDefinitionId));
+        Record(insert.OperationId,
+            new CardChangeEntry(CardInsert, insert.CardDefinitionId, carded.Id, cards.Count, insert.CardItemId, 0));
+        return new InventoryResult(
+            InventoryStatus.Committed,
+            row.InventoryRevision,
+            row.Coins,
+            new[]
+            {
+                row.Read(insert.CardItemId, insert.CardDefinitionId),
+                row.Read(carded.Id, carded.ItemDefinitionId)
             });
+    }
+
+    // As the PostgreSQL store checks it: the row with the card at the slot, unworn, the fee, and the bag's room; the
+    // later cards move down a slot, and the card goes into a stack of it or a row of its own.
+    private InventoryResult Remove(RemoveCardCommit remove)
+    {
+        Row row = m_characters[remove.CharacterId];
+        int index = row.Items.FindIndex(item => item.Id == remove.InventoryItemId);
+        if (index < 0
+            || row.Items[index].ItemDefinitionId != remove.ItemDefinitionId
+            || remove.Slot < 1
+            || remove.Slot > row.Items[index].Cards.Count
+            || row.Items[index].Cards[remove.Slot - 1] != remove.CardDefinitionId)
+        {
+            return Unchanged(InventoryStatus.Refused, row);
+        }
+
+        if (row.Equipment.ContainsValue(remove.InventoryItemId))
+        {
+            return Unchanged(InventoryStatus.RowWorn, row);
+        }
+
+        if (row.Coins < remove.Fee)
+        {
+            return Unchanged(InventoryStatus.NotEnoughCoins, row);
+        }
+
+        bool hasStack = remove.CardStackLimit > 1
+            && row.Items.Any(item => item.ItemDefinitionId == remove.CardDefinitionId
+                && item.Quantity < remove.CardStackLimit);
+        if (!hasStack && row.Items.Count >= remove.MaxRows)
+        {
+            return Unchanged(InventoryStatus.InventoryFull, row);
+        }
+
+        StoredItem carded = row.Items[index];
+        var cards = carded.Cards.ToList();
+        cards.RemoveAt(remove.Slot - 1);
+        row.Items[index] = new StoredItem(
+            carded.Id,
+            carded.ItemDefinitionId,
+            carded.Quantity,
+            null,
+            carded.RefineLevel,
+            cards);
+        long kept = PutCard(row, remove.CardDefinitionId, remove.CardStackLimit);
+        row.Coins -= remove.Fee;
+        row.InventoryRevision = unchecked(row.InventoryRevision + 1);
+        m_ledger.Add(remove.OperationId, new LedgerEntry(remove.CharacterId, kept, remove.CardDefinitionId));
+        Record(remove.OperationId,
+            new CardChangeEntry(CardRemove, remove.CardDefinitionId, carded.Id, remove.Slot, kept, remove.Fee));
+        return new InventoryResult(
+            InventoryStatus.Committed,
+            row.InventoryRevision,
+            row.Coins,
+            new[] { row.Read(carded.Id), row.Read(kept) });
+    }
+
+    // One card into the bag: one more in a stack of it with room, else a row of its own; the row that took it.
+    private long PutCard(Row row, string card, int stackLimit)
+    {
+        int stack = stackLimit == 1
+            ? -1
+            : row.Items.FindIndex(item => item.ItemDefinitionId == card && item.Quantity < stackLimit);
+        if (stack >= 0)
+        {
+            StoredItem held = row.Items[stack];
+            row.Items[stack] = new StoredItem(held.Id, card, held.Quantity + 1);
+            return held.Id;
+        }
+
+        var added = new StoredItem(++m_lastItem, card, 1);
+        row.Items.Add(added);
+        return added.Id;
+    }
+
+    private void Record(Guid operation, CardChangeEntry change)
+    {
+        if (!CardChanges.TryGetValue(operation, out List<CardChangeEntry>? changes))
+        {
+            changes = new List<CardChangeEntry>();
+            CardChanges.Add(operation, changes);
+        }
+
+        changes.Add(change);
+    }
+
+    private InventoryResult LoseCardAnswer(InventoryResult result)
+    {
+        if (AmbiguousCardFailures > 0 && result.Status == InventoryStatus.Committed)
+        {
+            AmbiguousCardFailures--;
+            throw new StoreUnavailableException(new TimeoutException("scripted loss of the commit's answer"));
+        }
+
+        return result;
     }
 
     private Task<InventoryResult> AnswerEquipment(InventoryResult result)
@@ -2423,6 +2684,34 @@ internal sealed class InMemoryGameStore : IGameStore
         public long Coins { get; }
 
         public long Tax { get; }
+    }
+
+    /// <summary>
+    ///     One change of a row's cards, as <c>card_changes</c> records it.
+    /// </summary>
+    public sealed class CardChangeEntry
+    {
+        public CardChangeEntry(string change, string card, long item, int slot, long cardRow, long fee)
+        {
+            Change = change;
+            Card = card;
+            Item = item;
+            Slot = slot;
+            CardRow = cardRow;
+            Fee = fee;
+        }
+
+        public string Change { get; }
+
+        public string Card { get; }
+
+        public long Item { get; }
+
+        public int Slot { get; }
+
+        public long CardRow { get; }
+
+        public long Fee { get; }
     }
 
     private sealed class LedgerEntry

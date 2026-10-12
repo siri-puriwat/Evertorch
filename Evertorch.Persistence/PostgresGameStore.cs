@@ -937,6 +937,7 @@ WHERE character_quests.state = {CharacterQuestRow.ActiveState} AND character_que
                                 OperationId = sell.OperationId,
                                 ActorCharacterId = sell.CharacterId,
                                 OperationType = LedgerRow.SellOperation,
+                                MetadataJson = row.InstanceDataJson,
                                 ItemInstanceId = row.Id,
                                 ItemDefinitionId = row.ItemDefinitionId,
                                 QuantityDelta = -sell.Quantity,
@@ -1789,6 +1790,14 @@ WHERE character_quests.state = {CharacterQuestRow.ActiveState} AND character_que
                         return Unchanged(InventoryStatus.NotEnoughCoins, character);
                     }
 
+                    IReadOnlyList<string> cards = refine.Outcome == RefineOutcomeKind.Destroyed
+                        ? CardsJson.Read(row.InstanceDataJson)
+                        : Array.Empty<string>();
+                    if (cards.Any(card => !refine.CardStackLimits.ContainsKey(card)))
+                    {
+                        return Refused(character);
+                    }
+
                     if (ore.Quantity == refine.MaterialQuantity)
                     {
                         context.InventoryItems.Remove(ore);
@@ -1799,8 +1808,18 @@ WHERE character_quests.state = {CharacterQuestRow.ActiveState} AND character_que
                         ore.Version++;
                     }
 
-                    character.Currency -= refine.Coins;
                     Refine(context, row, refine);
+                    List<long> returned = await ReturnCardsAsync(context, refine, row, cards, cancellationToken)
+                        .ConfigureAwait(false);
+                    if (returned.Count < cards.Count)
+                    {
+                        await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
+                        context.ChangeTracker.Clear();
+                        return Unchanged(InventoryStatus.InventoryFull, character);
+                    }
+
+                    character.Currency -= refine.Coins;
+
                     context.RefineAttempts.Add(
                         new RefineAttemptRow
                         {
@@ -1832,8 +1851,207 @@ WHERE character_quests.state = {CharacterQuestRow.ActiveState} AND character_que
                                 CurrencyDelta = -refine.Coins,
                                 CreatedAt = refine.At
                             },
-                            new[] { row.Id, ore.Id },
+                            new[] { row.Id, ore.Id }.Concat(returned).Distinct().ToArray(),
                             refine.ReportRows,
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                }
+            },
+            cancellationToken);
+    }
+
+    public Task<InventoryResult> CommitInsertCardAsync(InsertCardCommit insert, CancellationToken cancellationToken)
+    {
+        return RunAsync(
+            async context =>
+            {
+                await using (IDbContextTransaction transaction =
+                             await context.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false))
+                {
+                    CharacterRow character = await LockCharacterAsync(context, insert.CharacterId, cancellationToken)
+                        .ConfigureAwait(false);
+                    InventoryResult? earlier = await FindAsync(
+                            context,
+                            insert.OperationId,
+                            insert.CharacterId,
+                            insert.ReportRows,
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                    if (earlier != null)
+                    {
+                        return earlier;
+                    }
+
+                    InventoryItemRow? card = await RowOfAsync(context, insert.CharacterId, insert.CardItemId,
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                    InventoryItemRow? row = await RowOfAsync(context, insert.CharacterId, insert.InventoryItemId,
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                    if (card == null
+                        || row == null
+                        || card.Id == row.Id
+                        || card.ItemDefinitionId != insert.CardDefinitionId
+                        || row.ItemDefinitionId != insert.ItemDefinitionId)
+                    {
+                        return Refused(character);
+                    }
+
+                    if (await IsWornAsync(context, row.Id, cancellationToken).ConfigureAwait(false))
+                    {
+                        return Unchanged(InventoryStatus.RowWorn, character);
+                    }
+
+                    var cards = CardsJson.Read(row.InstanceDataJson).ToList();
+                    if (cards.Count >= insert.Slots)
+                    {
+                        return Unchanged(InventoryStatus.NoFreeSlot, character);
+                    }
+
+                    if (card.Quantity == 1)
+                    {
+                        context.InventoryItems.Remove(card);
+                    }
+                    else
+                    {
+                        card.Quantity--;
+                        card.Version++;
+                    }
+
+                    cards.Add(insert.CardDefinitionId);
+                    row.InstanceDataJson = CardsJson.Write(cards);
+                    row.Version++;
+                    context.CardChanges.Add(
+                        new CardChangeRow
+                        {
+                            OperationId = insert.OperationId,
+                            CharacterId = insert.CharacterId,
+                            Change = CardChangeRow.InsertChange,
+                            CardDefinitionId = insert.CardDefinitionId,
+                            ItemInstanceId = row.Id,
+                            ItemDefinitionId = row.ItemDefinitionId,
+                            Slot = cards.Count,
+                            CardInstanceId = card.Id,
+                            CreatedAt = insert.At
+                        });
+                    return await CommitOperationAsync(
+                            context,
+                            transaction,
+                            character,
+                            new LedgerRow
+                            {
+                                OperationId = insert.OperationId,
+                                ActorCharacterId = insert.CharacterId,
+                                OperationType = LedgerRow.CardInsertOperation,
+                                ItemInstanceId = card.Id,
+                                ItemDefinitionId = insert.CardDefinitionId,
+                                QuantityDelta = -1,
+                                CreatedAt = insert.At
+                            },
+                            new[] { card.Id, row.Id },
+                            insert.ReportRows,
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                }
+            },
+            cancellationToken);
+    }
+
+    public Task<InventoryResult> CommitRemoveCardAsync(RemoveCardCommit remove, CancellationToken cancellationToken)
+    {
+        return RunAsync(
+            async context =>
+            {
+                await using (IDbContextTransaction transaction =
+                             await context.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false))
+                {
+                    CharacterRow character = await LockCharacterAsync(context, remove.CharacterId, cancellationToken)
+                        .ConfigureAwait(false);
+                    InventoryResult? earlier = await FindAsync(
+                            context,
+                            remove.OperationId,
+                            remove.CharacterId,
+                            remove.ReportRows,
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                    if (earlier != null)
+                    {
+                        return earlier;
+                    }
+
+                    InventoryItemRow? row = await RowOfAsync(context, remove.CharacterId, remove.InventoryItemId,
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                    List<string> cards =
+                        row == null ? new List<string>() : CardsJson.Read(row.InstanceDataJson).ToList();
+                    if (row == null
+                        || row.ItemDefinitionId != remove.ItemDefinitionId
+                        || remove.Slot < 1
+                        || remove.Slot > cards.Count
+                        || cards[remove.Slot - 1] != remove.CardDefinitionId)
+                    {
+                        return Refused(character);
+                    }
+
+                    if (await IsWornAsync(context, row.Id, cancellationToken).ConfigureAwait(false))
+                    {
+                        return Unchanged(InventoryStatus.RowWorn, character);
+                    }
+
+                    if (character.Currency < remove.Fee)
+                    {
+                        return Unchanged(InventoryStatus.NotEnoughCoins, character);
+                    }
+
+                    List<InventoryItemRow> bag = await context.InventoryItems
+                        .Where(item => item.CharacterId == remove.CharacterId)
+                        .OrderBy(item => item.Id)
+                        .ToListAsync(cancellationToken)
+                        .ConfigureAwait(false);
+                    InventoryItemRow? stack = CardStackFor(bag, remove.CardDefinitionId, remove.CardStackLimit);
+                    if (stack == null && bag.Count >= remove.MaxRows)
+                    {
+                        return Unchanged(InventoryStatus.InventoryFull, character);
+                    }
+
+                    character.Currency -= remove.Fee;
+                    cards.RemoveAt(remove.Slot - 1);
+                    row.InstanceDataJson = CardsJson.Write(cards);
+                    row.Version++;
+                    InventoryItemRow kept = await PutCardAsync(context, remove.CharacterId, remove.CardDefinitionId,
+                            stack, cancellationToken)
+                        .ConfigureAwait(false);
+                    context.CardChanges.Add(
+                        new CardChangeRow
+                        {
+                            OperationId = remove.OperationId,
+                            CharacterId = remove.CharacterId,
+                            Change = CardChangeRow.RemoveChange,
+                            CardDefinitionId = remove.CardDefinitionId,
+                            ItemInstanceId = row.Id,
+                            ItemDefinitionId = row.ItemDefinitionId,
+                            Slot = remove.Slot,
+                            CardInstanceId = kept.Id,
+                            Fee = remove.Fee,
+                            CreatedAt = remove.At
+                        });
+                    return await CommitOperationAsync(
+                            context,
+                            transaction,
+                            character,
+                            new LedgerRow
+                            {
+                                OperationId = remove.OperationId,
+                                ActorCharacterId = remove.CharacterId,
+                                OperationType = LedgerRow.CardRemoveOperation,
+                                ItemInstanceId = kept.Id,
+                                ItemDefinitionId = remove.CardDefinitionId,
+                                QuantityDelta = 1,
+                                CurrencyDelta = -remove.Fee,
+                                CreatedAt = remove.At
+                            },
+                            new[] { row.Id, kept.Id },
+                            remove.ReportRows,
                             cancellationToken)
                         .ConfigureAwait(false);
                 }
@@ -3068,6 +3286,118 @@ WHERE character_skills.level <> EXCLUDED.level",
             CardsJson.Read(row.InstanceDataJson));
     }
 
+    private static async Task<InventoryItemRow?> RowOfAsync(
+        EvertorchDbContext context,
+        long characterId,
+        long rowId,
+        CancellationToken cancellationToken)
+    {
+        return await context.InventoryItems
+            .SingleOrDefaultAsync(item => item.Id == rowId && item.CharacterId == characterId, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private static async Task<bool> IsWornAsync(EvertorchDbContext context, long rowId,
+        CancellationToken cancellationToken)
+    {
+        return await context.Equipment
+            .AnyAsync(slot => slot.InventoryItemId == rowId, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    // A card merges into a stack of it with room, the first by row; a card that does not stack takes a row of its own.
+    private static InventoryItemRow? CardStackFor(IEnumerable<InventoryItemRow> bag, string card, int stackLimit)
+    {
+        return stackLimit == 1
+            ? null
+            : bag.FirstOrDefault(item => item.ItemDefinitionId == card && item.Quantity < stackLimit);
+    }
+
+    // The card into the bag: one more in its stack, or a new row saved at once, so the ledger and the card's change can
+    // name it.
+    private static async Task<InventoryItemRow> PutCardAsync(
+        EvertorchDbContext context,
+        long characterId,
+        string card,
+        InventoryItemRow? stack,
+        CancellationToken cancellationToken)
+    {
+        if (stack != null)
+        {
+            stack.Quantity++;
+            stack.Version++;
+            return stack;
+        }
+
+        var added = new InventoryItemRow
+        {
+            CharacterId = characterId,
+            ItemDefinitionId = card,
+            Quantity = 1
+        };
+        context.InventoryItems.Add(added);
+        await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        return added;
+    }
+
+    // A refine that destroyed a carded row returns its cards to the bag, each with a change of its own (Gameplay Systems
+    // §11.6); the rows that took them, or fewer when the bag ran out of room.
+    private static async Task<List<long>> ReturnCardsAsync(
+        EvertorchDbContext context,
+        RefineCommit refine,
+        InventoryItemRow destroyed,
+        IReadOnlyList<string> cards,
+        CancellationToken cancellationToken)
+    {
+        var returned = new List<long>();
+        if (cards.Count == 0)
+        {
+            return returned;
+        }
+
+        // The destroyed row and an emptied ore are already marked deleted, so the bag is the rows that stay.
+        var bag = (await context.InventoryItems
+                .Where(item => item.CharacterId == refine.CharacterId)
+                .OrderBy(item => item.Id)
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false))
+            .Where(item => context.Entry(item).State != EntityState.Deleted)
+            .ToList();
+        for (int index = 0; index < cards.Count; index++)
+        {
+            InventoryItemRow? stack = CardStackFor(bag, cards[index], refine.CardStackLimits[cards[index]]);
+            if (stack == null && bag.Count >= refine.MaxRows)
+            {
+                return returned;
+            }
+
+            InventoryItemRow kept = await PutCardAsync(context, refine.CharacterId, cards[index], stack,
+                    cancellationToken)
+                .ConfigureAwait(false);
+            if (stack == null)
+            {
+                bag.Add(kept);
+            }
+
+            context.CardChanges.Add(
+                new CardChangeRow
+                {
+                    OperationId = refine.OperationId,
+                    CharacterId = refine.CharacterId,
+                    Change = CardChangeRow.ReturnChange,
+                    CardDefinitionId = cards[index],
+                    ItemInstanceId = destroyed.Id,
+                    ItemDefinitionId = destroyed.ItemDefinitionId,
+                    Slot = index + 1,
+                    CardInstanceId = kept.Id,
+                    CreatedAt = refine.At
+                });
+            returned.Add(kept.Id);
+        }
+
+        return returned;
+    }
+
     private static InventoryResult Refused(CharacterRow character)
     {
         return new InventoryResult(
@@ -3153,6 +3483,18 @@ WHERE character_skills.level <> EXCLUDED.level",
         }
 
         reported.AddRange(reportRows.Where(row => reported.All(named => named.Id != row.Id)));
+        var changed = await context.CardChanges
+            .AsNoTracking()
+            .Where(change => change.OperationId == operationId)
+            .OrderBy(change => change.Id)
+            .Select(change => new { change.CardInstanceId, change.CardDefinitionId })
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        foreach (var change in changed.Where(change => reported.All(named => named.Id != change.CardInstanceId)))
+        {
+            reported.Add(new ReportedRow(change.CardInstanceId, change.CardDefinitionId));
+        }
+
         IReadOnlyList<StoredItem> rows = await ReadRowsAsync(context, characterId, reported, cancellationToken)
             .ConfigureAwait(false);
         return new InventoryResult(InventoryStatus.Committed, (uint)now.InventoryRevision, now.Currency, rows);

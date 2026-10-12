@@ -10,7 +10,8 @@ namespace Evertorch.Server.Tests
 {
 /// <summary>
 ///     The in-memory store keeps PostgreSQL's rules for a row's cards (Persistence §4, §5; <c>CardStoreTests</c>): a
-///     row keeps its cards wherever it goes, and a second item with a stack limit of 1 takes a row of its own.
+///     row keeps its cards wherever it goes, an insertion and a removal move one card each, a refine that breaks a
+///     carded row returns its cards, and a second item with a stack limit of 1 takes a row of its own.
 /// </summary>
 [TestFixture]
 public sealed class InMemoryCardStoreTests
@@ -93,6 +94,38 @@ public sealed class InMemoryCardStoreTests
     }
 
     [Test]
+    public void InsertAndRemove_MoveOneCard_AndRecordTheirChanges()
+    {
+        long character = NewCharacter(NewAccount());
+        m_store.GiveItems(character, Keen, 1, 2, 0);
+        m_store.GiveItems(character, Sword, 1, 1, 0);
+        long keen = m_store.Stored(character).Items[0].Id;
+        long sword = m_store.Stored(character).Items[1].Id;
+        var inserted = Guid.NewGuid();
+        var removed = Guid.NewGuid();
+
+        InventoryResult insert = m_store.CommitInsertCardAsync(
+                new InsertCardCommit(inserted, character, keen, Keen, sword, Sword, 2, Now),
+                CancellationToken.None)
+            .GetAwaiter()
+            .GetResult();
+        InventoryResult remove = m_store.CommitRemoveCardAsync(
+                new RemoveCardCommit(removed, character, sword, Sword, 1, Keen, 40, 999, 100, Now),
+                CancellationToken.None)
+            .GetAwaiter()
+            .GetResult();
+
+        Assert.That(insert.Rows.Select(row => (row.Id, row.Quantity, row.Cards.Count)),
+            Is.EqualTo(new[] { (keen, 1, 0), (sword, 1, 1) }));
+        Assert.That((remove.Coins, remove.Rows.Select(row => (row.Id, row.Quantity, row.Cards.Count))),
+            Is.EqualTo((60L, new[] { (sword, 1, 0), (keen, 2, 0) })));
+        Assert.That(
+            m_store.CardChanges[inserted].Concat(m_store.CardChanges[removed])
+                .Select(change => (change.Change, change.Slot, change.CardRow, change.Fee)),
+            Is.EqualTo(new[] { ("insert", 1, keen, 0L), ("remove", 1, keen, 40L) }));
+    }
+
+    [Test]
     public void Pickup_OfASecondItemWithAStackLimitOfOne_TakesARowOfItsOwn()
     {
         long character = NewCharacter(NewAccount());
@@ -107,6 +140,32 @@ public sealed class InMemoryCardStoreTests
         Assert.That(result.Status, Is.EqualTo(InventoryStatus.Committed));
         Assert.That(m_store.Stored(character).Items.Select(item => (item.ItemDefinitionId, item.Quantity)),
             Is.EqualTo(new[] { (Sword, 1), (Sword, 1) }));
+    }
+
+    [Test]
+    public void Refine_ThatDestroysACardedRow_ReturnsItsCards_OrWithoutRoomChangesNothing()
+    {
+        long character = NewCharacter(NewAccount());
+        long sword = CardedSword(character);
+        m_store.GiveItems(character, "item.material.emberstone", 1, 2, 0);
+        long ore = m_store.Stored(character).Items[1].Id;
+        var limits = new Dictionary<string, int> { [Keen] = 999, [Bane] = 999 };
+
+        RefineCommit Destroy(int maxRows)
+        {
+            return new RefineCommit(Guid.NewGuid(), character, sword, Sword, 7, RefineOutcomeKind.Destroyed, 0, ore,
+                "item.material.emberstone", 1, 10, Now, limits, maxRows);
+        }
+
+        InventoryResult full = m_store.CommitRefineAsync(Destroy(2), CancellationToken.None).GetAwaiter().GetResult();
+        RefineCommit refine = Destroy(3);
+        InventoryResult broken = m_store.CommitRefineAsync(refine, CancellationToken.None).GetAwaiter().GetResult();
+
+        Assert.That((full.Status, full.Coins), Is.EqualTo((InventoryStatus.InventoryFull, 100L)));
+        Assert.That(broken.Rows.Select(row => (row.ItemDefinitionId, row.Quantity)),
+            Is.EqualTo(new[] { (Sword, 0), ("item.material.emberstone", 1), (Keen, 1), (Bane, 1) }));
+        Assert.That(m_store.CardChanges[refine.OperationId].Select(change => (change.Change, change.Card, change.Slot)),
+            Is.EqualTo(new[] { ("return", Keen, 1), ("return", Bane, 2) }));
     }
 }
 }

@@ -23,6 +23,7 @@ public sealed class SchemaTests
     private const string AddBossRewards = "20261002222843_AddBossRewards";
     private const string AddTradesAndStorage = "20261003172540_AddTradesAndStorage";
     private const string AddMarketBoard = "20261010111957_AddMarketBoard";
+    private const string AddRefining = "20261011013231_AddRefining";
 
     private PostgresFixture m_database = null!;
     private Sql m_sql = null!;
@@ -182,6 +183,8 @@ public sealed class SchemaTests
     [TestCase("market_buy")]
     [TestCase("market_collect")]
     [TestCase("refine")]
+    [TestCase("card_insert")]
+    [TestCase("card_remove")]
     public void Ledger_WithAKnownOperationType_IsStored(string operationType)
     {
         long character = NewCharacter();
@@ -218,6 +221,32 @@ public sealed class SchemaTests
         long account = m_sql.InsertAccount();
 
         AssertFailsWith(CheckViolation, Sql.SessionTokenInsert(account, lifetime: lifetime));
+    }
+
+    // Persistence §4: instance data is null or exactly {"cards": [...]} with one to four strings, on a row of one, in
+    // the bag and in storage alike.
+    [TestCase("'{}'", 1)]
+    [TestCase("'{\"cards\": []}'", 1)]
+    [TestCase("'{\"cards\": [\"a\", \"b\", \"c\", \"d\", \"e\"]}'", 1)]
+    [TestCase("'{\"cards\": [1]}'", 1)]
+    [TestCase("'{\"cards\": \"a\"}'", 1)]
+    [TestCase("'{\"cards\": [\"a\"], \"note\": 1}'", 1)]
+    [TestCase("'[\"a\"]'", 1)]
+    [TestCase("'{\"cards\": [\"a\"]}'", 2)]
+    public void Cards_OutsideTheirShape_AreRejected_InTheBagAndInStorage(string data, int quantity)
+    {
+        long character = NewCharacter();
+        long account = m_sql.InsertAccount();
+        m_sql.Execute($"INSERT INTO account_storages (account_id, revision, version) VALUES ({account}, 0, 0)");
+
+        AssertFailsWith(
+            CheckViolation,
+            "INSERT INTO inventory_items (character_id, item_definition_id, quantity, refine_level, "
+            + $"instance_data_json, version) VALUES ({character}, 'item.weapon.iron_sword', {quantity}, 0, {data}, 0)");
+        AssertFailsWith(
+            CheckViolation,
+            "INSERT INTO storage_items (account_id, item_definition_id, quantity, refine_level, instance_data_json, "
+            + $"version) VALUES ({account}, 'item.weapon.iron_sword', {quantity}, 0, {data}, 0)");
     }
 
     [Test]
@@ -287,6 +316,57 @@ public sealed class SchemaTests
         Assert.That((refused as PostgresException)?.SqlState, Is.EqualTo(CheckViolation), "the prize's row holds");
         Assert.That(afterDown, Is.EqualTo(CheckViolation), "no prize without the type");
         Assert.That(SqlStateOf(plainSql, Sql.LedgerInsert(Guid.NewGuid(), character, "boss_reward")), Is.Null);
+    }
+
+    // AddCards runs down only while no ledger row is of a type it adds, drops its table with its rows, and lets any
+    // instance data in again (Persistence §4, §11).
+    [Test]
+    public void AddCards_Down_IsRefusedOverACardRow_AndOtherwiseDropsItsTable()
+    {
+        using var carded = PostgresFixture.Start();
+        var cardedSql = new Sql(carded.ConnectionString);
+        cardedSql.Scalar(
+            Sql.LedgerInsert(Guid.NewGuid(), cardedSql.InsertCharacter(cardedSql.InsertAccount(), "Carder"),
+                "card_insert"));
+        using var plain = PostgresFixture.Start();
+        var plainSql = new Sql(plain.ConnectionString);
+        long character = plainSql.InsertCharacter(plainSql.InsertAccount(), "Plain");
+        plainSql.Execute(Sql.CardChangeInsert(Guid.NewGuid(), character, "insert", 1));
+
+        Exception? refused = null;
+        try
+        {
+            EvertorchDatabase.ApplyMigrationsAsync(carded.ConnectionString, AddRefining, CancellationToken.None)
+                .GetAwaiter()
+                .GetResult();
+        }
+        catch (PostgresException exception)
+        {
+            refused = exception;
+        }
+
+        EvertorchDatabase.ApplyMigrationsAsync(plain.ConnectionString, AddRefining, CancellationToken.None)
+            .GetAwaiter()
+            .GetResult();
+
+        Assert.That((refused as PostgresException)?.SqlState, Is.EqualTo(CheckViolation), "a card row holds it up");
+        Assert.That(
+            plainSql.Scalar(
+                "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public' "
+                + "AND table_name = 'card_changes'"),
+            Is.Zero,
+            "its table went with it");
+        Assert.That(
+            plainSql.Scalar(
+                "INSERT INTO inventory_items (character_id, item_definition_id, quantity, refine_level, "
+                + "instance_data_json, version) "
+                + $"VALUES ({character}, 'item.material.slime_gel', 5, 0, '{{\"note\": 1}}', 0) RETURNING id"),
+            Is.Positive,
+            "the instance data's old freedom");
+        Assert.That(
+            cardedSql.Scalar("SELECT count(*) FROM economy_ledger WHERE operation_type = 'card_insert'"),
+            Is.EqualTo(1),
+            "the refused down kept the row");
     }
 
     // AddMarketBoard runs down only while no ledger row is of a type it adds, drops its tables with their rows, and
@@ -456,6 +536,45 @@ public sealed class SchemaTests
             tradedSql.Scalar("SELECT count(*) FROM economy_ledger WHERE operation_type = 'trade'"),
             Is.EqualTo(1),
             "the refused down kept the row");
+    }
+
+    [Test]
+    public void CardChanges_AreAppendOnly_AndKeepTheirRules()
+    {
+        long character = NewCharacter();
+        var operation = Guid.NewGuid();
+        m_sql.Execute(Sql.CardChangeInsert(operation, character, "insert", 1));
+
+        AssertFailsWith(CheckViolation, Sql.CardChangeInsert(Guid.NewGuid(), character, "swap", 1));
+        AssertFailsWith(CheckViolation, Sql.CardChangeInsert(Guid.NewGuid(), character, "remove", 0));
+        AssertFailsWith(CheckViolation, Sql.CardChangeInsert(Guid.NewGuid(), character, "remove", 5));
+        AssertFailsWith(CheckViolation, Sql.CardChangeInsert(Guid.NewGuid(), character, "remove", 1, -1));
+        AssertFailsWith(CheckViolation, Sql.CardChangeInsert(Guid.NewGuid(), character, "remove", 1, 1_000_001));
+        AssertFailsWith(ForeignKeyViolation, Sql.CardChangeInsert(Guid.NewGuid(), -1, "insert", 1));
+        AssertFailsWith(RestrictViolation, $"UPDATE card_changes SET fee = 1 WHERE operation_id = '{operation}'");
+        AssertFailsWith(RestrictViolation, $"DELETE FROM card_changes WHERE operation_id = '{operation}'");
+        AssertFailsWith(RestrictViolation, "TRUNCATE card_changes");
+        Assert.That(m_sql.Execute(Sql.CardChangeInsert(operation, character, "return", 4)), Is.EqualTo(1),
+            "a refine returns several cards under one operation");
+        Assert.That(m_sql.Execute(Sql.CardChangeInsert(Guid.NewGuid(), character, "remove", 1, 1_000_000)),
+            Is.EqualTo(1));
+    }
+
+    [Test]
+    public void Cards_OfOneToFour_AreStored_InTheBagAndInStorage()
+    {
+        long character = NewCharacter();
+        long account = m_sql.InsertAccount();
+        m_sql.Execute($"INSERT INTO account_storages (account_id, revision, version) VALUES ({account}, 0, 0)");
+        string bag = "INSERT INTO inventory_items (character_id, item_definition_id, quantity, refine_level, "
+            + $"instance_data_json, version) VALUES ({character}, 'item.weapon.iron_sword', 1, 0, ";
+        string stored = "INSERT INTO storage_items (account_id, item_definition_id, quantity, refine_level, "
+            + $"instance_data_json, version) VALUES ({account}, 'item.weapon.iron_sword', 1, 0, ";
+
+        Assert.That(m_sql.Execute(bag + "'{\"cards\": [\"a\"]}', 0)"), Is.EqualTo(1));
+        Assert.That(m_sql.Execute(bag + "'{\"cards\": [\"a\", \"a\", \"b\", \"a\"]}', 0)"), Is.EqualTo(1));
+        Assert.That(m_sql.Execute(stored + "'{\"cards\": [\"a\", \"b\"]}', 0)"), Is.EqualTo(1));
+        Assert.That(m_sql.Execute(bag + "NULL, 0)"), Is.EqualTo(1));
     }
 
     [Test]
@@ -738,8 +857,9 @@ public sealed class SchemaTests
                 "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name IN "
                 + "('accounts', 'characters', 'inventory_items', 'equipment', 'economy_ledger', 'character_quests', "
                 + "'session_tokens', 'character_skills', 'parties', 'party_members', 'trades', 'account_storages', "
-                + "'storage_items', 'market_prices', 'market_listings', 'market_sales', 'refine_attempts')"),
-            Is.EqualTo(17));
+                + "'storage_items', 'market_prices', 'market_listings', 'market_sales', 'refine_attempts', "
+                + "'card_changes')"),
+            Is.EqualTo(18));
     }
 
     [Test]

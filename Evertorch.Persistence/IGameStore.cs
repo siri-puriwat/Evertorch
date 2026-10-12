@@ -328,6 +328,28 @@ public interface IGameStore
     Task<InventoryResult> CommitRefineAsync(RefineCommit refine, CancellationToken cancellationToken);
 
     /// <summary>
+    ///     Puts one card into a row in one transaction with a <c>card_insert</c> ledger row and a <c>card_changes</c> row
+    ///     (Persistence §5): under the character's lock, a repeat answers from the ledger; one card leaves its row, which
+    ///     is deleted once emptied, and joins the item row's cards in its first free slot; the inventory revision goes up
+    ///     by one. The answer reports the card's row and the item's. <see cref="InventoryStatus.Refused" /> when either
+    ///     row is gone or holds another item; <see cref="InventoryStatus.RowWorn" /> when the item is worn;
+    ///     <see cref="InventoryStatus.NoFreeSlot" /> when its slots are full.
+    /// </summary>
+    Task<InventoryResult> CommitInsertCardAsync(InsertCardCommit insert, CancellationToken cancellationToken);
+
+    /// <summary>
+    ///     Takes one card out of a row at the Smith in one transaction with a <c>card_remove</c> ledger row and a
+    ///     <c>card_changes</c> row (Persistence §5): under the character's lock, a repeat answers from the ledger; the fee
+    ///     is taken, the card leaves its slot, the later cards moving down, and goes into the bag, merged into a stack of
+    ///     it or in a new row; the inventory revision goes up by one. The answer reports the item's row and the card's.
+    ///     <see cref="InventoryStatus.Refused" /> when the row is gone, holds another item, or another card at the slot;
+    ///     <see cref="InventoryStatus.RowWorn" /> when it is worn; <see cref="InventoryStatus.NotEnoughCoins" /> when the
+    ///     coins fall short of the fee; <see cref="InventoryStatus.InventoryFull" /> when the bag has no room for the
+    ///     card.
+    /// </summary>
+    Task<InventoryResult> CommitRemoveCardAsync(RemoveCardCommit remove, CancellationToken cancellationToken);
+
+    /// <summary>
     ///     Every distinct job, map, item, quest, and skill definition ID stored for any character, and every item in
     ///     storage, on the board's listings, and in its price rows, for the startup comparison with the loaded content
     ///     (Persistence §8).

@@ -50,8 +50,13 @@ public enum InventoryStatus
     MaterialShort = 9,
 
     /// <summary>
-    ///     Nothing changed: the row to refine is worn.
+    ///     Nothing changed: the row to refine, or to put a card into or take one out of, is worn.
     /// </summary>
-    RowWorn = 10
+    RowWorn = 10,
+
+    /// <summary>
+    ///     Nothing changed: the item holds as many cards as its slots (Gameplay Systems §11.7).
+    /// </summary>
+    NoFreeSlot = 11
 }
 }

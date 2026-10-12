@@ -23,7 +23,9 @@ public sealed class RefineCommit
         string materialDefinitionId,
         int materialQuantity,
         long coins,
-        DateTime at)
+        DateTime at,
+        IReadOnlyDictionary<string, int>? cardStackLimits = null,
+        int maxRows = 0)
     {
         OperationId = operationId;
         CharacterId = characterId;
@@ -37,6 +39,8 @@ public sealed class RefineCommit
         MaterialQuantity = materialQuantity;
         Coins = coins;
         At = at;
+        CardStackLimits = cardStackLimits ?? new Dictionary<string, int>();
+        MaxRows = maxRows;
         ReportRows = new[] { new ReportedRow(materialItemId, MaterialDefinitionId) };
     }
 
@@ -67,6 +71,15 @@ public sealed class RefineCommit
     public long Coins { get; }
 
     public DateTime At { get; }
+
+    /// <summary>
+    ///     The stack limit of each card the row holds, which a destroyed row's cards come back to the bag under
+    ///     (Gameplay Systems §11.6); a card missing from it refuses the refine.
+    /// </summary>
+    public IReadOnlyDictionary<string, int> CardStackLimits { get; }
+
+    /// <summary>The bag's rows, which the returned cards may not pass.</summary>
+    public int MaxRows { get; }
 
     /// <summary>
     ///     The ore's row, which the answer reports beside the refined one under its own item (Persistence §5).

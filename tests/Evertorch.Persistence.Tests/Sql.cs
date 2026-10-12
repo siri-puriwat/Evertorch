@@ -180,6 +180,15 @@ internal sealed class Sql
             + $"'{outcome}', 2, 'item.material.emberstone', {materialQuantity}, {coins}, now())";
     }
 
+    // One Keen card in or out of an Iron Sword's slot; the card's row and the sword's row need not exist.
+    public static string CardChangeInsert(Guid operation, long character, string change, int slot, long fee = 0)
+    {
+        return "INSERT INTO card_changes (operation_id, character_id, change, card_definition_id, item_instance_id, "
+            + "item_definition_id, slot, card_instance_id, fee, created_at) "
+            + $"VALUES ('{operation}', {character}, '{change}', 'item.card.forest_crawler', 1, "
+            + $"'item.weapon.iron_sword', {slot}, 2, {fee}, now())";
+    }
+
     public static string SaleInsert(Guid operation, long listing, long seller, long buyer, int units, long gross)
     {
         return "INSERT INTO market_sales (operation_id, listing_id, seller_character_id, buyer_character_id, "
