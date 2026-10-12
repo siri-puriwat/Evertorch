@@ -222,10 +222,10 @@ public sealed class TradeStoreTests
     }
 
     [Test]
-    public void Trade_OfARefinedRowWithInstanceData_KeepsThem_AndTheLoadReadsTheLevel()
+    public void Trade_OfARefinedCardedRow_KeepsBoth_AndTheLoadReadsThem()
     {
         (long ann, long bob) = NewPair(isOneAccount: true);
-        long sword = Give(ann, Sword, 1, 7, "{\"note\":\"kept\"}");
+        long sword = Give(ann, Sword, 1, 7, "{\"cards\": [\"item.card.forest_crawler\"]}");
 
         TradeResult result = Trade(Guid.NewGuid(), ann, Lines((sword, 1)), 0, bob, Lines(), 0);
         StoredCharacter? loaded = m_store
@@ -239,12 +239,15 @@ public sealed class TradeStoreTests
         Assert.That(result.Status, Is.EqualTo(TradeStatus.Committed), "characters of one account may trade");
         Assert.That(
             m_sql.Text(
-                $"SELECT refine_level || ' ' || (instance_data_json ->> 'note') FROM inventory_items WHERE id = {sword}"),
-            Is.EqualTo("7 kept"));
+                "SELECT refine_level || ' ' || (instance_data_json -> 'cards' ->> 0) FROM inventory_items "
+                + $"WHERE id = {sword}"),
+            Is.EqualTo("7 item.card.forest_crawler"));
         Assert.That(
-            loaded!.Items.Select(item => (item.Id, item.RefineLevel)),
-            Is.EqualTo(new[] { (sword, 7) }));
-        Assert.That(result.Second.Rows.Single().RefineLevel, Is.EqualTo(7), "the answer carries the level");
+            loaded!.Items.Select(item => (item.Id, item.RefineLevel, item.Cards.Single())),
+            Is.EqualTo(new[] { (sword, 7, "item.card.forest_crawler") }));
+        StoredItem answered = result.Second.Rows.Single();
+        Assert.That((answered.RefineLevel, answered.Cards.Single()), Is.EqualTo((7, "item.card.forest_crawler")),
+            "the answer carries the level and the card");
     }
 
     [Test]

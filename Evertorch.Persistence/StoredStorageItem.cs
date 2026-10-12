@@ -1,3 +1,6 @@
+using System;
+using System.Collections.Generic;
+
 namespace Evertorch.Persistence
 {
 /// <summary>
@@ -5,12 +8,18 @@ namespace Evertorch.Persistence
 /// </summary>
 public sealed class StoredStorageItem
 {
-    public StoredStorageItem(long id, string itemDefinitionId, int quantity, int refineLevel = 0)
+    public StoredStorageItem(
+        long id,
+        string itemDefinitionId,
+        int quantity,
+        int refineLevel = 0,
+        IReadOnlyList<string>? cards = null)
     {
         Id = id;
         ItemDefinitionId = itemDefinitionId;
         Quantity = quantity;
         RefineLevel = refineLevel;
+        Cards = cards ?? Array.Empty<string>();
     }
 
     public long Id { get; }
@@ -23,5 +32,10 @@ public sealed class StoredStorageItem
     public int Quantity { get; }
 
     public int RefineLevel { get; }
+
+    /// <summary>
+    ///     The stored row's cards in slot order; empty for none (Persistence §4).
+    /// </summary>
+    public IReadOnlyList<string> Cards { get; }
 }
 }

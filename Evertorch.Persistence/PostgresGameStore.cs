@@ -314,21 +314,21 @@ WHERE account_id = {account.Value} AND expires_at > {issuedAt} AND token_hash NO
                     return null;
                 }
 
-                List<StoredItem> items = await context.InventoryItems
+                var rows = await context.InventoryItems
                     .AsNoTracking()
                     .Where(item => item.CharacterId == characterId)
                     .OrderBy(item => item.Id)
-                    .Select(item => new StoredItem(
-                        item.Id,
-                        item.ItemDefinitionId,
-                        item.Quantity,
-                        context.Equipment
+                    .Select(item => new
+                    {
+                        Row = item,
+                        Slot = context.Equipment
                             .Where(worn => worn.InventoryItemId == item.Id)
                             .Select(worn => worn.Slot)
-                            .FirstOrDefault(),
-                        item.RefineLevel))
+                            .FirstOrDefault()
+                    })
                     .ToListAsync(cancellationToken)
                     .ConfigureAwait(false);
+                var items = rows.Select(item => Stored(item.Row, item.Slot)).ToList();
                 List<StoredQuest> quests = await context.CharacterQuests
                     .AsNoTracking()
                     .Where(quest => quest.CharacterId == characterId)
@@ -586,7 +586,7 @@ WHERE character_quests.state = {CharacterQuestRow.ActiveState} AND character_que
                         character.Currency,
                         new[]
                         {
-                            new StoredItem(stack.Id, stack.ItemDefinitionId, stack.Quantity, null, stack.RefineLevel)
+                            Stored(stack, null)
                         });
                 }
             },
@@ -1862,10 +1862,19 @@ WHERE character_quests.state = {CharacterQuestRow.ActiveState} AND character_que
                     .ToListAsync(cancellationToken).ConfigureAwait(false);
                 List<string> priced = await context.MarketPrices.Select(row => row.ItemDefinitionId)
                     .ToListAsync(cancellationToken).ConfigureAwait(false);
+                List<string> cards = await context.Database
+                    .SqlQueryRaw<string>(
+                        "SELECT jsonb_array_elements_text(instance_data_json -> 'cards') AS \"Value\" "
+                        + "FROM inventory_items WHERE instance_data_json IS NOT NULL "
+                        + "UNION SELECT jsonb_array_elements_text(instance_data_json -> 'cards') "
+                        + "FROM storage_items WHERE instance_data_json IS NOT NULL")
+                    .ToListAsync(cancellationToken)
+                    .ConfigureAwait(false);
                 return (IReadOnlyList<string>)jobs.Concat(maps).Concat(items).Concat(quests).Concat(skills)
                     .Concat(stored)
                     .Concat(listed)
                     .Concat(priced)
+                    .Concat(cards)
                     .Distinct()
                     .OrderBy(id => id, StringComparer.Ordinal)
                     .ToList();
@@ -2114,14 +2123,13 @@ WHERE character_quests.state = {CharacterQuestRow.ActiveState} AND character_que
                     .Select(row => row.Revision)
                     .SingleOrDefaultAsync(cancellationToken)
                     .ConfigureAwait(false);
-                List<StoredStorageItem> items = await context.StorageItems
+                List<StorageItemRow> items = await context.StorageItems
                     .AsNoTracking()
                     .Where(row => row.AccountId == account.Value)
                     .OrderBy(row => row.Id)
-                    .Select(row => new StoredStorageItem(row.Id, row.ItemDefinitionId, row.Quantity, row.RefineLevel))
                     .ToListAsync(cancellationToken)
                     .ConfigureAwait(false);
-                return new StoredStorage((uint)revision, items);
+                return new StoredStorage((uint)revision, items.Select(Stored).ToList());
             },
             cancellationToken);
     }
@@ -2429,12 +2437,7 @@ WHERE character_quests.state = {CharacterQuestRow.ActiveState} AND character_que
             characterId,
             (uint)character.InventoryRevision,
             character.Currency,
-            rows.Select(row => new StoredItem(
-                    row.Id,
-                    row.ItemDefinitionId,
-                    row.Quantity,
-                    slots.FirstOrDefault(slot => slot.InventoryItemId == row.Id)?.Slot,
-                    row.RefineLevel))
+            rows.Select(row => Stored(row, slots.FirstOrDefault(slot => slot.InventoryItemId == row.Id)?.Slot))
                 .ToList());
     }
 
@@ -2583,7 +2586,7 @@ WHERE character_quests.state = {CharacterQuestRow.ActiveState} AND character_que
             (uint)storageRevision,
             stored == null
                 ? new StoredStorageItem(storageItemId, itemDefinitionId, 0)
-                : new StoredStorageItem(stored.Id, stored.ItemDefinitionId, stored.Quantity, stored.RefineLevel));
+                : Stored(stored));
     }
 
     // Both characters are locked in the order of their IDs, so two creations over the same pair queue rather than
@@ -3043,6 +3046,28 @@ WHERE character_skills.level <> EXCLUDED.level",
         };
     }
 
+    // A row as the stores answer it, its cards read from its instance data (Persistence §4).
+    private static StoredItem Stored(InventoryItemRow row, string? slot)
+    {
+        return new StoredItem(
+            row.Id,
+            row.ItemDefinitionId,
+            row.Quantity,
+            slot,
+            row.RefineLevel,
+            CardsJson.Read(row.InstanceDataJson));
+    }
+
+    private static StoredStorageItem Stored(StorageItemRow row)
+    {
+        return new StoredStorageItem(
+            row.Id,
+            row.ItemDefinitionId,
+            row.Quantity,
+            row.RefineLevel,
+            CardsJson.Read(row.InstanceDataJson));
+    }
+
     private static InventoryResult Refused(CharacterRow character)
     {
         return new InventoryResult(
@@ -3161,7 +3186,7 @@ WHERE character_skills.level <> EXCLUDED.level",
             rows.Add(
                 row == null
                     ? new StoredItem(named.Id, named.ItemDefinitionId, 0)
-                    : new StoredItem(row.Id, row.ItemDefinitionId, row.Quantity, slot, row.RefineLevel));
+                    : Stored(row, slot));
         }
 
         return rows;

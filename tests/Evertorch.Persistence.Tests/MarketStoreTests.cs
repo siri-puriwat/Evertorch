@@ -479,7 +479,7 @@ public sealed class MarketStoreTests
         long worn = Give(seller, Sword, 1);
         m_sql.Execute(Sql.EquipmentInsert(seller, "Weapon", worn));
         long refined = Give(seller, Sword, 1, 3);
-        long carded = Give(seller, Sword, 1, 0, "{\"cards\":[]}");
+        long carded = Give(seller, Sword, 1, 0, "{\"cards\": [\"item.card.forest_crawler\"]}");
         long poor = NewCharacter(0);
         long poorDust = Give(poor, item, 5);
         long busy = NewCharacter(100);

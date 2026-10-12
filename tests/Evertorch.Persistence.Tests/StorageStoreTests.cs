@@ -116,21 +116,23 @@ public sealed class StorageStoreTests
     }
 
     [Test]
-    public void ARefinedRowWithInstanceData_KeepsThemThroughADepositAndAWithdrawal()
+    public void ARefinedCardedRow_KeepsBothThroughADepositAndAWithdrawal()
     {
         (long _, long character, long other) = NewAccount(Fee);
-        long sword = Give(character, Sword, 1, 7, "{\"note\":\"kept\"}");
+        long sword = Give(character, Sword, 1, 7, "{\"cards\": [\"item.card.forest_crawler\"]}");
 
         StorageResult stored = Deposit(character, sword, 1, 1);
         StorageResult back = Withdraw(other, stored.StorageRow!.Id, 1, 1);
 
-        Assert.That(stored.StorageRow.RefineLevel, Is.EqualTo(7));
+        Assert.That((stored.StorageRow.RefineLevel, stored.StorageRow.Cards.Single()),
+            Is.EqualTo((7, "item.card.forest_crawler")));
         Assert.That(
             m_sql.Text(
-                "SELECT refine_level || ' ' || (instance_data_json ->> 'note') FROM inventory_items "
+                "SELECT refine_level || ' ' || (instance_data_json -> 'cards' ->> 0) FROM inventory_items "
                 + $"WHERE id = {back.Row!.Id}"),
-            Is.EqualTo("7 kept"));
-        Assert.That((back.Row.RefineLevel, back.StorageRow!.Quantity), Is.EqualTo((7, 0)));
+            Is.EqualTo("7 item.card.forest_crawler"));
+        Assert.That((back.Row.RefineLevel, back.Row.Cards.Single(), back.StorageRow!.Quantity),
+            Is.EqualTo((7, "item.card.forest_crawler", 0)));
     }
 
     [Test]

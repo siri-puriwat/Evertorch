@@ -157,6 +157,17 @@ public sealed class WorldSimulation
                 return false;
             }
 
+            // A stored card the content lacks refuses the entry as an unknown item does (Persistence §8).
+            foreach (string card in item.Cards)
+            {
+                if (!ItemDefinitionId.TryCreate(card, out ItemDefinitionId cardId) ||
+                    !m_content.Items.ContainsKey(cardId))
+                {
+                    problem = $"card '{card}'";
+                    return false;
+                }
+            }
+
             // A row worn in a slot its item no longer fills is a content change the character cannot load under.
             EquipmentSlot slot = CharacterInventory.SlotOf(item);
             if (slot != EquipmentSlot.None && slot != itemDefinition!.Slot)

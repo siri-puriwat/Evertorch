@@ -99,6 +99,80 @@ namespace Evertorch.Persistence
                         });
                 });
 
+            modelBuilder.Entity("Evertorch.Persistence.CardChangeRow", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityAlwaysColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("CardDefinitionId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("card_definition_id");
+
+                    b.Property<long>("CardInstanceId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("card_instance_id");
+
+                    b.Property<string>("Change")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("change");
+
+                    b.Property<long>("CharacterId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("character_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<long>("Fee")
+                        .HasColumnType("bigint")
+                        .HasColumnName("fee");
+
+                    b.Property<string>("ItemDefinitionId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("item_definition_id");
+
+                    b.Property<long>("ItemInstanceId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("item_instance_id");
+
+                    b.Property<Guid>("OperationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("operation_id");
+
+                    b.Property<int>("Slot")
+                        .HasColumnType("integer")
+                        .HasColumnName("slot");
+
+                    b.HasKey("Id")
+                        .HasName("pk_card_changes");
+
+                    b.HasIndex("CharacterId")
+                        .HasDatabaseName("ix_card_changes_character_id");
+
+                    b.HasIndex("OperationId")
+                        .HasDatabaseName("ix_card_changes_operation_id");
+
+                    b.ToTable("card_changes", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_card_changes_change", "change IN ('insert', 'remove', 'return')");
+
+                            t.HasCheckConstraint("ck_card_changes_fee", "fee BETWEEN 0 AND 1000000");
+
+                            t.HasCheckConstraint("ck_card_changes_slot", "slot BETWEEN 1 AND 4");
+                        });
+                });
+
             modelBuilder.Entity("Evertorch.Persistence.CharacterQuestRow", b =>
                 {
                     b.Property<long>("CharacterId")
@@ -392,6 +466,8 @@ namespace Evertorch.Persistence
 
                     b.ToTable("inventory_items", null, t =>
                         {
+                            t.HasCheckConstraint("ck_inventory_items_cards", "instance_data_json IS NULL OR (quantity = 1 AND coalesce(jsonb_typeof(instance_data_json) = 'object', false) AND NOT coalesce(jsonb_path_exists(instance_data_json, 'strict $.keyvalue() ? (@.key != \"cards\")', '{}', true), true) AND coalesce(jsonb_path_exists(instance_data_json, 'strict $.cards ? (@.type() == \"array\" && @.size() >= 1 && @.size() <= 4)', '{}', true), false) AND NOT coalesce(jsonb_path_exists(instance_data_json, 'strict $.cards[*] ? (@.type() != \"string\")', '{}', true), true))");
+
                             t.HasCheckConstraint("ck_inventory_items_quantity", "quantity BETWEEN 1 AND 1000000");
 
                             t.HasCheckConstraint("ck_inventory_items_refine_level", "refine_level BETWEEN 0 AND 255");
@@ -458,7 +534,7 @@ namespace Evertorch.Persistence
 
                     b.ToTable("economy_ledger", null, t =>
                         {
-                            t.HasCheckConstraint("ck_economy_ledger_operation_type", "operation_type IN ('pickup', 'equip', 'unequip', 'consume', 'buy', 'sell', 'quest_reward', 'boss_reward', 'trade', 'storage_deposit', 'storage_withdraw', 'market_list', 'market_buy', 'market_collect', 'refine')");
+                            t.HasCheckConstraint("ck_economy_ledger_operation_type", "operation_type IN ('pickup', 'equip', 'unequip', 'consume', 'buy', 'sell', 'quest_reward', 'boss_reward', 'trade', 'storage_deposit', 'storage_withdraw', 'market_list', 'market_buy', 'market_collect', 'refine', 'card_insert', 'card_remove')");
                         });
                 });
 
@@ -838,6 +914,8 @@ namespace Evertorch.Persistence
 
                     b.ToTable("storage_items", null, t =>
                         {
+                            t.HasCheckConstraint("ck_storage_items_cards", "instance_data_json IS NULL OR (quantity = 1 AND coalesce(jsonb_typeof(instance_data_json) = 'object', false) AND NOT coalesce(jsonb_path_exists(instance_data_json, 'strict $.keyvalue() ? (@.key != \"cards\")', '{}', true), true) AND coalesce(jsonb_path_exists(instance_data_json, 'strict $.cards ? (@.type() == \"array\" && @.size() >= 1 && @.size() <= 4)', '{}', true), false) AND NOT coalesce(jsonb_path_exists(instance_data_json, 'strict $.cards[*] ? (@.type() != \"string\")', '{}', true), true))");
+
                             t.HasCheckConstraint("ck_storage_items_quantity", "quantity BETWEEN 1 AND 1000000");
 
                             t.HasCheckConstraint("ck_storage_items_refine_level", "refine_level BETWEEN 0 AND 255");
@@ -885,6 +963,16 @@ namespace Evertorch.Persistence
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_account_storages_accounts");
+                });
+
+            modelBuilder.Entity("Evertorch.Persistence.CardChangeRow", b =>
+                {
+                    b.HasOne("Evertorch.Persistence.CharacterRow", null)
+                        .WithMany()
+                        .HasForeignKey("CharacterId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_card_changes_characters");
                 });
 
             modelBuilder.Entity("Evertorch.Persistence.CharacterQuestRow", b =>

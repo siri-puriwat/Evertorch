@@ -1271,7 +1271,34 @@ internal sealed class InMemoryGameStore : IGameStore
         {
             List<StoredItem> items = m_characters[id].Items;
             int index = items.FindIndex(row => row.Id == item);
-            items[index] = new StoredItem(item, items[index].ItemDefinitionId, items[index].Quantity, null, level);
+            items[index] = new StoredItem(
+                item,
+                items[index].ItemDefinitionId,
+                items[index].Quantity,
+                null,
+                level,
+                items[index].Cards);
+        }
+    }
+
+    /// <summary>
+    ///     Gives row <paramref name="item" /> of character <paramref name="id" /> the cards <paramref name="cards" />, in
+    ///     slot order, as insertions will.
+    /// </summary>
+    public void Card(long id, long item, params string[] cards)
+    {
+        lock (m_gate)
+        {
+            List<StoredItem> items = m_characters[id].Items;
+            int index = items.FindIndex(row => row.Id == item);
+            StoredItem carded = items[index];
+            items[index] = new StoredItem(
+                item,
+                carded.ItemDefinitionId,
+                carded.Quantity,
+                null,
+                carded.RefineLevel,
+                cards);
         }
     }
 
@@ -1358,7 +1385,8 @@ internal sealed class InMemoryGameStore : IGameStore
                     holding.ItemDefinitionId,
                     holding.Quantity,
                     null,
-                    source.RefineLevel));
+                    source.RefineLevel,
+                    source.Cards));
             }
 
             row.InventoryRevision = unchecked(row.InventoryRevision + 1);
@@ -1480,7 +1508,12 @@ internal sealed class InMemoryGameStore : IGameStore
                 given.ItemDefinitionId,
                 held + deposit.Quantity,
                 storage.Items[stack].RefineLevel)
-            : new StoredStorageItem(++m_lastStorageItem, given.ItemDefinitionId, deposit.Quantity, given.RefineLevel);
+            : new StoredStorageItem(
+                ++m_lastStorageItem,
+                given.ItemDefinitionId,
+                deposit.Quantity,
+                given.RefineLevel,
+                given.Cards);
         if (stack >= 0)
         {
             storage.Items[stack] = kept;
@@ -1501,7 +1534,8 @@ internal sealed class InMemoryGameStore : IGameStore
                 given.ItemDefinitionId,
                 given.Quantity - deposit.Quantity,
                 null,
-                given.RefineLevel);
+                given.RefineLevel,
+                given.Cards);
         }
 
         row.Coins -= deposit.Fee;
@@ -1542,7 +1576,13 @@ internal sealed class InMemoryGameStore : IGameStore
                 held + withdraw.Quantity,
                 null,
                 row.Items[stack].RefineLevel)
-            : new StoredItem(++m_lastItem, taken.ItemDefinitionId, withdraw.Quantity, null, taken.RefineLevel);
+            : new StoredItem(
+                ++m_lastItem,
+                taken.ItemDefinitionId,
+                withdraw.Quantity,
+                null,
+                taken.RefineLevel,
+                taken.Cards);
         if (stack >= 0)
         {
             row.Items[stack] = received;
@@ -1562,7 +1602,8 @@ internal sealed class InMemoryGameStore : IGameStore
                 taken.Id,
                 taken.ItemDefinitionId,
                 taken.Quantity - withdraw.Quantity,
-                taken.RefineLevel);
+                taken.RefineLevel,
+                taken.Cards);
         }
 
         row.InventoryRevision = unchecked(row.InventoryRevision + 1);
@@ -1812,8 +1853,13 @@ internal sealed class InMemoryGameStore : IGameStore
         {
             case RefineOutcomeKind.Refined:
             case RefineOutcomeKind.Lowered:
-                row.Items[target] = new StoredItem(refined.Id, refined.ItemDefinitionId, refined.Quantity, null,
-                    refine.LevelAfter);
+                row.Items[target] = new StoredItem(
+                    refined.Id,
+                    refined.ItemDefinitionId,
+                    refined.Quantity,
+                    null,
+                    refine.LevelAfter,
+                    refined.Cards);
                 break;
             case RefineOutcomeKind.Destroyed:
                 row.Items.RemoveAt(target);
@@ -1922,7 +1968,9 @@ internal sealed class InMemoryGameStore : IGameStore
     private InventoryResult Commit(PickupCommit pickup)
     {
         Row row = m_characters[pickup.CharacterId];
-        int index = row.Items.FindIndex(item => item.ItemDefinitionId == pickup.ItemDefinitionId);
+        int index = pickup.StackLimit == 1
+            ? -1
+            : row.Items.FindIndex(item => item.ItemDefinitionId == pickup.ItemDefinitionId);
         int held = index >= 0 ? row.Items[index].Quantity : 0;
         if (held > pickup.StackLimit - pickup.Amount || (index < 0 && row.Items.Count >= pickup.MaxRows))
         {
@@ -2227,8 +2275,13 @@ internal sealed class InMemoryGameStore : IGameStore
         }
         else
         {
-            row.Items[index] = new StoredItem(item.Id, item.ItemDefinitionId, item.Quantity - quantity, null,
-                item.RefineLevel);
+            row.Items[index] = new StoredItem(
+                item.Id,
+                item.ItemDefinitionId,
+                item.Quantity - quantity,
+                null,
+                item.RefineLevel,
+                item.Cards);
         }
     }
 
@@ -2475,7 +2528,7 @@ internal sealed class InMemoryGameStore : IGameStore
             string? slot = Equipment.Where(pair => pair.Value == id).Select(pair => pair.Key).FirstOrDefault();
             return item == null
                 ? new StoredItem(id, emptiedItem, 0)
-                : new StoredItem(item.Id, item.ItemDefinitionId, item.Quantity, slot, item.RefineLevel);
+                : new StoredItem(item.Id, item.ItemDefinitionId, item.Quantity, slot, item.RefineLevel, item.Cards);
         }
 
         public StoredCharacter ToStored(long id)

@@ -27,12 +27,30 @@ internal sealed class EvertorchDbContext : DbContext
     /// </summary>
     public const long MaxCurrency = 1_000_000_000;
 
+    /// <summary>
+    ///     The highest fee to take a card out (Content Pipeline §4).
+    /// </summary>
+    public const int MaxCardFee = 1_000_000;
+
     private const int MaxStatusLength = 16;
     private const int MaxSchemeLength = 32;
     private const int MaxSlotLength = 16;
     private const int MaxOperationTypeLength = 32;
     private const int MaxQuestStateLength = 16;
     private const int MaxOutcomeLength = 16;
+    private const int MaxChangeLength = 16;
+
+    // A row's instance data is null or its cards (Persistence §4): an object whose one key, cards, holds one to four
+    // strings, on a row of one. A check holds no subquery, so the elements are tested with jsonpaths, silent and wrapped
+    // in coalesce, so that a value of another shape fails the check rather than the statement.
+    private const string CardsCheck = "instance_data_json IS NULL OR (quantity = 1"
+        + " AND coalesce(jsonb_typeof(instance_data_json) = 'object', false)"
+        + " AND NOT coalesce(jsonb_path_exists(instance_data_json,"
+        + " 'strict $.keyvalue() ? (@.key != \"cards\")', '{}', true), true)"
+        + " AND coalesce(jsonb_path_exists(instance_data_json,"
+        + " 'strict $.cards ? (@.type() == \"array\" && @.size() >= 1 && @.size() <= 4)', '{}', true), false)"
+        + " AND NOT coalesce(jsonb_path_exists(instance_data_json,"
+        + " 'strict $.cards[*] ? (@.type() != \"string\")', '{}', true), true))";
 
     public EvertorchDbContext(DbContextOptions<EvertorchDbContext> options)
         : base(options)
@@ -73,6 +91,8 @@ internal sealed class EvertorchDbContext : DbContext
 
     public DbSet<RefineAttemptRow> RefineAttempts => Set<RefineAttemptRow>();
 
+    public DbSet<CardChangeRow> CardChanges => Set<CardChangeRow>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         ConfigureAccounts(modelBuilder.Entity<AccountRow>());
@@ -92,6 +112,7 @@ internal sealed class EvertorchDbContext : DbContext
         ConfigureMarketListings(modelBuilder.Entity<MarketListingRow>());
         ConfigureMarketSales(modelBuilder.Entity<MarketSaleRow>());
         ConfigureRefineAttempts(modelBuilder.Entity<RefineAttemptRow>());
+        ConfigureCardChanges(modelBuilder.Entity<CardChangeRow>());
 
         foreach (IMutableEntityType entity in modelBuilder.Model.GetEntityTypes())
         {
@@ -164,6 +185,7 @@ internal sealed class EvertorchDbContext : DbContext
             table.HasCheckConstraint(
                 "ck_inventory_items_refine_level",
                 $"refine_level BETWEEN 0 AND {MaxRefineLevel}");
+            table.HasCheckConstraint("ck_inventory_items_cards", CardsCheck);
         });
         item.HasKey(row => row.Id).HasName("pk_inventory_items");
         item.Property(row => row.Id).UseIdentityAlwaysColumn();
@@ -219,7 +241,8 @@ internal sealed class EvertorchDbContext : DbContext
                 + $"'{LedgerRow.BossRewardOperation}', '{LedgerRow.TradeOperation}', "
                 + $"'{LedgerRow.StorageDepositOperation}', '{LedgerRow.StorageWithdrawOperation}', "
                 + $"'{LedgerRow.MarketListOperation}', '{LedgerRow.MarketBuyOperation}', "
-                + $"'{LedgerRow.MarketCollectOperation}', '{LedgerRow.RefineOperation}')");
+                + $"'{LedgerRow.MarketCollectOperation}', '{LedgerRow.RefineOperation}', "
+                + $"'{LedgerRow.CardInsertOperation}', '{LedgerRow.CardRemoveOperation}')");
         });
         entry.HasKey(row => row.Id).HasName("pk_economy_ledger");
         entry.Property(row => row.Id).UseIdentityAlwaysColumn();
@@ -344,6 +367,7 @@ internal sealed class EvertorchDbContext : DbContext
             table.HasCheckConstraint(
                 "ck_storage_items_refine_level",
                 $"refine_level BETWEEN 0 AND {MaxRefineLevel}");
+            table.HasCheckConstraint("ck_storage_items_cards", CardsCheck);
         });
         item.HasKey(row => row.Id).HasName("pk_storage_items");
         item.Property(row => row.Id).UseIdentityAlwaysColumn();
@@ -452,6 +476,31 @@ internal sealed class EvertorchDbContext : DbContext
             .HasForeignKey(row => row.CharacterId)
             .OnDelete(DeleteBehavior.Restrict)
             .HasConstraintName("fk_refine_attempts_characters");
+    }
+
+    private static void ConfigureCardChanges(EntityTypeBuilder<CardChangeRow> change)
+    {
+        change.ToTable("card_changes", table =>
+        {
+            table.HasCheckConstraint(
+                "ck_card_changes_change",
+                $"change IN ('{CardChangeRow.InsertChange}', '{CardChangeRow.RemoveChange}', "
+                + $"'{CardChangeRow.ReturnChange}')");
+            table.HasCheckConstraint("ck_card_changes_slot", $"slot BETWEEN 1 AND {CardsJson.MaxCards}");
+            table.HasCheckConstraint("ck_card_changes_fee", $"fee BETWEEN 0 AND {MaxCardFee}");
+        });
+        change.HasKey(row => row.Id).HasName("pk_card_changes");
+        change.Property(row => row.Id).UseIdentityAlwaysColumn();
+        change.Property(row => row.Change).HasMaxLength(MaxChangeLength).IsRequired();
+        change.Property(row => row.CardDefinitionId).HasMaxLength(MaxDefinitionIdLength).IsRequired();
+        change.Property(row => row.ItemDefinitionId).HasMaxLength(MaxDefinitionIdLength).IsRequired();
+        change.HasIndex(row => row.OperationId).HasDatabaseName("ix_card_changes_operation_id");
+        change.HasIndex(row => row.CharacterId).HasDatabaseName("ix_card_changes_character_id");
+        change.HasOne<CharacterRow>()
+            .WithMany()
+            .HasForeignKey(row => row.CharacterId)
+            .OnDelete(DeleteBehavior.Restrict)
+            .HasConstraintName("fk_card_changes_characters");
     }
 
     private static void ConfigureSessionTokens(EntityTypeBuilder<SessionTokenRow> token)

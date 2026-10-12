@@ -14,6 +14,8 @@ namespace Evertorch.Persistence.Tests
 public sealed class CharacterLoadTests
 {
     private const string Adventurer = "job.adventurer";
+    private const string Keen = "item.card.forest_crawler";
+    private const string Bane = "item.card.gloom_wisp";
 
     private static readonly DateTime Now = new(2026, 9, 23, 12, 0, 0, DateTimeKind.Utc);
 
@@ -184,6 +186,28 @@ public sealed class CharacterLoadTests
     }
 
     [Test]
+    public void ListStoredDefinitionIds_IncludesTheCardsOfBagAndStorageRows()
+    {
+        (AccountId account, long character) = NewCharacter();
+        m_sql.Execute(
+            "INSERT INTO inventory_items (character_id, item_definition_id, quantity, refine_level, "
+            + $"instance_data_json, version) VALUES ({character}, 'item.weapon.iron_sword', 1, 0, "
+            + "'{\"cards\": [\"item.card.retired_in_bag\"]}'::jsonb, 0)");
+        m_sql.Execute(
+            $"INSERT INTO account_storages (account_id, revision, version) VALUES ({account.Value}, 0, 0)");
+        m_sql.Execute(
+            "INSERT INTO storage_items (account_id, item_definition_id, quantity, refine_level, "
+            + $"instance_data_json, version) VALUES ({account.Value}, 'item.armor.leather', 1, 0, "
+            + "'{\"cards\": [\"item.card.retired_in_storage\"]}'::jsonb, 0)");
+
+        IReadOnlyList<string> ids = m_store.ListStoredDefinitionIdsAsync(CancellationToken.None).GetAwaiter()
+            .GetResult();
+
+        Assert.That(ids, Does.Contain("item.card.retired_in_bag"));
+        Assert.That(ids, Does.Contain("item.card.retired_in_storage"));
+    }
+
+    [Test]
     public void LoadCharacter_ForANewCharacter_ReturnsLevelOneWithNoExperienceAndItsSp()
     {
         (AccountId account, long character) = NewCharacter();
@@ -230,6 +254,21 @@ public sealed class CharacterLoadTests
 
         Assert.That(Load(other, character), Is.Null);
         Assert.That(Load(other, long.MaxValue), Is.Null);
+    }
+
+    [Test]
+    public void LoadCharacter_WithACardedRow_ReadsItsCardsInSlotOrder()
+    {
+        (AccountId account, long character) = NewCharacter();
+        long sword = m_sql.Scalar(
+            "INSERT INTO inventory_items (character_id, item_definition_id, quantity, refine_level, "
+            + $"instance_data_json, version) VALUES ({character}, 'item.weapon.iron_sword', 1, 7, "
+            + $"'{{\"cards\": [\"{Keen}\", \"{Bane}\", \"{Keen}\"]}}'::jsonb, 0) RETURNING id");
+
+        StoredItem stored = Load(account, character)!.Items.Single();
+
+        Assert.That((stored.Id, stored.RefineLevel), Is.EqualTo((sword, 7)));
+        Assert.That(stored.Cards, Is.EqualTo(new[] { Keen, Bane, Keen }));
     }
 
     [Test]
