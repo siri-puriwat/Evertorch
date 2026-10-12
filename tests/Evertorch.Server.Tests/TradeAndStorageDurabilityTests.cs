@@ -364,6 +364,68 @@ public sealed class TradeAndStorageDurabilityTests
         Assert.That(BagAfterRestart(pair.Bobby), Is.EqualTo(BobbyAfter));
     }
 
+    // A carded sword set by SQL keeps its cards through a trade, which moves the row itself, so its ID stays, and through
+    // a deposit and a withdrawal, which make new rows, in the messages and in the rows (Milestone 17).
+    [Test]
+    public void ACardedSword_KeepsItsCards_ThroughATradeADepositAndAWithdrawal()
+    {
+        const string keen = "item.card.forest_crawler";
+        const string bane = "item.card.gloom_wisp";
+        Pair pair = EnterPair(
+            "Carded",
+            prepare: (anna, _) => Execute(
+                $"UPDATE inventory_items SET instance_data_json = jsonb_build_object('cards', jsonb_build_array('{keen}', "
+                + $"'{bane}')) WHERE character_id = {anna} AND item_definition_id = '{Sword}'"));
+        long offered = RowOf(pair.Server, pair.Anna.Connection, Sword);
+        pair.Rig.Open(pair.Anna.Connection, pair.Bobby.Connection, pair.Anna.Name, pair.Bobby.Name);
+        pair.Rig.Offer(pair.Anna.Connection, offered, 1);
+        TradeSide offer = pair.Rig.Sides(pair.Bobby.Connection).Last(side => side.Entries.Count > 0);
+        pair.Rig.Lock(pair.Anna.Connection);
+        pair.Rig.Lock(pair.Bobby.Connection);
+        Confirm(pair);
+        TickUntil(pair.Server, () => pair.Server.Trades.OpenTrades == 0, "traded");
+        InventoryEntry traded = CharacterOf(pair.Server, pair.Bobby.Connection).Inventory.Rows
+            .Single(row => row.Item.Value == Sword);
+
+        NpcEntity keeper = pair.Server.NpcOf(Storekeeper);
+        pair.Server.Place(pair.Bobby.Connection, keeper.Position.X + 2f, keeper.Position.Z);
+        pair.Server.Tick(2);
+        pair.Server.Transport.ClearSent();
+        pair.Server.SendStorageDeposit(pair.Bobby.Connection, keeper.Id, traded.InventoryItem, 1,
+            pair.Rig.Next(pair.Bobby.Connection));
+        pair.Server.Tick();
+        TickUntil(pair.Server, () => CharacterOf(pair.Server, pair.Bobby.Connection).Operation == null, "stored");
+        StorageChanged stored = pair.Server.Transport.ControlSentTo(pair.Bobby.Connection)
+            .Where(message => message.Opcode == MessageOpcode.StorageChanged)
+            .Select(message => StorageChanged.TryRead(message.Payload, out StorageChanged? read) ? read! : null!)
+            .Single();
+        pair.Server.SendStorageWithdraw(
+            pair.Bobby.Connection,
+            keeper.Id,
+            stored.Row.StorageItem,
+            1,
+            pair.Rig.Next(pair.Bobby.Connection));
+        pair.Server.Tick();
+        TickUntil(pair.Server, () => CharacterOf(pair.Server, pair.Bobby.Connection).Operation == null, "taken back");
+        InventoryEntry withdrawn = CharacterOf(pair.Server, pair.Bobby.Connection).Inventory.Rows
+            .Single(row => row.Item.Value == Sword);
+        string[] both = { keen, bane };
+
+        Assert.That(offer.Entries.Single().Cards.Select(card => card.Value), Is.EqualTo(both), "the partner sees them");
+        Assert.That(
+            (traded.InventoryItem, traded.Cards.Select(card => card.Value)),
+            Is.EqualTo((offered, both)),
+            "a trade moves the row itself");
+        Assert.That(stored.Row.Cards.Select(card => card.Value), Is.EqualTo(both), "in storage");
+        Assert.That(withdrawn.InventoryItem, Is.Not.EqualTo(offered), "a withdrawal makes a new row");
+        Assert.That(withdrawn.Cards.Select(card => card.Value), Is.EqualTo(both), "taken back");
+        Assert.That(
+            Scalar(
+                "SELECT count(*) FROM inventory_items WHERE instance_data_json = jsonb_build_object('cards', "
+                + $"jsonb_build_array('{keen}', '{bane}')) AND character_id = {pair.Bobby.Character}"),
+            Is.EqualTo(1L));
+    }
+
     // A refine level set by SQL travels with the sword through a trade, a deposit, and a withdrawal, in the messages
     // and in the rows.
     [Test]
