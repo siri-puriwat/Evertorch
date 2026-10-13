@@ -19,7 +19,8 @@ public sealed class SkillDefinition
         SkillPaymentPoint spPaidAt,
         IReadOnlyList<SkillLevel> levels,
         SkillRequirement? requires = null,
-        double areaRadius = 0d)
+        double areaRadius = 0d,
+        SkillElement? element = null)
     {
         Id = id;
         DisplayName = displayName;
@@ -30,6 +31,7 @@ public sealed class SkillDefinition
         Levels = levels ?? throw new ArgumentNullException(nameof(levels));
         Requires = requires;
         AreaRadius = areaRadius;
+        Element = element;
     }
 
     public SkillDefinitionId Id { get; }
@@ -42,6 +44,12 @@ public sealed class SkillDefinition
     ///     Required for a job's basic attack and a damage effect; absent otherwise.
     /// </summary>
     public SkillDamageType? DamageType { get; }
+
+    /// <summary>
+    ///     The element a damage skill strikes with (Gameplay Systems §9); absent when it has no damage type, and a damage
+    ///     skill without one strikes with the weapon's.
+    /// </summary>
+    public SkillElement? Element { get; }
 
     /// <summary>World units.</summary>
     public double Range { get; }

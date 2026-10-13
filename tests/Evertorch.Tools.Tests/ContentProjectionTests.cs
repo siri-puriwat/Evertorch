@@ -41,7 +41,7 @@ public sealed class ContentProjectionTests
         "kill", "monster", "count", "currency", "jobExperienceTable", "jobExperience", "guild", "reset", "maxLevel",
         "requires", "baseJob", "weapons", "weaponType", "jobChange", "assist", "assistRadius", "respawnVarianceMs",
         "areaRadius", "mvpExperience", "mvpDrops", "card", "maxHp", "maxSp", "bossDamage", "bossDamageReduction",
-        "removalFee"
+        "raceDamage", "elementDamage", "sizeDamage", "elementDamageReduction", "armorElement", "removalFee"
     };
 
     // The client package's allow-list (Content Pipeline §5), by file: a name not reviewed here fails.
@@ -69,8 +69,8 @@ public sealed class ContentProjectionTests
         ["quests.json"] = new[] { "schemaVersion", "definitions", "id", "displayName" },
         ["skills.json"] = new[]
         {
-            "schemaVersion", "definitions", "id", "displayName", "targetType", "area", "icon", "description",
-            "projectile"
+            "schemaVersion", "definitions", "id", "displayName", "targetType", "element", "area", "icon",
+            "description", "projectile"
         },
         ["status-effects.json"] = new[] { "schemaVersion", "definitions", "id", "displayName", "icon" }
     };
@@ -247,7 +247,11 @@ public sealed class ContentProjectionTests
                     string id = definition.GetProperty("id").GetString()!;
                     Assert.That(
                         definition.EnumerateObject().Select(property => property.Name),
-                        Is.SubsetOf(new[] { "id", "displayName", "targetType", "icon", "description", "projectile" }),
+                        Is.SubsetOf(
+                            new[]
+                            {
+                                "id", "displayName", "targetType", "element", "icon", "description", "projectile"
+                            }),
                         id);
                     Assert.That(definition.GetProperty("description").GetString(), Is.Not.Empty, id);
                     Assert.That(definition.GetProperty("icon").GetString(), Is.EqualTo(id.Replace('.', '_')), id);

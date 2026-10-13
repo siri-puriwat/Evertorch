@@ -30,6 +30,16 @@ internal static class SkillDefinitionReader
         SkillDamageType? damageType = root.Has("damageType")
             ? root.RequiredEnum<SkillDamageType>("damageType")
             : null;
+        SkillElement? element = root.Has("element") ? root.RequiredEnum<SkillElement>("element") : null;
+        if (damageType != null && !root.Has("element"))
+        {
+            root.ReportField("element", "is required for a skill with a damageType");
+        }
+        else if (damageType == null && root.Has("element"))
+        {
+            root.ReportField("element", "is only for a skill with a damageType");
+        }
+
         bool hasArea = root.Has("area");
         double areaRadius = hasArea
             ? root.RequiredMapping("area").RequiredDouble("radius", 0d, ContentLimits.MaxDistance, true)
@@ -96,7 +106,8 @@ internal static class SkillDefinitionReader
             spPaidAt,
             levels.AsReadOnly(),
             requires,
-            areaRadius);
+            areaRadius,
+            element);
         return new AuthoredSkill(root.ToSource(), definition, icon, description, projectile);
     }
 

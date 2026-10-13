@@ -206,6 +206,12 @@ internal static class ClientProjection
             writer.WriteString("displayName", skill.DisplayName);
             writer.WriteString("targetType", EnumText.Of(skill.TargetType));
 
+            // The target frame's hint names how a damage skill's element fares (Content Pipeline §5).
+            if (skill.Element.HasValue)
+            {
+                writer.WriteString("element", EnumText.Of(skill.Element.Value));
+            }
+
             // The player sees an area's reach as the telegraph of its cast (Content Pipeline §5).
             if (skill.HasArea)
             {

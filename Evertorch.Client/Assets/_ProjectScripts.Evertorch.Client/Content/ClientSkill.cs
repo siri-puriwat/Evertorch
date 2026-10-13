@@ -5,8 +5,8 @@ namespace Evertorch.Client
 {
 /// <summary>
 ///     The client-safe part of a skill definition: its name, whether it is used on an enemy, on the caster, or on an
-///     ally, the logical keys of its icon and of what it flies, and its description for the player (Content Pipeline
-///     §5).
+///     ally, the logical keys of its icon and of what it flies, its description for the player, and the element a
+///     damage skill strikes with (Content Pipeline §5).
 /// </summary>
 public sealed class ClientSkill
 {
@@ -17,7 +17,8 @@ public sealed class ClientSkill
         string iconKey,
         string description = "",
         string projectileKey = "",
-        float areaRadius = 0f)
+        float areaRadius = 0f,
+        SkillElement? element = null)
     {
         Id = id;
         DisplayName = displayName ?? throw new ArgumentNullException(nameof(displayName));
@@ -26,6 +27,7 @@ public sealed class ClientSkill
         Description = description ?? throw new ArgumentNullException(nameof(description));
         ProjectileKey = projectileKey ?? throw new ArgumentNullException(nameof(projectileKey));
         AreaRadius = areaRadius;
+        Element = element;
     }
 
     public SkillDefinitionId Id { get; }
@@ -51,5 +53,11 @@ public sealed class ClientSkill
     ///     (Gameplay Systems §9); 0 for a skill with no area.
     /// </summary>
     public float AreaRadius { get; }
+
+    /// <summary>
+    ///     The element a damage skill strikes with, which the target frame's hint weighs against a monster's (Gameplay
+    ///     Systems §9); null for a skill that deals no damage.
+    /// </summary>
+    public SkillElement? Element { get; }
 }
 }

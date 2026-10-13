@@ -98,6 +98,17 @@ public static class ContentLimits
 
     public const int MaxCardRemovalFee = 1_000_000;
 
+    /// <summary>
+    ///     The most a card adds to its wearer's damage to one race, element, or size, in percent (Gameplay Systems
+    ///     §11.1).
+    /// </summary>
+    public const int MaxCardDamagePercent = 100;
+
+    /// <summary>
+    ///     The most a card takes off the damage of one element, in percent; combat caps the worn cards' sum there too.
+    /// </summary>
+    public const int MaxCardDamageReductionPercent = 90;
+
     public const int MaxKillCount = 1000;
     public const int MaxExperience = 1_000_000_000;
     public const int MaxDurationMs = 86_400_000;

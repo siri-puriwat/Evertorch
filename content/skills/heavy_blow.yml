@@ -2,6 +2,7 @@ id: skill.heavy_blow
 displayName: Heavy Blow
 targetType: enemy
 damageType: physical
+element: weapon
 server:
   range: 1.5
   maxLevel: 5

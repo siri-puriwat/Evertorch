@@ -258,6 +258,45 @@ public sealed class YamlFieldReader
         return default;
     }
 
+    /// <summary>
+    ///     A mapping from an enum's camelCase names to whole numbers within their bounds, such as a card's damage by race;
+    ///     a name outside the enum or a number out of bounds is reported on its own field and left out.
+    /// </summary>
+    public IReadOnlyDictionary<TEnum, int> RequiredEnumMap<TEnum>(string key, int min, int max)
+        where TEnum : struct, Enum
+    {
+        YamlFieldReader mapping = RequiredMapping(key);
+        var names = new Dictionary<string, TEnum>(StringComparer.Ordinal);
+        foreach (TEnum candidate in Enum.GetValues<TEnum>())
+        {
+            names.Add(EnumText.Of(candidate), candidate);
+        }
+
+        var values = new Dictionary<TEnum, int>();
+        foreach (KeyValuePair<YamlNode, YamlNode> child in mapping.m_node.Children)
+        {
+            if (!(child.Key is YamlScalarNode keyNode) || keyNode.Value == null)
+            {
+                continue;
+            }
+
+            if (!names.TryGetValue(keyNode.Value, out TEnum name))
+            {
+                mapping.m_readKeys.Add(keyNode.Value);
+                mapping.Report(keyNode.Value, keyNode, $"must be one of: {string.Join(", ", names.Keys)}");
+                continue;
+            }
+
+            int value = mapping.RequiredInt(keyNode.Value, min, max);
+            if (value >= min && value <= max)
+            {
+                values[name] = value;
+            }
+        }
+
+        return values;
+    }
+
     public YamlFieldReader RequiredMapping(string key)
     {
         YamlNode? node = Find(key);

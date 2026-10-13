@@ -5,7 +5,8 @@ using NUnit.Framework;
 namespace Evertorch.Tools.Tests
 {
 /// <summary>
-///     Consumables (Content Pipeline §4; Gameplay Systems §11.2): a server-only effect that restores HP, SP, or both.
+///     Consumables (Content Pipeline §4; Gameplay Systems §11.2): a server-only effect that restores HP or SP, or
+///     starts a status.
 /// </summary>
 [TestFixture]
 public sealed class ConsumableContentTests
@@ -30,7 +31,7 @@ public sealed class ConsumableContentTests
     }
 
     [TestCase("  effect:\n    hp: 30\n", "", "server.effect", "required field is missing")]
-    [TestCase("    hp: 30\n", "    hp: 0\n", "server.effect", "must restore HP, SP, or both")]
+    [TestCase("    hp: 30\n", "    hp: 0\n", "server.effect", "must restore HP or SP, or start a status")]
     [TestCase("    hp: 30\n", "    hp: -1\n", "server.effect.hp", "between 0 and")]
     [TestCase("    hp: 30\n", "    hp: 30\n    mp: 3\n", "server.effect.mp", "unknown field")]
     public void Run_WhenAConsumableIsBroken_ReportsThatField(

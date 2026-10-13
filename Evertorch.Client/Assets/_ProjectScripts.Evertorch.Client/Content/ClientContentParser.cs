@@ -530,6 +530,19 @@ public static class ClientContentParser
                 return null;
             }
 
+            // JsonUtility reads an absent element as empty, which stands for a skill that deals no damage.
+            SkillElement? element = null;
+            if (!string.IsNullOrEmpty(skill.element))
+            {
+                if (!TryParseName(skill.element, out SkillElement named))
+                {
+                    error = $"Skill '{skill.id}': element is unknown.";
+                    return null;
+                }
+
+                element = named;
+            }
+
             // JsonUtility reads an absent area as 0, which stands for none; only a skill cast on its caster has one.
             if (float.IsNaN(skill.area)
                 || skill.area < 0f
@@ -553,7 +566,8 @@ public static class ClientContentParser
                     skill.icon,
                     skill.description ?? string.Empty,
                     projectile,
-                    skill.area));
+                    skill.area,
+                    element));
         }
 
         return skills;
@@ -1087,6 +1101,7 @@ public static class ClientContentParser
         public string? description = string.Empty;
         public string? projectile = string.Empty;
         public float area = 0f;
+        public string? element = string.Empty;
     }
 
     [Serializable]

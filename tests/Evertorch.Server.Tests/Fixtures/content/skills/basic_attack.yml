@@ -2,6 +2,7 @@ id: skill.basic_attack
 displayName: Basic Attack
 targetType: enemy
 damageType: physical
+element: weapon
 server:
   range: 1.5
 client:

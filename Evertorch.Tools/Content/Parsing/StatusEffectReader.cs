@@ -23,6 +23,14 @@ internal static class StatusEffectReader
 
         string displayName = root.RequiredString("displayName");
 
+        // A converter's status sets the element of the wearer's swings and weapon skills (Gameplay Systems §9.1).
+        Element? attackElement = null;
+        if (root.Has("server"))
+        {
+            YamlFieldReader server = root.RequiredMapping("server");
+            attackElement = server.Has("attackElement") ? server.RequiredEnum<Element>("attackElement") : null;
+        }
+
         string? icon = null;
         if (root.Has("client"))
         {
@@ -36,7 +44,7 @@ internal static class StatusEffectReader
             return null;
         }
 
-        var definition = new StatusEffectDefinition(id, displayName);
+        var definition = new StatusEffectDefinition(id, displayName, attackElement);
         return new AuthoredStatusEffect(root.ToSource(), definition, icon);
     }
 }

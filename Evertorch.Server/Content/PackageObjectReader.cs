@@ -208,6 +208,53 @@ internal sealed class PackageObjectReader
         return readers;
     }
 
+    /// <summary>
+    ///     An object from an enum's camelCase names to whole numbers within their bounds, such as a card's damage by
+    ///     race; a name outside the enum, a repeated name, or a number out of bounds is reported and left out.
+    /// </summary>
+    public IReadOnlyDictionary<TEnum, int> RequiredEnumMap<TEnum>(string name, int minimum, int maximum)
+        where TEnum : struct, Enum
+    {
+        var values = new Dictionary<TEnum, int>();
+        PackageObjectReader? map = RequiredObject(name);
+        if (map == null)
+        {
+            return values;
+        }
+
+        foreach (JsonProperty property in map.m_element.EnumerateObject())
+        {
+            map.m_requested.Add(property.Name);
+            TEnum? key = null;
+            foreach (TEnum candidate in (TEnum[])Enum.GetValues(typeof(TEnum)))
+            {
+                string candidateName = candidate.ToString();
+                if (string.Equals(
+                        $"{char.ToLowerInvariant(candidateName[0])}{candidateName.Substring(1)}",
+                        property.Name,
+                        StringComparison.Ordinal))
+                {
+                    key = candidate;
+                }
+            }
+
+            if (key == null)
+            {
+                map.Report(property.Name, "unknown name");
+            }
+            else if (values.ContainsKey(key.Value))
+            {
+                map.Report(property.Name, "appears more than once");
+            }
+            else
+            {
+                values.Add(key.Value, map.RequiredInt(property.Name, minimum, maximum));
+            }
+        }
+
+        return values;
+    }
+
     public IReadOnlyList<string> RequiredStringArray(string name)
     {
         var values = new List<string>();

@@ -2,6 +2,7 @@ id: skill.arcane_bolt
 displayName: Arcane Bolt
 targetType: enemy
 damageType: magical
+element: ghost
 server:
   range: 8.0
   maxLevel: 5
@@ -35,4 +36,4 @@ server:
 client:
   icon: skill_arcane_bolt
   projectile: projectile_arcane_bolt
-  description: Gather arcane force and hurl it at your target from afar. You stand still while you cast. Each level hits harder for more SP.
+  description: Gather arcane force and hurl it at your target from afar as a Ghost bolt. You stand still while you cast. Each level hits harder for more SP.

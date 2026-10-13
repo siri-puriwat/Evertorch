@@ -162,7 +162,7 @@ public sealed class ContentValidationTests
         FocusStatus,
         "displayName: Focus\n",
         "displayName: Focus\nserver:\n  statPercent: { agi: 1 }\n",
-        "server",
+        "server.statPercent",
         "unknown field")]
     [TestCase(Strike, "  maxLevel: 2\n", "  maxLevel: 3\n", "server.levels", "must list exactly maxLevel (3) levels")]
     [TestCase(Strike, "  maxLevel: 2\n", "  maxLevel: 6\n", "server.maxLevel", "between 1 and 5")]
@@ -178,7 +178,7 @@ public sealed class ContentValidationTests
     [TestCase(FocusStatus, "displayName: Focus\n", "", "displayName", "required field is missing")]
     [TestCase(FocusStatus, "icon: status_focus", "icon: Status/Focus.png", "client.icon", "logical asset key")]
     [TestCase(Strike, "ratio: 1319", "ratio: 0", "server.levels[0].effect.damage.ratio", "between 1 and")]
-    [TestCase(Strike, "damageType: physical\n", "", "damageType", "required for a damage effect")]
+    [TestCase(Strike, "damageType: physical\nelement: weapon\n", "", "damageType", "required for a damage effect")]
     [TestCase(Strike, "spPaidAt: castStart", "spPaidAt: later", "server.spPaidAt", "one of: resolution, castStart")]
     [TestCase(Strike, "cooldownMs: 21133", "cooldownMs: -1", "server.levels[0].cooldownMs", "between 0 and")]
     [TestCase(Strike, "fixed: 3171", "fixed: 1.5", "server.levels[0].castTimeMs.fixed", "whole number")]
@@ -779,7 +779,7 @@ public sealed class ContentValidationTests
     {
         using (var workspace = new ContentWorkspace())
         {
-            workspace.Replace(Skill, "damageType: physical\n", "");
+            workspace.Replace(Skill, "damageType: physical\nelement: weapon\n", "");
 
             ContentPipelineResult result = ContentPipeline.Run(workspace.ContentRoot);
 

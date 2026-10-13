@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -67,7 +68,7 @@ internal static class ItemDefinitionReader
         int removalFee = 0;
         if (type == ItemType.Card)
         {
-            bonus = ReadCard(server.RequiredMapping("card"), out removalFee);
+            bonus = ReadCard(server.RequiredMapping("card"), fits, out removalFee);
         }
         else if (server.Has("card"))
         {
@@ -196,8 +197,9 @@ internal static class ItemDefinitionReader
     }
 
     // What a card adds while worn, each value optional and 0 when absent, at least one above 0, and the fee to take it
-    // out (Content Pipeline §4).
-    private static CardBonus? ReadCard(YamlFieldReader card, out int removalFee)
+    // out (Content Pipeline §4). The damage it adds by race, element, and size and takes off by element are maps from
+    // names to percentages, and only a card that fits armor may give its wearer an element.
+    private static CardBonus? ReadCard(YamlFieldReader card, EquipmentSlot fits, out int removalFee)
     {
         var stats = new PrimaryStats(0, 0, 0, 0, 0, 0);
         if (card.Has("bonus"))
@@ -222,9 +224,19 @@ internal static class ItemDefinitionReader
             card.Has("bossDamage") ? card.RequiredInt("bossDamage", 0, ContentLimits.MaxBossDamagePercent) : 0,
             card.Has("bossDamageReduction")
                 ? card.RequiredInt("bossDamageReduction", 0, ContentLimits.MaxBossDamageReductionPercent)
-                : 0);
+                : 0,
+            OptionalMap<Race>(card, "raceDamage", ContentLimits.MaxCardDamagePercent),
+            OptionalMap<Element>(card, "elementDamage", ContentLimits.MaxCardDamagePercent),
+            OptionalMap<BodySize>(card, "sizeDamage", ContentLimits.MaxCardDamagePercent),
+            OptionalMap<Element>(card, "elementDamageReduction", ContentLimits.MaxCardDamageReductionPercent),
+            card.Has("armorElement") ? card.RequiredEnum<Element>("armorElement") : Element.Neutral);
+        if (card.Has("armorElement") && fits != EquipmentSlot.Armor)
+        {
+            card.ReportField("armorElement", "is only for a card that fits armor");
+        }
+
         removalFee = card.RequiredInt("removalFee", 0, ContentLimits.MaxCardRemovalFee);
-        if (!ValuesOf(bonus).Any(value => value > 0))
+        if (!ValuesOf(bonus).Any(value => value > 0) && bonus.ArmorElement == Element.Neutral)
         {
             card.ReportField("bonus", "must add at least one value above 0");
             return null;
@@ -233,15 +245,51 @@ internal static class ItemDefinitionReader
         return bonus;
     }
 
-    // Every value a card adds, in its fields' order.
+    // Every value a card adds, in its fields' order, its groups' percentages after them.
     private static IEnumerable<int> ValuesOf(CardBonus bonus)
     {
         return new[]
+            {
+                bonus.Stats.Str, bonus.Stats.Agi, bonus.Stats.Vit, bonus.Stats.Int, bonus.Stats.Dex, bonus.Stats.Luk,
+                bonus.Attack, bonus.MagicAttack, bonus.Defense, bonus.MaxHp, bonus.MaxSp, bonus.BossDamagePercent,
+                bonus.BossDamageReductionPercent
+            }
+            .Concat(bonus.RaceDamage.Values)
+            .Concat(bonus.ElementDamage.Values)
+            .Concat(bonus.SizeDamage.Values)
+            .Concat(bonus.ElementDamageReduction.Values);
+    }
+
+    // Every name a card's description must hold: each race, element, and size its groups name and the element it gives
+    // its wearer. Undead is both a race and an element, so the description says which (Content Pipeline §7).
+    private static IEnumerable<string[]> NamesOf(CardBonus bonus)
+    {
+        foreach (Race race in bonus.RaceDamage.Keys)
         {
-            bonus.Stats.Str, bonus.Stats.Agi, bonus.Stats.Vit, bonus.Stats.Int, bonus.Stats.Dex, bonus.Stats.Luk,
-            bonus.Attack, bonus.MagicAttack, bonus.Defense, bonus.MaxHp, bonus.MaxSp, bonus.BossDamagePercent,
-            bonus.BossDamageReductionPercent
-        };
+            yield return race == Race.Undead ? new[] { "Undead", "race" } : new[] { race.ToString() };
+        }
+
+        IEnumerable<Element> elements = bonus.ElementDamage.Keys.Concat(bonus.ElementDamageReduction.Keys);
+        if (bonus.ArmorElement != Element.Neutral)
+        {
+            elements = elements.Append(bonus.ArmorElement);
+        }
+
+        foreach (Element element in elements)
+        {
+            yield return element == Element.Undead ? new[] { "Undead", "element" } : new[] { element.ToString() };
+        }
+
+        foreach (BodySize size in bonus.SizeDamage.Keys)
+        {
+            yield return new[] { size.ToString() };
+        }
+    }
+
+    private static IReadOnlyDictionary<TEnum, int>? OptionalMap<TEnum>(YamlFieldReader card, string key, int max)
+        where TEnum : struct, Enum
+    {
+        return card.Has(key) ? card.RequiredEnumMap<TEnum>(key, 1, max) : null;
     }
 
     // The word an item's name takes for the card, "+7 Keen Iron Sword [2]" (Prototype Content §2).
@@ -297,6 +345,18 @@ internal static class ItemDefinitionReader
                     + string.Join(", ", missing.Select(value => value.ToString(CultureInfo.InvariantCulture))));
                 return null;
             }
+
+            string[] unnamed = NamesOf(bonus)
+                .Where(words => !words.All(word => description.Contains(word, StringComparison.Ordinal)))
+                .Select(words => string.Join(" ", words))
+                .ToArray();
+            if (unnamed.Length > 0)
+            {
+                client.ReportField(
+                    "description",
+                    $"must name every race, element, and size of the card, and leaves out {string.Join(", ", unnamed)}");
+                return null;
+            }
         }
 
         return description;
@@ -329,18 +389,35 @@ internal static class ItemDefinitionReader
         return new ItemEquipment(attack, penalty, defense, bonus, weaponType);
     }
 
-    // A consumable restores HP, SP, or both, each an optional flat amount.
+    // A consumable restores HP and SP, each an optional flat amount, or starts a status for a while, at least one of
+    // the three; the validator checks that the status exists and sets an attack element (Content Pipeline §4).
     private static ItemEffect? ReadEffect(YamlFieldReader server, YamlFieldReader effect)
     {
         int health = OptionalStat(effect, "hp");
         int spirit = OptionalStat(effect, "sp");
-        if (health == 0 && spirit == 0)
+        StatusDefinitionId? status = null;
+        int durationMs = 0;
+        if (effect.Has("status"))
         {
-            server.ReportField("effect", "must restore HP, SP, or both");
+            YamlFieldReader started = effect.RequiredMapping("status");
+            status = started.RequiredId<StatusDefinitionId>(
+                "status",
+                StatusDefinitionId.TryCreate,
+                StatusDefinitionId.KindPrefix);
+            durationMs = started.RequiredInt("durationMs", 1, ContentLimits.MaxDurationMs);
+            if (status == default(StatusDefinitionId) || durationMs < 1)
+            {
+                return null;
+            }
+        }
+
+        if (health == 0 && spirit == 0 && status == null)
+        {
+            server.ReportField("effect", "must restore HP or SP, or start a status");
             return null;
         }
 
-        return new ItemEffect(health, spirit);
+        return new ItemEffect(health, spirit, status, durationMs);
     }
 
     // A listable item's terms (Content Pipeline §4): a base, and a floor and a ceiling that default to the sell price,

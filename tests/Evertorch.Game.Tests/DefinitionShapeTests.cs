@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using NUnit.Framework;
 
@@ -44,6 +45,78 @@ public sealed class DefinitionShapeTests
     }
 
     [Test]
+    public void CardBonus_None_HasNoGroups_AndPlusSumsThemByName_TheFirstArmorElementWinning()
+    {
+        var bane = new CardBonus(
+            new PrimaryStats(0, 0, 0, 0, 0, 0),
+            0,
+            0,
+            0,
+            0,
+            0,
+            20,
+            0,
+            new Dictionary<Race, int> { [Race.Insect] = 10 },
+            sizeDamage: new Dictionary<BodySize, int> { [BodySize.Small] = 5 });
+        var earthen = new CardBonus(
+            new PrimaryStats(0, 0, 0, 0, 0, 0),
+            0,
+            0,
+            10,
+            0,
+            0,
+            0,
+            0,
+            new Dictionary<Race, int> { [Race.Insect] = 15, [Race.Undead] = 20 },
+            elementDamageReduction: new Dictionary<Element, int> { [Element.Wind] = 20 },
+            armorElement: Element.Earth);
+        var shrouded = new CardBonus(
+            new PrimaryStats(0, 0, 0, 0, 0, 0),
+            0,
+            0,
+            0,
+            30,
+            0,
+            0,
+            0,
+            elementDamageReduction: new Dictionary<Element, int> { [Element.Shadow] = 30, [Element.Wind] = 5 },
+            armorElement: Element.Shadow);
+
+        CardBonus worn = CardBonus.None.Plus(bane).Plus(earthen).Plus(shrouded);
+
+        Assert.That(
+            (CardBonus.None.RaceDamage.Count, CardBonus.None.ElementDamage.Count, CardBonus.None.SizeDamage.Count,
+                CardBonus.None.ElementDamageReduction.Count, CardBonus.None.ArmorElement),
+            Is.EqualTo((0, 0, 0, 0, Element.Neutral)));
+        Assert.That(
+            (worn.DamageTo(Race.Insect), worn.DamageTo(Race.Undead), worn.DamageTo(Race.Plant),
+                worn.DamageTo(BodySize.Small), worn.DamageTo(Element.Water)),
+            Is.EqualTo((25, 20, 0, 5, 0)));
+        Assert.That(
+            (worn.ReductionFrom(Element.Wind), worn.ReductionFrom(Element.Shadow), worn.ArmorElement),
+            Is.EqualTo((25, 30, Element.Earth)),
+            "the first card in slot order that gives an element wins");
+        Assert.That((worn.BossDamagePercent, worn.Defense, worn.MaxHp), Is.EqualTo((20, 10, 30)));
+    }
+
+    [Test]
+    public void CardBonus_WithANegativeGroup_Throws()
+    {
+        Action negative = () => _ = new CardBonus(
+            new PrimaryStats(0, 0, 0, 0, 0, 0),
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            sizeDamage: new Dictionary<BodySize, int> { [BodySize.Large] = -1 });
+
+        Assert.That(negative, Throws.TypeOf<ArgumentOutOfRangeException>());
+    }
+
+    [Test]
     public void ExperienceTableDefinition_WithValues_ExposesThem()
     {
         var table = new ExperienceTableDefinition(new ExperienceDefinitionId("experience.adventurer"),
@@ -70,6 +143,23 @@ public sealed class DefinitionShapeTests
         Assert.That(item.StackLimit, Is.EqualTo(999));
         Assert.That(item.Weight, Is.EqualTo(1));
         Assert.That(item.SellPrice, Is.EqualTo(4));
+    }
+
+    [Test]
+    public void ItemEffect_StartingAStatusAlone_ExposesIt_AndWithNothingOrNoDurationThrows()
+    {
+        var status = new StatusDefinitionId("status.fire_weapon");
+        var converter = new ItemEffect(0, 0, status, 1_200_000);
+        Action nothing = () => _ = new ItemEffect(0, 0);
+        Action noDuration = () => _ = new ItemEffect(0, 0, status);
+        Action durationWithoutStatus = () => _ = new ItemEffect(30, 0, null, 1_000);
+
+        Assert.That(
+            (converter.Health, converter.Spirit, converter.Status?.Value, converter.StatusDurationMs),
+            Is.EqualTo((0, 0, "status.fire_weapon", 1_200_000)));
+        Assert.That(nothing, Throws.TypeOf<ArgumentOutOfRangeException>());
+        Assert.That(noDuration, Throws.TypeOf<ArgumentOutOfRangeException>());
+        Assert.That(durationWithoutStatus, Throws.TypeOf<ArgumentOutOfRangeException>());
     }
 
     [Test]
@@ -446,9 +536,15 @@ public sealed class DefinitionShapeTests
     public void StatusEffectDefinition_WithValues_ExposesThem()
     {
         var focus = new StatusEffectDefinition(new StatusDefinitionId("status.focus"), "Focus");
+        var fireWeapon = new StatusEffectDefinition(
+            new StatusDefinitionId("status.fire_weapon"),
+            "Fire Weapon",
+            Element.Fire);
 
         Assert.That(focus.Id.Value, Is.EqualTo("status.focus"));
         Assert.That(focus.DisplayName, Is.EqualTo("Focus"));
+        Assert.That(focus.AttackElement, Is.Null);
+        Assert.That(fireWeapon.AttackElement, Is.EqualTo(Element.Fire));
     }
 }
 }

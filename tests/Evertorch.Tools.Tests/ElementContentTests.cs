@@ -1,3 +1,4 @@
+using System;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
@@ -8,18 +9,43 @@ namespace Evertorch.Tools.Tests
 {
 /// <summary>
 ///     Elements, races, and sizes as content (Content Pipeline §4, §5, §7): a monster's top-level <c>element</c>,
-///     <c>race</c>, and <c>size</c>, required and written to both packages, since the target frame shows them.
+///     <c>race</c>, and <c>size</c>, required and written to both packages, since the target frame shows them; a damage
+///     skill's <c>element</c>, in both packages too; a status's server-only <c>attackElement</c>; and a consumable that
+///     starts such a status.
 /// </summary>
 [TestFixture]
 public sealed class ElementContentTests
 {
     private const string Monster = "monsters/training_slime.yml";
+    private const string Strike = "skills/strike.yml";
+    private const string FocusSkill = "skills/focus.yml";
+    private const string FocusStatus = "status-effects/focus.yml";
+    private const string Potion = "items/minor_health.yml";
+    private const string Converts = "    hp: 30\n    status: { status: status.focus, durationMs: 1200000 }\n";
+    private const string SetsFire = "displayName: Focus\nserver:\n  attackElement: fire\n";
 
     private static ContentPackages Build(ContentWorkspace workspace)
     {
         ContentPipelineResult result = ContentPipeline.Run(workspace.ContentRoot);
         Assert.That(result.Diagnostics.Select(diagnostic => diagnostic.ToString()), Is.Empty);
         return result.Packages!;
+    }
+
+    private static string Describe(ContentPipelineResult result)
+    {
+        return string.Join("\n", result.Diagnostics.Select(diagnostic => diagnostic.ToString()));
+    }
+
+    private static JsonElement Definition(ContentPackage package, string path, string id)
+    {
+        PackageFile file = package.DataFiles.Single(candidate => candidate.Path == path);
+        using (var document = JsonDocument.Parse(file.Content))
+        {
+            return document.RootElement.GetProperty("definitions")
+                .EnumerateArray()
+                .Single(definition => definition.GetProperty("id").GetString() == id)
+                .Clone();
+        }
     }
 
     private static JsonElement Slime(ContentPackage package)
@@ -55,6 +81,71 @@ public sealed class ElementContentTests
         Assert.That(diagnostic.Message, Does.Contain(expectedMessagePart));
     }
 
+    [TestCase(Strike, "element: weapon\n", "", "element", "is required for a skill with a damageType")]
+    [TestCase(Strike, "element: weapon\n", "element: dark\n", "element", "must be one of: weapon, neutral, water")]
+    [TestCase(FocusSkill, "targetType: self\n", "targetType: self\nelement: wind\n", "element",
+        "is only for a skill with a damageType")]
+    [TestCase(FocusStatus, "displayName: Focus\n", "displayName: Focus\nserver:\n  attackElement: weapon\n",
+        "server.attackElement", "must be one of: neutral, water")]
+    [TestCase(FocusStatus, "displayName: Focus\n", "displayName: Focus\nserver:\n  element: fire\n",
+        "server.element", "unknown field")]
+    [TestCase(Potion, "    hp: 30\n", "    hp: 30\n    status: { status: status.focus, durationMs: 0 }\n",
+        "server.effect.status.durationMs", "must be between 1 and 86400000")]
+    [TestCase(Potion, "    hp: 30\n", "    hp: 30\n    status: { status: status.focus, durationMs: 86400001 }\n",
+        "server.effect.status.durationMs", "must be between 1 and 86400000")]
+    [TestCase(Potion, "    hp: 30\n", "    hp: 30\n    status: { status: status.focus }\n",
+        "server.effect.status.durationMs", "required field is missing")]
+    [TestCase(Potion, "    hp: 30\n", "    hp: 30\n    status: { status: status.ember, durationMs: 1000 }\n",
+        "server.effect.status.status", "references unknown status effect 'status.ember'")]
+    [TestCase(Potion, "    hp: 30\n", Converts, "server.effect.status.status",
+        "names 'status.focus', which sets no attack element; an item starts only such a status")]
+    [TestCase(Potion, "    hp: 30\n", "    status: { status: status.focus, durationMs: 1000 }\n",
+        "server.effect.status.status", "which sets no attack element")]
+    public void Run_WhenAnElementOrAConvertedStatusIsBroken_ReportsTheField(
+        string file,
+        string oldText,
+        string newText,
+        string expectedFieldPath,
+        string expectedMessagePart)
+    {
+        using var workspace = new ContentWorkspace();
+        workspace.Replace(file, oldText, newText);
+
+        ContentPipelineResult result = ContentPipeline.Run(workspace.ContentRoot);
+
+        Assert.That(result.Packages, Is.Null);
+        Assert.That(
+            result.Diagnostics.Count(diagnostic =>
+                diagnostic.File == file
+                && diagnostic.FieldPath == expectedFieldPath
+                && diagnostic.Message.Contains(expectedMessagePart, StringComparison.Ordinal)),
+            Is.EqualTo(1),
+            Describe(result));
+    }
+
+    [TestCase("skill.basic_attack", SkillElement.Weapon)]
+    [TestCase("skill.strike", SkillElement.Weapon)]
+    [TestCase("skill.heavy_blow", SkillElement.Weapon)]
+    [TestCase("skill.arcane_bolt", SkillElement.Ghost)]
+    [TestCase("skill.spark_bolt", SkillElement.Wind)]
+    [TestCase("skill.quake_slam", SkillElement.Earth)]
+    public void RepositoryContent_EachDamageSkill_HasItsElement(string skill, SkillElement element)
+    {
+        ContentPipelineResult result = ContentPipeline.Run(
+            Path.Combine(ContentValidationTests.RepositoryRoot(), "content"));
+        Assert.That(result.Diagnostics, Is.Empty);
+
+        Assert.That(
+            result.Content.Skills.Single(authored => authored.Definition.Id.Value == skill).Definition.Element,
+            Is.EqualTo(element));
+        Assert.That(
+            result.Content.Skills
+                .Where(authored => authored.Definition.DamageType == null)
+                .Select(authored => authored.Definition.Element),
+            Is.All.Null,
+            "a skill without damage has no element");
+    }
+
     [TestCase("monster.training_slime", Element.Water, Race.Plant, BodySize.Medium)]
     [TestCase("monster.forest_crawler", Element.Earth, Race.Insect, BodySize.Small)]
     [TestCase("monster.spark_wisp", Element.Wind, Race.Formless, BodySize.Small)]
@@ -72,6 +163,62 @@ public sealed class ElementContentTests
             .Definition;
 
         Assert.That((definition.Element, definition.Race, definition.Size), Is.EqualTo((element, race, size)));
+    }
+
+    [Test]
+    public void Run_ForAConsumableStartingAStatusThatSetsAnElement_WritesBothForTheServerOnly()
+    {
+        using var workspace = new ContentWorkspace();
+        workspace.Replace(FocusStatus, "displayName: Focus\n", SetsFire);
+        workspace.Replace(Potion, "    hp: 30\n", Converts);
+
+        ContentPipelineResult result = ContentPipeline.Run(workspace.ContentRoot);
+
+        Assert.That(result.Diagnostics, Is.Empty, Describe(result));
+        ItemEffect effect = result.Content.Items
+            .Single(item => item.Definition.Id.Value == "item.consumable.minor_health")
+            .Definition.Effect!;
+        Assert.That(
+            (effect.Health, effect.Spirit, effect.Status?.Value, effect.StatusDurationMs),
+            Is.EqualTo((30, 0, "status.focus", 1200000)));
+        Assert.That(
+            result.Content.StatusEffects.Single().Definition.AttackElement,
+            Is.EqualTo(Element.Fire));
+
+        ContentPackages packages = result.Packages!;
+        JsonElement serverEffect = Definition(packages.Server, "items.json", "item.consumable.minor_health")
+            .GetProperty("effect");
+        Assert.That(
+            (serverEffect.GetProperty("status").GetString(), serverEffect.GetProperty("durationMs").GetInt32()),
+            Is.EqualTo(("status.focus", 1200000)));
+        Assert.That(
+            Definition(packages.Server, "status-effects.json", "status.focus").GetProperty("attackElement").GetString(),
+            Is.EqualTo("fire"));
+        Assert.That(
+            Definition(packages.Client, "status-effects.json", "status.focus").TryGetProperty("attackElement", out _),
+            Is.False);
+        Assert.That(
+            Definition(packages.Client, "items.json", "item.consumable.minor_health").TryGetProperty("effect", out _),
+            Is.False);
+    }
+
+    [Test]
+    public void Run_ForTheFixture_WritesADamageSkillsElementToBothPackages_AndNoneForAnotherSkill()
+    {
+        using var workspace = new ContentWorkspace();
+
+        ContentPackages packages = Build(workspace);
+
+        foreach (ContentPackage package in new[] { packages.Server, packages.Client })
+        {
+            Assert.That(
+                new[] { "skill.basic_attack", "skill.strike", "skill.focus" }
+                    .Select(id =>
+                        Definition(package, "skills.json", id).TryGetProperty("element", out JsonElement value)
+                            ? value.GetString()
+                            : "-"),
+                Is.EqualTo(new[] { "weapon", "weapon", "-" }));
+        }
     }
 
     [Test]

@@ -23,6 +23,7 @@ public sealed class BossContentTests
         + "displayName: Slam\n"
         + "targetType: self\n"
         + "damageType: magical\n"
+        + "element: earth\n"
         + "area: { radius: 2.5 }\n"
         + "server:\n"
         + "  range: 0\n"

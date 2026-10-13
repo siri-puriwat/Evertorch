@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Text.Json;
 using Evertorch.Game;
@@ -130,6 +131,12 @@ internal static class ServerProjection
                 writer.WriteStartObject("effect");
                 writer.WriteNumber("hp", item.Effect.Health);
                 writer.WriteNumber("sp", item.Effect.Spirit);
+                if (item.Effect.Status.HasValue)
+                {
+                    writer.WriteString("status", item.Effect.Status.Value.Value);
+                    writer.WriteNumber("durationMs", item.Effect.StatusDurationMs);
+                }
+
                 writer.WriteEndObject();
             }
 
@@ -173,7 +180,28 @@ internal static class ServerProjection
         writer.WriteNumber("maxSp", bonus.MaxSp);
         writer.WriteNumber("bossDamage", bonus.BossDamagePercent);
         writer.WriteNumber("bossDamageReduction", bonus.BossDamageReductionPercent);
+        WriteMap(writer, "raceDamage", bonus.RaceDamage);
+        WriteMap(writer, "elementDamage", bonus.ElementDamage);
+        WriteMap(writer, "sizeDamage", bonus.SizeDamage);
+        WriteMap(writer, "elementDamageReduction", bonus.ElementDamageReduction);
+        writer.WriteString("armorElement", EnumText.Of(bonus.ArmorElement));
         writer.WriteNumber("removalFee", card.RemovalFee);
+        writer.WriteEndObject();
+    }
+
+    // A map of percentages by name in the enum's own order, so identical content writes identical bytes.
+    private static void WriteMap<TEnum>(Utf8JsonWriter writer, string name, IReadOnlyDictionary<TEnum, int> values)
+        where TEnum : struct, Enum
+    {
+        writer.WriteStartObject(name);
+        foreach (TEnum key in Enum.GetValues<TEnum>())
+        {
+            if (values.TryGetValue(key, out int value))
+            {
+                writer.WriteNumber(EnumText.Of(key), value);
+            }
+        }
+
         writer.WriteEndObject();
     }
 
@@ -461,6 +489,11 @@ internal static class ServerProjection
                 writer.WriteString("damageType", EnumText.Of(skill.DamageType.Value));
             }
 
+            if (skill.Element.HasValue)
+            {
+                writer.WriteString("element", EnumText.Of(skill.Element.Value));
+            }
+
             writer.WriteNumber("range", skill.Range);
             writer.WriteNumber("areaRadius", skill.AreaRadius);
             writer.WriteString("spPaidAt", EnumText.Of(skill.SpPaidAt));
@@ -531,6 +564,11 @@ internal static class ServerProjection
             writer.WriteStartObject();
             writer.WriteString("id", status.Id.Value);
             writer.WriteString("displayName", status.DisplayName);
+            if (status.AttackElement.HasValue)
+            {
+                writer.WriteString("attackElement", EnumText.Of(status.AttackElement.Value));
+            }
+
             writer.WriteEndObject();
         }
 

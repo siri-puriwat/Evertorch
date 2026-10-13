@@ -2,6 +2,7 @@ id: skill.spark_bolt
 displayName: Spark Bolt
 targetType: enemy
 damageType: magical
+element: wind
 server:
   range: 6.0
   levels:

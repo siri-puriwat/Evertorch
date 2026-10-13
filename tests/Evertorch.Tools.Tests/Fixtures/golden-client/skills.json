@@ -5,6 +5,7 @@
       "id": "skill.basic_attack",
       "displayName": "Basic Attack",
       "targetType": "enemy",
+      "element": "weapon",
       "icon": "skill_basic_attack"
     },
     {
@@ -17,6 +18,7 @@
       "id": "skill.strike",
       "displayName": "Strike",
       "targetType": "enemy",
+      "element": "weapon",
       "icon": "skill_strike",
       "description": "Hits the target harder than a swing."
     }

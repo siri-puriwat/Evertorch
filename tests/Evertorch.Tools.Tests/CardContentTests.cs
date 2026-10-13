@@ -8,9 +8,10 @@ using NUnit.Framework;
 namespace Evertorch.Tools.Tests
 {
 /// <summary>
-///     Cards and slots (Content Pipeline §4, §5, §7; Gameplay Systems §11.7): a card's fit, values, fee, prefix, and
-///     description, their bounds and the description's check, the slots of a weapon and an armor, the cards' count, the
-///     server package that carries every value, and the client package that carries the facts the player sees.
+///     Cards and slots (Content Pipeline §4, §5, §7; Gameplay Systems §11.7): a card's fit, values, groups, fee,
+///     prefix, and description, their bounds and the description's check, the slots of a weapon and an armor, the
+///     cards' count, the server package that carries every value, and the client package that carries the facts the
+///     player sees.
 /// </summary>
 [TestFixture]
 public sealed class CardContentTests
@@ -60,6 +61,26 @@ public sealed class CardContentTests
         + "client:\n"
         + "  icon: item_training_sword\n"
         + "  model: pickup_training_sword\n";
+
+    private const string EarthenText =
+        "id: item.card.earthen\n"
+        + "displayName: Earthen Card\n"
+        + "type: card\n"
+        + "stackLimit: 999\n"
+        + "fits: armor\n"
+        + "server:\n"
+        + "  weight: 1\n"
+        + "  sellPrice: 0\n"
+        + "  card:\n"
+        + "    defense: 10\n"
+        + "    elementDamageReduction: { shadow: 30, wind: 20 }\n"
+        + "    armorElement: earth\n"
+        + "    removalFee: 600\n"
+        + "client:\n"
+        + "  icon: item_slime_gel\n"
+        + "  model: pickup_slime_gel\n"
+        + "  prefix: Earthen\n"
+        + "  description: Earth armor, defense +10, and damage from Wind -20% and Shadow -30%.\n";
 
     private const string ArmorText =
         "id: item.armor.cloth\n"
@@ -118,6 +139,20 @@ public sealed class CardContentTests
     [TestCase("    bossDamage: 20", "    bossDamage: 101", "server.card.bossDamage")]
     [TestCase("    bossDamage: 20", "    bossDamage: 20\n    bossDamageReduction: 91",
         "server.card.bossDamageReduction")]
+    [TestCase("    bossDamage: 20", "    bossDamage: 20\n    raceDamage: { insect: 101 }",
+        "server.card.raceDamage.insect")]
+    [TestCase("    bossDamage: 20", "    bossDamage: 20\n    raceDamage: { insect: 0 }",
+        "server.card.raceDamage.insect")]
+    [TestCase("    bossDamage: 20", "    bossDamage: 20\n    raceDamage: insect",
+        "server.card.raceDamage")]
+    [TestCase("    bossDamage: 20", "    bossDamage: 20\n    sizeDamage: { huge: 10 }",
+        "server.card.sizeDamage.huge")]
+    [TestCase("    bossDamage: 20", "    bossDamage: 20\n    elementDamage: { weapon: 10 }",
+        "server.card.elementDamage.weapon")]
+    [TestCase("    bossDamage: 20", "    bossDamage: 20\n    elementDamageReduction: { wind: 91 }",
+        "server.card.elementDamageReduction.wind")]
+    [TestCase("    bossDamage: 20", "    bossDamage: 20\n    armorElement: earth",
+        "server.card.armorElement")]
     [TestCase("    removalFee: 200", "    removalFee: 1000001", "server.card.removalFee")]
     [TestCase("    removalFee: 200\n", "", "server.card.removalFee")]
     [TestCase("    removalFee: 200", "    removalFee: 200\n    price: 3", "server.card.price")]
@@ -170,6 +205,46 @@ public sealed class CardContentTests
         return string.Join(" ", values.Where(value => value.Value > 0).Select(value => $"{value.Name} {value.Value}"));
     }
 
+    // Each group's number and name; "Undead" says whether it is the race or the element (Content Pipeline §7).
+    [TestCase("    raceDamage: { insect: 10 }\n", "bosses +20%, and to the rest +10%.", "Insect")]
+    [TestCase("    raceDamage: { insect: 10 }\n", "bosses +20%, and to Insect.", "10")]
+    [TestCase("    raceDamage: { undead: 10 }\n", "bosses +20%, and to the Undead +10%.", "Undead race")]
+    [TestCase("    elementDamage: { undead: 10 }\n", "bosses +20%, and to the Undead race +10%.", "Undead element")]
+    [TestCase("    sizeDamage: { small: 10 }\n", "bosses +20%, and to small ones +10%.", "Small")]
+    public void Run_ForACardsGroupItsDescriptionLeavesOut_ReportsIt(string group, string ending, string leftOut)
+    {
+        using (ContentWorkspace workspace = Workspace())
+        {
+            workspace.Replace(Card, "    removalFee: 200\n", group + "    removalFee: 200\n");
+            workspace.Replace(Card, "bosses +20%.", ending);
+
+            ContentPipelineResult result = ContentPipeline.Run(workspace.ContentRoot);
+
+            Assert.That(
+                result.Diagnostics.Select(diagnostic => $"{diagnostic.FieldPath}: {diagnostic.Message}"),
+                Has.Some.EndsWith($", and leaves out {leftOut}"),
+                Describe(result));
+            Assert.That(FieldsOf(result), Is.EqualTo(new[] { (Card, "client.description") }), Describe(result));
+        }
+    }
+
+    [TestCase("    raceDamage: { insect: 10 }\n", "bosses +20%, and to Insect +10%.")]
+    [TestCase("    raceDamage: { undead: 10 }\n", "bosses +20%, and to the Undead race +10%.")]
+    [TestCase("    elementDamage: { undead: 10 }\n", "bosses +20%, and to the Undead element +10%.")]
+    [TestCase("    sizeDamage: { small: 10 }\n", "bosses +20%, and to Small +10%.")]
+    public void Run_ForACardsGroupItsDescriptionStates_ReportsNothing(string group, string ending)
+    {
+        using (ContentWorkspace workspace = Workspace())
+        {
+            workspace.Replace(Card, "    removalFee: 200\n", group + "    removalFee: 200\n");
+            workspace.Replace(Card, "bosses +20%.", ending);
+
+            ContentPipelineResult result = ContentPipeline.Run(workspace.ContentRoot);
+
+            Assert.That(result.Diagnostics, Is.Empty, Describe(result));
+        }
+    }
+
     [Test]
     public void Run_ForACardAddingNothing_OrALongDescription_ReportsEach()
     {
@@ -220,9 +295,13 @@ public sealed class CardContentTests
                     new[]
                     {
                         "bonus", "attack", "magicAttack", "defense", "maxHp", "maxSp", "bossDamage",
-                        "bossDamageReduction", "removalFee"
+                        "bossDamageReduction", "raceDamage", "elementDamage", "sizeDamage", "elementDamageReduction",
+                        "armorElement", "removalFee"
                     }),
-                "every value, 0 when absent");
+                "every value, 0 when absent, every group empty, and no element");
+            Assert.That(
+                (values.GetProperty("raceDamage").GetRawText(), values.GetProperty("armorElement").GetString()),
+                Is.EqualTo(("{}", "neutral")));
             Assert.That(
                 (values.GetProperty("bonus").GetProperty("str").GetInt32(), values.GetProperty("maxHp").GetInt32()),
                 Is.EqualTo((2, 0)));
@@ -273,6 +352,75 @@ public sealed class CardContentTests
                         (Gel, "client.description")
                     }),
                 Describe(result));
+        }
+    }
+
+    [Test]
+    public void Run_ForCardsWithGroups_ReadsThem_AndTheServerPackageWritesThemInTheirListsOrder()
+    {
+        using (ContentWorkspace workspace = Workspace())
+        {
+            workspace.Replace(
+                Card,
+                "    removalFee: 200\n",
+                "    raceDamage: { insect: 10 }\n"
+                + "    elementDamage: { earth: 25, water: 5 }\n"
+                + "    sizeDamage: { small: 15 }\n"
+                + "    removalFee: 200\n");
+            workspace.Replace(
+                Card,
+                "bosses +20%.",
+                "bosses +20%, to Insect +10%, to Small +15%, to Water +5%, and to Earth +25%.");
+            workspace.Write("items/earthen_card.yml", EarthenText);
+            workspace.Write(
+                "items/stony_card.yml",
+                EarthenText
+                    .Replace("earthen", "stony", StringComparison.Ordinal)
+                    .Replace("Earthen", "Stony", StringComparison.Ordinal)
+                    .Replace("    defense: 10\n    elementDamageReduction: { shadow: 30, wind: 20 }\n", string.Empty,
+                        StringComparison.Ordinal)
+                    .Replace(", defense +10, and damage from Wind -20% and Shadow -30%.", ".",
+                        StringComparison.Ordinal));
+
+            ContentPipelineResult result = ContentPipeline.Run(workspace.ContentRoot);
+
+            Assert.That(result.Diagnostics, Is.Empty, Describe(result));
+            CardBonus keen = result.Content.Items.Single(item => item.Definition.Id.Value == "item.card.keen")
+                .Definition.Card!.Bonus;
+            Assert.That(
+                (keen.DamageTo(Race.Insect), keen.DamageTo(Element.Earth), keen.DamageTo(Element.Water),
+                    keen.DamageTo(BodySize.Small), keen.DamageTo(BodySize.Large), keen.ArmorElement),
+                Is.EqualTo((10, 25, 5, 15, 0, Element.Neutral)));
+            CardBonus earthen = result.Content.Items.Single(item => item.Definition.Id.Value == "item.card.earthen")
+                .Definition.Card!.Bonus;
+            Assert.That(
+                (earthen.Defense, earthen.ReductionFrom(Element.Wind), earthen.ReductionFrom(Element.Shadow),
+                    earthen.ArmorElement),
+                Is.EqualTo((10, 20, 30, Element.Earth)));
+
+            JsonElement keenValues = Definition(result.Packages!.Server, "item.card.keen").GetProperty("card");
+            JsonElement earthenValues = Definition(result.Packages.Server, "item.card.earthen").GetProperty("card");
+            JsonElement stonyValues = Definition(result.Packages.Server, "item.card.stony").GetProperty("card");
+            Assert.That(
+                (NamesOf(keenValues.GetProperty("elementDamage")),
+                    NamesOf(earthenValues.GetProperty("elementDamageReduction"))),
+                Is.EqualTo((new[] { "water", "earth" }, new[] { "wind", "shadow" })),
+                "in the list's own order, whatever the authoring order");
+            Assert.That(
+                (keenValues.GetProperty("raceDamage").GetProperty("insect").GetInt32(),
+                    keenValues.GetProperty("sizeDamage").GetProperty("small").GetInt32(),
+                    earthenValues.GetProperty("armorElement").GetString(),
+                    stonyValues.GetProperty("armorElement").GetString()),
+                Is.EqualTo((10, 15, "earth", "earth")),
+                "an element alone is a value the card adds");
+            Assert.That(
+                NamesOf(Definition(result.Packages.Client, "item.card.earthen")),
+                Is.EqualTo(
+                    new[]
+                    {
+                        "id", "displayName", "type", "stackLimit", "icon", "model", "fits", "prefix", "description"
+                    }),
+                "the groups stay on the server");
         }
     }
 

@@ -195,6 +195,7 @@ public static class ServerContentLoader
             declaredExperienceTables,
             declaredStatusEffects,
             problems);
+        CheckStartedStatuses(items, statusEffects, declaredStatusEffects, problems);
         CheckNpcsAndQuests(
             npcs.Values,
             quests.Values,
@@ -513,17 +514,32 @@ public static class ServerContentLoader
             values.RequiredInt("maxHp", 0, ContentLimits.MaxStat),
             values.RequiredInt("maxSp", 0, ContentLimits.MaxStat),
             values.RequiredInt("bossDamage", 0, ContentLimits.MaxBossDamagePercent),
-            values.RequiredInt("bossDamageReduction", 0, ContentLimits.MaxBossDamageReductionPercent));
+            values.RequiredInt("bossDamageReduction", 0, ContentLimits.MaxBossDamageReductionPercent),
+            values.RequiredEnumMap<Race>("raceDamage", 1, ContentLimits.MaxCardDamagePercent),
+            values.RequiredEnumMap<Element>("elementDamage", 1, ContentLimits.MaxCardDamagePercent),
+            values.RequiredEnumMap<BodySize>("sizeDamage", 1, ContentLimits.MaxCardDamagePercent),
+            values.RequiredEnumMap<Element>("elementDamageReduction", 1, ContentLimits.MaxCardDamageReductionPercent),
+            values.RequiredEnum<Element>("armorElement"));
         int removalFee = values.RequiredInt("removalFee", 0, ContentLimits.MaxCardRemovalFee);
+        if (bonus.ArmorElement != Element.Neutral && fits != EquipmentSlot.Armor)
+        {
+            values.Report("armorElement", "is only for a card that fits armor");
+        }
+
         stats.ReportUnexpectedProperties();
         values.ReportUnexpectedProperties();
         PrimaryStats added = bonus.Stats;
         bool addsAny = new[]
-            {
-                added.Str, added.Agi, added.Vit, added.Int, added.Dex, added.Luk, bonus.Attack, bonus.MagicAttack,
-                bonus.Defense, bonus.MaxHp, bonus.MaxSp, bonus.BossDamagePercent, bonus.BossDamageReductionPercent
-            }
-            .Any(value => value > 0);
+                {
+                    added.Str, added.Agi, added.Vit, added.Int, added.Dex, added.Luk, bonus.Attack, bonus.MagicAttack,
+                    bonus.Defense, bonus.MaxHp, bonus.MaxSp, bonus.BossDamagePercent, bonus.BossDamageReductionPercent
+                }
+                .Concat(bonus.RaceDamage.Values)
+                .Concat(bonus.ElementDamage.Values)
+                .Concat(bonus.SizeDamage.Values)
+                .Concat(bonus.ElementDamageReduction.Values)
+                .Any(value => value > 0)
+            || bonus.ArmorElement != Element.Neutral;
         if (!addsAny)
         {
             entry.Report("card", "must add at least one value above 0");
@@ -580,14 +596,22 @@ public static class ServerContentLoader
 
         int health = values.RequiredInt("hp", 0, ContentLimits.MaxStat);
         int spirit = values.RequiredInt("sp", 0, ContentLimits.MaxStat);
-        values.ReportUnexpectedProperties();
-        if (health == 0 && spirit == 0)
+        StatusDefinitionId? status = null;
+        int durationMs = 0;
+        if (values.Has("status"))
         {
-            entry.Report("effect", "must restore HP, SP, or both");
+            status = values.RequiredId<StatusDefinitionId>("status", StatusDefinitionId.TryCreate);
+            durationMs = values.RequiredInt("durationMs", 1, ContentLimits.MaxDurationMs);
+        }
+
+        values.ReportUnexpectedProperties();
+        if (health == 0 && spirit == 0 && status == null)
+        {
+            entry.Report("effect", "must restore HP or SP, or start a status");
             return null;
         }
 
-        return new ItemEffect(health, spirit);
+        return new ItemEffect(health, spirit, status, durationMs);
     }
 
     // A weapon names its type and keeps its attack-speed penalty within a job's limit (Gameplay Systems §11.1).
@@ -787,6 +811,16 @@ public static class ServerContentLoader
         SkillDamageType? damageType = entry.Has("damageType")
             ? entry.RequiredEnum<SkillDamageType>("damageType")
             : null;
+        SkillElement? element = null;
+        if (damageType != null)
+        {
+            element = entry.RequiredEnum<SkillElement>("element");
+        }
+        else if (entry.Has("element"))
+        {
+            entry.Report("element", "is only for a skill with a damageType");
+        }
+
         double range = RequiredNonNegative(entry, "range", ContentLimits.MaxDistance);
         double areaRadius = RequiredNonNegative(entry, "areaRadius", ContentLimits.MaxDistance);
         SkillPaymentPoint spPaidAt = entry.RequiredEnum<SkillPaymentPoint>("spPaidAt");
@@ -862,7 +896,8 @@ public static class ServerContentLoader
                 spPaidAt,
                 levels.AsReadOnly(),
                 requires,
-                areaRadius)
+                areaRadius,
+                element)
             : null;
     }
 
@@ -1323,8 +1358,11 @@ public static class ServerContentLoader
     {
         int problemsBefore = problems.Count;
         string displayName = entry.RequiredString("displayName");
+        Element? attackElement = entry.Has("attackElement") ? entry.RequiredEnum<Element>("attackElement") : null;
         entry.ReportUnexpectedProperties();
-        return problems.Count == problemsBefore ? new StatusEffectDefinition(id, displayName) : null;
+        return problems.Count == problemsBefore
+            ? new StatusEffectDefinition(id, displayName, attackElement)
+            : null;
     }
 
     private static MapDefinition? ReadMap(PackageObjectReader entry, MapDefinitionId id, List<string> problems)
@@ -1598,6 +1636,32 @@ public static class ServerContentLoader
                 problems.Add(
                     $"{RefineFile}: {table}: is named by more than the {ContentLimits.MaxRefineItems} items its "
                     + "message carries");
+            }
+        }
+    }
+
+    // A consumable starts only a status that sets an attack element, a converter's (Content Pipeline §7).
+    private static void CheckStartedStatuses(
+        IReadOnlyDictionary<ItemDefinitionId, ItemDefinition> items,
+        IReadOnlyDictionary<StatusDefinitionId, StatusEffectDefinition> statusEffects,
+        HashSet<StatusDefinitionId> declaredStatusEffects,
+        List<string> problems)
+    {
+        foreach (ItemDefinition item in items.Values)
+        {
+            if (!(item.Effect?.Status is StatusDefinitionId started))
+            {
+                continue;
+            }
+
+            if (!declaredStatusEffects.Contains(started))
+            {
+                problems.Add($"{ItemsFile}: {item.Id}: starts unknown status effect '{started}'");
+            }
+            else if (statusEffects.TryGetValue(started, out StatusEffectDefinition? status)
+                     && status.AttackElement == null)
+            {
+                problems.Add($"{ItemsFile}: {item.Id}: starts status effect '{started}', which sets no attack element");
             }
         }
     }

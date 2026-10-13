@@ -284,6 +284,16 @@ public sealed class ClientContentParserTests
         "Skill 'skill.first_aid': area must be 0, or a radius up to 10000 on a skill cast on its caster")]
     [TestCase(
         ClientContentParser.SkillsFile,
+        "\"targetType\":\"enemy\"",
+        "\"targetType\":\"enemy\",\"element\":\"dark\"",
+        "Skill 'skill.strike': element is unknown")]
+    [TestCase(
+        ClientContentParser.SkillsFile,
+        "\"targetType\":\"enemy\"",
+        "\"targetType\":\"enemy\",\"element\":\"Ghost\"",
+        "Skill 'skill.strike': element is unknown")]
+    [TestCase(
+        ClientContentParser.SkillsFile,
         "\"schemaVersion\":1",
         "\"schemaVersion\":2",
         "'skills.json' is not readable or has an unsupported schema version")]
@@ -521,6 +531,24 @@ public sealed class ClientContentParserTests
         Assert.That(quartermaster!.Tint, Is.Null);
     }
 
+    // A damage skill names the element it strikes with, which the target frame's hint weighs (Gameplay Systems §9).
+    [Test]
+    public void Parse_ForADamageSkill_ReadsItsElement_AndAnotherSkillHasNone()
+    {
+        string original = Package.DefaultTexts(Maps)[ClientContentParser.SkillsFile];
+        var package = Package.With(
+            ClientContentParser.SkillsFile,
+            original.Replace("\"targetType\":\"enemy\"", "\"targetType\":\"enemy\",\"element\":\"ghost\""));
+
+        ClientContent? content = ClientContentParser.Parse(package.Manifest, package.Files, out string error);
+
+        Assert.That(content, Is.Not.Null, error);
+        Assert.That(content!.TryGetSkill(new SkillDefinitionId("skill.strike"), out ClientSkill? strike), Is.True);
+        Assert.That(content.TryGetSkill(new SkillDefinitionId("skill.first_aid"), out ClientSkill? aid), Is.True);
+        Assert.That(strike!.Element, Is.EqualTo(SkillElement.Ghost));
+        Assert.That(aid!.Element, Is.Null);
+    }
+
     // A heal may name another player (Gameplay Systems §9).
     [Test]
     public void Parse_ForASkillOnAnAlly_ReadsItsTargetType()
@@ -607,6 +635,11 @@ public sealed class ClientContentParserTests
             content.TryGetQuest(new QuestDefinitionId("quest.crawler_hunt"), out ClientQuest? hunt),
             Is.True);
         Assert.That(hunt!.DisplayName, Is.EqualTo("Crawler Hunt"));
+        Assert.That(
+            content.TryGetSkill(new SkillDefinitionId("skill.arcane_bolt"), out ClientSkill? bolt)
+                ? bolt!.Element
+                : null,
+            Is.EqualTo(SkillElement.Ghost));
     }
 
     [Test]

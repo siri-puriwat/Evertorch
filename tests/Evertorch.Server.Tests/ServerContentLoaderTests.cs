@@ -99,7 +99,7 @@ public sealed class ServerContentLoaderTests
         "definitions[0].levels[0].effect.damageRatio: an effect must have exactly one of damageRatio, healHp, or status")]
     [TestCase(
         Skills,
-        "      \"damageType\": \"physical\",\n",
+        "      \"damageType\": \"physical\",\n      \"element\": \"weapon\",\n",
         "",
         "jobs.json: job.adventurer: its basic attack 'skill.basic_attack' has no damage type")]
     [TestCase(Jobs, "\"skills\": []", "\"skills\": [\"skill.none\"]", "knows unknown skill 'skill.none'")]
@@ -734,7 +734,7 @@ public sealed class ServerContentLoaderTests
 
         Assert.That(ProblemsOf(material), Has.Some.Contains("effect: is only for a consumable"));
         Assert.That(ProblemsOf(consumable), Has.Some.Contains("effect: required property is missing"));
-        Assert.That(ProblemsOf(empty), Has.Some.Contains("effect: must restore HP, SP, or both"));
+        Assert.That(ProblemsOf(empty), Has.Some.Contains("effect: must restore HP or SP, or start a status"));
     }
 
     [Test]

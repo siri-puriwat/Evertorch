@@ -111,6 +111,31 @@ public static class ContentValidator
             }
         }
 
+        // A consumable starts only a status that sets an attack element, a converter's (Content Pipeline §7).
+        var statusesById = new Dictionary<string, StatusEffectDefinition>(StringComparer.Ordinal);
+        foreach (AuthoredStatusEffect status in content.StatusEffects)
+        {
+            statusesById[status.Definition.Id.Value] = status.Definition;
+        }
+
+        foreach (AuthoredItem item in content.Items)
+        {
+            if (item.Definition.Effect?.Status is StatusDefinitionId started)
+            {
+                const string startedPath = "server.effect.status.status";
+                RequireReference(statusEffects, started.Value, "status effect", item.Source, startedPath, diagnostics);
+                if (statusesById.TryGetValue(started.Value, out StatusEffectDefinition? status)
+                    && status.AttackElement == null)
+                {
+                    Report(
+                        item.Source,
+                        startedPath,
+                        $"names '{started.Value}', which sets no attack element; an item starts only such a status",
+                        diagnostics);
+                }
+            }
+        }
+
         var skillsById = new Dictionary<string, SkillDefinition>(StringComparer.Ordinal);
         foreach (AuthoredSkill skill in content.Skills)
         {
