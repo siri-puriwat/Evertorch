@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Evertorch.Game;
 using Evertorch.Protocol;
+using Evertorch.Rules;
 using NUnit.Framework;
 
 namespace Evertorch.Server.Tests
@@ -61,14 +62,15 @@ public sealed class ElementCombatTests
         string? weapon = null,
         Element? attackElement = null,
         CardBonus? cards = null,
-        bool isStrike = false)
+        bool isStrike = false,
+        IRandomSource? random = null)
     {
         var server = new TestServer(
             withEveryMap: true,
             withGrotto: true,
             withMonsters: true,
             withMonsterAi: false,
-            combatRandom: new SureHitRandom());
+            combatRandom: random ?? new SureHitRandom());
         ConnectionId player = server.EnterWorld(1);
         server.CrossIntoTheGrotto(player);
         MonsterEntity monarch = MonarchOf(server);
@@ -110,6 +112,27 @@ public sealed class ElementCombatTests
             .Where(message => message.Opcode == MessageOpcode.SkillResolved)
             .Select(message => SkillResolved.TryRead(message.Payload, out SkillResolved? resolved) ? resolved! : null!)
             .ToArray();
+    }
+
+    // No new draw (Gameplay Systems §3, §11.7): a converted swing and Strike with every kind of card group draw the very
+    // numbers a plain one draws, so a seed replays whatever the elements and the cards.
+    [TestCase(false)]
+    [TestCase(true)]
+    public void AConvertedCardedHit_DrawsTheNumbersAPlainOneDraws(bool isStrike)
+    {
+        var plain = new ScriptedRandom(0);
+        var dressed = new ScriptedRandom(0);
+        CardBonus cards = Cards(
+            new Dictionary<Race, int> { [Race.Plant] = 10 },
+            new Dictionary<Element, int> { [Element.Water] = 10 },
+            new Dictionary<BodySize, int> { [BodySize.Large] = 10 },
+            new Dictionary<Element, int> { [Element.Earth] = 10 },
+            Element.Earth);
+
+        FirstHitOnTheMonarch("item.weapon.iron_sword", isStrike: isStrike, random: plain);
+        FirstHitOnTheMonarch("item.weapon.iron_sword", Element.Wind, cards, isStrike, dressed);
+
+        Assert.That(dressed.Bounds, Is.EqualTo(plain.Bounds).And.Not.Empty);
     }
 
     // Gameplay Systems §3: a Holy bolt on a Holy slime deals nothing and is immune; everyone who sees the slime is told,

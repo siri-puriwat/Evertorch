@@ -22,6 +22,8 @@ namespace Evertorch.Server.Tests
 ///     result, and a boss's fall everyone on its map. Milestone 14 adds the trade and storage: another's trade, its
 ///     settled bags, and its deposits and withdrawals reach an observer beside it as nothing. Milestone 15 adds the
 ///     market board: another's reads, listings, purchases, sales, and collections reach an observer beside it as nothing.
+///     Milestone 18 adds the elements: another's converters, the sheet's attack element and the status list they change,
+///     reach an observer beside it and a member of its party as nothing.
 /// </summary>
 [TestFixture]
 public sealed class ObserverOutputTests
@@ -183,6 +185,63 @@ public sealed class ObserverOutputTests
             observerHeard,
             Has.None.EqualTo(MessageOpcode.CharacterSheet).And.None.EqualTo(MessageOpcode.SkillList),
             "never another's sheet or skills");
+    }
+
+    // The elements (Milestone 18 verification): the actor, wearing a sword and partied with a third player, uses a Fire
+    // Converter, then a Wind one, then takes the sword off, while the observer stands beside it outside the party. The
+    // actor hears its sheet and its status list each time; the member and the observer hear neither: the observer what
+    // anyone near sees, the member that and the party.
+    [Test]
+    public void AnotherPlayersConverters_ReachAnObserverAndAPartyMemberAsNothingNew()
+    {
+        const string fire = "item.consumable.fire_converter";
+        const string wind = "item.consumable.wind_converter";
+        var rig = new PartyRig();
+        TestServer server = rig.Server;
+        ConnectionId actor = server.Connect();
+        server.SignInWithCharacter(actor, Actor);
+        server.Store.GiveItems(Actor, fire, 1, 1, 5);
+        server.Store.GiveItems(Actor, wind, 1, 1, 5);
+        server.Store.GiveItems(Actor, Sword, 1, 1, 5);
+        server.Store.Wear(Actor, server.Store.Stored(Actor).Items.Last().Id, "Weapon");
+        server.SendEnterWorld(actor, Actor);
+        server.TickUntil(() => server.SessionOf(actor).State == SessionState.InWorld);
+        ConnectionId observer = rig.Enter(Observer);
+        ConnectionId member = rig.Enter(3);
+        rig.Join(actor, "Tester1", member, "Tester3");
+        server.Place(observer, server.PlayerOf(actor).Position.X + 1f, server.PlayerOf(actor).Position.Z);
+        server.Place(member, server.PlayerOf(actor).Position.X - 1f, server.PlayerOf(actor).Position.Z);
+        server.Tick(2);
+        server.Transport.ClearSent();
+
+        server.SendUseItem(actor, RowOf(server, actor, fire), rig.Next(actor));
+        Settle(server, actor);
+        server.SendUseItem(actor, RowOf(server, actor, wind), rig.Next(actor));
+        Settle(server, actor);
+        server.SendUnequip(actor, EquipmentSlot.Weapon, rig.Next(actor));
+        Settle(server, actor);
+
+        MessageOpcode[] actorHeard = server.Transport.SentTo(actor).Select(message => message.Opcode).ToArray();
+        MessageOpcode[] observerHeard = server.Transport.SentTo(observer).Select(message => message.Opcode).ToArray();
+        MessageOpcode[] memberHeard = server.Transport.SentTo(member).Select(message => message.Opcode).ToArray();
+        MessageOpcode[] party =
+            { MessageOpcode.PartyEvent, MessageOpcode.PartyRoster, MessageOpcode.PartyMemberStatus };
+        Assert.That(
+            Read(server, actor, MessageOpcode.CharacterSheet, payload =>
+                    CharacterSheet.TryRead(payload, out CharacterSheet? sheet) ? sheet : null)
+                .Select(sheet => sheet.AttackElement),
+            Is.EqualTo(new[] { Element.Fire, Element.Wind, Element.Neutral }),
+            "the actor's sheet told each change");
+        Assert.That(
+            actorHeard.Count(opcode => opcode == MessageOpcode.StatusEffects),
+            Is.EqualTo(3),
+            "and its status list");
+        Assert.That(observerHeard.Distinct(), Is.SubsetOf(WhatAnyoneNearSees));
+        Assert.That(memberHeard.Distinct(), Is.SubsetOf(WhatAnyoneNearSees.Concat(party)));
+        Assert.That(
+            observerHeard.Concat(memberHeard),
+            Has.None.EqualTo(MessageOpcode.CharacterSheet).And.None.EqualTo(MessageOpcode.StatusEffects),
+            "never another's sheet or statuses");
     }
 
     // The party (Milestone 12 verification): the actor and a third player form a party, the actor is wounded, speaks to

@@ -12,7 +12,8 @@ namespace Evertorch.Server.Tests
 ///     A supplied seed replays Milestone 13's systems too (verification line "assist, the debuff, the slam, the spread,
 ///     and the MVP's rolls replay with a seed"): in the Umbral Grotto a scripted player fights a Grotto Crawler, whose
 ///     kin join in; a Gloom Wisp, which numbs it; and the Slime Monarch, which slams it; then the boss falls to the
-///     player, which rolls its prize and draws its return.
+///     player, which rolls its prize and draws its return. Milestone 18 has the player wear a training sword made Earth
+///     by a converter and fight a Barrow Crawler, which bites with Grave Bite, and a Hollow Wisp before the boss.
 /// </summary>
 [TestFixture]
 public sealed class DungeonDeterminismTests
@@ -21,6 +22,10 @@ public sealed class DungeonDeterminismTests
     private const string Crawler = "monster.grotto_crawler";
     private const string Wisp = "monster.gloom_wisp";
     private const string Monarch = "monster.slime_monarch";
+    private const string Barrow = "monster.barrow_crawler";
+    private const string Hollow = "monster.hollow_wisp";
+    private const string Sword = "item.weapon.training_sword";
+    private const string EarthConverter = "item.consumable.earth_converter";
 
     private static readonly MapDefinitionId Grotto = new("map.umbral_grotto");
 
@@ -48,7 +53,13 @@ public sealed class DungeonDeterminismTests
     private static Recording Record(ulong seed)
     {
         var server = new TestServer(withEveryMap: true, withGrotto: true, withMonsters: true, randomSeed: seed);
-        ConnectionId player = server.EnterWorld(1);
+        ConnectionId player = server.Connect();
+        server.SignInWithCharacter(player, 1);
+        server.Store.GiveItems(1, EarthConverter, 1, 1, 5);
+        server.Store.GiveItems(1, Sword, 1, 1, 5);
+        server.Store.Wear(1, server.Store.Stored(1).Items.Last().Id, "Weapon");
+        server.SendEnterWorld(player, 1);
+        server.TickUntil(() => server.SessionOf(player).State == SessionState.InWorld);
         server.CrossIntoTheGrotto(player);
         PlayerEntity scripted = server.PlayerOf(player);
         scripted.SetPrimary(new PrimaryStats(5, 5, 5, 5, 99, 5));
@@ -56,7 +67,10 @@ public sealed class DungeonDeterminismTests
         MapInstance grotto = GrottoOf(server);
         var positions = new List<string>();
         uint sequence = 0;
-        foreach (string prey in new[] { Crawler, Wisp, Monarch })
+        long converter = server.Store.Stored(1).Items.First(item => item.ItemDefinitionId == EarthConverter).Id;
+        server.SendUseItem(player, converter, ++sequence);
+        server.TickUntil(() => server.SessionOf(player).Character!.Operation == null);
+        foreach (string prey in new[] { Crawler, Wisp, Barrow, Hollow, Monarch })
         {
             EntityId target = default;
             bool isAttacking = false;
@@ -90,7 +104,7 @@ public sealed class DungeonDeterminismTests
                 }
                 else
                 {
-                    float distance = prey == Wisp && monster.Target == self.Id ? 5f : 1.2f;
+                    float distance = (prey == Wisp || prey == Hollow) && monster.Target == self.Id ? 5f : 1.2f;
                     if (Math.Abs(Distance(self.Position, monster.Position) - distance) > 0.5f)
                     {
                         TryStandAt(grotto, self, monster, distance);
@@ -170,6 +184,15 @@ public sealed class DungeonDeterminismTests
                     monster.Position.X,
                     monster.Position.Z,
                     monster.CurrentHealth)));
+    }
+
+    private static HashSet<EntityId> Hollows(Recording recording)
+    {
+        return Read(recording, MessageOpcode.EntitySpawn, payload =>
+                EntitySpawn.TryRead(payload, out EntitySpawn? spawn) ? spawn : null)
+            .Where(spawn => spawn.DefinitionId == Hollow)
+            .Select(spawn => spawn.Entity)
+            .ToHashSet();
     }
 
     private static IEnumerable<T> Read<T>(Recording recording, MessageOpcode opcode, Func<byte[], T?> read)
@@ -258,8 +281,22 @@ public sealed class DungeonDeterminismTests
                     SkillResolved.TryRead(payload, out SkillResolved? resolved) ? resolved : null)
                 .Select(resolved => resolved.Skill.Value)
                 .Distinct(),
-            Is.SupersetOf(new[] { "skill.numbing_spark", "skill.quake_slam" }),
-            "the wisp numbed the player and the boss slammed it");
+            Is.SupersetOf(new[] { "skill.numbing_spark", "skill.grave_bite", "skill.quake_slam" }),
+            "the wisp numbed the player, a barrow crawler bit it, and the boss slammed it");
+        Assert.That(
+            Read(first, MessageOpcode.StatusEffects, payload =>
+                    StatusEffects.TryRead(payload, out StatusEffects? effects) ? effects : null)
+                .SelectMany(effects => effects.Effects)
+                .Select(effect => effect.Status.Value),
+            Has.Member("status.earth_weapon"),
+            "the converter's status");
+        Assert.That(
+            first.Messages
+                .Where(message => message.Opcode == MessageOpcode.Damage)
+                .Select(message => Damage.TryRead(message.Payload, out Damage read) ? read : default)
+                .Count(damage => damage.Source.Value == self && Hollows(first).Contains(damage.Target)),
+            Is.Positive,
+            "the player struck a hollow wisp");
         Assert.That(
             first.Messages.Count(message => message.Opcode == MessageOpcode.MvpAwarded),
             Is.EqualTo(1),
