@@ -49,10 +49,11 @@ public sealed class ServerOutputTests
         ["CharacterProgress"] = new[] { "Experience", "ExperienceToNextLevel", "Level" },
         ["CharacterSheet"] = new[]
         {
-            "Attack", "AttackSpeed", "Critical", "Defense", "EquipmentAgi", "EquipmentAttack", "EquipmentDefense",
-            "EquipmentDex", "EquipmentInt", "EquipmentLuk", "EquipmentMagicAttack", "EquipmentStr", "EquipmentVit",
-            "Flee", "Hit", "Job", "JobExperience", "JobExperienceToNextLevel", "JobLevel", "MagicAttack",
-            "MagicDefense", "SkillPoints", "StatPoints", "Stats"
+            "ArmorElement", "Attack", "AttackElement", "AttackSpeed", "Critical", "Defense", "EquipmentAgi",
+            "EquipmentAttack", "EquipmentDefense", "EquipmentDex", "EquipmentInt", "EquipmentLuk",
+            "EquipmentMagicAttack",
+            "EquipmentStr", "EquipmentVit", "Flee", "Hit", "Job", "JobExperience", "JobExperienceToNextLevel",
+            "JobLevel", "MagicAttack", "MagicDefense", "SkillPoints", "StatPoints", "Stats"
         },
         ["CharacterSheetStat"] = new[] { "NextCost", "Value" },
         ["CommandRejected"] = new[] { "CommandSequence", "Reason" },

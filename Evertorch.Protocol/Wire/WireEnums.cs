@@ -1,3 +1,5 @@
+using Evertorch.Game;
+
 namespace Evertorch.Protocol
 {
 /// <summary>
@@ -15,6 +17,11 @@ internal static class WireEnums
     public static bool IsDefined(EntityKind value)
     {
         return value >= EntityKind.Player && value <= EntityKind.Npc;
+    }
+
+    public static bool IsDefined(Element value)
+    {
+        return value >= Element.Neutral && value <= Element.Undead;
     }
 
     public static bool IsDefined(CombatResult value)

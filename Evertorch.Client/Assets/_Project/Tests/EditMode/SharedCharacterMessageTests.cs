@@ -39,7 +39,8 @@ public sealed class SharedCharacterMessageTests
 
     // Job level 3 with 20 of 80 job experience; 7 stat points and 2 skill points; STR 5, AGI 11, VIT 99 (the cap),
     // INT 5, DEX 21, LUK 1 with their next costs; attack 46, magic attack 12, defense 5, magic defense 6, hit 188, flee
-    // 125, critical 13, attack speed 154; the equipment adds 33 attack, 18 magic attack, and 28 defense.
+    // 125, critical 13, attack speed 154; the equipment adds 33 attack, 18 magic attack, and 28 defense; the attack
+    // element is Fire and the armor element Earth.
     private static readonly byte[] SheetBytes =
     {
         0x1F, 0x80, 0x03, 0x00,
@@ -50,7 +51,8 @@ public sealed class SharedCharacterMessageTests
         0x05, 0x02, 0x0B, 0x03, 0x63, 0x00, 0x05, 0x02, 0x15, 0x04, 0x01, 0x02,
         0x2E, 0x00, 0x0C, 0x00, 0x05, 0x00, 0x06, 0x00, 0xBC, 0x00, 0x7D, 0x00, 0x0D, 0x00, 0x9A, 0x00,
         0x21, 0x00, 0x12, 0x00, 0x1C, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00
+        0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x03, 0x02
     };
 
     private static byte[] BuildList()
@@ -147,7 +149,11 @@ public sealed class SharedCharacterMessageTests
             0,
             0,
             1,
-            3);
+            3,
+            0,
+            0,
+            Element.Fire,
+            Element.Earth);
         byte[] buffer = new byte[sheet.GetEncodedLength()];
         sheet.Write(buffer);
 
@@ -164,6 +170,8 @@ public sealed class SharedCharacterMessageTests
             Is.EqualTo(((ushort)33, (ushort)18, (ushort)28)));
         Assert.That((read.EquipmentVit, read.EquipmentInt), Is.EqualTo(((ushort)1, (ushort)3)));
         Assert.That((read.JobLevel, read.Job.Value, read.SkillPoints), Is.EqualTo(((ushort)3, "job.a", (ushort)2)));
+        Assert.That(read.AttackElement, Is.EqualTo(Element.Fire));
+        Assert.That(read.ArmorElement, Is.EqualTo(Element.Earth));
     }
 
     [Test]

@@ -61,6 +61,17 @@ public sealed class ConverterTests
             .ToArray();
     }
 
+    private static CharacterSheet LastSheet(TestServer server, ConnectionId player)
+    {
+        return Sent(server, player, MessageOpcode.CharacterSheet, (byte[] bytes, out CharacterSheet read) =>
+            {
+                bool isRead = CharacterSheet.TryRead(bytes, out CharacterSheet? message);
+                read = message!;
+                return isRead;
+            })
+            .Last();
+    }
+
     private static long RowOf(TestServer server, string item)
     {
         return server.Store.Stored(1).Items.First(stored => stored.ItemDefinitionId == item).Id;
@@ -186,6 +197,37 @@ public sealed class ConverterTests
         Assert.That(entity.AttackElement, Is.EqualTo(Element.Wind));
         Assert.That(LastStatusList(server, player), Is.EqualTo(new[] { WindWeapon.Value }));
         Assert.That((QuantityOf(server, Fire), QuantityOf(server, Wind)), Is.EqualTo((4, 4)));
+    }
+
+    // Network Protocol §6: the sheet tells its owner both elements in the tick either changes.
+    [Test]
+    public void TheSheet_TellsTheOwnerTheAttackElement_AndTheArmorElement()
+    {
+        var server = new TestServer();
+        ConnectionId player = Enter(server, true);
+        PlayerEntity entity = server.PlayerOf(player);
+        CharacterSheet entered = LastSheet(server, player);
+
+        Use(server, player, Fire, 1);
+        Element converted = LastSheet(server, player).AttackElement;
+        entity.CardBonus = new CardBonus(
+            new PrimaryStats(0, 0, 0, 0, 0, 0),
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            armorElement: Element.Earth);
+        server.Tick();
+        Element armor = LastSheet(server, player).ArmorElement;
+        server.SendUnequip(player, EquipmentSlot.Weapon, 2);
+        Settle(server, player);
+
+        Assert.That((entered.AttackElement, entered.ArmorElement), Is.EqualTo((Element.Neutral, Element.Neutral)));
+        Assert.That((converted, armor), Is.EqualTo((Element.Fire, Element.Earth)));
+        Assert.That(LastSheet(server, player).AttackElement, Is.EqualTo(Element.Neutral), "the unequip ended it");
     }
 }
 }

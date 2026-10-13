@@ -18,11 +18,13 @@ namespace Evertorch.Server.Tests
 ///     The Milestone 18 "Elements, races, and sizes" exit criterion's server side end to end (ROADMAP §8): the composed
 ///     server host on a real PostgreSQL 18 and real UDP sockets on loopback, with scripted combat and drops, and two
 ///     clients of two accounts built from the client's production networking and gameplay code. Vera, stored on the
-///     training field wearing a training sword and holding cloth armor and a Grotto Crawler Card, and Arlo, of another
-///     account, stored beside her as an Arcanist wearing the training staff with Arcane Bolt learned, enter and see each
-///     other by name. Vera's sword fells a Spark Wisp, every hit for the sword's least draw, and Arlo's bolt strikes
-///     another. Then Vera leaves, and Arlo sees her go. After a clean stop a second host on the same database lets both
-///     in again on the field, their bags as they left them.
+///     training field wearing a training sword and holding cloth armor, a Grotto Crawler Card, and an Earth Converter,
+///     and Arlo, of another account, stored beside her as an Arcanist wearing the training staff with Arcane Bolt
+///     learned, enter and see each other by name. Vera's sword fells a Spark Wisp in three hits for the sword's least
+///     draw against its small size; she uses the converter, her sheet and status list say Earth, and her sword fells
+///     another wisp, Wind, in two; and Arlo's bolt strikes a third. Then Vera leaves, and Arlo sees her go. After a
+///     clean stop a second host on the same database lets both in again on the field, their bags as they left them and
+///     the converter's element gone.
 /// </summary>
 [TestFixture]
 [NonParallelizable]
@@ -34,6 +36,8 @@ public sealed class ElementAcceptanceTests
     private const string TrainingStaff = "item.weapon.training_staff";
     private const string ClothArmor = "item.armor.cloth";
     private const string GrottoCrawlerCard = "item.card.grotto_crawler";
+    private const string EarthConverter = "item.consumable.earth_converter";
+    private const string EarthWeapon = "status.earth_weapon";
     private const string Arcanist = "job.arcanist";
     private const string VeraIdentity = "element-vera";
     private const string VeraName = "Vera";
@@ -43,6 +47,10 @@ public sealed class ElementAcceptanceTests
     // The training sword's least draw, 19, three quarters of it against the Small wisp, 14, and twice the status
     // attack of 7, less the wisp's 1 defense (Gameplay Systems §11.1).
     private const uint SwordOnAWisp = 27;
+
+    // The sized draw, 14, half again for Earth on Wind, 21, beside twice the status attack of 8, since the first
+    // wisp's experience lifted Vera to level 2, less the wisp's 1 defense.
+    private const uint EarthSwordOnAWisp = 36;
 
     private static readonly SkillDefinitionId ArcaneBolt = new("skill.arcane_bolt");
     private static readonly TimeSpan FightLimit = TimeSpan.FromSeconds(30);
@@ -92,6 +100,7 @@ public sealed class ElementAcceptanceTests
             StoreWorn(VeraName, TrainingSword);
             StoreItem(VeraName, ClothArmor);
             StoreItem(VeraName, GrottoCrawlerCard);
+            StoreItem(VeraName, EarthConverter);
         };
         arlo.AfterCreate = () =>
         {
@@ -116,7 +125,12 @@ public sealed class ElementAcceptanceTests
 
         Assert.That(
             Bag(vera),
-            Is.EqualTo(new[] { $"{ClothArmor} x 1", $"{GrottoCrawlerCard} x 1", $"{TrainingSword} x 1 worn" }),
+            Is.EqualTo(
+                new[]
+                {
+                    $"{ClothArmor} x 1", $"{GrottoCrawlerCard} x 1", $"{EarthConverter} x 1",
+                    $"{TrainingSword} x 1 worn"
+                }),
             $"{step}: Vera's bag as stored");
         Assert.That(Bag(arlo), Is.EqualTo(new[] { $"{TrainingStaff} x 1 worn" }), $"{step}: Arlo's bag as stored");
     }
@@ -160,11 +174,10 @@ public sealed class ElementAcceptanceTests
             && !remote.IsDead;
     }
 
-    // West attacks the wisp Tab found: the client walks into range, and every scripted hit lands for the same amount
+    // Vera attacks the wisp Tab found: the client walks into range, and every scripted hit lands for the same amount
     // until the wisp falls (Gameplay Systems §6, §11.1).
-    private static void FellAWisp(SocketClient vera, SocketClient arlo)
+    private static void FellAWisp(string step, SocketClient vera, SocketClient arlo, uint amount, int count)
     {
-        const string step = "the sword";
         ClientWorld world = vera.World;
         EntityId wisp = TargetA(step, SparkWisp, vera, arlo);
         var damages = new List<Damage>();
@@ -184,12 +197,36 @@ public sealed class ElementAcceptanceTests
             .Where(damage => damage.Source == world.LocalEntity && damage.Target == wisp)
             .Select(damage => damage.Amount)
             .ToArray();
-        Assert.That(hits, Has.Length.EqualTo(3).And.All.EqualTo(SwordOnAWisp), $"{step}: three hits of the sword");
+        Assert.That(hits, Has.Length.EqualTo(count).And.All.EqualTo(amount), $"{step}: {count} hits of {amount}");
         Assert.That(world.IsLocalDead, Is.False, $"{step}: Vera survived");
         Assert.That(
             SocketClients.PumpUntil(() => !vera.AutoAttack.IsActive, vera, arlo),
             Is.True,
             $"{step}: the attack ended");
+    }
+
+    // Vera uses her Earth Converter: once its commit settles, her sheet's attack element and her status list say Earth
+    // (Gameplay Systems §9.1, §11.2).
+    private static void Convert(SocketClient vera, SocketClient arlo)
+    {
+        const string step = "the converter";
+        ClientWorld world = vera.World;
+        InventoryEntry converter = world.Inventory.Rows.Single(row => row.Item.Value == EarthConverter);
+
+        vera.Connection.SendUseItem(converter.InventoryItem);
+
+        Assert.That(
+            SocketClients.PumpUntil(
+                () => world.Sheet?.AttackElement == Element.Earth
+                    && world.StatusEffects.Any(effect => effect.Status.Value == EarthWeapon),
+                vera,
+                arlo),
+            Is.True,
+            $"{step}: Vera's swings are Earth ({world.LastRejection})");
+        Assert.That(
+            world.Inventory.Rows.Select(row => row.Item.Value),
+            Has.No.Member(EarthConverter),
+            $"{step}: used up");
     }
 
     // Arlo targets another wisp and casts Arcane Bolt: the client walks into the bolt's range, and the bolt strikes
@@ -321,8 +358,11 @@ public sealed class ElementAcceptanceTests
             AssertSees("enter", arlo, vera, VeraName);
             AssertCleanTraffic("enter", vera, arlo);
 
-            FellAWisp(vera, arlo);
+            FellAWisp("the sword", vera, arlo, SwordOnAWisp, 3);
             AssertCleanTraffic("the sword", vera, arlo);
+            Convert(vera, arlo);
+            FellAWisp("the converted sword", vera, arlo, EarthSwordOnAWisp, 2);
+            AssertCleanTraffic("the converter", vera, arlo);
             BoltAWisp(arlo, vera);
             AssertCleanTraffic("the bolt", vera, arlo);
             veraBag = Bag(vera);
@@ -341,6 +381,11 @@ public sealed class ElementAcceptanceTests
             arlo.EnterWorld(port);
             Assert.That(Bag(vera), Is.EqualTo(veraBag), "restart: Vera's bag as it was");
             Assert.That(Bag(arlo), Is.EqualTo(arloBag), "restart: Arlo's bag as it was");
+            Assert.That(
+                vera.World.Sheet?.AttackElement,
+                Is.EqualTo(Element.Neutral),
+                "restart: no effect is stored, so the converter's element is gone");
+            Assert.That(vera.World.StatusEffects, Is.Empty, "restart: nor its status");
             foreach (SocketClient client in new[] { vera, arlo })
             {
                 Assert.That(client.World.Map, Is.EqualTo(new MapDefinitionId(TrainingField)), "restart: on the field");

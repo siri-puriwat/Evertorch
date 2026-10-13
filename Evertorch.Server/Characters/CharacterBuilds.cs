@@ -230,7 +230,9 @@ public sealed class CharacterBuilds
             Clamp(weapon.Vit + armor.Vit + cards.Vit),
             Clamp(weapon.Int + armor.Int + cards.Int),
             Clamp(weapon.Dex + armor.Dex + cards.Dex),
-            Clamp(weapon.Luk + armor.Luk + cards.Luk));
+            Clamp(weapon.Luk + armor.Luk + cards.Luk),
+            player.AttackElement,
+            player.ArmorElement);
     }
 
     /// <summary>

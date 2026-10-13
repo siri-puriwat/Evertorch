@@ -256,9 +256,9 @@ public sealed class MessageRoutingTests
     }
 
     [Test]
-    public void ProtocolVersion_IsFortyFive()
+    public void ProtocolVersion_IsFortySix()
     {
-        Assert.That(ProtocolConstants.ProtocolVersion, Is.EqualTo(45));
+        Assert.That(ProtocolConstants.ProtocolVersion, Is.EqualTo(46));
     }
 
     [Test]

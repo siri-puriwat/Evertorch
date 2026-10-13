@@ -7,9 +7,10 @@ namespace Evertorch.Protocol
 /// <summary>
 ///     The receiver's own character's build (Network Protocol §6, §9): its job level, its job, which the owner's client
 ///     draws its body from, and its job experience, the stat and skill points it has left, each primary statistic with
-///     what raising it next costs, the derived statistics the Stats window shows, and what the worn equipment adds to
-///     them (Gameplay Systems §2). Sent to its owner alone, right after <c>WorldEntered</c> in every baseline and in
-///     the tick of any change. The values travel on purpose, because the player must see them (Content Pipeline §5).
+///     what raising it next costs, the derived statistics the Stats window shows, what the worn equipment adds to
+///     them, and the attack and armor elements (Gameplay Systems §2, §3). Sent to its owner alone, right after
+///     <c>WorldEntered</c> in every baseline and in the tick of any change. The values travel on purpose, because the
+///     player must see them (Content Pipeline §5).
 /// </summary>
 public sealed class CharacterSheet : IEquatable<CharacterSheet>
 {
@@ -28,7 +29,7 @@ public sealed class CharacterSheet : IEquatable<CharacterSheet>
     /// </summary>
     public const int MaxEncodedLength = sizeof(ushort) + sizeof(ushort) + sizeof(ushort)
         + ProtocolLimits.MaxDefinitionIdBytes + 2 * sizeof(ulong) + 2 * sizeof(ushort) + StatCount * 2 * sizeof(byte)
-        + 17 * sizeof(ushort);
+        + 17 * sizeof(ushort) + 2 * sizeof(byte);
 
     public CharacterSheet(
         ushort jobLevel,
@@ -54,7 +55,9 @@ public sealed class CharacterSheet : IEquatable<CharacterSheet>
         ushort equipmentVit = 0,
         ushort equipmentInt = 0,
         ushort equipmentDex = 0,
-        ushort equipmentLuk = 0)
+        ushort equipmentLuk = 0,
+        Element attackElement = Element.Neutral,
+        Element armorElement = Element.Neutral)
     {
         if (stats == null)
         {
@@ -95,6 +98,8 @@ public sealed class CharacterSheet : IEquatable<CharacterSheet>
         EquipmentInt = equipmentInt;
         EquipmentDex = equipmentDex;
         EquipmentLuk = equipmentLuk;
+        AttackElement = attackElement;
+        ArmorElement = armorElement;
     }
 
     public ushort JobLevel { get; }
@@ -173,6 +178,16 @@ public sealed class CharacterSheet : IEquatable<CharacterSheet>
 
     public ushort EquipmentLuk { get; }
 
+    /// <summary>
+    ///     The element of the character's swings and weapon skills: a converter's, else Neutral (Gameplay Systems §9.1).
+    /// </summary>
+    public Element AttackElement { get; }
+
+    /// <summary>
+    ///     The element the worn armor's card gives the character, else Neutral (Gameplay Systems §11.7).
+    /// </summary>
+    public Element ArmorElement { get; }
+
     public bool Equals(CharacterSheet? other)
     {
         if (other == null)
@@ -210,7 +225,9 @@ public sealed class CharacterSheet : IEquatable<CharacterSheet>
             && EquipmentVit == other.EquipmentVit
             && EquipmentInt == other.EquipmentInt
             && EquipmentDex == other.EquipmentDex
-            && EquipmentLuk == other.EquipmentLuk;
+            && EquipmentLuk == other.EquipmentLuk
+            && AttackElement == other.AttackElement
+            && ArmorElement == other.ArmorElement;
     }
 
     public static bool TryRead(ReadOnlySpan<byte> source, out CharacterSheet? message)
@@ -262,7 +279,11 @@ public sealed class CharacterSheet : IEquatable<CharacterSheet>
             || !reader.TryReadUInt16(out ushort equipmentInt)
             || !reader.TryReadUInt16(out ushort equipmentDex)
             || !reader.TryReadUInt16(out ushort equipmentLuk)
-            || !reader.IsAtEnd)
+            || !reader.TryReadByte(out byte attackElement)
+            || !reader.TryReadByte(out byte armorElement)
+            || !reader.IsAtEnd
+            || !WireEnums.IsDefined((Element)attackElement)
+            || !WireEnums.IsDefined((Element)armorElement))
         {
             return false;
         }
@@ -291,7 +312,9 @@ public sealed class CharacterSheet : IEquatable<CharacterSheet>
             equipmentVit,
             equipmentInt,
             equipmentDex,
-            equipmentLuk);
+            equipmentLuk,
+            (Element)attackElement,
+            (Element)armorElement);
         return true;
     }
 
@@ -328,6 +351,8 @@ public sealed class CharacterSheet : IEquatable<CharacterSheet>
         writer.WriteUInt16(EquipmentInt);
         writer.WriteUInt16(EquipmentDex);
         writer.WriteUInt16(EquipmentLuk);
+        writer.WriteByte((byte)AttackElement);
+        writer.WriteByte((byte)ArmorElement);
         return writer.Position;
     }
 

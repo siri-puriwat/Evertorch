@@ -150,7 +150,7 @@ public sealed class SharedCombatMessageTests
         Assert.That(written, Is.EqualTo(ItemDroppedBytes));
         Assert.That(isRead, Is.True);
         Assert.That(read!.Amount, Is.EqualTo(2u));
-        Assert.That(ProtocolConstants.ProtocolVersion, Is.EqualTo(45));
+        Assert.That(ProtocolConstants.ProtocolVersion, Is.EqualTo(46));
     }
 
     [Test]
