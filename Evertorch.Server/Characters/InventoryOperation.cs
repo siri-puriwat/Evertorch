@@ -25,7 +25,8 @@ public sealed class InventoryOperation
         QuestDefinitionId quest = default,
         JobDefinitionId job = default,
         long listing = 0,
-        RefineAttempt? refine = null)
+        RefineAttempt? refine = null,
+        int deaths = 0)
     {
         Kind = kind;
         CommandSequence = commandSequence;
@@ -39,6 +40,7 @@ public sealed class InventoryOperation
         Job = job;
         Listing = listing;
         Refine = refine;
+        Deaths = deaths;
     }
 
     public InventoryOperationKind Kind { get; }
@@ -81,6 +83,9 @@ public sealed class InventoryOperation
 
     /// <summary>What a refine's draw decided; null for every other kind.</summary>
     public RefineAttempt? Refine { get; }
+
+    /// <summary>The player's deaths when a use was accepted; a use whose player has died since restores nothing.</summary>
+    public int Deaths { get; }
 
     /// <summary>
     ///     A pickup of <paramref name="drop" />, whose drop ID is the operation ID.

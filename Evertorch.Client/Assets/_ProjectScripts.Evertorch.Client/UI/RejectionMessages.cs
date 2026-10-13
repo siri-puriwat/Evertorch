@@ -49,10 +49,6 @@ public static class RejectionMessages
     }
 
     /// <summary>
-    ///     The words for <paramref name="reason" />; an equip refused for a requirement is a weapon the character's job
-    ///     cannot wield (Gameplay Systems §11.1).
-    /// </summary>
-    /// <summary>
     ///     The words for a refused use of an item: a converter needs a worn weapon, so a living player not trading who
     ///     wears none hears that (Gameplay Systems §11.2); any other refusal reads as any.
     /// </summary>
@@ -63,6 +59,10 @@ public static class RejectionMessages
             : Describe(reason);
     }
 
+    /// <summary>
+    ///     The words for <paramref name="reason" />; an equip refused for a requirement is a weapon the character's job
+    ///     cannot wield (Gameplay Systems §11.1).
+    /// </summary>
     public static string Describe(CommandRejectionReason reason, bool isEquip)
     {
         switch (reason)

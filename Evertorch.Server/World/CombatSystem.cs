@@ -281,6 +281,7 @@ public sealed class CombatSystem : ITickPhase
         ClearTarget(entity);
         if (entity is PlayerEntity dead)
         {
+            dead.Deaths++;
             m_statusEffects.EndAll(dead);
         }
 
@@ -768,13 +769,11 @@ public sealed class CombatSystem : ITickPhase
             cards.DamageTo(monster.Size));
     }
 
-    // A monster's swing has no element and its skill its own, which meets the player's armor element; the player's
-    // worn cards take off their reduction of that element and of a boss's damage.
+    // A monster's swing has no element and its skill its own, a skill of the weapon's Neutral, which meets the player's
+    // armor element; the player's worn cards take off their reduction of that element and of a boss's damage.
     private static DamageModifiers StruckBy(MonsterDefinition monster, PlayerEntity player, SkillDefinition? skill)
     {
-        Element? element = skill?.Element is SkillElement own && own != SkillElement.Weapon
-            ? ElementTable.Of(own, Element.Neutral)
-            : null;
+        Element? element = skill?.Element is SkillElement own ? ElementTable.Of(own, Element.Neutral) : null;
         CardBonus cards = player.CardBonus;
         return new DamageModifiers(
             0,

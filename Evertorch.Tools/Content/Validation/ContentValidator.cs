@@ -549,8 +549,9 @@ public static class ContentValidator
         }
     }
 
-    // A basic attack needs its damage type; every other skill a job lists needs an effect to resolve and keeps its
-    // statuses to its caster, and a first job's whole tree fits one skill list (Content Pipeline §7).
+    // A basic attack needs its damage type and strikes with the weapon's element; every other skill a job lists needs an
+    // effect to resolve and keeps its statuses to its caster, and a first job's whole tree fits one skill list (Content
+    // Pipeline §4, §7).
     private static void RequireJobSkills(
         AuthoredJob job,
         HashSet<string> knownSkills,
@@ -562,6 +563,14 @@ public static class ContentValidator
             && basicAttack.DamageType == null)
         {
             Report(job.Source, "server.basicAttack", "names a skill without a damageType", diagnostics);
+        }
+
+        if (job.Definition.BaseJob == null
+            && skillsById.TryGetValue(job.Definition.BasicAttack.Value, out SkillDefinition? swing)
+            && swing.DamageType != null
+            && swing.Element != SkillElement.Weapon)
+        {
+            Report(job.Source, "server.basicAttack", "names a skill whose element is not weapon", diagnostics);
         }
 
         if (job.Definition.Tree.Count > JobDefinitionReader.MaxSkills)

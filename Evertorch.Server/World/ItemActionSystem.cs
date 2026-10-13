@@ -375,7 +375,8 @@ public sealed class ItemActionSystem : ITickPhase
             InventoryOperationKind.Consume,
             commandSequence,
             Guid.NewGuid(),
-            item: row.Item);
+            item: row.Item,
+            deaths: character.Player.Deaths);
         var commit = new ConsumeCommit(
             operation.OperationId,
             character.Character.Value,
@@ -2088,7 +2089,7 @@ public sealed class ItemActionSystem : ITickPhase
                 Wear(character);
                 break;
             case InventoryOperationKind.Consume:
-                Restore(character.Player, m_content.Items[operation.Item].Effect!);
+                Restore(character.Player, m_content.Items[operation.Item].Effect!, operation.Deaths);
                 break;
             case InventoryOperationKind.Buy:
                 LogBought(
@@ -2278,10 +2279,11 @@ public sealed class ItemActionSystem : ITickPhase
     }
 
     // A use restores what its item gives once its commit returns, capped at the maximums, and starts its status from
-    // that tick (Gameplay Systems §11.2). A character that died meanwhile gets nothing: the unit is spent either way.
-    private void Restore(PlayerEntity player, ItemEffect effect)
+    // that tick (Gameplay Systems §11.2). A character that died meanwhile gets nothing, even one already respawned: the
+    // unit is spent either way.
+    private void Restore(PlayerEntity player, ItemEffect effect, int deathsAtUse)
     {
-        if (player.IsDead)
+        if (player.IsDead || player.Deaths != deathsAtUse)
         {
             return;
         }

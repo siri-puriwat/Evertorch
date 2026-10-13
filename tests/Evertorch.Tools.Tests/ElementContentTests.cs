@@ -218,6 +218,23 @@ public sealed class ElementContentTests
                 new[] { "status.earth_weapon", "status.fire_weapon", "status.water_weapon", "status.wind_weapon" }));
     }
 
+    // Content Pipeline §4: a job's basic attack strikes with the weapon's element, so it names `weapon`.
+    [Test]
+    public void Run_ForABasicAttackOfAnotherElement_ReportsTheJob()
+    {
+        using var workspace = new ContentWorkspace();
+        workspace.Replace("skills/basic_attack.yml", "element: weapon\n", "element: fire\n");
+
+        ContentPipelineResult result = ContentPipeline.Run(workspace.ContentRoot);
+
+        Assert.That(result.Packages, Is.Null);
+        Assert.That(
+            result.Diagnostics.Select(diagnostic => (diagnostic.File, diagnostic.FieldPath, diagnostic.Message)),
+            Is.EqualTo(
+                new[] { ("jobs/adventurer.yml", "server.basicAttack", "names a skill whose element is not weapon") }),
+            Describe(result));
+    }
+
     [Test]
     public void Run_ForAConsumableStartingAStatusThatSetsAnElement_WritesBothForTheServerOnly()
     {

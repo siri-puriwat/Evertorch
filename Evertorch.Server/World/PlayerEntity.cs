@@ -157,6 +157,12 @@ public sealed class PlayerEntity : WorldEntity
     public bool IsTrading { get; set; }
 
     /// <summary>
+    ///     How often the player has died since it entered the world, so an answer that returns after a death and a respawn
+    ///     knows the death came between (Gameplay Systems §11.2).
+    /// </summary>
+    public int Deaths { get; set; }
+
+    /// <summary>
     ///     The item of the weapon the player wears, which everyone near sees in its hand; null while the weapon slot is
     ///     empty (Gameplay Systems §11.1).
     /// </summary>

@@ -24,14 +24,16 @@ public sealed class GraveBiteTests
     // Crawler at its spawn's center; the AI is off, so only the test bites.
     private static (TestServer Server, ConnectionId Player, MonsterEntity Crawler) BesideTheBarrowPack(
         IRandomSource random,
-        CardBonus? cards = null)
+        CardBonus? cards = null,
+        ServerContent? content = null)
     {
         var server = new TestServer(
             withEveryMap: true,
             withGrotto: true,
             withMonsters: true,
             withMonsterAi: false,
-            combatRandom: random);
+            combatRandom: random,
+            content: content);
         ConnectionId player = server.EnterWorld(1);
         server.CrossIntoTheGrotto(player);
         server.World.TryGetMap(Grotto, out MapInstance? map);
@@ -63,6 +65,29 @@ public sealed class GraveBiteTests
             .Where(message => message.Opcode == MessageOpcode.SkillResolved)
             .Select(message => SkillResolved.TryRead(message.Payload, out SkillResolved? resolved) ? resolved! : null!)
             .Single();
+    }
+
+    // Gameplay Systems §9: a monster's skill of the weapon's element strikes as Neutral, so Ghost armor takes half of
+    // it, as of a Neutral swing's part, where a Shadow bite fares as ever.
+    [Test]
+    public void AMonstersSkillOfTheWeaponsElement_StrikesAsNeutral()
+    {
+        Dictionary<string, byte[]> files = PackageFixture.BuildRepositoryPackage();
+        PackageFixture.SetValue(files, "skills.json", GraveBite.Value, "element", "\"weapon\"");
+        ServerContent weaponBite = ServerContentLoader.Load(files);
+        var ghostArmor = new CardBonus(new PrimaryStats(0, 0, 0, 0, 0, 0), 0, 0, 0, 0, 0, 0, 0,
+            armorElement: Element.Ghost);
+        (TestServer plain, ConnectionId first, MonsterEntity firstCrawler) =
+            BesideTheBarrowPack(new SureHitRandom(), content: weaponBite);
+        (TestServer ghost, ConnectionId second, MonsterEntity secondCrawler) =
+            BesideTheBarrowPack(new SureHitRandom(), ghostArmor, weaponBite);
+
+        Bite(plain, first, firstCrawler);
+        Bite(ghost, second, secondCrawler);
+
+        int full = Spare - plain.PlayerOf(first).CurrentHealth;
+        Assert.That(full, Is.GreaterThan(1));
+        Assert.That(Spare - ghost.PlayerOf(second).CurrentHealth, Is.EqualTo(full * 50 / 100), "Neutral on Ghost");
     }
 
     [Test]

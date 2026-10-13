@@ -194,6 +194,32 @@ public sealed class ConverterTests
         Assert.That(QuantityOf(server, Fire), Is.EqualTo(4));
     }
 
+    // Gameplay Systems §11.2: the use is queued, the player dies and respawns, and then the commit settles: the unit is
+    // spent, and no status starts, since a death came between.
+    [Test]
+    public void AConverter_WhosePlayerDiesAndRespawnsBeforeTheAnswer_StartsNothing()
+    {
+        var server = new TestServer();
+        ConnectionId player = Enter(server, true);
+        PlayerEntity entity = server.PlayerOf(player);
+        server.World.TryGetMap(new MapDefinitionId("map.training_ground"), out MapInstance? ground);
+
+        server.RunsPersistence = false;
+        server.SendUseItem(player, RowOf(server, Fire), 1);
+        server.Tick();
+        server.Combat.Kill(ground!, entity, null, server.CurrentTick);
+        server.SendRespawn(player, 2);
+        server.Tick(2);
+        bool isAlive = !entity.IsDead;
+        server.RunsPersistence = true;
+        Settle(server, player);
+
+        Assert.That(isAlive, Is.True, "respawned before the answer");
+        Assert.That(QuantityOf(server, Fire), Is.EqualTo(4), "the unit spent");
+        Assert.That(entity.StatusEffects, Is.Empty);
+        Assert.That(entity.AttackElement, Is.EqualTo(Element.Neutral));
+    }
+
     [Test]
     public void AConverter_WithNoWeaponWorn_IsRefusedWithThree_AndSpendsNothing()
     {
