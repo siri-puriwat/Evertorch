@@ -52,6 +52,17 @@ public static class RejectionMessages
     ///     The words for <paramref name="reason" />; an equip refused for a requirement is a weapon the character's job
     ///     cannot wield (Gameplay Systems §11.1).
     /// </summary>
+    /// <summary>
+    ///     The words for a refused use of an item: a converter needs a worn weapon, so a living player not trading who
+    ///     wears none hears that (Gameplay Systems §11.2); any other refusal reads as any.
+    /// </summary>
+    public static string DescribeUse(CommandRejectionReason reason, bool isArmed, bool isDead, bool isTrading)
+    {
+        return reason == CommandRejectionReason.NotAllowedNow && !isArmed && !isDead && !isTrading
+            ? "You need a weapon for that."
+            : Describe(reason);
+    }
+
     public static string Describe(CommandRejectionReason reason, bool isEquip)
     {
         switch (reason)

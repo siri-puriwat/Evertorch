@@ -53,6 +53,22 @@ public sealed class RejectionMessagesTests
         Assert.That(RejectionMessages.DescribeParty(command, "Bobby", reason), Is.EqualTo(expected));
     }
 
+    // Gameplay Systems §11.2: a converter needs a worn weapon; a refusal for anything else reads as any.
+    [TestCase(CommandRejectionReason.NotAllowedNow, false, false, false, "You need a weapon for that.")]
+    [TestCase(CommandRejectionReason.NotAllowedNow, true, false, false, "You cannot do that right now.")]
+    [TestCase(CommandRejectionReason.NotAllowedNow, false, true, false, "You cannot do that right now.")]
+    [TestCase(CommandRejectionReason.NotAllowedNow, false, false, true, "You cannot do that right now.")]
+    [TestCase(CommandRejectionReason.ItemActionInFlight, false, false, false, "An item change is still going through.")]
+    public void DescribeUse_UnarmedAndFree_SaysAWeaponIsNeeded(
+        CommandRejectionReason reason,
+        bool isArmed,
+        bool isDead,
+        bool isTrading,
+        string expected)
+    {
+        Assert.That(RejectionMessages.DescribeUse(reason, isArmed, isDead, isTrading), Is.EqualTo(expected));
+    }
+
     [Test]
     public void Describe_AReasonThisClientDoesNotKnow_StillSaysTheServerRefused()
     {

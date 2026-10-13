@@ -73,7 +73,8 @@ public static class BuildMessages
             $"Defense {WithEquipment(sheet.Defense, sheet.EquipmentDefense)}",
             $"Magic defense {Number(sheet.MagicDefense)}",
             $"Hit {Number(sheet.Hit)}", $"Flee {Number(sheet.Flee)}", $"Critical {critical}%",
-            $"Attack speed {Number(sheet.AttackSpeed)}"
+            $"Attack speed {Number(sheet.AttackSpeed)}", $"{sheet.AttackElement} attack",
+            $"{sheet.ArmorElement} armor"
         };
     }
 
@@ -98,12 +99,14 @@ public static class BuildMessages
         if (after.Job != before.Job)
         {
             lines.Add($"You are now {WithArticle(JobName(content, after.Job))}.");
+            AddElements(lines, before, after);
             return lines;
         }
 
         if (IsReset(before, after))
         {
             lines.Add("Every point returned.");
+            AddElements(lines, before, after);
             return lines;
         }
 
@@ -121,7 +124,27 @@ public static class BuildMessages
             }
         }
 
+        AddElements(lines, before, after);
         return lines;
+    }
+
+    // "Your attacks are now Fire." when a converter starts, "Your attacks are Neutral again." when it ends, and the same
+    // of the armor's element (Prototype Content §2).
+    private static void AddElements(List<string> lines, CharacterSheet before, CharacterSheet after)
+    {
+        if (after.AttackElement != before.AttackElement)
+        {
+            lines.Add(after.AttackElement == Element.Neutral
+                ? "Your attacks are Neutral again."
+                : $"Your attacks are now {after.AttackElement}.");
+        }
+
+        if (after.ArmorElement != before.ArmorElement)
+        {
+            lines.Add(after.ArmorElement == Element.Neutral
+                ? "Your armor is Neutral again."
+                : $"Your armor is now {after.ArmorElement}.");
+        }
     }
 
     public static string JobName(ClientContent? content, JobDefinitionId job)
@@ -144,6 +167,20 @@ public static class BuildMessages
         return content != null && content.TryGetSkill(skill, out ClientSkill? found) && found != null
             ? found.DisplayName
             : skill.Value;
+    }
+
+    /// <summary>
+    ///     The element a damage skill strikes with, "Ghost", or "Weapon" for one of the weapon's; null for a skill that
+    ///     deals no damage, or one the content does not know (Prototype Content §2).
+    /// </summary>
+    public static string? SkillElementName(ClientContent? content, SkillDefinitionId skill)
+    {
+        return content != null
+            && content.TryGetSkill(skill, out ClientSkill? found)
+            && found != null
+            && found.Element is SkillElement element
+                ? element.ToString()
+                : null;
     }
 
     /// <summary>

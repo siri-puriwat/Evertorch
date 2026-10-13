@@ -20,7 +20,9 @@ public sealed class BuildMessagesTests
         byte agility,
         byte agilityCost = 2,
         byte skillPoints = 0,
-        string job = "job.adventurer")
+        string job = "job.adventurer",
+        Element attack = Element.Neutral,
+        Element armor = Element.Neutral)
     {
         CharacterSheetStat[] stats = Enumerable.Repeat(new CharacterSheetStat(5, 2), CharacterSheet.StatCount)
             .ToArray();
@@ -40,7 +42,9 @@ public sealed class BuildMessagesTests
             188,
             125,
             13,
-            154);
+            154,
+            attackElement: attack,
+            armorElement: armor);
     }
 
     private static CharacterSheet Equipped(ushort attack, ushort magicAttack, ushort defense)
@@ -84,6 +88,28 @@ public sealed class BuildMessagesTests
             BuildMessages.DescribeSkills(before, after, null),
             Is.EqualTo(new[] { "skill.strike Lv 2.", "skill.focus Lv 1." }),
             "without content, the definition names it");
+    }
+
+    // Prototype Content §2: a converter's start and end, and an armor card's element, say so; a job change that took the
+    // weapon off says both.
+    [Test]
+    public void Describe_AnElementsChange_SaysTheNewElement()
+    {
+        Assert.That(
+            BuildMessages.Describe(Sheet(1, 5), Sheet(1, 5, attack: Element.Fire)),
+            Is.EqualTo(new[] { "Your attacks are now Fire." }));
+        Assert.That(
+            BuildMessages.Describe(Sheet(1, 5, attack: Element.Fire), Sheet(1, 5)),
+            Is.EqualTo(new[] { "Your attacks are Neutral again." }));
+        Assert.That(
+            BuildMessages.Describe(Sheet(1, 5), Sheet(1, 5, armor: Element.Earth)),
+            Is.EqualTo(new[] { "Your armor is now Earth." }));
+        Assert.That(
+            BuildMessages.Describe(Sheet(1, 5, armor: Element.Earth), Sheet(1, 5)),
+            Is.EqualTo(new[] { "Your armor is Neutral again." }));
+        Assert.That(
+            BuildMessages.Describe(Sheet(10, 5, attack: Element.Wind), Sheet(1, 5, job: "job.vanguard")),
+            Is.EqualTo(new[] { "You are now a job.vanguard.", "Your attacks are Neutral again." }));
     }
 
     // A job change says so, and nothing of the job level that fell with it (Prototype Content §2).
@@ -149,6 +175,34 @@ public sealed class BuildMessagesTests
             "a level learned");
     }
 
+    // Prototype Content §2: the Skills window names a damage skill's element, "Weapon" for one of the weapon's.
+    [Test]
+    public void SkillElementName_NamesADamageSkillsElement_AndNoneForAnother()
+    {
+        var bolt = new SkillDefinitionId("skill.arcane_bolt");
+        var strike = new SkillDefinitionId("skill.strike");
+        var aid = new SkillDefinitionId("skill.first_aid");
+        var content = new ClientContent(
+            "0000000000000000",
+            new Dictionary<MapDefinitionId, ClientMap>(),
+            new Dictionary<JobDefinitionId, ClientJob>(),
+            new Dictionary<MonsterDefinitionId, ClientMonster>(),
+            new Dictionary<ItemDefinitionId, ClientItem>(),
+            new Dictionary<SkillDefinitionId, ClientSkill>
+            {
+                [bolt] = new(bolt, "Arcane Bolt", SkillTargetType.Enemy, "skill_arcane_bolt",
+                    element: SkillElement.Ghost),
+                [strike] = new(strike, "Strike", SkillTargetType.Enemy, "skill_strike", element: SkillElement.Weapon),
+                [aid] = new(aid, "First Aid", SkillTargetType.Self, "skill_first_aid")
+            },
+            new Dictionary<StatusDefinitionId, ClientStatusEffect>());
+
+        Assert.That(
+            new[] { bolt, strike, aid }.Select(skill => BuildMessages.SkillElementName(content, skill)),
+            Is.EqualTo(new[] { "Ghost", "Weapon", null }));
+        Assert.That(BuildMessages.SkillElementName(null, bolt), Is.Null, "without content, nothing");
+    }
+
     [Test]
     public void TheSkillsWindowsWords_GiveTheLevelOfTheMaximum_AndAnUnmetPrerequisite()
     {
@@ -193,8 +247,11 @@ public sealed class BuildMessagesTests
                 new[]
                 {
                     "Attack 46", "Magic attack 12", "Defense 5", "Magic defense 6", "Hit 188", "Flee 125",
-                    "Critical 1.3%", "Attack speed 154"
+                    "Critical 1.3%", "Attack speed 154", "Neutral attack", "Neutral armor"
                 }));
+        Assert.That(
+            BuildMessages.Derived(Sheet(1, 5, attack: Element.Fire, armor: Element.Earth)).Skip(8),
+            Is.EqualTo(new[] { "Fire attack", "Earth armor" }));
     }
 }
 }

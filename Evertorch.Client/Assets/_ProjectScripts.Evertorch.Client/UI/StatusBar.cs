@@ -23,14 +23,19 @@ public sealed class StatusBar : MonoBehaviour
     private const float Height = 56f;
     private const int Padding = 12;
     private const float ExperienceBarHeight = 6f;
+
     private const float JobExperienceBarHeight = 4f;
+
+    // An effect with this many seconds left or more shows whole minutes.
+    private const int MinutesFrom = 100;
 
     private static readonly UiBuilder Ui = new(24f, Height, 0f, 24f);
     private static readonly Color ExperienceBackColor = new(0.15f, 0.16f, 0.2f);
     private static readonly Color ExperienceFillColor = new(0.95f, 0.78f, 0.25f);
     private static readonly Color JobExperienceFillColor = new(0.35f, 0.72f, 0.95f);
-    private readonly List<(StatusDefinitionId Status, int Seconds)> m_effectsNow = new();
-    private readonly List<(StatusDefinitionId Status, int Seconds)> m_shownEffects = new();
+
+    private readonly List<(StatusDefinitionId Status, int Shown)> m_effectsNow = new();
+    private readonly List<(StatusDefinitionId Status, int Shown)> m_shownEffects = new();
 
     private GameClient? m_client;
     private GameObject? m_bar;
@@ -175,8 +180,9 @@ public sealed class StatusBar : MonoBehaviour
         Write(m_spirit!, $"SP {current} / {maximum}");
     }
 
-    // Whole seconds, rounded up; an effect whose time ran out here is left out while its end is on its way. The text
-    // is built only when a name or a second changes.
+    // Whole seconds, rounded up, below 100 s, and whole minutes, rounded up, from there (a converter's 20 minutes); an
+    // effect whose time ran out here is left out while its end is on its way. The text is built only when a name or a
+    // shown time changes, a minute shown as its negative so that it never equals a second.
     private void ShowEffects(ClientWorld world, ClientContent? content)
     {
         m_effectsNow.Clear();
@@ -185,7 +191,7 @@ public sealed class StatusBar : MonoBehaviour
             int seconds = (int)Math.Ceiling(world.StatusRemaining(effect.Status));
             if (seconds > 0)
             {
-                m_effectsNow.Add((effect.Status, seconds));
+                m_effectsNow.Add((effect.Status, seconds < MinutesFrom ? seconds : -(int)Math.Ceiling(seconds / 60.0)));
             }
         }
 
@@ -197,7 +203,7 @@ public sealed class StatusBar : MonoBehaviour
         m_shownEffects.Clear();
         m_shownEffects.AddRange(m_effectsNow);
         var text = new StringBuilder();
-        foreach ((StatusDefinitionId status, int seconds) in m_shownEffects)
+        foreach ((StatusDefinitionId status, int shown) in m_shownEffects)
         {
             if (text.Length > 0)
             {
@@ -208,7 +214,10 @@ public sealed class StatusBar : MonoBehaviour
                 && found != null
                     ? found.DisplayName
                     : status.Value;
-            text.Append(name).Append(' ').Append(seconds.ToString(CultureInfo.InvariantCulture)).Append('s');
+            text.Append(name)
+                .Append(' ')
+                .Append(Math.Abs(shown).ToString(CultureInfo.InvariantCulture))
+                .Append(shown < 0 ? 'm' : 's');
         }
 
         Write(m_effects!, text.ToString());
@@ -255,7 +264,7 @@ public sealed class StatusBar : MonoBehaviour
         }
     }
 
-    private bool IsShown(List<(StatusDefinitionId Status, int Seconds)> effects)
+    private bool IsShown(List<(StatusDefinitionId Status, int Shown)> effects)
     {
         if (effects.Count != m_shownEffects.Count)
         {

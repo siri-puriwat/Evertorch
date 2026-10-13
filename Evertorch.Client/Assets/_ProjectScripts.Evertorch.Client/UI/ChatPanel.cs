@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using Evertorch.Game;
 using Evertorch.Protocol;
@@ -412,6 +413,20 @@ public sealed class ChatPanel : MonoBehaviour
                     m_watched?.RefineTableFor(refine.Npc, refine.Item),
                     rejected.Reason,
                     m_client.Content));
+            return;
+        }
+
+        if (m_client != null
+            && m_client.Connection != null
+            && m_watched != null
+            && m_client.Connection.IsUseSequence(rejected.CommandSequence))
+        {
+            Add(
+                RejectionMessages.DescribeUse(
+                    rejected.Reason,
+                    m_watched.Inventory.Rows.Any(row => row.Slot == EquipmentSlot.Weapon),
+                    m_watched.IsLocalDead,
+                    m_client.IsTrading));
             return;
         }
 

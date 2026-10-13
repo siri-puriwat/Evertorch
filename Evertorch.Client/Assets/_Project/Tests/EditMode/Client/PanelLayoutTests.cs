@@ -308,7 +308,7 @@ public sealed class PanelLayoutTests
     {
         Rect bounds = StatsWindow.BoundsFor(1920f, true);
 
-        Assert.That(bounds.height, Is.EqualTo(56f + 10 * 30f + 9 * 6f).Within(1e-3f));
+        Assert.That(bounds.height, Is.EqualTo(56f + 11 * 30f + 10 * 6f).Within(1e-3f));
     }
 
     // The windows at the top left share one place and one right edge; the target frame moves right of it while one

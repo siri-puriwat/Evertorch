@@ -29,8 +29,8 @@ public sealed class StatsWindow : MonoBehaviour
     private const float StatWidth = 150f;
     private const float RaiseWidth = 60f;
 
-    // Six statistics and four rows of two derived ones.
-    private const int ListRows = CharacterSheet.StatCount + 4;
+    // Six statistics and five rows of two derived ones, the last the attack and armor elements.
+    private const int ListRows = CharacterSheet.StatCount + 5;
 
     private const float CloseWidth = 80f;
 
@@ -43,7 +43,7 @@ public sealed class StatsWindow : MonoBehaviour
     private readonly TMP_Text[] m_values = new TMP_Text[CharacterSheet.StatCount];
     private readonly TMP_Text[] m_costs = new TMP_Text[CharacterSheet.StatCount];
     private readonly Button[] m_raises = new Button[CharacterSheet.StatCount];
-    private readonly TMP_Text[] m_derived = new TMP_Text[8];
+    private readonly TMP_Text[] m_derived = new TMP_Text[10];
     private GameClient? m_client;
     private GameObject? m_panel;
     private TMP_Text? m_points;

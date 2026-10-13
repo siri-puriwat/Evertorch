@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using Evertorch.Game;
 using Evertorch.Protocol;
@@ -9,8 +10,9 @@ using UnityEngine.UI;
 namespace Evertorch.Client
 {
 /// <summary>
-///     The confirmed target (Prototype Content §2, §4): a monster's name, its HP ratio as a bar, its distance, and
-///     whether it is dead, or a selected player's name and job, "Ann · Vanguard", with its HP bar only for a party
+///     The confirmed target (Prototype Content §2, §4): a monster's name, its HP ratio as a bar, its element, race, and
+///     size, its distance, how the player's attacks fare against it, and whether it is dead, or a selected player's
+///     name and job, "Ann · Vanguard", with its HP bar only for a party
 ///     member, since others' HP is not shown, and Invite while the player could join the party (Prototype Content §2),
 ///     or Follow for a member (§4), beside Trade for anyone else while no trade is open (Gameplay Systems §16). It shows
 ///     only a target the server confirmed with <c>TargetChanged</c>, and the HP
@@ -32,9 +34,10 @@ public sealed class TargetFrame : MonoBehaviour
     public const string Follow = "Follow";
 
     /// <summary>
-    ///     The frame at its tallest, a selected player's name, its empty detail line, and Invite, in canvas units.
+    ///     The frame at its tallest, in canvas units: a monster's name, bar, facts, and detail, or a party member's name,
+    ///     bar, empty detail line, and buttons.
     /// </summary>
-    public const float TallestHeight = 2 * Padding + 3 * RowHeight + 2 * Spacing;
+    public const float TallestHeight = 2 * Padding + 3 * RowHeight + BarHeight + 3 * Spacing;
 
     // With the status bar, under the chat and the login panel.
     private const int SortingOrder = 6;
@@ -59,7 +62,9 @@ public sealed class TargetFrame : MonoBehaviour
     private GameObject? m_panel;
     private TMP_Text? m_name;
     private RectTransform? m_fill;
+    private TMP_Text? m_facts;
     private TMP_Text? m_detail;
+    private GameObject? m_actions;
     private GameObject? m_invite;
     private GameObject? m_trade;
     private GameObject? m_inspect;
@@ -70,7 +75,13 @@ public sealed class TargetFrame : MonoBehaviour
     private ClientMonster? m_labelled;
     private string? m_labelledId;
     private string m_label = string.Empty;
+    private ClientMonster? m_hinted;
+    private Element m_hintedElement;
+    private IReadOnlyList<SkillListEntry>? m_hintedSkills;
+    private string m_hint = string.Empty;
     private string? m_shownName;
+    private string? m_shownFacts;
+    private string? m_shownHint;
     private int m_shownPermille = -1;
     private int m_shownTenths = -1;
     private bool m_isShownPlayer;
@@ -116,9 +127,11 @@ public sealed class TargetFrame : MonoBehaviour
             m_targetName = target.Name;
             UiBuilder.SetActive(m_invite!, CanInvite(m_client, target.Name));
             UiBuilder.SetActive(m_trade!, CanTrade(m_client, target.Name));
-            UiBuilder.SetActive(m_inspect!, CanInspect(m_client, target.Name));
+            bool canInspect = CanInspect(m_client, target.Name);
+            UiBuilder.SetActive(m_inspect!, canInspect);
             bool canFollow = CanFollow(m_client, target.Name);
             UiBuilder.SetActive(m_follow!, canFollow);
+            UiBuilder.SetActive(m_actions!, canInspect || canFollow || CanInvite(m_client, target.Name));
             if (canFollow)
             {
                 ShowFollowing(m_client.IsFollowing
@@ -128,10 +141,7 @@ public sealed class TargetFrame : MonoBehaviour
             return;
         }
 
-        UiBuilder.SetActive(m_invite!, false);
-        UiBuilder.SetActive(m_follow!, false);
-        UiBuilder.SetActive(m_trade!, false);
-        UiBuilder.SetActive(m_inspect!, false);
+        UiBuilder.SetActive(m_actions!, false);
 
         float ratio = target.HealthPermille / 1000f;
         bool isDead = target.IsDead;
@@ -158,13 +168,61 @@ public sealed class TargetFrame : MonoBehaviour
             distance = new Vector2(at.x - self.X, at.z - self.Z).magnitude;
         }
 
+        ClientMonster? monster = EntityViewKeys.MonsterOf(m_client.Content, target.Kind, target.DefinitionId);
         ShowTarget(
-            CachedMonsterLabel(
-                EntityViewKeys.MonsterOf(m_client.Content, target.Kind, target.DefinitionId),
-                target.DefinitionId),
+            CachedMonsterLabel(monster, target.DefinitionId),
             ratio,
             distance,
-            isDead);
+            isDead,
+            monster != null ? Facts(monster) : string.Empty,
+            CachedHint(monster, world.Sheet?.AttackElement ?? Element.Neutral, world.Skills, m_client.Content));
+    }
+
+    /// <summary>
+    ///     A monster's element, race, and size, "Earth · Insect · Small" (Prototype Content §2).
+    /// </summary>
+    public static string Facts(ClientMonster monster)
+    {
+        return $"{monster.Element} \u00B7 {monster.Race} \u00B7 {monster.Size}";
+    }
+
+    /// <summary>
+    ///     How the player's attacks fare against <paramref name="monster" />, "Swing 150% · Arcane Bolt 150%": the swing
+    ///     with the attack element, then each learned skill that deals damage with its own element, a skill of the
+    ///     weapon's taking the swing's, each only when it is not 100 % (Gameplay Systems §3).
+    /// </summary>
+    public static string Hint(
+        ClientMonster monster,
+        Element attackElement,
+        IReadOnlyList<SkillListEntry> skills,
+        ClientContent? content)
+    {
+        var parts = new List<string>();
+        AddMatchup(parts, "Swing", ElementTable.Percent(attackElement, monster.Element));
+        foreach (SkillListEntry entry in skills)
+        {
+            if (entry.Level > 0
+                && content != null
+                && content.TryGetSkill(entry.Skill, out ClientSkill? skill)
+                && skill != null
+                && skill.Element is SkillElement element)
+            {
+                AddMatchup(
+                    parts,
+                    skill.DisplayName,
+                    ElementTable.Percent(ElementTable.Of(element, attackElement), monster.Element));
+            }
+        }
+
+        return string.Join(" \u00B7 ", parts);
+    }
+
+    private static void AddMatchup(List<string> parts, string name, int percent)
+    {
+        if (percent != 100)
+        {
+            parts.Add($"{name} {percent.ToString(CultureInfo.InvariantCulture)}%");
+        }
     }
 
     /// <summary>
@@ -247,7 +305,15 @@ public sealed class TargetFrame : MonoBehaviour
     /// <param name="ratio">The HP ratio, from 0 to 1.</param>
     /// <param name="distanceMeters">Null while the target has no view to measure to.</param>
     /// <param name="isDead">Whether the target is shown dead.</param>
-    public void ShowTarget(string name, float ratio, float? distanceMeters, bool isDead)
+    /// <param name="facts">The monster's element, race, and size.</param>
+    /// <param name="hint">How the player's attacks fare against it; never shown beside "Dead".</param>
+    public void ShowTarget(
+        string name,
+        float ratio,
+        float? distanceMeters,
+        bool isDead,
+        string facts = "",
+        string hint = "")
     {
         UiBuilder.SetActive(m_panel!, true);
         ShowName(name);
@@ -255,6 +321,13 @@ public sealed class TargetFrame : MonoBehaviour
         {
             m_isShownPlayer = false;
             UiBuilder.SetActive(m_fill!.parent.gameObject, true);
+            UiBuilder.SetActive(m_facts!.gameObject, true);
+        }
+
+        if (!string.Equals(facts, m_shownFacts, StringComparison.Ordinal))
+        {
+            m_shownFacts = facts;
+            Write(m_facts!, facts);
         }
 
         int permille = isDead ? 0 : Mathf.RoundToInt(Mathf.Clamp01(ratio) * 1000f);
@@ -265,17 +338,24 @@ public sealed class TargetFrame : MonoBehaviour
         }
 
         int tenths = distanceMeters.HasValue ? Mathf.RoundToInt(distanceMeters.Value * 10f) : -1;
-        if (tenths == m_shownTenths && isDead == m_shownDead)
+        if (tenths == m_shownTenths
+            && isDead == m_shownDead
+            && string.Equals(hint, m_shownHint, StringComparison.Ordinal))
         {
             return;
         }
 
         m_shownTenths = tenths;
         m_shownDead = isDead;
+        m_shownHint = hint;
         string detail = tenths < 0 ? string.Empty : $"{(tenths / 10f).ToString("F1", CultureInfo.InvariantCulture)} m";
         if (isDead)
         {
             detail = detail.Length == 0 ? "Dead" : $"{detail}   Dead";
+        }
+        else if (hint.Length > 0)
+        {
+            detail = detail.Length == 0 ? hint : $"{detail} \u00B7 {hint}";
         }
 
         Write(m_detail!, detail);
@@ -298,6 +378,7 @@ public sealed class TargetFrame : MonoBehaviour
         UiBuilder.SetActive(m_panel!, true);
         ShowName(label);
         UiBuilder.SetActive(m_fill!.parent.gameObject, ratio.HasValue);
+        UiBuilder.SetActive(m_facts!.gameObject, false);
         if (ratio.HasValue)
         {
             int permille = Mathf.RoundToInt(Mathf.Clamp01(ratio.Value) * 1000f);
@@ -316,6 +397,7 @@ public sealed class TargetFrame : MonoBehaviour
         m_isShownPlayer = true;
         m_shownTenths = -1;
         m_shownDead = false;
+        m_shownHint = null;
         Write(m_detail!, string.Empty);
     }
 
@@ -384,6 +466,29 @@ public sealed class TargetFrame : MonoBehaviour
         return m_label;
     }
 
+    // The hint is built again only for another monster, attack element, or skill list.
+    private string CachedHint(
+        ClientMonster? monster,
+        Element attackElement,
+        IReadOnlyList<SkillListEntry> skills,
+        ClientContent? content)
+    {
+        if (monster == null)
+        {
+            return string.Empty;
+        }
+
+        if (!ReferenceEquals(monster, m_hinted) || attackElement != m_hintedElement || skills != m_hintedSkills)
+        {
+            m_hinted = monster;
+            m_hintedElement = attackElement;
+            m_hintedSkills = skills;
+            m_hint = Hint(monster, attackElement, skills, content);
+        }
+
+        return m_hint;
+    }
+
     private void PlaceBeside(bool isBeside, bool isTouchShown)
     {
         if (isBeside == m_isShownBeside && isTouchShown == m_isShownBesideTouch)
@@ -420,10 +525,18 @@ public sealed class TargetFrame : MonoBehaviour
         m_fill = UiBuilder.CreateBar("Bar", panel, BarBackColor, BarFillColor);
         m_fill.parent.gameObject.AddComponent<LayoutElement>().preferredHeight = BarHeight;
 
+        m_facts = Ui.CreateLabel("Facts", panel);
+        m_facts.alignment = TextAlignmentOptions.Center;
         m_detail = Ui.CreateLabel("Detail", panel);
         m_detail.alignment = TextAlignmentOptions.Center;
-        // Invite and Follow never show together, so with Trade and Inspect they keep one row's height.
+        m_detail.textWrappingMode = TextWrappingModes.NoWrap;
+        m_detail.enableAutoSizing = true;
+        m_detail.fontSizeMin = 12f;
+        m_detail.fontSizeMax = m_detail.fontSize;
+        // Invite and Follow never show together, so with Trade and Inspect they keep one row's height; the row hides
+        // while it holds no button.
         GameObject actions = Ui.CreateRow("Actions", panel);
+        m_actions = actions;
         m_invite = Ui.CreateButton(Invite, actions.transform, () => client.InviteToParty(m_targetName));
         m_invite.SetActive(false);
         m_follow = Ui.CreateButton(Follow, actions.transform, OnFollowPressed);

@@ -217,18 +217,19 @@ public sealed class LiveServerBuildTests : InputTestFixture
         Assert.That(lines.Text, Is.Empty, "a locked slot's key does nothing, not even ask for a target");
 
         yield return Tap(keyboard.kKey);
-        yield return WaitUntil(() => window.IsOpen && window.Text.Contains("Strike Lv 0/5, Learn"), 2f);
+        yield return WaitUntil(() => window.IsOpen && window.Text.Contains("Strike \u00B7 Weapon Lv 0/5, Learn"), 2f);
         Assert.That(window.IsOpen, Is.True, "K opens the window");
-        Assert.That(window.Text, Does.StartWith("Points: 1\nStrike Lv 0/5, Learn"), $"{server.JoinOutput()}");
+        Assert.That(window.Text, Does.StartWith("Points: 1\nStrike \u00B7 Weapon Lv 0/5, Learn"),
+            $"{server.JoinOutput()}");
         Button learn = window.GetComponentsInChildren<Button>().Single(button => button.name == "Learn skill.strike");
         learn.onClick.Invoke();
         yield return WaitUntil(
             () => slot.text == "Strike\n1" &&
-                window.Text.StartsWith("Points: 0\nStrike Lv 1/5\n", StringComparison.Ordinal),
+                window.Text.StartsWith("Points: 0\nStrike \u00B7 Weapon Lv 1/5\n", StringComparison.Ordinal),
             StartTimeoutSeconds);
 
         Assert.That(slot.text, Is.EqualTo("Strike\n1"), $"the slot unlocks: {client.Status} {server.JoinOutput()}");
-        Assert.That(window.Text, Does.StartWith("Points: 0\nStrike Lv 1/5\n"));
+        Assert.That(window.Text, Does.StartWith("Points: 0\nStrike \u00B7 Weapon Lv 1/5\n"));
         Assert.That(lines.Text, Does.Contain("Strike Lv 1."));
         yield return Tap(keyboard.kKey);
         yield return WaitUntil(() => !window.IsOpen, 2f);

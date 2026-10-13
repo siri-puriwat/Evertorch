@@ -670,7 +670,7 @@ public sealed class PlayerPanelTests
             Is.EqualTo(
                 "Points: 3\nSTR 5, next 2, +\nAGI 11, next 3, +\nVIT 99, max\nINT 5, next 2, +\nDEX 21, next 4"
                 + "\nLUK 1, next 2, +\nAttack 46\nMagic attack 12\nDefense 5\nMagic defense 6\nHit 188\nFlee 125"
-                + "\nCritical 1.3%\nAttack speed 154"));
+                + "\nCritical 1.3%\nAttack speed 154\nNeutral attack\nNeutral armor"));
         Assert.That(
             Enumerable.Range(1, 6).Select(stat => window.IsRaiseShown((PrimaryStat)stat)),
             Is.EqualTo(new[] { true, true, false, true, false, true }),
@@ -1070,13 +1070,97 @@ public sealed class PlayerPanelTests
         string moved = Label(frame, "Detail").text;
         frame.ShowTarget("Training Slime", 0.4f, 3f, true);
 
-        Assert.That(afterFirst, Is.EqualTo(2), "the name and the detail");
-        Assert.That(afterSameTenth, Is.EqualTo(2), "a new HP ratio moves the bar, and 4.21 m still reads 4.2 m");
+        Assert.That(afterFirst, Is.EqualTo(3), "the name, the facts, and the detail");
+        Assert.That(afterSameTenth, Is.EqualTo(3), "a new HP ratio moves the bar, and 4.21 m still reads 4.2 m");
         Assert.That(ratio, Is.EqualTo(0.4f).Within(0.001f));
         Assert.That(moved, Is.EqualTo("3.0 m"));
         Assert.That(Label(frame, "Detail").text, Is.EqualTo("3.0 m   Dead"));
         Assert.That(frame.ShownRatio, Is.EqualTo(0f));
-        Assert.That(frame.TextChanges, Is.EqualTo(4));
+        Assert.That(frame.TextChanges, Is.EqualTo(5));
+    }
+
+    // A monster's frame shows its element, race, and size under its bar, and how the player's swing and learned damage
+    // skills fare against it, those not at 100 %, never beside "Dead"; it stays within the layout's height, its
+    // empty button row hidden (Prototype Content §2).
+    [UnityTest]
+    public IEnumerator TargetFrame_ForAMonster_ShowsItsFacts_AndHowTheAttacksFare_AtItsTallest()
+    {
+        GameClient client = CreateIdleClient();
+        ClientWorld world = GiveWorld(client);
+        var crawler = new MonsterDefinitionId("monster.forest_crawler");
+        var bolt = new SkillDefinitionId("skill.arcane_bolt");
+        GiveContent(
+            client,
+            new ClientItem[0],
+            monsters: new Dictionary<MonsterDefinitionId, ClientMonster>
+            {
+                [crawler] = new(crawler, "Forest Crawler", "monster_forest_crawler", "crawler", level: 3,
+                    element: Element.Earth, race: Race.Insect, size: BodySize.Small)
+            },
+            skills: new Dictionary<SkillDefinitionId, ClientSkill>
+            {
+                [TreeIds[0]] = new(TreeIds[0], "Strike", SkillTargetType.Enemy, "skill_strike",
+                    element: SkillElement.Weapon),
+                [TreeIds[1]] = new(TreeIds[1], "First Aid", SkillTargetType.Self, "skill_first_aid"),
+                [bolt] = new(bolt, "Arcane Bolt", SkillTargetType.Enemy, "skill_arcane_bolt",
+                    element: SkillElement.Ghost)
+            });
+        CharacterSheetStat[] stats = Enumerable.Repeat(new CharacterSheetStat(5, 2), 6).ToArray();
+        world.OnCharacterSheet(new CharacterSheet(2, Adventurer, 0, 50, 0, 0, stats, 10, 5, 2, 3, 182, 105, 11, 153,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, Element.Fire));
+        world.OnSkillList(
+            new SkillList(
+                new[]
+                {
+                    new SkillListEntry(TreeIds[0], 1.5f, 8, 2000, 500, 0, 1, 5, SkillListEntry.NoPrerequisite, 0),
+                    new SkillListEntry(TreeIds[1], 0f, 3, 0, 0, 0, 1, 1, SkillListEntry.NoPrerequisite, 0),
+                    new SkillListEntry(bolt, 8f, 10, 0, 500, 0, 0, 5, SkillListEntry.NoPrerequisite, 0)
+                }));
+        var frame = TargetFrame.Create(client);
+        m_created.Add(frame.gameObject);
+        Spawn(world, 7, EntityKind.Monster, crawler.Value, 1000);
+
+        world.OnTargetChanged(new TargetChanged(Local, new EntityId(7)));
+        yield return null;
+        yield return null;
+        string facts = Label(frame, "Facts").text;
+        string detail = Label(frame, "Detail").text;
+        float height = ((RectTransform)frame.GetComponentsInChildren<Image>()[0].transform).rect.height;
+        string[] buttons = ButtonsOf(frame);
+
+        Assert.That(facts, Is.EqualTo("Earth \u00B7 Insect \u00B7 Small"));
+        Assert.That(detail, Is.EqualTo("Swing 150% \u00B7 Strike 150%"),
+            "Fire on Earth for the swing and the weapon's Strike; First Aid deals no damage, Arcane Bolt is unlearned");
+        Assert.That(
+            height,
+            Is.LessThanOrEqualTo(TargetFrame.TallestHeight + 0.01f),
+            "name, bar, facts, and detail, within the layout's height");
+        Assert.That(buttons, Is.Empty, "no button row for a monster");
+        Assert.That(TargetFrame.TallestHeight, Is.EqualTo(142f));
+    }
+
+    // The hint fits beside a window at 12 points or more at its longest in real content: a Vanguard's swing, Strike,
+    // and Heavy Blow, and nothing else learned that deals damage (Prototype Content §2).
+    [UnityTest]
+    public IEnumerator TargetFrame_BesideAWindow_FitsTheLongestHint_At12PointsOrMore()
+    {
+        var frame = TargetFrame.Create(CreateIdleClient());
+        m_created.Add(frame.gameObject);
+        yield return null;
+        typeof(TargetFrame)
+            .GetMethod("PlaceBeside", BindingFlags.NonPublic | BindingFlags.Instance)!
+            .Invoke(frame, new object[] { true, false });
+
+        frame.ShowTarget("Spark Wisp \u00B7 Lv 9", 1f, 12.34f, false, "Wind \u00B7 Formless \u00B7 Small",
+            "Swing 150% \u00B7 Strike 150% \u00B7 Heavy Blow 150%");
+        yield return null;
+        TMP_Text detail = Label(frame, "Detail");
+        detail.ForceMeshUpdate();
+
+        Assert.That(detail.text, Does.StartWith("12.3 m \u00B7 Swing 150%"));
+        Assert.That(detail.fontSize, Is.GreaterThanOrEqualTo(12f));
+        Assert.That(detail.textBounds.size.x,
+            Is.LessThanOrEqualTo(((RectTransform)detail.transform).rect.width + 0.5f));
     }
 
     [UnityTest]
@@ -1140,6 +1224,38 @@ public sealed class PlayerPanelTests
         Assert.That(changesLater, Is.EqualTo(changes), "an unchanged second rewrites nothing");
         Assert.That(later, Is.EqualTo("status.focus 40s"));
         Assert.That(Label(bar, "Effects").text, Is.Empty);
+    }
+
+    // Prototype Content §2: an effect with 100 s or more left shows whole minutes, rounded up, and its label is written
+    // again only when the shown minute changes; below 100 s it shows seconds.
+    [UnityTest]
+    public IEnumerator StatusBar_ShowsAConvertersTime_InWholeMinutes_TillItsLast100Seconds()
+    {
+        GameClient client = CreateIdleClient();
+        ClientWorld world = GiveWorld(client);
+        var bar = StatusBar.Create(client);
+        m_created.Add(bar.gameObject);
+        yield return null;
+
+        world.OnStatusEffects(
+            new StatusEffects(new[]
+                { new StatusEffectEntry(new StatusDefinitionId("status.fire_weapon"), 1_200_000) }));
+        yield return null;
+        string started = Label(bar, "Effects").text;
+        int changes = bar.TextChanges;
+        world.Advance(30f);
+        yield return null;
+        int changesWithinTheMinute = bar.TextChanges;
+        world.Advance(1069f);
+        yield return null;
+        string near = Label(bar, "Effects").text;
+        world.Advance(2f);
+        yield return null;
+
+        Assert.That(started, Is.EqualTo("status.fire_weapon 20m"));
+        Assert.That(changesWithinTheMinute, Is.EqualTo(changes), "19m 30s still reads 20m");
+        Assert.That(near, Is.EqualTo("status.fire_weapon 2m"), "101 s left");
+        Assert.That(Label(bar, "Effects").text, Is.EqualTo("status.fire_weapon 99s"));
     }
 
     [UnityTest]

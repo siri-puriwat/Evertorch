@@ -207,6 +207,12 @@ public sealed class SkillsWindow : MonoBehaviour
     private void AddSkill(IReadOnlyList<SkillListEntry> tree, SkillListEntry entry, int points, ClientContent? content)
     {
         string name = BuildMessages.SkillName(content, entry.Skill);
+        string? element = BuildMessages.SkillElementName(content, entry.Skill);
+        if (element != null)
+        {
+            name = $"{name} \u00B7 {element}";
+        }
+
         string? unmet = BuildMessages.UnmetPrerequisite(tree, entry, content);
         bool canLearn = !m_wasDead && points > 0 && entry.Level < entry.MaxLevel && unmet == null;
 

@@ -24,6 +24,7 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
     private readonly byte[] m_sendBuffer = new byte[ProtocolLimits.MaxClientPayloadBytes];
     private readonly Dictionary<QuestDefinitionId, NpcQuestOffer> m_questOffers = new();
     private readonly HashSet<uint> m_equipSequences = new();
+    private readonly HashSet<uint> m_useSequences = new();
     private readonly Dictionary<uint, (ChatChannel Channel, string Recipient)> m_chatSequences = new();
     private readonly Dictionary<uint, (PartyCommand Command, string Name)> m_partySequences = new();
     private readonly Dictionary<uint, (TradeCommand Command, string Name)> m_tradeSequences = new();
@@ -533,6 +534,12 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
         uint sequence = NextCommandSequence();
         new UseItem(inventoryItem, sequence).Write(m_sendBuffer);
         SendRouted(MessageOpcode.UseItem, UseItem.EncodedLength);
+        if (m_useSequences.Count >= MaxEquipSequences)
+        {
+            m_useSequences.Clear();
+        }
+
+        m_useSequences.Add(sequence);
         return sequence;
     }
 
@@ -595,6 +602,14 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
     public bool IsEquipSequence(uint commandSequence)
     {
         return commandSequence != 0 && m_equipSequences.Contains(commandSequence);
+    }
+
+    /// <summary>
+    ///     Whether <paramref name="commandSequence" /> asked to use an item, so that its refusal can say why.
+    /// </summary>
+    public bool IsUseSequence(uint commandSequence)
+    {
+        return commandSequence != 0 && m_useSequences.Contains(commandSequence);
     }
 
     /// <summary>
@@ -1574,6 +1589,7 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
         if (!isMapChange)
         {
             m_equipSequences.Clear();
+            m_useSequences.Clear();
             m_chatSequences.Clear();
             m_partySequences.Clear();
             m_tradeSequences.Clear();

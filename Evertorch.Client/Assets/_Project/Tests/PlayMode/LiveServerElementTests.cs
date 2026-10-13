@@ -27,6 +27,7 @@ public sealed class LiveServerElementTests
     private const string ActionsAsset = "_Project/Settings/InputSystem_Actions.inputactions";
     private const string VeraName = "LiveElementVera";
     private const string TrainingSword = "item.weapon.training_sword";
+    private const string WindConverter = "item.consumable.wind_converter";
     private const string TrainingSlime = "monster.training_slime";
     private const float StartTimeoutSeconds = 30f;
     private const int TestTimeoutMs = 300_000;
@@ -66,9 +67,11 @@ public sealed class LiveServerElementTests
         }
     }
 
-    // The real client, stored wearing a training sword, enters the training ground: the Stats window lists the derived
-    // statistics with the sword's attack, and a training slime, selected, fills the target frame with its name, its
-    // level, and how far away it is (Prototype Content §2).
+    // The real client, stored wearing a training sword and holding a Wind Converter, enters the training ground: the
+    // Stats window lists the derived statistics with the sword's attack and its Neutral elements, and a training slime,
+    // selected, fills the target frame with its name, its level, its facts, and how far away it is. The converter,
+    // used, makes the swing Wind: the frame says it fares half again against the Water slime, the status bar shows its
+    // twenty minutes, and the chat says so (Prototype Content §2).
     [UnityTest]
     [Timeout(TestTimeoutMs)]
     public IEnumerator Fighter_WithASwordWorn_SelectsASlime_AndReadsItInTheTargetFrame()
@@ -77,18 +80,26 @@ public sealed class LiveServerElementTests
         yield return StartDatabaseAndServer();
         LiveServer server = m_server!;
         GameClient client = CreateClient(actionsPath);
-        yield return EnterByName(client, VeraName, () => StoreWorn(TrainingSword));
+        yield return EnterByName(client, VeraName, () =>
+        {
+            StoreWorn(TrainingSword);
+            StoreItem(WindConverter);
+        });
         ClientWorld world = client.World!;
         Assert.That(
-            world.Inventory.Rows.Select(row => (row.Item.Value, row.Slot)),
-            Is.EqualTo(new[] { (TrainingSword, EquipmentSlot.Weapon) }),
-            "the stored sword, worn");
+            world.Inventory.Rows.Select(row => (row.Item.Value, row.Slot)).OrderBy(row => row.Value),
+            Is.EqualTo(new[] { (WindConverter, EquipmentSlot.None), (TrainingSword, EquipmentSlot.Weapon) }),
+            "the stored sword, worn, and the converter");
 
         StatsWindow stats = client.GetComponentsInChildren<StatsWindow>(true).Single();
         yield return WaitUntil(() => world.Sheet != null, StartTimeoutSeconds);
         client.ToggleStats();
         yield return WaitUntil(() => stats.IsOpen && stats.Text.Contains("Attack"), StartTimeoutSeconds);
         Assert.That(stats.Text, Does.Contain("Attack").And.Contain("Defense"), $"the derived statistics: {stats.Text}");
+        Assert.That(
+            stats.Text,
+            Does.Contain("Neutral attack").And.Contain("Neutral armor"),
+            $"the elements: {stats.Text}");
         client.ToggleStats();
 
         yield return WaitUntil(
@@ -106,8 +117,33 @@ public sealed class LiveServerElementTests
             StartTimeoutSeconds);
         Assert.That(world.Target, Is.EqualTo(slime), $"the slime selected: {server.JoinOutput()}");
         Assert.That(name.text, Is.EqualTo("Training Slime · Lv 1"), "the slime's name and level");
-        Assert.That(detail.text, Does.EndWith(" m"), "how far away it is");
+        Assert.That(detail.text, Does.EndWith(" m"), "how far away it is, and a Neutral swing fares as ever");
+        TMP_Text facts = frame.GetComponentsInChildren<TMP_Text>(true).Single(label => label.name == "Facts");
+        Assert.That(facts.text, Is.EqualTo("Water · Plant · Medium"), "the slime's facts");
+
+        long converter = world.Inventory.Rows.Single(row => row.Item.Value == WindConverter).InventoryItem;
+        client.Connection.SendUseItem(converter);
+        StatusBar bar = client.GetComponentsInChildren<StatusBar>(true).Single();
+        TMP_Text effects = bar.GetComponentsInChildren<TMP_Text>(true).Single(label => label.name == "Effects");
+        yield return WaitUntil(
+            () => world.Sheet?.AttackElement == Element.Wind
+                && detail.text.EndsWith(" m · Swing 150%", StringComparison.Ordinal)
+                && effects.text.Length > 0,
+            StartTimeoutSeconds);
+        Assert.That(detail.text, Does.EndWith(" m · Swing 150%"), $"Wind on Water: {server.JoinOutput()}");
+        Assert.That(effects.text, Is.EqualTo("Wind Weapon 20m"), "the converter's twenty minutes");
+        Assert.That(
+            client.ChatLog.Lines.Select(line => line.Text),
+            Has.Member("Your attacks are now Wind."),
+            "the chat says so");
         Assert.That(client.Connection.MalformedMessages + client.Connection.UnexpectedMessages, Is.Zero);
+    }
+
+    private void StoreItem(string item)
+    {
+        m_database!.Execute(
+            "INSERT INTO inventory_items (character_id, item_definition_id, quantity, refine_level, version) "
+            + $"SELECT id, '{item}', 1, 0, 0 FROM characters WHERE name = '{VeraName}'");
     }
 
     private void StoreWorn(string weapon)
