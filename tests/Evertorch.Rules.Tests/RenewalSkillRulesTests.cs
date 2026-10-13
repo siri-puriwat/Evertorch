@@ -140,6 +140,26 @@ public sealed class RenewalSkillRulesTests
         Assert.That(resolve, Throws.ArgumentException);
     }
 
+    // A test package's Holy bolt on a Holy target: the element table brings it to 0, and the skill says so (Gameplay
+    // Systems §9).
+    [Test]
+    public void Resolve_AMagicSkillOnAZeroCell_IsImmune()
+    {
+        SkillDefinition bolt = Skill(SkillTargetType.Enemy, SkillDamageType.Magical, 300, 800, SkillEffect.Damage(100));
+        var random = new ScriptedRandomSource(8);
+        var magic = new MagicDamageContext(
+            40,
+            0,
+            0,
+            random,
+            modifiers: new DamageModifiers(0, 0, Element.Holy, Element.Holy));
+
+        SkillResolution resolution = m_rules.Resolve(new SkillContext(bolt, 1, AttackerKind.Character, 831, magic));
+
+        Assert.That((resolution.Result, resolution.Amount), Is.EqualTo((SkillResult.Immune, 0)));
+        Assert.That(random.RequestedBounds, Is.EqualTo(new[] { 17 }), "the roll alone");
+    }
+
     [Test]
     public void Resolve_FirstAid_HealsItsNominalAmount_WithoutARoll()
     {
@@ -212,6 +232,33 @@ public sealed class RenewalSkillRulesTests
         SkillResolution resolution = m_rules.Resolve(context);
 
         Assert.That(resolution.Amount, Is.EqualTo(35), "raw 14 + 14 = 28; x 130 % = 36; x 4002 / 4020 = 35");
+    }
+
+    // A Strike with a Fire Converter on a small crawler takes the converter's element and the sword's size through
+    // the context's copy (Gameplay Systems §11.1).
+    [Test]
+    public void Resolve_Strike_WithAnElementAndASize_KeepsThemThroughTheCopy()
+    {
+        var random = new FixedRandom(0);
+        var context = new SkillContext(
+            Strike,
+            1,
+            AttackerKind.Character,
+            831,
+            new HitContext(182, 25, 110, 0, 0, random),
+            new DamageContext(
+                AttackerKind.Character,
+                7,
+                20,
+                4,
+                0,
+                false,
+                random,
+                modifiers: new DamageModifiers(0, 0, Element.Fire, Element.Earth, WeaponType.Sword, BodySize.Small)));
+
+        SkillResolution resolution = m_rules.Resolve(context);
+
+        Assert.That(resolution.Amount, Is.EqualTo(44), "14 + 21 = 35; × 130 % = 45; less the defense of 4");
     }
 }
 }

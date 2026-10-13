@@ -68,7 +68,8 @@ public readonly struct DamageContext
     public int FlatAttack { get; }
 
     /// <summary>
-    ///     The boss modifiers, the last step of the damage; the default changes nothing.
+    ///     The elements, the target's size, and the worn cards' modifiers (Gameplay Systems §11.1); the default changes
+    ///     nothing.
     /// </summary>
     public DamageModifiers Modifiers { get; }
 

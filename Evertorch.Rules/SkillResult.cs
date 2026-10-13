@@ -5,6 +5,7 @@ public enum SkillResult
     Hit,
     Miss,
     PerfectDodge,
-    Healed
+    Healed,
+    Immune
 }
 }

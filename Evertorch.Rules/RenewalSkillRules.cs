@@ -53,7 +53,7 @@ public sealed class RenewalSkillRules : ISkillRules
         }
 
         MagicDamageContext magic = context.Magic.Value.ForSkill(ratioPercent);
-        return new SkillResolution(SkillResult.Hit, new RenewalCombatRules().CalculateMagicDamage(magic).Amount);
+        return Struck(new RenewalCombatRules().CalculateMagicDamage(magic));
     }
 
     private static SkillResolution ResolveDamage(SkillContext context, int ratioPercent)
@@ -78,7 +78,13 @@ public sealed class RenewalSkillRules : ISkillRules
         // Copied through the context's own method, so every input of a basic attack, a refine's flat attack among them,
         // reaches the skill.
         DamageContext damage = context.Damage.Value.ForSkill(ratioPercent);
-        return new SkillResolution(SkillResult.Hit, combat.CalculateDamage(damage).Amount);
+        return Struck(combat.CalculateDamage(damage));
+    }
+
+    // A hit that the element table brought to 0 is immune, and says so (Gameplay Systems §9).
+    private static SkillResolution Struck(DamageResult damage)
+    {
+        return new SkillResolution(damage.IsImmune ? SkillResult.Immune : SkillResult.Hit, damage.Amount);
     }
 }
 }

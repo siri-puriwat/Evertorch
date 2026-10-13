@@ -43,7 +43,7 @@ public readonly struct MagicDamageContext
     public int RatioPercent { get; }
 
     /// <summary>
-    ///     The boss modifiers, the last step of the damage; the default changes nothing.
+    ///     The elements and the defender's cards' reductions (Gameplay Systems §9); the default changes nothing.
     /// </summary>
     public DamageModifiers Modifiers { get; }
 

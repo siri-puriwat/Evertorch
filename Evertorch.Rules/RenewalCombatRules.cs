@@ -64,12 +64,31 @@ public sealed class RenewalCombatRules : ICombatRules
 
     public DamageResult CalculateDamage(DamageContext context)
     {
-        // A refine's flat attack joins after the weapon's draw, so no draw varies it (Gameplay Systems §11.1).
-        long raw = context.AttackerKind == AttackerKind.Character
-            ? 2L * context.StatusAttack + RollWeaponAttack(context) + context.FlatAttack
-            : RollMonsterAttack(context) + context.StatusAttack;
-        raw = raw * context.RatioPercent / 100;
+        DamageModifiers modifiers = context.Modifiers;
+        long raw;
+        if (context.AttackerKind == AttackerKind.Character)
+        {
+            // Three parts (Gameplay Systems §11.1): the status attack, always Neutral and doubled after its element;
+            // the weapon's draw, sized and then by the attack's element; and the flat attack, the refine bonus and the
+            // cards' attack, which no draw varies, by the attack's element alone. The cards' damage to the target
+            // grows the last two.
+            long status = (long)context.StatusAttack * ElementPercent(modifiers, Element.Neutral) / 100;
+            int attackPercent = ElementPercent(modifiers, modifiers.AttackElement ?? Element.Neutral);
+            long weapon = RollWeaponAttack(context) * SizePercent(modifiers.Weapon, modifiers.DefenderSize) / 100
+                * attackPercent / 100;
+            long flat = (long)context.FlatAttack * attackPercent / 100;
+            raw = 2 * status + modifiers.Dealt(weapon + flat);
+            if (raw == 0 && modifiers.AttackElement.HasValue)
+            {
+                return Immune(context.IsCritical);
+            }
+        }
+        else
+        {
+            raw = RollMonsterAttack(context) + context.StatusAttack;
+        }
 
+        raw = raw * context.RatioPercent / 100;
         long reduced = raw * (DefenseScale + context.HardDefense) / (DefenseScale + 10L * context.HardDefense)
             - context.SoftDefense;
         long amount = Math.Max(1, reduced);
@@ -78,14 +97,27 @@ public sealed class RenewalCombatRules : ICombatRules
             amount = amount * 14 / 10;
         }
 
-        amount = context.Modifiers.Apply(amount);
+        // A monster's skill takes its element after the defense, and its swing none (Gameplay Systems §9).
+        if (context.AttackerKind == AttackerKind.Monster && modifiers.AttackElement.HasValue)
+        {
+            int percent = ElementPercent(modifiers, modifiers.AttackElement.Value);
+            if (percent == 0)
+            {
+                return Immune(context.IsCritical);
+            }
+
+            amount = Math.Max(1, amount * percent / 100);
+        }
+
+        amount = modifiers.Taken(amount);
         return new DamageResult((int)Math.Min(int.MaxValue, amount), context.IsCritical);
     }
 
     /// <summary>
     ///     Magic as the skills research note reads it: the magic attack rolled between 80 % and 120 %, the ratio, then
-    ///     hard magic defense as a ratio and soft magic defense subtracted, at least 1, then the boss modifiers. Magic
-    ///     never misses or crits.
+    ///     hard magic defense as a ratio and soft magic defense subtracted, at least 1; then the skill's element against
+    ///     the target's, where a cell of 0 is immune and any other keeps at least 1; then the defender's cards'
+    ///     reductions. No card adds to magic (owner decisions 13 and 21), and magic never misses or crits.
     /// </summary>
     public DamageResult CalculateMagicDamage(MagicDamageContext context)
     {
@@ -95,7 +127,20 @@ public sealed class RenewalCombatRules : ICombatRules
         long reduced = raw * (MagicDefenseScale + context.HardMagicDefense)
             / (MagicDefenseScale + 10L * context.HardMagicDefense)
             - context.SoftMagicDefense;
-        long amount = context.Modifiers.Apply(Math.Max(1, reduced));
+        long amount = Math.Max(1, reduced);
+        DamageModifiers modifiers = context.Modifiers;
+        if (modifiers.AttackElement.HasValue)
+        {
+            int percent = ElementPercent(modifiers, modifiers.AttackElement.Value);
+            if (percent == 0)
+            {
+                return Immune(false);
+            }
+
+            amount = Math.Max(1, amount * percent / 100);
+        }
+
+        amount = modifiers.Taken(amount);
         return new DamageResult((int)Math.Min(int.MaxValue, amount), false);
     }
 
@@ -106,6 +151,18 @@ public sealed class RenewalCombatRules : ICombatRules
     public static int SizePercent(WeaponType? weapon, BodySize size)
     {
         return weapon == WeaponType.Sword && size != BodySize.Medium ? 75 : 100;
+    }
+
+    // The element table's cell for a part of the given element against the defender's; without an attack element
+    // there is no element step at all.
+    private static int ElementPercent(DamageModifiers modifiers, Element part)
+    {
+        return modifiers.AttackElement.HasValue ? ElementTable.Percent(part, modifiers.DefenseElement) : 100;
+    }
+
+    private static DamageResult Immune(bool isCritical)
+    {
+        return new DamageResult(0, isCritical, true);
     }
 
     // An armed character's swing draws once more (equipment research note): every weapon is weapon level 1 and varies

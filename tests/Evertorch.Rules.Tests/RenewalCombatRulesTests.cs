@@ -248,12 +248,12 @@ public sealed class RenewalCombatRulesTests
         Assert.That(random.RequestedBounds, Is.EqualTo(new[] { 3 }), "the weapon's draw alone");
     }
 
-    // Gameplay Systems §11.1: damage to a boss grows by the worn cards' percentage after everything else, rounded down,
-    // and draws nothing more.
-    [TestCase(0, 55)]
-    [TestCase(1, 56)]
-    [TestCase(2, 57)]
-    public void CalculateDamage_ToABoss_GrowsByTheCardsPercent_Last(int draw, int expected)
+    // Gameplay Systems §11.1, from Milestone 18 (owner decision 21): damage to a boss grows the weapon and flat parts
+    // by the worn cards' percentage, rounded down, before the defense, and draws nothing more.
+    [TestCase(0, 52)]
+    [TestCase(1, 53)]
+    [TestCase(2, 55)]
+    public void CalculateDamage_ToABoss_GrowsTheWeaponAndFlatPartsByTheCardsPercent(int draw, int expected)
     {
         var random = new ScriptedRandomSource(draw);
 
@@ -269,7 +269,7 @@ public sealed class RenewalCombatRulesTests
                 flatAttack: 14,
                 modifiers: new DamageModifiers(20, 0)));
 
-        Assert.That(result.Amount, Is.EqualTo(expected), "46 to 48 times 120 %");
+        Assert.That(result.Amount, Is.EqualTo(expected), "14 + (19 to 21 + 14) × 120 %, then the defense of 2");
         Assert.That(random.RequestedBounds, Is.EqualTo(new[] { 3 }), "the weapon's draw alone");
     }
 
@@ -333,7 +333,7 @@ public sealed class RenewalCombatRulesTests
     }
 
     [Test]
-    public void CalculateDamage_CriticalOnABoss_MultipliesTheCriticalAndThenTheCards()
+    public void CalculateDamage_CriticalOnABoss_GrowsThePartsThenMultipliesTheCritical()
     {
         DamageResult result = Rules.CalculateDamage(
             new DamageContext(
@@ -347,7 +347,7 @@ public sealed class RenewalCombatRulesTests
                 flatAttack: 14,
                 modifiers: new DamageModifiers(20, 0)));
 
-        Assert.That(result.Amount, Is.EqualTo(48 * 14 / 10 * 120 / 100), "the critical's 48, then 40 %, then 20 %");
+        Assert.That(result.Amount, Is.EqualTo(77), "(21 + 14) × 120 % = 42; 14 + 42 = 56, 55 after the defense; × 1.4");
     }
 
     [Test]
@@ -435,8 +435,9 @@ public sealed class RenewalCombatRulesTests
         Assert.That(result.Outcome, Is.EqualTo(HitOutcome.Hit));
     }
 
+    // From Milestone 18 no card adds to magic (owner decisions 13 and 21), and a boss's magic still shrinks last.
     [Test]
-    public void CalculateMagicDamage_ToAndFromABoss_TakesTheModifiersLast()
+    public void CalculateMagicDamage_FromABoss_ShrinksLast_AndNoCardGrowsIt()
     {
         DamageResult toBoss = Rules.CalculateMagicDamage(
             new MagicDamageContext(50, 0, 0, new ScriptedRandomSource(10), modifiers: new DamageModifiers(20, 0)));
@@ -444,7 +445,7 @@ public sealed class RenewalCombatRulesTests
             new MagicDamageContext(50, 0, 0, new ScriptedRandomSource(10), modifiers: new DamageModifiers(0, 25)));
         DamageResult plain = Rules.CalculateMagicDamage(new MagicDamageContext(50, 0, 0, new ScriptedRandomSource(10)));
 
-        Assert.That((plain.Amount, toBoss.Amount, fromBoss.Amount), Is.EqualTo((50, 60, 37)));
+        Assert.That((plain.Amount, toBoss.Amount, fromBoss.Amount), Is.EqualTo((50, 50, 37)));
     }
 
     [Test]
@@ -475,7 +476,17 @@ public sealed class RenewalCombatRulesTests
             true,
             random,
             flatAttack: 14,
-            modifiers: new DamageModifiers(20, 5));
+            modifiers: new DamageModifiers(
+                20,
+                5,
+                Element.Fire,
+                Element.Earth,
+                WeaponType.Sword,
+                BodySize.Small,
+                1,
+                2,
+                3,
+                4));
 
         DamageContext skill = context.ForSkill(130);
 
@@ -484,17 +495,43 @@ public sealed class RenewalCombatRulesTests
                 skill.IsCritical, skill.RatioPercent, skill.FlatAttack, skill.Random),
             Is.EqualTo((AttackerKind.Character, 7, 20, 2, 4, false, 130, 14, (IRandomSource)random)));
         Assert.That(
-            (skill.Modifiers.BossDamagePercent, skill.Modifiers.BossDamageReductionPercent),
-            Is.EqualTo((20, 5)));
+            (skill.Modifiers.BossDamagePercent, skill.Modifiers.BossDamageReductionPercent,
+                skill.Modifiers.AttackElement, skill.Modifiers.DefenseElement, skill.Modifiers.Weapon,
+                skill.Modifiers.DefenderSize),
+            Is.EqualTo((20, 5, (Element?)Element.Fire, Element.Earth, (WeaponType?)WeaponType.Sword, BodySize.Small)));
+        Assert.That(
+            (skill.Modifiers.ElementDamagePercent, skill.Modifiers.RaceDamagePercent, skill.Modifiers.SizeDamagePercent,
+                skill.Modifiers.ElementDamageReductionPercent),
+            Is.EqualTo((1, 2, 3, 4)));
     }
 
     [Test]
     public void DamageModifiers_ByDefault_ChangeNothing_AndRefuseANegative()
     {
         Action negative = () => _ = new DamageModifiers(-1, 0);
+        Action negativeRace = () => _ = new DamageModifiers(0, 0, raceDamagePercent: -1);
+        Action negativeReduction = () => _ = new DamageModifiers(0, 0, elementDamageReductionPercent: -1);
+        DamageModifiers none = default;
 
-        Assert.That((default(DamageModifiers).Apply(1), default(DamageModifiers).Apply(4567)), Is.EqualTo((1L, 4567L)));
+        Assert.That((none.Dealt(0), none.Dealt(4567), none.Taken(1), none.Taken(4567)),
+            Is.EqualTo((0L, 4567L, 1L, 4567L)));
+        Assert.That(none.AttackElement, Is.Null, "no element step");
         Assert.That(negative, Throws.InstanceOf<ArgumentOutOfRangeException>());
+        Assert.That(negativeRace, Throws.InstanceOf<ArgumentOutOfRangeException>());
+        Assert.That(negativeReduction, Throws.InstanceOf<ArgumentOutOfRangeException>());
+    }
+
+    // The defender's cards take at most 90 % off a hit, for an element and from a boss alike, each rounded down and
+    // leaving at least 1; the attacker's grow the parts in order, each rounded down (Gameplay Systems §11.1).
+    [Test]
+    public void DamageModifiers_DealtAndTaken_StepInOrder_AndCapEachReductionAtNinety()
+    {
+        var dealt = new DamageModifiers(10, 0, elementDamagePercent: 10, raceDamagePercent: 10, sizeDamagePercent: 10);
+        var taken = new DamageModifiers(0, 95, elementDamageReductionPercent: 95);
+
+        Assert.That(dealt.Dealt(100), Is.EqualTo(146L), "110, 121, 133, then 146");
+        Assert.That(taken.Taken(1000), Is.EqualTo(10L), "100, then 10");
+        Assert.That(taken.Taken(5), Is.EqualTo(1L), "at least 1");
     }
 
     [Test]
@@ -535,7 +572,12 @@ public sealed class RenewalCombatRulesTests
         var random = new ScriptedRandomSource();
 
         HitContext hit = new HitContext(182, 25, 102, 3, 4, random).WithoutCritical();
-        MagicDamageContext magic = new MagicDamageContext(50, 1, 2, random, modifiers: new DamageModifiers(0, 25))
+        MagicDamageContext magic = new MagicDamageContext(
+                50,
+                1,
+                2,
+                random,
+                modifiers: new DamageModifiers(0, 25, Element.Ghost, Element.Water, elementDamageReductionPercent: 30))
             .ForSkill(150);
 
         Assert.That(
@@ -543,8 +585,10 @@ public sealed class RenewalCombatRulesTests
             Is.EqualTo((182, 0, 102, 3, 4)));
         Assert.That(
             (magic.MagicAttack, magic.HardMagicDefense, magic.SoftMagicDefense, magic.RatioPercent,
-                magic.Modifiers.BossDamageReductionPercent),
-            Is.EqualTo((50, 1, 2, 150, 25)));
+                magic.Modifiers.BossDamageReductionPercent, magic.Modifiers.AttackElement,
+                magic.Modifiers.DefenseElement,
+                magic.Modifiers.ElementDamageReductionPercent),
+            Is.EqualTo((50, 1, 2, 150, 25, (Element?)Element.Ghost, Element.Water, 30)));
     }
 }
 }

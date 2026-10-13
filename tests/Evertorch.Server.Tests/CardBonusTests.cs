@@ -11,8 +11,8 @@ namespace Evertorch.Server.Tests
 /// <summary>
 ///     What worn cards add (Gameplay Systems §2, §11.1): the equipment helper sums the worn rows' cards at the load and
 ///     at every change of what is worn; their statistics join the items' bonuses and their maxima come after the
-///     scaling; their attack, magic attack, and defense join the refine bonuses; the boss modifiers are the last step
-///     of a hit on a boss and of a boss's slam; and a card out of place stays, counts, and is logged at the load.
+///     scaling; their attack, magic attack, and defense join the refine bonuses; damage to a boss grows a hit's weapon
+///     and flat parts, a boss's slam shrinks last; and a card out of place stays, counts, and is logged at the load.
 /// </summary>
 [TestFixture]
 public sealed class CardBonusTests
@@ -68,8 +68,8 @@ public sealed class CardBonusTests
         return map!.Monsters.Single(monster => monster.Definition.Id == Monarch);
     }
 
-    // The first hit of an unarmed player on the Slime Monarch, every draw scripted, with the given cards worn.
-    private static int FirstHitOnTheMonarch(CardBonus cards)
+    // The first hit of a player on the Slime Monarch, every draw scripted, with the given cards and weapon attack worn.
+    private static int FirstHitOnTheMonarch(CardBonus cards, int weaponAttack = 0)
     {
         var server = new TestServer(
             withEveryMap: true,
@@ -82,6 +82,7 @@ public sealed class CardBonusTests
         MonsterEntity monarch = MonarchOf(server);
         server.Place(player, monarch.Position.X - 1.2f, monarch.Position.Z);
         server.PlayerOf(player).CardBonus = cards;
+        server.PlayerOf(player).Equipment = new WornEquipment(weaponAttack, 0, 0, 0);
         server.Tick();
         int before = monarch.CurrentHealth;
 
@@ -91,15 +92,18 @@ public sealed class CardBonusTests
         return before - monarch.CurrentHealth;
     }
 
-    // Gameplay Systems §11.1: damage to a boss grows by the worn cards' percentage, rounded down.
+    // Gameplay Systems §11.1, from Milestone 18 (owner decision 21): damage to a boss grows a hit's weapon and flat parts
+    // by the worn cards' percentage, rounded down, so an unarmed hit, which has neither, keeps its amount.
     [Test]
-    public void AHitOnTheMonarch_WithBaneWorn_GrowsByTwentyPercent()
+    public void AHitOnTheMonarch_WithBaneWorn_GrowsItsWeaponPartByTwentyPercent()
     {
-        int plain = FirstHitOnTheMonarch(CardBonus.None);
-        int bane = FirstHitOnTheMonarch(Boss(20, 0));
+        int plain = FirstHitOnTheMonarch(CardBonus.None, 38);
+        int bane = FirstHitOnTheMonarch(Boss(20, 0), 38);
+        int unarmed = FirstHitOnTheMonarch(CardBonus.None);
+        int unarmedBane = FirstHitOnTheMonarch(Boss(20, 0));
 
-        Assert.That(plain, Is.Positive);
-        Assert.That(bane, Is.EqualTo(plain * 120 / 100));
+        Assert.That((plain, bane), Is.EqualTo((46, 53)), "14 + 37, and 14 + ⌊37 × 120 %⌋ = 58, less the defense of 40");
+        Assert.That(unarmedBane, Is.EqualTo(unarmed).And.Positive, "no part to grow");
     }
 
     [Test]
