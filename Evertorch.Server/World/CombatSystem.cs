@@ -355,6 +355,19 @@ public sealed class CombatSystem : ITickPhase
         return (float)Math.Sqrt(dx * dx + dz * dz);
     }
 
+    private static SkillOutcome ToSkillOutcome(SkillResult result)
+    {
+        switch (result)
+        {
+            case SkillResult.Hit:
+                return SkillOutcome.Hit;
+            case SkillResult.Immune:
+                return SkillOutcome.Immune;
+            default:
+                return SkillOutcome.Miss;
+        }
+    }
+
     private static CombatResult ToCombatResult(HitOutcome outcome)
     {
         switch (outcome)
@@ -453,8 +466,13 @@ public sealed class CombatSystem : ITickPhase
         if (hit.DealsDamage)
         {
             DamageResult damage = m_rules.CalculateDamage(
-                CreateDamageContext(attacker, target, hit.Outcome == HitOutcome.Critical));
+                CreateDamageContext(attacker, target, hit.Outcome == HitOutcome.Critical, null));
             amount = damage.Amount;
+            if (damage.IsImmune)
+            {
+                result = CombatResult.Immune;
+            }
+
             target.CurrentHealth = Math.Max(0, target.CurrentHealth - amount);
         }
 
@@ -596,8 +614,7 @@ public sealed class CombatSystem : ITickPhase
         }
 
         target.CurrentHealth = Math.Max(0, target.CurrentHealth - resolution.Amount);
-        SkillOutcome outcome = resolution.Result == SkillResult.Hit ? SkillOutcome.Hit : SkillOutcome.Miss;
-        AnnounceResolved(map, caster, target, skill.Id, outcome, resolution.Amount, tick);
+        AnnounceResolved(map, caster, target, skill.Id, ToSkillOutcome(resolution.Result), resolution.Amount, tick);
         AfterDamage(map, caster, target, resolution.Amount, tick);
     }
 
@@ -622,8 +639,7 @@ public sealed class CombatSystem : ITickPhase
         {
             SkillResolution resolution = m_skillRules.Resolve(CreateSkillContext(caster, player, skill, level, true));
             player.CurrentHealth = Math.Max(0, player.CurrentHealth - resolution.Amount);
-            SkillOutcome outcome = resolution.Result == SkillResult.Hit ? SkillOutcome.Hit : SkillOutcome.Miss;
-            AnnounceResolved(map, caster, player, skill.Id, outcome, resolution.Amount, tick);
+            AnnounceResolved(map, caster, player, skill.Id, ToSkillOutcome(resolution.Result), resolution.Amount, tick);
             AfterDamage(map, caster, player, resolution.Amount, tick);
         }
     }
@@ -689,7 +705,7 @@ public sealed class CombatSystem : ITickPhase
         int permille = caster is PlayerEntity player ? player.Stats.VariableCastPermille : 0;
         if (isDamage && skill.DamageType == SkillDamageType.Magical)
         {
-            return new SkillContext(skill, level, kind, permille, CreateMagicContext(caster, target));
+            return new SkillContext(skill, level, kind, permille, CreateMagicContext(caster, target, skill));
         }
 
         return isDamage
@@ -699,13 +715,13 @@ public sealed class CombatSystem : ITickPhase
                 kind,
                 permille,
                 CreateHitContext(caster, target),
-                CreateDamageContext(caster, target, false))
+                CreateDamageContext(caster, target, false, skill))
             : new SkillContext(skill, level, kind, permille);
     }
 
     // A monster's magic attack is its definition's, a player's its derived one. Nothing gives hard magic defense yet,
     // and monsters carry no statistics to derive a soft one from.
-    private MagicDamageContext CreateMagicContext(WorldEntity caster, WorldEntity target)
+    private MagicDamageContext CreateMagicContext(WorldEntity caster, WorldEntity target, SkillDefinition skill)
     {
         int magicAttack = caster switch
         {
@@ -714,21 +730,58 @@ public sealed class CombatSystem : ITickPhase
             _ => 0
         };
         int softMagicDefense = target is PlayerEntity defender ? defender.Stats.SoftMagicDefense : 0;
-        return new MagicDamageContext(magicAttack, 0, softMagicDefense, m_random, 100, ModifiersOf(caster, target));
+        return new MagicDamageContext(
+            magicAttack,
+            0,
+            softMagicDefense,
+            m_random,
+            100,
+            ModifiersOf(caster, target, skill));
     }
 
-    // The worn cards' boss modifiers (Gameplay Systems §11.1): the attacker's damage to a boss, or the defender's
-    // reduction of a boss's damage; none between a player and an ordinary monster.
-    private static DamageModifiers ModifiersOf(WorldEntity attacker, WorldEntity target)
+    // What the elements, the sizes, and the worn cards make of one hit (Gameplay Systems §3, §9, §11.1, §11.7).
+    private static DamageModifiers ModifiersOf(WorldEntity attacker, WorldEntity target, SkillDefinition? skill)
     {
         return attacker switch
         {
-            PlayerEntity player when target is MonsterEntity { Definition: { IsBoss: true } } =>
-                new DamageModifiers(player.CardBonus.BossDamagePercent, 0),
-            MonsterEntity { Definition: { IsBoss: true } } when target is PlayerEntity player =>
-                new DamageModifiers(0, player.CardBonus.BossDamageReductionPercent),
+            PlayerEntity player when target is MonsterEntity monster => Striking(player, monster.Definition, skill),
+            MonsterEntity monster when target is PlayerEntity player => StruckBy(monster.Definition, player, skill),
             _ => default
         };
+    }
+
+    // A player's swing, or a skill of its weapon's element, strikes with the player's attack element, any other skill
+    // with its own; the weapon meets the monster's size, and the worn cards' groups its element, race, and size, and a
+    // boss.
+    private static DamageModifiers Striking(PlayerEntity player, MonsterDefinition monster, SkillDefinition? skill)
+    {
+        CardBonus cards = player.CardBonus;
+        return new DamageModifiers(
+            monster.IsBoss ? cards.BossDamagePercent : 0,
+            0,
+            ElementTable.Of(skill?.Element ?? SkillElement.Weapon, player.AttackElement),
+            monster.Element,
+            player.Weapon?.WeaponType,
+            monster.Size,
+            cards.DamageTo(monster.Element),
+            cards.DamageTo(monster.Race),
+            cards.DamageTo(monster.Size));
+    }
+
+    // A monster's swing has no element and its skill its own, which meets the player's armor element; the player's
+    // worn cards take off their reduction of that element and of a boss's damage.
+    private static DamageModifiers StruckBy(MonsterDefinition monster, PlayerEntity player, SkillDefinition? skill)
+    {
+        Element? element = skill?.Element is SkillElement own && own != SkillElement.Weapon
+            ? ElementTable.Of(own, Element.Neutral)
+            : null;
+        CardBonus cards = player.CardBonus;
+        return new DamageModifiers(
+            0,
+            monster.IsBoss ? cards.BossDamageReductionPercent : 0,
+            element,
+            player.ArmorElement,
+            elementDamageReductionPercent: element.HasValue ? cards.ReductionFrom(element.Value) : 0);
     }
 
     private HitContext CreateHitContext(WorldEntity attacker, WorldEntity target)
@@ -757,7 +810,11 @@ public sealed class CombatSystem : ITickPhase
         }
     }
 
-    private DamageContext CreateDamageContext(WorldEntity attacker, WorldEntity target, bool isCritical)
+    private DamageContext CreateDamageContext(
+        WorldEntity attacker,
+        WorldEntity target,
+        bool isCritical,
+        SkillDefinition? skill)
     {
         // Evertorch monsters have no primary statistics, so no soft defense (research note, intentional differences). A
         // player's weapon adds its attack and its refine bonus after the draw, and its armor with its refine bonus is its
@@ -774,7 +831,7 @@ public sealed class CombatSystem : ITickPhase
                     isCritical,
                     m_random,
                     flatAttack: player.Equipment.FlatAttack,
-                    modifiers: ModifiersOf(attacker, target));
+                    modifiers: ModifiersOf(attacker, target, skill));
             case MonsterEntity monster when target is PlayerEntity player:
                 return new DamageContext(
                     AttackerKind.Monster,
@@ -784,7 +841,7 @@ public sealed class CombatSystem : ITickPhase
                     player.Stats.SoftDefense,
                     isCritical,
                     m_random,
-                    modifiers: ModifiersOf(attacker, target));
+                    modifiers: ModifiersOf(attacker, target, skill));
             default:
                 throw new InvalidOperationException(
                     $"No basic attack is defined from {attacker.Kind} {attacker.Id} to {target.Kind} {target.Id}.");

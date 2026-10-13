@@ -403,6 +403,10 @@ public sealed class MessageFuzzTests
             Encode(new Damage(new EntityId(9), new EntityId(10), CombatResult.Hit, 12, 50, 760)),
             payload => Damage.TryRead(payload, out Damage message) ? Encode(message) : null);
         yield return Case(
+            "Damage (immune)",
+            Encode(new Damage(new EntityId(9), new EntityId(10), CombatResult.Immune, 0, 50, 1000)),
+            payload => Damage.TryRead(payload, out Damage message) ? Encode(message) : null);
+        yield return Case(
             "EntityDied",
             Encode(new EntityDied(new EntityId(10), new EntityId(9), 60)),
             payload => EntityDied.TryRead(payload, out EntityDied message) ? Encode(message) : null);
@@ -429,6 +433,18 @@ public sealed class MessageFuzzTests
                     17,
                     70,
                     660)),
+            payload => SkillResolved.TryRead(payload, out SkillResolved? message) ? Encode(message!) : null);
+        yield return Case(
+            "SkillResolved (immune)",
+            Encode(
+                new SkillResolved(
+                    new EntityId(9),
+                    new EntityId(42),
+                    new SkillDefinitionId("skill.arcane_bolt"),
+                    SkillOutcome.Immune,
+                    0,
+                    70,
+                    1000)),
             payload => SkillResolved.TryRead(payload, out SkillResolved? message) ? Encode(message!) : null);
         yield return Case(
             "SkillList",

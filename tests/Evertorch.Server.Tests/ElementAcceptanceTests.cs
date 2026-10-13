@@ -40,9 +40,9 @@ public sealed class ElementAcceptanceTests
     private const string ArloIdentity = "element-arlo";
     private const string ArloName = "Arlo";
 
-    // The training sword's least draw, 19, and twice the status attack of 7, less the wisp's 1 defense
-    // (Gameplay Systems §11.1).
-    private const uint SwordOnAWisp = 32;
+    // The training sword's least draw, 19, three quarters of it against the Small wisp, 14, and twice the status
+    // attack of 7, less the wisp's 1 defense (Gameplay Systems §11.1).
+    private const uint SwordOnAWisp = 27;
 
     private static readonly SkillDefinitionId ArcaneBolt = new("skill.arcane_bolt");
     private static readonly TimeSpan FightLimit = TimeSpan.FromSeconds(30);
@@ -184,7 +184,7 @@ public sealed class ElementAcceptanceTests
             .Where(damage => damage.Source == world.LocalEntity && damage.Target == wisp)
             .Select(damage => damage.Amount)
             .ToArray();
-        Assert.That(hits, Has.Length.EqualTo(2).And.All.EqualTo(SwordOnAWisp), $"{step}: two hits of the sword");
+        Assert.That(hits, Has.Length.EqualTo(3).And.All.EqualTo(SwordOnAWisp), $"{step}: three hits of the sword");
         Assert.That(world.IsLocalDead, Is.False, $"{step}: Vera survived");
         Assert.That(
             SocketClients.PumpUntil(() => !vera.AutoAttack.IsActive, vera, arlo),

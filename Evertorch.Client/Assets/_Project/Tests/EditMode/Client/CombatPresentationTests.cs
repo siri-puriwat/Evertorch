@@ -229,5 +229,18 @@ public sealed class CombatPresentationTests
         Assert.That(timeline.PendingHits, Is.Zero);
         Assert.That(timeline.Squash(Slime, 5.0, 2.0), Is.EqualTo(1f));
     }
+
+    [Test]
+    public void Timeline_ShowsAnImmuneHitWithoutASquash()
+    {
+        var timeline = new CombatTimeline();
+        var due = new List<HitMark>();
+
+        timeline.AddHit(new HitMark(Slime, 1.0, false, CombatResult.Immune, 0, 1000));
+        timeline.CollectDueHits(0.0, 1.0, due);
+
+        Assert.That(due.Count, Is.EqualTo(1));
+        Assert.That(timeline.Squash(Slime, 0.0, 1.0), Is.Zero);
+    }
 }
 }

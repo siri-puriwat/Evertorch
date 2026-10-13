@@ -120,6 +120,32 @@ public sealed class PlayerEntity : WorldEntity
     public CardBonus CardBonus { get; set; } = CardBonus.None;
 
     /// <summary>
+    ///     The element of the player's swings and weapon skills (Gameplay Systems §9.1): the active status's that sets
+    ///     one, a converter's, else Neutral.
+    /// </summary>
+    public Element AttackElement
+    {
+        get
+        {
+            foreach (ActiveStatusEffect effect in m_statusEffects)
+            {
+                if (effect.AttackElement.HasValue)
+                {
+                    return effect.AttackElement.Value;
+                }
+            }
+
+            return Element.Neutral;
+        }
+    }
+
+    /// <summary>
+    ///     The element the worn armor's card gives the player (Gameplay Systems §11.7), else Neutral; it follows
+    ///     <see cref="CardBonus" />, which the equipment helper sets at the load and at every change of what is worn.
+    /// </summary>
+    public Element ArmorElement => CardBonus.ArmorElement;
+
+    /// <summary>
     ///     Set by a job change: the next visibility pass sends the player's spawn, with its new job, to every session
     ///     that already sees it, and clears the flag (Network Protocol §9).
     /// </summary>

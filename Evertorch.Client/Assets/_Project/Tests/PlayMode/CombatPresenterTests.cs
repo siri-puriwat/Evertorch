@@ -270,6 +270,34 @@ public sealed class CombatPresenterTests
         Assert.That(Object.FindAnyObjectByType<FloatingNumber>().Text, Is.EqualTo("17"));
     }
 
+    // Gameplay Systems §3: a hit whose element deals nothing reads "Immune" in the miss colour, a swing's and a
+    // skill's alike.
+    [Test]
+    public void Immune_SwingAndSkill_ShowImmuneInTheMissColour()
+    {
+        ClientWorld world = CreateWorld();
+        Dictionary<EntityId, EntityView> remotes = CreateViews(out EntityView local);
+        CombatPresenter presenter = CreatePresenter(world);
+        presenter.Present(local, remotes, null);
+        presenter.TryGetHealthBar(Slime, out HealthBar? bar);
+
+        world.OnDamage(new Damage(Local, Slime, CombatResult.Miss, 0, 2, 1000));
+        world.OnDamage(new Damage(Local, Slime, CombatResult.Immune, 0, 2, 1000));
+        world.OnSkillResolved(new SkillResolved(Local, Slime, Strike, SkillOutcome.Immune, 0, 2, 1000));
+        world.Advance(0.3f);
+        presenter.Present(local, remotes, null);
+
+        FloatingNumber[] numbers = Object.FindObjectsByType<FloatingNumber>(FindObjectsSortMode.None);
+        Color miss = numbers.Single(number => number.Text == "Miss").GetComponent<TextMeshPro>().color;
+        Assert.That(presenter.NumbersShown, Is.EqualTo(3));
+        Assert.That(numbers.Count(number => number.Text == "Immune"), Is.EqualTo(2));
+        Assert.That(
+            numbers.Where(number => number.Text == "Immune")
+                .Select(number => number.GetComponent<TextMeshPro>().color),
+            Is.All.EqualTo(miss));
+        Assert.That(bar!.ShownRatio, Is.EqualTo(1f), "nothing taken");
+    }
+
     [Test]
     public void Death_OfAMonster_HidesItsBarOnceTheDeathIsDrawn()
     {

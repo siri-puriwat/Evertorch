@@ -122,6 +122,22 @@ public sealed class SharedCombatMessageTests
     }
 
     [Test]
+    public void Damage_ToAnImmuneTarget_CarriesNothing_AndAnAmountIsRefused()
+    {
+        byte[] immune = new byte[Damage.EncodedLength];
+        new Damage(new EntityId(1), new EntityId(42), CombatResult.Immune, 0, 32, 1000).Write(immune);
+        byte[] withAmount = new byte[Damage.EncodedLength];
+        new Damage(new EntityId(1), new EntityId(42), CombatResult.Immune, 5, 32, 1000).Write(withAmount);
+
+        bool isRead = Damage.TryRead(immune, out Damage read);
+
+        Assert.That(isRead, Is.True);
+        Assert.That(read.Result, Is.EqualTo(CombatResult.Immune));
+        Assert.That(read.Amount, Is.EqualTo(0u));
+        Assert.That(Damage.TryRead(withAmount, out Damage _), Is.False);
+    }
+
+    [Test]
     public void ItemDropped_WriteAndRead_MatchGoldenBytes()
     {
         var message = new ItemDropped(new EntityId(7), "item.material.slime_gel", 2,
@@ -134,7 +150,7 @@ public sealed class SharedCombatMessageTests
         Assert.That(written, Is.EqualTo(ItemDroppedBytes));
         Assert.That(isRead, Is.True);
         Assert.That(read!.Amount, Is.EqualTo(2u));
-        Assert.That(ProtocolConstants.ProtocolVersion, Is.EqualTo(44));
+        Assert.That(ProtocolConstants.ProtocolVersion, Is.EqualTo(45));
     }
 
     [Test]

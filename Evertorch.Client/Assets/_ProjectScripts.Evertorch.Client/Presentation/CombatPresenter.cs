@@ -198,6 +198,7 @@ public sealed class CombatPresenter : IDisposable
         return hit.Result switch
         {
             CombatResult.Miss => "Miss",
+            CombatResult.Immune => "Immune",
             CombatResult.Critical => hit.Amount.ToString(CultureInfo.InvariantCulture) + "!",
             _ => hit.Amount.ToString(CultureInfo.InvariantCulture)
         };
@@ -347,7 +348,7 @@ public sealed class CombatPresenter : IDisposable
             ? HealColor
             : hit.Result switch
             {
-                CombatResult.Miss => MissColor,
+                CombatResult.Miss or CombatResult.Immune => MissColor,
                 CombatResult.Critical => CriticalColor,
                 _ => isLocal ? LocalHitColor : HitColor
             };
@@ -406,6 +407,9 @@ public sealed class CombatPresenter : IDisposable
                 break;
             case SkillOutcome.Critical:
                 result = CombatResult.Critical;
+                break;
+            case SkillOutcome.Immune:
+                result = CombatResult.Immune;
                 break;
             default:
                 return;

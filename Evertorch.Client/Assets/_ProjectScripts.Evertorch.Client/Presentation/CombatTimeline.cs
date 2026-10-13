@@ -161,7 +161,7 @@ public sealed class CombatTimeline
     public void AddHit(HitMark hit)
     {
         m_pending.Add(hit);
-        if (hit.Result != CombatResult.Miss && !hit.IsHeal)
+        if (hit.Result != CombatResult.Miss && hit.Result != CombatResult.Immune && !hit.IsHeal)
         {
             m_impacts[hit.Target] = new Moment(hit.Seconds, hit.IsOnLocalClock);
         }

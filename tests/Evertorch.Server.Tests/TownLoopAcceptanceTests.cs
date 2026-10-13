@@ -409,6 +409,14 @@ public sealed class TownLoopAcceptanceTests
         };
         world.EntityDiedReceived += died => killers[died.Entity] = died.Source;
         world.ItemDroppedReceived += drops.Add;
+        var partnerHits = new List<Damage>();
+        partnerWorld.DamageReceived += damage =>
+        {
+            if (damage.Source == partnerWorld.LocalEntity)
+            {
+                partnerHits.Add(damage);
+            }
+        };
 
         WalkTo(step, client, staging);
         WalkTo(step, partner, beside);
@@ -439,6 +447,18 @@ public sealed class TownLoopAcceptanceTests
                 + $"{TargetingOf(admin, world, target)}; partner: {TargetingOf(admin, partnerWorld, target)}");
             partner.AttackTarget();
             client.AttackTarget();
+
+            // One hit earns the partner the kill's credit. The player's sword, which deals a Small crawler three
+            // quarters of its draw since Milestone 18, lands the rest, so the player still takes every kill's loot.
+            Assert.That(
+                SocketClients.PumpUntil(
+                    () => partnerHits.Any(hit => hit.Target == target),
+                    FightLimit,
+                    client,
+                    partner),
+                Is.True,
+                $"{killStep}: the partner struck it");
+            partner.AutoAttack.OnWalkRequested();
             Assert.That(
                 SocketClients.PumpUntil(() => killers.ContainsKey(target), FightLimit, client, partner),
                 Is.True,

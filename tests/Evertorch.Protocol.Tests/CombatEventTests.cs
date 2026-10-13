@@ -78,7 +78,10 @@ public sealed class CombatEventTests
     [TestCase(0x01, 0x00, false)]
     [TestCase(0x03, 0x00, false)]
     [TestCase(0x00, 0x44, false)]
+    [TestCase(0x04, 0x00, true)]
     [TestCase(0x04, 0x44, false)]
+    [TestCase(0x05, 0x00, false)]
+    [TestCase(0x05, 0x44, false)]
     public void Damage_ResultAndAmount_MustAgree(byte result, byte amount, bool expected)
     {
         byte[] bytes = WireMatrix.With(WireMatrix.With(DamageBytes, 18, result), 19, amount, 0x00, 0x00, 0x00);

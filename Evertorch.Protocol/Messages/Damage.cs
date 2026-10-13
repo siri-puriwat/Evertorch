@@ -5,7 +5,7 @@ namespace Evertorch.Protocol
 {
 /// <summary>
 ///     A swing resolved at impact. Sent to every client that knows the target; the source is 0 for a receiver that
-///     has no spawn for it. A miss deals nothing, a hit or a critical at least 1.
+///     has no spawn for it. A miss or an immune hit deals nothing, a hit or a critical at least 1.
 /// </summary>
 public readonly struct Damage
 {
@@ -63,7 +63,8 @@ public readonly struct Damage
         }
 
         var result = (CombatResult)resultValue;
-        if (!WireEnums.IsDefined(result) || result == CombatResult.Miss != (amount == 0))
+        if (!WireEnums.IsDefined(result)
+            || (result == CombatResult.Miss || result == CombatResult.Immune) != (amount == 0))
         {
             return false;
         }

@@ -5,7 +5,7 @@ namespace Evertorch.Protocol
 {
 /// <summary>
 ///     A cast resolved on its target, to every client that knows the target (Network Protocol §9). A heal carries its
-///     nominal amount, so no other player's HP leaks.
+///     nominal amount, so no other player's HP leaks; an immune target takes nothing.
 /// </summary>
 public sealed class SkillResolved
 {
@@ -44,7 +44,7 @@ public sealed class SkillResolved
     public SkillOutcome Outcome { get; }
 
     /// <summary>
-    ///     The damage dealt, 0 for a miss, or the heal's nominal amount.
+    ///     The damage dealt, 0 for a miss or an immune target, or the heal's nominal amount.
     /// </summary>
     public uint Amount { get; }
 
@@ -70,6 +70,7 @@ public sealed class SkillResolved
             || !reader.IsAtEnd
             || target == 0
             || !WireEnums.IsDefined((SkillOutcome)outcome)
+            || ((SkillOutcome)outcome == SkillOutcome.Immune && amount != 0)
             || permille > HealthRatio.Full
             || !SkillDefinitionId.TryCreate(skillText, out SkillDefinitionId skill))
         {

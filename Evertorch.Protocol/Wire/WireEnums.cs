@@ -19,7 +19,7 @@ internal static class WireEnums
 
     public static bool IsDefined(CombatResult value)
     {
-        return value >= CombatResult.Hit && value <= CombatResult.Critical;
+        return value >= CombatResult.Hit && value <= CombatResult.Immune;
     }
 
     public static bool IsDefined(DespawnReason value)
@@ -39,7 +39,7 @@ internal static class WireEnums
 
     public static bool IsDefined(SkillOutcome value)
     {
-        return value >= SkillOutcome.Hit && value <= SkillOutcome.Applied;
+        return value >= SkillOutcome.Hit && value <= SkillOutcome.Immune;
     }
 
     public static bool IsDefined(QuestState value)

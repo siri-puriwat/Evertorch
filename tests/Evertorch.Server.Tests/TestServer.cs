@@ -71,15 +71,23 @@ internal sealed class TestServer
         MarketOptions? market = null,
         IRandomSource? refineRandom = null,
         int bossHealthPercent = 100,
-        int cardChanceScale = 1)
+        int cardChanceScale = 1,
+        ServerContent? content = null)
     {
-        Content = Contents.GetOrAdd(
-            (withEveryMap, withGrotto, withMonsters, withNpcs),
-            key => Copy(
-                RepositoryContent.Value,
-                map => map.Id == GrottoMap ? key.Grotto : key.EveryMap || IsStartingMap(map),
-                key.Monsters,
-                key.Npcs));
+        // A test's own content, the repository's package edited for one rule, is copied the same way but never shared.
+        Content = content != null
+            ? Copy(
+                content,
+                map => map.Id == GrottoMap ? withGrotto : withEveryMap || IsStartingMap(map),
+                withMonsters,
+                withNpcs)
+            : Contents.GetOrAdd(
+                (withEveryMap, withGrotto, withMonsters, withNpcs),
+                key => Copy(
+                    RepositoryContent.Value,
+                    map => map.Id == GrottoMap ? key.Grotto : key.EveryMap || IsStartingMap(map),
+                    key.Monsters,
+                    key.Npcs));
 
         var network = new NetworkOptions
         {

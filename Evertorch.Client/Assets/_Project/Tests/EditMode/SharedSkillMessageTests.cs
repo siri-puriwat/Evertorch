@@ -154,6 +154,24 @@ public sealed class SharedSkillMessageTests
     }
 
     [Test]
+    public void SkillResolved_ForAnImmuneTarget_CarriesNothing_AndAnAmountIsRefused()
+    {
+        var immune = new SkillResolved(new EntityId(1), new EntityId(42), Skill, SkillOutcome.Immune, 0, 32, 1000);
+        var withAmount = new SkillResolved(new EntityId(1), new EntityId(42), Skill, SkillOutcome.Immune, 5, 32, 1000);
+        byte[] immuneBytes = new byte[immune.GetEncodedLength()];
+        immune.Write(immuneBytes);
+        byte[] withAmountBytes = new byte[withAmount.GetEncodedLength()];
+        withAmount.Write(withAmountBytes);
+
+        bool isRead = SkillResolved.TryRead(immuneBytes, out SkillResolved? read);
+
+        Assert.That(isRead, Is.True);
+        Assert.That(read!.Outcome, Is.EqualTo(SkillOutcome.Immune));
+        Assert.That(read.Amount, Is.EqualTo(0u));
+        Assert.That(SkillResolved.TryRead(withAmountBytes, out SkillResolved? _), Is.False);
+    }
+
+    [Test]
     public void SkillResolved_WriteAndRead_MatchGoldenBytes()
     {
         var message = new SkillResolved(new EntityId(1), new EntityId(42), Skill, SkillOutcome.Hit, 17, 32, 660);

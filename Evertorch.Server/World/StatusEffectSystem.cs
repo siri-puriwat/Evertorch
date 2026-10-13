@@ -69,7 +69,10 @@ public sealed class StatusEffectSystem : ITickPhase
     /// </summary>
     public void Apply(PlayerEntity player, StatusDefinitionId status, StatPercentages statPercent, long endMs)
     {
-        bool isNew = player.StartStatusEffect(new ActiveStatusEffect(status, statPercent, endMs));
+        Element? attackElement = m_content.StatusEffects.TryGetValue(status, out StatusEffectDefinition? definition)
+            ? definition.AttackElement
+            : null;
+        bool isNew = player.StartStatusEffect(new ActiveStatusEffect(status, statPercent, endMs, attackElement));
         m_instruments.RecordStatusEffects(isNew ? StatusEffectChange.Started : StatusEffectChange.Renewed, 1);
         Recalculate(player);
     }

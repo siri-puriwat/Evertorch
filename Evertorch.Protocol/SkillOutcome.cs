@@ -11,6 +11,7 @@ public enum SkillOutcome : byte
     Miss = 2,
     Critical = 3,
     Healed = 4,
-    Applied = 5
+    Applied = 5,
+    Immune = 6
 }
 }
