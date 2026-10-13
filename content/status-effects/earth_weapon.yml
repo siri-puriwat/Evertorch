@@ -1,0 +1,4 @@
+id: status.earth_weapon
+displayName: Earth Weapon
+server:
+  attackElement: earth

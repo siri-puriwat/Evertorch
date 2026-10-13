@@ -1,0 +1,4 @@
+id: status.water_weapon
+displayName: Water Weapon
+server:
+  attackElement: water

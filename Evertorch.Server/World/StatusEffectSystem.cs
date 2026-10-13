@@ -65,16 +65,39 @@ public sealed class StatusEffectSystem : ITickPhase
     ///     Starts <paramref name="status" /> on <paramref name="player" /> at the strength of the level that cast it,
     ///     ending at <paramref name="endMs" />, or, when it is already active, replaces its strength and renews it to end
     ///     then; either way the statistics are derived again, so a recast at another level changes them at once
-    ///     (Gameplay Systems §9.1).
+    ///     (Gameplay Systems §9.1). A status that sets an attack element first ends any other that does.
     /// </summary>
     public void Apply(PlayerEntity player, StatusDefinitionId status, StatPercentages statPercent, long endMs)
     {
         Element? attackElement = m_content.StatusEffects.TryGetValue(status, out StatusEffectDefinition? definition)
             ? definition.AttackElement
             : null;
+        if (attackElement.HasValue)
+        {
+            int replaced = player.EndAttackElementEffects(status);
+            if (replaced > 0)
+            {
+                m_instruments.RecordStatusEffects(StatusEffectChange.Ended, replaced);
+            }
+        }
+
         bool isNew = player.StartStatusEffect(new ActiveStatusEffect(status, statPercent, endMs, attackElement));
         m_instruments.RecordStatusEffects(isNew ? StatusEffectChange.Started : StatusEffectChange.Renewed, 1);
         Recalculate(player);
+    }
+
+    /// <summary>
+    ///     A change of the worn weapon ends the status that set its attack element, a converter's (Gameplay Systems
+    ///     §9.1).
+    /// </summary>
+    public void EndAttackElement(PlayerEntity player)
+    {
+        int ended = player.EndAttackElementEffects();
+        if (ended > 0)
+        {
+            m_instruments.RecordStatusEffects(StatusEffectChange.Ended, ended);
+            Recalculate(player);
+        }
     }
 
     /// <summary>

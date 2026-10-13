@@ -227,6 +227,14 @@ public sealed class PlayerEntity : WorldEntity
         return m_statusEffects.RemoveAll(effect => effect.EndMs <= nowMs);
     }
 
+    /// <summary>
+    ///     Ends every effect that sets an attack element but one of <paramref name="kept" />; returns how many ended.
+    /// </summary>
+    public int EndAttackElementEffects(StatusDefinitionId? kept = null)
+    {
+        return m_statusEffects.RemoveAll(effect => effect.AttackElement.HasValue && effect.Status != kept);
+    }
+
     public int EndAllStatusEffects()
     {
         int count = m_statusEffects.Count;

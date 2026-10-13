@@ -180,9 +180,11 @@ public sealed class ItemActionSystem : ITickPhase
     private readonly CharacterProgression m_progression;
     private readonly CharacterBuilds m_builds;
     private readonly CombatSystem m_combat;
+    private readonly StatusEffectSystem m_statusEffects;
     private readonly IRandomSource m_random;
     private readonly float m_npcReach;
     private readonly uint m_failedLookupDelayTicks;
+    private readonly int m_tickRate;
     private readonly List<(CharacterSession Character, uint NotBefore)> m_unsettled = new();
     private readonly IReadOnlyDictionary<string, int> m_stackLimits;
     private readonly IReadOnlyDictionary<string, ItemMarket> m_marketTerms;
@@ -205,6 +207,7 @@ public sealed class ItemActionSystem : ITickPhase
         CharacterProgression progression,
         CharacterBuilds builds,
         CombatSystem combat,
+        StatusEffectSystem statusEffects,
         IRandomSource random,
         AuditLog audit,
         ILogger<ItemActionSystem> logger)
@@ -222,6 +225,7 @@ public sealed class ItemActionSystem : ITickPhase
         m_progression = progression;
         m_builds = builds;
         m_combat = combat;
+        m_statusEffects = statusEffects;
         m_random = random;
         m_npcReach = NpcInteraction.Range + world.Value.AttackRangeTolerance;
         m_stackLimits =
@@ -232,6 +236,7 @@ public sealed class ItemActionSystem : ITickPhase
         m_listingDurationMs = market.Value.ListingDurationMs;
         m_failedLookupDelayTicks =
             (uint)((long)FailedLookupDelayMs * simulation.Value.TickRate / MillisecondsPerSecond);
+        m_tickRate = simulation.Value.TickRate;
     }
 
     public TickPhase Phase => TickPhase.SchedulePersistence;
@@ -354,7 +359,14 @@ public sealed class ItemActionSystem : ITickPhase
             return CommandRejectionReason.InvalidTarget;
         }
 
-        if (m_content.Items[row.Item].Effect == null)
+        ItemEffect? effect = m_content.Items[row.Item].Effect;
+        if (effect == null)
+        {
+            return CommandRejectionReason.NotAllowedNow;
+        }
+
+        // A converter gives its element to the worn weapon's swings, so it needs one (Gameplay Systems §11.2).
+        if (effect.Status != null && character.Player.Weapon == null)
         {
             return CommandRejectionReason.NotAllowedNow;
         }
@@ -2058,6 +2070,7 @@ public sealed class ItemActionSystem : ITickPhase
         }
 
         uint prior = character.Inventory.Revision;
+        long weaponBefore = character.Inventory.WornIn(EquipmentSlot.Weapon);
         InventoryEntry[] rows = character.Inventory.Apply(result);
         InventoryOperation operation = character.Operation!;
 
@@ -2126,6 +2139,12 @@ public sealed class ItemActionSystem : ITickPhase
                 break;
             default:
                 throw NotAnItemAction(operation);
+        }
+
+        // An unequip, a swap, or a job change's unequip ends a converter's element (Gameplay Systems §9.1).
+        if (character.Inventory.WornIn(EquipmentSlot.Weapon) != weaponBefore)
+        {
+            m_statusEffects.EndAttackElement(character.Player);
         }
 
         Finish(character);
@@ -2258,8 +2277,8 @@ public sealed class ItemActionSystem : ITickPhase
         }
     }
 
-    // A use restores what its item gives once its commit returns, capped at the maximums (Gameplay Systems §11.2). A
-    // character that died meanwhile gets nothing back: the unit is spent either way.
+    // A use restores what its item gives once its commit returns, capped at the maximums, and starts its status from
+    // that tick (Gameplay Systems §11.2). A character that died meanwhile gets nothing: the unit is spent either way.
     private void Restore(PlayerEntity player, ItemEffect effect)
     {
         if (player.IsDead)
@@ -2267,9 +2286,20 @@ public sealed class ItemActionSystem : ITickPhase
             return;
         }
 
-        player.CurrentHealth = Math.Min(player.MaxHealth, player.CurrentHealth + effect.Health);
-        player.CurrentSpirit = Math.Min(player.MaxSpirit, player.CurrentSpirit + effect.Spirit);
-        m_sender.SendHealth(player);
+        if (effect.Health > 0 || effect.Spirit > 0)
+        {
+            player.CurrentHealth = Math.Min(player.MaxHealth, player.CurrentHealth + effect.Health);
+            player.CurrentSpirit = Math.Min(player.MaxSpirit, player.CurrentSpirit + effect.Spirit);
+            m_sender.SendHealth(player);
+        }
+
+        if (effect.Status is StatusDefinitionId status)
+        {
+            // Commits settle while the commands drain, before this tick's persistence phase moves m_tick on, so the
+            // tick under way is the one after it, and its time is the status system's for that tick.
+            long now = (long)m_tick * MillisecondsPerSecond / m_tickRate;
+            m_statusEffects.Apply(player, status, default, now + effect.StatusDurationMs);
+        }
     }
 
     // The statistics follow the slots as committed (Gameplay Systems §2); the owner hears of new maximums as of any

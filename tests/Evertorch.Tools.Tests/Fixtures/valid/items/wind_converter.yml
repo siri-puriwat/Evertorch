@@ -1,0 +1,12 @@
+id: item.consumable.wind_converter
+displayName: Wind Converter
+type: consumable
+stackLimit: 50
+server:
+  weight: 4139
+  sellPrice: 0
+  effect:
+    status: { status: status.wind_weapon, durationMs: 61987 }
+client:
+  icon: item_minor_mana
+  model: pickup_minor_mana

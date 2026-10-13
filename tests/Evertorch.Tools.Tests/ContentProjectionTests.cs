@@ -22,7 +22,7 @@ public sealed class ContentProjectionTests
         "6.125", "12.375", "0.7321", "1.8125", "60413", "8123", "20417", "3119", "5.1875", "3.4375", "7.5625",
         "12.6875", "14.3125", "6.875", "86421", "6.4375", "4111", "5227", "139", "30211", "50423", "80637", "77173",
         "1.6875", "4127", "3171", "7193", "5231", "21133", "1319", "146443", "61933", "71129", "0.6875", "0.3125",
-        "40111", "40223", "77191", "61949", "4129", "3173", "7197", "5233", "21139", "1321"
+        "40111", "40223", "77191", "61949", "4129", "3173", "7197", "5233", "21139", "1321", "4139", "61987"
     };
 
     private static readonly string[] ServerOnlyFieldNames =
@@ -41,7 +41,8 @@ public sealed class ContentProjectionTests
         "kill", "monster", "count", "currency", "jobExperienceTable", "jobExperience", "guild", "reset", "maxLevel",
         "requires", "baseJob", "weapons", "weaponType", "jobChange", "assist", "assistRadius", "respawnVarianceMs",
         "areaRadius", "mvpExperience", "mvpDrops", "card", "maxHp", "maxSp", "bossDamage", "bossDamageReduction",
-        "raceDamage", "elementDamage", "sizeDamage", "elementDamageReduction", "armorElement", "removalFee"
+        "raceDamage", "elementDamage", "sizeDamage", "elementDamageReduction", "armorElement", "removalFee",
+        "attackElement"
     };
 
     // The client package's allow-list (Content Pipeline §5), by file: a name not reviewed here fails.

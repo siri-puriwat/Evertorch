@@ -123,6 +123,39 @@ public sealed class ElementContentTests
             Describe(result));
     }
 
+    [TestCase("fire", Element.Fire)]
+    [TestCase("water", Element.Water)]
+    [TestCase("earth", Element.Earth)]
+    [TestCase("wind", Element.Wind)]
+    public void RepositoryContent_EachConverter_StartsItsElementsStatusForTwentyMinutes(string name, Element element)
+    {
+        ContentPipelineResult result = ContentPipeline.Run(
+            Path.Combine(ContentValidationTests.RepositoryRoot(), "content"));
+        Assert.That(result.Diagnostics, Is.Empty);
+
+        AuthoredItem converter = result.Content.Items
+            .Single(item => item.Definition.Id.Value == $"item.consumable.{name}_converter");
+        ItemDefinition definition = converter.Definition;
+        StatusEffectDefinition status = result.Content.StatusEffects
+            .Single(authored => authored.Definition.Id.Value == $"status.{name}_weapon")
+            .Definition;
+
+        Assert.That(
+            (definition.Type, definition.StackLimit, definition.Weight, definition.SellPrice, converter.Icon,
+                converter.Model),
+            Is.EqualTo((ItemType.Consumable, 50, 2, 0, "item_minor_mana", "pickup_minor_mana")),
+            "the mana potion's look until its own art arrives");
+        Assert.That(
+            (definition.Effect!.Health, definition.Effect.Spirit, definition.Effect.Status?.Value,
+                definition.Effect.StatusDurationMs),
+            Is.EqualTo((0, 0, status.Id.Value, 1_200_000)));
+        Assert.That(
+            (definition.Market!.BasePrice, definition.Market.Floor, definition.Market.Ceiling),
+            Is.EqualTo((60, 15, 600)));
+        Assert.That(status.AttackElement, Is.EqualTo(element));
+        Assert.That(status.DisplayName, Is.EqualTo($"{element} Weapon"));
+    }
+
     [TestCase("skill.basic_attack", SkillElement.Weapon)]
     [TestCase("skill.strike", SkillElement.Weapon)]
     [TestCase("skill.heavy_blow", SkillElement.Weapon)]
@@ -166,6 +199,23 @@ public sealed class ElementContentTests
     }
 
     [Test]
+    public void RepositoryContent_HoldsNineStatusEffects_TheFourConvertersAloneSettingAnElement()
+    {
+        ContentPipelineResult result = ContentPipeline.Run(
+            Path.Combine(ContentValidationTests.RepositoryRoot(), "content"));
+        Assert.That(result.Diagnostics, Is.Empty);
+
+        Assert.That(result.Content.StatusEffects, Has.Count.EqualTo(9));
+        Assert.That(
+            result.Content.StatusEffects
+                .Where(status => status.Definition.AttackElement.HasValue)
+                .Select(status => status.Definition.Id.Value)
+                .OrderBy(id => id, StringComparer.Ordinal),
+            Is.EqualTo(
+                new[] { "status.earth_weapon", "status.fire_weapon", "status.water_weapon", "status.wind_weapon" }));
+    }
+
+    [Test]
     public void Run_ForAConsumableStartingAStatusThatSetsAnElement_WritesBothForTheServerOnly()
     {
         using var workspace = new ContentWorkspace();
@@ -182,7 +232,9 @@ public sealed class ElementContentTests
             (effect.Health, effect.Spirit, effect.Status?.Value, effect.StatusDurationMs),
             Is.EqualTo((30, 0, "status.focus", 1200000)));
         Assert.That(
-            result.Content.StatusEffects.Single().Definition.AttackElement,
+            result.Content.StatusEffects
+                .Single(status => status.Definition.Id.Value == "status.focus")
+                .Definition.AttackElement,
             Is.EqualTo(Element.Fire));
 
         ContentPackages packages = result.Packages!;

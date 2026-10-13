@@ -569,13 +569,13 @@ public sealed class ContentValidationTests
 
             Assert.That(result.Diagnostics, Is.Empty);
             Assert.That(result.Packages, Is.Not.Null);
-            Assert.That(result.Content.Items, Has.Count.EqualTo(2));
+            Assert.That(result.Content.Items, Has.Count.EqualTo(3));
             Assert.That(result.Content.Monsters, Has.Count.EqualTo(1));
             Assert.That(result.Content.Skills, Has.Count.EqualTo(3));
             Assert.That(result.Content.Jobs, Has.Count.EqualTo(1));
             Assert.That(result.Content.Maps, Has.Count.EqualTo(1));
             Assert.That(result.Content.ExperienceTables, Has.Count.EqualTo(2));
-            Assert.That(result.Content.StatusEffects, Has.Count.EqualTo(1));
+            Assert.That(result.Content.StatusEffects, Has.Count.EqualTo(2));
             Assert.That(result.Content.Npcs, Has.Count.EqualTo(1));
             Assert.That(result.Content.Quests, Has.Count.EqualTo(1));
             Assert.That(
@@ -624,7 +624,7 @@ public sealed class ContentValidationTests
         {
             workspace.Replace(FocusStatus, "client:\n  icon: status_focus\n", "");
             ContentPipelineResult withoutIcon = ContentPipeline.Run(workspace.ContentRoot);
-            for (int index = 1; index <= 14; index++)
+            for (int index = 1; index <= 13; index++)
             {
                 workspace.Write(
                     $"status-effects/extra_{index:D2}.yml",
@@ -635,7 +635,10 @@ public sealed class ContentValidationTests
 
             Assert.That(withoutIcon.Diagnostics, Is.Empty, Describe(withoutIcon));
             Assert.That(fifteen.Diagnostics, Has.Count.EqualTo(1), Describe(fifteen));
-            Assert.That(fifteen.Diagnostics[0].File, Is.EqualTo(FocusStatus), "the fifteenth by ID");
+            Assert.That(
+                fifteen.Diagnostics[0].File,
+                Is.EqualTo("status-effects/wind_weapon.yml"),
+                "the fifteenth by ID, after the fixture's converter status and Focus");
             Assert.That(fifteen.Diagnostics[0].Message, Does.Contain("more than the 14 status effects"));
         }
     }

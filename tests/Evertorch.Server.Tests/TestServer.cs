@@ -227,6 +227,7 @@ internal sealed class TestServer
             Progression,
             Builds,
             Combat,
+            StatusEffects,
             refineRandom ?? Random,
             Audit,
             ItemActionLog);

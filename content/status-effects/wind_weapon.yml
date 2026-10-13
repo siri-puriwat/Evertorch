@@ -1,0 +1,4 @@
+id: status.wind_weapon
+displayName: Wind Weapon
+server:
+  attackElement: wind

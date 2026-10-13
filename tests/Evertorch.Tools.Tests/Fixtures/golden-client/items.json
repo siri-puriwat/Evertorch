@@ -10,6 +10,14 @@
       "model": "pickup_minor_health"
     },
     {
+      "id": "item.consumable.wind_converter",
+      "displayName": "Wind Converter",
+      "type": "consumable",
+      "stackLimit": 50,
+      "icon": "item_minor_mana",
+      "model": "pickup_minor_mana"
+    },
+    {
       "id": "item.material.slime_gel",
       "displayName": "Slime Gel",
       "type": "material",

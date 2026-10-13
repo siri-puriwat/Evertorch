@@ -1,0 +1,16 @@
+id: item.consumable.earth_converter
+displayName: Earth Converter
+type: consumable
+stackLimit: 50
+server:
+  weight: 2
+  sellPrice: 0
+  effect:
+    status: { status: status.earth_weapon, durationMs: 1200000 }
+  market:
+    basePrice: 60
+    floor: 15
+# The mana potion's icon and pickup until its own art arrives.
+client:
+  icon: item_minor_mana
+  model: pickup_minor_mana

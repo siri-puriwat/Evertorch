@@ -192,6 +192,11 @@ public sealed class CardContentTests
         }
     }
 
+    private static string CardOf(MonsterDefinition monster)
+    {
+        return "item.card." + monster.Id.Value.Substring("monster.".Length);
+    }
+
     // The values above 0, named.
     private static string Bonus(CardBonus bonus)
     {
@@ -446,7 +451,7 @@ public sealed class CardContentTests
     }
 
     [Test]
-    public void Run_ForRepositoryContent_ReadsTheSixCards_TheirDropsLast_AndTheSlots()
+    public void Run_ForRepositoryContent_ReadsTheSixCards_TheirDropsLastButAConverter_AndTheSlots()
     {
         ContentPipelineResult result = ContentPipeline.Run(
             Path.Combine(ContentValidationTests.RepositoryRoot(), "content"));
@@ -485,23 +490,26 @@ public sealed class CardContentTests
                     ("item.card.spark_wisp", "Arcane", "int 1 magicAttack 10"),
                     ("item.card.training_slime", "Hardy", "vit 1 maxHp 20")
                 }));
+        MonsterDefinition[] monsters = result.Content.Monsters
+            .Select(monster => monster.Definition)
+            .OrderBy(monster => monster.Id.Value, StringComparer.Ordinal)
+            .ToArray();
         Assert.That(
-            result.Content.Monsters
-                .Select(monster => monster.Definition)
-                .Select(monster => (Id: monster.Id.Value, Item: monster.Drops.Last().Item.Value,
-                    monster.Drops.Last().Chance, monster.Drops.Last().MinAmount, monster.Drops.Last().MaxAmount))
-                .OrderBy(monster => monster.Id, StringComparer.Ordinal),
+            monsters
+                .Select(monster => monster.Drops.SkipWhile(drop => drop.Item.Value != CardOf(monster)).ToArray())
+                .Select(tail => (tail[0].Item.Value, tail[0].Chance, tail[0].MinAmount, tail[0].MaxAmount,
+                    string.Join(" ", tail.Skip(1).Select(drop => drop.Item.Value)))),
             Is.EqualTo(
                 new[]
                 {
-                    ("monster.forest_crawler", "item.card.forest_crawler", 0.001, 1, 1),
-                    ("monster.gloom_wisp", "item.card.gloom_wisp", 0.001, 1, 1),
-                    ("monster.grotto_crawler", "item.card.grotto_crawler", 0.001, 1, 1),
-                    ("monster.slime_monarch", "item.card.slime_monarch", 0.01, 1, 1),
-                    ("monster.spark_wisp", "item.card.spark_wisp", 0.001, 1, 1),
-                    ("monster.training_slime", "item.card.training_slime", 0.001, 1, 1)
+                    ("item.card.forest_crawler", 0.001, 1, 1, "item.consumable.earth_converter"),
+                    ("item.card.gloom_wisp", 0.001, 1, 1, "item.consumable.fire_converter"),
+                    ("item.card.grotto_crawler", 0.001, 1, 1, "item.consumable.wind_converter"),
+                    ("item.card.slime_monarch", 0.01, 1, 1, "item.consumable.fire_converter"),
+                    ("item.card.spark_wisp", 0.001, 1, 1, "item.consumable.wind_converter"),
+                    ("item.card.training_slime", 0.001, 1, 1, "")
                 }),
-            "each monster's own card last, so every earlier draw keeps its place");
+            "each monster's own card last but its converter, so every earlier draw keeps its place");
         Assert.That(
             result.Content.Items
                 .Where(item => item.Definition.Slot != EquipmentSlot.None)

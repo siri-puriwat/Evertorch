@@ -5,6 +5,10 @@
       "id": "status.focus",
       "displayName": "Focus",
       "icon": "status_focus"
+    },
+    {
+      "id": "status.wind_weapon",
+      "displayName": "Wind Weapon"
     }
   ]
 }
