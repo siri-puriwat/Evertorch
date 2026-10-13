@@ -16,7 +16,8 @@ namespace Evertorch.Server.Tests
 ///     §9): lost answers settled once from <c>trades</c> and the ledger, a database known down leaving a trade unsaved
 ///     and one paused mid-commit holding it, a full bag and the coin cap ending a trade with nothing moved, a logout,
 ///     an expulsion, and a replaced connection waiting for a commit, a refine level kept through a trade, a deposit,
-///     and a withdrawal, and a restart loading every result.
+///     and a withdrawal, and a restart loading every result; and cloth armor carded Earthen keeping its Earth element
+///     through a trade, a deposit, a withdrawal, and a restart.
 /// </summary>
 [TestFixture]
 [NonParallelizable]
@@ -521,6 +522,99 @@ public sealed class TradeAndStorageDurabilityTests
         Assert.That(
             BagAfterRestart(new Trader("v14-store", "CoraStore", cora, default)),
             Is.EqualTo(Gel + " 2; 0"));
+    }
+
+    // Cloth armor carded Earthen by SQL gives whoever wears it Earth armor: Anna before the trade, Bobby after it, after
+    // a deposit and a withdrawal, and after a restart loads it worn (Milestone 18).
+    [Test]
+    public void EarthenArmor_KeepsItsElement_ThroughATradeADepositAWithdrawal_AndARestart()
+    {
+        const string cloth = "item.armor.cloth";
+        const string earthen = "item.card.grotto_crawler";
+        Pair pair = EnterPair(
+            "Earthen",
+            prepare: (anna, _) => Execute(
+                "INSERT INTO inventory_items (character_id, item_definition_id, quantity, refine_level, "
+                + $"instance_data_json, version) VALUES ({anna}, '{cloth}', 1, 0, "
+                + $"jsonb_build_object('cards', jsonb_build_array('{earthen}')), 0)"));
+        TestServer server = pair.Server;
+
+        void Wear(Trader trader)
+        {
+            server.SendEquip(trader.Connection, RowOf(server, trader.Connection, cloth),
+                pair.Rig.Next(trader.Connection));
+            server.Tick();
+            TickUntil(server, () => CharacterOf(server, trader.Connection).Operation == null, $"{trader.Name} wore it");
+        }
+
+        void TakeOff(Trader trader)
+        {
+            server.SendUnequip(trader.Connection, EquipmentSlot.Armor, pair.Rig.Next(trader.Connection));
+            server.Tick();
+            TickUntil(server, () => CharacterOf(server, trader.Connection).Operation == null,
+                $"{trader.Name} took it off");
+        }
+
+        Element ArmorOf(Trader trader)
+        {
+            return server.PlayerOf(trader.Connection).ArmorElement;
+        }
+
+        Wear(pair.Anna);
+        Element annas = ArmorOf(pair.Anna);
+        TakeOff(pair.Anna);
+        pair.Rig.Open(pair.Anna.Connection, pair.Bobby.Connection, pair.Anna.Name, pair.Bobby.Name);
+        pair.Rig.Offer(pair.Anna.Connection, RowOf(server, pair.Anna.Connection, cloth), 1);
+        pair.Rig.Lock(pair.Anna.Connection);
+        pair.Rig.Lock(pair.Bobby.Connection);
+        Confirm(pair);
+        TickUntil(server, () => server.Trades.OpenTrades == 0, "traded");
+        Wear(pair.Bobby);
+        Element traded = ArmorOf(pair.Bobby);
+        TakeOff(pair.Bobby);
+
+        NpcEntity keeper = server.NpcOf(Storekeeper);
+        server.Place(pair.Bobby.Connection, keeper.Position.X + 2f, keeper.Position.Z);
+        server.Tick(2);
+        server.Transport.ClearSent();
+        server.SendStorageDeposit(
+            pair.Bobby.Connection,
+            keeper.Id,
+            RowOf(server, pair.Bobby.Connection, cloth),
+            1,
+            pair.Rig.Next(pair.Bobby.Connection));
+        server.Tick();
+        TickUntil(server, () => CharacterOf(server, pair.Bobby.Connection).Operation == null, "stored");
+        StorageChanged stored = server.Transport.ControlSentTo(pair.Bobby.Connection)
+            .Where(message => message.Opcode == MessageOpcode.StorageChanged)
+            .Select(message => StorageChanged.TryRead(message.Payload, out StorageChanged? read) ? read! : null!)
+            .Single();
+        server.SendStorageWithdraw(
+            pair.Bobby.Connection,
+            keeper.Id,
+            stored.Row.StorageItem,
+            1,
+            pair.Rig.Next(pair.Bobby.Connection));
+        server.Tick();
+        TickUntil(server, () => CharacterOf(server, pair.Bobby.Connection).Operation == null, "taken back");
+        Wear(pair.Bobby);
+        Element withdrawn = ArmorOf(pair.Bobby);
+        server.Disconnect(pair.Bobby.Connection);
+        server.Tick(2);
+        TestServer restarted = NewServer();
+        ConnectionId again = Enter(restarted, pair.Bobby.Identity, pair.Bobby.Character);
+
+        Assert.That(
+            (annas, traded, withdrawn, restarted.PlayerOf(again).ArmorElement),
+            Is.EqualTo((Element.Earth, Element.Earth, Element.Earth, Element.Earth)),
+            "Anna's, after the trade, after storage, and after a restart");
+        Assert.That(
+            Scalar(
+                "SELECT count(*) FROM equipment e JOIN inventory_items i ON i.id = e.inventory_item_id "
+                + $"WHERE e.character_id = {pair.Bobby.Character} AND e.slot = 'Armor' AND i.instance_data_json = "
+                + $"jsonb_build_object('cards', jsonb_build_array('{earthen}'))"),
+            Is.EqualTo(1L),
+            "worn, carded, in the rows");
     }
 
     // The database pauses with the commit queued: it is cut short and held, the traders waiting; once the database
