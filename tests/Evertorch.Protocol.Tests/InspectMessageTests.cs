@@ -103,6 +103,12 @@ public sealed class InspectMessageTests
     [Test]
     public void Readers_RefuseWhatBreaksARule()
     {
+        byte[] card = EquipmentBytes.Skip(20).Take(8).ToArray();
+        byte[] fiveCards = EquipmentBytes.Take(19)
+            .Append((byte)0x05)
+            .Concat(Enumerable.Repeat(card, 5).SelectMany(bytes => bytes))
+            .Concat(EquipmentBytes.Skip(28))
+            .ToArray();
         byte[] cardOnEmpty = EquipmentBytes.Take(28)
             .Concat(new byte[] { 0x00, 0x00, 0x00, 0x01, 0x06, 0x00, 0x69, 0x74, 0x65, 0x6D, 0x2E, 0x6B })
             .ToArray();
@@ -112,8 +118,7 @@ public sealed class InspectMessageTests
             "a player of 0");
         Assert.That(InspectedEquipment.TryRead(WireMatrix.With(EquipmentBytes, 12, (byte)'s'), out _), Is.False,
             "no item");
-        Assert.That(InspectedEquipment.TryRead(WireMatrix.With(EquipmentBytes, 19, 0x05), out _), Is.False,
-            "five cards");
+        Assert.That(InspectedEquipment.TryRead(fiveCards, out _), Is.False, "five cards");
         Assert.That(
             InspectedEquipment.TryRead(WireMatrix.With(EquipmentBytes, 30, 0x01), out _),
             Is.False,

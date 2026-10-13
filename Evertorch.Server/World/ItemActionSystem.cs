@@ -626,8 +626,8 @@ public sealed class ItemActionSystem : ITickPhase
         return TryCommit(session, operation, (store, cancellation) => store.CommitJobChangeAsync(commit, cancellation));
     }
 
-    // Each card's stack limit, which its return to the bag needs; a card the content no longer holds as an item has
-    // none, and the store refuses the refine.
+    // Each card's stack limit, which its return to the bag needs. A card the content no longer holds as an item has
+    // none, which leaves no room for it; the load and the storage read keep such a card out of the bag.
     private Dictionary<string, int> CardLimitsOf(IReadOnlyList<ItemDefinitionId> cards)
     {
         var limits = new Dictionary<string, int>(StringComparer.Ordinal);
@@ -684,6 +684,24 @@ public sealed class ItemActionSystem : ITickPhase
         }
 
         return true;
+    }
+
+    // As the store puts a card back: into the first stack of it below its limit, else a row of its own within the
+    // bag's rows. A refine's return can leave a card in more than one stack.
+    private static bool HasRoomForCard(CharacterInventory inventory, ItemDefinition card)
+    {
+        if (card.StackLimit > 1)
+        {
+            foreach (InventoryEntry row in inventory.Rows)
+            {
+                if (row.Item == card.Id && row.Quantity < card.StackLimit)
+                {
+                    return true;
+                }
+            }
+        }
+
+        return inventory.Rows.Count < PickupSystem.MaxInventoryRows;
     }
 
     // A stackable item merges into its one row; any other takes a new row.
@@ -935,7 +953,7 @@ public sealed class ItemActionSystem : ITickPhase
             return CommandRejectionReason.NotEnoughCoins;
         }
 
-        if (!HasRoomFor(character.Inventory, definition, 1))
+        if (!HasRoomForCard(character.Inventory, definition))
         {
             return CommandRejectionReason.InventoryFull;
         }
@@ -1266,14 +1284,18 @@ public sealed class ItemActionSystem : ITickPhase
         }
     }
 
+    // A stored row's cards are items too, which a withdrawal would bring into the bag (Persistence §8).
     private string? UnknownItemIn(StoredStorage storage)
     {
         foreach (StoredStorageItem row in storage.Items)
         {
-            if (!ItemDefinitionId.TryCreate(row.ItemDefinitionId, out ItemDefinitionId item)
-                || !m_content.Items.ContainsKey(item))
+            foreach (string definition in row.Cards.Prepend(row.ItemDefinitionId))
             {
-                return row.ItemDefinitionId;
+                if (!ItemDefinitionId.TryCreate(definition, out ItemDefinitionId item)
+                    || !m_content.Items.ContainsKey(item))
+                {
+                    return definition;
+                }
             }
         }
 

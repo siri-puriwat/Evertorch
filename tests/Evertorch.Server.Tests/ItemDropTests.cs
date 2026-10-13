@@ -76,8 +76,6 @@ public sealed class ItemDropTests
         Assert.That(ItemDropSystem.IsDropped(draw, chance), Is.EqualTo(expected));
     }
 
-    // Drops:CardChanceScale moves the card's threshold, never the draws (Gameplay Systems §10): a roll that misses at
-    // 0.1 % drops it at 1,000 times, capped at certain, and the gel's roll is the same at either scale.
     [TestCase(1, 1)]
     [TestCase(1000, 2)]
     public void Death_WithTheCardsChanceScaled_DropsTheCardOnTheSameDraws(int scale, int dropped)
@@ -141,6 +139,28 @@ public sealed class ItemDropTests
         Assert.That(message.ItemId, Is.EqualTo(SlimeGel));
         Assert.That(message.Amount, Is.EqualTo(2u));
         Assert.That(message.Position, Is.EqualTo(drop.Position));
+    }
+
+    // Drops:CardChanceScale moves the card's threshold, never the draws (Gameplay Systems §10): a roll that misses at
+    // 0.1 % drops it at 1,000 times, capped at certain, and the gel's roll is the same at either scale.
+    // The review's finding (session task T18): the scale raises a card's chance alone; the gel's roll that misses at
+    // 0.70 misses at any scale.
+    [Test]
+    public void Death_WithTheCardsChanceScaled_LeavesEveryOtherChanceAsItIs()
+    {
+        var random = new ScriptedRandom(0, 700_000, 999_999);
+        var rig = new CombatRig(combatRandom: new SureHitRandom(), dropRandom: random, cardChanceScale: 1000);
+        rig.Slime.CurrentHealth = 1;
+        rig.Attack(rig.Slime.Id);
+        for (int index = 0; index < 200 && !rig.Slime.IsDead; index++)
+        {
+            rig.Server.Tick();
+        }
+
+        Assert.That(rig.Slime.IsDead, Is.True);
+        Assert.That(
+            rig.Map.ItemDrops.Select(drop => drop.DefinitionId),
+            Is.EqualTo(new[] { "item.card.training_slime" }));
     }
 
     [Test]

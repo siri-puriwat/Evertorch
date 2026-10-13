@@ -101,6 +101,24 @@ public sealed class CardRemoveTests
         Assert.That(server.Store.CardCommits, Is.Empty, "nothing queued");
     }
 
+    // The review's finding (session task T18): a full stack of the card leaves room in a row of its own, as the store
+    // puts it there.
+    [Test]
+    public void Remove_BesideAFullStackOfTheCard_PutsItInARowOfItsOwn()
+    {
+        (TestServer server, ConnectionId player, Dictionary<string, long> rows) = Enter(keens: 999);
+
+        server.SendRemoveCard(player, server.NpcOf(Smith).Id, rows[Sword], 1, Keen, 1);
+        CommandRejectionReason answer = Answer(server, player);
+
+        Assert.That(answer, Is.EqualTo(CommandRejectionReason.None));
+        Assert.That(
+            server.SessionOf(player).Character!.Inventory.Rows.Where(row => row.Item.Value == Keen)
+                .Select(row => row.Quantity)
+                .OrderBy(quantity => quantity),
+            Is.EqualTo(new[] { 1u, 999u }));
+    }
+
     [Test]
     public void Remove_TakesTheFee_MovesTheLaterCardsDown_AndMergesTheCardIntoItsStack()
     {

@@ -118,7 +118,8 @@ public sealed class CardWireTests
             .Select(id => new InventoryEntry(id, LongestItem(), 1, EquipmentSlot.None, 0, FourLongestCards()))
             .ToArray();
         byte[] twoRows = Encode(new InventoryChanged(1, 2, 0, rows.Take(2).ToArray()));
-        byte[] past = twoRows.Concat(new byte[ProtocolLimits.MaxReliableMessageBytes]).ToArray();
+        byte[] oneRow = twoRows.Skip(15).Take((twoRows.Length - 15) / 2).ToArray();
+        byte[] past = twoRows.Concat(oneRow).ToArray();
         past[14] = 3;
 
         Action change = () => _ = new InventoryChanged(1, 2, 0, rows);
@@ -126,6 +127,7 @@ public sealed class CardWireTests
 
         Assert.That(change, Throws.ArgumentException);
         Assert.That(part, Throws.ArgumentException);
+        Assert.That(past.Length, Is.GreaterThan(ProtocolLimits.MaxReliableMessageBytes), "three whole rows");
         Assert.That(InventoryChanged.TryRead(past, out _), Is.False);
         Assert.That(InventoryChanged.TryRead(twoRows, out InventoryChanged? read), Is.True);
         Assert.That(read!.Changes, Has.Count.EqualTo(2));
@@ -190,7 +192,11 @@ public sealed class CardWireTests
     {
         byte[] stack = WireMatrix.With(CardedChangeBytes, Quantity, 0x02);
         byte[] removed = WireMatrix.With(CardedChangeBytes, Quantity, 0x00);
-        byte[] five = WireMatrix.With(CardedChangeBytes, CardCount, 0x05);
+        byte[] card = CardedChangeBytes.Skip(CardCount + 1).Take(8).ToArray();
+        byte[] five = CardedChangeBytes.Take(CardCount)
+            .Append((byte)0x05)
+            .Concat(Enumerable.Repeat(card, 5).SelectMany(bytes => bytes))
+            .ToArray();
         byte[] skill = WireMatrix.With(CardedChangeBytes, CardCount + 3, (byte)'s');
         byte[] none = WireMatrix.With(CardedChangeBytes, CardCount, 0x00);
 

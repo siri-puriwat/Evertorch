@@ -22,8 +22,8 @@ public sealed class ClientTrade
         new(TradeSideOwner.Partner, false, false, 0, Array.Empty<TradeEntry>());
 
     // A side's rows as its parts arrive, held until the last (Network Protocol §6).
-    private readonly List<TradeEntry> m_ownParts = new();
-    private readonly List<TradeEntry> m_theirParts = new();
+    private readonly SideParts m_ownParts = new();
+    private readonly SideParts m_theirParts = new();
 
     private string? m_answered;
     private double m_answeredEndsAt;
@@ -88,7 +88,12 @@ public sealed class ClientTrade
         }
     }
 
-    public void Apply(TradeSide side)
+    /// <summary>
+    ///     Takes one part of a side; the last part shows the whole side. False for a part out of its side's order, of
+    ///     another count than its first, or past a side's rows, which only a faulty server sends: the side's parts so far
+    ///     are dropped and the side shown stays as it was.
+    /// </summary>
+    public bool Apply(TradeSide side)
     {
         if (side == null)
         {
@@ -97,26 +102,36 @@ public sealed class ClientTrade
 
         if (!IsOpen)
         {
-            return;
+            return true;
         }
 
-        List<TradeEntry> rows = side.Owner == TradeSideOwner.Own ? m_ownParts : m_theirParts;
+        SideParts parts = side.Owner == TradeSideOwner.Own ? m_ownParts : m_theirParts;
         if (side.Part == 0)
         {
-            rows.Clear();
+            parts.Clear();
+            parts.Count = side.PartCount;
         }
 
-        rows.AddRange(side.Entries);
+        if (side.Part != parts.Next
+            || side.PartCount != parts.Count
+            || parts.Rows.Count + side.Entries.Count > TradeSide.MaxEntries)
+        {
+            parts.Clear();
+            return false;
+        }
+
+        parts.Rows.AddRange(side.Entries);
+        parts.Next++;
         if (!side.IsLast)
         {
-            return;
+            return true;
         }
 
         // Every part of a side carries its flags and coins; the last completes its rows.
         TradeSide whole = side.PartCount == 1
             ? side
-            : new TradeSide(side.Owner, side.IsLocked, side.IsConfirmed, side.Coins, rows.ToArray());
-        rows.Clear();
+            : new TradeSide(side.Owner, side.IsLocked, side.IsConfirmed, side.Coins, parts.Rows.ToArray());
+        parts.Clear();
         if (side.Owner == TradeSideOwner.Own)
         {
             Own = whole;
@@ -125,6 +140,8 @@ public sealed class ClientTrade
         {
             Theirs = whole;
         }
+
+        return true;
     }
 
     /// <summary>
@@ -184,6 +201,22 @@ public sealed class ClientTrade
         }
 
         return 0;
+    }
+
+    private sealed class SideParts
+    {
+        public List<TradeEntry> Rows { get; } = new();
+
+        public int Next { get; set; }
+
+        public int Count { get; set; }
+
+        public void Clear()
+        {
+            Rows.Clear();
+            Next = 0;
+            Count = 0;
+        }
     }
 }
 }

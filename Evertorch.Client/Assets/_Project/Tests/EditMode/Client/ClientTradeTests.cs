@@ -1,3 +1,4 @@
+using System.Linq;
 using Evertorch.Game;
 using Evertorch.Protocol;
 using NUnit.Framework;
@@ -17,6 +18,27 @@ public sealed class ClientTradeTests
     private static TradeSide Side(TradeSideOwner owner, uint coins, params TradeEntry[] entries)
     {
         return new TradeSide(owner, false, false, coins, entries);
+    }
+
+    // The review's finding (session task T18): a part out of order, of another count, or past a side's ten rows is
+    // refused rather than shown or thrown, and the side shown stays as it was.
+    [Test]
+    public void APartOutOfOrder_OfAnotherCount_OrPastTenRows_IsRefused_AndTheSideStays()
+    {
+        var trade = new ClientTrade();
+        trade.Apply(new TradeEvent(TradeEventKind.Opened, "Bobby"));
+        TradeEntry[] ten = Enumerable.Range(1, 10).Select(index => new TradeEntry(0, Gel, (uint)index)).ToArray();
+
+        bool skipped = trade.Apply(new TradeSide(TradeSideOwner.Partner, false, false, 0, new[] { ten[0] }, 1, 2));
+        bool first = trade.Apply(new TradeSide(TradeSideOwner.Partner, false, false, 0, ten, 0, 2));
+        bool eleventh = trade.Apply(new TradeSide(TradeSideOwner.Partner, false, false, 0, new[] { ten[0] }, 1, 2));
+        trade.Apply(new TradeSide(TradeSideOwner.Partner, false, false, 0, new[] { ten[0] }, 0, 3));
+        bool jumped = trade.Apply(new TradeSide(TradeSideOwner.Partner, false, false, 0, new[] { ten[1] }, 2, 3));
+        trade.Apply(new TradeSide(TradeSideOwner.Partner, false, false, 0, new[] { ten[0] }, 0, 3));
+        bool recounted = trade.Apply(new TradeSide(TradeSideOwner.Partner, false, false, 0, new[] { ten[1] }, 1, 2));
+
+        Assert.That((skipped, first, eleventh, jumped, recounted), Is.EqualTo((false, true, false, false, false)));
+        Assert.That(trade.Theirs.Entries, Is.Empty, "the side shown stays as it was");
     }
 
     // The server keeps a request whose answer came while an item change was going through; the client asks it again,

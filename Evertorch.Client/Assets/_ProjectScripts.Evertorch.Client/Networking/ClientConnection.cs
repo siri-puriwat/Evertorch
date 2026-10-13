@@ -1813,9 +1813,12 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
         {
             UnexpectedMessages++;
         }
+        else if (!World.Trade.Apply(message))
+        {
+            MalformedMessages++;
+        }
         else
         {
-            World.Trade.Apply(message);
             TradeSideReceived?.Invoke(message);
         }
     }

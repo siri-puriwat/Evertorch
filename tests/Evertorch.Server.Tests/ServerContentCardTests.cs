@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Text.Json.Nodes;
 using Evertorch.Game;
+using Evertorch.Protocol;
 using NUnit.Framework;
 
 namespace Evertorch.Server.Tests
@@ -60,6 +61,31 @@ public sealed class ServerContentCardTests
     private static PrimaryStats Stats(int vit = 0, int @int = 0)
     {
         return new PrimaryStats(0, 0, vit, @int, 0, 0);
+    }
+
+    // The review's finding (session task T18): a refiner in content without a card promises no removal, since no fees
+    // would follow, and the repository's Smith promises it with its six fees.
+    [Test]
+    public void ARefiner_TakesCardsOut_OnlyWhenTheContentHoldsACard()
+    {
+        Dictionary<string, byte[]> files = PackageFixture.BuildFixturePackage();
+        PackageFixture.SetValue(files, "npcs.json", "npc.quartermaster", "refine", "true");
+        ServerContent fixture = ServerContentLoader.Load(files);
+        ServerContent repository = ServerContentLoader.Load(PackageFixture.BuildRepositoryPackage());
+        NpcDefinition quartermaster = fixture.Npcs[new NpcDefinitionId("npc.quartermaster")];
+        NpcDefinition smith = repository.Npcs[new NpcDefinitionId("npc.smith")];
+
+        NpcServices withoutCards = NpcServicesBuilder.Build(new EntityId(1), quartermaster, fixture);
+        NpcServices withCards = NpcServicesBuilder.Build(new EntityId(2), smith, repository);
+
+        Assert.That(
+            (withoutCards.Refines, withoutCards.RemovesCards,
+                NpcServicesBuilder.BuildCardRemovalFees(new EntityId(1), quartermaster, fixture)),
+            Is.EqualTo((true, false, (CardRemovalFees?)null)));
+        Assert.That(
+            (withCards.RemovesCards,
+                NpcServicesBuilder.BuildCardRemovalFees(new EntityId(2), smith, repository)!.Entries.Count),
+            Is.EqualTo((true, 6)));
     }
 
     [Test]

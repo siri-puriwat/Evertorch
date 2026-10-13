@@ -100,6 +100,26 @@ public sealed class InspectTests
         Assert.That(rig.Refusals(asker), Is.Empty);
     }
 
+    // The review's finding (session task T18): a real player the asker cannot see, on another map, is refused with 1.
+    [Test]
+    public void Inspect_OfAPlayerOnAnotherMap_IsRefusedWithOne()
+    {
+        var rig = new TradeRig(new TestServer(withNpcs: true, withEveryMap: true, withGrotto: true));
+        ConnectionId away = rig.Enter(1);
+        ConnectionId asker = rig.Enter(2);
+        EntityId target = rig.Server.PlayerOf(away).Id;
+        rig.Server.CrossIntoTheGrotto(away);
+        rig.Server.Tick(2);
+        rig.Server.Transport.ClearSent();
+
+        uint sequence = rig.Next(asker);
+        rig.Server.SendInspectPlayer(asker, target, sequence);
+        rig.Server.Tick();
+
+        Assert.That(rig.RefusalOf(asker, sequence), Is.EqualTo(CommandRejectionReason.InvalidTarget));
+        Assert.That(Answers(rig.Server, asker), Is.Empty);
+    }
+
     [Test]
     public void Inspect_OfAPlayerWearingNothing_NamesTwoEmptySlots()
     {

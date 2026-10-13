@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using Evertorch.Game;
 using NUnit.Framework;
@@ -62,6 +63,19 @@ public sealed class CardMessageTests
     private static ItemDefinitionId Longest(int index)
     {
         return new ItemDefinitionId($"item.{(char)('a' + index)}{new string('c', DefinitionIdLimits.MaxLength - 6)}");
+    }
+
+    // Fifteen whole entries of distinct cards: only the count can refuse them.
+    private static byte[] Fifteen()
+    {
+        var bytes = new List<byte>(FeesBytes.Take(10)) { 15 };
+        for (int index = 0; index < 15; index++)
+        {
+            bytes.AddRange(new byte[] { 0x06, 0x00, 0x69, 0x74, 0x65, 0x6D, 0x2E, (byte)('a' + index) });
+            bytes.AddRange(new byte[] { 0xC8, 0x00, 0x00, 0x00 });
+        }
+
+        return bytes.ToArray();
     }
 
     private static bool ReadAny(byte[] bytes)
@@ -135,8 +149,11 @@ public sealed class CardMessageTests
         Assert.That(RemoveCard.TryRead(WireMatrix.With(RemoveBytes, 18, 0x05), out _), Is.False, "slot 5");
         Assert.That(RemoveCard.TryRead(WireMatrix.With(RemoveBytes, 21, (byte)'s'), out _), Is.False, "no item");
         Assert.That(CardRemovalFees.TryRead(WireMatrix.With(FeesBytes, 2, 0x00), out _), Is.False, "an NPC of 0");
-        Assert.That(CardRemovalFees.TryRead(WireMatrix.With(FeesBytes, 10, 0x00), out _), Is.False, "no card");
-        Assert.That(CardRemovalFees.TryRead(WireMatrix.With(FeesBytes, 10, 0x0F), out _), Is.False, "fifteen");
+        Assert.That(
+            CardRemovalFees.TryRead(FeesBytes.Take(10).Append((byte)0x00).ToArray(), out _),
+            Is.False,
+            "no card");
+        Assert.That(CardRemovalFees.TryRead(Fifteen(), out _), Is.False, "fifteen");
         Assert.That(
             CardRemovalFees.TryRead(WireMatrix.With(FeesBytes, 19, 0x41, 0x42, 0x0F, 0x00), out _),
             Is.False,

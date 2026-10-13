@@ -276,6 +276,24 @@ public sealed class StorageTests
             Is.EqualTo(InventoryOperationKind.StorageDeposit));
     }
 
+    // The review's finding (session task T18): a stored row's card the content lacks refuses the read as an unknown
+    // item does, so it never reaches the bag (Persistence §8).
+    [Test]
+    public void Open_OfARowHoldingACardTheContentLacks_IsRefusedWithSix_AndLogged()
+    {
+        Counter counter = Enter(0, prepare: store => store.PutInStorage(1, Sword, 1, "item.card.retired"));
+
+        counter.Server.SendStorageOpen(counter.Player, counter.Npc, 1);
+        counter.Server.Tick(3);
+
+        Assert.That(counter.Answer(), Is.EqualTo(CommandRejectionReason.ServiceUnavailable));
+        Assert.That(counter.Parts(), Is.Empty);
+        Assert.That(
+            counter.Server.ItemActionLog.Entries.Single(entry => entry.EventId.Name == "StorageContentMismatch")
+                .Fields["Definition"],
+            Is.EqualTo("item.card.retired"));
+    }
+
     [Test]
     public void Open_OfAnAccountThatNeverStored_IsOneEmptyPart_AtRevisionZero_AndTwoAskedTogetherAreReadOnce()
     {

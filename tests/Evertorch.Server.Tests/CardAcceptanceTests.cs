@@ -19,7 +19,7 @@ namespace Evertorch.Server.Tests
 ///     accounts built from the client's production networking and gameplay code. Anna, stored holding a training sword,
 ///     cloth armor, a Forest Crawler Card, a +7 training staff carrying a Spark Wisp Card, an Emberstone, and 1,000
 ///     coins, enters the training ground beside Bobby, of another account, with 300; each sees the other by name, and
-///     Anna's bag shows what was stored. Anna kills a training slime, whose every drop the script makes but its card,
+///     Anna's bag shows what was stored. Anna kills a training slime, whose every drop the script makes, its card too,
 ///     picks up its gel, inserts her card into the sword and wears it, which Bobby inspects and she does not hear, takes
 ///     it off, and walks up to the Smith; there she takes the card out again for its fee, and refines the staff, which
 ///     the scripted draw destroys, and its card comes back to her bag. At the Broker she lists the Forest Crawler Card,
@@ -477,7 +477,7 @@ public sealed class CardAcceptanceTests
             LoseTheStaff(anna, bobby);
             AssertCleanTraffic("refine", anna, bobby);
             ListTheCard(anna, bobby);
-            AssertCleanTraffic("refine", anna, bobby);
+            AssertCleanTraffic("board", anna, bobby);
             hunted = Bag(anna);
             coins = anna.World.Inventory.Coins;
             Leave(anna, bobby);

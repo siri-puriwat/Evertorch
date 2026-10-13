@@ -149,6 +149,7 @@ public sealed class CardOutputTests
         server.SendInsertCard(owner, RowOf(server, owner, Keen), sword, rig.Next(owner));
         Settle(server, owner);
         MessageOpcode[] inserted = Heard(server, owner);
+        MessageOpcode[] observedInsertion = Heard(server, observer);
         server.Transport.ClearSent();
         server.SendRemoveCard(owner, server.NpcOf(Smith).Id, sword, 1, Bane, rig.Next(owner));
         Settle(server, owner);
@@ -156,7 +157,7 @@ public sealed class CardOutputTests
 
         Assert.That(inserted, Is.EqualTo(new[] { MessageOpcode.InventoryChanged }), "the bag, and no sheet");
         Assert.That(removed, Is.EqualTo(new[] { MessageOpcode.InventoryChanged }), "the bag and the coins");
-        Assert.That(Heard(server, observer), Is.Empty, "nothing of another's cards");
+        Assert.That(observedInsertion.Concat(Heard(server, observer)), Is.Empty, "nothing of another's cards");
     }
 
     // An inspection reaches its asker alone: neither the inspected nor a third player beside them hears it.

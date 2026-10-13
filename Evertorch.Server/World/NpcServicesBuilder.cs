@@ -70,7 +70,14 @@ public static class NpcServicesBuilder
             npc.KeepsStorage,
             npc.KeepsMarket,
             npc.Refines,
-            npc.Refines);
+            RemovesCards(npc, content));
+    }
+
+    // A refiner takes cards out when the content holds any, so the fees it sends always follow the services that
+    // promise them.
+    private static bool RemovesCards(NpcDefinition npc, ServerContent content)
+    {
+        return npc.Refines && content.Items.Values.Any(item => item.Card != null);
     }
 
     /// <summary>

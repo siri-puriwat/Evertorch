@@ -1260,12 +1260,12 @@ internal sealed class InMemoryGameStore : IGameStore
     ///     Puts <paramref name="quantity" /> of <paramref name="item" /> in the storage of character
     ///     <paramref name="id" />'s account as a row of its own, as an earlier deposit would have left it; the row's ID.
     /// </summary>
-    public long PutInStorage(long id, string item, int quantity)
+    public long PutInStorage(long id, string item, int quantity, params string[] cards)
     {
         lock (m_gate)
         {
             StorageEntry storage = StorageOf(m_characters[id].Account.Value);
-            var row = new StoredStorageItem(++m_lastStorageItem, item, quantity);
+            var row = new StoredStorageItem(++m_lastStorageItem, item, quantity, 0, cards);
             storage.Items.Add(row);
             storage.Revision++;
             return row.Id;

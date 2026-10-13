@@ -1856,7 +1856,7 @@ public sealed class PlayerPanelTests
     }
 
     // The Smith's rows name a carded item, warn that its cards come back, and keep to their row at 12 points or more,
-    // the longest real row on two lines.
+    // a +9 Double Arcane Iron Sword's row on two lines.
     [UnityTest]
     public IEnumerator NpcWindow_ForTheSmith_NamesACardedRow_AndWarnsThatItsCardsComeBack()
     {
