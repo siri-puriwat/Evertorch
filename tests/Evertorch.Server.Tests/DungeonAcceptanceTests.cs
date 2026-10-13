@@ -645,7 +645,9 @@ public sealed class DungeonAcceptanceTests
                 DungeonPackage.Muffle(SlimeMonarch),
                 DungeonPackage.AlwaysCast(SlimeMonarch),
                 DungeonPackage.Weaken(GrottoCrawler, 100),
-                DungeonPackage.Shorten(GrottoHunt, 1)));
+                DungeonPackage.Shorten(GrottoHunt, 1),
+                DungeonPackage.Unspawn(UmbralGrotto, "monster.hollow_wisp"),
+                DungeonPackage.Unspawn(UmbralGrotto, "monster.barrow_crawler")));
 
         using IHost host = StartHost(root.Path);
         ServerContent content = host.Services.GetRequiredService<ServerContent>();

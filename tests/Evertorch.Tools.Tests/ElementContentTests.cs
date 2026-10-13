@@ -162,6 +162,7 @@ public sealed class ElementContentTests
     [TestCase("skill.arcane_bolt", SkillElement.Ghost)]
     [TestCase("skill.spark_bolt", SkillElement.Wind)]
     [TestCase("skill.quake_slam", SkillElement.Earth)]
+    [TestCase("skill.grave_bite", SkillElement.Shadow)]
     public void RepositoryContent_EachDamageSkill_HasItsElement(string skill, SkillElement element)
     {
         ContentPipelineResult result = ContentPipeline.Run(
@@ -185,6 +186,8 @@ public sealed class ElementContentTests
     [TestCase("monster.grotto_crawler", Element.Earth, Race.Insect, BodySize.Medium)]
     [TestCase("monster.gloom_wisp", Element.Shadow, Race.Demon, BodySize.Small)]
     [TestCase("monster.slime_monarch", Element.Water, Race.Plant, BodySize.Large)]
+    [TestCase("monster.hollow_wisp", Element.Ghost, Race.Demon, BodySize.Small)]
+    [TestCase("monster.barrow_crawler", Element.Undead, Race.Undead, BodySize.Medium)]
     public void RepositoryContent_EachMonster_HasItsFacts(string monster, Element element, Race race, BodySize size)
     {
         ContentPipelineResult result = ContentPipeline.Run(

@@ -1,0 +1,49 @@
+id: monster.hollow_wisp
+displayName: Hollow Wisp
+level: 17
+element: ghost
+race: demon
+size: small
+stats:
+  hp: 520
+  physicalAttack: 32
+  physicalDefense: 8
+  hit: 245
+  flee: 180
+movement:
+  baseSpeed: 4.4
+combat:
+  # A ranged basic attack; it walks away from anyone nearer than ai.keepDistance.
+  attackRange: 6.0
+  attackIntervalMs: 1800
+ai:
+  behavior: passive
+  perceptionRadius: 6.0
+  leashRadius: 14.0
+  roamRadius: 4.0
+  idlePauseMs: { min: 4000, max: 5000 }
+  scanIntervalMs: 100
+  keepDistance: 3.5
+drops:
+  - item: item.material.gloom_dust
+    chance: 0.50
+    amount: { min: 1, max: 2 }
+  - item: item.consumable.minor_mana
+    chance: 0.25
+    amount: { min: 1, max: 2 }
+  - item: item.card.hollow_wisp
+    chance: 0.001
+    amount: { min: 1, max: 1 }
+  - item: item.consumable.water_converter
+    chance: 0.03
+    amount: { min: 1, max: 1 }
+rewards:
+  baseExperience: 165
+  jobExperience: 120
+client:
+  # The spark wisp's body, a tenth smaller and in a pale blue.
+  prefab: monster_spark_wisp
+  icon: monster_spark_wisp_icon
+  projectile: projectile_spark
+  scale: 0.9
+  tint: "#BFD8E6"

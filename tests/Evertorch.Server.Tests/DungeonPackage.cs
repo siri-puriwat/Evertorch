@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Text;
 using System.Text.Json.Nodes;
 
 namespace Evertorch.Server.Tests
@@ -73,6 +74,21 @@ internal static class DungeonPackage
             map,
             $"monsterSpawns[{SpawnIndex(files, map, monster)}].respawnMs",
             Number(respawnMs));
+    }
+
+    /// <summary>
+    ///     A map without its spawn of a monster. The loader refuses a count of 0, so the spawn goes; the spawns before it
+    ///     keep their entity ids.
+    /// </summary>
+    public static Action<Dictionary<string, byte[]>> Unspawn(string map, string monster)
+    {
+        return files =>
+        {
+            int index = SpawnIndex(files, map, monster);
+            JsonArray definitions = JsonNode.Parse(files[Maps])!["definitions"]!.AsArray();
+            definitions.Single(node => (string?)node!["id"] == map)!["monsterSpawns"]!.AsArray().RemoveAt(index);
+            files[Maps] = Encoding.UTF8.GetBytes(definitions.Root.ToJsonString());
+        };
     }
 
     private static int SpawnIndex(IReadOnlyDictionary<string, byte[]> files, string map, string monster)

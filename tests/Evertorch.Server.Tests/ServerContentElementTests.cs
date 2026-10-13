@@ -193,8 +193,8 @@ public sealed class ServerContentElementTests
             Is.EqualTo(
                 new[]
                 {
-                    "skill.arcane_bolt Ghost", "skill.basic_attack Weapon", "skill.heavy_blow Weapon",
-                    "skill.quake_slam Earth", "skill.spark_bolt Wind", "skill.strike Weapon"
+                    "skill.arcane_bolt Ghost", "skill.basic_attack Weapon", "skill.grave_bite Shadow",
+                    "skill.heavy_blow Weapon", "skill.quake_slam Earth", "skill.spark_bolt Wind", "skill.strike Weapon"
                 }));
         Assert.That(
             content.Skills.Values.Where(skill => skill.DamageType == null).Select(skill => skill.Element),
@@ -213,8 +213,9 @@ public sealed class ServerContentElementTests
             Is.EqualTo(
                 new[]
                 {
-                    "monster.forest_crawler Earth Insect Small", "monster.gloom_wisp Shadow Demon Small",
-                    "monster.grotto_crawler Earth Insect Medium", "monster.slime_monarch Water Plant Large",
+                    "monster.barrow_crawler Undead Undead Medium", "monster.forest_crawler Earth Insect Small",
+                    "monster.gloom_wisp Shadow Demon Small", "monster.grotto_crawler Earth Insect Medium",
+                    "monster.hollow_wisp Ghost Demon Small", "monster.slime_monarch Water Plant Large",
                     "monster.spark_wisp Wind Formless Small", "monster.training_slime Water Plant Medium"
                 }));
     }

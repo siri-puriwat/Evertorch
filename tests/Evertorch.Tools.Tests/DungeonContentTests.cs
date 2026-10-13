@@ -58,6 +58,8 @@ public sealed class DungeonContentTests
     [TestCase(-18.5f, 15.5f, "the crawler hall")]
     [TestCase(16f, -19.5f, "the wisp gallery")]
     [TestCase(18f, 18f, "the boss chamber")]
+    [TestCase(24.5f, -26.5f, "the hollow wisps' corner of the wisp gallery")]
+    [TestCase(-20.5f, -26.5f, "the barrow pack's end of the entrance hall")]
     public void Run_ForRepositoryContent_LetsEveryRoomOfTheGrottoBeWalkedToFromItsSpawnPoint(
         float x,
         float z,
@@ -227,6 +229,98 @@ public sealed class DungeonContentTests
         Assert.That(spawn.Center.X + spawn.Radius, Is.LessThanOrEqualTo(-7d));
         Assert.That(spawn.Center.Z - spawn.Radius, Is.GreaterThanOrEqualTo(2d));
         Assert.That(spawn.Center.Z + spawn.Radius, Is.LessThanOrEqualTo(29d));
+    }
+
+    // Every place within either circle can hold a monster, and the barrow pack's roam reaches the entrance hall's
+    // corridor band (z -22 to -18) that every walk through the grotto crosses.
+    [Test]
+    public void Run_ForRepositoryContent_PlacesTheHollowWispsInTheGallery_AndAPassiveBarrowPackInTheEntranceHall()
+    {
+        ContentPipelineResult result = RepositoryContent();
+        MapDefinition grotto = MapOf(result, Grotto);
+        AuthoredMonster wisp = result.Content.Monsters
+            .Single(monster => monster.Definition.Id.Value == "monster.hollow_wisp");
+        AuthoredMonster crawler = result.Content.Monsters
+            .Single(monster => monster.Definition.Id.Value == "monster.barrow_crawler");
+        SkillDefinition bite = result.Content.Skills
+            .Single(skill => skill.Definition.Id.Value == "skill.grave_bite")
+            .Definition;
+
+        Assert.That(
+            new[] { wisp.Definition, crawler.Definition }
+                .Select(monster => (monster.Level, monster.Hp, monster.PhysicalAttack, monster.PhysicalDefense,
+                    monster.Behavior, monster.Assists, monster.BaseExperience, monster.JobExperience)),
+            Is.EqualTo(
+                new[]
+                {
+                    (17, 520, 32, 8, MonsterBehavior.Passive, false, 165, 120),
+                    (15, 1000, 58, 20, MonsterBehavior.Passive, true, 135, 100)
+                }));
+        Assert.That(
+            new[] { wisp, crawler }.Select(monster => (monster.Prefab, monster.Scale, monster.Tint)),
+            Is.EqualTo(
+                new[]
+                {
+                    ("monster_spark_wisp", 0.9, "#BFD8E6"),
+                    ("monster_forest_crawler", (double?)1.1, "#CFC8B0")
+                }));
+        Assert.That(
+            (wisp.Definition.AttackRange, wisp.Definition.KeepDistance, wisp.Definition.Skills.Count),
+            Is.EqualTo((6d, 3.5d, 0)));
+        Assert.That(
+            crawler.Definition.Skills.Select(entry => (entry.Skill.Value, entry.Chance)),
+            Is.EqualTo(new[] { ("skill.grave_bite", 0.2) }));
+        Assert.That(
+            (bite.TargetType, bite.DamageType, bite.Element, bite.Range, bite.Levels.Single().CooldownMs,
+                bite.Levels.Single().FixedCastMs),
+            Is.EqualTo((SkillTargetType.Enemy, (SkillDamageType?)SkillDamageType.Physical,
+                (SkillElement?)SkillElement.Shadow, 1.5d, 6000, 0)));
+        Assert.That(
+            new[] { wisp.Definition, crawler.Definition }
+                .Select(monster => string.Join(" ", monster.Drops.Select(drop => $"{drop.Item.Value} {drop.Chance}"))),
+            Is.EqualTo(
+                new[]
+                {
+                    "item.material.gloom_dust 0.5 item.consumable.minor_mana 0.25 item.card.hollow_wisp 0.001 "
+                    + "item.consumable.water_converter 0.03",
+                    "item.material.grotto_carapace 0.5 item.consumable.minor_health 0.25 item.card.barrow_crawler 0.001 "
+                    + "item.consumable.earth_converter 0.03"
+                }));
+
+        MonsterSpawn[] spawns = grotto.MonsterSpawns.Skip(3).ToArray();
+        Assert.That(
+            spawns.Select(spawn => (spawn.Monster.Value, spawn.Center.X, spawn.Center.Z, spawn.Radius, spawn.Count,
+                spawn.RespawnMs)),
+            Is.EqualTo(
+                new[]
+                {
+                    ("monster.hollow_wisp", 24.5f, -26.5f, 3d, 4, 20_000),
+                    ("monster.barrow_crawler", -20.5f, -26.5f, 3d, 4, 20_000)
+                }),
+            "after the boss's, so the earlier spawns keep their entity ids");
+        NavigationGrid grid = grotto.Navigation;
+        var blocked = new List<string>();
+        foreach (MonsterSpawn spawn in spawns)
+        {
+            for (double dx = -spawn.Radius; dx <= spawn.Radius; dx += 0.5d)
+            {
+                for (double dz = -spawn.Radius; dz <= spawn.Radius; dz += 0.5d)
+                {
+                    float x = spawn.Center.X + (float)dx;
+                    float z = spawn.Center.Z + (float)dz;
+                    if (dx * dx + dz * dz <= spawn.Radius * spawn.Radius && !grid.CanOccupy(x, z))
+                    {
+                        blocked.Add($"({x}, {z})");
+                    }
+                }
+            }
+        }
+
+        Assert.That(blocked, Is.Empty);
+        Assert.That(
+            spawns[1].Center.Z + spawns[1].Radius + crawler.Definition.RoamRadius,
+            Is.GreaterThanOrEqualTo(-22d),
+            "the pack's roam reaches the corridor band");
     }
 
     [Test]

@@ -144,8 +144,9 @@ public sealed class RefineTests
             Is.EqualTo(
                 new[]
                 {
-                    ("item.card.forest_crawler", 200u), ("item.card.gloom_wisp", 600u),
-                    ("item.card.grotto_crawler", 600u), ("item.card.slime_monarch", 5000u),
+                    ("item.card.barrow_crawler", 600u), ("item.card.forest_crawler", 200u),
+                    ("item.card.gloom_wisp", 600u), ("item.card.grotto_crawler", 600u),
+                    ("item.card.hollow_wisp", 600u), ("item.card.slime_monarch", 5000u),
                     ("item.card.spark_wisp", 200u), ("item.card.training_slime", 200u)
                 }));
         Assert.That(

@@ -1,0 +1,14 @@
+id: skill.grave_bite
+displayName: Grave Bite
+targetType: enemy
+damageType: physical
+element: shadow
+server:
+  range: 1.5
+  levels:
+    - cooldownMs: 6000
+      effect:
+        damage: { ratio: 150 }
+client:
+  # A key and no art yet.
+  icon: skill_grave_bite

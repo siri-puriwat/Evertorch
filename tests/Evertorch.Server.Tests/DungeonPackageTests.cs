@@ -63,5 +63,20 @@ public sealed class DungeonPackageTests
             ServerContentLoader.Load(files).ServerContentVersion,
             Is.EqualTo(ServerContentLoader.Load(repository).ServerContentVersion));
     }
+
+    [Test]
+    public void Build_WithTheGrottosNewSpawnsGone_LoadsTheThreeBeforeThem()
+    {
+        const string grotto = "map.umbral_grotto";
+        ServerContent content = ServerContentLoader.Load(
+            DungeonPackage.Build(
+                DungeonPackage.Unspawn(grotto, "monster.hollow_wisp"),
+                DungeonPackage.Unspawn(grotto, "monster.barrow_crawler")));
+
+        Assert.That(
+            content.Maps[new MapDefinitionId(grotto)].MonsterSpawns.Select(spawn => (spawn.Monster.Value, spawn.Count)),
+            Is.EqualTo(
+                new[] { ("monster.grotto_crawler", 6), ("monster.gloom_wisp", 5), ("monster.slime_monarch", 1) }));
+    }
 }
 }

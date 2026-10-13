@@ -464,7 +464,7 @@ public sealed class CardContentTests
     }
 
     [Test]
-    public void Run_ForRepositoryContent_ReadsTheSixCards_TheirDropsLastButAConverter_AndTheSlots()
+    public void Run_ForRepositoryContent_ReadsTheEightCards_TheirDropsLastButAConverter_AndTheSlots()
     {
         ContentPipelineResult result = ContentPipeline.Run(
             Path.Combine(ContentValidationTests.RepositoryRoot(), "content"));
@@ -480,9 +480,11 @@ public sealed class CardContentTests
             Is.EqualTo(
                 new[]
                 {
+                    ("item.card.barrow_crawler", EquipmentSlot.Armor, 999, 1, 0, 600, 2400, 240, 24000),
                     ("item.card.forest_crawler", EquipmentSlot.Weapon, 999, 1, 0, 200, 800, 80, 8000),
                     ("item.card.gloom_wisp", EquipmentSlot.Weapon, 999, 1, 0, 600, 2400, 240, 24000),
                     ("item.card.grotto_crawler", EquipmentSlot.Armor, 999, 1, 0, 600, 2400, 240, 24000),
+                    ("item.card.hollow_wisp", EquipmentSlot.Weapon, 999, 1, 0, 600, 2400, 240, 24000),
                     ("item.card.slime_monarch", EquipmentSlot.Armor, 999, 1, 0, 5000, 24000, 2400, 240000),
                     ("item.card.spark_wisp", EquipmentSlot.Weapon, 999, 1, 0, 200, 800, 80, 8000),
                     ("item.card.training_slime", EquipmentSlot.Armor, 999, 1, 0, 200, 800, 80, 8000)
@@ -496,9 +498,11 @@ public sealed class CardContentTests
             Is.EqualTo(
                 new[]
                 {
+                    ("item.card.barrow_crawler", "Shrouded", "maxHp 30 from Shadow 30"),
                     ("item.card.forest_crawler", "Keen", "attack 8 to Small 10"),
                     ("item.card.gloom_wisp", "Bane", "boss 20 to Insect 10"),
                     ("item.card.grotto_crawler", "Earthen", "defense 10 armor Earth"),
+                    ("item.card.hollow_wisp", "Spectral", "to Undead 20"),
                     ("item.card.slime_monarch", "Royal", "maxHp 40 reduction 25"),
                     ("item.card.spark_wisp", "Arcane", "int 1 magicAttack 10"),
                     ("item.card.training_slime", "Hardy", "vit 1 maxHp 20 from Wind 20")
@@ -515,9 +519,11 @@ public sealed class CardContentTests
             Is.EqualTo(
                 new[]
                 {
+                    ("item.card.barrow_crawler", 0.001, 1, 1, "item.consumable.earth_converter"),
                     ("item.card.forest_crawler", 0.001, 1, 1, "item.consumable.earth_converter"),
                     ("item.card.gloom_wisp", 0.001, 1, 1, "item.consumable.fire_converter"),
                     ("item.card.grotto_crawler", 0.001, 1, 1, "item.consumable.wind_converter"),
+                    ("item.card.hollow_wisp", 0.001, 1, 1, "item.consumable.water_converter"),
                     ("item.card.slime_monarch", 0.01, 1, 1, "item.consumable.fire_converter"),
                     ("item.card.spark_wisp", 0.001, 1, 1, "item.consumable.wind_converter"),
                     ("item.card.training_slime", 0.001, 1, 1, "")

@@ -219,8 +219,9 @@ public sealed class MarketAcceptanceTests
                 new[]
                 {
                     ("item.armor.leather", 90u, 0u), ("item.armor.monarch_mantle", 1000u, 0u),
-                    ("item.card.forest_crawler", 800u, 0u), ("item.card.gloom_wisp", 2400u, 0u),
-                    ("item.card.grotto_crawler", 2400u, 0u), ("item.card.slime_monarch", 24000u, 0u),
+                    ("item.card.barrow_crawler", 2400u, 0u), ("item.card.forest_crawler", 800u, 0u),
+                    ("item.card.gloom_wisp", 2400u, 0u), ("item.card.grotto_crawler", 2400u, 0u),
+                    ("item.card.hollow_wisp", 2400u, 0u), ("item.card.slime_monarch", 24000u, 0u),
                     ("item.card.spark_wisp", 800u, 0u), ("item.card.training_slime", 800u, 0u),
                     ("item.consumable.earth_converter", 60u, 0u), ("item.consumable.fire_converter", 60u, 0u),
                     ("item.consumable.water_converter", 60u, 0u), ("item.consumable.wind_converter", 60u, 0u),

@@ -24,6 +24,18 @@ server:
       count: 1
       respawnMs: 3600000
       respawnVarianceMs: 600000
+    # The wisp gallery's hollow wisps, Ghosts that a Neutral swing hits for half.
+    - monster: monster.hollow_wisp
+      center: { x: 24.5, y: 0.0, z: -26.5 }
+      radius: 3.0
+      count: 4
+      respawnMs: 20000
+    # The entrance hall's barrow pack, Undead, whose roam reaches the corridor every walk through the grotto crosses.
+    - monster: monster.barrow_crawler
+      center: { x: -20.5, y: 0.0, z: -26.5 }
+      radius: 3.0
+      count: 4
+      respawnMs: 20000
   portals:
     # In front of the west gate; arrivals on the field face west beside its east gate.
     - center: { x: -30.5, y: 0.0, z: -22.0 }
