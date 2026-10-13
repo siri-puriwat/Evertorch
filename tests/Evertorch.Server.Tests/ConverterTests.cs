@@ -9,7 +9,8 @@ namespace Evertorch.Server.Tests
 /// <summary>
 ///     Converters (Gameplay Systems §9.1, §11.2): a use needs a worn weapon; once its commit settles, its status gives
 ///     the player's swings and weapon skills its element for twenty minutes, replacing another converter's, and no
-///     health is sent; a change of the worn weapon ends it, a change of the armor does not.
+///     health is sent; a change of the worn weapon ends it, a job change that takes the weapon off too, and a change of
+///     the armor does not; a use while dead or trading is refused with 3, and one while another is in flight with 9.
 /// </summary>
 [TestFixture]
 public sealed class ConverterTests
@@ -116,6 +117,57 @@ public sealed class ConverterTests
         Settle(server, player);
     }
 
+    // Gameplay Systems §11.2: a second converter sent in the tick of the first finds its work in flight and is refused
+    // with 9; a dead player's use is refused with 3, as any use, and so is one while a trade is open, as any item
+    // command. Only the first is spent.
+    [Test]
+    public void AConverter_InTheTickOfAnother_IsRefusedWithNine_AndWhileDeadOrTradingWithThree()
+    {
+        var server = new TestServer();
+        ConnectionId player = Enter(server, true);
+        ConnectionId partner = server.EnterWorld(2);
+        PlayerEntity entity = server.PlayerOf(player);
+        server.Place(partner, entity.Position.X + 1f, entity.Position.Z);
+        server.Transport.ClearSent();
+
+        server.SendUseItem(player, RowOf(server, Fire), 1);
+        server.SendUseItem(player, RowOf(server, Wind), 2);
+        Settle(server, player);
+        Element converted = entity.AttackElement;
+        server.World.TryGetMap(new MapDefinitionId("map.training_ground"), out MapInstance? ground);
+        server.Combat.Kill(ground!, entity, null, server.CurrentTick);
+        server.Tick();
+        server.SendUseItem(player, RowOf(server, Wind), 3);
+        server.Tick();
+        server.SendRespawn(player, 4);
+        server.Tick(2);
+        server.Place(partner, entity.Position.X + 1f, entity.Position.Z);
+        server.Tick(2);
+        // The rig numbers the player's commands after the four sent above, so none reads as a repeat.
+        var rig = new TradeRig(server);
+        for (int sent = 0; sent < 4; sent++)
+        {
+            rig.Next(player);
+        }
+
+        rig.Open(player, partner, "Tester1", "Tester2");
+        bool isTrading = entity.IsTrading;
+        server.SendUseItem(player, RowOf(server, Wind), rig.Next(player));
+        server.Tick();
+
+        Assert.That((converted, isTrading), Is.EqualTo((Element.Fire, true)), "the first alone, then a trade");
+        Assert.That(
+            Rejections(server, player),
+            Is.EqualTo(
+                new[]
+                {
+                    CommandRejectionReason.ItemActionInFlight, CommandRejectionReason.NotAllowedNow,
+                    CommandRejectionReason.NotAllowedNow
+                }));
+        Assert.That((QuantityOf(server, Fire), QuantityOf(server, Wind)), Is.EqualTo((4, 5)));
+        Assert.That(entity.StatusEffects, Is.Empty, "the death ended the first");
+    }
+
     [Test]
     public void AConverter_OnceItsCommitSettles_GivesTheSwingsItsElementForTwentyMinutes_AndSendsNoHealth()
     {
@@ -155,6 +207,39 @@ public sealed class ConverterTests
         Assert.That(Rejections(server, player), Is.EqualTo(new[] { CommandRejectionReason.NotAllowedNow }));
         Assert.That(server.PlayerOf(player).StatusEffects, Is.Empty);
         Assert.That(QuantityOf(server, Fire), Is.EqualTo(5));
+    }
+
+    // Owner decision 17: a job change that takes the worn weapon off, an Adventurer's staff for a Vanguard, ends the
+    // converter's element with it.
+    [Test]
+    public void AConvertersElement_EndsWithAJobChangeThatTakesTheWeaponOff()
+    {
+        var server = new TestServer(withNpcs: true);
+        server.Store.SeedOnCreate = BuildSeed.ReadyToChange;
+        ConnectionId player = server.Connect();
+        server.SignInWithCharacter(player, 1);
+        server.Store.GiveItems(1, Fire, 1, 5, 5);
+        server.Store.GiveItems(1, "item.weapon.training_staff", 1, 1, 5);
+        server.Store.Wear(1, server.Store.Stored(1).Items.Last().Id, "Weapon");
+        server.SendEnterWorld(player, 1);
+        server.TickUntil(() => server.SessionOf(player).State == SessionState.InWorld);
+        NpcEntity guildmaster = server.NpcOf("npc.guildmaster");
+        server.Place(player, guildmaster.Position.X + 2f, guildmaster.Position.Z);
+        server.Tick(2);
+        PlayerEntity entity = server.PlayerOf(player);
+        Use(server, player, Fire, 1);
+        Element before = entity.AttackElement;
+
+        server.SendChangeJob(player, guildmaster.Id, "job.vanguard", 2);
+        server.Tick();
+        Settle(server, player);
+        server.Tick();
+
+        Assert.That(before, Is.EqualTo(Element.Fire));
+        Assert.That((entity.Job.Value, entity.Weapon), Is.EqualTo(("job.vanguard", (ItemEquipment?)null)));
+        Assert.That(entity.StatusEffects, Is.Empty, "the status ended with the weapon");
+        Assert.That(entity.AttackElement, Is.EqualTo(Element.Neutral));
+        Assert.That(LastStatusList(server, player), Is.Empty);
     }
 
     [Test]
