@@ -99,6 +99,15 @@ public sealed class RenewalCombatRules : ICombatRules
         return new DamageResult((int)Math.Min(int.MaxValue, amount), false);
     }
 
+    /// <summary>
+    ///     What a player's rolled weapon attack deals a target of <paramref name="size" />, in percent (Gameplay Systems
+    ///     §11.1): a sword 75 against small and large targets, and a staff and bare hands 100 against all.
+    /// </summary>
+    public static int SizePercent(WeaponType? weapon, BodySize size)
+    {
+        return weapon == WeaponType.Sword && size != BodySize.Medium ? 75 : 100;
+    }
+
     // An armed character's swing draws once more (equipment research note): every weapon is weapon level 1 and varies
     // by 5 % of its attack either way, both bounds included; a critical takes the top without a draw. A fist draws
     // nothing, so every unarmed vector holds.

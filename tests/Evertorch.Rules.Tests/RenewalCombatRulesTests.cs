@@ -296,6 +296,20 @@ public sealed class RenewalCombatRulesTests
         Assert.That(result.Amount, Is.EqualTo(expected));
     }
 
+    // A sword meets a target's size, and a staff and bare hands meet none (Gameplay Systems §11.1).
+    [TestCase(null, BodySize.Small, 100)]
+    [TestCase(null, BodySize.Large, 100)]
+    [TestCase(WeaponType.Sword, BodySize.Small, 75)]
+    [TestCase(WeaponType.Sword, BodySize.Medium, 100)]
+    [TestCase(WeaponType.Sword, BodySize.Large, 75)]
+    [TestCase(WeaponType.Staff, BodySize.Small, 100)]
+    [TestCase(WeaponType.Staff, BodySize.Medium, 100)]
+    [TestCase(WeaponType.Staff, BodySize.Large, 100)]
+    public void SizePercent_ForAWeaponAndASize_IsTheSizeTable(WeaponType? weapon, BodySize size, int expected)
+    {
+        Assert.That(RenewalCombatRules.SizePercent(weapon, size), Is.EqualTo(expected));
+    }
+
     [Test]
     public void AttackContext_WhenInputsAreInvalid_Throws()
     {
