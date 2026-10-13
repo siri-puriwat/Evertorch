@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
@@ -197,7 +198,8 @@ public sealed class CardContentTests
         return "item.card." + monster.Id.Value.Substring("monster.".Length);
     }
 
-    // The values above 0, named.
+    // The values above 0, named, then each group's, "to" a race, element, or size and "from" an element, and the armor's
+    // element.
     private static string Bonus(CardBonus bonus)
     {
         (string Name, int Value)[] values =
@@ -207,7 +209,18 @@ public sealed class CardContentTests
             ("magicAttack", bonus.MagicAttack), ("defense", bonus.Defense), ("maxHp", bonus.MaxHp),
             ("maxSp", bonus.MaxSp), ("boss", bonus.BossDamagePercent), ("reduction", bonus.BossDamageReductionPercent)
         };
-        return string.Join(" ", values.Where(value => value.Value > 0).Select(value => $"{value.Name} {value.Value}"));
+        IEnumerable<string> groups = bonus.RaceDamage.Select(entry => $"to {entry.Key} {entry.Value}")
+            .Concat(bonus.ElementDamage.Select(entry => $"to {entry.Key} {entry.Value}"))
+            .Concat(bonus.SizeDamage.Select(entry => $"to {entry.Key} {entry.Value}"))
+            .Concat(bonus.ElementDamageReduction.Select(entry => $"from {entry.Key} {entry.Value}"));
+        if (bonus.ArmorElement != Element.Neutral)
+        {
+            groups = groups.Append($"armor {bonus.ArmorElement}");
+        }
+
+        return string.Join(
+            " ",
+            values.Where(value => value.Value > 0).Select(value => $"{value.Name} {value.Value}").Concat(groups));
     }
 
     // Each group's number and name; "Undead" says whether it is the race or the element (Content Pipeline §7).
@@ -483,12 +496,12 @@ public sealed class CardContentTests
             Is.EqualTo(
                 new[]
                 {
-                    ("item.card.forest_crawler", "Keen", "attack 8"),
-                    ("item.card.gloom_wisp", "Bane", "boss 20"),
-                    ("item.card.grotto_crawler", "Shelled", "defense 20 maxHp 30"),
+                    ("item.card.forest_crawler", "Keen", "attack 8 to Small 10"),
+                    ("item.card.gloom_wisp", "Bane", "boss 20 to Insect 10"),
+                    ("item.card.grotto_crawler", "Earthen", "defense 10 armor Earth"),
                     ("item.card.slime_monarch", "Royal", "maxHp 40 reduction 25"),
                     ("item.card.spark_wisp", "Arcane", "int 1 magicAttack 10"),
-                    ("item.card.training_slime", "Hardy", "vit 1 maxHp 20")
+                    ("item.card.training_slime", "Hardy", "vit 1 maxHp 20 from Wind 20")
                 }));
         MonsterDefinition[] monsters = result.Content.Monsters
             .Select(monster => monster.Definition)

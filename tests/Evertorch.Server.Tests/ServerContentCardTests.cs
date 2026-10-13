@@ -93,6 +93,7 @@ public sealed class ServerContentCardTests
     {
         Dictionary<string, byte[]> files = PackageFixture.BuildRepositoryPackage();
         string card = PackageFixture.SetValue(files, Items, Keen, "card.attack", "0");
+        PackageFixture.SetValue(files, Items, Keen, "card.sizeDamage", "{}");
         JsonArray definitions = JsonNode.Parse(files[Items])!["definitions"]!.AsArray();
         JsonObject wisp = definitions
             .Single(definition => (string?)definition!["id"] == "item.card.gloom_wisp")!
@@ -146,11 +147,25 @@ public sealed class ServerContentCardTests
                 {
                     (Keen, EquipmentSlot.Weapon, 200, Stats(), 8, 0, 0, 0, 0, 0),
                     ("item.card.gloom_wisp", EquipmentSlot.Weapon, 600, Stats(), 0, 0, 0, 0, 20, 0),
-                    ("item.card.grotto_crawler", EquipmentSlot.Armor, 600, Stats(), 0, 0, 20, 30, 0, 0),
+                    ("item.card.grotto_crawler", EquipmentSlot.Armor, 600, Stats(), 0, 0, 10, 0, 0, 0),
                     ("item.card.slime_monarch", EquipmentSlot.Armor, 5000, Stats(), 0, 0, 0, 40, 0, 25),
                     ("item.card.spark_wisp", EquipmentSlot.Weapon, 200, Stats(@int: 1), 0, 10, 0, 0, 0, 0),
                     ("item.card.training_slime", EquipmentSlot.Armor, 200, Stats(1), 0, 0, 0, 20, 0, 0)
                 }));
+        Assert.That(
+            content.Items.Values
+                .Where(item => item.Type == ItemType.Card)
+                .OrderBy(item => item.Id.Value, StringComparer.Ordinal)
+                .Select(item => item.Card!.Bonus)
+                .Select(bonus => (bonus.DamageTo(Race.Insect), bonus.DamageTo(BodySize.Small),
+                    bonus.ReductionFrom(Element.Wind), bonus.ArmorElement)),
+            Is.EqualTo(
+                new[]
+                {
+                    (0, 10, 0, Element.Neutral), (10, 0, 0, Element.Neutral), (0, 0, 0, Element.Earth),
+                    (0, 0, 0, Element.Neutral), (0, 0, 0, Element.Neutral), (0, 0, 20, Element.Neutral)
+                }),
+            "Keen to Small, Bane to Insect, Earthen armor, Hardy from Wind; Royal and Arcane as they were");
         Assert.That(
             content.Items.Values
                 .Where(item => item.Slot != EquipmentSlot.None)

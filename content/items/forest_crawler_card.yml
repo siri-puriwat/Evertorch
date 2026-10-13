@@ -13,10 +13,11 @@ server:
     floor: 80
   card:
     attack: 8
+    sizeDamage: { small: 10 }
     removalFee: 200
 client:
   # The slime gel's look until art for the cards arrives.
   icon: item_slime_gel
   model: pickup_slime_gel
   prefix: Keen
-  description: Attack +8.
+  description: Attack +8 and damage to Small +10%.

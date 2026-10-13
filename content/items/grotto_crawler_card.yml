@@ -12,12 +12,13 @@ server:
     basePrice: 2400
     floor: 240
   card:
-    defense: 20
-    maxHp: 30
+    # Earth armor takes a quarter of the Monarch's Earth slam.
+    defense: 10
+    armorElement: earth
     removalFee: 600
 client:
   # The slime gel's look until art for the cards arrives.
   icon: item_slime_gel
   model: pickup_slime_gel
-  prefix: Shelled
-  description: Defense +20 and max HP +30.
+  prefix: Earthen
+  description: Earth armor and defense +10.

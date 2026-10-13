@@ -15,10 +15,11 @@ server:
     bonus:
       vit: 1
     maxHp: 20
+    elementDamageReduction: { wind: 20 }
     removalFee: 200
 client:
   # The slime gel's look until art for the cards arrives.
   icon: item_slime_gel
   model: pickup_slime_gel
   prefix: Hardy
-  description: VIT +1 and max HP +20.
+  description: VIT +1, max HP +20, and damage from Wind -20%.

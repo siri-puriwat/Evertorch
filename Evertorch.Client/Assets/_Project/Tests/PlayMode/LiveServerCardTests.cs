@@ -113,7 +113,10 @@ public sealed class LiveServerCardTests
         yield return WaitUntil(() => Row(bag, "Forest Crawler Card x 1") != null, StartTimeoutSeconds);
         Row(bag, "Forest Crawler Card x 1")!.onClick.Invoke();
         yield return WaitUntil(() => Row(cards, "Training Sword [1] · 1 free") != null, StartTimeoutSeconds);
-        Assert.That(cards.Text, Does.StartWith("Forest Crawler Card\nAttack +8.\nFits: weapon"), "the Card window");
+        Assert.That(
+            cards.Text,
+            Does.StartWith("Forest Crawler Card\nAttack +8 and damage to Small +10%.\nFits: weapon"),
+            "the Card window");
         Row(cards, "Training Sword [1] · 1 free")!.onClick.Invoke();
         yield return WaitUntil(() => Row(cards, CardMessages.InsertPrompt) != null, StartTimeoutSeconds);
         Row(cards, CardMessages.InsertPrompt)!.onClick.Invoke();

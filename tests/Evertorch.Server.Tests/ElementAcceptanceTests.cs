@@ -19,12 +19,13 @@ namespace Evertorch.Server.Tests
 ///     server host on a real PostgreSQL 18 and real UDP sockets on loopback, with scripted combat and drops, and two
 ///     clients of two accounts built from the client's production networking and gameplay code. Vera, stored on the
 ///     training field wearing a training sword and holding cloth armor, a Grotto Crawler Card, and an Earth Converter,
-///     and Arlo, of another account, stored beside her as an Arcanist wearing the training staff with Arcane Bolt
-///     learned, enter and see each other by name. Vera's sword fells a Spark Wisp in three hits for the sword's least
+///     and Arlo, of another account, stored beside her as an Arcanist wearing the training staff and cloth armor carded
+///     with a Grotto Crawler Card, Earthen, with Arcane Bolt learned, enter and see each other by name, his sheet's armor
+///     Earth. Vera's sword fells a Spark Wisp in three hits for the sword's least
 ///     draw against its small size; she uses the converter, her sheet and status list say Earth, and her sword fells
 ///     another wisp, Wind, in two; and Arlo's bolt strikes a third. Then Vera leaves, and Arlo sees her go. After a
-///     clean stop a second host on the same database lets both in again on the field, their bags as they left them and
-///     the converter's element gone.
+///     clean stop a second host on the same database lets both in again on the field, their bags as they left them, the
+///     converter's element gone, and Arlo's armor Earth still.
 /// </summary>
 [TestFixture]
 [NonParallelizable]
@@ -108,6 +109,7 @@ public sealed class ElementAcceptanceTests
             new BuildSeed(1, new Dictionary<string, int> { [ArcaneBolt.Value] = 1 }, Arcanist)
                 .Apply(m_database.ConnectionString, ArloName);
             StoreWorn(ArloName, TrainingStaff);
+            StoreWornArmor(ArloName, ClothArmor, GrottoCrawlerCard);
         };
         vera.EnterWorld(port);
         arlo.Connect(port);
@@ -132,7 +134,14 @@ public sealed class ElementAcceptanceTests
                     $"{TrainingSword} x 1 worn"
                 }),
             $"{step}: Vera's bag as stored");
-        Assert.That(Bag(arlo), Is.EqualTo(new[] { $"{TrainingStaff} x 1 worn" }), $"{step}: Arlo's bag as stored");
+        Assert.That(
+            Bag(arlo),
+            Is.EqualTo(new[] { $"{ClothArmor} x 1 [{GrottoCrawlerCard}] worn", $"{TrainingStaff} x 1 worn" }),
+            $"{step}: Arlo's bag as stored");
+        Assert.That(
+            SocketClients.PumpUntil(() => arlo.World.Sheet?.ArmorElement == Element.Earth, both),
+            Is.True,
+            $"{step}: Arlo's Earthen armor is Earth");
     }
 
     // The viewer has a spawn for the seen character, which names it (Network Protocol §6).
@@ -319,6 +328,15 @@ public sealed class ElementAcceptanceTests
             + "SELECT character_id, 'Weapon', id, 0 FROM worn");
     }
 
+    private void StoreWornArmor(string name, string armor, string card)
+    {
+        Execute(
+            "WITH worn AS (INSERT INTO inventory_items (character_id, item_definition_id, quantity, refine_level, "
+            + $"version, instance_data_json) SELECT id, '{armor}', 1, 0, 0, '{{\"cards\": [\"{card}\"]}}'::jsonb "
+            + $"FROM characters WHERE name = '{name}' RETURNING character_id, id) INSERT INTO equipment "
+            + "(character_id, slot, inventory_item_id, version) SELECT character_id, 'Armor', id, 0 FROM worn");
+    }
+
     private void Execute(string sql)
     {
         using var connection = new NpgsqlConnection(m_database.ConnectionString);
@@ -386,6 +404,10 @@ public sealed class ElementAcceptanceTests
                 Is.EqualTo(Element.Neutral),
                 "restart: no effect is stored, so the converter's element is gone");
             Assert.That(vera.World.StatusEffects, Is.Empty, "restart: nor its status");
+            Assert.That(
+                SocketClients.PumpUntil(() => arlo.World.Sheet?.ArmorElement == Element.Earth, vera, arlo),
+                Is.True,
+                "restart: Arlo's carded armor keeps its element");
             foreach (SocketClient client in new[] { vera, arlo })
             {
                 Assert.That(client.World.Map, Is.EqualTo(new MapDefinitionId(TrainingField)), "restart: on the field");

@@ -13,10 +13,11 @@ server:
     floor: 240
   card:
     bossDamage: 20
+    raceDamage: { insect: 10 }
     removalFee: 600
 client:
   # The slime gel's look until art for the cards arrives.
   icon: item_slime_gel
   model: pickup_slime_gel
   prefix: Bane
-  description: Damage to bosses +20%.
+  description: Damage to bosses +20% and to Insect +10%.
