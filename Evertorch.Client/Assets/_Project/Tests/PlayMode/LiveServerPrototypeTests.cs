@@ -257,8 +257,9 @@ public sealed class LiveServerPrototypeTests : InputTestFixture
         client.Connection.SendCancel();
         Vector3 wispAt = Drawn(field, wisp);
         Assert.That(
-            client.Controller!.TryMoveTo(field.Predictor.Position, new WorldPosition(wispAt.x - 5f, 0f, wispAt.z)),
-            Is.True);
+            client.Controller!.TryMoveTo(field.Predictor.Position, StepBack(field, wispAt)),
+            Is.True,
+            $"a way 5 m from the wisp at {wispAt}");
 
         bool wasCastBarShown = false;
         yield return WaitUntil(
@@ -275,6 +276,23 @@ public sealed class LiveServerPrototypeTests : InputTestFixture
         Assert.That(wasCastBarShown, Is.True, "a cast bar over the wisp");
         Assert.That(client.RemoteViews[wisp.Entity].HasClips, Is.True, "the delivered wisp plays clips");
         Assert.That(client.Connection.MalformedMessages + client.Connection.UnexpectedMessages, Is.Zero);
+    }
+
+    // 5 m west of the wisp, or north, south, or east of it where a tree stands west: the first place the player fits.
+    private static WorldPosition StepBack(ClientWorld world, Vector3 wispAt)
+    {
+        Vector2[] offsets = { new(-5f, 0f), new(0f, 5f), new(0f, -5f), new(5f, 0f) };
+        foreach (Vector2 offset in offsets)
+        {
+            float x = wispAt.x + offset.x;
+            float z = wispAt.z + offset.y;
+            if (world.Grid.CanOccupy(x, z))
+            {
+                return new WorldPosition(x, 0f, z);
+            }
+        }
+
+        return new WorldPosition(wispAt.x - 5f, 0f, wispAt.z);
     }
 
     private static float DistanceTo(ClientWorld world, RemoteEntity remote)

@@ -25,7 +25,11 @@ namespace Evertorch.Server.Tests
 ///     draw against its small size; she uses the converter, her sheet and status list say Earth, and her sword fells
 ///     another wisp, Wind, in two; and Arlo's bolt strikes a third. Then Vera leaves, and Arlo sees her go. After a
 ///     clean stop a second host on the same database lets both in again on the field, their bags as they left them, the
-///     converter's element gone, and Arlo's armor Earth still.
+///     converter's element gone, and Arlo's armor Earth still. In the Umbral Grotto, with a test package that disarms
+///     its monsters, has the Barrow Crawler bite and the Slime Monarch slam whenever they may, and softens the slam,
+///     Wren's Neutral sword strikes a Hollow Wisp, a Ghost, for half, and a Barrow Crawler bites Ilse, an Arcanist in
+///     Earthen armor, with Grave Bite; after a restart that finds them both beside the Monarch, its Earth slam strikes
+///     Ilse's Earth armor for a quarter of what it strikes Wren for.
 /// </summary>
 [TestFixture]
 [NonParallelizable]
@@ -44,6 +48,14 @@ public sealed class ElementAcceptanceTests
     private const string VeraName = "Vera";
     private const string ArloIdentity = "element-arlo";
     private const string ArloName = "Arlo";
+    private const string WrenIdentity = "element-wren";
+    private const string WrenName = "Wren";
+    private const string IlseIdentity = "element-ilse";
+    private const string IlseName = "Ilse";
+    private const string UmbralGrotto = "map.umbral_grotto";
+    private const string HollowWisp = "monster.hollow_wisp";
+    private const string BarrowCrawler = "monster.barrow_crawler";
+    private const string SlimeMonarch = "monster.slime_monarch";
 
     // The training sword's least draw, 19, three quarters of it against the Small wisp, 14, and twice the status
     // attack of 7, less the wisp's 1 defense (Gameplay Systems §11.1).
@@ -53,12 +65,30 @@ public sealed class ElementAcceptanceTests
     // wisp's experience lifted Vera to level 2, less the wisp's 1 defense.
     private const uint EarthSwordOnAWisp = 36;
 
+    // Half of each Neutral part on the Ghost: twice half the status attack of 7, 6, beside half the sized draw of 14,
+    // 7, less the Hollow Wisp's 8 defense (Gameplay Systems §3, §11.1).
+    private const uint SwordOnAGhost = 12;
+
+    // The test package's slam: a magic attack of 40, drawn at its least, 32, by 120 %, 38, before each player's magic
+    // defense (Gameplay Systems §9).
+    private const int SoftSlam = 40;
+
     private static readonly SkillDefinitionId ArcaneBolt = new("skill.arcane_bolt");
+    private static readonly SkillDefinitionId GraveBite = new("skill.grave_bite");
+    private static readonly SkillDefinitionId QuakeSlam = new("skill.quake_slam");
     private static readonly TimeSpan FightLimit = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan CastLimit = TimeSpan.FromSeconds(4);
 
     // West of the field's three Spark Wisps, beyond what the aggressive crawlers in its north notice.
     private static readonly WorldPosition VeraStands = new(0.5f, 0f, -10.5f);
     private static readonly WorldPosition ArloStands = new(0.5f, 0f, -8.5f);
+
+    // Inside the Hollow Wisps' spawn in the wisp gallery's south-east corner, and inside the Barrow Crawlers' in the
+    // entrance hall's south; then 2.5 m and 2.8 m from the Slime Monarch's home at (18, 0, 18), within its slam's 4 m.
+    private static readonly WorldPosition WrenByTheGhosts = new(22f, 0f, -26.5f);
+    private static readonly WorldPosition IlseByThePack = new(-20.5f, 0f, -24f);
+    private static readonly WorldPosition WrenBeforeTheBoss = new(15.5f, 0f, 18f);
+    private static readonly WorldPosition IlseBesideTheBoss = new(16f, 0f, 20f);
 
     private PostgresFixture m_database = null!;
 
@@ -144,6 +174,117 @@ public sealed class ElementAcceptanceTests
             $"{step}: Arlo's Earthen armor is Earth");
     }
 
+    // Wren, with a training sword, and Ilse, an Arcanist in Earthen cloth armor, stored in the grotto: Wren by the
+    // Hollow Wisps, Ilse by the Barrow Crawlers.
+    private void EnterTheGrotto(int port, SocketClient wren, SocketClient ilse)
+    {
+        const string step = "into the grotto";
+        wren.AfterCreate = () =>
+        {
+            Place(WrenName, WrenByTheGhosts, UmbralGrotto);
+            StoreWorn(WrenName, TrainingSword);
+        };
+        ilse.AfterCreate = () =>
+        {
+            Place(IlseName, IlseByThePack, UmbralGrotto);
+            new BuildSeed(1, new Dictionary<string, int> { [ArcaneBolt.Value] = 1 }, Arcanist)
+                .Apply(m_database.ConnectionString, IlseName);
+            StoreWorn(IlseName, TrainingStaff);
+            StoreWornArmor(IlseName, ClothArmor, GrottoCrawlerCard);
+        };
+        wren.EnterWorld(port);
+        ilse.EnterWorld(port);
+        foreach (SocketClient client in new[] { wren, ilse })
+        {
+            Assert.That(client.World.Map, Is.EqualTo(new MapDefinitionId(UmbralGrotto)), $"{step}: in the grotto");
+        }
+    }
+
+    // Wren's swing at a Hollow Wisp lands for half of each Neutral part; Wren then stops (Gameplay Systems §3).
+    private static void SwingAtTheGhost(SocketClient wren, SocketClient ilse)
+    {
+        const string step = "the ghost";
+        ClientWorld world = wren.World;
+        EntityId ghost = TargetA(step, HollowWisp, wren, ilse);
+        var hits = new List<uint>();
+
+        void OnDamage(Damage damage)
+        {
+            if (damage.Source == world.LocalEntity && damage.Target == ghost)
+            {
+                hits.Add(damage.Amount);
+            }
+        }
+
+        world.DamageReceived += OnDamage;
+        wren.AttackTarget();
+        Assert.That(SocketClients.PumpUntil(() => hits.Count > 0, FightLimit, wren, ilse), Is.True, $"{step}: a hit");
+        world.DamageReceived -= OnDamage;
+        wren.AutoAttack.OnWalkRequested();
+        Assert.That(hits[0], Is.EqualTo(SwordOnAGhost), $"{step}: half of each Neutral part");
+    }
+
+    // Ilse strikes a Barrow Crawler, which bites back with Grave Bite, a skill with no cast time; the package's
+    // disarmed bite strikes for the least, 1 (Gameplay Systems §9).
+    private static void BittenByThePack(SocketClient ilse, SocketClient wren)
+    {
+        const string step = "the bite";
+        ClientWorld world = ilse.World;
+        TargetA(step, BarrowCrawler, ilse, wren);
+        var resolved = new List<SkillResolved>();
+        world.SkillResolvedReceived += resolved.Add;
+
+        ilse.AttackTarget();
+        Assert.That(
+            SocketClients.PumpUntil(
+                () => resolved.Any(skill => skill.Skill == GraveBite && skill.Target == world.LocalEntity),
+                FightLimit,
+                ilse,
+                wren),
+            Is.True,
+            $"{step}: bitten");
+        world.SkillResolvedReceived -= resolved.Add;
+        ilse.AutoAttack.OnWalkRequested();
+
+        SkillResolved bite = resolved.First(skill => skill.Skill == GraveBite && skill.Target == world.LocalEntity);
+        Assert.That(world.Remotes[bite.Caster].DefinitionId, Is.EqualTo(BarrowCrawler), $"{step}: by a crawler");
+        Assert.That((bite.Outcome, bite.Amount), Is.EqualTo((SkillOutcome.Hit, 1u)), $"{step}: for 1");
+    }
+
+    // The Slime Monarch slams the two beside it: Earth on Wren's Neutral armor whole, on Ilse's Earth armor a quarter,
+    // each after its own magic defense, which the sheets give (Gameplay Systems §3, §9).
+    private static void SlammedOnEarth(SocketClient wren, SocketClient ilse)
+    {
+        const string step = "the slam";
+        SkillResolved? onWren = null;
+        SkillResolved? onIlse = null;
+        wren.World.SkillResolvedReceived += resolved =>
+            onWren ??= resolved.Skill == QuakeSlam && resolved.Target == wren.World.LocalEntity ? resolved : null;
+        ilse.World.SkillResolvedReceived += resolved =>
+            onIlse ??= resolved.Skill == QuakeSlam && resolved.Target == ilse.World.LocalEntity ? resolved : null;
+
+        Assert.That(
+            SocketClients.PumpUntil(() => onWren != null && onIlse != null, FightLimit, wren, ilse),
+            Is.True,
+            $"{step}: both slammed");
+        uint slam = onWren!.Amount + wren.World.Sheet!.MagicDefense;
+        Assert.That((onWren.Outcome, slam), Is.EqualTo((SkillOutcome.Hit, 38u)), $"{step}: Wren's whole slam");
+        Assert.That(
+            (onIlse!.Outcome, onIlse.Amount),
+            Is.EqualTo((SkillOutcome.Hit, (slam - ilse.World.Sheet!.MagicDefense) * 25 / 100)),
+            $"{step}: a quarter on Ilse's Earth armor");
+    }
+
+    private static Action<Dictionary<string, byte[]>> MagicAttack(string monster, int value)
+    {
+        return files => PackageFixture.SetValue(
+            files,
+            "monsters.json",
+            monster,
+            "magicAttack",
+            value.ToString(CultureInfo.InvariantCulture));
+    }
+
     // The viewer has a spawn for the seen character, which names it (Network Protocol §6).
     private static void AssertSees(string step, SocketClient viewer, SocketClient seen, string name)
     {
@@ -166,7 +307,7 @@ public sealed class ElementAcceptanceTests
                 other),
             Is.True,
             $"{step}: a {monster} in view");
-        for (int tries = 0; tries < 8 && !IsLive(world, world.Target, monster); tries++)
+        for (int tries = 0; tries < 12 && !IsLive(world, world.Target, monster); tries++)
         {
             EntityId next = client.CycleTarget(true);
             SocketClients.PumpUntil(() => world.Target == next, client, other);
@@ -239,7 +380,8 @@ public sealed class ElementAcceptanceTests
     }
 
     // Arlo targets another wisp and casts Arcane Bolt: the client walks into the bolt's range, and the bolt strikes
-    // (Gameplay Systems §9).
+    // (Gameplay Systems §9). A wisp that roams out of the bolt's range while it is cast ends the cast unheard (finding
+    // R1), so Arlo casts again until one lands.
     private static void BoltAWisp(SocketClient arlo, SocketClient vera)
     {
         const string step = "the bolt";
@@ -248,15 +390,18 @@ public sealed class ElementAcceptanceTests
         var resolved = new List<SkillResolved>();
         world.SkillResolvedReceived += resolved.Add;
 
+        bool IsBolted()
+        {
+            return resolved.Any(skill => skill.Caster == world.LocalEntity && skill.Skill == ArcaneBolt);
+        }
+
         Assert.That(arlo.UseSkill(ArcaneBolt), Is.True, $"{step}: cast");
-        Assert.That(
-            SocketClients.PumpUntil(
-                () => resolved.Any(skill => skill.Caster == world.LocalEntity && skill.Skill == ArcaneBolt),
-                FightLimit,
-                arlo,
-                vera),
-            Is.True,
-            $"{step}: resolved ({world.LastRejection})");
+        for (int casts = 1; casts < 8 && !SocketClients.PumpUntil(IsBolted, CastLimit, arlo, vera); casts++)
+        {
+            arlo.UseSkill(ArcaneBolt);
+        }
+
+        Assert.That(IsBolted(), Is.True, $"{step}: resolved ({world.LastRejection})");
         world.SkillResolvedReceived -= resolved.Add;
 
         SkillResolved bolt = resolved.First(skill => skill.Caster == world.LocalEntity && skill.Skill == ArcaneBolt);
@@ -300,10 +445,10 @@ public sealed class ElementAcceptanceTests
             .ToArray();
     }
 
-    private void Place(string name, WorldPosition position)
+    private void Place(string name, WorldPosition position, string map = TrainingField)
     {
         Execute(
-            $"UPDATE characters SET map_definition_id = '{TrainingField}', position_x = {Number(position.X)}, "
+            $"UPDATE characters SET map_definition_id = '{map}', position_x = {Number(position.X)}, "
             + $"position_y = {Number(position.Y)}, position_z = {Number(position.Z)} WHERE name = '{name}'");
     }
 
@@ -351,6 +496,57 @@ public sealed class ElementAcceptanceTests
         {
             Assert.That(client.Connection.MalformedMessages, Is.Zero, $"{step}: no malformed message");
             Assert.That(client.Connection.UnexpectedMessages, Is.Zero, $"{step}: no unexpected message");
+        }
+    }
+
+    [Test]
+    public void TwoPlayers_InTheGrotto_MeetTheGhostAndTheBite_ThenTheSlamOnEarthArmor()
+    {
+        using var root = new TemporaryDirectory();
+        PackageFixture.WriteTo(
+            Path.Combine(root.Path, "content", "server"),
+            DungeonPackage.Build(
+                DungeonPackage.Disarm(HollowWisp),
+                DungeonPackage.Disarm(BarrowCrawler),
+                DungeonPackage.AlwaysCast(BarrowCrawler),
+                DungeonPackage.Disarm(SlimeMonarch),
+                DungeonPackage.AlwaysCast(SlimeMonarch),
+                MagicAttack(SlimeMonarch, SoftSlam)));
+
+        ServerContent content;
+        using (IHost host = StartHost(root.Path))
+        {
+            content = host.Services.GetRequiredService<ServerContent>();
+            int port = host.Services.GetRequiredService<LiteNetLibServerTransport>().LocalPort;
+            using var wren = new SocketClient(content, WrenIdentity, WrenName);
+            using var ilse = new SocketClient(content, IlseIdentity, IlseName);
+            EnterTheGrotto(port, wren, ilse);
+            AssertCleanTraffic("into the grotto", wren, ilse);
+
+            SwingAtTheGhost(wren, ilse);
+            AssertCleanTraffic("the ghost", wren, ilse);
+            BittenByThePack(ilse, wren);
+            AssertCleanTraffic("the bite", wren, ilse);
+            Stop(host, wren, ilse);
+        }
+
+        Place(WrenName, WrenBeforeTheBoss, UmbralGrotto);
+        Place(IlseName, IlseBesideTheBoss, UmbralGrotto);
+        using (IHost host = StartHost(root.Path))
+        {
+            int port = host.Services.GetRequiredService<LiteNetLibServerTransport>().LocalPort;
+            using var wren = new SocketClient(content, WrenIdentity, WrenName);
+            using var ilse = new SocketClient(content, IlseIdentity, IlseName);
+            wren.EnterWorld(port);
+            ilse.EnterWorld(port);
+            Assert.That(
+                SocketClients.PumpUntil(() => ilse.World.Sheet?.ArmorElement == Element.Earth, wren, ilse),
+                Is.True,
+                "restart: Ilse's carded armor is Earth");
+
+            SlammedOnEarth(wren, ilse);
+            AssertCleanTraffic("the slam", wren, ilse);
+            Stop(host, wren, ilse);
         }
     }
 
