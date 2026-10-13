@@ -1,0 +1,93 @@
+using System.IO;
+using System.Linq;
+using System.Text.Json;
+using Evertorch.Game;
+using NUnit.Framework;
+
+namespace Evertorch.Tools.Tests
+{
+/// <summary>
+///     Elements, races, and sizes as content (Content Pipeline §4, §5, §7): a monster's top-level <c>element</c>,
+///     <c>race</c>, and <c>size</c>, required and written to both packages, since the target frame shows them.
+/// </summary>
+[TestFixture]
+public sealed class ElementContentTests
+{
+    private const string Monster = "monsters/training_slime.yml";
+
+    private static ContentPackages Build(ContentWorkspace workspace)
+    {
+        ContentPipelineResult result = ContentPipeline.Run(workspace.ContentRoot);
+        Assert.That(result.Diagnostics.Select(diagnostic => diagnostic.ToString()), Is.Empty);
+        return result.Packages!;
+    }
+
+    private static JsonElement Slime(ContentPackage package)
+    {
+        PackageFile file = package.DataFiles.Single(candidate => candidate.Path == "monsters.json");
+        using (var document = JsonDocument.Parse(file.Content))
+        {
+            return document.RootElement.GetProperty("definitions")[0].Clone();
+        }
+    }
+
+    [TestCase("element: water\n", "element: lightning\n", "element", "must be one of: neutral, water, earth, fire")]
+    [TestCase("element: water\n", "element: Water\n", "element", "must be one of")]
+    [TestCase("element: water\n", "", "element", "required field is missing")]
+    [TestCase("race: plant\n", "race: elemental\n", "race", "must be one of: formless, undead, beast, plant")]
+    [TestCase("race: plant\n", "", "race", "required field is missing")]
+    [TestCase("size: medium\n", "size: huge\n", "size", "must be one of: small, medium, large")]
+    [TestCase("size: medium\n", "", "size", "required field is missing")]
+    public void Run_WhenAFactIsBroken_ReportsTheField(
+        string oldText,
+        string newText,
+        string expectedFieldPath,
+        string expectedMessagePart)
+    {
+        using var workspace = new ContentWorkspace();
+        workspace.Replace(Monster, oldText, newText);
+
+        ContentPipelineResult result = ContentPipeline.Run(workspace.ContentRoot);
+
+        Assert.That(result.Packages, Is.Null);
+        ContentDiagnostic diagnostic = result.Diagnostics.Single();
+        Assert.That((diagnostic.File, diagnostic.FieldPath), Is.EqualTo((Monster, expectedFieldPath)));
+        Assert.That(diagnostic.Message, Does.Contain(expectedMessagePart));
+    }
+
+    [TestCase("monster.training_slime", Element.Water, Race.Plant, BodySize.Medium)]
+    [TestCase("monster.forest_crawler", Element.Earth, Race.Insect, BodySize.Small)]
+    [TestCase("monster.spark_wisp", Element.Wind, Race.Formless, BodySize.Small)]
+    [TestCase("monster.grotto_crawler", Element.Earth, Race.Insect, BodySize.Medium)]
+    [TestCase("monster.gloom_wisp", Element.Shadow, Race.Demon, BodySize.Small)]
+    [TestCase("monster.slime_monarch", Element.Water, Race.Plant, BodySize.Large)]
+    public void RepositoryContent_EachMonster_HasItsFacts(string monster, Element element, Race race, BodySize size)
+    {
+        ContentPipelineResult result = ContentPipeline.Run(
+            Path.Combine(ContentValidationTests.RepositoryRoot(), "content"));
+        Assert.That(result.Diagnostics, Is.Empty);
+
+        MonsterDefinition definition = result.Content.Monsters
+            .Single(authored => authored.Definition.Id.Value == monster)
+            .Definition;
+
+        Assert.That((definition.Element, definition.Race, definition.Size), Is.EqualTo((element, race, size)));
+    }
+
+    [Test]
+    public void Run_ForTheFixture_WritesTheFactsToBothPackages()
+    {
+        using var workspace = new ContentWorkspace();
+
+        ContentPackages packages = Build(workspace);
+
+        foreach (JsonElement slime in new[] { Slime(packages.Server), Slime(packages.Client) })
+        {
+            Assert.That(
+                (slime.GetProperty("element").GetString(), slime.GetProperty("race").GetString(),
+                    slime.GetProperty("size").GetString()),
+                Is.EqualTo(("water", "plant", "medium")));
+        }
+    }
+}
+}

@@ -2,6 +2,9 @@ id: monster.slime_monarch
 displayName: Slime Monarch
 level: 25
 boss: true
+element: water
+race: plant
+size: large
 stats:
   hp: 40000
   physicalAttack: 120

@@ -382,6 +382,9 @@ internal static class ServerProjection
             writer.WriteString("displayName", monster.DisplayName);
             writer.WriteNumber("level", monster.Level);
             writer.WriteBoolean("boss", monster.IsBoss);
+            writer.WriteString("element", EnumText.Of(monster.Element));
+            writer.WriteString("race", EnumText.Of(monster.Race));
+            writer.WriteString("size", EnumText.Of(monster.Size));
             writer.WriteNumber("hp", monster.Hp);
             writer.WriteNumber("physicalAttack", monster.PhysicalAttack);
             writer.WriteNumber("physicalDefense", monster.PhysicalDefense);

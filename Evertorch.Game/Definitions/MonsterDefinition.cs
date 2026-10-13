@@ -34,7 +34,10 @@ public sealed class MonsterDefinition
         bool assists = false,
         double assistRadius = 0d,
         int mvpExperience = 0,
-        IReadOnlyList<MvpDrop>? mvpDrops = null)
+        IReadOnlyList<MvpDrop>? mvpDrops = null,
+        Element element = Element.Neutral,
+        Race race = Race.Formless,
+        BodySize size = BodySize.Medium)
     {
         Id = id;
         DisplayName = displayName;
@@ -65,6 +68,9 @@ public sealed class MonsterDefinition
         AssistRadius = assistRadius;
         MvpExperience = mvpExperience;
         MvpDrops = mvpDrops ?? Array.Empty<MvpDrop>();
+        Element = element;
+        Race = race;
+        Size = size;
     }
 
     public MonsterDefinitionId Id { get; }
@@ -158,5 +164,20 @@ public sealed class MonsterDefinition
     ///     monster.
     /// </summary>
     public IReadOnlyList<MvpDrop> MvpDrops { get; }
+
+    /// <summary>
+    ///     What every attack on it meets in the element table (Gameplay Systems §10); the player sees it.
+    /// </summary>
+    public Element Element { get; }
+
+    /// <summary>
+    ///     Its race, which a card may deal more damage to (Gameplay Systems §11.1); the player sees it.
+    /// </summary>
+    public Race Race { get; }
+
+    /// <summary>
+    ///     Its size, which a sword's rolled attack meets (Gameplay Systems §11.1); the player sees it.
+    /// </summary>
+    public BodySize Size { get; }
 }
 }

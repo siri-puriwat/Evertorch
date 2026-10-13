@@ -28,7 +28,8 @@ public sealed class ClientContentParserTests
 
     private const string Monsters =
         "{\"schemaVersion\":1,\"definitions\":[{\"id\":\"monster.training_slime\",\"displayName\":\"Training Slime\","
-        + "\"level\":1,\"prefab\":\"monster_training_slime\",\"icon\":\"monster_training_slime_icon\"}]}";
+        + "\"level\":1,\"element\":\"water\",\"race\":\"plant\",\"size\":\"medium\","
+        + "\"prefab\":\"monster_training_slime\",\"icon\":\"monster_training_slime_icon\"}]}";
 
     private const string Items =
         "{\"schemaVersion\":1,\"definitions\":[{\"id\":\"item.material.slime_gel\",\"displayName\":\"Slime Gel\","
@@ -196,6 +197,21 @@ public sealed class ClientContentParserTests
         "\"level\":1,",
         "\"level\":1,\"tint\":\"# 5B3A8\",",
         "Monster 'monster.training_slime': tint is not a colour written #RRGGBB")]
+    [TestCase(
+        ClientContentParser.MonstersFile,
+        "\"element\":\"water\"",
+        "\"element\":\"lightning\"",
+        "Monster 'monster.training_slime': element, race, or size is missing or unknown")]
+    [TestCase(
+        ClientContentParser.MonstersFile,
+        ",\"race\":\"plant\"",
+        "",
+        "Monster 'monster.training_slime': element, race, or size is missing or unknown")]
+    [TestCase(
+        ClientContentParser.MonstersFile,
+        "\"size\":\"medium\"",
+        "\"size\":\"Medium\"",
+        "Monster 'monster.training_slime': element, race, or size is missing or unknown")]
     [TestCase(
         ClientContentParser.ItemsFile,
         "\"model\":\"pickup_slime_gel\"",
@@ -442,6 +458,18 @@ public sealed class ClientContentParserTests
         Assert.That(error, Does.Contain(expected));
     }
 
+    private static void AssertRoundTrip<TEnum>()
+        where TEnum : struct, Enum
+    {
+        foreach (TEnum value in (TEnum[])Enum.GetValues(typeof(TEnum)))
+        {
+            string name = ClientContentParser.NameOf(value);
+            Assert.That(ClientContentParser.TryParseName(name, out TEnum read), Is.True, name);
+            Assert.That(read, Is.EqualTo(value), name);
+            Assert.That(char.IsLower(name[0]), Is.True, name);
+        }
+    }
+
     // A card is an item of its own type (Gameplay Systems §11.7).
     [Test]
     public void Parse_ACard_ReadsItsTypeFitPrefixAndDescription()
@@ -643,6 +671,8 @@ public sealed class ClientContentParserTests
         Assert.That(monster.IconKey, Is.EqualTo("monster_training_slime_icon"));
         Assert.That(monster.ProjectileKey, Is.Empty, "no projectile when the package names none");
         Assert.That(monster.Level, Is.EqualTo(1));
+        Assert.That((monster.Element, monster.Race, monster.Size),
+            Is.EqualTo((Element.Water, Race.Plant, BodySize.Medium)));
         Assert.That(monster.Scale, Is.EqualTo(1f), "the model's own size when the package names none");
         Assert.That(monster.Tint, Is.Null);
         Assert.That(monster.IsBoss, Is.False);
@@ -736,6 +766,21 @@ public sealed class ClientContentParserTests
                     "items.json", "jobs.json", "maps.json", "monsters.json", "npcs.json", "quests.json",
                     "skills.json", "status-effects.json"
                 }));
+    }
+
+    // The client reads a content enum by the name the content tools write, each of the ten elements, the ten races,
+    // the three sizes, and a skill's eleven elements (Content Pipeline §5).
+    [Test]
+    public void TryParseName_ForEveryValueOfTheFactsEnums_ReadsItsOwnName()
+    {
+        AssertRoundTrip<Element>();
+        AssertRoundTrip<Race>();
+        AssertRoundTrip<BodySize>();
+        AssertRoundTrip<SkillElement>();
+        Assert.That(ClientContentParser.NameOf(SkillElement.Weapon), Is.EqualTo("weapon"));
+        Assert.That(ClientContentParser.NameOf(Race.Humanoid), Is.EqualTo("humanoid"));
+        Assert.That(ClientContentParser.TryParseName(string.Empty, out Element _), Is.False);
+        Assert.That(ClientContentParser.TryParseName(null, out Element _), Is.False);
     }
 }
 }

@@ -1,6 +1,9 @@
 id: monster.forest_crawler
 displayName: Forest Crawler
 level: 3
+element: earth
+race: insect
+size: small
 stats:
   hp: 80
   physicalAttack: 10

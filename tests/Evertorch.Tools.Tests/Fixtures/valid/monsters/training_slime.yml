@@ -1,6 +1,9 @@
 id: monster.training_slime
 displayName: Training Slime
 level: 1
+element: water
+race: plant
+size: medium
 stats:
   hp: 54321
   physicalAttack: 7613

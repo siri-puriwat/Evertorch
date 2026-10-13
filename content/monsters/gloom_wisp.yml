@@ -1,6 +1,9 @@
 id: monster.gloom_wisp
 displayName: Gloom Wisp
 level: 16
+element: shadow
+race: demon
+size: small
 stats:
   hp: 700
   physicalAttack: 30

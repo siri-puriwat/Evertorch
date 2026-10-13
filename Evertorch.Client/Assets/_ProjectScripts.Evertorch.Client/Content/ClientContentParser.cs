@@ -312,6 +312,14 @@ public static class ClientContentParser
                 return null;
             }
 
+            if (!TryParseName(monster.element, out Element element)
+                || !TryParseName(monster.race, out Race race)
+                || !TryParseName(monster.size, out BodySize size))
+            {
+                error = $"Monster '{monster.id}': element, race, or size is missing or unknown.";
+                return null;
+            }
+
             Color? tint = null;
             string tintText = monster.tint ?? string.Empty;
             if (tintText.Length > 0)
@@ -336,7 +344,10 @@ public static class ClientContentParser
                     monster.level,
                     scale,
                     tint,
-                    monster.boss));
+                    monster.boss,
+                    element,
+                    race,
+                    size));
         }
 
         return monsters;
@@ -678,6 +689,36 @@ public static class ClientContentParser
         }
     }
 
+    /// <summary>
+    ///     A content enum by its camelCase name, as the content tools write it (Content Pipeline §5); anything else,
+    ///     the empty name of an absent field included, is refused.
+    /// </summary>
+    public static bool TryParseName<TEnum>(string? text, out TEnum value)
+        where TEnum : struct, Enum
+    {
+        foreach (TEnum candidate in (TEnum[])Enum.GetValues(typeof(TEnum)))
+        {
+            if (string.Equals(NameOf(candidate), text, StringComparison.Ordinal))
+            {
+                value = candidate;
+                return true;
+            }
+        }
+
+        value = default;
+        return false;
+    }
+
+    /// <summary>
+    ///     The camelCase name the content tools write for <paramref name="value" />.
+    /// </summary>
+    public static string NameOf<TEnum>(TEnum value)
+        where TEnum : struct, Enum
+    {
+        string name = value.ToString();
+        return $"{char.ToLowerInvariant(name[0])}{name.Substring(1)}";
+    }
+
     private static bool TryParseTargetType(string? text, out SkillTargetType targetType)
     {
         switch (text)
@@ -986,6 +1027,9 @@ public static class ClientContentParser
         public float scale = 0f;
         public string? tint = string.Empty;
         public bool boss = false;
+        public string? element = string.Empty;
+        public string? race = string.Empty;
+        public string? size = string.Empty;
     }
 
     [Serializable]

@@ -5,9 +5,9 @@ using UnityEngine;
 namespace Evertorch.Client
 {
 /// <summary>
-///     The client-safe part of a monster definition: its name, its level, and whether it is a boss; the logical keys
-///     of its view, its icon, and the projectile its ranged attacks and casts fly; and the size and colour its body is
-///     drawn in (Prototype Content §2).
+///     The client-safe part of a monster definition: its name, its level, its element, race, and size, and whether it
+///     is a boss; the logical keys of its view, its icon, and the projectile its ranged attacks and casts fly; and the
+///     size and colour its body is drawn in (Prototype Content §2).
 /// </summary>
 public sealed class ClientMonster
 {
@@ -20,7 +20,10 @@ public sealed class ClientMonster
         int level = 1,
         float scale = 1f,
         Color? tint = null,
-        bool isBoss = false)
+        bool isBoss = false,
+        Element element = Element.Neutral,
+        Race race = Race.Formless,
+        BodySize size = BodySize.Medium)
     {
         Id = id;
         DisplayName = displayName ?? throw new ArgumentNullException(nameof(displayName));
@@ -31,6 +34,9 @@ public sealed class ClientMonster
         Scale = scale;
         Tint = tint;
         IsBoss = isBoss;
+        Element = element;
+        Race = race;
+        Size = size;
     }
 
     public MonsterDefinitionId Id { get; }
@@ -53,5 +59,11 @@ public sealed class ClientMonster
     public Color? Tint { get; }
 
     public bool IsBoss { get; }
+
+    public Element Element { get; }
+
+    public Race Race { get; }
+
+    public BodySize Size { get; }
 }
 }

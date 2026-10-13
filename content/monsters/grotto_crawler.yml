@@ -1,6 +1,9 @@
 id: monster.grotto_crawler
 displayName: Grotto Crawler
 level: 14
+element: earth
+race: insect
+size: medium
 stats:
   hp: 900
   physicalAttack: 62

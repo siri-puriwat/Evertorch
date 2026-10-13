@@ -24,6 +24,9 @@ internal static class MonsterDefinitionReader
         string displayName = root.RequiredString("displayName");
         int level = root.RequiredInt("level", 1, ContentLimits.MaxLevel);
         bool isBoss = root.Has("boss") && root.RequiredBool("boss");
+        Element element = root.RequiredEnum<Element>("element");
+        Race race = root.RequiredEnum<Race>("race");
+        BodySize size = root.RequiredEnum<BodySize>("size");
 
         YamlFieldReader stats = root.RequiredMapping("stats");
         int hp = stats.RequiredInt("hp", 1, ContentLimits.MaxHp);
@@ -168,7 +171,10 @@ internal static class MonsterDefinitionReader
             assists,
             assistRadius,
             mvpExperience,
-            mvpDrops);
+            mvpDrops,
+            element,
+            race,
+            size);
         return new AuthoredMonster(root.ToSource(), definition, prefab, icon, projectile, scale, tint);
     }
 

@@ -1,6 +1,9 @@
 id: monster.spark_wisp
 displayName: Spark Wisp
 level: 4
+element: wind
+race: formless
+size: small
 stats:
   hp: 60
   physicalAttack: 6

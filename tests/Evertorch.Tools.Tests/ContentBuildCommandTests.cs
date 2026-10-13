@@ -279,7 +279,7 @@ public sealed class ContentBuildCommandTests
             Assert.That(exitCode, Is.EqualTo(1));
             Assert.That(
                 error,
-                Does.Contain("monsters/training_slime.yml(24): drops[0].chance: must be between 0 and 1"));
+                Does.Contain("monsters/training_slime.yml(27): drops[0].chance: must be between 0 and 1"));
         }
     }
 

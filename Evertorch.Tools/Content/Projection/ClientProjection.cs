@@ -125,6 +125,11 @@ internal static class ClientProjection
             writer.WriteString("id", monster.Id.Value);
             writer.WriteString("displayName", monster.DisplayName);
             writer.WriteNumber("level", monster.Level);
+
+            // The target frame shows them, as it shows the level (Content Pipeline §5).
+            writer.WriteString("element", EnumText.Of(monster.Element));
+            writer.WriteString("race", EnumText.Of(monster.Race));
+            writer.WriteString("size", EnumText.Of(monster.Size));
             writer.WriteString("prefab", authored.Prefab);
             writer.WriteString("icon", authored.Icon);
             if (authored.Projectile != null)

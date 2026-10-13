@@ -636,6 +636,9 @@ public static class ServerContentLoader
         string displayName = entry.RequiredString("displayName");
         int level = entry.RequiredInt("level", 1, ContentLimits.MaxLevel);
         bool isBoss = entry.RequiredBool("boss");
+        Element element = entry.RequiredEnum<Element>("element");
+        Race race = entry.RequiredEnum<Race>("race");
+        BodySize size = entry.RequiredEnum<BodySize>("size");
         int hp = entry.RequiredInt("hp", 1, ContentLimits.MaxHp);
         int physicalAttack = entry.RequiredInt("physicalAttack", 0, ContentLimits.MaxStat);
         int physicalDefense = entry.RequiredInt("physicalDefense", 0, ContentLimits.MaxStat);
@@ -770,7 +773,10 @@ public static class ServerContentLoader
             assists,
             assistRadius,
             mvpExperience,
-            mvpDrops.AsReadOnly());
+            mvpDrops.AsReadOnly(),
+            element,
+            race,
+            size);
     }
 
     private static SkillDefinition? ReadSkill(PackageObjectReader entry, SkillDefinitionId id, List<string> problems)
