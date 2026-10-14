@@ -386,6 +386,66 @@ namespace Evertorch.Persistence
                         });
                 });
 
+            modelBuilder.Entity("Evertorch.Persistence.CharacterStatusEffectRow", b =>
+                {
+                    b.Property<long>("CharacterId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("character_id");
+
+                    b.Property<string>("StatusDefinitionId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("status_definition_id");
+
+                    b.Property<int>("AgiPercent")
+                        .HasColumnType("integer")
+                        .HasColumnName("agi_percent");
+
+                    b.Property<int>("DexPercent")
+                        .HasColumnType("integer")
+                        .HasColumnName("dex_percent");
+
+                    b.Property<int>("IntPercent")
+                        .HasColumnType("integer")
+                        .HasColumnName("int_percent");
+
+                    b.Property<int>("LukPercent")
+                        .HasColumnType("integer")
+                        .HasColumnName("luk_percent");
+
+                    b.Property<int>("RemainingMs")
+                        .HasColumnType("integer")
+                        .HasColumnName("remaining_ms");
+
+                    b.Property<int>("StrPercent")
+                        .HasColumnType("integer")
+                        .HasColumnName("str_percent");
+
+                    b.Property<int>("VitPercent")
+                        .HasColumnType("integer")
+                        .HasColumnName("vit_percent");
+
+                    b.HasKey("CharacterId", "StatusDefinitionId")
+                        .HasName("pk_character_status_effects");
+
+                    b.ToTable("character_status_effects", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_character_status_effects_agi_percent", "agi_percent BETWEEN -99 AND 1000");
+
+                            t.HasCheckConstraint("ck_character_status_effects_dex_percent", "dex_percent BETWEEN -99 AND 1000");
+
+                            t.HasCheckConstraint("ck_character_status_effects_int_percent", "int_percent BETWEEN -99 AND 1000");
+
+                            t.HasCheckConstraint("ck_character_status_effects_luk_percent", "luk_percent BETWEEN -99 AND 1000");
+
+                            t.HasCheckConstraint("ck_character_status_effects_remaining_ms", "remaining_ms BETWEEN 1 AND 86400000");
+
+                            t.HasCheckConstraint("ck_character_status_effects_str_percent", "str_percent BETWEEN -99 AND 1000");
+
+                            t.HasCheckConstraint("ck_character_status_effects_vit_percent", "vit_percent BETWEEN -99 AND 1000");
+                        });
+                });
+
             modelBuilder.Entity("Evertorch.Persistence.EquipmentRow", b =>
                 {
                     b.Property<long>("CharacterId")
@@ -1003,6 +1063,16 @@ namespace Evertorch.Persistence
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_character_skills_characters");
+                });
+
+            modelBuilder.Entity("Evertorch.Persistence.CharacterStatusEffectRow", b =>
+                {
+                    b.HasOne("Evertorch.Persistence.CharacterRow", null)
+                        .WithMany()
+                        .HasForeignKey("CharacterId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_character_status_effects_characters");
                 });
 
             modelBuilder.Entity("Evertorch.Persistence.EquipmentRow", b =>

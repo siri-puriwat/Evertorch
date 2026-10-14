@@ -93,6 +93,8 @@ internal sealed class EvertorchDbContext : DbContext
 
     public DbSet<CardChangeRow> CardChanges => Set<CardChangeRow>();
 
+    public DbSet<CharacterStatusEffectRow> CharacterStatusEffects => Set<CharacterStatusEffectRow>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         ConfigureAccounts(modelBuilder.Entity<AccountRow>());
@@ -113,6 +115,7 @@ internal sealed class EvertorchDbContext : DbContext
         ConfigureMarketSales(modelBuilder.Entity<MarketSaleRow>());
         ConfigureRefineAttempts(modelBuilder.Entity<RefineAttemptRow>());
         ConfigureCardChanges(modelBuilder.Entity<CardChangeRow>());
+        ConfigureStatusEffects(modelBuilder.Entity<CharacterStatusEffectRow>());
 
         foreach (IMutableEntityType entity in modelBuilder.Model.GetEntityTypes())
         {
@@ -290,6 +293,31 @@ internal sealed class EvertorchDbContext : DbContext
             .HasForeignKey(row => row.CharacterId)
             .OnDelete(DeleteBehavior.Restrict)
             .HasConstraintName("fk_character_skills_characters");
+    }
+
+    // A saved status holds no value: the checkpoint writes the rows whole, and they go with their character
+    // (Persistence §4).
+    private static void ConfigureStatusEffects(EntityTypeBuilder<CharacterStatusEffectRow> effect)
+    {
+        effect.ToTable("character_status_effects", table =>
+        {
+            table.HasCheckConstraint(
+                "ck_character_status_effects_remaining_ms",
+                $"remaining_ms BETWEEN 1 AND {ContentLimits.MaxDurationMs}");
+            foreach (string statistic in new[] { "str", "agi", "vit", "int", "dex", "luk" })
+            {
+                table.HasCheckConstraint(
+                    $"ck_character_status_effects_{statistic}_percent",
+                    $"{statistic}_percent BETWEEN {ContentLimits.MinStatPercent} AND {ContentLimits.MaxStatPercent}");
+            }
+        });
+        effect.HasKey(row => new { row.CharacterId, row.StatusDefinitionId }).HasName("pk_character_status_effects");
+        effect.Property(row => row.StatusDefinitionId).HasMaxLength(MaxDefinitionIdLength).IsRequired();
+        effect.HasOne<CharacterRow>()
+            .WithMany()
+            .HasForeignKey(row => row.CharacterId)
+            .OnDelete(DeleteBehavior.Cascade)
+            .HasConstraintName("fk_character_status_effects_characters");
     }
 
     // The leader's own key, (id, leader_character_id) to party_members, is declared in the AddParties migration's raw

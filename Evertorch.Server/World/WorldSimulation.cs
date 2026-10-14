@@ -88,6 +88,23 @@ public sealed class WorldSimulation
 
     public IReadOnlyCollection<MapInstance> Maps => m_maps.Values;
 
+    /// <summary>
+    ///     Places a stored character in the world (Persistence §6, §8): its stored job, level, experience, and
+    ///     statistics, its job level and job experience, and its learned skills, on its stored map, with its HP and SP
+    ///     within their maximums. It stands where it was
+    ///     checkpointed, at the map's spawn point with full HP and SP when it was checkpointed dead, and at the spawn
+    ///     point with its HP when its spot is no longer standable or lies inside a portal (Gameplay Systems §4.2).
+    ///     Returns false, placing nothing, when the content does
+    ///     not define its job, its map, or one of its items, quests, or skills; <paramref name="problem" /> then names
+    ///     what is missing.
+    /// </summary>
+    /// <summary>
+    ///     The time of the tick under way, in milliseconds from the first tick's; set as each tick starts
+    ///     (<see cref="WorldClockPhase" />), so a load, a settle, and a checkpoint read the same time as the systems of
+    ///     that tick.
+    /// </summary>
+    public long NowMs { get; set; }
+
     public bool TryGetMap(MapDefinitionId id, out MapInstance? map)
     {
         return m_maps.TryGetValue(id, out map);
@@ -111,25 +128,17 @@ public sealed class WorldSimulation
             now);
     }
 
-    /// <summary>
-    ///     Places a stored character in the world (Persistence §6, §8): its stored job, level, experience, and
-    ///     statistics, its job level and job experience, and its learned skills, on its stored map, with its HP and SP
-    ///     within their maximums. It stands where it was
-    ///     checkpointed, at the map's spawn point with full HP and SP when it was checkpointed dead, and at the spawn
-    ///     point with its HP when its spot is no longer standable or lies inside a portal (Gameplay Systems §4.2).
-    ///     Returns false, placing nothing, when the content does
-    ///     not define its job, its map, or one of its items, quests, or skills; <paramref name="problem" /> then names
-    ///     what is missing.
-    /// </summary>
     public bool TrySpawnPlayer(
         StoredCharacter stored,
         ConnectionId owner,
         out PlayerEntity? player,
         out MapInstance? map,
-        out string problem)
+        out string problem,
+        out StatusRestoration restoration)
     {
         player = null;
         map = null;
+        restoration = StatusRestoration.None;
         if (!JobDefinitionId.TryCreate(stored.JobDefinitionId, out JobDefinitionId jobId)
             || !m_content.Jobs.TryGetValue(jobId, out JobDefinition? job))
         {
@@ -240,6 +249,10 @@ public sealed class WorldSimulation
         // Equipment loads with the character and counts from its first tick (Gameplay Systems §11.1), so the stored
         // HP and SP are held to the maximums it gives.
         WornEquipment.Dress(player, m_content, wornWeapon, weaponLevel, wornArmor, armorLevel, weaponCards, armorCards);
+
+        // Saved effects join before the statistics are derived, so the stored HP and SP are held to maximums that count
+        // them; their time waited offline (Persistence §7).
+        restoration = RestoreStatusEffects(player, stored.StatusEffects, wornWeapon.HasValue);
         m_stats.Recalculate(player, job);
         player.CurrentHealth = wasDead ? player.MaxHealth : Math.Min(stored.Health, player.MaxHealth);
         player.CurrentSpirit = wasDead ? player.MaxSpirit : Math.Min(stored.Spirit, player.MaxSpirit);
@@ -255,6 +268,45 @@ public sealed class WorldSimulation
         map = instance;
         problem = string.Empty;
         return true;
+    }
+
+    // A converter's status needs a worn weapon, and a status the content lacks holds no value, so both are dropped and
+    // the next checkpoint deletes them (Persistence §8).
+    private StatusRestoration RestoreStatusEffects(
+        PlayerEntity player,
+        IReadOnlyList<StoredStatusEffect> stored,
+        bool isArmed)
+    {
+        if (stored.Count == 0)
+        {
+            return StatusRestoration.None;
+        }
+
+        var unknown = new List<string>();
+        int restored = 0;
+        int unarmed = 0;
+        foreach (StoredStatusEffect effect in stored)
+        {
+            if (!StatusDefinitionId.TryCreate(effect.StatusDefinitionId, out StatusDefinitionId status)
+                || !m_content.StatusEffects.TryGetValue(status, out StatusEffectDefinition? definition))
+            {
+                unknown.Add(effect.StatusDefinitionId);
+                continue;
+            }
+
+            if (definition.AttackElement.HasValue && !isArmed)
+            {
+                unarmed++;
+                continue;
+            }
+
+            player.StartStatusEffect(
+                new ActiveStatusEffect(status, effect.StatPercent, NowMs + effect.RemainingMs,
+                    definition.AttackElement));
+            restored++;
+        }
+
+        return new StatusRestoration(restored, unarmed + unknown.Count, unknown);
     }
 
     public void RemovePlayer(MapInstance map, PlayerEntity player)

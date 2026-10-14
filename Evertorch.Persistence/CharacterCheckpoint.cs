@@ -8,8 +8,9 @@ namespace Evertorch.Persistence
 ///     The limited-rollback state of a character in the world (Persistence §6): its job, its map, its position, its HP,
 ///     where HP 0 records a character checkpointed dead, its SP, its level and experience and its job level and job
 ///     experience, which a checkpoint never lowers, the job pair only while the stored job is the checkpoint's, the
-///     progress of its active quests, which a checkpoint never lowers either, and its primary statistics and learned
-///     skills, which it writes whole. It never writes the job itself: only a change's commit does.
+///     progress of its active quests, which a checkpoint never lowers either, and its primary statistics, learned
+///     skills, and status effects, which it writes whole. It never writes the job itself: only a change's commit
+///     does.
 /// </summary>
 public sealed class CharacterCheckpoint
 {
@@ -28,7 +29,8 @@ public sealed class CharacterCheckpoint
         int jobLevel = 1,
         long jobExperience = 0,
         PrimaryStats? stats = null,
-        IReadOnlyList<StoredSkill>? skills = null)
+        IReadOnlyList<StoredSkill>? skills = null,
+        IReadOnlyList<StoredStatusEffect>? statusEffects = null)
     {
         CharacterId = characterId;
         Job = job ?? throw new ArgumentNullException(nameof(job));
@@ -45,6 +47,7 @@ public sealed class CharacterCheckpoint
         JobExperience = jobExperience;
         Stats = stats;
         Skills = skills;
+        StatusEffects = statusEffects;
     }
 
     public long CharacterId { get; }
@@ -105,5 +108,12 @@ public sealed class CharacterCheckpoint
     ///     ones as they are.
     /// </summary>
     public IReadOnlyList<StoredSkill>? Skills { get; }
+
+    /// <summary>
+    ///     Every active status effect with what it had left when the checkpoint was built, written whole, so an effect
+    ///     left out has ended; null leaves the stored ones as they are. Statuses hold no points, so a commit in flight
+    ///     never holds them back (Persistence §6).
+    /// </summary>
+    public IReadOnlyList<StoredStatusEffect>? StatusEffects { get; }
 }
 }

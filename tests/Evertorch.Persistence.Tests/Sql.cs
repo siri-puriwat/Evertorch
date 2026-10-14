@@ -130,6 +130,13 @@ internal sealed class Sql
             + $"VALUES ({character}, '{skill}', {level})";
     }
 
+    public static string StatusEffectInsert(long character, string status, int remainingMs, int strPercent)
+    {
+        return "INSERT INTO character_status_effects (character_id, status_definition_id, remaining_ms, str_percent, "
+            + "agi_percent, vit_percent, int_percent, dex_percent, luk_percent) "
+            + $"VALUES ({character}, '{status}', {remainingMs}, {strPercent}, 0, 0, 0, 0, 0)";
+    }
+
     public static string QuestInsert(long character, string quest, string state, int progress)
     {
         string completedAt = state == "completed" ? "now()" : "NULL";

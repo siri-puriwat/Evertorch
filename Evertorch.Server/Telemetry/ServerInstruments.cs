@@ -73,6 +73,8 @@ public sealed class ServerInstruments
     private static readonly KeyValuePair<string, object?> StatusStarted = new("change", "started");
     private static readonly KeyValuePair<string, object?> StatusRenewed = new("change", "renewed");
     private static readonly KeyValuePair<string, object?> StatusEnded = new("change", "ended");
+    private static readonly KeyValuePair<string, object?> StatusRestored = new("change", "restored");
+    private static readonly KeyValuePair<string, object?> StatusDropped = new("change", "dropped");
     private static readonly KeyValuePair<string, object?> StatChange = new("change", "stat");
     private static readonly KeyValuePair<string, object?> SkillChange = new("change", "skill");
     private static readonly KeyValuePair<string, object?> ResetChange = new("change", "reset");
@@ -520,6 +522,8 @@ public sealed class ServerInstruments
         {
             StatusEffectChange.Started => StatusStarted,
             StatusEffectChange.Renewed => StatusRenewed,
+            StatusEffectChange.Restored => StatusRestored,
+            StatusEffectChange.Dropped => StatusDropped,
             _ => StatusEnded
         };
         m_statusEffects.Add(count, tag);

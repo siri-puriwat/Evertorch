@@ -346,6 +346,23 @@ WHERE account_id = {account.Value} AND expires_at > {issuedAt} AND token_hash NO
                     .Select(skill => new StoredSkill(skill.SkillDefinitionId, skill.Level))
                     .ToListAsync(cancellationToken)
                     .ConfigureAwait(false);
+                List<CharacterStatusEffectRow> effectRows = await context.CharacterStatusEffects
+                    .AsNoTracking()
+                    .Where(effect => effect.CharacterId == characterId)
+                    .OrderBy(effect => effect.StatusDefinitionId)
+                    .ToListAsync(cancellationToken)
+                    .ConfigureAwait(false);
+                var statusEffects = effectRows.Select(effect => new StoredStatusEffect(
+                        effect.StatusDefinitionId,
+                        effect.RemainingMs,
+                        new StatPercentages(
+                            effect.StrPercent,
+                            effect.AgiPercent,
+                            effect.VitPercent,
+                            effect.IntPercent,
+                            effect.DexPercent,
+                            effect.LukPercent)))
+                    .ToList();
                 return new StoredCharacter(
                     row.Id,
                     account,
@@ -364,7 +381,8 @@ WHERE account_id = {account.Value} AND expires_at > {issuedAt} AND token_hash NO
                     quests,
                     row.JobLevel,
                     row.JobExp,
-                    skills);
+                    skills,
+                    statusEffects);
             },
             cancellationToken);
     }
@@ -476,6 +494,17 @@ WHERE character_quests.state = {CharacterQuestRow.ActiveState} AND character_que
                     if (!isCommitInFlight && checkpoint.Skills != null && updated == 1)
                     {
                         await WriteSkillsAsync(context, checkpoint.CharacterId, checkpoint.Skills, cancellationToken)
+                            .ConfigureAwait(false);
+                    }
+
+                    // Statuses hold no points, so a commit in flight never holds them back (Persistence §6).
+                    if (checkpoint.StatusEffects != null && updated == 1)
+                    {
+                        await WriteStatusEffectsAsync(
+                                context,
+                                checkpoint.CharacterId,
+                                checkpoint.StatusEffects,
+                                cancellationToken)
                             .ConfigureAwait(false);
                     }
 
@@ -3115,6 +3144,39 @@ WHERE character_quests.state = {CharacterQuestRow.ActiveState} AND character_que
 VALUES ({characterId}, {skill.SkillDefinitionId}, {skill.Level})
 ON CONFLICT (character_id, skill_definition_id) DO UPDATE SET level = EXCLUDED.level
 WHERE character_skills.level <> EXCLUDED.level",
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+    }
+
+    // Written whole, as the learned skills are: each effect is inserted or replaced with what it has left, and a stored
+    // effect left out has ended (Persistence §6).
+    private static async Task WriteStatusEffectsAsync(
+        EvertorchDbContext context,
+        long characterId,
+        IReadOnlyList<StoredStatusEffect> effects,
+        CancellationToken cancellationToken)
+    {
+        string[] kept = effects.Select(effect => effect.StatusDefinitionId).ToArray();
+        await context.Database
+            .ExecuteSqlInterpolatedAsync(
+                $"DELETE FROM character_status_effects WHERE character_id = {characterId} AND status_definition_id <> ALL ({kept})",
+                cancellationToken)
+            .ConfigureAwait(false);
+        foreach (StoredStatusEffect effect in effects)
+        {
+            StatPercentages percent = effect.StatPercent;
+            await context.Database
+                .ExecuteSqlInterpolatedAsync(
+                    $@"INSERT INTO character_status_effects
+    (character_id, status_definition_id, remaining_ms, str_percent, agi_percent, vit_percent, int_percent, dex_percent,
+    luk_percent)
+VALUES ({characterId}, {effect.StatusDefinitionId}, {effect.RemainingMs}, {percent.Str}, {percent.Agi}, {percent.Vit},
+    {percent.Int}, {percent.Dex}, {percent.Luk})
+ON CONFLICT (character_id, status_definition_id) DO UPDATE
+SET remaining_ms = EXCLUDED.remaining_ms, str_percent = EXCLUDED.str_percent, agi_percent = EXCLUDED.agi_percent,
+    vit_percent = EXCLUDED.vit_percent, int_percent = EXCLUDED.int_percent, dex_percent = EXCLUDED.dex_percent,
+    luk_percent = EXCLUDED.luk_percent",
                     cancellationToken)
                 .ConfigureAwait(false);
         }

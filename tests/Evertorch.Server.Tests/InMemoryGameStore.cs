@@ -572,6 +572,12 @@ internal sealed class InMemoryGameStore : IGameStore
                     }
                 }
 
+                if (checkpoint.StatusEffects != null)
+                {
+                    row.StatusEffects.Clear();
+                    row.StatusEffects.AddRange(checkpoint.StatusEffects);
+                }
+
                 foreach (StoredQuest quest in checkpoint.Quests)
                 {
                     if (!row.Quests.TryGetValue(quest.QuestDefinitionId, out StoredQuest? stored))
@@ -1220,11 +1226,18 @@ internal sealed class InMemoryGameStore : IGameStore
         int? jobLevel = null,
         long? jobExperience = null,
         PrimaryStats? stats = null,
-        IReadOnlyDictionary<string, int>? skills = null)
+        IReadOnlyDictionary<string, int>? skills = null,
+        IReadOnlyList<StoredStatusEffect>? statusEffects = null)
     {
         lock (m_gate)
         {
             Row row = m_characters[id];
+            if (statusEffects != null)
+            {
+                row.StatusEffects.Clear();
+                row.StatusEffects.AddRange(statusEffects);
+            }
+
             row.Job = job ?? row.Job;
             row.Map = map ?? row.Map;
             row.Position = position ?? row.Position;
@@ -2793,6 +2806,9 @@ internal sealed class InMemoryGameStore : IGameStore
         /// <summary>Each learned skill's level, by skill ID.</summary>
         public Dictionary<string, int> Skills { get; } = new(StringComparer.Ordinal);
 
+        /// <summary>The status effects of the last checkpoint, written whole.</summary>
+        public List<StoredStatusEffect> StatusEffects { get; } = new();
+
         public uint InventoryRevision { get; set; }
 
         public long Coins { get; set; }
@@ -2842,7 +2858,8 @@ internal sealed class InMemoryGameStore : IGameStore
                 JobExperience,
                 Skills.OrderBy(skill => skill.Key, StringComparer.Ordinal)
                     .Select(skill => new StoredSkill(skill.Key, skill.Value))
-                    .ToList());
+                    .ToList(),
+                StatusEffects.OrderBy(effect => effect.StatusDefinitionId, StringComparer.Ordinal).ToList());
         }
     }
 }

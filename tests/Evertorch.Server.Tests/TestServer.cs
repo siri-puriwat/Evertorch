@@ -154,6 +154,7 @@ internal sealed class TestServer
             Sessions,
             Persistence,
             Time,
+            Instruments,
             Options.Create(persistence ?? new PersistenceOptions()),
             Options.Create(new SessionOptions { ReconnectGraceMs = reconnectGraceMs }),
             simulation,
@@ -193,7 +194,7 @@ internal sealed class TestServer
             Options.Create(world),
             Options.Create(new DropOptions { CardChanceScale = cardChanceScale }),
             simulation);
-        StatusEffects = new StatusEffectSystem(World, Sessions, Content, stats, sender, Instruments, simulation);
+        StatusEffects = new StatusEffectSystem(World, Sessions, Content, stats, sender, Instruments);
         Bosses = new BossAnnouncer(Sessions, sender, Instruments, BossLog);
         Combat = new CombatSystem(
             World,
@@ -309,6 +310,7 @@ internal sealed class TestServer
         Admin = new AdminCommandService(Status, AdminQueue, Shutdown, ApplicationLifetime, Audit, Accounts);
         var phases = new List<ITickPhase>
         {
+            new WorldClockPhase(World, simulation),
             Status,
             new SnapshotPhase(Sessions, sender, Options.Create(world)),
             new VisibilityPhase(Sessions, World, sender, targeting),

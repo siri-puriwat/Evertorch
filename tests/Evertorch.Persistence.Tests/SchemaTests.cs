@@ -24,6 +24,7 @@ public sealed class SchemaTests
     private const string AddTradesAndStorage = "20261003172540_AddTradesAndStorage";
     private const string AddMarketBoard = "20261010111957_AddMarketBoard";
     private const string AddRefining = "20261011013231_AddRefining";
+    private const string AddCards = "20261012164717_AddCards";
 
     private PostgresFixture m_database = null!;
     private Sql m_sql = null!;
@@ -247,6 +248,18 @@ public sealed class SchemaTests
             CheckViolation,
             "INSERT INTO storage_items (account_id, item_definition_id, quantity, refine_level, instance_data_json, "
             + $"version) VALUES ({account}, 'item.weapon.iron_sword', {quantity}, 0, {data}, 0)");
+    }
+
+    // A saved status has 1 ms to a day left and percentages from −99 to 1,000 (Persistence §4).
+    [TestCase(0, 0)]
+    [TestCase(86_400_001, 0)]
+    [TestCase(1, -100)]
+    [TestCase(1, 1_001)]
+    public void CharacterStatusEffect_OutsideItsBounds_IsRejected(int remainingMs, int percent)
+    {
+        long character = NewCharacter();
+
+        AssertFailsWith(CheckViolation, Sql.StatusEffectInsert(character, "status.focus", remainingMs, percent));
     }
 
     [Test]
@@ -495,6 +508,28 @@ public sealed class SchemaTests
             "the refused down kept the row");
     }
 
+    // AddSavedStatusEffects runs down at any time, dropping its table with its rows, since a saved status holds no
+    // value (Persistence §4, §11).
+    [Test]
+    public void AddSavedStatusEffects_Down_DropsItsTable()
+    {
+        using var saved = PostgresFixture.Start();
+        var savedSql = new Sql(saved.ConnectionString);
+        long character = savedSql.InsertCharacter(savedSql.InsertAccount(), "Saver");
+        savedSql.Execute(Sql.StatusEffectInsert(character, "status.focus", 30_000, 100));
+
+        EvertorchDatabase.ApplyMigrationsAsync(saved.ConnectionString, AddCards, CancellationToken.None)
+            .GetAwaiter()
+            .GetResult();
+
+        Assert.That(
+            savedSql.Scalar(
+                "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public' "
+                + "AND table_name = 'character_status_effects'"),
+            Is.Zero,
+            "its table went with its row");
+    }
+
     // AddTradesAndStorage runs down only while no ledger row is of a type it adds, and drops its tables with their rows
     // (Persistence §4, §11).
     [Test]
@@ -622,6 +657,25 @@ public sealed class SchemaTests
     }
 
     [Test]
+    public void CharacterStatusEffect_AtItsBounds_IsStoredOncePerCharacterAndStatus()
+    {
+        long character = NewCharacter();
+        m_sql.Execute(Sql.StatusEffectInsert(character, "status.focus", 1, -99));
+        m_sql.Execute(Sql.StatusEffectInsert(character, "status.numbed", 86_400_000, 1_000));
+
+        AssertFailsWith(UniqueViolation, Sql.StatusEffectInsert(character, "status.focus", 5, 0));
+        Assert.That(
+            m_sql.Scalar($"SELECT count(*) FROM character_status_effects WHERE character_id = {character}"),
+            Is.EqualTo(2));
+    }
+
+    [Test]
+    public void CharacterStatusEffect_OfAMissingCharacter_IsRejected()
+    {
+        AssertFailsWith(ForeignKeyViolation, Sql.StatusEffectInsert(-1, "status.focus", 30_000, 100));
+    }
+
+    [Test]
     public void Character_AtTheLargestInventoryRevision_IsStored()
     {
         long account = m_sql.InsertAccount();
@@ -630,6 +684,19 @@ public sealed class SchemaTests
         long id = m_sql.Scalar(Sql.CharacterInsert(account, name, name.ToLowerInvariant(), uint.MaxValue));
 
         Assert.That(id, Is.Positive);
+    }
+
+    [Test]
+    public void Character_Deleted_TakesItsStatusEffectsWithIt()
+    {
+        long character = NewCharacter();
+        m_sql.Execute(Sql.StatusEffectInsert(character, "status.focus", 30_000, 100));
+
+        m_sql.Execute($"DELETE FROM characters WHERE id = {character}");
+
+        Assert.That(
+            m_sql.Scalar($"SELECT count(*) FROM character_status_effects WHERE character_id = {character}"),
+            Is.Zero);
     }
 
     [Test]
@@ -858,8 +925,8 @@ public sealed class SchemaTests
                 + "('accounts', 'characters', 'inventory_items', 'equipment', 'economy_ledger', 'character_quests', "
                 + "'session_tokens', 'character_skills', 'parties', 'party_members', 'trades', 'account_storages', "
                 + "'storage_items', 'market_prices', 'market_listings', 'market_sales', 'refine_attempts', "
-                + "'card_changes')"),
-            Is.EqualTo(18));
+                + "'card_changes', 'character_status_effects')"),
+            Is.EqualTo(19));
     }
 
     [Test]

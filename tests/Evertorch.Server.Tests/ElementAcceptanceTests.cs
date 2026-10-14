@@ -25,7 +25,8 @@ namespace Evertorch.Server.Tests
 ///     draw against its small size; she uses the converter, her sheet and status list say Earth, and her sword fells
 ///     another wisp, Wind, in two; and Arlo's bolt strikes a third. Then Vera leaves, and Arlo sees her go. After a
 ///     clean stop a second host on the same database lets both in again on the field, their bags as they left them, the
-///     converter's element gone, and Arlo's armor Earth still. In the Umbral Grotto, with a test package that disarms
+///     converter's element kept, since every status is saved (Milestone 19), and Arlo's armor Earth still. In the Umbral
+///     Grotto, with a test package that disarms
 ///     its monsters, has the Barrow Crawler bite and the Slime Monarch slam whenever they may, and softens the slam,
 ///     Wren's Neutral sword strikes a Hollow Wisp, a Ghost, for half, and a Barrow Crawler bites Ilse, an Arcanist in
 ///     Earthen armor, with Grave Bite; after a restart that finds them both beside the Monarch, its Earth slam strikes
@@ -596,10 +597,13 @@ public sealed class ElementAcceptanceTests
             Assert.That(Bag(vera), Is.EqualTo(veraBag), "restart: Vera's bag as it was");
             Assert.That(Bag(arlo), Is.EqualTo(arloBag), "restart: Arlo's bag as it was");
             Assert.That(
-                vera.World.Sheet?.AttackElement,
-                Is.EqualTo(Element.Neutral),
-                "restart: no effect is stored, so the converter's element is gone");
-            Assert.That(vera.World.StatusEffects, Is.Empty, "restart: nor its status");
+                SocketClients.PumpUntil(() => vera.World.Sheet?.AttackElement == Element.Earth, vera, arlo),
+                Is.True,
+                "restart: every status is saved, so the converter's element stays");
+            Assert.That(
+                vera.World.StatusEffects.Select(effect => effect.Status.Value),
+                Is.EqualTo(new[] { EarthWeapon }),
+                "restart: and its status");
             Assert.That(
                 SocketClients.PumpUntil(() => arlo.World.Sheet?.ArmorElement == Element.Earth, vera, arlo),
                 Is.True,

@@ -183,7 +183,8 @@ public sealed class PlayerEntity : WorldEntity
     public long NextSpiritRegenerationMs { get; set; } = long.MinValue;
 
     /// <summary>
-    ///     The status effects on the player, in the order they started; they are not persisted (Gameplay Systems §9.1).
+    ///     The status effects on the player, in the order they started; the checkpoint saves them with their time left
+    ///     (Gameplay Systems §9.1).
     /// </summary>
     public IReadOnlyList<ActiveStatusEffect> StatusEffects => m_statusEffects;
 

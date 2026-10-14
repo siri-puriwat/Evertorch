@@ -118,6 +118,30 @@ public sealed class CharacterLoadTests
         return stored.Skills.Select(skill => (skill.SkillDefinitionId, skill.Level)).ToArray();
     }
 
+    private void SaveEffects(long character, IReadOnlyList<StoredStatusEffect>? effects, bool isCommitInFlight = false)
+    {
+        var checkpoint = new CharacterCheckpoint(
+            character,
+            Adventurer,
+            new MapDefinitionId("map.training_ground"),
+            new WorldPosition(1f, 0f, 1f),
+            50,
+            23,
+            1,
+            0,
+            Now,
+            isCommitInFlight: isCommitInFlight,
+            statusEffects: effects);
+        m_store.SaveCheckpointAsync(checkpoint, CancellationToken.None).GetAwaiter().GetResult();
+    }
+
+    private static (string, int, StatPercentages)[] EffectsOf(StoredCharacter stored)
+    {
+        return stored.StatusEffects
+            .Select(effect => (effect.StatusDefinitionId, effect.RemainingMs, effect.StatPercent))
+            .ToArray();
+    }
+
     // Stored job level and job experience, then a checkpoint's => what is stored afterwards (Persistence §6).
     [TestCase(3, 40, 2, 99, 3, 40)]
     [TestCase(3, 40, 3, 39, 3, 40)]
@@ -208,6 +232,19 @@ public sealed class CharacterLoadTests
     }
 
     [Test]
+    public void ListStoredDefinitionIds_LeavesTheStatusEffectsOut()
+    {
+        (AccountId _, long character) = NewCharacter();
+        SaveEffects(character, new[] { new StoredStatusEffect("status.forgotten", 1_000, default) });
+
+        IReadOnlyList<string> ids = m_store.ListStoredDefinitionIdsAsync(CancellationToken.None)
+            .GetAwaiter()
+            .GetResult();
+
+        Assert.That(ids, Has.No.Member("status.forgotten"));
+    }
+
+    [Test]
     public void LoadCharacter_ForANewCharacter_ReturnsLevelOneWithNoExperienceAndItsSp()
     {
         (AccountId account, long character) = NewCharacter();
@@ -254,6 +291,27 @@ public sealed class CharacterLoadTests
 
         Assert.That(Load(other, character), Is.Null);
         Assert.That(Load(other, long.MaxValue), Is.Null);
+    }
+
+    [Test]
+    public void LoadCharacter_ReadsItsStatusEffectsInIdOrder_WithTheirTimeLeftAndPercentages()
+    {
+        (AccountId account, long character) = NewCharacter();
+        var guard = new StatPercentages(0, 0, 70, 0, 0, 0);
+        var numbed = new StatPercentages(0, -40, 0, 0, 0, 0);
+        SaveEffects(
+            character,
+            new[]
+            {
+                new StoredStatusEffect("status.war_cry", 86_400_000, guard),
+                new StoredStatusEffect("status.numbed", 1, numbed)
+            });
+
+        StoredCharacter stored = Load(account, character)!;
+
+        Assert.That(
+            EffectsOf(stored),
+            Is.EqualTo(new[] { ("status.numbed", 1, numbed), ("status.war_cry", 86_400_000, guard) }));
     }
 
     [Test]
@@ -370,6 +428,30 @@ public sealed class CharacterLoadTests
         Assert.That(LevelsOf(raised), Is.EqualTo(new[] { ("skill.focus", 3), ("skill.strike", 2) }));
         Assert.That(reset.Stats, Is.EqualTo(new PrimaryStats(5, 6, 7, 8, 9, 10)), "lowered, written whole");
         Assert.That(LevelsOf(reset), Is.EqualTo(new[] { ("skill.strike", 1) }), "focus forgotten, strike lowered");
+    }
+
+    // Statuses hold no points, so a checkpoint writes them whole whatever a commit in flight holds back, and only a
+    // checkpoint without them leaves the stored ones (Persistence §6).
+    [Test]
+    public void SaveCheckpoint_WritesTheStatusEffectsWhole_EvenWhileACommitIsInFlight()
+    {
+        (AccountId account, long character) = NewCharacter();
+        var focus = new StatPercentages(0, 100, 0, 0, 100, 0);
+        SaveEffects(
+            character,
+            new[]
+            {
+                new StoredStatusEffect("status.focus", 30_000, focus),
+                new StoredStatusEffect("status.clarity", 30_000, new StatPercentages(0, 0, 0, 40, 0, 0))
+            });
+
+        SaveEffects(character, new[] { new StoredStatusEffect("status.focus", 20_000, focus) }, true);
+        StoredCharacter written = Load(account, character)!;
+        SaveEffects(character, null);
+        StoredCharacter kept = Load(account, character)!;
+
+        Assert.That(EffectsOf(written), Is.EqualTo(new[] { ("status.focus", 20_000, focus) }), "clarity ended");
+        Assert.That(EffectsOf(kept), Is.EqualTo(EffectsOf(written)), "a checkpoint without them leaves them");
     }
 }
 }

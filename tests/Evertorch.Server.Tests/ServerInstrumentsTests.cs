@@ -882,6 +882,31 @@ public sealed class ServerInstrumentsTests
     }
 
     [Test]
+    public void StatusEffects_RestoredAndDroppedAtALoad_AreCounted()
+    {
+        var server = new TestServer();
+        using var recorder = new MeterRecorder(server.Instruments.Meter);
+        server.Disconnect(server.EnterWorld(7));
+        server.Tick(2);
+        server.Store.Edit(
+            7,
+            statusEffects: new[]
+            {
+                new StoredStatusEffect("status.focus", 30_000, new StatPercentages(0, 100, 0, 0, 100, 0)),
+                new StoredStatusEffect("status.fire_weapon", 30_000, default),
+                new StoredStatusEffect("status.forgotten", 30_000, default)
+            });
+
+        ConnectionId connection = server.Connect();
+        server.SignInWithCharacter(connection, 7);
+        server.SendEnterWorld(connection, 7);
+        server.TickUntil(() => server.SessionOf(connection).State == SessionState.InWorld);
+
+        Assert.That(SumTagged(recorder, "evertorch.combat.status_effects", "change", "restored"), Is.EqualTo(1));
+        Assert.That(SumTagged(recorder, "evertorch.combat.status_effects", "change", "dropped"), Is.EqualTo(2));
+    }
+
+    [Test]
     public void Tags_NeverNameAConnectionAccountOrCharacter()
     {
         var server = new TestServer();

@@ -38,6 +38,13 @@ public sealed class CharacterLifetime
             "Character {Character} on connection {Connection} entered wearing {Item} at +{Level}, past the {Last} "
             + "levels its refine table gives; it counts the table's last bonus, or none without a table.");
 
+    private static readonly Action<ILogger, long, long, string, Exception?> LogStoredStatusDropped =
+        LoggerMessage.Define<long, long, string>(
+            LogLevel.Warning,
+            new EventId(1043, "StoredStatusDropped"),
+            "Character {Character} on connection {Connection} entered with the saved status {Status}, which the content "
+            + "lacks; it is dropped, and the next checkpoint deletes it.");
+
     private static readonly Action<ILogger, long, long, ItemDefinitionId, int, int, string, Exception?>
         LogCardOutOfPlace = LoggerMessage.Define<long, long, ItemDefinitionId, int, int, string>(
             LogLevel.Warning,
@@ -51,6 +58,7 @@ public sealed class CharacterLifetime
     private readonly SessionRegistry m_sessions;
     private readonly PersistenceWorker m_persistence;
     private readonly TimeProvider m_time;
+    private readonly ServerInstruments m_instruments;
     private readonly ILogger<CharacterLifetime> m_logger;
     private readonly uint m_checkpointIntervalTicks;
     private readonly uint m_graceTicks;
@@ -63,6 +71,7 @@ public sealed class CharacterLifetime
         SessionRegistry sessions,
         PersistenceWorker persistence,
         TimeProvider time,
+        ServerInstruments instruments,
         IOptions<PersistenceOptions> persistenceOptions,
         IOptions<SessionOptions> sessionOptions,
         IOptions<SimulationOptions> simulation,
@@ -74,6 +83,7 @@ public sealed class CharacterLifetime
         m_sessions = sessions;
         m_persistence = persistence;
         m_time = time;
+        m_instruments = instruments;
         m_logger = logger;
         long ticks = (long)persistenceOptions.Value.CheckpointIntervalMs * simulation.Value.TickRate /
             MillisecondsPerSecond;
@@ -95,11 +105,18 @@ public sealed class CharacterLifetime
     /// </summary>
     public CharacterSession? Spawn(StoredCharacter stored, ClientSession owner, uint tick, out string problem)
     {
-        if (!m_world.TrySpawnPlayer(stored, owner.Connection, out PlayerEntity? player, out MapInstance? map,
-                out problem))
+        if (!m_world.TrySpawnPlayer(
+                stored,
+                owner.Connection,
+                out PlayerEntity? player,
+                out MapInstance? map,
+                out problem,
+                out StatusRestoration restoration))
         {
             return null;
         }
+
+        CountRestoredStatuses(restoration, stored.Id, owner.Connection);
 
         // A build that spends more than its levels grant, from a hand-edited row or shortened content, starts again
         // from the job's start; the next checkpoint stores that (Persistence §6).
@@ -120,6 +137,24 @@ public sealed class CharacterLifetime
         LogCardsOutOfPlace(character);
         m_sessions.AddCharacter(character);
         return character;
+    }
+
+    private void CountRestoredStatuses(StatusRestoration restoration, long character, ConnectionId connection)
+    {
+        if (restoration.Restored > 0)
+        {
+            m_instruments.RecordStatusEffects(StatusEffectChange.Restored, restoration.Restored);
+        }
+
+        if (restoration.Dropped > 0)
+        {
+            m_instruments.RecordStatusEffects(StatusEffectChange.Dropped, restoration.Dropped);
+        }
+
+        foreach (string status in restoration.Unknown)
+        {
+            LogStoredStatusDropped(m_logger, character, connection.Value, status, null);
+        }
     }
 
     // Only changed content or a hand-edited row leaves a weapon the job cannot wield; taking it off here would be an
@@ -210,8 +245,8 @@ public sealed class CharacterLifetime
 
     /// <summary>
     ///     Hands the character's current job, map, position, HP, SP, level and experience, job level and job experience,
-    ///     primary statistics, learned skills, and active quests to the writer, replacing any checkpoint of it still
-    ///     waiting. <paramref name="onComplete" /> runs on the tick thread when it is
+    ///     primary statistics, learned skills, status effects, and active quests to the writer, replacing any checkpoint
+    ///     of it still waiting. <paramref name="onComplete" /> runs on the tick thread when it is
     ///     written or found unwritable.
     /// </summary>
     public PersistenceJob QueueCheckpoint(CharacterSession character, Action<PersistenceOutcome>? onComplete = null)
@@ -234,7 +269,8 @@ public sealed class CharacterLifetime
             player.JobLevel,
             player.JobExperience,
             player.Primary,
-            StoredSkillsOf(player));
+            StoredSkillsOf(player),
+            StoredStatusEffectsOf(player));
         ConnectionId connection = character.Connection?.Connection ?? default;
         PersistenceJob<bool>? job = null;
         job = new PersistenceJob<bool>(
@@ -268,6 +304,27 @@ public sealed class CharacterLifetime
         }
 
         return skills;
+    }
+
+    // What each effect has left at the clock of the tick under way, held to a day. An effect with nothing left is left
+    // out: it ends in this tick's combat phase, and a remaining time of 0 would fail the whole checkpoint (Persistence
+    // §6).
+    private List<StoredStatusEffect> StoredStatusEffectsOf(PlayerEntity player)
+    {
+        var effects = new List<StoredStatusEffect>(player.StatusEffects.Count);
+        foreach (ActiveStatusEffect effect in player.StatusEffects)
+        {
+            long remaining = effect.EndMs - m_world.NowMs;
+            if (remaining > 0)
+            {
+                effects.Add(new StoredStatusEffect(
+                    effect.Status.Value,
+                    (int)Math.Min(remaining, ContentLimits.MaxDurationMs),
+                    effect.StatPercent));
+            }
+        }
+
+        return effects;
     }
 
     /// <summary>

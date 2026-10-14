@@ -1,5 +1,4 @@
 using Evertorch.Game;
-using Microsoft.Extensions.Options;
 
 namespace Evertorch.Server
 {
@@ -11,15 +10,12 @@ namespace Evertorch.Server
 /// </summary>
 public sealed class StatusEffectSystem : ITickPhase
 {
-    private const int MillisecondsPerSecond = 1000;
-
     private readonly WorldSimulation m_world;
     private readonly SessionRegistry m_sessions;
     private readonly ServerContent m_content;
     private readonly CharacterStats m_stats;
     private readonly MessageSender m_sender;
     private readonly ServerInstruments m_instruments;
-    private readonly int m_tickRate;
 
     public StatusEffectSystem(
         WorldSimulation world,
@@ -27,8 +23,7 @@ public sealed class StatusEffectSystem : ITickPhase
         ServerContent content,
         CharacterStats stats,
         MessageSender sender,
-        ServerInstruments instruments,
-        IOptions<SimulationOptions> simulation)
+        ServerInstruments instruments)
     {
         m_world = world;
         m_sessions = sessions;
@@ -36,14 +31,13 @@ public sealed class StatusEffectSystem : ITickPhase
         m_stats = stats;
         m_sender = sender;
         m_instruments = instruments;
-        m_tickRate = simulation.Value.TickRate;
     }
 
     public TickPhase Phase => TickPhase.Combat;
 
     public void Execute(in TickContext context)
     {
-        long now = (long)(context.Tick - 1) * MillisecondsPerSecond / m_tickRate;
+        long now = m_world.NowMs;
         foreach (MapInstance map in m_world.Maps)
         {
             foreach (WorldEntity entity in map.Entities)

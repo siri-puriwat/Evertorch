@@ -12,7 +12,8 @@ namespace Evertorch.Server.Tests
 /// <summary>
 ///     Converters on PostgreSQL 18 (Milestone 18 verification; Gameplay Systems §9.1, §11.2; Persistence §5): a use
 ///     whose answers are lost commits once, settled from the ledger, and starts its status once; a player who dies
-///     before the answer gets none; and a restart keeps no effect, since effects are never stored. Earthen armor through
+///     before the answer gets none; and a restart keeps the status with its time left, since every status is saved
+///     (Milestone 19). Earthen armor through
 ///     a trade, storage, and a restart is <see cref="TradeAndStorageDurabilityTests" />'s.
 /// </summary>
 [TestFixture]
@@ -109,9 +110,9 @@ public sealed class ConverterDurabilityTests
 
     // Every answer is lost, so the writer replays the commit and the server settles it from the ledger: one unit
     // spent, one ledger row, and one status started and told. A new server on the same database loads the character
-    // with no effect and a Neutral swing, its sword still worn.
+    // with the converter's status and an Earth swing, its sword still worn (Persistence §6, §7).
     [Test]
-    public void Use_WhoseAnswersAreLost_CommitsOnce_StartsItsStatusOnce_AndARestartKeepsNoEffect()
+    public void Use_WhoseAnswersAreLost_CommitsOnce_StartsItsStatusOnce_AndARestartKeepsIt()
     {
         var store = new LosingAnswersGameStore(new PostgresGameStore(m_database.ConnectionString));
         var server = new TestServer(store: store);
@@ -136,10 +137,13 @@ public sealed class ConverterDurabilityTests
         Assert.That(Scalar($"SELECT quantity FROM inventory_items WHERE id = {converters}"), Is.EqualTo(1L));
         Assert.That(entity.StatusEffects.Select(effect => effect.Status), Is.EqualTo(new[] { EarthWeapon }));
         Assert.That(StatusListsTold(server, player), Is.EqualTo(1), "told once");
-        Assert.That(restarted.PlayerOf(again).StatusEffects, Is.Empty, "no effect is stored");
+        Assert.That(
+            restarted.PlayerOf(again).StatusEffects.Select(effect => effect.Status),
+            Is.EqualTo(new[] { EarthWeapon }),
+            "the status is stored");
         Assert.That(
             (restarted.PlayerOf(again).AttackElement, restarted.PlayerOf(again).Weapon != null),
-            Is.EqualTo((Element.Neutral, true)));
+            Is.EqualTo((Element.Earth, true)));
     }
 
     // The use is queued, the player dies before its answer, and the commit settles after: the unit is spent, as the

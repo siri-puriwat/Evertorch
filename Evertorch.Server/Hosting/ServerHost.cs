@@ -103,6 +103,9 @@ public static class ServerHost
         builder.Services.AddSingleton<CharacterLifetime>();
         builder.Services.AddSingleton<CharacterProgression>();
         builder.Services.AddSingleton<PickupSystem>();
+
+        // The clock first, so every phase of a tick reads its time.
+        builder.Services.AddSingleton<ITickPhase, WorldClockPhase>();
         builder.Services.AddSingleton<ITickPhase>(services => services.GetRequiredService<PickupSystem>());
         builder.Services.AddSingleton<ItemActionSystem>();
         builder.Services.AddSingleton<ChatSystem>();

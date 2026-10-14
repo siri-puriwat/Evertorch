@@ -22,7 +22,7 @@ namespace Evertorch.Server.Tests
 ///     wearing the Iron Sword, and Ines, a level-25 Arcanist with Arcane Bolt 5 and Mend 3 wearing the Ash Staff, stored
 ///     in the Umbral Grotto's crawler hall, enter and see each other by name. Sora raises Iron Guard, Ines Mends Sora,
 ///     and Sora's Heavy Blow strikes a Grotto Crawler. After a clean stop a second host on the same database lets both in
-///     again in the hall, each with its job and its skills.
+///     again in the hall, each with its job and its skills, and Sora with its Iron Guard and the time it had left.
 /// </summary>
 [TestFixture]
 [NonParallelizable]
@@ -154,6 +154,22 @@ public sealed class AilmentAcceptanceTests
                 ines),
             Is.True,
             $"{step}: in Sora's status list ({world.LastRejection})");
+    }
+
+    // Every status is saved with its time left, which waited while the server was down (Gameplay Systems §9.1).
+    private static void AssertIronGuardKept(SocketClient sora, SocketClient ines)
+    {
+        const string step = "restart";
+        ClientWorld world = sora.World;
+        Assert.That(
+            SocketClients.PumpUntil(
+                () => world.StatusEffects.Any(effect => effect.Status.Value == IronGuardStatus),
+                sora,
+                ines),
+            Is.True,
+            $"{step}: Sora's Iron Guard kept");
+        uint left = world.StatusEffects.Single(effect => effect.Status.Value == IronGuardStatus).RemainingMs;
+        Assert.That(left, Is.InRange(1u, 60_000u), $"{step}: with what it had left");
     }
 
     // Ines heals Sora with Mend: the heal names Sora and its level's amount (Gameplay Systems §9).
@@ -347,6 +363,7 @@ public sealed class AilmentAcceptanceTests
 
             AssertBuild("restart", sora, Vanguard, SoraBuild);
             AssertBuild("restart", ines, Arcanist, InesBuild);
+            AssertIronGuardKept(sora, ines);
             AssertCleanTraffic("restart", sora, ines);
             Stop(host, sora, ines);
         }

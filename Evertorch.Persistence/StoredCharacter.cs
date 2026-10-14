@@ -5,7 +5,8 @@ using Evertorch.Game;
 namespace Evertorch.Persistence
 {
 /// <summary>
-///     A character as stored, with its inventory, its quests, and its learned skills: what entering the world loads
+///     A character as stored, with its inventory, its quests, its learned skills, and its saved status effects: what
+///     entering the world loads
 ///     (Persistence §7).
 ///     Definition IDs are the stored text, which the current content may no longer define (Persistence §8).
 /// </summary>
@@ -29,7 +30,8 @@ public sealed class StoredCharacter
         IReadOnlyList<StoredQuest>? quests = null,
         int jobLevel = 1,
         long jobExperience = 0,
-        IReadOnlyList<StoredSkill>? skills = null)
+        IReadOnlyList<StoredSkill>? skills = null,
+        IReadOnlyList<StoredStatusEffect>? statusEffects = null)
     {
         Id = id;
         Account = account;
@@ -49,6 +51,7 @@ public sealed class StoredCharacter
         JobLevel = jobLevel;
         JobExperience = jobExperience;
         Skills = skills ?? Array.Empty<StoredSkill>();
+        StatusEffects = statusEffects ?? Array.Empty<StoredStatusEffect>();
     }
 
     public long Id { get; }
@@ -104,5 +107,11 @@ public sealed class StoredCharacter
     ///     The skills the character has learned, ordered by skill ID.
     /// </summary>
     public IReadOnlyList<StoredSkill> Skills { get; }
+
+    /// <summary>
+    ///     The status effects the character had at its last checkpoint, ordered by status ID; their time waited while
+    ///     the character was offline (Persistence §6).
+    /// </summary>
+    public IReadOnlyList<StoredStatusEffect> StatusEffects { get; }
 }
 }

@@ -24,6 +24,7 @@ public sealed class MigrationUpgradeTests
     private const string AddTradesAndStorage = "20261003172540_AddTradesAndStorage";
     private const string AddMarketBoard = "20261010111957_AddMarketBoard";
     private const string AddRefining = "20261011013231_AddRefining";
+    private const string AddCards = "20261012164717_AddCards";
     private const string ForeignKeyViolation = "23503";
     private const string CheckViolation = "23514";
     private const string UndefinedTable = "42P01";
@@ -101,6 +102,62 @@ public sealed class MigrationUpgradeTests
         }
 
         Assert.That(SqlStateOf(sql, Sql.LedgerInsert(Guid.NewGuid(), character, "gift")), Is.EqualTo(CheckViolation));
+    }
+
+    // Saved statuses add one table (Persistence §4); the migration changes no row, and no character has a saved
+    // status until its next checkpoint.
+    [Test]
+    public void Upgrade_FromAddCards_KeepsEveryRow_AndAddsSavedStatusEffects()
+    {
+        using var database = PostgresFixture.Start(targetMigration: AddCards);
+        var sql = new Sql(database.ConnectionString);
+        long account = sql.InsertAccount();
+        long character = sql.InsertCharacter(account, Sql.UniqueName("Up"));
+        long other = sql.InsertCharacter(sql.InsertAccount(), Sql.UniqueName("Up"));
+        long weapon = sql.Scalar(
+            "INSERT INTO inventory_items (character_id, item_definition_id, quantity, refine_level, version, "
+            + "instance_data_json) VALUES "
+            + $"({character}, 'item.weapon.iron_sword', 1, 7, 0, '{{\"cards\": [\"item.card.forest_crawler\"]}}') "
+            + "RETURNING id");
+        sql.Execute(Sql.EquipmentInsert(character, "Weapon", weapon));
+        sql.Scalar(Sql.LedgerInsert(Guid.NewGuid(), character, "card_insert"));
+        sql.Execute(Sql.QuestInsert(character, "quest.crawler_hunt", "completed", 5));
+        sql.Execute(Sql.SessionTokenInsert(account));
+        sql.Execute(Sql.SkillInsert(character, "skill.strike", 2));
+        sql.Scalar(Sql.PartyInsert(character, character, other));
+        sql.Execute($"INSERT INTO account_storages (account_id, revision, version) VALUES ({account}, 1, 0)");
+        sql.Execute(
+            "INSERT INTO storage_items (account_id, item_definition_id, quantity, refine_level, version) "
+            + $"VALUES ({account}, 'item.armor.cloth', 1, 4, 0)");
+        long listing = sql.Scalar(Sql.ListingInsert(character, "item.material.gloom_dust", 5, 3, 56));
+        sql.Execute(Sql.SaleInsert(Guid.NewGuid(), listing, character, other, 2, 56));
+        sql.Execute(Sql.RefineAttemptInsert(Guid.NewGuid(), character, "refined", 6, "7"));
+        sql.Execute(Sql.CardChangeInsert(Guid.NewGuid(), character, "insert", 1));
+        string? tableBefore = SqlStateOf(sql, "SELECT count(*) FROM character_status_effects");
+        string[] more =
+        {
+            "character_quests", "session_tokens", "character_skills", "parties", "party_members",
+            "account_storages", "storage_items", "market_listings", "market_sales", "refine_attempts", "card_changes"
+        };
+        string before = Dump(sql, more);
+
+        EvertorchDatabase.ApplyMigrationsAsync(database.ConnectionString, CancellationToken.None)
+            .GetAwaiter()
+            .GetResult();
+
+        IReadOnlyList<string> pending = EvertorchDatabase
+            .GetPendingMigrationsAsync(database.ConnectionString, CancellationToken.None)
+            .GetAwaiter()
+            .GetResult();
+        Assert.That(tableBefore, Is.EqualTo(UndefinedTable), "no table before");
+        Assert.That(pending, Is.Empty);
+        Assert.That(Dump(sql, more), Is.EqualTo(before), "every row as it was");
+        Assert.That(sql.Scalar("SELECT count(*) FROM character_status_effects"), Is.Zero, "no saved status yet");
+        Assert.That(SqlStateOf(sql, Sql.StatusEffectInsert(character, "status.focus", 30_000, 100)), Is.Null);
+        Assert.That(
+            SqlStateOf(sql, Sql.StatusEffectInsert(other, "status.focus", 0, 100)),
+            Is.EqualTo(CheckViolation),
+            "the new table's check");
     }
 
     // Every existing character starts without a party (Persistence §4; owner decision 3 of the pre-Milestone-12
