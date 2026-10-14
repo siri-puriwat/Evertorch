@@ -407,6 +407,10 @@ public sealed class MessageFuzzTests
             Encode(new Damage(new EntityId(9), new EntityId(10), CombatResult.Immune, 0, 50, 1000)),
             payload => Damage.TryRead(payload, out Damage message) ? Encode(message) : null);
         yield return Case(
+            "Damage (poison)",
+            Encode(new Damage(default, new EntityId(10), CombatResult.Poison, 3, 50, 0)),
+            payload => Damage.TryRead(payload, out Damage message) ? Encode(message) : null);
+        yield return Case(
             "EntityDied",
             Encode(new EntityDied(new EntityId(10), new EntityId(9), 60)),
             payload => EntityDied.TryRead(payload, out EntityDied message) ? Encode(message) : null);
@@ -445,6 +449,18 @@ public sealed class MessageFuzzTests
                     0,
                     70,
                     1000)),
+            payload => SkillResolved.TryRead(payload, out SkillResolved? message) ? Encode(message!) : null);
+        yield return Case(
+            "SkillResolved (resisted)",
+            Encode(
+                new SkillResolved(
+                    new EntityId(9),
+                    new EntityId(42),
+                    new SkillDefinitionId("skill.hush"),
+                    SkillOutcome.Resisted,
+                    0,
+                    70,
+                    0)),
             payload => SkillResolved.TryRead(payload, out SkillResolved? message) ? Encode(message!) : null);
         yield return Case(
             "SkillList",

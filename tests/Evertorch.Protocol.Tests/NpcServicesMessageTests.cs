@@ -140,7 +140,7 @@ public sealed class NpcServicesMessageTests
     [Test]
     public void NpcServices_AtTheirLargest_FitOneReliableMessage()
     {
-        NpcServiceEntry[] entries = Enumerable.Range(0, NpcServices.MaxEntries)
+        NpcServiceEntry[] entries = Enumerable.Range(0, 13)
             .Select(index => new NpcServiceEntry(new ItemDefinitionId(LongestId("item", index)), 1, 1))
             .ToArray();
         NpcQuestOffer[] offers = Enumerable.Range(0, NpcServices.MaxOffers)
@@ -176,20 +176,19 @@ public sealed class NpcServicesMessageTests
     [Test]
     public void NpcServices_BeyondTheirLimits_AreRefusedByTheReader()
     {
-        string[] fourteen = Enumerable.Range(0, NpcServices.MaxEntries + 1)
+        string[] twentyFive = Enumerable.Range(0, NpcServices.MaxEntries + 1)
             .Select(index => $"item.{(char)('a' + index)}")
             .ToArray();
         string[] seven = Enumerable.Range(0, NpcServices.MaxOffers + 1)
             .Select(index => $"quest.{(char)('a' + index)}")
             .ToArray();
-        string[] longest = Enumerable.Range(0, NpcServices.MaxEntries).Select(index => LongestId("item", index))
-            .ToArray();
+        string[] longest = Enumerable.Range(0, 13).Select(index => LongestId("item", index)).ToArray();
         byte[] tooLarge = Services(longest, new[] { LongestId("quest", 0) }, LongestId("monster", 0));
         string[] none = new string[0];
 
-        Assert.That(NpcServices.TryRead(Services(fourteen.Take(13).ToArray(), none, "monster.a"), out _), Is.True);
+        Assert.That(NpcServices.TryRead(Services(twentyFive.Take(24).ToArray(), none, "monster.a"), out _), Is.True);
         Assert.That(NpcServices.TryRead(Services(none, seven.Take(6).ToArray(), "monster.a"), out _), Is.True);
-        Assert.That(NpcServices.TryRead(Services(fourteen, none, "monster.a"), out _), Is.False, "14 entries");
+        Assert.That(NpcServices.TryRead(Services(twentyFive, none, "monster.a"), out _), Is.False, "25 entries");
         Assert.That(NpcServices.TryRead(Services(none, seven, "monster.a"), out _), Is.False, "7 offers");
         Assert.That(tooLarge.Length, Is.EqualTo(1130));
         Assert.That(NpcServices.TryRead(tooLarge, out _), Is.False, "1,130 bytes");
@@ -334,6 +333,26 @@ public sealed class NpcServicesMessageTests
         Assert.That(NpcServices.TryRead(written, out NpcServices? read), Is.True);
         Assert.That(read!.JobChanges.Count, Is.EqualTo(7));
         Assert.That(eight, Throws.ArgumentException);
+    }
+
+    // Twenty-four items fit when their IDs leave room: 14 + 24 × (10 + 31) = 998 bytes (Network Protocol §6).
+    [Test]
+    public void NpcServices_WithTheMostEntriesWithinItsBytes_FitOneReliableMessage()
+    {
+        NpcServiceEntry[] entries = Enumerable.Range(0, NpcServices.MaxEntries)
+            .Select(index => new NpcServiceEntry(
+                new ItemDefinitionId($"item.{(char)('a' + index)}{new string('x', 25)}"),
+                1,
+                1))
+            .ToArray();
+        var shop = new NpcServices(new EntityId(long.MaxValue), entries, new NpcQuestOffer[0]);
+        byte[] buffer = new byte[shop.GetEncodedLength()];
+        shop.Write(buffer);
+
+        Assert.That(entries[0].Item.Value.Length, Is.EqualTo(31));
+        Assert.That(shop.GetEncodedLength(), Is.EqualTo(998));
+        Assert.That(NpcServices.TryRead(buffer, out NpcServices? read), Is.True);
+        Assert.That(read!.Entries, Has.Count.EqualTo(24));
     }
 
     [Test]

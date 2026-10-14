@@ -70,7 +70,8 @@ public sealed class SkillResolved
             || !reader.IsAtEnd
             || target == 0
             || !WireEnums.IsDefined((SkillOutcome)outcome)
-            || ((SkillOutcome)outcome == SkillOutcome.Immune && amount != 0)
+            || (((SkillOutcome)outcome == SkillOutcome.Immune || (SkillOutcome)outcome == SkillOutcome.Resisted)
+                && amount != 0)
             || permille > HealthRatio.Full
             || !SkillDefinitionId.TryCreate(skillText, out SkillDefinitionId skill))
         {

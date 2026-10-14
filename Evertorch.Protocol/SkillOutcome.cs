@@ -1,8 +1,8 @@
 namespace Evertorch.Protocol
 {
 /// <summary>
-///     How a cast ended on its target: the combat results a swing can have, a heal, or a status effect applied. A
-///     perfect dodge travels as a miss. Zero is never sent.
+///     How a cast ended on its target: the combat results a swing can have, a heal, a status effect applied, or an
+///     ailment resisted (Gameplay Systems §9). A perfect dodge travels as a miss. Zero is never sent.
 /// </summary>
 public enum SkillOutcome : byte
 {
@@ -12,6 +12,9 @@ public enum SkillOutcome : byte
     Critical = 3,
     Healed = 4,
     Applied = 5,
-    Immune = 6
+    Immune = 6,
+
+    /// <summary>An ailment skill that did not land, with an amount of 0.</summary>
+    Resisted = 7
 }
 }

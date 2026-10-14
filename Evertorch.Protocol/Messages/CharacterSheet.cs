@@ -29,7 +29,17 @@ public sealed class CharacterSheet : IEquatable<CharacterSheet>
     /// </summary>
     public const int MaxEncodedLength = sizeof(ushort) + sizeof(ushort) + sizeof(ushort)
         + ProtocolLimits.MaxDefinitionIdBytes + 2 * sizeof(ulong) + 2 * sizeof(ushort) + StatCount * 2 * sizeof(byte)
-        + 17 * sizeof(ushort) + 2 * sizeof(byte);
+        + 17 * sizeof(ushort) + 2 * sizeof(byte) + AilmentCount * sizeof(byte);
+
+    /// <summary>
+    ///     The ailments a sheet names a resistance to: poison, stun, freeze, sleep, silence, and blind, in that order.
+    /// </summary>
+    public const int AilmentCount = 6;
+
+    /// <summary>
+    ///     The most a resistance reaches, in percent (Gameplay Systems §2).
+    /// </summary>
+    public const byte MaxResistance = 100;
 
     public CharacterSheet(
         ushort jobLevel,
@@ -57,7 +67,13 @@ public sealed class CharacterSheet : IEquatable<CharacterSheet>
         ushort equipmentDex = 0,
         ushort equipmentLuk = 0,
         Element attackElement = Element.Neutral,
-        Element armorElement = Element.Neutral)
+        Element armorElement = Element.Neutral,
+        byte poisonResistance = 0,
+        byte stunResistance = 0,
+        byte freezeResistance = 0,
+        byte sleepResistance = 0,
+        byte silenceResistance = 0,
+        byte blindResistance = 0)
     {
         if (stats == null)
         {
@@ -72,6 +88,18 @@ public sealed class CharacterSheet : IEquatable<CharacterSheet>
         if (job == default)
         {
             throw new ArgumentException("A job is required.", nameof(job));
+        }
+
+        foreach (byte resistance in new[]
+                 {
+                     poisonResistance, stunResistance, freezeResistance, sleepResistance, silenceResistance,
+                     blindResistance
+                 })
+        {
+            if (resistance > MaxResistance)
+            {
+                throw new ArgumentOutOfRangeException(nameof(poisonResistance), "A resistance runs from 0 to 100.");
+            }
         }
 
         JobLevel = jobLevel;
@@ -100,6 +128,12 @@ public sealed class CharacterSheet : IEquatable<CharacterSheet>
         EquipmentLuk = equipmentLuk;
         AttackElement = attackElement;
         ArmorElement = armorElement;
+        PoisonResistance = poisonResistance;
+        StunResistance = stunResistance;
+        FreezeResistance = freezeResistance;
+        SleepResistance = sleepResistance;
+        SilenceResistance = silenceResistance;
+        BlindResistance = blindResistance;
     }
 
     public ushort JobLevel { get; }
@@ -188,6 +222,22 @@ public sealed class CharacterSheet : IEquatable<CharacterSheet>
     /// </summary>
     public Element ArmorElement { get; }
 
+    /// <summary>
+    ///     The character's resistance to poison against a source of its own level, its cards' included, 0 to 100
+    ///     (Gameplay Systems §2); the five that follow are stun's, freeze's, sleep's, silence's, and blind's.
+    /// </summary>
+    public byte PoisonResistance { get; }
+
+    public byte StunResistance { get; }
+
+    public byte FreezeResistance { get; }
+
+    public byte SleepResistance { get; }
+
+    public byte SilenceResistance { get; }
+
+    public byte BlindResistance { get; }
+
     public bool Equals(CharacterSheet? other)
     {
         if (other == null)
@@ -227,7 +277,13 @@ public sealed class CharacterSheet : IEquatable<CharacterSheet>
             && EquipmentDex == other.EquipmentDex
             && EquipmentLuk == other.EquipmentLuk
             && AttackElement == other.AttackElement
-            && ArmorElement == other.ArmorElement;
+            && ArmorElement == other.ArmorElement
+            && PoisonResistance == other.PoisonResistance
+            && StunResistance == other.StunResistance
+            && FreezeResistance == other.FreezeResistance
+            && SleepResistance == other.SleepResistance
+            && SilenceResistance == other.SilenceResistance
+            && BlindResistance == other.BlindResistance;
     }
 
     public static bool TryRead(ReadOnlySpan<byte> source, out CharacterSheet? message)
@@ -281,9 +337,21 @@ public sealed class CharacterSheet : IEquatable<CharacterSheet>
             || !reader.TryReadUInt16(out ushort equipmentLuk)
             || !reader.TryReadByte(out byte attackElement)
             || !reader.TryReadByte(out byte armorElement)
+            || !reader.TryReadByte(out byte poisonResistance)
+            || !reader.TryReadByte(out byte stunResistance)
+            || !reader.TryReadByte(out byte freezeResistance)
+            || !reader.TryReadByte(out byte sleepResistance)
+            || !reader.TryReadByte(out byte silenceResistance)
+            || !reader.TryReadByte(out byte blindResistance)
             || !reader.IsAtEnd
             || !WireEnums.IsDefined((Element)attackElement)
-            || !WireEnums.IsDefined((Element)armorElement))
+            || !WireEnums.IsDefined((Element)armorElement)
+            || poisonResistance > MaxResistance
+            || stunResistance > MaxResistance
+            || freezeResistance > MaxResistance
+            || sleepResistance > MaxResistance
+            || silenceResistance > MaxResistance
+            || blindResistance > MaxResistance)
         {
             return false;
         }
@@ -314,7 +382,13 @@ public sealed class CharacterSheet : IEquatable<CharacterSheet>
             equipmentDex,
             equipmentLuk,
             (Element)attackElement,
-            (Element)armorElement);
+            (Element)armorElement,
+            poisonResistance,
+            stunResistance,
+            freezeResistance,
+            sleepResistance,
+            silenceResistance,
+            blindResistance);
         return true;
     }
 
@@ -353,6 +427,12 @@ public sealed class CharacterSheet : IEquatable<CharacterSheet>
         writer.WriteUInt16(EquipmentLuk);
         writer.WriteByte((byte)AttackElement);
         writer.WriteByte((byte)ArmorElement);
+        writer.WriteByte(PoisonResistance);
+        writer.WriteByte(StunResistance);
+        writer.WriteByte(FreezeResistance);
+        writer.WriteByte(SleepResistance);
+        writer.WriteByte(SilenceResistance);
+        writer.WriteByte(BlindResistance);
         return writer.Position;
     }
 

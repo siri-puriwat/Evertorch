@@ -1,8 +1,8 @@
 namespace Evertorch.Protocol
 {
 /// <summary>
-///     How a swing ended. A perfect dodge travels as a miss; a hit whose element deals nothing to its target is immune
-///     (Gameplay Systems §3). Zero is never sent.
+///     How a swing ended, or a poison tick (Gameplay Systems §9.1). A perfect dodge travels as a miss; a hit whose
+///     element deals nothing to its target is immune (Gameplay Systems §3). Zero is never sent.
 /// </summary>
 public enum CombatResult : byte
 {
@@ -10,6 +10,9 @@ public enum CombatResult : byte
     Hit = 1,
     Miss = 2,
     Critical = 3,
-    Immune = 4
+    Immune = 4,
+
+    /// <summary>A poison tick: no source, and at least 1 HP lost.</summary>
+    Poison = 5
 }
 }

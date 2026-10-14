@@ -11,9 +11,15 @@ namespace Evertorch.Protocol
 public sealed class StatusEffects
 {
     /// <summary>
-    ///     The most effects one message holds, so it fits one reliable message even with the longest IDs.
+    ///     The most effects one message holds, within <see cref="MaxEncodedLength" /> (Network Protocol §6).
     /// </summary>
-    public const int MaxEntries = 14;
+    public const int MaxEntries = 24;
+
+    /// <summary>
+    ///     What one reliable message may carry, LiteNetLib's first MTU less its header; the content keeps every status
+    ///     within it (Content Pipeline §4).
+    /// </summary>
+    public const int MaxEncodedLength = ProtocolLimits.MaxReliableMessageBytes;
 
     public StatusEffects(IReadOnlyList<StatusEffectEntry> effects)
     {
@@ -28,6 +34,10 @@ public sealed class StatusEffects
         }
 
         Effects = effects;
+        if (GetEncodedLength() > MaxEncodedLength)
+        {
+            throw new ArgumentException($"A status list holds at most {MaxEncodedLength} bytes.", nameof(effects));
+        }
     }
 
     public IReadOnlyList<StatusEffectEntry> Effects { get; }
@@ -35,6 +45,11 @@ public sealed class StatusEffects
     public static bool TryRead(ReadOnlySpan<byte> source, out StatusEffects? message)
     {
         message = null;
+        if (source.Length > MaxEncodedLength)
+        {
+            return false;
+        }
+
         var reader = new WireReader(source);
         if (!reader.TryReadOpcode(MessageOpcode.StatusEffects)
             || !reader.TryReadByte(out byte count)

@@ -1,3 +1,4 @@
+using System;
 using System.Linq;
 using Evertorch.Game;
 using NUnit.Framework;
@@ -15,6 +16,15 @@ public sealed class StatusEffectsMessageTests
         .ToArray();
 
     private static readonly StatusDefinitionId Status = new("status.a");
+
+    private static StatusEffectEntry[] Entries(int count, int idLength)
+    {
+        return Enumerable.Range(0, count)
+            .Select(index => new StatusEffectEntry(
+                new StatusDefinitionId($"status.{(char)('a' + index)}{new string('x', idLength - 8)}"),
+                uint.MaxValue))
+            .ToArray();
+    }
 
     [Test]
     public void StatusEffects_ForGoldenBytes_RoundTrips()
@@ -35,6 +45,26 @@ public sealed class StatusEffectsMessageTests
         WireMatrix.AssertRejectsOtherOpcodes(EffectsBytes, bytes => StatusEffects.TryRead(bytes, out _));
     }
 
+    // Fifteen 64-byte IDs take 3 + 15 × 70 = 1,053 bytes: the constructor refuses them, and the reader refuses such a
+    // payload by its length before anything else (Network Protocol §6).
+    [Test]
+    public void StatusEffects_PastItsBytes_IsRefusedByTheConstructorAndTheReader()
+    {
+        StatusEffectEntry[] entries = Entries(15, 64);
+        Action tooLarge = () => _ = new StatusEffects(entries);
+        var fits = new StatusEffects(entries.Take(14).ToArray());
+        byte[] buffer = new byte[fits.GetEncodedLength() + 70];
+        fits.Write(buffer);
+        buffer[2] = 15;
+        byte[] last = new byte[73];
+        new StatusEffects(entries.Skip(14).ToArray()).Write(last);
+        Array.Copy(last, 3, buffer, buffer.Length - 70, 70);
+
+        Assert.That(tooLarge, Throws.ArgumentException);
+        Assert.That(buffer.Length, Is.EqualTo(1053));
+        Assert.That(StatusEffects.TryRead(buffer, out _), Is.False);
+    }
+
     [Test]
     public void StatusEffects_WithNone_IsTheOpcodeAndAZeroCount()
     {
@@ -47,22 +77,17 @@ public sealed class StatusEffectsMessageTests
         Assert.That(read!.Effects, Is.Empty);
     }
 
+    // Twenty-four entries of 36-byte IDs take 3 + 24 × 42 = 1,011 of the 1,020 bytes a reliable message carries.
     [Test]
-    public void StatusEffects_WithTheMostEntriesAndTheLongestIds_FitsOneReliableMessage()
+    public void StatusEffects_WithTheMostEntriesWithinItsBytes_FitsOneReliableMessage()
     {
-        StatusEffectEntry[] entries = Enumerable.Range(0, StatusEffects.MaxEntries)
-            .Select(index => new StatusEffectEntry(
-                new StatusDefinitionId($"status.{(char)('a' + index)}{new string('x', 56)}"),
-                uint.MaxValue))
-            .ToArray();
-        var message = new StatusEffects(entries);
+        var message = new StatusEffects(Entries(StatusEffects.MaxEntries, 36));
         byte[] buffer = new byte[message.GetEncodedLength()];
         message.Write(buffer);
 
-        Assert.That(entries[0].Status.Value.Length, Is.EqualTo(64));
         Assert.That(StatusEffects.TryRead(buffer, out StatusEffects? read), Is.True);
-        Assert.That(read!.Effects, Has.Count.EqualTo(StatusEffects.MaxEntries));
-        Assert.That(buffer.Length, Is.EqualTo(983), "under LiteNetLib's 1,020 bytes a reliable message may carry");
+        Assert.That(read!.Effects, Has.Count.EqualTo(24));
+        Assert.That(buffer.Length, Is.EqualTo(1011));
     }
 
     [Test]

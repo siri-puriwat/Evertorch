@@ -82,11 +82,34 @@ public sealed class CombatEventTests
     [TestCase(0x04, 0x44, false)]
     [TestCase(0x05, 0x00, false)]
     [TestCase(0x05, 0x44, false)]
+    [TestCase(0x06, 0x44, false)]
     public void Damage_ResultAndAmount_MustAgree(byte result, byte amount, bool expected)
     {
         byte[] bytes = WireMatrix.With(WireMatrix.With(DamageBytes, 18, result), 19, amount, 0x00, 0x00, 0x00);
 
         Assert.That(Damage.TryRead(bytes, out _), Is.EqualTo(expected));
+    }
+
+    // A poison tick names no source and loses at least 1 HP (Network Protocol §6).
+    [TestCase(0L, 3u, true)]
+    [TestCase(0L, 0u, false)]
+    [TestCase(9L, 3u, false)]
+    public void Damage_APoisonTick_HasNoSourceAndSomeAmount(long source, uint amount, bool expected)
+    {
+        byte[] bytes = new byte[Damage.EncodedLength];
+        new Damage(new EntityId(source), new EntityId(10), CombatResult.Poison, Math.Max(1u, amount), 50, 980)
+            .Write(bytes);
+        if (amount == 0)
+        {
+            bytes = WireMatrix.With(bytes, 19, 0x00, 0x00, 0x00, 0x00);
+        }
+
+        Assert.That(Damage.TryRead(bytes, out Damage read), Is.EqualTo(expected));
+        if (expected)
+        {
+            Assert.That((read.Source, read.Result, read.Amount),
+                Is.EqualTo((default(EntityId), CombatResult.Poison, 3u)));
+        }
     }
 
     [TestCase(50, 50, 1000)]

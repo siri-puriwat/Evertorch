@@ -7,7 +7,9 @@ namespace Evertorch.Protocol
 /// </summary>
 internal static class WireEnums
 {
-    private const EntityStateFlags KnownStateFlags = EntityStateFlags.Moving | EntityStateFlags.Dead;
+    private const EntityStateFlags KnownStateFlags = EntityStateFlags.Moving | EntityStateFlags.Dead
+        | EntityStateFlags.Poisoned | EntityStateFlags.Stunned | EntityStateFlags.Frozen | EntityStateFlags.Asleep
+        | EntityStateFlags.Silenced | EntityStateFlags.Blinded;
 
     public static bool IsDefined(DisconnectReason value)
     {
@@ -26,7 +28,7 @@ internal static class WireEnums
 
     public static bool IsDefined(CombatResult value)
     {
-        return value >= CombatResult.Hit && value <= CombatResult.Immune;
+        return value >= CombatResult.Hit && value <= CombatResult.Poison;
     }
 
     public static bool IsDefined(DespawnReason value)
@@ -46,7 +48,7 @@ internal static class WireEnums
 
     public static bool IsDefined(SkillOutcome value)
     {
-        return value >= SkillOutcome.Hit && value <= SkillOutcome.Immune;
+        return value >= SkillOutcome.Hit && value <= SkillOutcome.Resisted;
     }
 
     public static bool IsDefined(QuestState value)

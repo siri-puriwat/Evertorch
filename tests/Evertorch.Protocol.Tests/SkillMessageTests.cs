@@ -77,7 +77,8 @@ public sealed class SkillMessageTests
     [TestCase(10, (byte)0x00, "no target")]
     [TestCase(27, (byte)0x00, "outcome 0")]
     [TestCase(27, (byte)0x06, "an immune target with an amount")]
-    [TestCase(27, (byte)0x07, "an outcome not yet defined")]
+    [TestCase(27, (byte)0x07, "a resisted ailment with an amount")]
+    [TestCase(27, (byte)0x08, "an outcome not yet defined")]
     public void SkillResolved_WithAnImpossibleField_IsRefused(int offset, byte value, string why)
     {
         Assert.That(SkillResolved.TryRead(WireMatrix.With(ResolvedBytes, offset, value), out _), Is.False, why);
@@ -214,10 +215,11 @@ public sealed class SkillMessageTests
     {
         Assert.That(
             Array.ConvertAll((SkillOutcome[])Enum.GetValues(typeof(SkillOutcome)), outcome => (byte)outcome),
-            Is.EqualTo(new byte[] { 0, 1, 2, 3, 4, 5, 6 }));
+            Is.EqualTo(new byte[] { 0, 1, 2, 3, 4, 5, 6, 7 }));
         Assert.That((byte)SkillOutcome.Healed, Is.EqualTo(4));
         Assert.That((byte)SkillOutcome.Applied, Is.EqualTo(5));
         Assert.That((byte)SkillOutcome.Immune, Is.EqualTo(6));
+        Assert.That((byte)SkillOutcome.Resisted, Is.EqualTo(7));
     }
 
     [Test]

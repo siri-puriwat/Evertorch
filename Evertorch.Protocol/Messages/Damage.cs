@@ -4,8 +4,9 @@ using Evertorch.Game;
 namespace Evertorch.Protocol
 {
 /// <summary>
-///     A swing resolved at impact. Sent to every client that knows the target; the source is 0 for a receiver that
-///     has no spawn for it. A miss or an immune hit deals nothing, a hit or a critical at least 1.
+///     A swing resolved at impact, or a poison tick. Sent to every client that knows the target; the source is 0 for a
+///     receiver that has no spawn for it, and always for a poison tick. A miss or an immune hit deals nothing, a hit, a
+///     critical, or a poison tick at least 1 (Network Protocol §6).
 /// </summary>
 public readonly struct Damage
 {
@@ -64,7 +65,8 @@ public readonly struct Damage
 
         var result = (CombatResult)resultValue;
         if (!WireEnums.IsDefined(result)
-            || (result == CombatResult.Miss || result == CombatResult.Immune) != (amount == 0))
+            || (result == CombatResult.Miss || result == CombatResult.Immune) != (amount == 0)
+            || (result == CombatResult.Poison && damageSource != 0))
         {
             return false;
         }

@@ -1,3 +1,4 @@
+using System;
 using System.Linq;
 using Evertorch.Game;
 using Evertorch.Protocol;
@@ -191,16 +192,24 @@ public sealed class SharedSkillMessageTests
         Assert.That(read.TargetHealthPermille, Is.EqualTo(660));
     }
 
+    // Twenty-four entries of 36-byte IDs take 1,011 bytes; fifteen of 64 bytes would take 1,053, past the 1,020 a
+    // reliable message carries (Network Protocol §6).
     [Test]
-    public void StatusEffects_AtTheirLargest_Are983Bytes()
+    public void StatusEffects_AtTheirLargest_FitTheirBytes()
     {
         StatusEffectEntry[] entries = Enumerable.Range(0, StatusEffects.MaxEntries)
+            .Select(index => new StatusEffectEntry(
+                new StatusDefinitionId($"status.{(char)('a' + index)}{new string('x', 28)}"),
+                uint.MaxValue))
+            .ToArray();
+        StatusEffectEntry[] longest = Enumerable.Range(0, 15)
             .Select(index => new StatusEffectEntry(
                 new StatusDefinitionId($"status.{(char)('a' + index)}{new string('x', 56)}"),
                 uint.MaxValue))
             .ToArray();
 
-        Assert.That(new StatusEffects(entries).GetEncodedLength(), Is.EqualTo(983));
+        Assert.That(new StatusEffects(entries).GetEncodedLength(), Is.EqualTo(1011));
+        Assert.Throws<ArgumentException>(() => _ = new StatusEffects(longest));
     }
 
     [Test]

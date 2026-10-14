@@ -15,9 +15,10 @@ namespace Evertorch.Protocol
 public sealed class NpcServices
 {
     /// <summary>
-    ///     The most items one message holds: 74 bytes each with the longest ID, beside the 14 of the header.
+    ///     The most items one message holds, 10 bytes each and their IDs', within <see cref="MaxEncodedLength" />
+    ///     (Network Protocol §6).
     /// </summary>
-    public const int MaxEntries = 13;
+    public const int MaxEntries = 24;
 
     /// <summary>
     ///     The most quests one message holds: 154 bytes each with the longest IDs.

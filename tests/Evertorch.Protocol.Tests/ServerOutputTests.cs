@@ -39,7 +39,7 @@ public sealed class ServerOutputTests
         ["StorageChanged"] = new[] { "NewRevision", "PriorRevision", "Row" },
         ["StorageEntry"] = new[] { "Cards", "Item", "Quantity", "RefineLevel", "StorageItem" },
         ["StorageSnapshot"] = new[] { "DepositFee", "Entries", "IsLast", "Part", "PartCount", "Revision" },
-        ["PartyMemberStatus"] = new[] { "HealthPermille", "Name", "SpiritPermille" },
+        ["PartyMemberStatus"] = new[] { "Ailments", "HealthPermille", "Name", "SpiritPermille" },
         ["PartyRoster"] = new[] { "LeaderIndex", "Members" },
         ["PartyRosterEntry"] = new[] { "BaseLevel", "IsInWorld", "Job", "Map", "Name" },
         ["CharacterHealth"] = new[] { "Current", "CurrentSpirit", "Maximum", "MaximumSpirit" },
@@ -49,11 +49,12 @@ public sealed class ServerOutputTests
         ["CharacterProgress"] = new[] { "Experience", "ExperienceToNextLevel", "Level" },
         ["CharacterSheet"] = new[]
         {
-            "ArmorElement", "Attack", "AttackElement", "AttackSpeed", "Critical", "Defense", "EquipmentAgi",
-            "EquipmentAttack", "EquipmentDefense", "EquipmentDex", "EquipmentInt", "EquipmentLuk",
+            "ArmorElement", "Attack", "AttackElement", "AttackSpeed", "BlindResistance", "Critical", "Defense",
+            "EquipmentAgi", "EquipmentAttack", "EquipmentDefense", "EquipmentDex", "EquipmentInt", "EquipmentLuk",
             "EquipmentMagicAttack",
-            "EquipmentStr", "EquipmentVit", "Flee", "Hit", "Job", "JobExperience", "JobExperienceToNextLevel",
-            "JobLevel", "MagicAttack", "MagicDefense", "SkillPoints", "StatPoints", "Stats"
+            "EquipmentStr", "EquipmentVit", "Flee", "FreezeResistance", "Hit", "Job", "JobExperience",
+            "JobExperienceToNextLevel", "JobLevel", "MagicAttack", "MagicDefense", "PoisonResistance",
+            "SilenceResistance", "SkillPoints", "SleepResistance", "StatPoints", "Stats", "StunResistance"
         },
         ["CharacterSheetStat"] = new[] { "NextCost", "Value" },
         ["CommandRejected"] = new[] { "CommandSequence", "Reason" },

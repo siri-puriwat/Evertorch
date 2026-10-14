@@ -91,7 +91,7 @@ public sealed class EntitySpawnTests
         Assert.That(EntitySpawn.TryRead(WireMatrix.With(GoldenBytes, KindOffset, kind), out _), Is.False);
     }
 
-    [TestCase(0x04, 0x00)]
+    [TestCase(0x00, 0x01)]
     [TestCase(0x01, 0x80)]
     [TestCase(0xFF, 0xFF)]
     public void TryRead_WhenFlagsContainUnknownBits_ReturnsFalse(byte low, byte high)
@@ -316,6 +316,19 @@ public sealed class EntitySpawnTests
     public void TryRead_WhenTruncatedAtAnyLength_ReturnsFalse()
     {
         WireMatrix.AssertRejectsEveryTruncation(GoldenBytes, bytes => EntitySpawn.TryRead(bytes, out _));
+    }
+
+    // Moving, Dead, and the six ailments, every bit protocol 47 knows (Network Protocol §6).
+    [Test]
+    public void TryRead_WithEveryKnownFlag_KeepsThem()
+    {
+        Assert.That(EntitySpawn.TryRead(WireMatrix.With(GoldenBytes, FlagsOffset, 0xFF, 0x00), out EntitySpawn? read),
+            Is.True);
+        Assert.That(
+            read!.StateFlags,
+            Is.EqualTo(EntityStateFlags.Moving | EntityStateFlags.Dead | EntityStateFlags.Poisoned
+                | EntityStateFlags.Stunned | EntityStateFlags.Frozen | EntityStateFlags.Asleep
+                | EntityStateFlags.Silenced | EntityStateFlags.Blinded));
     }
 
     [Test]

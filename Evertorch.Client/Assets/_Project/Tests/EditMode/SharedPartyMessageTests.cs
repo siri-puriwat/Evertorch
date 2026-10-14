@@ -44,7 +44,7 @@ public sealed class SharedPartyMessageTests
 
     private static readonly byte[] PartyMemberStatusBytes =
     {
-        0x23, 0x80, 0x04, 0x00, 0x41, 0x6E, 0x6E, 0x61, 0xEE, 0x02, 0xE8, 0x03
+        0x23, 0x80, 0x04, 0x00, 0x41, 0x6E, 0x6E, 0x61, 0xEE, 0x02, 0xE8, 0x03, 0x05
     };
 
     private delegate int Writer(Span<byte> destination);
@@ -88,7 +88,7 @@ public sealed class SharedPartyMessageTests
                 new PartyRosterEntry("Anna", new JobDefinitionId("job.a"), 3, new MapDefinitionId("map.a")),
                 new PartyRosterEntry("Bobby", new JobDefinitionId("job.b"), 12, null)
             });
-        var status = new PartyMemberStatus("Anna", 750, 1000);
+        var status = new PartyMemberStatus("Anna", 750, 1000, 0x05);
 
         Assert.That(Encode(partyEvent.GetEncodedLength(), partyEvent.Write), Is.EqualTo(PartyEventBytes));
         Assert.That(Encode(roster.GetEncodedLength(), roster.Write), Is.EqualTo(PartyRosterBytes));
@@ -97,7 +97,7 @@ public sealed class SharedPartyMessageTests
         Assert.That(PartyRoster.TryRead(PartyRosterBytes, out PartyRoster? read), Is.True);
         Assert.That(read!.Members[1].IsInWorld, Is.False);
         Assert.That(PartyMemberStatus.TryRead(PartyMemberStatusBytes, out PartyMemberStatus? shown), Is.True);
-        Assert.That(shown!.HealthPermille, Is.EqualTo(750));
+        Assert.That((shown!.HealthPermille, shown.Ailments), Is.EqualTo(((ushort)750, (byte)0x05)));
     }
 }
 }

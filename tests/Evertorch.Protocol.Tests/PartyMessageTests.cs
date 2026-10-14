@@ -64,7 +64,8 @@ public sealed class PartyMessageTests
         0x23, 0x80,
         0x04, 0x00, 0x41, 0x6E, 0x6E, 0x61,
         0xEE, 0x02,
-        0xE8, 0x03
+        0xE8, 0x03,
+        0x05
     };
 
     public static PartyInvite InviteGolden => new("Bobby", 7);
@@ -87,7 +88,8 @@ public sealed class PartyMessageTests
             new PartyRosterEntry("Bobby", new JobDefinitionId("job.b"), 12, null)
         });
 
-    public static PartyMemberStatus StatusGolden => new("Anna", 750, 1000);
+    // Poisoned and frozen: bits 0 and 2.
+    public static PartyMemberStatus StatusGolden => new("Anna", 750, 1000, 0x05);
 
     private static byte[] Encode(int length, Func<byte[], int> write)
     {
@@ -267,7 +269,9 @@ public sealed class PartyMessageTests
             Is.EqualTo(new[] { ("Anna", "job.a", (ushort)3, true), ("Bobby", "job.b", (ushort)12, false) }));
         Assert.That(roster.Members[0].Map, Is.EqualTo(new MapDefinitionId("map.a")));
         Assert.That(PartyMemberStatus.TryRead(StatusBytes, out PartyMemberStatus? status), Is.True);
-        Assert.That((status!.Name, status.HealthPermille, status.SpiritPermille), Is.EqualTo(("Anna", 750, 1000)));
+        Assert.That(
+            (status!.Name, status.HealthPermille, status.SpiritPermille, status.Ailments),
+            Is.EqualTo(("Anna", 750, 1000, (byte)0x05)));
     }
 
     [Test]
@@ -277,8 +281,13 @@ public sealed class PartyMessageTests
         Assert.That(PartyMemberStatus.TryRead(Encode(new PartyMemberStatus("Anna", 0, 1001)), out _), Is.False);
         Assert.That(PartyMemberStatus.TryRead(Encode(new PartyMemberStatus("Ann", 0, 0)), out _), Is.False);
         Assert.That(
-            Encode(new PartyMemberStatus(new string('A', CharacterNames.MaxLength), 0, 0)),
-            Has.Length.EqualTo(31),
+            PartyMemberStatus.TryRead(WireMatrix.With(StatusBytes, StatusBytes.Length - 1, 0x40), out _),
+            Is.False,
+            "an ailment bit above 5");
+        Assert.That(
+            Encode(new PartyMemberStatus(new string('A', CharacterNames.MaxLength), 0, 0,
+                PartyMemberStatus.KnownAilments)),
+            Has.Length.EqualTo(32),
             "the largest");
     }
 }
