@@ -30,6 +30,7 @@ public sealed class CombatSystem : ITickPhase
     private readonly ServerInstruments m_instruments;
     private readonly IRandomSource m_random;
     private readonly BossAnnouncer m_bosses;
+    private readonly AilmentRolls m_ailments;
     private readonly int m_tickRate;
     private readonly float m_rangeTolerance;
     private readonly List<WorldEntity> m_due = new();
@@ -51,7 +52,8 @@ public sealed class CombatSystem : ITickPhase
         ServerInstruments instruments,
         BossAnnouncer bosses,
         IOptions<WorldOptions> worldOptions,
-        IOptions<SimulationOptions> simulation)
+        IOptions<SimulationOptions> simulation,
+        IOptions<CombatOptions> combatOptions)
     {
         m_world = world;
         m_sessions = sessions;
@@ -66,6 +68,8 @@ public sealed class CombatSystem : ITickPhase
         m_random = random;
         m_instruments = instruments;
         m_bosses = bosses;
+        m_ailments = new AilmentRolls(content, statusEffects, world, random, instruments,
+            combatOptions.Value.AilmentChanceScale);
         m_tickRate = simulation.Value.TickRate;
         m_rangeTolerance = worldOptions.Value.AttackRangeTolerance;
     }
@@ -502,6 +506,12 @@ public sealed class CombatSystem : ITickPhase
             }
         }
 
+        if (hit.DealsDamage && result != CombatResult.Immune && target.CurrentHealth > 0)
+        {
+            bool hasBroken = m_ailments.Break(target);
+            m_ailments.RollRiders(attacker, target, null, true, hasBroken);
+        }
+
         AfterDamage(map, attacker, target, amount, tick);
     }
 
@@ -584,9 +594,21 @@ public sealed class CombatSystem : ITickPhase
             }
         }
 
+        if (values.Effect.Kind == SkillEffectKind.Status && IsAilment(values.Effect.Status))
+        {
+            if (skill.HasArea)
+            {
+                ResolveAreaAilment(map, caster, skill, values.Effect, tick);
+                return;
+            }
+
+            AnnounceAilment(map, caster, target, skill.Id, values.Effect, tick);
+            return;
+        }
+
         if (values.Effect.Kind == SkillEffectKind.Status)
         {
-            // Effects are players' alone: a job's status skill lands on its caster, a monster's on the player it
+            // Any other status is a player's: a job's status skill lands on its caster, a monster's on the player it
             // fights (§9.1), with no roll to resist it.
             if (target is PlayerEntity affected)
             {
@@ -623,13 +645,88 @@ public sealed class CombatSystem : ITickPhase
 
         target.CurrentHealth = Math.Max(0, target.CurrentHealth - resolution.Amount);
         AnnounceResolved(map, caster, target, skill.Id, ToSkillOutcome(resolution.Result), resolution.Amount, tick);
+        RollAfterHit(caster, target, skill, values.Effect, resolution.Result);
         AfterDamage(map, caster, target, resolution.Amount, tick);
+    }
+
+    private bool IsAilment(StatusDefinitionId status)
+    {
+        return m_content.StatusEffects.TryGetValue(status, out StatusEffectDefinition? definition)
+            && definition.Ailment != Ailment.None;
+    }
+
+    // A skill's landed hit on a target still alive breaks a freeze or a sleep, then rolls its rider and, for a player's
+    // physical skill, its worn cards (Gameplay Systems §9.1).
+    private void RollAfterHit(
+        WorldEntity caster,
+        WorldEntity target,
+        SkillDefinition skill,
+        SkillEffect effect,
+        SkillResult result)
+    {
+        if (result != SkillResult.Hit || target.CurrentHealth <= 0)
+        {
+            return;
+        }
+
+        bool hasBroken = m_ailments.Break(target);
+        m_ailments.RollRiders(caster, target, effect.Rider, skill.DamageType == SkillDamageType.Physical, hasBroken);
+    }
+
+    // An ailment skill draws once for its target with no hit roll, and answers Applied when it lands and Resisted
+    // otherwise, both with no amount (Network Protocol §9).
+    private void AnnounceAilment(
+        MapInstance map,
+        WorldEntity caster,
+        WorldEntity target,
+        SkillDefinitionId skill,
+        SkillEffect effect,
+        uint tick)
+    {
+        AilmentOutcome outcome = m_ailments.Roll(
+            caster,
+            target,
+            effect.Status,
+            effect.ChanceBasisPoints,
+            effect.StatusDurationMs);
+        AnnounceResolved(
+            map,
+            caster,
+            target,
+            skill,
+            outcome == AilmentOutcome.Landed ? SkillOutcome.Applied : SkillOutcome.Resisted,
+            0,
+            tick);
+    }
+
+    // An area ailment skill draws once for each live player within the area and in its caster's sight, in order of
+    // entity ID, as an area strike does; one reaching nobody is told to nobody.
+    private void ResolveAreaAilment(MapInstance map, WorldEntity caster, SkillDefinition skill, SkillEffect effect,
+        uint tick)
+    {
+        foreach (PlayerEntity player in Struck(map, caster, skill))
+        {
+            AnnounceAilment(map, caster, player, skill.Id, effect, tick);
+        }
     }
 
     // Every live player within the area and in its caster's sight takes its own roll, in order of entity ID, since the
     // map keeps its players unordered (Gameplay Systems §9). One that stepped out takes nothing, and a strike that
     // reaches nobody is told to nobody.
     private void ResolveArea(MapInstance map, WorldEntity caster, SkillDefinition skill, int level, uint tick)
+    {
+        SkillEffect effect = skill.ValuesAt(level).Effect;
+        foreach (PlayerEntity player in Struck(map, caster, skill))
+        {
+            SkillResolution resolution = m_skillRules.Resolve(CreateSkillContext(caster, player, skill, level, true));
+            player.CurrentHealth = Math.Max(0, player.CurrentHealth - resolution.Amount);
+            AnnounceResolved(map, caster, player, skill.Id, ToSkillOutcome(resolution.Result), resolution.Amount, tick);
+            RollAfterHit(caster, player, skill, effect, resolution.Result);
+            AfterDamage(map, caster, player, resolution.Amount, tick);
+        }
+    }
+
+    private List<PlayerEntity> Struck(MapInstance map, WorldEntity caster, SkillDefinition skill)
     {
         m_struck.Clear();
         foreach (PlayerEntity player in map.Players)
@@ -643,13 +740,7 @@ public sealed class CombatSystem : ITickPhase
         }
 
         m_struck.Sort((left, right) => left.Id.Value.CompareTo(right.Id.Value));
-        foreach (PlayerEntity player in m_struck)
-        {
-            SkillResolution resolution = m_skillRules.Resolve(CreateSkillContext(caster, player, skill, level, true));
-            player.CurrentHealth = Math.Max(0, player.CurrentHealth - resolution.Amount);
-            AnnounceResolved(map, caster, player, skill.Id, ToSkillOutcome(resolution.Result), resolution.Amount, tick);
-            AfterDamage(map, caster, player, resolution.Amount, tick);
-        }
+        return m_struck;
     }
 
     // To every client that knows the caster; one that does not know the target is told 0 (Network Protocol §9).
@@ -752,7 +843,7 @@ public sealed class CombatSystem : ITickPhase
     {
         return attacker switch
         {
-            PlayerEntity player when target is MonsterEntity monster => Striking(player, monster.Definition, skill),
+            PlayerEntity player when target is MonsterEntity monster => Striking(player, monster, skill),
             MonsterEntity monster when target is PlayerEntity player => StruckBy(monster.Definition, player, skill),
             _ => default
         };
@@ -761,19 +852,26 @@ public sealed class CombatSystem : ITickPhase
     // A player's swing, or a skill of its weapon's element, strikes with the player's attack element, any other skill
     // with its own; the weapon meets the monster's size, and the worn cards' groups its element, race, and size, and a
     // boss.
-    private static DamageModifiers Striking(PlayerEntity player, MonsterDefinition monster, SkillDefinition? skill)
+    private static DamageModifiers Striking(PlayerEntity player, MonsterEntity monster, SkillDefinition? skill)
     {
         CardBonus cards = player.CardBonus;
+        MonsterDefinition definition = monster.Definition;
         return new DamageModifiers(
-            monster.IsBoss ? cards.BossDamagePercent : 0,
+            definition.IsBoss ? cards.BossDamagePercent : 0,
             0,
             ElementTable.Of(skill?.Element ?? SkillElement.Weapon, player.AttackElement),
-            monster.Element,
+            DefenseElementOf(monster, definition.Element),
             player.Weapon?.WeaponType,
-            monster.Size,
-            cards.DamageTo(monster.Element),
-            cards.DamageTo(monster.Race),
-            cards.DamageTo(monster.Size));
+            definition.Size,
+            cards.DamageTo(definition.Element),
+            cards.DamageTo(definition.Race),
+            cards.DamageTo(definition.Size));
+    }
+
+    // A frozen body is Water for the element table at the hit, never its sheet's armor element (Gameplay Systems §9.1).
+    private static Element DefenseElementOf(WorldEntity defender, Element own)
+    {
+        return defender.HasAilment(Ailment.Freeze) ? Element.Water : own;
     }
 
     // A monster's swing has no element and its skill its own, a skill of the weapon's Neutral, which meets the player's
@@ -786,7 +884,7 @@ public sealed class CombatSystem : ITickPhase
             0,
             monster.IsBoss ? cards.BossDamageReductionPercent : 0,
             element,
-            player.ArmorElement,
+            DefenseElementOf(player, player.ArmorElement),
             elementDamageReductionPercent: element.HasValue ? cards.ReductionFrom(element.Value) : 0);
     }
 
@@ -801,7 +899,11 @@ public sealed class CombatSystem : ITickPhase
                     monster.Definition.Flee,
                     0,
                     0,
-                    m_random);
+                    m_random,
+                    target.IsHeld,
+                    target.HasAilment(Ailment.Sleep),
+                    attacker.HasAilment(Ailment.Blind),
+                    target.HasAilment(Ailment.Blind));
             case MonsterEntity monster when target is PlayerEntity player:
                 return new HitContext(
                     monster.Definition.Hit,
@@ -809,7 +911,11 @@ public sealed class CombatSystem : ITickPhase
                     player.Stats.Flee,
                     player.Stats.PerfectDodge,
                     player.Primary.Luk,
-                    m_random);
+                    m_random,
+                    target.IsHeld,
+                    target.HasAilment(Ailment.Sleep),
+                    attacker.HasAilment(Ailment.Blind),
+                    target.HasAilment(Ailment.Blind));
             default:
                 throw new InvalidOperationException(
                     $"No basic attack is defined from {attacker.Kind} {attacker.Id} to {target.Kind} {target.Id}.");
@@ -837,7 +943,9 @@ public sealed class CombatSystem : ITickPhase
                     isCritical,
                     m_random,
                     flatAttack: player.Equipment.FlatAttack,
-                    modifiers: ModifiersOf(attacker, target, skill));
+                    modifiers: ModifiersOf(attacker, target, skill),
+                    isDefenderFrozen: target.HasAilment(Ailment.Freeze),
+                    isDefenderPoisoned: target.HasAilment(Ailment.Poison));
             case MonsterEntity monster when target is PlayerEntity player:
                 return new DamageContext(
                     AttackerKind.Monster,
@@ -847,7 +955,9 @@ public sealed class CombatSystem : ITickPhase
                     player.Stats.SoftDefense,
                     isCritical,
                     m_random,
-                    modifiers: ModifiersOf(attacker, target, skill));
+                    modifiers: ModifiersOf(attacker, target, skill),
+                    isDefenderFrozen: target.HasAilment(Ailment.Freeze),
+                    isDefenderPoisoned: target.HasAilment(Ailment.Poison));
             default:
                 throw new InvalidOperationException(
                     $"No basic attack is defined from {attacker.Kind} {attacker.Id} to {target.Kind} {target.Id}.");

@@ -13,6 +13,9 @@ public enum StatusEffectChange
     Restored,
 
     /// <summary>Dropped at a load: a converter without a worn weapon, or a status the content lacks.</summary>
-    Dropped
+    Dropped,
+
+    /// <summary>A freeze or a sleep a landed hit ended (Gameplay Systems §9.1).</summary>
+    Broken
 }
 }

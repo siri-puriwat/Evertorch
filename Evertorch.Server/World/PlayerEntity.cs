@@ -119,6 +119,12 @@ public sealed class PlayerEntity : WorldEntity
     public CardBonus CardBonus { get; set; } = CardBonus.None;
 
     /// <summary>
+    ///     The primary statistics with the status effects, the equipment, and the cards, as the last recalculation
+    ///     derived them: what a player resists an ailment by (Gameplay Systems §9.1).
+    /// </summary>
+    public PrimaryStats EffectivePrimary { get; set; }
+
+    /// <summary>
     ///     The element of the player's swings and weapon skills (Gameplay Systems §9.1): the active status's that sets
     ///     one, a converter's, else Neutral.
     /// </summary>

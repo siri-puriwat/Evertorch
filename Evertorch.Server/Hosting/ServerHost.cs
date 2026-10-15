@@ -74,6 +74,7 @@ public static class ServerHost
         AddOptions<WorldOptions, WorldOptionsValidator>(builder, WorldOptions.SectionName);
         AddOptions<MarketOptions, MarketOptionsValidator>(builder, MarketOptions.SectionName);
         AddOptions<DropOptions, DropOptionsValidator>(builder, DropOptions.SectionName);
+        AddOptions<CombatOptions, CombatOptionsValidator>(builder, CombatOptions.SectionName);
         builder.Services
             .AddOptions<DevelopmentAuthenticationOptions>()
             .Bind(builder.Configuration.GetSection(DevelopmentAuthenticationOptions.SectionName));

@@ -115,6 +115,46 @@ public sealed class ServerHostTests
         }
     }
 
+    [TestCase(0)]
+    [TestCase(101)]
+    public void Start_WithAilmentChanceScaleOutsideOneToAHundred_FailsNamingTheKey(int scale)
+    {
+        using var root = new TemporaryDirectory();
+        root.Write("appsettings.json", $"{{ \"Combat\": {{ \"AilmentChanceScale\": {scale} }} }}");
+        WriteValidContent(root);
+        using IHost host = TestHosts.CreateBuilder(EphemeralPort, root.Path).Build();
+        Action start = () => host.Start();
+
+        Assert.That(
+            start,
+            Throws.InstanceOf<OptionsValidationException>().With.Message.Contains("Combat:AilmentChanceScale"));
+    }
+
+    // System Architecture §10: the startup warns while ailments land more often, and says nothing at 1.
+    [TestCase(5, true)]
+    [TestCase(1, false)]
+    public void Start_WithAilmentChanceScale_WarnsOnlyAboveOne(int scale, bool isWarned)
+    {
+        using var root = new TemporaryDirectory();
+        WriteValidContent(root);
+        var logs = new CapturingLoggerProvider();
+        HostApplicationBuilder builder = TestHosts.CreateBuilder(
+            new[] { "--Network:Port=0", $"--Combat:AilmentChanceScale={scale}" },
+            root.Path);
+        builder.Logging.AddProvider(logs);
+        using IHost host = builder.Build();
+
+        host.Start();
+        host.StopAsync().GetAwaiter().GetResult();
+
+        string[] warned = logs.Lines.Where(line => line.Contains(" AilmentChanceScaled: ")).ToArray();
+        Assert.That(warned.Length, Is.EqualTo(isWarned ? 1 : 0));
+        if (isWarned)
+        {
+            Assert.That(warned[0], Does.Contain("5 times"));
+        }
+    }
+
     [TestCase("-0.5")]
     [TestCase("10.5")]
     public void Start_WithPickupRangeOutsideZeroToTen_FailsNamingTheKey(string range)

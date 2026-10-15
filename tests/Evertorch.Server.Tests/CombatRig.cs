@@ -134,14 +134,15 @@ internal sealed class CombatRig
 }
 
 /// <summary>
-///     Always hits, never dodges or crits, and rolls the lowest variance: every bound of 1000 (the dodge and critical
-///     rolls) draws 999, everything else 0.
+///     Always hits, never dodges or crits, rolls the lowest variance, and lands no ailment's roll a test did not script:
+///     every bound of 1000 (the dodge and critical rolls) draws 999, of 10,000 (an ailment's roll) 9,999, and everything
+///     else 0.
 /// </summary>
 internal sealed class SureHitRandom : IRandomSource
 {
     public int Next(int exclusiveMax)
     {
-        return exclusiveMax == 1000 ? 999 : 0;
+        return exclusiveMax == 1000 || exclusiveMax == 10_000 ? exclusiveMax - 1 : 0;
     }
 }
 }

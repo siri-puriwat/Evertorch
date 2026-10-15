@@ -25,6 +25,8 @@ public sealed class CharacterBuilds
     /// </summary>
     public const string GuildmasterReason = "guildmaster";
 
+    private static readonly AilmentRules Ailments = new();
+
     private static readonly Action<ILogger, long, long, PrimaryStat, int, int, Exception?> LogStatRaised =
         LoggerMessage.Define<long, long, PrimaryStat, int, int>(
             LogLevel.Information,
@@ -232,7 +234,13 @@ public sealed class CharacterBuilds
             Clamp(weapon.Dex + armor.Dex + cards.Dex),
             Clamp(weapon.Luk + armor.Luk + cards.Luk),
             player.AttackElement,
-            player.ArmorElement);
+            player.ArmorElement,
+            ResistanceOf(player, Ailment.Poison),
+            ResistanceOf(player, Ailment.Stun),
+            ResistanceOf(player, Ailment.Freeze),
+            ResistanceOf(player, Ailment.Sleep),
+            ResistanceOf(player, Ailment.Silence),
+            ResistanceOf(player, Ailment.Blind));
     }
 
     /// <summary>
@@ -360,6 +368,15 @@ public sealed class CharacterBuilds
             stat == PrimaryStat.Int ? value : primary.Int,
             stat == PrimaryStat.Dex ? value : primary.Dex,
             stat == PrimaryStat.Luk ? value : primary.Luk);
+    }
+
+    // What the Stats window's row shows: the statistic's and the armor cards' resistance together against a source of
+    // the player's own level (Gameplay Systems §9.1).
+    private static byte ResistanceOf(PlayerEntity player, Ailment ailment)
+    {
+        int resistance = Ailments.PlayerResistance(AilmentRolls.StatisticAgainst(player, ailment), 0);
+        int cards = Ailments.CardResistance(player.CardBonus.ResistanceTo(ailment));
+        return (byte)Ailments.SheetResistance(resistance, cards);
     }
 
     private static ushort Clamp(int value)

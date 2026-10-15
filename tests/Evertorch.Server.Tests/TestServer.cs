@@ -72,7 +72,8 @@ internal sealed class TestServer
         IRandomSource? refineRandom = null,
         int bossHealthPercent = 100,
         int cardChanceScale = 1,
-        ServerContent? content = null)
+        ServerContent? content = null,
+        int ailmentChanceScale = 1)
     {
         // A test's own content, the repository's package edited for one rule, is copied the same way but never shared.
         Content = content != null
@@ -211,7 +212,8 @@ internal sealed class TestServer
             Instruments,
             Bosses,
             Options.Create(world),
-            simulation);
+            simulation,
+            Options.Create(new CombatOptions { AilmentChanceScale = ailmentChanceScale }));
         MonsterAi = new MonsterAiSystem(World, Random, Options.Create(world), simulation, Instruments, Combat, Bosses);
         Items = new ItemActionSystem(
             Persistence,

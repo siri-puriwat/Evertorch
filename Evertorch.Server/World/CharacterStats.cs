@@ -57,6 +57,7 @@ public sealed class CharacterStats
             cards.Stats);
         DerivedStats stats = WithMaxima(Calculate(job, player.Level, primary, player.Weapon), cards);
         player.ApplyStats(stats, m_rules.CalculateRegeneration(primary, stats));
+        player.EffectivePrimary = primary;
     }
 
     private static PrimaryStats Plus(PrimaryStats stats, PrimaryStats? bonus)

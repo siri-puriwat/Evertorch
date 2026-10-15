@@ -130,9 +130,10 @@ public sealed class CharacterSession
     public bool IsRemovalDeferred { get; set; }
 
     /// <summary>
-    ///     The health and SP in thousandths its party's other members last heard; null before they heard any.
+    ///     The health and SP in thousandths and the ailments its party's other members last heard; null before they heard
+    ///     any.
     /// </summary>
-    public (ushort Health, ushort Spirit)? PartyStatusSent { get; set; }
+    public (ushort Health, ushort Spirit, byte Ailments)? PartyStatusSent { get; set; }
 
     /// <summary>
     ///     The first tick on which the other members may hear its health and SP again: at most once a second.

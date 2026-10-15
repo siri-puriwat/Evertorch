@@ -175,6 +175,34 @@ public sealed class ServerInstrumentsTests
     }
 
     [Test]
+    public void Ailments_AreCountedByAilmentAndOutcome_AndABreakAsAChange()
+    {
+        var server = new TestServer(withEveryMap: true, withGrotto: true, withMonsters: true, withMonsterAi: false);
+        using var recorder = new MeterRecorder(server.Instruments.Meter);
+        PlayerEntity player = server.PlayerOf(server.EnterWorld(1));
+        MonsterEntity[] grotto = server.World.Maps.SelectMany(map => map.Monsters).ToArray();
+        MonsterEntity crawler = grotto.First(monster => monster.Definition.Id.Value == "monster.grotto_crawler");
+        MonsterEntity boss = grotto.First(monster => monster.Definition.IsBoss);
+        var rolls = new AilmentRolls(server.Content, server.StatusEffects, server.World, new ScriptedRandom(9999, 0),
+            server.Instruments, 1);
+        var frozen = new StatusDefinitionId("status.frozen");
+
+        rolls.Roll(player, crawler, frozen, 10_000, 8000);
+        rolls.Roll(player, crawler, frozen, 10_000, 8000);
+        rolls.Roll(player, boss, frozen, 10_000, 8000);
+        rolls.Roll(player, player, new StatusDefinitionId("status.poisoned"), 5000, 20_000);
+        bool hasBroken = rolls.Break(crawler);
+
+        Assert.That(SumTagged(recorder, "evertorch.combat.ailments", "outcome", "landed"), Is.EqualTo(1));
+        Assert.That(SumTagged(recorder, "evertorch.combat.ailments", "outcome", "refused"), Is.EqualTo(1));
+        Assert.That(SumTagged(recorder, "evertorch.combat.ailments", "outcome", "immune"), Is.EqualTo(1));
+        Assert.That(SumTagged(recorder, "evertorch.combat.ailments", "outcome", "resisted"), Is.EqualTo(1));
+        Assert.That(SumTagged(recorder, "evertorch.combat.ailments", "ailment", "freeze"), Is.EqualTo(3));
+        Assert.That(hasBroken, Is.True);
+        Assert.That(SumTagged(recorder, "evertorch.combat.status_effects", "change", "broken"), Is.EqualTo(1));
+    }
+
+    [Test]
     public void Assists_AreCountedByMonster_OncePerKinThatAnswers()
     {
         var server = new TestServer(withEveryMap: true, withGrotto: true, withMonsters: true);

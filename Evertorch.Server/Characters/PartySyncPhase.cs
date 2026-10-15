@@ -104,7 +104,8 @@ public sealed class PartySyncPhase : ITickPhase
             }
 
             PartyMemberStatus status = StatusOf(character.Player);
-            (ushort Health, ushort Spirit) now = (status.HealthPermille, status.SpiritPermille);
+            (ushort Health, ushort Spirit, byte Ailments) now =
+                (status.HealthPermille, status.SpiritPermille, status.Ailments);
             if (character.PartyStatusSent == now)
             {
                 continue;
@@ -197,7 +198,16 @@ public sealed class PartySyncPhase : ITickPhase
     {
         ushort health = player.IsDead ? (ushort)0 : Permille(player.CurrentHealth, player.MaxHealth, 1);
         ushort spirit = Permille(player.CurrentSpirit, player.MaxSpirit, 0);
-        return new PartyMemberStatus(player.Name, health, spirit);
+        byte ailments = 0;
+        for (Ailment ailment = Ailment.Poison; ailment <= Ailment.Blind; ailment++)
+        {
+            if (player.HasAilment(ailment))
+            {
+                ailments |= (byte)(1 << ((int)ailment - 1));
+            }
+        }
+
+        return new PartyMemberStatus(player.Name, health, spirit, ailments);
     }
 
     private static ushort Permille(int current, int maximum, int least)

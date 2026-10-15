@@ -70,11 +70,14 @@ public sealed class ServerInstruments
 
     private static readonly KeyValuePair<string, object?> CastResolved = new(OutcomeTag, "resolved");
     private static readonly KeyValuePair<string, object?> CastInterrupted = new(OutcomeTag, "interrupted");
+    private static readonly string[] AilmentWords = { "none", "poison", "stun", "freeze", "sleep", "silence", "blind" };
+    private static readonly string[] AilmentOutcomeWords = { "landed", "resisted", "refused", "immune" };
     private static readonly KeyValuePair<string, object?> StatusStarted = new("change", "started");
     private static readonly KeyValuePair<string, object?> StatusRenewed = new("change", "renewed");
     private static readonly KeyValuePair<string, object?> StatusEnded = new("change", "ended");
     private static readonly KeyValuePair<string, object?> StatusRestored = new("change", "restored");
     private static readonly KeyValuePair<string, object?> StatusDropped = new("change", "dropped");
+    private static readonly KeyValuePair<string, object?> StatusBroken = new("change", "broken");
     private static readonly KeyValuePair<string, object?> StatChange = new("change", "stat");
     private static readonly KeyValuePair<string, object?> SkillChange = new("change", "skill");
     private static readonly KeyValuePair<string, object?> ResetChange = new("change", "reset");
@@ -105,6 +108,7 @@ public sealed class ServerInstruments
     private readonly Counter<long> m_jobLevelUps;
     private readonly Counter<long> m_casts;
     private readonly Counter<long> m_statusEffects;
+    private readonly Counter<long> m_ailments;
     private readonly Counter<long> m_buildChanges;
     private readonly Counter<long> m_mapTransfers;
     private readonly Counter<long> m_otherEpochInputs;
@@ -247,6 +251,10 @@ public sealed class ServerInstruments
             "evertorch.combat.status_effects",
             "{effect}",
             "Status effects started, renewed, or ended, by change.");
+        m_ailments = Meter.CreateCounter<long>(
+            "evertorch.combat.ailments",
+            "{roll}",
+            "Rolls for an ailment, by ailment and outcome.");
         m_buildChanges = Meter.CreateCounter<long>(
             "evertorch.build.changes",
             "{change}",
@@ -524,9 +532,18 @@ public sealed class ServerInstruments
             StatusEffectChange.Renewed => StatusRenewed,
             StatusEffectChange.Restored => StatusRestored,
             StatusEffectChange.Dropped => StatusDropped,
+            StatusEffectChange.Broken => StatusBroken,
             _ => StatusEnded
         };
         m_statusEffects.Add(count, tag);
+    }
+
+    public void RecordAilment(Ailment ailment, AilmentOutcome outcome)
+    {
+        m_ailments.Add(
+            1,
+            new KeyValuePair<string, object?>("ailment", AilmentWords[(int)ailment]),
+            new KeyValuePair<string, object?>(OutcomeTag, AilmentOutcomeWords[(int)outcome]));
     }
 
     /// <summary>

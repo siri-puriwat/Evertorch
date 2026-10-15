@@ -115,6 +115,22 @@ public sealed class StatusEffectSystem : ITickPhase
     }
 
     /// <summary>
+    ///     Ends the ailments <paramref name="ended" /> names on <paramref name="entity" />, a hit's break or a cure
+    ///     (Gameplay Systems §9.1), counted as <paramref name="change" />; returns how many ended.
+    /// </summary>
+    public int EndAilments(WorldEntity entity, Predicate<Ailment> ended, StatusEffectChange change)
+    {
+        int count = entity.EndAilments(ended);
+        if (count > 0)
+        {
+            m_instruments.RecordStatusEffects(change, count);
+            Recalculate(entity);
+        }
+
+        return count;
+    }
+
+    /// <summary>
     ///     Death ends every effect, a monster's ailments with a player's (Gameplay Systems §9.1).
     /// </summary>
     public void EndAll(WorldEntity entity)
