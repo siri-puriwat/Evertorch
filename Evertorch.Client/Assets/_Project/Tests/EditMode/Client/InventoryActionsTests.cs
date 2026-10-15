@@ -95,8 +95,8 @@ public sealed class InventoryActionsTests
         Assert.That(commands.Sent, Is.EqualTo(new[] { "equip 11 Weapon", "unequip Weapon", "unequip Armor" }));
     }
 
-    // Each piece goes to its own position, an accessory to the first of the two (Gameplay Systems §11.1), and a worn
-    // piece comes off wherever it is worn.
+    // Each piece goes to its own position, and a worn piece comes off wherever it is worn; an unworn accessory's press
+    // opens the Equipment window to choose one of the two, which the interface does (Prototype Content §2).
     [Test]
     public void Press_OfEachCategory_SendsItsOwnPosition_OrTakesItOffWhereItIsWorn()
     {
@@ -121,9 +121,17 @@ public sealed class InventoryActionsTests
                 new[]
                 {
                     "equip 20 Weapon", "equip 20 Armor", "equip 20 Headgear", "equip 20 Shield", "equip 20 Garment",
-                    "equip 20 Footwear", "equip 20 Accessory1", "unequip Accessory2"
+                    "equip 20 Footwear", "unequip Accessory2"
                 }));
         Assert.That(categories, Has.All.Matches<ItemType>(InventoryActions.HasAction));
+        var unworn = new InventoryEntry(20, item, 1);
+        var worn = new InventoryEntry(21, item, 1, EquipmentSlot.Accessory2);
+        Assert.That(
+            InventoryActions.ChoosesPosition(unworn, ItemType.Accessory),
+            Is.True,
+            "an unworn accessory chooses its position");
+        Assert.That(InventoryActions.ChoosesPosition(worn, ItemType.Accessory), Is.False, "a worn one comes off");
+        Assert.That(InventoryActions.ChoosesPosition(unworn, ItemType.Headgear), Is.False);
     }
 
     [Test]

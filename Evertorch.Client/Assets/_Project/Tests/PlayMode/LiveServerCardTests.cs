@@ -147,7 +147,12 @@ public sealed class LiveServerCardTests
                 return inspect.IsOpen;
             },
             StartTimeoutSeconds);
-        Assert.That(inspect.Text, Is.EqualTo($"{BobName}\nWeapon: none\nArmor: none"), "the other wears nothing");
+        Assert.That(
+            inspect.Text,
+            Is.EqualTo(
+                $"{BobName}\nWeapon: none\nBody armor: none\nHeadgear: none\nShield: none\nGarment: none"
+                + "\nFootwear: none\nAccessory 1: none\nAccessory 2: none"),
+            "the other wears nothing in any of the eight positions");
 
         NpcWindow window = client.GetComponentsInChildren<NpcWindow>(true).Single();
         yield return WaitUntil(() => NpcView(client, Smith)?.HasBody == true, StartTimeoutSeconds);

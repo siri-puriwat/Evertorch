@@ -24,11 +24,12 @@ public sealed class PanelLayoutTests
         Rect[] others =
         {
             ChatPanel.BoundsFor(true), SkillBar.BoundsFor(width, SkillSlots.Count), TouchControls.StickBounds,
-            TouchControls.ButtonColumnBounds(width), TouchControls.StatsButtonBounds(canvasHeight),
+            TouchControls.ButtonColumnBounds(width), TouchControls.MenuButtonBounds(canvasHeight),
             TouchControls.SkillsButtonBounds(canvasHeight), TouchControls.OverlayToggleBounds(canvasHeight),
             NpcWindow.BoundsFor(canvasHeight, 100, true), StatsWindow.BoundsFor(canvasHeight, true),
             SkillsWindow.BoundsFor(canvasHeight, 11, true), InventoryWindow.BoundsFor(canvasHeight, 60, true),
-            CardWindow.BoundsFor(canvasHeight, 100, true), InspectWindow.BoundsFor(canvasHeight, 10, true)
+            CardWindow.BoundsFor(canvasHeight, 100, true), InspectWindow.BoundsFor(canvasHeight, 40, true),
+            MenuWindow.BoundsFor(canvasHeight, true), EquipmentWindow.BoundsFor(canvasHeight, 100, true)
         };
 
         Assert.That(others.Where(chat.Overlaps), Is.Empty);
@@ -113,24 +114,51 @@ public sealed class PanelLayoutTests
         Assert.That(withTouch.height, Is.GreaterThanOrEqualTo(56f + 2 * 30f), "two rows show on the shortest screen");
     }
 
-    // The Stats and Skills buttons stand above the Dev button's place on the left edge, clear of the stick and the Dev
+    // The Menu and Skills buttons stand above the Dev button's place on the left edge, clear of the stick and the Dev
     // button.
     [TestCase(486f)]
     [TestCase(607.5f)]
     [TestCase(1920f)]
-    public void StatsButton_StandsAboveTheDevButton_ClearOfTheStick(float canvasHeight)
+    public void MenuButton_StandsAboveTheDevButton_ClearOfTheStick(float canvasHeight)
     {
-        Rect stats = TouchControls.StatsButtonBounds(canvasHeight);
+        Rect menu = TouchControls.MenuButtonBounds(canvasHeight);
         Rect skills = TouchControls.SkillsButtonBounds(canvasHeight);
         Rect dev = TouchControls.OverlayToggleBounds(canvasHeight);
 
-        Assert.That(skills.yMin, Is.GreaterThan(stats.yMax), "Skills above Stats");
+        Assert.That(skills.yMin, Is.GreaterThan(menu.yMax), "Skills above Menu");
         Assert.That(skills.yMax, Is.LessThan(canvasHeight), "on the screen");
-        Assert.That(stats.Overlaps(TouchControls.StickBounds), Is.False, "the stick");
+        Assert.That(menu.Overlaps(TouchControls.StickBounds), Is.False, "the stick");
         Assert.That(dev.Overlaps(TouchControls.StickBounds), Is.False, "the Dev button and the stick");
-        Assert.That(stats.Overlaps(dev), Is.False, "the Dev button");
-        Assert.That(stats.yMin, Is.GreaterThan(dev.yMax));
-        Assert.That(stats.xMin, Is.Zero, "on the left edge");
+        Assert.That(menu.Overlaps(dev), Is.False, "the Dev button");
+        Assert.That(menu.yMin, Is.GreaterThan(dev.yMax));
+        Assert.That(menu.xMin, Is.Zero, "on the left edge");
+    }
+
+    // The Menu and the Equipment window hang where the NPC window does and stop above the chat and the stick; the
+    // Menu's three entries and the eight positions scroll on the smallest canvas (Prototype Content §2).
+    [TestCase(486f)]
+    [TestCase(607.5f)]
+    [TestCase(1920f)]
+    public void MenuAndEquipmentWindow_HangBelowTheStatusBar_AndStopAboveTheChatAndTheStick(float canvasHeight)
+    {
+        Rect[] windows =
+        {
+            MenuWindow.BoundsFor(canvasHeight, true), EquipmentWindow.BoundsFor(canvasHeight, 100, true)
+        };
+
+        Assert.That(windows.Select(window => window.yMax), Is.All.EqualTo(canvasHeight - 64f).Within(1e-3f));
+        Assert.That(windows.Where(window => window.Overlaps(ChatPanel.BoundsFor(true))), Is.Empty, "clear of the chat");
+        Assert.That(windows.Where(window => window.Overlaps(TouchControls.StickBounds)), Is.Empty, "and the stick");
+        Assert.That(windows.Select(window => window.height), Is.All.GreaterThanOrEqualTo(56f + 2 * 30f),
+            "two rows show");
+        Assert.That(
+            MenuWindow.BoundsFor(1920f, false).height,
+            Is.EqualTo(2 * 10f + 30f + 6f + 3 * 30f + 2 * 6f).Within(1e-3f),
+            "the three entries");
+        Assert.That(
+            EquipmentWindow.BoundsFor(1920f, 8, false).height,
+            Is.EqualTo(2 * 10f + 30f + 6f + 8 * 30f + 7 * 6f).Within(1e-3f),
+            "the eight positions");
     }
 
     [TestCase(486f)]
@@ -158,14 +186,15 @@ public sealed class PanelLayoutTests
     {
         Rect[] buttons =
         {
-            TouchControls.StatsButtonBounds(canvasHeight), TouchControls.SkillsButtonBounds(canvasHeight),
+            TouchControls.MenuButtonBounds(canvasHeight), TouchControls.SkillsButtonBounds(canvasHeight),
             TouchControls.OverlayToggleBounds(canvasHeight)
         };
         Rect[] windows =
         {
             NpcWindow.BoundsFor(canvasHeight, 100, true), StatsWindow.BoundsFor(canvasHeight, true),
             SkillsWindow.BoundsFor(canvasHeight, 11, true), CardWindow.BoundsFor(canvasHeight, 100, true),
-            InspectWindow.BoundsFor(canvasHeight, 10, true)
+            InspectWindow.BoundsFor(canvasHeight, 40, true), MenuWindow.BoundsFor(canvasHeight, true),
+            EquipmentWindow.BoundsFor(canvasHeight, 100, true)
         };
         Vector2 beside = TargetFrame.XRangeFor(true, true);
 
@@ -204,7 +233,7 @@ public sealed class PanelLayoutTests
             ? new[]
             {
                 ChatPanel.BoundsFor(true), SkillBar.BoundsFor(width, SkillSlots.Count), TouchControls.StickBounds,
-                TouchControls.ButtonColumnBounds(width), TouchControls.StatsButtonBounds(canvasHeight),
+                TouchControls.ButtonColumnBounds(width), TouchControls.MenuButtonBounds(canvasHeight),
                 TouchControls.SkillsButtonBounds(canvasHeight), TouchControls.OverlayToggleBounds(canvasHeight),
                 TouchControls.ChatButtonBounds, target
             }
@@ -218,14 +247,14 @@ public sealed class PanelLayoutTests
         Assert.That(PartyList.RowHeightFor(canvasHeight, isTouch), Is.GreaterThanOrEqualTo(24f), "a row stays legible");
     }
 
-    // The Inspect window hangs where the NPC window does and stops above the chat and the stick; its ten lines at most,
-    // two items with four cards each, scroll on the smallest canvas (Prototype Content §2).
+    // The Inspect window hangs where the NPC window does and stops above the chat and the stick; its forty lines at
+    // most, eight items with four cards each, scroll (Prototype Content §2).
     [TestCase(486f)]
     [TestCase(607.5f)]
     [TestCase(1920f)]
     public void InspectWindow_HangsBelowTheStatusBar_AndStopsAboveTheChatAndTheStick(float canvasHeight)
     {
-        Rect withTouch = InspectWindow.BoundsFor(canvasHeight, 10, true);
+        Rect withTouch = InspectWindow.BoundsFor(canvasHeight, 40, true);
         Rect fewRows = InspectWindow.BoundsFor(1920f, 2, false);
 
         Assert.That(withTouch.yMax, Is.EqualTo(canvasHeight - 64f).Within(1e-3f), "below the status bar");

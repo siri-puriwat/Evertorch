@@ -4,14 +4,16 @@ using System.Text;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
+using EntityId = Evertorch.Game.EntityId;
 
 namespace Evertorch.Client
 {
 /// <summary>
 ///     The Inspect window (Gameplay Systems §11.7; Prototype Content §2), in the side slot, opened by the server's answer
-///     to an inspection: the inspected player's name, then the worn weapon and armor, each named with its refine level,
-///     its cards, and its slots, and each card on a line of its own. It shows the answer as it came and closes when the
-///     world changes or the connection closes.
+///     to an inspection: the inspected player's name, then the eight positions in order, each named with its item's
+///     refine level, cards, and slots, or "none", and each card on a line of its own. It shows the answer as it came;
+///     once the player's appearance shows another revision, it marks the answer "(changed)" and asks again through
+///     <see cref="GameClient" />. It closes when the world changes or the connection closes.
 /// </summary>
 public sealed class InspectWindow : MonoBehaviour
 {
@@ -40,11 +42,21 @@ public sealed class InspectWindow : MonoBehaviour
     private float m_listHeight = -1f;
     private float m_left = Margin;
     private ClientWorld? m_world;
+    private string m_shownName = string.Empty;
+    private EntityId m_entity;
+    private uint m_revision;
+    private bool m_isAskedAgain;
 
     public bool IsOpen => m_panel != null && m_panel.activeSelf;
 
     /// <summary>
-    ///     The window as shown, one line each: the player's name, then each line of the list.
+    ///     Whether the player's appearance has shown another revision than the answer's since it came.
+    /// </summary>
+    public bool IsChanged { get; private set; }
+
+    /// <summary>
+    ///     The window as shown, one line each: the player's name, "(changed)" after it once the answer is stale, then
+    ///     each line of the list.
     /// </summary>
     public string Text { get; private set; } = string.Empty;
 
@@ -60,6 +72,20 @@ public sealed class InspectWindow : MonoBehaviour
         {
             Close();
             return;
+        }
+
+        // An appearance carries the revision of what the player wears (Network Protocol §9); one past the answer's
+        // means the answer is stale, and the client asks again until its bucket lets it.
+        if (!IsChanged
+            && world.Remotes.TryGetValue(m_entity, out RemoteEntity? remote)
+            && remote.AppearanceRevision > m_revision)
+        {
+            MarkChanged();
+        }
+
+        if (IsChanged && !m_isAskedAgain)
+        {
+            m_isAskedAgain = m_client!.InspectAgain(m_entity);
         }
 
         FitList();
@@ -98,6 +124,10 @@ public sealed class InspectWindow : MonoBehaviour
         }
 
         m_world = world;
+        m_entity = shown.Entity;
+        m_revision = shown.Revision;
+        IsChanged = false;
+        m_isAskedAgain = false;
         UiBuilder.SetActive(m_panel!, true);
         Show(shown, name, m_client!.Content);
         Update();
@@ -120,6 +150,15 @@ public sealed class InspectWindow : MonoBehaviour
         return Math.Max(0f, Math.Min(needed, room));
     }
 
+    private void MarkChanged()
+    {
+        IsChanged = true;
+        string heading = $"{m_shownName} (changed)";
+        m_name!.text = heading;
+        int end = Text.IndexOf('\n');
+        Text = end < 0 ? heading : heading + Text.Substring(end);
+    }
+
     private void Show(PlayerInspection shown, string name, ClientContent? content)
     {
         foreach (GameObject row in m_rowObjects)
@@ -129,6 +168,7 @@ public sealed class InspectWindow : MonoBehaviour
 
         m_rowObjects.Clear();
         m_text.Clear();
+        m_shownName = name;
         m_name!.text = name;
         AppendText(name);
         foreach (string line in InspectMessages.Lines(content, shown))

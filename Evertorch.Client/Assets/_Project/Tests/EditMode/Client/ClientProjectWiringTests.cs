@@ -53,6 +53,12 @@ public sealed class ClientProjectWiringTests
     [TestCase("Player/Talk")]
     [TestCase("Player/Stats")]
     [TestCase("Player/Skills")]
+    [TestCase("Player/Menu")]
+    [TestCase("Player/Equipment")]
+    [TestCase("Menu/Navigate")]
+    [TestCase("Menu/Choose")]
+    [TestCase("Menu/Back")]
+    [TestCase("Menu/End")]
     public void InputActions_HaveTheActionsTheClientBinds(string actionPath)
     {
         Assert.That(LoadActions().FindAction(actionPath), Is.Not.Null);
@@ -206,17 +212,44 @@ public sealed class ClientProjectWiringTests
         Assert.That(actions.FindAction("Player/Interact"), Is.Null, "the template's Interact is replaced");
     }
 
+    // The Menu map holds the gamepad's focus on a window; it binds Select as End, which the Player map's Menu binds too,
+    // since only one of the two maps is enabled at a time (Prototype Content §4).
+    [Test]
+    public void InputActions_TheMenuMapFollowsThePrototypeControls()
+    {
+        InputActionAsset actions = LoadActions();
+
+        Assert.That(
+            actions.FindActionMap(MenuInputSource.MapName, true).actions.Select(action => action.name),
+            Is.EqualTo(new[] { "Navigate", "Choose", "Back", "End" }));
+        Assert.That(
+            Paths(actions, "Menu/Navigate"),
+            Is.EquivalentTo(new[] { "<Gamepad>/dpad", "<Gamepad>/leftStick" }));
+        Assert.That(Paths(actions, "Menu/Choose"), Is.EquivalentTo(new[] { "<Gamepad>/buttonSouth" }));
+        Assert.That(Paths(actions, "Menu/Back"), Is.EquivalentTo(new[] { "<Gamepad>/buttonEast" }));
+        Assert.That(Paths(actions, "Menu/End"), Is.EquivalentTo(new[] { TouchControls.MenuControlPath }));
+        string[] presses = { "Menu/Choose", "Menu/Back", "Menu/End" };
+        Assert.That(
+            presses.Select(path => actions.FindAction(path, true).interactions),
+            Is.All.Empty,
+            "presses, not holds");
+    }
+
     [Test]
     public void InputActions_TheWindowsFollowThePrototypeControls()
     {
         InputActionAsset actions = LoadActions();
 
-        Assert.That(
-            Paths(actions, "Player/Stats"),
-            Is.EquivalentTo(new[] { "<Keyboard>/c", TouchControls.StatsControlPath }),
-            "the Stats touch button drives the gamepad's Select");
-        Assert.That(TouchControls.StatsControlPath, Is.EqualTo("<Gamepad>/select"));
+        Assert.That(Paths(actions, "Player/Stats"), Is.EquivalentTo(new[] { "<Keyboard>/c" }), "Select opens the Menu");
         Assert.That(actions.FindAction("Player/Stats", true).interactions, Is.Empty, "a press, not a hold");
+        Assert.That(
+            Paths(actions, "Player/Menu"),
+            Is.EquivalentTo(new[] { TouchControls.MenuControlPath }),
+            "the Menu touch button drives the gamepad's Select");
+        Assert.That(TouchControls.MenuControlPath, Is.EqualTo("<Gamepad>/select"));
+        Assert.That(actions.FindAction("Player/Menu", true).interactions, Is.Empty, "a press, not a hold");
+        Assert.That(Paths(actions, "Player/Equipment"), Is.EquivalentTo(new[] { "<Keyboard>/i" }));
+        Assert.That(actions.FindAction("Player/Equipment", true).interactions, Is.Empty, "a press, not a hold");
         Assert.That(
             Paths(actions, "Player/Skills"),
             Is.EquivalentTo(new[] { "<Keyboard>/k", TouchControls.SkillsControlPath }),

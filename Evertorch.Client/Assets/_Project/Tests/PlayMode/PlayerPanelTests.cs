@@ -33,6 +33,8 @@ public sealed class PlayerPanelTests
     private const string Hunt = "quest.crawler_hunt";
     private const string Crawler = "monster.forest_crawler";
     private const string Guildmaster = "npc.guildmaster";
+    private const string Charm = "item.accessory.traveler_charm";
+    private const string Cap = "item.headgear.trail_cap";
     private static readonly JobDefinitionId Adventurer = new("job.adventurer");
     private static readonly JobDefinitionId Vanguard = new("job.vanguard");
     private static readonly JobDefinitionId Arcanist = new("job.arcanist");
@@ -364,6 +366,72 @@ public sealed class PlayerPanelTests
                 EntityStateFlags.None,
                 healthPermille,
                 name));
+    }
+
+    // The gear of the equipment tests: the Iron Sword and the cards, a traveler charm, and a trail cap.
+    private static void GiveGear(GameClient client)
+    {
+        GiveContent(
+            client,
+            CardedItems()
+                .Concat(
+                    new[]
+                    {
+                        new ClientItem(
+                            new ItemDefinitionId(Charm),
+                            "Traveler Charm",
+                            ItemType.Accessory,
+                            "pickup_cloth_armor",
+                            "armor",
+                            slots: 1),
+                        new ClientItem(
+                            new ItemDefinitionId(Cap),
+                            "Trail Cap",
+                            ItemType.Headgear,
+                            "pickup_cloth_armor",
+                            "armor",
+                            slots: 1)
+                    }));
+    }
+
+    private static EquipmentAppearance Appearance(long entity, uint revision, string weapon)
+    {
+        var items = new ItemDefinitionId[8];
+        items[0] = new ItemDefinitionId(weapon);
+        return new EquipmentAppearance(new EntityId(entity), revision, items);
+    }
+
+    private static InspectedEquipment Answer(long entity, uint asked, uint revision, string weapon)
+    {
+        var held = new InspectedItem(new ItemDefinitionId(weapon), 0, new ItemDefinitionId[0]);
+        InspectedEntry[] entries = EquipmentPositions.All
+            .Select(slot => new InspectedEntry(slot, slot == EquipmentSlot.Weapon ? held : default))
+            .ToArray();
+        return new InspectedEquipment(new EntityId(entity), asked, revision, 0, 1, entries);
+    }
+
+    private static uint[] InspectionsAsked(RecordingConnection recording)
+    {
+        return recording.SentOf(MessageOpcode.InspectPlayer)
+            .Select(payload => InspectPlayer.TryRead(payload, out InspectPlayer? read) ? read!.CommandSequence : 0u)
+            .ToArray();
+    }
+
+    private static (long, EquipmentSlot)[] Equips(RecordingConnection recording)
+    {
+        return recording.SentOf(MessageOpcode.EquipItem)
+            .Select(payload => EquipItem.TryRead(payload, out EquipItem equip)
+                ? (equip.InventoryItem, equip.Destination)
+                : (0L, EquipmentSlot.None))
+            .ToArray();
+    }
+
+    private static EquipmentSlot[] Unequips(RecordingConnection recording)
+    {
+        return recording.SentOf(MessageOpcode.UnequipItem)
+            .Select(payload =>
+                UnequipItem.TryRead(payload, out UnequipItem unequip) ? unequip.Slot : EquipmentSlot.None)
+            .ToArray();
     }
 
     private static bool Press(Component window, string name)
@@ -2111,10 +2179,11 @@ public sealed class PlayerPanelTests
         Assert.That(inserts, Is.EqualTo(new[] { (7L, 3L) }));
     }
 
-    // The answer to an inspection opens the Inspect window in place of the Stats window, naming the player and each
-    // worn item with its cards, each line on one row at 12 points or more; Stats then replaces it (Prototype Content §2).
+    // The answer to an inspection opens the Inspect window in place of the Stats window, naming the player and the
+    // eight positions, each worn item with its cards, each line on one row at 12 points or more; Stats then replaces it
+    // (Prototype Content §2).
     [UnityTest]
-    public IEnumerator InspectWindow_OnTheAnswer_NamesThePlayersWornItems_InPlaceOfStats()
+    public IEnumerator InspectWindow_OnTheAnswer_NamesTheEightPositions_InPlaceOfStats()
     {
         GameClient client = CreateIdleClient();
         (ClientWorld world, RecordingConnection _) = GiveRecordedWorld(client);
@@ -2162,9 +2231,248 @@ public sealed class PlayerPanelTests
             shown,
             Is.EqualTo(
                 "Bobby\nWeapon: +7 Keen Arcane Iron Sword [2]\n· Forest Crawler Card\n· Spark Wisp Card"
-                + "\nArmor: Shelled Monarch Mantle [1]\n· Grotto Crawler Card"));
+                + "\nBody armor: Shelled Monarch Mantle [1]\n· Grotto Crawler Card\nHeadgear: none\nShield: none"
+                + "\nGarment: none\nFootwear: none\nAccessory 1: none\nAccessory 2: none"));
         Assert.That(isStatsOpen, Is.False, "the answer took the Stats window's place");
         Assert.That((inspectWindow.IsOpen, statsWindow.IsOpen), Is.EqualTo((false, true)), "Stats replaces it");
+    }
+
+    // An appearance at another revision than the answer's marks it "(changed)", and the client asks again once, which
+    // the new answer settles (Network Protocol §9; Prototype Content §2).
+    [UnityTest]
+    public IEnumerator InspectWindow_WhenTheAppearanceChanges_SaysChanged_AndAsksAgainOnce()
+    {
+        GameClient client = CreateIdleClient();
+        (ClientWorld world, RecordingConnection recording) = GiveRecordedWorld(client);
+        GiveShop(client);
+        var inspectWindow = InspectWindow.Create(client);
+        m_created.Add(inspectWindow.gameObject);
+        const BindingFlags field = BindingFlags.NonPublic | BindingFlags.Instance;
+        typeof(GameClient).GetField("m_inspectWindow", field)!.SetValue(client, inspectWindow);
+        MethodInfo onAnswer = typeof(GameClient).GetMethod("OnInspectedEquipment", field)!;
+        Spawn(world, 7, EntityKind.Player, "job.adventurer", 1000, "Bobby");
+        world.OnEquipmentAppearance(Appearance(7, 3, IronSword));
+        uint asked = client.InspectPlayer(new EntityId(7));
+        onAnswer.Invoke(client, new object[] { Answer(7, asked, 3, IronSword) });
+        yield return null;
+        string first = inspectWindow.Text;
+
+        world.OnEquipmentAppearance(Appearance(7, 4, Sword));
+        yield return null;
+        yield return null;
+        string changed = inspectWindow.Text;
+        uint[] asks = InspectionsAsked(recording);
+        onAnswer.Invoke(client, new object[] { Answer(7, asks[asks.Length - 1], 4, Sword) });
+        yield return null;
+        yield return null;
+
+        Assert.That(first, Does.StartWith("Bobby\nWeapon: Iron Sword [2]\nBody armor: none\n"));
+        Assert.That(changed, Does.StartWith("Bobby (changed)\nWeapon: Iron Sword [2]\n"), "the answer as it came");
+        Assert.That(asks, Has.Length.EqualTo(2), "asked again once");
+        Assert.That(inspectWindow.Text, Does.StartWith("Bobby\nWeapon: Training Sword\n"), "the new answer");
+        Assert.That(inspectWindow.IsChanged, Is.False);
+        Assert.That(InspectionsAsked(recording), Has.Length.EqualTo(2), "and no more");
+    }
+
+    // Prototype Content §2: the Equipment window names the eight positions in order, what each holds with its cards on
+    // lines of their own, or "empty"; a press on a position lists "Take off" and each unworn row that goes there, and a
+    // press on one asks for it there. Each label keeps to its row at 12 points or more.
+    [UnityTest]
+    public IEnumerator EquipmentWindow_NamesTheEightPositions_AndAPressListsWhatGoesThere_WearingItThere()
+    {
+        GameClient client = CreateIdleClient();
+        (ClientWorld world, RecordingConnection recording) = GiveRecordedWorld(client);
+        GiveGear(client);
+        var window = EquipmentWindow.Create(client);
+        m_created.Add(window.gameObject);
+        world.Inventory.OnSnapshot(
+            new InventorySnapshot(
+                4,
+                0,
+                0,
+                1,
+                new[]
+                {
+                    new InventoryEntry(
+                        1,
+                        new ItemDefinitionId(IronSword),
+                        1,
+                        EquipmentSlot.Weapon,
+                        7,
+                        new[] { new ItemDefinitionId(Keen), new ItemDefinitionId(Arcane) }),
+                    new InventoryEntry(2, new ItemDefinitionId(Charm), 1, EquipmentSlot.Accessory2),
+                    new InventoryEntry(3, new ItemDefinitionId(Charm), 1),
+                    new InventoryEntry(4, new ItemDefinitionId(Cap), 1)
+                }));
+        window.Open();
+        yield return null;
+        string shown = window.Text;
+        bool isListed = Press(window, "Accessory 1: empty");
+        yield return null;
+        string listed = window.Text;
+        bool isChosen = Press(window, "Traveler Charm [1]");
+        yield return null;
+        string afterChoice = window.Text;
+        Press(window, "Accessory 2: Traveler Charm [1]");
+        yield return null;
+        string listedWorn = window.Text;
+        Press(window, "Take off");
+        yield return null;
+        yield return null;
+        foreach (TMP_Text label in window.GetComponentsInChildren<TMP_Text>())
+        {
+            AssertFitsItsRow(label, 1);
+        }
+
+        Assert.That(
+            shown,
+            Is.EqualTo(
+                "Equipment\nWeapon: +7 Keen Arcane Iron Sword [2]\n· Forest Crawler Card\n· Spark Wisp Card"
+                + "\nBody armor: empty\nHeadgear: empty\nShield: empty\nGarment: empty\nFootwear: empty"
+                + "\nAccessory 1: empty\nAccessory 2: Traveler Charm [1]"));
+        Assert.That(isListed, Is.True);
+        Assert.That(
+            listed,
+            Does.EndWith("\nAccessory 1: empty\nTraveler Charm [1]\nAccessory 2: Traveler Charm [1]"),
+            "the unworn charm, nothing to take off");
+        Assert.That(isChosen, Is.True);
+        Assert.That(afterChoice, Is.EqualTo(shown), "the list closes; only the server's change moves the row");
+        Assert.That(
+            listedWorn,
+            Does.EndWith("\nAccessory 2: Traveler Charm [1]\nTake off\nTraveler Charm [1]"),
+            "the worn charm can come off");
+        Assert.That(Equips(recording), Is.EqualTo(new[] { (3L, EquipmentSlot.Accessory1) }));
+        Assert.That(Unequips(recording), Is.EqualTo(new[] { EquipmentSlot.Accessory2 }));
+        Assert.That(
+            window.GetComponentsInChildren<Button>(true).Select(button => button.navigation.mode),
+            Is.All.EqualTo(Navigation.Mode.None),
+            "the gamepad's focus is the only path, not the event system's navigation");
+    }
+
+    // Prototype Content §2: an unworn accessory's bag row opens the Equipment window in the side slot with the row
+    // chosen, and a press on either accessory position wears it there; a worn accessory's row takes it off.
+    [UnityTest]
+    public IEnumerator EquipmentWindow_FromAnUnwornAccessorysRow_WearsItInTheAccessoryPositionPressed()
+    {
+        GameClient client = CreateIdleClient();
+        (ClientWorld world, RecordingConnection recording) = GiveRecordedWorld(client);
+        GiveGear(client);
+        var equipment = EquipmentWindow.Create(client);
+        var stats = StatsWindow.Create(client);
+        m_created.Add(equipment.gameObject);
+        m_created.Add(stats.gameObject);
+        const BindingFlags field = BindingFlags.NonPublic | BindingFlags.Instance;
+        typeof(GameClient).GetField("m_equipmentWindow", field)!.SetValue(client, equipment);
+        typeof(GameClient).GetField("m_statsWindow", field)!.SetValue(client, stats);
+        var worn = new InventoryEntry(2, new ItemDefinitionId(Charm), 1, EquipmentSlot.Accessory1);
+        var unworn = new InventoryEntry(3, new ItemDefinitionId(Charm), 1);
+        world.Inventory.OnSnapshot(new InventorySnapshot(4, 0, 0, 1, new[] { worn, unworn }));
+        client.ToggleStats();
+
+        client.PressInventoryRow(unworn);
+        yield return null;
+        (bool, bool, long) opened = (equipment.IsOpen, stats.IsOpen, equipment.ChosenRow);
+        string chosen = equipment.Text;
+        bool isPressed = Press(equipment, "Accessory 2: empty");
+        yield return null;
+        long chosenAfter = equipment.ChosenRow;
+        client.PressInventoryRow(worn);
+        yield return null;
+
+        Assert.That(opened, Is.EqualTo((true, false, 3L)), "in the Stats window's place, the charm chosen");
+        Assert.That(
+            chosen,
+            Does.StartWith("Equipment\nWear Traveler Charm [1] in Accessory 1 or Accessory 2\nWeapon: empty\n"));
+        Assert.That(chosen, Does.EndWith("\nAccessory 1: Traveler Charm [1]\nAccessory 2: empty"));
+        Assert.That((isPressed, chosenAfter), Is.EqualTo((true, 0L)), "the choice made");
+        Assert.That(Equips(recording), Is.EqualTo(new[] { (3L, EquipmentSlot.Accessory2) }));
+        Assert.That(Unequips(recording), Is.EqualTo(new[] { EquipmentSlot.Accessory1 }));
+    }
+
+    // Prototype Content §2: the Menu and the Equipment window take the side slot as the Stats window does, and the
+    // Menu's entries open their windows in its place; without the Menu map, the Menu opens without the gamepad's
+    // focus.
+    [UnityTest]
+    public IEnumerator MenuAndEquipmentWindows_TakeTheSideSlot_AsTheStatsWindowDoes()
+    {
+        GameClient client = CreateIdleClient();
+        GiveWorld(client);
+        var menu = MenuWindow.Create(client);
+        var equipment = EquipmentWindow.Create(client);
+        var stats = StatsWindow.Create(client);
+        var skills = SkillsWindow.Create(client);
+        const BindingFlags field = BindingFlags.NonPublic | BindingFlags.Instance;
+        foreach ((string name, Component window) in new (string, Component)[]
+                 {
+                     ("m_menuWindow", menu), ("m_equipmentWindow", equipment), ("m_statsWindow", stats),
+                     ("m_skillsWindow", skills)
+                 })
+        {
+            m_created.Add(window.gameObject);
+            typeof(GameClient).GetField(name, field)!.SetValue(client, window);
+        }
+
+        yield return null;
+
+        client.ToggleMenu();
+        (bool, bool, string) menuOpened = (menu.IsOpen, client.HasWindowFocus, menu.Text);
+        Press(menu, "Equipment");
+        (bool, bool) fromMenu = (equipment.IsOpen, menu.IsOpen);
+        client.ToggleStats();
+        (bool, bool) statsOver = (stats.IsOpen, equipment.IsOpen);
+        client.ToggleEquipment();
+        (bool, bool) equipmentOver = (equipment.IsOpen, stats.IsOpen);
+        client.ToggleMenu();
+        (bool, bool) menuOver = (menu.IsOpen, equipment.IsOpen);
+        Press(menu, "Skills");
+        (bool, bool) skillsFromMenu = (skills.IsOpen, menu.IsOpen);
+        client.ToggleMenu();
+        client.ToggleMenu();
+        (bool, bool) closedAgain = (menu.IsOpen, skills.IsOpen);
+        client.ToggleEquipment();
+        client.ToggleEquipment();
+
+        Assert.That(menuOpened, Is.EqualTo((true, false, "Menu\nStats\nSkills\nEquipment")), "no Menu map, no focus");
+        Assert.That(fromMenu, Is.EqualTo((true, false)), "Equipment in the Menu's place");
+        Assert.That(statsOver, Is.EqualTo((true, false)), "Stats replaces the Equipment window");
+        Assert.That(equipmentOver, Is.EqualTo((true, false)), "and the Equipment window Stats");
+        Assert.That(menuOver, Is.EqualTo((true, false)), "the Menu replaces the Equipment window");
+        Assert.That(skillsFromMenu, Is.EqualTo((true, false)), "Skills in the Menu's place");
+        Assert.That(closedAgain, Is.EqualTo((false, false)),
+            "the Menu replaced Skills, then a second toggle closed it");
+        Assert.That((equipment.IsOpen, client.IsSideWindowOpen), Is.EqualTo((false, false)), "toggled closed");
+    }
+
+    // Prototype Content §2: the server refuses an equip of a row worn elsewhere and one to the wrong position alike,
+    // with 3; the rows tell them apart.
+    [UnityTest]
+    public IEnumerator ChatPanel_ForAnEquipRefusedWith3_SaysTakeItOffFirst_OrThatItDoesNotGoThere()
+    {
+        GameClient client = CreateIdleClient();
+        (ClientWorld world, RecordingConnection recording) = GiveRecordedWorld(client);
+        GiveGear(client);
+        var lines = ChatPanel.Create(client);
+        m_created.Add(lines.gameObject);
+        world.Inventory.OnSnapshot(
+            new InventorySnapshot(
+                4,
+                0,
+                0,
+                1,
+                new[]
+                {
+                    new InventoryEntry(2, new ItemDefinitionId(Charm), 1, EquipmentSlot.Accessory1),
+                    new InventoryEntry(4, new ItemDefinitionId(Cap), 1)
+                }));
+        uint worn = recording.Connection.SendEquip(2, EquipmentSlot.Accessory2);
+        uint wrong = recording.Connection.SendEquip(4, EquipmentSlot.Shield);
+        yield return null;
+
+        world.OnCommandRejected(new CommandRejected(worn, CommandRejectionReason.NotAllowedNow));
+        world.OnCommandRejected(new CommandRejected(wrong, CommandRejectionReason.NotAllowedNow));
+        yield return null;
+
+        Assert.That(lines.Text, Does.Contain("Take it off first.\nThat doesn't go there."));
     }
 
     // The Broker's "List from the bag" leaves a carded row out, as it does a worn or refined one, and lists a card like

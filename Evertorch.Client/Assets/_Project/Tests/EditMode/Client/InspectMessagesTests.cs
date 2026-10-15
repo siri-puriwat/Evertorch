@@ -6,8 +6,8 @@ using NUnit.Framework;
 namespace Evertorch.Client.Tests.EditMode
 {
 /// <summary>
-///     The words of an inspection (Prototype Content §2): each worn item named with its level, cards, and slots, each
-///     card on a line of its own, "none" for an empty slot; and <c>/inspect</c>.
+///     The words of an inspection (Prototype Content §2): the eight positions in order, each worn item named with its
+///     level, cards, and slots, each card on a line of its own, "none" for an empty position; and <c>/inspect</c>.
 /// </summary>
 [TestFixture]
 public sealed class InspectMessagesTests
@@ -42,10 +42,11 @@ public sealed class InspectMessagesTests
     }
 
     [Test]
-    public void Lines_NameEachWornItem_ItsCards_AndAnEmptySlot()
+    public void Lines_NameTheEightPositions_EachWornItem_ItsCards_AndAnEmptyPosition()
     {
         var items = new InspectedItem[8];
         items[0] = new InspectedItem(Sword, 7, new[] { Keen, Keen });
+        items[7] = new InspectedItem(Sword, 0, new ItemDefinitionId[0]);
         var shown = new PlayerInspection(new EntityId(9), 3, items);
 
         Assert.That(
@@ -54,7 +55,8 @@ public sealed class InspectMessagesTests
                 new[]
                 {
                     "Weapon: +7 Double Keen Iron Sword [2]", "· Forest Crawler Card", "· Forest Crawler Card",
-                    "Armor: none"
+                    "Body armor: none", "Headgear: none", "Shield: none", "Garment: none", "Footwear: none",
+                    "Accessory 1: none", "Accessory 2: Iron Sword [2]"
                 }));
     }
 

@@ -1083,6 +1083,12 @@ public sealed class ClientConnectionTests
         Assert.That(
             new[] { equipSent.Channel, unequipSent.Channel },
             Is.All.EqualTo(ProtocolChannel.Control));
+        bool isRemembered = harness.Connection.TryGetEquipSequence(6, out EquipRequest remembered);
+        Assert.That(
+            (isRemembered, remembered.InventoryItem, remembered.Destination),
+            Is.EqualTo((true, 41L, EquipmentSlot.Accessory2)),
+            "a refusal can name the row and the position");
+        Assert.That(harness.Connection.TryGetEquipSequence(7, out EquipRequest _), Is.False, "an unequip is no equip");
     }
 
     [Test]

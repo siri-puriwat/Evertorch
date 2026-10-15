@@ -31,6 +31,7 @@ public sealed class LiveServerEquipmentTests
     private const string TrainingSword = "item.weapon.training_sword";
     private const string ClothArmor = "item.armor.cloth";
     private const string LeatherArmor = "item.armor.leather";
+    private const string TravelerCharm = "item.accessory.traveler_charm";
     private const float StartTimeoutSeconds = 30f;
     private const int TestTimeoutMs = 300_000;
 
@@ -160,6 +161,38 @@ public sealed class LiveServerEquipmentTests
             Is.EqualTo((TrainingSword, ClothArmor)),
             "the sword and the cloth inspected");
         Assert.That(other.MalformedMessages + other.UnexpectedMessages, Is.Zero, "the other player's traffic");
+        Assert.That(client.Connection!.MalformedMessages + client.Connection.UnexpectedMessages, Is.Zero);
+    }
+
+    // The real client, stored with a traveler charm in the bag, presses its row: the Equipment window opens with the
+    // charm chosen, and a press on accessory 2 wears it there, which the window and the bag show once the server
+    // commits it (Prototype Content §2).
+    [UnityTest]
+    [Timeout(TestTimeoutMs)]
+    public IEnumerator Wearer_PressesACharmsRow_AndWearsItAsAccessory2_InTheEquipmentWindow()
+    {
+        string actionsPath = RequirePrerequisites();
+        yield return StartDatabaseAndServer();
+        GameClient client = CreateClient(actionsPath);
+        yield return EnterByName(client, AnnName, () => StoreItem(TravelerCharm, 0));
+        ClientWorld world = client.World!;
+        InventoryWindow bag = client.GetComponentsInChildren<InventoryWindow>(true).Single();
+        EquipmentWindow equipment = client.GetComponentsInChildren<EquipmentWindow>(true).Single();
+        yield return WaitUntil(() => Row(bag, "Traveler Charm [1]") != null, StartTimeoutSeconds);
+
+        Row(bag, "Traveler Charm [1]")!.onClick.Invoke();
+        yield return null;
+        string chosen = equipment.Text;
+        Row(equipment, "Accessory 2: empty")!.onClick.Invoke();
+        yield return WaitUntil(() => Row(equipment, "Accessory 2: Traveler Charm [1]") != null, StartTimeoutSeconds);
+
+        Assert.That(chosen, Does.Contain("\nWear Traveler Charm [1] in Accessory 1 or Accessory 2\n"), "chosen");
+        Assert.That(
+            Row(equipment, "Accessory 2: Traveler Charm [1]"),
+            Is.Not.Null,
+            $"worn as accessory 2: {world.LastRejection}");
+        Assert.That(equipment.Text, Does.Contain("\nAccessory 1: empty\n"));
+        Assert.That(Row(bag, "Traveler Charm [1] (equipped)"), Is.Not.Null, "the bag marks it worn");
         Assert.That(client.Connection!.MalformedMessages + client.Connection.UnexpectedMessages, Is.Zero);
     }
 

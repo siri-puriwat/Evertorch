@@ -430,10 +430,16 @@ public sealed class ChatPanel : MonoBehaviour
             return;
         }
 
-        bool isEquip = m_client != null
+        if (m_client != null
             && m_client.Connection != null
-            && m_client.Connection.IsEquipSequence(rejected.CommandSequence);
-        Add(RejectionMessages.Describe(rejected.Reason, isEquip));
+            && m_client.Connection.TryGetEquipSequence(rejected.CommandSequence, out EquipRequest equip))
+        {
+            IReadOnlyList<InventoryEntry> rows = m_watched != null ? m_watched.Inventory.Rows : new InventoryEntry[0];
+            Add(EquipmentMessages.DescribeRefusal(equip, rows, rejected.Reason, m_client.Content));
+            return;
+        }
+
+        Add(RejectionMessages.Describe(rejected.Reason));
     }
 
     private void OnPickedUp(ItemPickedUp pickedUp)

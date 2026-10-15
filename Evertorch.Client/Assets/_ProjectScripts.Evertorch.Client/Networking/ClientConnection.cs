@@ -23,7 +23,7 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
     private readonly IMapProvider m_maps;
     private readonly byte[] m_sendBuffer = new byte[ProtocolLimits.MaxClientPayloadBytes];
     private readonly Dictionary<QuestDefinitionId, NpcQuestOffer> m_questOffers = new();
-    private readonly HashSet<uint> m_equipSequences = new();
+    private readonly Dictionary<uint, EquipRequest> m_equipSequences = new();
     private readonly HashSet<uint> m_useSequences = new();
     private readonly Dictionary<uint, (ChatChannel Channel, string Recipient)> m_chatSequences = new();
     private readonly Dictionary<uint, (PartyCommand Command, string Name)> m_partySequences = new();
@@ -500,7 +500,7 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
             m_equipSequences.Clear();
         }
 
-        m_equipSequences.Add(sequence);
+        m_equipSequences[sequence] = new EquipRequest(inventoryItem, destination);
         return sequence;
     }
 
@@ -596,12 +596,12 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
     }
 
     /// <summary>
-    ///     Whether <paramref name="commandSequence" /> numbered an equip sent since the character entered, so a refusal
-    ///     can say what it answers.
+    ///     The equip <paramref name="commandSequence" /> numbered since the character entered, so a refusal can say what
+    ///     it answers.
     /// </summary>
-    public bool IsEquipSequence(uint commandSequence)
+    public bool TryGetEquipSequence(uint commandSequence, out EquipRequest request)
     {
-        return commandSequence != 0 && m_equipSequences.Contains(commandSequence);
+        return m_equipSequences.TryGetValue(commandSequence, out request);
     }
 
     /// <summary>

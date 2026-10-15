@@ -91,6 +91,8 @@ public sealed class GameClient : MonoBehaviour
     private PointerMoveHandler? m_pointerHandler;
     private CombatInputSource? m_combatSource;
     private WindowInputSource? m_windowSource;
+    private MenuInputSource? m_menuSource;
+    private WindowFocus m_focus;
     private SkillInputSource? m_skillSource;
     private CameraInputSource? m_cameraSource;
     private TargetCursor? m_cursor;
@@ -122,6 +124,8 @@ public sealed class GameClient : MonoBehaviour
     private SkillsWindow? m_skillsWindow;
     private CardWindow? m_cardWindow;
     private InspectWindow? m_inspectWindow;
+    private MenuWindow? m_menuWindow;
+    private EquipmentWindow? m_equipmentWindow;
     private TradeWindow? m_tradeWindow;
     private bool m_hasSaidHeld;
     private ClientWorld? m_ailmentRefusalsSaidIn;
@@ -219,9 +223,14 @@ public sealed class GameClient : MonoBehaviour
     public PartyInvitePrompt? InvitePrompt => m_invitePrompt;
 
     /// <summary>
-    ///     Whether the chat input has focus, which shuts every gameplay key (Prototype Content §4).
+    ///     Whether a text field or the gamepad's focus on a window shuts every gameplay key (Prototype Content §4).
     /// </summary>
     public bool IsTyping => m_inputGate != null && m_inputGate.IsShut;
+
+    /// <summary>
+    ///     Whether the gamepad's focus is on the Menu or the Equipment window (Prototype Content §4).
+    /// </summary>
+    public bool HasWindowFocus => m_focus != WindowFocus.None;
 
     public NamePlatePresenter? NamePlates => m_namePlates;
 
@@ -289,14 +298,16 @@ public sealed class GameClient : MonoBehaviour
     public SkillDefinitionId TargetingSkill => m_targeting.IsChoosing ? m_targeting.Skill : default;
 
     /// <summary>
-    ///     Whether the NPC, Stats, Skills, trade, Card, or Inspect window shows at the top left, which the target frame
-    ///     keeps clear of.
+    ///     Whether the NPC, Stats, Skills, trade, Card, Inspect, or Equipment window or the Menu shows at the top left,
+    ///     which the target frame keeps clear of.
     /// </summary>
     public bool IsSideWindowOpen =>
         (m_npcWindow != null && m_npcWindow.IsOpen)
         || (m_statsWindow != null && m_statsWindow.IsOpen)
         || (m_skillsWindow != null && m_skillsWindow.IsOpen)
         || (m_tradeWindow != null && m_tradeWindow.IsOpen)
+        || (m_menuWindow != null && m_menuWindow.IsOpen)
+        || (m_equipmentWindow != null && m_equipmentWindow.IsOpen)
         || IsCardWindowOpen
         || IsInspectWindowOpen;
 
@@ -363,6 +374,10 @@ public sealed class GameClient : MonoBehaviour
         m_cardWindow.transform.SetParent(transform, false);
         m_inspectWindow = InspectWindow.Create(this);
         m_inspectWindow.transform.SetParent(transform, false);
+        m_menuWindow = MenuWindow.Create(this);
+        m_menuWindow.transform.SetParent(transform, false);
+        m_equipmentWindow = EquipmentWindow.Create(this);
+        m_equipmentWindow.transform.SetParent(transform, false);
         m_tradeWindow = TradeWindow.Create(this);
         m_tradeWindow.transform.SetParent(transform, false);
         m_skillBar = SkillBar.Create(this);
@@ -400,8 +415,7 @@ public sealed class GameClient : MonoBehaviour
             m_skillSource?.TakeSlot();
             m_skillSource?.Reset();
             m_targeting.Cancel();
-            m_windowSource?.TakeStatsToggle();
-            m_windowSource?.TakeSkillsToggle();
+            m_windowSource?.Drop();
             return;
         }
 
@@ -453,16 +467,7 @@ public sealed class GameClient : MonoBehaviour
 
         HandlePointerRequest();
         HandleCombatRequest();
-        if (m_windowSource != null && m_windowSource.TakeStatsToggle())
-        {
-            ToggleStats();
-        }
-
-        if (m_windowSource != null && m_windowSource.TakeSkillsToggle())
-        {
-            ToggleSkills();
-        }
-
+        HandleWindowInput();
         int slot = 0;
         bool isFromGamepad = false;
         if (m_skillSource != null)
@@ -548,6 +553,7 @@ public sealed class GameClient : MonoBehaviour
         m_pointerSource?.Dispose();
         m_combatSource?.Dispose();
         m_windowSource?.Dispose();
+        m_menuSource?.Dispose();
         m_skillSource?.Dispose();
         m_cameraSource?.Dispose();
         m_cursor?.Dispose();
@@ -799,6 +805,12 @@ public sealed class GameClient : MonoBehaviour
                 return;
             }
 
+            if (InventoryActions.ChoosesPosition(row, item.Type))
+            {
+                OpenEquipmentWith(row.InventoryItem);
+                return;
+            }
+
             InventoryActions.Press(Connection, row, item.Type);
         }
     }
@@ -818,7 +830,28 @@ public sealed class GameClient : MonoBehaviour
         m_statsWindow?.Close();
         m_skillsWindow?.Close();
         m_inspectWindow?.Close();
+        m_menuWindow?.Close();
+        m_equipmentWindow?.Close();
         m_cardWindow.Open(cardRow);
+    }
+
+    /// <summary>
+    ///     Wears the bag's row <paramref name="inventoryItem" /> in <paramref name="destination" /> (Gameplay Systems
+    ///     §11.1). The server checks the row, the position, and the job, and only its committed change moves the row. 0
+    ///     when nothing was sent, else the command's sequence.
+    /// </summary>
+    public uint EquipInto(long inventoryItem, EquipmentSlot destination)
+    {
+        return Connection?.SendEquip(inventoryItem, destination) ?? 0;
+    }
+
+    /// <summary>
+    ///     Takes off what <paramref name="slot" /> holds; only the server's committed change moves the row back to the
+    ///     bag. 0 when nothing was sent, else the command's sequence.
+    /// </summary>
+    public uint TakeOff(EquipmentSlot slot)
+    {
+        return Connection?.SendUnequip(slot) ?? 0;
     }
 
     /// <summary>
@@ -1042,6 +1075,8 @@ public sealed class GameClient : MonoBehaviour
         m_npcWindow?.Close();
         m_skillsWindow?.Close();
         m_inspectWindow?.Close();
+        m_menuWindow?.Close();
+        m_equipmentWindow?.Close();
         m_statsWindow.Open();
     }
 
@@ -1069,7 +1104,67 @@ public sealed class GameClient : MonoBehaviour
         m_npcWindow?.Close();
         m_statsWindow?.Close();
         m_inspectWindow?.Close();
+        m_menuWindow?.Close();
+        m_equipmentWindow?.Close();
         m_skillsWindow.Open();
+    }
+
+    /// <summary>
+    ///     Opens the Menu in the side slot with the gamepad's focus, or closes it (Prototype Content §2, §4): Select and
+    ///     the Menu touch button ask for it.
+    /// </summary>
+    public void ToggleMenu()
+    {
+        if (m_menuWindow == null)
+        {
+            return;
+        }
+
+        if (m_menuWindow.IsOpen)
+        {
+            m_menuWindow.Close();
+            EndFocus();
+            return;
+        }
+
+        if (IsTrading || IsCardWindowOpen)
+        {
+            return;
+        }
+
+        OpenMenu(MenuWindow.StatsEntry);
+    }
+
+    /// <summary>
+    ///     Opens the Equipment window in place of the Menu or the NPC, Stats, Skills, or Inspect window, or closes it
+    ///     (Prototype Content §2, §4). Chosen from the Menu while the gamepad's focus is on it, the focus moves into the
+    ///     window.
+    /// </summary>
+    public void ToggleEquipment()
+    {
+        if (m_equipmentWindow == null)
+        {
+            return;
+        }
+
+        if (m_equipmentWindow.IsOpen)
+        {
+            m_equipmentWindow.Close();
+            return;
+        }
+
+        if (IsTrading || IsCardWindowOpen)
+        {
+            return;
+        }
+
+        bool isFocused = m_focus == WindowFocus.Menu;
+        CloseForEquipment();
+        m_equipmentWindow.Open();
+        if (isFocused)
+        {
+            BeginFocus(WindowFocus.Equipment, 0);
+        }
     }
 
     /// <summary>
@@ -1449,12 +1544,235 @@ public sealed class GameClient : MonoBehaviour
             m_skillSource = new SkillInputSource(slots, actions?.FindAction("Player/SkillPage"));
         }
 
-        InputAction? stats = actions?.FindAction("Player/Stats");
-        InputAction? skills = actions?.FindAction("Player/Skills");
-        if (stats != null && skills != null)
+        m_windowSource = new WindowInputSource(
+            WindowAction(actions, "Player/Stats"),
+            WindowAction(actions, "Player/Skills"),
+            WindowAction(actions, "Player/Menu"),
+            WindowAction(actions, "Player/Equipment"));
+        m_menuSource = MenuInputSource.TryCreate(actions);
+        if (m_menuSource == null)
         {
-            m_windowSource = new WindowInputSource(stats, skills);
+            Debug.LogWarning("The input actions asset lacks the Menu map; the Menu opens without the gamepad's focus.");
         }
+    }
+
+    // Each window action binds alone, so a missing one silences only its own window (Prototype Content §4).
+    private static InputAction? WindowAction(InputActionAsset? actions, string path)
+    {
+        InputAction? action = actions?.FindAction(path);
+        if (action == null)
+        {
+            Debug.LogWarning($"The input actions asset lacks {path}; its window has no key.");
+        }
+
+        return action;
+    }
+
+    private void HandleWindowInput()
+    {
+        if (m_windowSource != null)
+        {
+            if (m_windowSource.TakeStatsToggle())
+            {
+                ToggleStats();
+            }
+
+            if (m_windowSource.TakeSkillsToggle())
+            {
+                ToggleSkills();
+            }
+
+            if (m_windowSource.TakeEquipmentToggle())
+            {
+                ToggleEquipment();
+            }
+
+            if (m_windowSource.TakeMenuToggle())
+            {
+                ToggleMenu();
+            }
+        }
+
+        HandleFocus();
+    }
+
+    // While the focus holds, the Menu map alone reads the gamepad (Prototype Content §4). It ends with its window,
+    // however that closed, and at death, so that Start can ask for the respawn.
+    private void HandleFocus()
+    {
+        if (m_focus == WindowFocus.None || m_menuSource == null)
+        {
+            return;
+        }
+
+        bool isOpen = m_focus == WindowFocus.Menu
+            ? m_menuWindow != null && m_menuWindow.IsOpen
+            : m_equipmentWindow != null && m_equipmentWindow.IsOpen;
+        if (!isOpen || m_world == null || m_world.IsLocalDead)
+        {
+            EndFocus();
+            return;
+        }
+
+        if (m_menuSource.TakeEnd())
+        {
+            CloseFocusedWindow();
+            EndFocus();
+            return;
+        }
+
+        if (m_menuSource.TakeBack())
+        {
+            BackOut();
+            return;
+        }
+
+        int step = m_menuSource.TakeStep();
+        if (step != 0 && m_focus == WindowFocus.Menu)
+        {
+            m_menuWindow!.MoveHighlight(step);
+        }
+        else if (step != 0)
+        {
+            m_equipmentWindow!.MoveHighlight(step);
+        }
+
+        if (!m_menuSource.TakeChoose())
+        {
+            return;
+        }
+
+        if (m_focus == WindowFocus.Menu)
+        {
+            m_menuWindow!.Choose();
+        }
+        else
+        {
+            m_equipmentWindow!.Choose();
+        }
+    }
+
+    // East backs out one level: the Menu closes, and the Equipment window closes its list or gives way to the Menu.
+    private void BackOut()
+    {
+        if (m_focus == WindowFocus.Menu)
+        {
+            m_menuWindow!.Close();
+            EndFocus();
+        }
+        else if (!m_equipmentWindow!.Back())
+        {
+            OpenMenu(MenuWindow.EquipmentEntry);
+        }
+    }
+
+    private void CloseFocusedWindow()
+    {
+        if (m_focus == WindowFocus.Menu)
+        {
+            m_menuWindow!.Close();
+        }
+        else
+        {
+            m_equipmentWindow!.Close();
+        }
+    }
+
+    private void OpenMenu(int highlight)
+    {
+        m_npcWindow?.Close();
+        m_statsWindow?.Close();
+        m_skillsWindow?.Close();
+        m_inspectWindow?.Close();
+        m_equipmentWindow?.Close();
+        m_menuWindow!.Open();
+        BeginFocus(WindowFocus.Menu, highlight);
+    }
+
+    // An unworn accessory's bag row opens the Equipment window with the row chosen (Prototype Content §2); the trade and
+    // Card windows keep the side slot.
+    private void OpenEquipmentWith(long chosenRow)
+    {
+        if (m_equipmentWindow == null || IsTrading || IsCardWindowOpen)
+        {
+            return;
+        }
+
+        CloseForEquipment();
+        m_equipmentWindow.Open(chosenRow);
+    }
+
+    private void CloseForEquipment()
+    {
+        m_npcWindow?.Close();
+        m_statsWindow?.Close();
+        m_skillsWindow?.Close();
+        m_inspectWindow?.Close();
+        m_menuWindow?.Close();
+    }
+
+    // The focus holds the input gate as a text field does, shutting the whole Player map, and enables the Menu map;
+    // whatever the Player map latched before it shut is dropped.
+    private void BeginFocus(WindowFocus focus, int highlight)
+    {
+        if (m_menuSource == null)
+        {
+            return;
+        }
+
+        if (m_focus == WindowFocus.None)
+        {
+            SetTyping(m_menuSource, true);
+            DropLatchedInput();
+            m_menuSource.Begin();
+        }
+
+        m_focus = focus;
+        if (focus == WindowFocus.Menu)
+        {
+            m_equipmentWindow?.Unfocus();
+            m_menuWindow!.Focus(highlight);
+        }
+        else
+        {
+            m_menuWindow?.Unfocus();
+            m_equipmentWindow!.Focus();
+        }
+    }
+
+    // When the focus ends, a held button needs a new press, which the actions' own initial state check gives, a held
+    // stick walks only once centred, and whatever was latched meanwhile is dropped.
+    private void EndFocus()
+    {
+        if (m_focus == WindowFocus.None)
+        {
+            return;
+        }
+
+        m_focus = WindowFocus.None;
+        if (m_menuWindow != null)
+        {
+            m_menuWindow.Unfocus();
+        }
+
+        if (m_equipmentWindow != null)
+        {
+            m_equipmentWindow.Unfocus();
+        }
+
+        m_menuSource!.End();
+        SetTyping(m_menuSource, false);
+        m_manualSource?.RequireCentre();
+        DropLatchedInput();
+    }
+
+    private void DropLatchedInput()
+    {
+        m_pointerSource?.TryTakeRequest(out Vector2 _);
+        m_combatSource?.TakeRequest();
+        m_skillSource?.TakeSlot();
+        m_skillSource?.TakePageToggle();
+        m_windowSource?.Drop();
     }
 
     private void HandlePointerRequest()
@@ -1706,6 +2024,8 @@ public sealed class GameClient : MonoBehaviour
         m_statsWindow?.Close();
         m_skillsWindow?.Close();
         m_inspectWindow?.Close();
+        m_menuWindow?.Close();
+        m_equipmentWindow?.Close();
         m_npcWindow?.Open(npc);
     }
 
@@ -2020,6 +2340,8 @@ public sealed class GameClient : MonoBehaviour
             m_skillsWindow?.Close();
             m_cardWindow?.Close();
             m_inspectWindow?.Close();
+            m_menuWindow?.Close();
+            m_equipmentWindow?.Close();
         }
 
         string? line = TradeMessages.Describe(message);
@@ -2272,7 +2594,31 @@ public sealed class GameClient : MonoBehaviour
         m_statsWindow?.Close();
         m_skillsWindow?.Close();
         m_cardWindow?.Close();
+        m_menuWindow?.Close();
+        m_equipmentWindow?.Close();
         m_inspectWindow.Open(whole, name);
+    }
+
+    /// <summary>
+    ///     Asks again about the player <paramref name="entity" />, whose shown answer an appearance made stale (Network
+    ///     Protocol §9): one request in flight at most, through the inspection's own bucket, and nothing said. False
+    ///     while it must wait.
+    /// </summary>
+    public bool InspectAgain(EntityId entity)
+    {
+        double now = Time.realtimeSinceStartupAsDouble;
+        if (Connection == null || m_inspection.IsWaiting || IsTrading || !m_inspectThrottle.TryTake(now))
+        {
+            return false;
+        }
+
+        uint sequence = Connection.SendInspectPlayer(entity);
+        if (sequence != 0)
+        {
+            m_inspection.Expect(sequence, entity, now);
+        }
+
+        return sequence != 0;
     }
 
     /// <summary>
@@ -2501,6 +2847,17 @@ public sealed class GameClient : MonoBehaviour
             m_inspectWindow.Close();
         }
 
+        if (m_menuWindow != null)
+        {
+            m_menuWindow.Close();
+        }
+
+        if (m_equipmentWindow != null)
+        {
+            m_equipmentWindow.Close();
+        }
+
+        EndFocus();
         m_controller = null;
         foreach (EntityView view in m_remoteViews.Values)
         {
@@ -2664,6 +3021,14 @@ public sealed class GameClient : MonoBehaviour
         {
             Destroy(view.gameObject);
         }
+    }
+
+    // Which window the gamepad's focus is on (Prototype Content §4).
+    private enum WindowFocus
+    {
+        None,
+        Menu,
+        Equipment
     }
 }
 }

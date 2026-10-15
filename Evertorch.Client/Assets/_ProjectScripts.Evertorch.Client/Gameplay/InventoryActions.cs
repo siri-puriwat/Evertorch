@@ -6,15 +6,24 @@ namespace Evertorch.Client
 {
 /// <summary>
 ///     What a press of an inventory row asks the server for (Prototype Content §2): a piece of equipment is put on in its
-///     own position, the first of its category's, or taken off when it is worn, and a consumable is used. A card's press
-///     opens the Card window, which the interface does, so it asks the server for nothing here; any other row asks for
-///     nothing either.
+///     category's position, or taken off when it is worn, and a consumable is used. A card's press opens the Card
+///     window, and an unworn accessory's the Equipment window to choose its position, which the interface does, so they
+///     ask the server for nothing here; any other row asks for nothing either.
 /// </summary>
 public static class InventoryActions
 {
     public static bool HasAction(ItemType type)
     {
         return EquipmentPositions.IsEquipment(type) || type == ItemType.Consumable || type == ItemType.Card;
+    }
+
+    /// <summary>
+    ///     Whether a press of <paramref name="row" /> opens the Equipment window with the row chosen: an unworn accessory,
+    ///     which either accessory position takes (Gameplay Systems §11.1).
+    /// </summary>
+    public static bool ChoosesPosition(InventoryEntry row, ItemType type)
+    {
+        return type == ItemType.Accessory && row.Slot == EquipmentSlot.None;
     }
 
     /// <summary>
@@ -28,7 +37,7 @@ public static class InventoryActions
             return commands.SendUseItem(row.InventoryItem);
         }
 
-        if (!EquipmentPositions.IsEquipment(type))
+        if (!EquipmentPositions.IsEquipment(type) || ChoosesPosition(row, type))
         {
             return 0;
         }

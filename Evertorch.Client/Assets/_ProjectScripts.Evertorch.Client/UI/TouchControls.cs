@@ -7,10 +7,10 @@ using UnityEngine.UI;
 namespace Evertorch.Client
 {
 /// <summary>
-///     The on-screen stick, the Next, Previous, and Clear target buttons, the Stats and Skills buttons, and the
+///     The on-screen stick, the Next, Previous, and Clear target buttons, the Menu and Skills buttons, and the
 ///     development overlay's toggle. The stick and the other buttons but the toggle drive a virtual gamepad, so the
 ///     actions read them through the same bindings as a real gamepad and no touch-specific movement, targeting, or
-///     window code exists (Prototype Content §4).
+///     window code exists (Prototype Content §4): the Menu button is the gamepad's Select.
 /// </summary>
 public sealed class TouchControls : MonoBehaviour
 {
@@ -18,7 +18,7 @@ public sealed class TouchControls : MonoBehaviour
     public const string NextControlPath = "<Gamepad>/rightShoulder";
     public const string PreviousControlPath = "<Gamepad>/leftShoulder";
     public const string ClearControlPath = "<Gamepad>/buttonEast";
-    public const string StatsControlPath = "<Gamepad>/select";
+    public const string MenuControlPath = "<Gamepad>/select";
     public const string SkillsControlPath = "<Gamepad>/leftStickPress";
 
     private const float StickRange = 51f;
@@ -59,7 +59,7 @@ public sealed class TouchControls : MonoBehaviour
     }
 
     /// <summary>
-    ///     The right edge of the Dev, Stats, and Skills buttons on the left edge, in canvas units.
+    ///     The right edge of the Dev, Menu, and Skills buttons on the left edge, in canvas units.
     /// </summary>
     public static float WindowButtonsRight => ToggleSize.x;
 
@@ -80,16 +80,16 @@ public sealed class TouchControls : MonoBehaviour
     }
 
     /// <summary>
-    ///     The Stats button on the left edge of a canvas <paramref name="canvasHeight" /> units tall, just above the Dev
+    ///     The Menu button on the left edge of a canvas <paramref name="canvasHeight" /> units tall, just above the Dev
     ///     button's place, from its bottom-left corner.
     /// </summary>
-    public static Rect StatsButtonBounds(float canvasHeight)
+    public static Rect MenuButtonBounds(float canvasHeight)
     {
         return WindowButtonBounds(canvasHeight, 0);
     }
 
     /// <summary>
-    ///     The Skills button, just above the Stats button, from the canvas's bottom-left corner.
+    ///     The Skills button, just above the Menu button, from the canvas's bottom-left corner.
     /// </summary>
     public static Rect SkillsButtonBounds(float canvasHeight)
     {
@@ -116,9 +116,8 @@ public sealed class TouchControls : MonoBehaviour
     }
 
     /// <summary>
-    ///     Shows or hides the stick, the target buttons, and the Stats and Skills buttons. The Dev button stays: on a device
-    ///     without
-    ///     a keyboard it is the only way back to the overlay, whose toggle calls this.
+    ///     Shows or hides the stick, the target buttons, and the Menu and Skills buttons. The Dev button stays: on a device
+    ///     without a keyboard it is the only way back to the overlay, whose toggle calls this.
     /// </summary>
     public void SetVisible(bool isVisible)
     {
@@ -174,7 +173,7 @@ public sealed class TouchControls : MonoBehaviour
 
         m_windowButtons = UiBuilder.CreateUiObject("Window buttons", canvasObject.transform);
         UiBuilder.Stretch(m_windowButtons, 0f, 0f);
-        CreateWindowButton("Stats", StatsControlPath, 0);
+        CreateWindowButton("Menu", MenuControlPath, 0);
         CreateWindowButton("Skills", SkillsControlPath, 1);
 
         if (toggleOverlay != null)

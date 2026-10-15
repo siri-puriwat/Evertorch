@@ -2,6 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using Evertorch.Game;
 using Evertorch.Protocol;
 using NUnit.Framework;
@@ -19,13 +20,16 @@ namespace Evertorch.Client.Tests.PlayMode
 {
 /// <summary>
 ///     Simulated devices drive the project's real input actions and the client's real input sources. Whatever the
-///     device, the only thing that comes out is a <see cref="MoveIntent" /> from the one producer.
+///     device, the only thing that comes out is a <see cref="MoveIntent" /> from the one producer. The gamepad's focus on
+///     the Menu and the Equipment window runs through a client that never starts, each step one frame's window input
+///     (Prototype Content §4).
 /// </summary>
 public sealed class SharedIntentPathTests : InputTestFixture
 {
     private const float TickSeconds = 0.05f;
     private const float Speed = 5f;
     private const string ActionsAsset = "_Project/Settings/InputSystem_Actions.inputactions";
+    private const BindingFlags ClientField = BindingFlags.NonPublic | BindingFlags.Instance;
 
     // North row first; one-metre cells with the origin at zero.
     private static readonly string[] Yard =
@@ -42,6 +46,7 @@ public sealed class SharedIntentPathTests : InputTestFixture
 
     private readonly List<Object> m_created = new();
     private Rig? m_rig;
+    private InputActionAsset? m_focusActions;
 
     public override void Setup()
     {
@@ -52,6 +57,16 @@ public sealed class SharedIntentPathTests : InputTestFixture
     {
         m_rig?.Dispose();
         m_rig = null;
+
+        // A window's focus ends with the gate enabling the Player map again, and an action enabled since the last input
+        // update keeps a hook for its initial state check, which would otherwise run after the asset is destroyed;
+        // disabled and updated once, it unhooks while the asset and the test's gamepad still live.
+        if (m_focusActions != null)
+        {
+            m_focusActions.Disable();
+            InputSystem.Update();
+            m_focusActions = null;
+        }
 
         // Destroyed now, not at the end of the frame: an on-screen stick removes its virtual gamepad when it is
         // disabled, and that has to happen while this test's input state is still the active one.
@@ -506,8 +521,8 @@ public sealed class SharedIntentPathTests : InputTestFixture
         Assert.That(requests, Is.EqualTo(new[] { CombatRequest.Next, CombatRequest.Previous, CombatRequest.Clear }));
     }
 
-    // The Stats touch button drives the gamepad's Select and the Skills button a press of the left stick, so one action
-    // each serves the key, the gamepad, and the button (Prototype Content §4).
+    // The Menu touch button drives the gamepad's Select and the Skills button a press of the left stick, so one action
+    // each serves the gamepad and the button (Prototype Content §4).
     [UnityTest]
     public IEnumerator WindowTouchButtons_AskForTheirWindows_AsTheirGamepadControlsDo()
     {
@@ -522,30 +537,170 @@ public sealed class SharedIntentPathTests : InputTestFixture
         WindowInputSource source = rig.CreateWindowSource();
         yield return null;
 
-        Vector2 onButton = CenterOf(Child(controls, "Stats"));
+        Vector2 onButton = CenterOf(Child(controls, "Menu"));
         BeginTouch(1, onButton, screen: touchscreen);
         yield return null;
         yield return null;
-        bool pressed = source.TakeStatsToggle();
-        bool skillsOnStats = source.TakeSkillsToggle();
+        bool pressed = source.TakeMenuToggle();
+        bool othersOnMenu = source.TakeSkillsToggle() || source.TakeStatsToggle();
         EndTouch(1, onButton, screen: touchscreen);
         yield return null;
         yield return null;
-        bool again = source.TakeStatsToggle();
+        bool again = source.TakeMenuToggle();
         Vector2 onSkills = CenterOf(Child(controls, "Skills"));
         BeginTouch(2, onSkills, screen: touchscreen);
         yield return null;
         yield return null;
         bool skills = source.TakeSkillsToggle();
-        bool statsOnSkills = source.TakeStatsToggle();
+        bool menuOnSkills = source.TakeMenuToggle();
         EndTouch(2, onSkills, screen: touchscreen);
         yield return null;
         yield return null;
 
-        Assert.That(pressed, Is.True, "the Stats button asks for its window");
+        Assert.That(pressed, Is.True, "the Menu button asks for the Menu");
         Assert.That(again, Is.False, "once per press");
         Assert.That(skills, Is.True, "the Skills button asks for its window");
-        Assert.That((skillsOnStats, statsOnSkills), Is.EqualTo((false, false)), "each button asks for its own");
+        Assert.That((othersOnMenu, menuOnSkills), Is.EqualTo((false, false)), "each button asks for its own");
+    }
+
+    // C asks for the Stats window alone now that Select opens the Menu; I asks for the Equipment window, and a drop
+    // forgets every press not yet taken (Prototype Content §4).
+    [Test]
+    public void WindowKeys_CAsksForStats_IForEquipment_AndSelectForTheMenu()
+    {
+        Keyboard keyboard = InputSystem.AddDevice<Keyboard>();
+        Gamepad gamepad = InputSystem.AddDevice<Gamepad>();
+        Rig rig = CreateRig();
+        WindowInputSource source = rig.CreateWindowSource();
+
+        Press(keyboard.cKey);
+        Release(keyboard.cKey);
+        (bool, bool, bool, bool) afterC = TakeAll(source);
+        Press(keyboard.iKey);
+        Release(keyboard.iKey);
+        (bool, bool, bool, bool) afterI = TakeAll(source);
+        Press(gamepad.selectButton);
+        Release(gamepad.selectButton);
+        (bool, bool, bool, bool) afterSelect = TakeAll(source);
+        Press(gamepad.leftStickButton);
+        Release(gamepad.leftStickButton);
+        (bool, bool, bool, bool) afterStickPress = TakeAll(source);
+        Press(keyboard.iKey);
+        Release(keyboard.iKey);
+        source.Drop();
+
+        Assert.That(afterC, Is.EqualTo((true, false, false, false)));
+        Assert.That(afterI, Is.EqualTo((false, false, false, true)));
+        Assert.That(afterSelect, Is.EqualTo((false, false, true, false)));
+        Assert.That(afterStickPress, Is.EqualTo((false, true, false, false)));
+        Assert.That(TakeAll(source), Is.EqualTo((false, false, false, false)), "dropped");
+    }
+
+    // Each window action binds alone, so a missing one silences only its own window (Prototype Content §4).
+    [Test]
+    public void WindowSource_WithoutTheSkillsAndMenuActions_StillAsksForStatsAndEquipment()
+    {
+        Keyboard keyboard = InputSystem.AddDevice<Keyboard>();
+        Rig rig = CreateRig();
+        using var source = new WindowInputSource(
+            rig.Actions.FindAction("Player/Stats", true),
+            null,
+            null,
+            rig.Actions.FindAction("Player/Equipment", true));
+
+        Press(keyboard.cKey);
+        Release(keyboard.cKey);
+        Press(keyboard.iKey);
+        Release(keyboard.iKey);
+
+        Assert.That(TakeAll(source), Is.EqualTo((true, false, false, true)));
+    }
+
+    // The Menu map reads the gamepad only while the focus holds, though project-wide maps start enabled: a push steps
+    // the highlight once, a held push not again, and each press counts once (Prototype Content §4).
+    [Test]
+    public void MenuSource_ReadsTheGamepadOnlyWhileTheFocusHolds_APushSteppingOnce()
+    {
+        Gamepad gamepad = InputSystem.AddDevice<Gamepad>();
+        Rig rig = CreateRig();
+        rig.Actions.FindActionMap(MenuInputSource.MapName, true).Enable();
+        MenuInputSource menu = rig.CreateMenuSource();
+        bool wasActive = menu.IsActive;
+        Press(gamepad.buttonSouth);
+        Release(gamepad.buttonSouth);
+        bool choseUnfocused = menu.TakeChoose();
+
+        menu.Begin();
+        int centred = menu.TakeStep();
+        Press(gamepad.dpad.down);
+        int down = menu.TakeStep();
+        int held = menu.TakeStep();
+        Release(gamepad.dpad.down);
+        int released = menu.TakeStep();
+        Set(gamepad.leftStick, new Vector2(0f, 0.9f));
+        int up = menu.TakeStep();
+        Set(gamepad.leftStick, Vector2.zero);
+        Press(gamepad.buttonSouth);
+        Release(gamepad.buttonSouth);
+        Press(gamepad.buttonEast);
+        Release(gamepad.buttonEast);
+        Press(gamepad.selectButton);
+        Release(gamepad.selectButton);
+        (bool, bool, bool) presses = (menu.TakeChoose(), menu.TakeBack(), menu.TakeEnd());
+        (bool, bool, bool) again = (menu.TakeChoose(), menu.TakeBack(), menu.TakeEnd());
+        menu.End();
+        Press(gamepad.buttonSouth);
+        Release(gamepad.buttonSouth);
+
+        Assert.That((wasActive, choseUnfocused), Is.EqualTo((false, false)), "disabled until the focus begins");
+        Assert.That((centred, down, held, released, up), Is.EqualTo((0, 1, 0, 0, -1)));
+        Assert.That(presses, Is.EqualTo((true, true, true)));
+        Assert.That(again, Is.EqualTo((false, false, false)), "once per press");
+        Assert.That((menu.IsActive, menu.TakeChoose()), Is.EqualTo((false, false)), "nothing after the focus ends");
+    }
+
+    [Test]
+    public void MenuSource_AStickHeldWhenTheFocusBegins_StepsOnlyOnceCentred()
+    {
+        Gamepad gamepad = InputSystem.AddDevice<Gamepad>();
+        Rig rig = CreateRig();
+        MenuInputSource menu = rig.CreateMenuSource();
+        Set(gamepad.leftStick, new Vector2(0f, -1f));
+
+        menu.Begin();
+        int whileHeld = menu.TakeStep();
+        Set(gamepad.leftStick, Vector2.zero);
+        int centred = menu.TakeStep();
+        Set(gamepad.leftStick, new Vector2(0f, -1f));
+        int pushed = menu.TakeStep();
+
+        Assert.That((whileHeld, centred, pushed), Is.EqualTo((0, 0, 1)));
+    }
+
+    // When the focus ends, a stick still pushed walks nowhere until it is centred (Prototype Content §4).
+    [Test]
+    public void HeldStick_AfterTheFocusEnds_WalksOnlyOnceCentred()
+    {
+        Gamepad gamepad = InputSystem.AddDevice<Gamepad>();
+        Rig rig = CreateRig();
+        Set(gamepad.leftStick, new Vector2(0f, 1f));
+
+        rig.RequireCentre();
+        rig.Tick();
+        int sentWhileHeld = rig.Sent.Count;
+        Set(gamepad.leftStick, Vector2.zero);
+        rig.Tick();
+        Set(gamepad.leftStick, new Vector2(0f, 1f));
+        rig.Tick();
+
+        Assert.That(sentWhileHeld, Is.Zero);
+        Assert.That(rig.Sent, Is.Not.Empty, "it walks once pushed again");
+    }
+
+    private static (bool Stats, bool Skills, bool Menu, bool Equipment) TakeAll(WindowInputSource source)
+    {
+        return (source.TakeStatsToggle(), source.TakeSkillsToggle(), source.TakeMenuToggle(),
+            source.TakeEquipmentToggle());
     }
 
     [UnityTest]
@@ -731,6 +886,213 @@ public sealed class SharedIntentPathTests : InputTestFixture
     // Devices are driven with complete state events, the way hardware reports, in one input update each. The
     // fixture's single-control helpers send delta events, which stopped reaching a device here once a real frame
     // had run; whole states do not have that problem and are closer to real input anyway.
+    // Death ends the focus, so that Start can ask for the respawn, and leaves the Menu open (Prototype Content §4).
+    [Test]
+    public void Death_EndsTheFocus_AndLeavesTheMenuOpen()
+    {
+        (GameClient client, ClientWorld world, Gamepad gamepad, InputActionAsset actions) = CreateFocusClient();
+        MenuWindow menu = Window<MenuWindow>(client, "m_menuWindow");
+        PressAndRelease(gamepad.selectButton);
+        Frame(client);
+        bool wasFocused = client.HasWindowFocus;
+
+        world.OnEntityDied(new EntityDied(world.LocalEntity, default, 1));
+        Frame(client);
+
+        Assert.That(wasFocused, Is.True);
+        Assert.That((menu.IsOpen, client.HasWindowFocus), Is.EqualTo((true, false)));
+        Assert.That(actions.FindAction("Player/Respawn", true).enabled, Is.True, "Start can ask for the respawn");
+    }
+
+    // Choosing Equipment moves the focus into the window, where the highlight starts on the weapon; East closes a
+    // listed position, then gives the Menu back with Equipment highlighted, and Select closes it and ends the focus
+    // without opening it again on the same press.
+    [Test]
+    public void Equipment_ChosenFromTheMenu_TakesTheFocus_EastBacksOutToTheMenu_AndSelectEndsIt()
+    {
+        (GameClient client, ClientWorld _, Gamepad gamepad, InputActionAsset actions) = CreateFocusClient();
+        MenuWindow menu = Window<MenuWindow>(client, "m_menuWindow");
+        EquipmentWindow equipment = Window<EquipmentWindow>(client, "m_equipmentWindow");
+        PressAndRelease(gamepad.selectButton);
+        Frame(client);
+        Step(client, gamepad.dpad.down);
+        Step(client, gamepad.dpad.down);
+
+        PressAndRelease(gamepad.buttonSouth);
+        Frame(client);
+        (bool, bool, bool, string) inEquipment =
+            (equipment.IsOpen, menu.IsOpen, client.HasWindowFocus, equipment.Highlighted);
+        Step(client, gamepad.dpad.down);
+        string second = equipment.Highlighted;
+        PressAndRelease(gamepad.buttonSouth);
+        Frame(client);
+        EquipmentSlot listed = equipment.Listed;
+        PressAndRelease(gamepad.buttonEast);
+        Frame(client);
+        EquipmentSlot afterBack = equipment.Listed;
+        PressAndRelease(gamepad.buttonEast);
+        Frame(client);
+        (bool, bool, int, bool) backed = (menu.IsOpen, equipment.IsOpen, menu.Highlight, client.HasWindowFocus);
+        PressAndRelease(gamepad.selectButton);
+        Frame(client);
+        Frame(client);
+
+        Assert.That(inEquipment, Is.EqualTo((true, false, true, "Weapon: empty")));
+        Assert.That(second, Is.EqualTo("Body armor: empty"));
+        Assert.That((listed, afterBack), Is.EqualTo((EquipmentSlot.Armor, EquipmentSlot.None)), "a list closes first");
+        Assert.That(backed, Is.EqualTo((true, false, MenuWindow.EquipmentEntry, true)), "then the Menu comes back");
+        Assert.That((menu.IsOpen, client.HasWindowFocus), Is.EqualTo((false, false)), "Select closed it");
+        Assert.That(actions.FindActionMap(MenuInputSource.MapName, true).enabled, Is.False);
+        Assert.That(actions.FindAction("Player/Move", true).enabled, Is.True, "the Player map open again");
+    }
+
+    // However the focused window closes, a click on its Close among them, the focus ends with it.
+    [Test]
+    public void FocusedMenu_ClosedByItsButton_EndsTheFocus()
+    {
+        (GameClient client, ClientWorld _, Gamepad gamepad, InputActionAsset actions) = CreateFocusClient();
+        MenuWindow menu = Window<MenuWindow>(client, "m_menuWindow");
+        PressAndRelease(gamepad.selectButton);
+        Frame(client);
+
+        menu.GetComponentsInChildren<Button>().Single(button => button.name == "Close").onClick.Invoke();
+        Frame(client);
+
+        Assert.That((menu.IsOpen, client.HasWindowFocus), Is.EqualTo((false, false)));
+        Assert.That(actions.FindAction("Player/Move", true).enabled, Is.True);
+    }
+
+    // Select opens the Menu with the focus on Stats, shutting the Player map, so South asks for no skill; South chooses
+    // the highlighted Skills, which takes the Menu's place and ends the focus, and the South still held asks for no
+    // skill until it is pressed again.
+    [Test]
+    public void Select_OpensTheMenuWithTheFocus_AndChoosingSkillsEndsIt_TheHeldSouthAskingForNoSkill()
+    {
+        (GameClient client, ClientWorld _, Gamepad gamepad, InputActionAsset actions) = CreateFocusClient();
+        InputAction move = actions.FindAction("Player/Move", true);
+        MenuWindow menu = Window<MenuWindow>(client, "m_menuWindow");
+        SkillsWindow skills = Window<SkillsWindow>(client, "m_skillsWindow");
+
+        PressAndRelease(gamepad.selectButton);
+        Frame(client);
+        (bool, bool, bool, int) opened = (menu.IsOpen, client.HasWindowFocus, move.enabled, menu.Highlight);
+        Step(client, gamepad.dpad.down);
+        int highlighted = menu.Highlight;
+        Press(gamepad.buttonSouth);
+        Frame(client);
+        Frame(client);
+        (bool, bool, bool, bool) chosen = (skills.IsOpen, menu.IsOpen, client.HasWindowFocus, move.enabled);
+        int slotWhileHeld = TakeSkillSlot(client);
+        Release(gamepad.buttonSouth);
+        PressAndRelease(gamepad.buttonSouth);
+        int slotOnANewPress = TakeSkillSlot(client);
+
+        Assert.That(opened, Is.EqualTo((true, true, false, MenuWindow.StatsEntry)), "the Player map shut");
+        Assert.That(highlighted, Is.EqualTo(MenuWindow.SkillsEntry));
+        Assert.That(chosen, Is.EqualTo((true, false, false, true)), "Skills in the Menu's place, the focus ended");
+        Assert.That(slotWhileHeld, Is.Zero, "the South that chose asks for no skill");
+        Assert.That(slotOnANewPress, Is.EqualTo(1), "a new press does");
+    }
+
+    // The client's real windows and input sources, the input bound as on entering a map, and a world the test holds.
+    private (GameClient Client, ClientWorld World, Gamepad Gamepad, InputActionAsset Actions) CreateFocusClient()
+    {
+        string actionsPath = Path.Combine(Application.dataPath, ActionsAsset);
+        if (!File.Exists(actionsPath))
+        {
+            Assert.Ignore("The input actions asset is only readable from the editor project.");
+        }
+
+        var actions = InputActionAsset.FromJson(File.ReadAllText(actionsPath));
+        m_created.Add(actions);
+        m_focusActions = actions;
+
+        // As the project-wide asset starts.
+        actions.Enable();
+        Gamepad gamepad = InputSystem.AddDevice<Gamepad>();
+        var clientObject = new GameObject("TestClient");
+        clientObject.SetActive(false);
+        m_created.Add(clientObject);
+        GameClient client = clientObject.AddComponent<GameClient>();
+        typeof(GameClient).GetField("m_inputActions", ClientField)!.SetValue(client, actions);
+        typeof(GameClient).GetMethod("BindInput", ClientField)!.Invoke(client, null);
+        var world = new ClientWorld(FocusGrid(), FocusEntered(), 20);
+        typeof(GameClient).GetField("m_world", ClientField)!.SetValue(client, world);
+        AddWindow(client, "m_menuWindow", MenuWindow.Create(client));
+        AddWindow(client, "m_equipmentWindow", EquipmentWindow.Create(client));
+        AddWindow(client, "m_statsWindow", StatsWindow.Create(client));
+        AddWindow(client, "m_skillsWindow", SkillsWindow.Create(client));
+        return (client, world, gamepad, actions);
+    }
+
+    private void AddWindow(GameClient client, string field, Component window)
+    {
+        m_created.Add(window.gameObject);
+        typeof(GameClient).GetField(field, ClientField)!.SetValue(client, window);
+    }
+
+    private static T Window<T>(GameClient client, string field)
+        where T : Component
+    {
+        return (T)typeof(GameClient).GetField(field, ClientField)!.GetValue(client);
+    }
+
+    // What the client's Update does for the windows each frame: their keys, then the focus.
+    private static void Frame(GameClient client)
+    {
+        typeof(GameClient).GetMethod("HandleWindowInput", ClientField)!.Invoke(client, null);
+    }
+
+    private static int TakeSkillSlot(GameClient client)
+    {
+        return ((SkillInputSource)typeof(GameClient).GetField("m_skillSource", ClientField)!.GetValue(client))
+            .TakeSlot();
+    }
+
+    private void PressAndRelease(ButtonControl button)
+    {
+        Press(button);
+        Release(button);
+    }
+
+    // One push of the d-pad, read while held, then a frame with it centred again.
+    private void Step(GameClient client, ButtonControl direction)
+    {
+        Press(direction);
+        Frame(client);
+        Release(direction);
+        Frame(client);
+    }
+
+    private static NavigationGrid FocusGrid()
+    {
+        NavigationCell[] cells = Enumerable.Repeat(NavigationCell.Level(NavigationSurface.Floor, 0f), 16).ToArray();
+        return new NavigationGrid(4, 4, 1f, 0f, 0f, 0.3f, 0.4f, cells);
+    }
+
+    private static WorldEntered FocusEntered()
+    {
+        return new WorldEntered(
+            new MapDefinitionId("map.training_ground"),
+            1,
+            new EntityId(100),
+            new JobDefinitionId("job.adventurer"),
+            0,
+            new WorldPosition(1.5f, 0f, 1.5f),
+            new WorldDirection(0f, 1f),
+            5f,
+            71,
+            71,
+            1.5f,
+            0,
+            new CharacterId(1),
+            1,
+            0,
+            30,
+            24,
+            24);
+    }
+
     private static void SetKeys(Keyboard keyboard, params Key[] pressed)
     {
         InputSystem.QueueStateEvent(keyboard, new KeyboardState(pressed));
@@ -795,6 +1157,7 @@ public sealed class SharedIntentPathTests : InputTestFixture
         private readonly InputActionAsset m_actions;
         private CombatInputSource? m_combat;
         private WindowInputSource? m_windows;
+        private MenuInputSource? m_menu;
         private SkillInputSource? m_skills;
         private PointerMoveHandler m_handler;
         private uint m_tick;
@@ -907,8 +1270,22 @@ public sealed class SharedIntentPathTests : InputTestFixture
         {
             m_windows = new WindowInputSource(
                 m_actions.FindAction("Player/Stats", true),
-                m_actions.FindAction("Player/Skills", true));
+                m_actions.FindAction("Player/Skills", true),
+                m_actions.FindAction("Player/Menu", true),
+                m_actions.FindAction("Player/Equipment", true));
             return m_windows;
+        }
+
+        public MenuInputSource CreateMenuSource()
+        {
+            m_menu = MenuInputSource.TryCreate(m_actions);
+            Assert.That(m_menu, Is.Not.Null, "the asset holds the Menu map");
+            return m_menu!;
+        }
+
+        public void RequireCentre()
+        {
+            m_manual.RequireCentre();
         }
 
         public DevelopmentOverlay CreateOverlay()
@@ -967,6 +1344,7 @@ public sealed class SharedIntentPathTests : InputTestFixture
             m_pointer.Dispose();
             m_combat?.Dispose();
             m_windows?.Dispose();
+            m_menu?.Dispose();
             m_skills?.Dispose();
         }
 
