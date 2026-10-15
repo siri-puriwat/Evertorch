@@ -136,7 +136,10 @@ public sealed class ServerEndToEndTests
             MessageOpcode.CharacterSheet,
             MessageOpcode.EntitySpawn
         }));
-        Assert.That(Opcodes(Control(first)).Last(), Is.EqualTo(MessageOpcode.EntitySpawn));
+        Assert.That(
+            Opcodes(Control(first)).Skip(Opcodes(Control(first)).Length - 2),
+            Is.EqualTo(new[] { MessageOpcode.EntitySpawn, MessageOpcode.EquipmentAppearance }),
+            "the second player's spawn, then what it wears");
         WorldEntered.TryRead(Control(second)[4].Payload, out WorldEntered? entered);
         Assert.That(entered!.Map, Is.EqualTo(new MapDefinitionId("map.training_ground")));
         Assert.That(entered.Job, Is.EqualTo(new JobDefinitionId("job.adventurer")));

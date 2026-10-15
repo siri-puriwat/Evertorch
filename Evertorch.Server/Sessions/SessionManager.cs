@@ -964,9 +964,10 @@ public sealed class SessionManager : ITickPhase
         }
     }
 
-    // An inspection reads the target's worn rows on the tick thread and answers the asker alone; the inspected hears
-    // nothing, and a trade does not stop it, since it changes nothing (Gameplay Systems §11.7).
-    private CommandRejectionReason TryInspect(ClientSession session, EntityId target)
+    // An inspection reads the target's worn rows on the tick thread, at one appearance revision, and answers the asker
+    // alone in parts; the inspected hears nothing, and a trade does not stop it, since it changes nothing (Gameplay
+    // Systems §11.1, §11.7).
+    private CommandRejectionReason TryInspect(ClientSession session, EntityId target, uint commandSequence)
     {
         if (!session.KnownEntities.Contains(target)
             || session.Map == null
@@ -976,7 +977,15 @@ public sealed class SessionManager : ITickPhase
             return CommandRejectionReason.InvalidTarget;
         }
 
-        m_sender.Send(session.Connection, WornEquipment.InspectionOf(target, inspected!.Inventory));
+        foreach (InspectedEquipment part in InspectedEquipment.CreateParts(
+                     target,
+                     commandSequence,
+                     player.AppearanceRevision,
+                     WornEquipment.InspectionOf(inspected!.Inventory)))
+        {
+            m_sender.Send(session.Connection, part);
+        }
+
         return CommandRejectionReason.None;
     }
 
@@ -1124,7 +1133,7 @@ public sealed class SessionManager : ITickPhase
                 command.CardItem,
                 command.InventoryItem,
                 command.CommandSequence),
-            InboundEventKind.InspectPlayer => TryInspect(session, command.Target),
+            InboundEventKind.InspectPlayer => TryInspect(session, command.Target, command.CommandSequence),
             InboundEventKind.RemoveCard => m_items.TryRemoveCard(
                 session,
                 command.Target,

@@ -104,7 +104,6 @@ public sealed class FollowStateTests
                     new WorldDirection(0f, 1f),
                     EntityStateFlags.None,
                     kind == EntityKind.Monster ? (ushort)1000 : (ushort)0,
-                    string.Empty,
                     name));
         }
     }

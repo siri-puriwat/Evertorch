@@ -58,15 +58,21 @@ public sealed class EquipmentTests
         });
     }
 
+    private static List<EquipmentAppearance> Appearances(TestServer server, ConnectionId player)
+    {
+        return Sent(server, player, MessageOpcode.EquipmentAppearance, (byte[] bytes, out EquipmentAppearance read) =>
+        {
+            bool isRead = EquipmentAppearance.TryRead(bytes, out EquipmentAppearance? message);
+            read = message!;
+            return isRead;
+        });
+    }
+
+    // The weapon each appearance a session heard shows in the hand, empty for none.
     private static string[] WornWeapons(TestServer server, ConnectionId player)
     {
-        return Sent(server, player, MessageOpcode.WornWeaponChanged, (byte[] bytes, out WornWeaponChanged read) =>
-            {
-                bool isRead = WornWeaponChanged.TryRead(bytes, out WornWeaponChanged? message);
-                read = message!;
-                return isRead;
-            })
-            .Select(changed => changed.WornWeapon)
+        return Appearances(server, player)
+            .Select(appearance => appearance.ItemIn(EquipmentSlot.Weapon).Value)
             .ToArray();
     }
 
@@ -127,6 +133,38 @@ public sealed class EquipmentTests
         return Sent(server, player, MessageOpcode.Damage, (byte[] bytes, out Damage read) =>
                 Damage.TryRead(bytes, out read))
             .Any(damage => damage.Target == entity.Id);
+    }
+
+    // Gameplay Systems §11.1: every committed change of what is worn goes to those who see the player, the armor's
+    // too, its revision up each time, even when the same item goes back on.
+    [Test]
+    public void Appearance_IsToldToOthersAtEveryChange_WithItsRevisionUp()
+    {
+        var server = new TestServer();
+        ConnectionId player = EnterHolding(server, Sword, Cloth);
+        ConnectionId other = server.EnterWorld(2);
+        server.Tick();
+        server.Transport.ClearSent();
+
+        Equip(server, player, RowOf(server, 1, Sword), 1);
+        server.Tick(2);
+        Equip(server, player, RowOf(server, 1, Cloth), 2);
+        server.Tick(2);
+        server.SendUnequip(player, EquipmentSlot.Armor, 3);
+        server.TickUntil(() => CharacterOf(server, player).Operation == null);
+        server.Tick(2);
+        Equip(server, player, RowOf(server, 1, Cloth), 4);
+        server.Tick(2);
+
+        List<EquipmentAppearance> heard = Appearances(server, other);
+        Assert.That(
+            heard.Select(appearance => (appearance.ItemIn(EquipmentSlot.Weapon).Value,
+                appearance.ItemIn(EquipmentSlot.Armor).Value)),
+            Is.EqualTo(new[] { (Sword, ""), (Sword, Cloth), (Sword, ""), (Sword, Cloth) }),
+            "each change once, the armor's included");
+        Assert.That(heard.Select(appearance => appearance.Revision), Is.Ordered.Ascending.And.Unique);
+        Assert.That(heard.Select(appearance => appearance.Entity), Is.All.EqualTo(server.PlayerOf(player).Id));
+        Assert.That(Appearances(server, player), Is.Empty, "the owner learns it from its inventory");
     }
 
     // A crawler's lowest roll is 8: cloth armor's hard defense 8 takes it to 7 (8 × 4008 ÷ 4080), and the soft
@@ -552,26 +590,6 @@ public sealed class EquipmentTests
         CharacterHealth health = Healths(server, player).Single();
         Assert.That((health.CurrentSpirit, health.MaximumSpirit), Is.EqualTo((24u, 24u)), "SP held to the new maximum");
         Assert.That(WornWeapons(server, other), Is.EqualTo(new[] { string.Empty }), "others see an empty hand once");
-    }
-
-    [Test]
-    public void WornWeapon_IsToldToOthersOnlyWhenTheWeaponsItemChanges()
-    {
-        var server = new TestServer();
-        ConnectionId player = EnterHolding(server, Sword, Cloth);
-        ConnectionId other = server.EnterWorld(2);
-        server.Tick();
-        server.Transport.ClearSent();
-
-        Equip(server, player, RowOf(server, 1, Sword), 1);
-        server.Tick(2);
-        Assert.That(WornWeapons(server, other), Is.EqualTo(new[] { Sword }), "the sword, once");
-        server.Transport.ClearSent();
-        Equip(server, player, RowOf(server, 1, Cloth), 2);
-        server.Tick(2);
-
-        Assert.That(server.PlayerOf(player).Armor, Is.Not.Null, "the armor is worn");
-        Assert.That(WornWeapons(server, other), Is.Empty, "an armor, beside the same sword, shows in no hand anew");
     }
 }
 }

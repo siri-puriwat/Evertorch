@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Evertorch.Game;
 using Evertorch.Protocol;
 
@@ -38,10 +39,17 @@ public sealed class RemoteEntity
     public ushort HealthPermille { get; internal set; }
 
     /// <summary>
-    ///     The item ID of the weapon a player wears, from its spawn and each change the server announces; empty when it
-    ///     wears none and for every other kind (Network Protocol §9).
+    ///     The item a player wears in each of the eight positions, in position order from the weapon, default where none,
+    ///     from the appearance that follows its spawn and each change the server announces (Network Protocol §9); all
+    ///     default for every other kind.
     /// </summary>
-    public string WornWeapon { get; internal set; } = string.Empty;
+    public IReadOnlyList<ItemDefinitionId> Appearance { get; internal set; } = new ItemDefinitionId[8];
+
+    /// <summary>The revision of <see cref="Appearance" />, which an inspection read at another is stale against.</summary>
+    public uint AppearanceRevision { get; internal set; }
+
+    /// <summary>The item ID of the weapon a player wears; empty when it wears none and for every other kind.</summary>
+    public string WornWeapon => Appearance[0].Value;
 
     /// <summary>
     ///     A player's character name from its spawn; empty for every other kind (Network Protocol §6).

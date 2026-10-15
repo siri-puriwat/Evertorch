@@ -81,11 +81,9 @@ public sealed class VisibilityPhase : ITickPhase
                 }
                 else if (entity is PlayerEntity { AppearancePending: true } seen)
                 {
-                    // A weapon worn or taken off shows in the player's hand to those who see it; a replacement spawn
-                    // above already carries it (Network Protocol §9).
-                    m_sender.Send(
-                        session.Connection,
-                        new WornWeaponChanged(seen.Id, seen.WornWeapon?.Value ?? string.Empty));
+                    // What the player wears changed, and those who see it hear of it; a replacement spawn above is
+                    // followed by the appearance already (Network Protocol §9).
+                    SendAppearance(session, seen);
                 }
 
                 continue;
@@ -133,6 +131,8 @@ public sealed class VisibilityPhase : ITickPhase
         }
     }
 
+    // A player's spawn is followed by what it wears, on the same channel, so the appearance always arrives after the
+    // spawn (Network Protocol §6).
     private void SendSpawn(ClientSession session, WorldEntity entity)
     {
         var player = entity as PlayerEntity;
@@ -146,8 +146,18 @@ public sealed class VisibilityPhase : ITickPhase
                 entity.Facing,
                 entity.StateFlags,
                 entity.SharedHealthPermille,
-                player?.WornWeapon?.Value ?? string.Empty,
                 player?.Name ?? string.Empty));
+        if (player != null)
+        {
+            SendAppearance(session, player);
+        }
+    }
+
+    private void SendAppearance(ClientSession session, PlayerEntity player)
+    {
+        m_sender.Send(
+            session.Connection,
+            new EquipmentAppearance(player.Id, player.AppearanceRevision, player.Appearance));
     }
 }
 }

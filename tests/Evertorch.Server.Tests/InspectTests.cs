@@ -6,9 +6,10 @@ using NUnit.Framework;
 namespace Evertorch.Server.Tests
 {
 /// <summary>
-///     Inspecting another player (Gameplay Systems §11.7; Network Protocol §9, §11): the worn weapon and armor, each with
-///     its refine level and cards, read on the tick thread and sent to the asker alone; an unseen entity or one that is
-///     not a player refused with 1; a dead asker refused with 3; a trade no obstacle.
+///     Inspecting another player (Gameplay Systems §11.1, §11.7; Network Protocol §6, §9, §11): the eight positions, each
+///     with its item, refine level, and cards, read on the tick thread at one appearance revision and sent to the asker
+///     alone in parts that name the request; an unseen entity or one that is not a player refused with 1; a dead asker
+///     refused with 3; a trade no obstacle.
 /// </summary>
 [TestFixture]
 public sealed class InspectTests
@@ -80,22 +81,27 @@ public sealed class InspectTests
     }
 
     [Test]
-    public void Inspect_OfAPlayerInView_AnswersTheAskerAlone_WithTheWornWeaponAndArmorAndTheirCards()
+    public void Inspect_OfAPlayerInView_AnswersTheAskerAlone_WithEveryPositionAndItsCards()
     {
         (TradeRig rig, ConnectionId worn, ConnectionId asker) = Enter();
         EntityId target = rig.Server.PlayerOf(worn).Id;
+        uint sequence = rig.Next(asker);
 
-        rig.Server.SendInspectPlayer(asker, target, rig.Next(asker));
+        rig.Server.SendInspectPlayer(asker, target, sequence);
         rig.Server.Tick();
 
         InspectedEquipment answer = Answers(rig.Server, asker).Single();
-        Assert.That(answer.Entity, Is.EqualTo(target));
         Assert.That(
-            (answer.Weapon.Item.Value, answer.Weapon.RefineLevel, answer.Weapon.Cards.Select(card => card.Value)),
+            (answer.Entity, answer.CommandSequence, answer.Revision, answer.Part, answer.PartCount),
+            Is.EqualTo((target, sequence, rig.Server.PlayerOf(worn).AppearanceRevision, (byte)0, (byte)1)));
+        Assert.That(answer.Entries.Select(entry => entry.Slot), Is.EqualTo(EquipmentPositions.All));
+        InspectedItem weapon = answer.Entries[0].Item;
+        InspectedItem armor = answer.Entries[1].Item;
+        Assert.That(
+            (weapon.Item.Value, weapon.RefineLevel, weapon.Cards.Select(card => card.Value)),
             Is.EqualTo((Sword, (byte)4, new[] { Keen, Bane })));
-        Assert.That(
-            (answer.Armor.Item.Value, answer.Armor.RefineLevel, answer.Armor.Cards.Count),
-            Is.EqualTo((Cloth, (byte)0, 0)));
+        Assert.That((armor.Item.Value, armor.RefineLevel, armor.Cards.Count), Is.EqualTo((Cloth, (byte)0, 0)));
+        Assert.That(answer.Entries.Skip(2).Select(entry => entry.Item.IsEmpty), Is.All.True, "the six others empty");
         Assert.That(Answers(rig.Server, worn), Is.Empty, "the inspected hears nothing");
         Assert.That(rig.Refusals(asker), Is.Empty);
     }
@@ -121,7 +127,7 @@ public sealed class InspectTests
     }
 
     [Test]
-    public void Inspect_OfAPlayerWearingNothing_NamesTwoEmptySlots()
+    public void Inspect_OfAPlayerWearingNothing_NamesEightEmptyPositions()
     {
         (TradeRig rig, ConnectionId worn, ConnectionId asker) = Enter();
 
@@ -129,7 +135,8 @@ public sealed class InspectTests
         rig.Server.Tick();
 
         InspectedEquipment answer = Answers(rig.Server, worn).Single();
-        Assert.That((answer.Weapon.IsEmpty, answer.Armor.IsEmpty), Is.EqualTo((true, true)));
+        Assert.That(answer.Entries.Select(entry => entry.Slot), Is.EqualTo(EquipmentPositions.All));
+        Assert.That(answer.Entries.Select(entry => entry.Item.IsEmpty), Is.All.True);
     }
 
     // An inspection changes nothing, so a trade does not stop it (Network Protocol §11).

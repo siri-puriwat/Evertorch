@@ -26,11 +26,12 @@ public sealed class PresentationBoundaryTests
         + @"|\.ActionLock\b"
         + @"|\.On(Spawn|Despawn|Snapshot|TargetChanged|AttackStarted|Damage|EntityDied|EntityRevived|CommandRejected"
         + @"|ItemDropped|ItemPickedUp|CharacterHealth|CharacterProgress|SkillCastStarted|SkillResolved|SkillList"
-        + @"|StatusEffects|NpcServices|QuestLog|CharacterSheet|LocalCancel|WornWeaponChanged|Changed|RefineTable"
+        + @"|StatusEffects|NpcServices|QuestLog|CharacterSheet|LocalCancel|EquipmentAppearance|Changed|RefineTable"
         + @"|RefineOutcome|CardRemovalFees)\("
         + @"|\.(Advance|CollectTargetCandidates|CollectPlayerCandidates|CollectDropCandidates|CollectNpcCandidates)\("
         + @"|\.(HealthPermille|StateFlags|CurrentHealth|Target|LastRejection|LocalHealth|LocalMaximumHealth|IsDead"
-        + @"|LocalSpirit|LocalMaximumSpirit|Level|Experience|ExperienceToNextLevel|WornWeapon)\s*=(?![=>])");
+        + @"|LocalSpirit|LocalMaximumSpirit|Level|Experience|ExperienceToNextLevel"
+        + @"|Appearance|AppearanceRevision)\s*=(?![=>])");
 
     // UI may ask GameClient for anything a player can do, and read what it likes; it may not send, build a message,
     // drive movement or the client's ticks, or change what the client believes (Coding Standards §3). A method whose
@@ -53,11 +54,12 @@ public sealed class PresentationBoundaryTests
         + @"|[Pp]redictor\??\.Apply\(|\.Buffer\.(Add|Clear)\("
         + @"|\.On(Spawn|Despawn|Snapshot|TargetChanged|AttackStarted|Damage|EntityDied|EntityRevived|CommandRejected"
         + @"|ItemDropped|ItemPickedUp|CharacterHealth|CharacterProgress|SkillCastStarted|SkillResolved|SkillList"
-        + @"|StatusEffects|NpcServices|QuestLog|CharacterSheet|LocalCancel|WornWeaponChanged|Changed|RefineTable"
+        + @"|StatusEffects|NpcServices|QuestLog|CharacterSheet|LocalCancel|EquipmentAppearance|Changed|RefineTable"
         + @"|RefineOutcome|CardRemovalFees)\("
         + @"|\.(Advance|CollectTargetCandidates|CollectPlayerCandidates|CollectDropCandidates|CollectNpcCandidates)\("
         + @"|\.(Target|LastRejection|LocalHealth|LocalMaximumHealth|HealthPermille|StateFlags|CurrentHealth|IsLocked"
-        + @"|IsDead|LocalSpirit|LocalMaximumSpirit|Level|Experience|ExperienceToNextLevel|WornWeapon)\s*=(?![=>])");
+        + @"|IsDead|LocalSpirit|LocalMaximumSpirit|Level|Experience|ExperienceToNextLevel"
+        + @"|Appearance|AppearanceRevision)\s*=(?![=>])");
 
     private static readonly Regex UsesPresentation = new(
         @"\b(CombatAnimation|CombatTimeline|CombatPresenter|HitMark|FloatingNumber|HealthBar|CastBar|EntityView"
@@ -114,7 +116,7 @@ public sealed class PresentationBoundaryTests
             "client.TurnInQuestTo(npc, quest);", "m_client.RaiseStat(PrimaryStat.Agi);", "client.ToggleStats();",
             "m_client.LearnSkillLevel(skill);", "client.ToggleSkills();",
             "m_client.ResetBuildAt(npc);", "m_client.ChangeJobAt(npc, job);",
-            "m_world.OnWornWeaponChanged(changed);", "remote.WornWeapon = string.Empty;",
+            "m_world.OnEquipmentAppearance(appearance);", "remote.Appearance = items;",
             "m_client.RefineAt(npc, row, 6);", "m_world.OnRefineTable(table);", "m_world.OnCardRemovalFees(fees);",
             "m_client.InsertCardInto(card, row);", "m_client.RemoveCardAt(npc, row, 1, card);",
             "m_client.InspectPlayerNamed(name);"

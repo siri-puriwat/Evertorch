@@ -13,11 +13,11 @@ public static class InspectMessages
     /// <summary>
     ///     "Weapon: +7 Keen Iron Sword [2]", "· Forest Crawler Card", "Armor: none".
     /// </summary>
-    public static IReadOnlyList<string> Lines(ClientContent? content, InspectedEquipment shown)
+    public static IReadOnlyList<string> Lines(ClientContent? content, PlayerInspection shown)
     {
         var lines = new List<string>();
-        Add(lines, content, "Weapon", shown.Weapon);
-        Add(lines, content, "Armor", shown.Armor);
+        Add(lines, content, "Weapon", shown.ItemIn(EquipmentSlot.Weapon));
+        Add(lines, content, "Armor", shown.ItemIn(EquipmentSlot.Armor));
         return lines;
     }
 

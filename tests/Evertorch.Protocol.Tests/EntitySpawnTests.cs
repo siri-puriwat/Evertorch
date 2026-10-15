@@ -24,7 +24,6 @@ public sealed class EntitySpawnTests
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80, 0x3F,
         0x01, 0x00,
         0x00, 0x00,
-        0x00, 0x00,
         0x04, 0x00, 0x41, 0x6E, 0x6E, 0x61
     };
 
@@ -38,7 +37,6 @@ public sealed class EntitySpawnTests
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80, 0x3F,
         0x00, 0x00,
         0xE8, 0x03,
-        0x00, 0x00,
         0x00, 0x00
     };
 
@@ -59,7 +57,6 @@ public sealed class EntitySpawnTests
         new WorldDirection(0f, 1f),
         EntityStateFlags.Moving,
         0,
-        "",
         "Anna");
 
     private static EntitySpawn PlayerNamed(string name)
@@ -72,7 +69,6 @@ public sealed class EntitySpawnTests
             new WorldDirection(0f, 1f),
             EntityStateFlags.None,
             0,
-            "",
             name);
     }
 
@@ -112,7 +108,7 @@ public sealed class EntitySpawnTests
             0);
         byte[] bytes = new byte[drop.GetEncodedLength()];
         drop.Write(bytes);
-        byte[] withHealth = WireMatrix.With(bytes, bytes.Length - 6, 0x01, 0x00);
+        byte[] withHealth = WireMatrix.With(bytes, bytes.Length - 4, 0x01, 0x00);
         byte[] monsterAsDrop = WireMatrix.With(WireMatrix.With(MonsterBytes, KindOffset, 0x03), 44, 0x00, 0x00);
 
         Assert.That(EntitySpawn.TryRead(bytes, out EntitySpawn? read), Is.True);
@@ -123,7 +119,7 @@ public sealed class EntitySpawnTests
     }
 
     [Test]
-    public void Largest_IsOneHundredNinetyTwoBytes()
+    public void Largest_IsOneHundredTwentySixBytes()
     {
         var largest = new EntitySpawn(
             new EntityId(long.MaxValue),
@@ -133,12 +129,11 @@ public sealed class EntitySpawnTests
             new WorldDirection(0f, 1f),
             EntityStateFlags.None,
             0,
-            $"item.{new string('a', DefinitionIdLimits.MaxLength - 5)}",
             new string('A', CharacterNames.MaxLength));
 
         byte[] bytes = Encode(largest);
 
-        Assert.That(bytes, Has.Length.EqualTo(192));
+        Assert.That(bytes, Has.Length.EqualTo(126), "protocol 49: no worn weapon");
         Assert.That(EntitySpawn.TryRead(bytes, out _), Is.True);
     }
 
@@ -155,7 +150,7 @@ public sealed class EntitySpawnTests
             0);
         byte[] bytes = new byte[npc.GetEncodedLength()];
         npc.Write(bytes);
-        byte[] withHealth = WireMatrix.With(bytes, bytes.Length - 6, 0x01, 0x00);
+        byte[] withHealth = WireMatrix.With(bytes, bytes.Length - 4, 0x01, 0x00);
         byte[] monsterAsNpc = WireMatrix.With(WireMatrix.With(MonsterBytes, KindOffset, 0x04), 44, 0x00, 0x00);
 
         Assert.That(EntitySpawn.TryRead(bytes, out EntitySpawn? read), Is.True);
@@ -183,56 +178,8 @@ public sealed class EntitySpawnTests
             new WorldDirection(0f, 1f),
             EntityStateFlags.None,
             1000,
-            "",
             "Anna");
         Assert.That(EntitySpawn.TryRead(Encode(namedMonster), out _), Is.False, "only a player is named");
-    }
-
-    [Test]
-    public void Player_WithAWornWeapon_RoundTripsIt_AndNoOtherKindCarriesOne()
-    {
-        var armed = new EntitySpawn(
-            new EntityId(7),
-            EntityKind.Player,
-            "job.adventurer",
-            new WorldPosition(1f, 0f, 1f),
-            new WorldDirection(0f, 1f),
-            EntityStateFlags.None,
-            0,
-            "item.weapon.training_sword",
-            "Wearer1");
-        var armedMonster = new EntitySpawn(
-            new EntityId(8),
-            EntityKind.Monster,
-            "monster.a",
-            new WorldPosition(1f, 0f, 1f),
-            new WorldDirection(0f, 1f),
-            EntityStateFlags.None,
-            1000,
-            "item.weapon.training_sword");
-        var badWeapon = new EntitySpawn(
-            new EntityId(9),
-            EntityKind.Player,
-            "job.adventurer",
-            new WorldPosition(1f, 0f, 1f),
-            new WorldDirection(0f, 1f),
-            EntityStateFlags.None,
-            0,
-            "Training Sword",
-            "Wearer2");
-        byte[] bytes = new byte[armed.GetEncodedLength()];
-        armed.Write(bytes);
-        byte[] monster = new byte[armedMonster.GetEncodedLength()];
-        armedMonster.Write(monster);
-        byte[] bad = new byte[badWeapon.GetEncodedLength()];
-        badWeapon.Write(bad);
-
-        Assert.That(EntitySpawn.TryRead(bytes, out EntitySpawn? read), Is.True);
-        Assert.That(read!.WornWeapon, Is.EqualTo("item.weapon.training_sword"));
-        Assert.That(EntitySpawn.TryRead(monster, out _), Is.False, "only a player wears a weapon");
-        Assert.That(EntitySpawn.TryRead(bad, out _), Is.False, "a worn weapon is an item ID");
-        Assert.That(EntitySpawn.TryRead(GoldenBytes, out EntitySpawn? unarmed), Is.True);
-        Assert.That(unarmed!.WornWeapon, Is.Empty, "unarmed");
     }
 
     [Test]

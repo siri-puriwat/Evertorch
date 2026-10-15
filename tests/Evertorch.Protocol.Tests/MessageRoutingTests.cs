@@ -81,7 +81,6 @@ public sealed class MessageRoutingTests
     [TestCase(MessageOpcode.NpcServices)]
     [TestCase(MessageOpcode.QuestLog)]
     [TestCase(MessageOpcode.CharacterSheet)]
-    [TestCase(MessageOpcode.WornWeaponChanged)]
     [TestCase(MessageOpcode.EntityRevived)]
     [TestCase(MessageOpcode.DisconnectNotice)]
     [TestCase(MessageOpcode.CharacterList)]
@@ -107,6 +106,7 @@ public sealed class MessageRoutingTests
     [TestCase(MessageOpcode.RefineOutcome)]
     [TestCase(MessageOpcode.CardRemovalFees)]
     [TestCase(MessageOpcode.InspectedEquipment)]
+    [TestCase(MessageOpcode.EquipmentAppearance)]
     public void TryGetRoute_ForSessionAndLifecycleMessages_IsReliableOrderedOnControl(MessageOpcode opcode)
     {
         MessageRouting.TryGetRoute(opcode, out ProtocolChannel channel, out MessageDelivery delivery);
@@ -169,6 +169,7 @@ public sealed class MessageRoutingTests
     [TestCase(MessageOpcode.CardRemovalFees, false)]
     [TestCase(MessageOpcode.InspectPlayer, true)]
     [TestCase(MessageOpcode.InspectedEquipment, false)]
+    [TestCase(MessageOpcode.EquipmentAppearance, false)]
     [TestCase(MessageOpcode.Respawn, true)]
     [TestCase(MessageOpcode.MoveInput, true)]
     [TestCase(MessageOpcode.StopMovement, true)]
@@ -231,11 +232,11 @@ public sealed class MessageRoutingTests
             "CreateCharacterResult=0x8017", "CommandRejected=0x8018",
             "LogoutComplete=0x8019", "CharacterProgress=0x801A", "SkillList=0x801B",
             "StatusEffects=0x801C", "NpcServices=0x801D", "QuestLog=0x801E", "CharacterSheet=0x801F",
-            "WornWeaponChanged=0x8020", "PartyEvent=0x8021", "PartyRoster=0x8022", "PartyMemberStatus=0x8023",
+            "PartyEvent=0x8021", "PartyRoster=0x8022", "PartyMemberStatus=0x8023",
             "BossAnnouncement=0x8024", "MvpAwarded=0x8025", "TradeEvent=0x8026", "TradeSide=0x8027",
             "StorageSnapshot=0x8028", "StorageChanged=0x8029", "MarketBoard=0x802A", "MarketMine=0x802B",
             "MarketEvent=0x802C", "RefineTable=0x802D", "RefineOutcome=0x802E", "CardRemovalFees=0x802F",
-            "InspectedEquipment=0x8030"
+            "InspectedEquipment=0x8030", "EquipmentAppearance=0x8031"
         };
 
         string[] actual = ((MessageOpcode[])Enum.GetValues(typeof(MessageOpcode)))
@@ -256,9 +257,17 @@ public sealed class MessageRoutingTests
     }
 
     [Test]
-    public void ProtocolVersion_IsFortyEight()
+    public void ProtocolVersion_IsFortyNine()
     {
-        Assert.That(ProtocolConstants.ProtocolVersion, Is.EqualTo(48));
+        Assert.That(ProtocolConstants.ProtocolVersion, Is.EqualTo(49));
+    }
+
+    // Protocol 49 retired the worn weapon's change: its opcode routes nowhere and is never reused (Network Protocol §6).
+    [Test]
+    public void TryGetRoute_ForTheRetiredWornWeaponOpcode_IsRefused()
+    {
+        Assert.That(MessageRouting.TryGetRoute((MessageOpcode)0x8020, out _, out _), Is.False);
+        Assert.That(Enum.IsDefined(typeof(MessageOpcode), (ushort)0x8020), Is.False);
     }
 
     [Test]

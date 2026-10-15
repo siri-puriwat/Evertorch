@@ -83,6 +83,7 @@ public sealed class GameClient : MonoBehaviour
 
     // An inspection is scored when throttled too (Network Protocol §11).
     private readonly ChatThrottle m_inspectThrottle = new(ChatThrottle.ReadBurst);
+    private readonly InspectionParts m_inspection = new();
     private readonly HashSet<HeldAct> m_ailmentRefusalsSaid = new();
     private IClientTransport? m_socket;
     private ManualMoveSource? m_manualSource;
@@ -390,6 +391,7 @@ public sealed class GameClient : MonoBehaviour
     private void Update()
     {
         Connection?.Poll();
+        m_inspection.Advance(Time.realtimeSinceStartupAsDouble);
         if (m_world == null || m_driver == null || m_clock == null || m_controller == null)
         {
             // A click made while there is no world to walk in is dropped, not saved up for the next one.
@@ -1303,6 +1305,7 @@ public sealed class GameClient : MonoBehaviour
 
         m_isChangingMap = false;
         m_world = world;
+        m_inspection.Forget();
         Material material = ResolveMaterial();
         Material overlay = ResolveOverlayMaterial();
         MapLook? look = FindFirstObjectByType<MapLook>();
@@ -1322,7 +1325,7 @@ public sealed class GameClient : MonoBehaviour
 
         world.RemoteSpawned += AddRemoteView;
         world.RemoteDespawned += RemoveRemoteView;
-        world.RemoteWornWeaponChanged += HoldRemoteWeapon;
+        world.RemoteAppearanceChanged += HoldRemoteWeapon;
         world.Inventory.Changed += HoldLocalWeapon;
         world.LocalJobChanged += ReplaceLocalBody;
         world.AilmentsChanged += OnAilmentsChanged;
@@ -2240,26 +2243,36 @@ public sealed class GameClient : MonoBehaviour
             return 0;
         }
 
-        return Connection.SendInspectPlayer(entity);
+        uint sequence = Connection.SendInspectPlayer(entity);
+        if (sequence != 0)
+        {
+            m_inspection.Expect(sequence, entity, Time.realtimeSinceStartupAsDouble);
+        }
+
+        return sequence;
     }
 
     // The answer opens the Inspect window in place of the NPC, Stats, Skills, or Card window; a trade opened since the
     // asking keeps the side slot, so its answer is not shown.
-    private void OnInspectedEquipment(InspectedEquipment message)
+    private void OnInspectedEquipment(InspectedEquipment part)
     {
-        if (m_inspectWindow == null || m_world == null || IsTrading)
+        if (!m_inspection.TryAdd(part, out PlayerInspection? whole)
+            || whole == null
+            || m_inspectWindow == null
+            || m_world == null
+            || IsTrading)
         {
             return;
         }
 
-        string name = m_world.Remotes.TryGetValue(message.Entity, out RemoteEntity? remote)
+        string name = m_world.Remotes.TryGetValue(whole.Entity, out RemoteEntity? remote)
             ? remote.Name
             : string.Empty;
         m_npcWindow?.Close();
         m_statsWindow?.Close();
         m_skillsWindow?.Close();
         m_cardWindow?.Close();
-        m_inspectWindow.Open(message, name);
+        m_inspectWindow.Open(whole, name);
     }
 
     /// <summary>
@@ -2432,7 +2445,7 @@ public sealed class GameClient : MonoBehaviour
         {
             m_world.RemoteSpawned -= AddRemoteView;
             m_world.RemoteDespawned -= RemoveRemoteView;
-            m_world.RemoteWornWeaponChanged -= HoldRemoteWeapon;
+            m_world.RemoteAppearanceChanged -= HoldRemoteWeapon;
             m_world.Inventory.Changed -= HoldLocalWeapon;
             m_world.LocalJobChanged -= ReplaceLocalBody;
             m_world.AilmentsChanged -= OnAilmentsChanged;
@@ -2449,6 +2462,7 @@ public sealed class GameClient : MonoBehaviour
         m_telegraphs?.Dispose();
         m_telegraphs = null;
         m_world = null;
+        m_inspection.Forget();
         m_driver = null;
         m_autoAttack = null;
         m_pickup = null;

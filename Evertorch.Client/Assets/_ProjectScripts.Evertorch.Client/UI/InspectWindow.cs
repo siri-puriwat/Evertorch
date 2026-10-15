@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
-using Evertorch.Protocol;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -90,7 +89,7 @@ public sealed class InspectWindow : MonoBehaviour
     /// <summary>
     ///     Shows what the player named <paramref name="name" /> wears, as <paramref name="shown" /> says.
     /// </summary>
-    public void Open(InspectedEquipment shown, string name)
+    public void Open(PlayerInspection shown, string name)
     {
         ClientWorld? world = m_client != null ? m_client.World : null;
         if (world == null || shown == null)
@@ -121,7 +120,7 @@ public sealed class InspectWindow : MonoBehaviour
         return Math.Max(0f, Math.Min(needed, room));
     }
 
-    private void Show(InspectedEquipment shown, string name, ClientContent? content)
+    private void Show(PlayerInspection shown, string name, ClientContent? content)
     {
         foreach (GameObject row in m_rowObjects)
         {

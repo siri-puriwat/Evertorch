@@ -124,7 +124,7 @@ public sealed class WornEquipment
     {
         var pieces = new List<WornPiece>(worn.Count);
         var cards = new List<IReadOnlyList<ItemDefinitionId>>(worn.Count);
-        ItemDefinitionId? weapon = null;
+        var appearance = new ItemDefinitionId[EquipmentPositions.All.Count];
         ItemEquipment? weaponEquipment = null;
         ItemEquipment? armorEquipment = null;
         foreach (InventoryEntry row in worn)
@@ -132,9 +132,9 @@ public sealed class WornEquipment
             ItemDefinition item = content.Items[row.Item];
             pieces.Add(new WornPiece(row.Slot, item, TableOf(content, item), row.RefineLevel));
             cards.Add(row.Cards);
+            appearance[(int)row.Slot - 1] = row.Item;
             if (row.Slot == EquipmentSlot.Weapon)
             {
-                weapon = row.Item;
                 weaponEquipment = item.Equipment;
             }
             else if (row.Slot == EquipmentSlot.Armor)
@@ -145,7 +145,7 @@ public sealed class WornEquipment
 
         CardBonus bonus = CardsOf(content, cards);
         player.Weapon = weaponEquipment;
-        player.SetWornWeapon(weapon);
+        player.SetAppearance(appearance);
         player.Armor = armorEquipment;
         player.CardBonus = bonus;
         player.Equipment = Of(pieces, bonus);
@@ -176,22 +176,23 @@ public sealed class WornEquipment
     }
 
     /// <summary>
-    ///     What an inspection of the player <paramref name="entity" /> shows (Gameplay Systems §11.7): the worn weapon and
-    ///     armor in the character's settled inventory, each with its refine level and cards.
+    ///     What an inspection shows (Gameplay Systems §11.1): each of the eight positions of the character's settled
+    ///     inventory, in position order, with its item, refine level, and cards, or empty.
     /// </summary>
-    public static InspectedEquipment InspectionOf(EntityId entity, CharacterInventory inventory)
+    public static InspectedEntry[] InspectionOf(CharacterInventory inventory)
     {
-        return new InspectedEquipment(
-            entity,
-            InspectedIn(inventory, EquipmentSlot.Weapon),
-            InspectedIn(inventory, EquipmentSlot.Armor));
-    }
+        var entries = new InspectedEntry[EquipmentPositions.All.Count];
+        for (int index = 0; index < entries.Length; index++)
+        {
+            EquipmentSlot slot = EquipmentPositions.All[index];
+            entries[index] = new InspectedEntry(
+                slot,
+                inventory.TryGetRow(inventory.WornIn(slot), out InventoryEntry row)
+                    ? new InspectedItem(row.Item, row.RefineLevel, row.Cards)
+                    : default);
+        }
 
-    private static InspectedItem InspectedIn(CharacterInventory inventory, EquipmentSlot slot)
-    {
-        return inventory.TryGetRow(inventory.WornIn(slot), out InventoryEntry row)
-            ? new InspectedItem(row.Item, row.RefineLevel, row.Cards)
-            : default;
+        return entries;
     }
 
     /// <summary>

@@ -166,8 +166,8 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
             case MessageOpcode.EntityDespawn:
                 OnEntityDespawn(payload);
                 break;
-            case MessageOpcode.WornWeaponChanged:
-                OnWornWeaponChanged(payload);
+            case MessageOpcode.EquipmentAppearance:
+                OnEquipmentAppearance(payload);
                 break;
             case MessageOpcode.ChatReceived:
                 OnChatReceived(payload);
@@ -1410,7 +1410,8 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
     public event Action<RefineOutcome>? RefineOutcomeReceived;
 
     /// <summary>
-    ///     What another player wears, the answer to the player's own inspection, while in the world.
+    ///     A part of what another player wears, the answer to the player's own inspection, while in the world; the
+    ///     receiver puts the parts together (<see cref="InspectionParts" />).
     /// </summary>
     public event Action<InspectedEquipment>? InspectedEquipmentReceived;
 
@@ -1919,9 +1920,9 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
         }
     }
 
-    private void OnWornWeaponChanged(ReadOnlySpan<byte> payload)
+    private void OnEquipmentAppearance(ReadOnlySpan<byte> payload)
     {
-        if (!WornWeaponChanged.TryRead(payload, out WornWeaponChanged? changed) || changed == null)
+        if (!EquipmentAppearance.TryRead(payload, out EquipmentAppearance? appearance) || appearance == null)
         {
             MalformedMessages++;
         }
@@ -1931,7 +1932,7 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
         }
         else
         {
-            World.OnWornWeaponChanged(changed);
+            World.OnEquipmentAppearance(appearance);
         }
     }
 

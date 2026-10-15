@@ -11,6 +11,7 @@ namespace Evertorch.Server
 /// </summary>
 public sealed class PlayerEntity : WorldEntity
 {
+    private readonly ItemDefinitionId[] m_appearance = new ItemDefinitionId[EquipmentPositions.All.Count];
     private readonly Dictionary<SkillDefinitionId, int> m_skills = new();
 
     public PlayerEntity(
@@ -168,14 +169,26 @@ public sealed class PlayerEntity : WorldEntity
     public int Deaths { get; set; }
 
     /// <summary>
-    ///     The item of the weapon the player wears, which everyone near sees in its hand; null while the weapon slot is
-    ///     empty (Gameplay Systems §11.1).
+    ///     The item worn in each of the eight positions, in position order from the weapon, default where none: what
+    ///     everyone who sees the player knows of its equipment (Gameplay Systems §11.1).
     /// </summary>
-    public ItemDefinitionId? WornWeapon { get; private set; }
+    public IReadOnlyList<ItemDefinitionId> Appearance => m_appearance;
 
     /// <summary>
-    ///     Set when <see cref="WornWeapon" /> changes: the next visibility pass tells every session that already sees the
-    ///     player, and clears the flag (Network Protocol §9).
+    ///     Raised at every committed change of what the player wears, even one that leaves the same items, so an
+    ///     inspection read at another revision is stale (Gameplay Systems §11.1).
+    /// </summary>
+    public uint AppearanceRevision { get; private set; }
+
+    /// <summary>
+    ///     The item of the weapon the player wears; null while the weapon's position is empty.
+    /// </summary>
+    public ItemDefinitionId? WornWeapon =>
+        m_appearance[0] == default ? null : m_appearance[0];
+
+    /// <summary>
+    ///     Set at a committed change of what the player wears: the next visibility pass sends the appearance to every
+    ///     session that already sees the player, and clears the flag (Network Protocol §9).
     /// </summary>
     public bool AppearancePending { get; set; }
 
@@ -192,17 +205,24 @@ public sealed class PlayerEntity : WorldEntity
     public override string DefinitionId => Job.Value;
 
     /// <summary>
-    ///     Keeps the worn weapon's item; only a change of the item itself, never an armor or the same item again, is
-    ///     announced.
+    ///     Keeps the item of each of the eight positions, in position order; only
+    ///     <see cref="WornEquipment" />'s <c>Dress</c> sets it.
     /// </summary>
-    public void SetWornWeapon(ItemDefinitionId? item)
+    public void SetAppearance(IReadOnlyList<ItemDefinitionId> items)
     {
-        if (Nullable.Equals(WornWeapon, item))
+        for (int index = 0; index < m_appearance.Length; index++)
         {
-            return;
+            m_appearance[index] = items[index];
         }
+    }
 
-        WornWeapon = item;
+    /// <summary>
+    ///     A committed equip, unequip, or job change's unequip changed what the player wears: the revision goes up and
+    ///     those who see the player hear of it.
+    /// </summary>
+    public void MarkAppearanceChanged()
+    {
+        AppearanceRevision = unchecked(AppearanceRevision + 1);
         AppearancePending = true;
     }
 

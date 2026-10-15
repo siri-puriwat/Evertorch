@@ -239,10 +239,11 @@ public sealed class CardAcceptanceTests
 
         InspectedEquipment answer = seen.Single();
         Assert.That(
-            (answer.Entity, answer.Weapon.Item.Value, answer.Weapon.Cards.Select(card => card.Value).Single()),
+            (answer.Entity, answer.ItemIn(EquipmentSlot.Weapon).Item.Value,
+                answer.ItemIn(EquipmentSlot.Weapon).Cards.Select(card => card.Value).Single()),
             Is.EqualTo((world.LocalEntity, TrainingSword, Keen)),
             $"{step}: the sword and its card");
-        Assert.That(answer.Armor.IsEmpty, Is.True, $"{step}: no armor worn");
+        Assert.That(answer.ItemIn(EquipmentSlot.Armor).IsEmpty, Is.True, $"{step}: no armor worn");
         Assert.That(heard, Is.Empty, $"{step}: Anna hears nothing");
     }
 

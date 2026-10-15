@@ -197,7 +197,6 @@ public sealed class PartyPanelTests
                 new WorldDirection(0f, 1f),
                 EntityStateFlags.None,
                 1000,
-                string.Empty,
                 "Bobby"));
         world.OnTargetChanged(new TargetChanged(Local, new EntityId(7)));
         yield return null;
@@ -232,7 +231,6 @@ public sealed class PartyPanelTests
                 new WorldDirection(0f, 1f),
                 EntityStateFlags.None,
                 1000,
-                string.Empty,
                 "Bobby"));
         world.OnTargetChanged(new TargetChanged(Local, new EntityId(7)));
         yield return null;
@@ -301,7 +299,6 @@ public sealed class PartyPanelTests
                 new WorldDirection(0f, 1f),
                 EntityStateFlags.None,
                 1000,
-                string.Empty,
                 "Bobby"));
     }
 

@@ -133,7 +133,6 @@ public sealed class CombatPresenterTests
                 new WorldDirection(0f, 1f),
                 EntityStateFlags.None,
                 1000,
-                string.Empty,
                 "Bobby"));
         Dictionary<EntityId, EntityView> remotes = CreateViews(out EntityView local);
         var bobbyObject = new GameObject("Bobby");

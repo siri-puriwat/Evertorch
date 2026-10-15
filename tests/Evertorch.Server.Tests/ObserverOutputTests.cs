@@ -49,7 +49,7 @@ public sealed class ObserverOutputTests
         MessageOpcode.EntitySpawn, MessageOpcode.EntityDespawn, MessageOpcode.EntitySnapshot,
         MessageOpcode.AttackStarted, MessageOpcode.Damage, MessageOpcode.EntityDied, MessageOpcode.EntityRevived,
         MessageOpcode.SkillCastStarted, MessageOpcode.SkillResolved, MessageOpcode.ItemDropped,
-        MessageOpcode.ItemPickedUp, MessageOpcode.WornWeaponChanged
+        MessageOpcode.ItemPickedUp, MessageOpcode.EquipmentAppearance
     };
 
     private static MapInstance GroundOf(TestServer server)
@@ -540,11 +540,13 @@ public sealed class ObserverOutputTests
                 .Select(cast => cast.Skill.Value),
             Is.EqualTo(new[] { Strike, FirstAid, Focus }));
         Assert.That(
-            Read(server, observer, MessageOpcode.WornWeaponChanged, payload =>
-                    WornWeaponChanged.TryRead(payload, out WornWeaponChanged? read) ? read : null)
-                .Select(changed => (changed.Entity, changed.WornWeapon)),
-            Is.EqualTo(new[] { (server.PlayerOf(actor).Id, Sword) }),
-            "the sword in the actor's hand, told once; the armor taken off, never");
+            Read(server, observer, MessageOpcode.EquipmentAppearance, payload =>
+                    EquipmentAppearance.TryRead(payload, out EquipmentAppearance? read) ? read : null)
+                .Where(appearance => appearance.Entity == server.PlayerOf(actor).Id)
+                .Select(appearance => appearance.ItemIn(EquipmentSlot.Weapon).Value)
+                .Last(),
+            Is.EqualTo(Sword),
+            "the sword in the actor's hand, from its appearance");
     }
 
     // The town's play (Milestone 7 verification line V4): the actor buys from the Quartermaster, sells to it, and

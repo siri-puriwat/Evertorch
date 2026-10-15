@@ -1,6 +1,5 @@
 using System;
 using System.Collections;
-using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -13,6 +12,7 @@ using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
 using UnityEngine.UI;
 using EntityId = Evertorch.Game.EntityId;
+using EquipmentSlot = Evertorch.Game.EquipmentSlot;
 using Object = UnityEngine.Object;
 
 namespace Evertorch.Client.Tests.PlayMode
@@ -132,20 +132,31 @@ public sealed class LiveServerEquipmentTests
             Is.EqualTo(TrainingSword),
             $"the other player sees the sword in Ann's hand: {server.JoinOutput()}");
 
-        var answers = new List<InspectedEquipment>();
-        other.InspectedEquipmentReceived += answers.Add;
-        Assert.That(other.SendInspectPlayer(ann), Is.Not.Zero, "asked");
+        // The bare connection puts the answer's parts together as the client does (Network Protocol §9).
+        var parts = new InspectionParts();
+        PlayerInspection? answer = null;
+        Action<InspectedEquipment> take = part =>
+        {
+            if (parts.TryAdd(part, out PlayerInspection? whole))
+            {
+                answer = whole;
+            }
+        };
+        other.InspectedEquipmentReceived += take;
+        uint asked = other.SendInspectPlayer(ann);
+        parts.Expect(asked, ann, Time.realtimeSinceStartupAsDouble);
+        Assert.That(asked, Is.Not.Zero, "asked");
         yield return WaitUntil(
             () =>
             {
                 other.Poll();
-                return answers.Count == 1;
+                return answer != null;
             },
             StartTimeoutSeconds);
-        other.InspectedEquipmentReceived -= answers.Add;
-        Assert.That(answers, Has.Count.EqualTo(1), "answered");
+        other.InspectedEquipmentReceived -= take;
+        Assert.That(answer, Is.Not.Null, "answered");
         Assert.That(
-            (answers[0].Weapon.Item.Value, answers[0].Armor.Item.Value),
+            (answer!.ItemIn(EquipmentSlot.Weapon).Item.Value, answer.ItemIn(EquipmentSlot.Armor).Item.Value),
             Is.EqualTo((TrainingSword, ClothArmor)),
             "the sword and the cloth inspected");
         Assert.That(other.MalformedMessages + other.UnexpectedMessages, Is.Zero, "the other player's traffic");

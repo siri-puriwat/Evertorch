@@ -154,15 +154,15 @@ public sealed class EquipmentAcceptanceTests
         anna.Connection.InspectedEquipmentReceived -= heard.Add;
 
         InspectedEquipment answer = seen.Single();
+        InspectedItem weapon = answer.ItemIn(EquipmentSlot.Weapon);
+        InspectedItem worn = answer.ItemIn(EquipmentSlot.Armor);
         Assert.That(
-            (answer.Entity, answer.Weapon.Item.Value, answer.Weapon.RefineLevel, answer.Weapon.Cards.Count),
+            (answer.Entity, weapon.Item.Value, weapon.RefineLevel, weapon.Cards.Count),
             Is.EqualTo((anna.World.LocalEntity, TrainingSword, (byte)0, 0)),
             $"{step}: the sword");
-        Assert.That(
-            (answer.Armor.Item.Value, answer.Armor.RefineLevel),
-            Is.EqualTo((armor, (byte)armorLevel)),
-            $"{step}: the armor");
-        Assert.That(answer.Armor.Cards.Select(card => card.Value), Is.EqualTo(armorCards), $"{step}: its cards");
+        Assert.That((worn.Item.Value, worn.RefineLevel), Is.EqualTo((armor, (byte)armorLevel)), $"{step}: the armor");
+        Assert.That(worn.Cards.Select(card => card.Value), Is.EqualTo(armorCards), $"{step}: its cards");
+        Assert.That(answer.Entries.Skip(2).Select(entry => entry.Item.IsEmpty), Is.All.True, $"{step}: the rest empty");
         Assert.That(heard, Is.Empty, $"{step}: Anna hears nothing");
     }
 

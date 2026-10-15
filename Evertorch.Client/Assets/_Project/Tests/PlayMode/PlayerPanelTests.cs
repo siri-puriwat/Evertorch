@@ -363,7 +363,6 @@ public sealed class PlayerPanelTests
                 new WorldDirection(0f, 1f),
                 EntityStateFlags.None,
                 healthPermille,
-                string.Empty,
                 name));
     }
 
@@ -2129,13 +2128,21 @@ public sealed class PlayerPanelTests
         typeof(GameClient).GetField("m_statsWindow", field)!.SetValue(client, statsWindow);
         Spawn(world, 7, EntityKind.Player, "job.adventurer", 1000, "Bobby");
         client.ToggleStats();
-        var answer = new InspectedEquipment(
+        var weapon = new InspectedItem(
+            new ItemDefinitionId(IronSword),
+            7,
+            new[] { new ItemDefinitionId(Keen), new ItemDefinitionId(Arcane) });
+        var armor = new InspectedItem(new ItemDefinitionId(Mantle), 0, new[] { new ItemDefinitionId(Shelled) });
+        InspectedEntry[] entries = EquipmentPositions.All
+            .Select(slot => new InspectedEntry(
+                slot,
+                slot == EquipmentSlot.Weapon ? weapon : slot == EquipmentSlot.Armor ? armor : default))
+            .ToArray();
+        var answer = new InspectedEquipment(new EntityId(7), 3, 0, 0, 1, entries);
+        ((InspectionParts)typeof(GameClient).GetField("m_inspection", field)!.GetValue(client)).Expect(
+            3,
             new EntityId(7),
-            new InspectedItem(
-                new ItemDefinitionId(IronSword),
-                7,
-                new[] { new ItemDefinitionId(Keen), new ItemDefinitionId(Arcane) }),
-            new InspectedItem(new ItemDefinitionId(Mantle), 0, new[] { new ItemDefinitionId(Shelled) }));
+            Time.realtimeSinceStartupAsDouble);
 
         typeof(GameClient).GetMethod("OnInspectedEquipment", field)!.Invoke(client, new object[] { answer });
         yield return null;

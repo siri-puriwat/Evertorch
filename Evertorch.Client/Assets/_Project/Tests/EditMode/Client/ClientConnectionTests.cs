@@ -1395,7 +1395,6 @@ public sealed class ClientConnectionTests
             new WorldDirection(0f, 1f),
             EntityStateFlags.None,
             0,
-            "",
             "Other1");
         EntitySnapshot snapshot = ClientWorldFixture.Snapshot(
             5,

@@ -252,9 +252,9 @@ public sealed class ClientWorld
     public event Action<RemoteEntity>? RemoteDespawned;
 
     /// <summary>
-    ///     A player this client sees now wears another weapon, or none.
+    ///     What a player this client sees wears arrived, after its spawn or at a change (Network Protocol §9).
     /// </summary>
-    public event Action<RemoteEntity>? RemoteWornWeaponChanged;
+    public event Action<RemoteEntity>? RemoteAppearanceChanged;
 
     /// <summary>
     ///     A snapshot changed the ailments of an entity this client knows, the local player included; its flags before
@@ -349,27 +349,28 @@ public sealed class ClientWorld
             spawn.Kind,
             spawn.DefinitionId,
             spawn.StateFlags,
-            spawn.HealthPermille) { WornWeapon = spawn.WornWeapon, Name = spawn.Name };
+            spawn.HealthPermille) { Name = spawn.Name };
         remote.Buffer.Add(LatestServerTick * m_tickSeconds, spawn.Position, spawn.Facing);
         m_remotes.Add(spawn.Entity, remote);
         RemoteSpawned?.Invoke(remote);
     }
 
-    public void OnWornWeaponChanged(WornWeaponChanged changed)
+    public void OnEquipmentAppearance(EquipmentAppearance appearance)
     {
-        if (changed == null)
+        if (appearance == null)
         {
-            throw new ArgumentNullException(nameof(changed));
+            throw new ArgumentNullException(nameof(appearance));
         }
 
-        if (!m_remotes.TryGetValue(changed.Entity, out RemoteEntity? remote) || remote.Kind != EntityKind.Player)
+        if (!m_remotes.TryGetValue(appearance.Entity, out RemoteEntity? remote) || remote.Kind != EntityKind.Player)
         {
             UnknownEntityEvents++;
             return;
         }
 
-        remote.WornWeapon = changed.WornWeapon;
-        RemoteWornWeaponChanged?.Invoke(remote);
+        remote.Appearance = appearance.Items;
+        remote.AppearanceRevision = appearance.Revision;
+        RemoteAppearanceChanged?.Invoke(remote);
     }
 
     public void OnDespawn(EntityDespawn despawn)

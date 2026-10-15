@@ -2268,6 +2268,11 @@ public sealed class ItemActionSystem : ITickPhase
         int maxSpirit = player.MaxSpirit;
         m_combat.InterruptCast(player);
         WornEquipment.Dress(player, m_content, character.Inventory);
+        if (takenOff.Length > 0)
+        {
+            player.MarkAppearanceChanged();
+        }
+
         m_builds.ChangeJob(
             player,
             character.Connection?.Connection ?? default,
@@ -2320,6 +2325,7 @@ public sealed class ItemActionSystem : ITickPhase
         int maxHealth = player.MaxHealth;
         int maxSpirit = player.MaxSpirit;
         WornEquipment.Dress(player, m_content, character.Inventory);
+        player.MarkAppearanceChanged();
         m_stats.Recalculate(player, m_content.Jobs[player.Job]);
         if (player.MaxHealth != maxHealth || player.MaxSpirit != maxSpirit)
         {

@@ -62,7 +62,9 @@ public sealed class VisibilityTests
         server.Place(mover, 6f, 0.5f);
         server.Tick();
 
-        Assert.That(server.Transport.ControlOpcodesSentTo(near), Is.EqualTo(new[] { MessageOpcode.EntitySpawn }));
+        Assert.That(server.Transport.ControlOpcodesSentTo(near),
+            Is.EqualTo(new[] { MessageOpcode.EntitySpawn, MessageOpcode.EquipmentAppearance }),
+            "a spawn, then what it wears");
     }
 
     [Test]
@@ -100,7 +102,10 @@ public sealed class VisibilityTests
 
         MessageOpcode[] toFirst = server.Transport.ControlOpcodesSentTo(first).ToArray();
         Assert.That(toFirst.Count(opcode => opcode == MessageOpcode.EntitySpawn), Is.EqualTo(1));
-        EntitySpawn.TryRead(server.Transport.ControlSentTo(first).Last().Payload, out EntitySpawn? spawn);
+        Assert.That(toFirst.Count(opcode => opcode == MessageOpcode.EquipmentAppearance), Is.EqualTo(1));
+        EntitySpawn.TryRead(
+            server.Transport.ControlSentTo(first).Last(message => message.Opcode == MessageOpcode.EntitySpawn).Payload,
+            out EntitySpawn? spawn);
         Assert.That(spawn!.Entity, Is.EqualTo(server.PlayerOf(second).Id));
     }
 
@@ -115,8 +120,10 @@ public sealed class VisibilityTests
         server.Place(far, 6f, 0.5f);
         server.Tick(4);
 
-        Assert.That(server.Transport.ControlOpcodesSentTo(near), Is.EqualTo(new[] { MessageOpcode.EntitySpawn }));
-        Assert.That(server.Transport.ControlOpcodesSentTo(far), Is.EqualTo(new[] { MessageOpcode.EntitySpawn }));
+        Assert.That(server.Transport.ControlOpcodesSentTo(near),
+            Is.EqualTo(new[] { MessageOpcode.EntitySpawn, MessageOpcode.EquipmentAppearance }));
+        Assert.That(server.Transport.ControlOpcodesSentTo(far),
+            Is.EqualTo(new[] { MessageOpcode.EntitySpawn, MessageOpcode.EquipmentAppearance }));
     }
 
     [Test]
@@ -149,7 +156,8 @@ public sealed class VisibilityTests
         {
             MessageOpcode.ServerHello, MessageOpcode.CharacterList, MessageOpcode.CreateCharacterResult,
             MessageOpcode.CharacterList, MessageOpcode.WorldEntered, MessageOpcode.CharacterSheet,
-            MessageOpcode.EntitySpawn, MessageOpcode.InventorySnapshot, MessageOpcode.SkillList,
+            MessageOpcode.EntitySpawn, MessageOpcode.EquipmentAppearance, MessageOpcode.InventorySnapshot,
+            MessageOpcode.SkillList,
             MessageOpcode.StatusEffects, MessageOpcode.QuestLog, MessageOpcode.PartyRoster
         };
         Assert.That(server.Transport.ControlOpcodesSentTo(second), Is.EqualTo(expected));

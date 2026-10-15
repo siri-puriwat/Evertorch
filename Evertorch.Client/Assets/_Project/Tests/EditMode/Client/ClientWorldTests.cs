@@ -94,6 +94,30 @@ public sealed class ClientWorldTests
         Assert.That(despawned, Is.EqualTo(new[] { Other }));
     }
 
+    // Network Protocol §9: the appearance that follows a player's spawn, and each later one, sets what it wears and the
+    // weapon in its hand; one for an entity the client does not know as a player is counted and changes nothing.
+    [Test]
+    public void OnEquipmentAppearance_SetsWhatAKnownPlayerWears_AndCountsAnyOther()
+    {
+        ClientWorld world = ClientWorldFixture.Create(ClientTestGrids.CreateYard(), Start, 500);
+        world.OnSpawn(Spawn(Other, Start));
+        var changed = new List<EntityId>();
+        world.RemoteAppearanceChanged += remote => changed.Add(remote.Entity);
+        var sword = new ItemDefinitionId("item.weapon.training_sword");
+        var charm = new ItemDefinitionId("item.accessory.traveler_charm");
+        ItemDefinitionId[] items = { sword, default, default, default, default, default, charm, default };
+
+        world.OnEquipmentAppearance(new EquipmentAppearance(Other, 4, items));
+        world.OnEquipmentAppearance(new EquipmentAppearance(new EntityId(999), 1, items));
+        world.OnEquipmentAppearance(new EquipmentAppearance(ClientWorldFixture.LocalEntity, 1, items));
+
+        RemoteEntity remote = world.Remotes[Other];
+        Assert.That(changed, Is.EqualTo(new[] { Other }));
+        Assert.That((remote.WornWeapon, remote.AppearanceRevision), Is.EqualTo(("item.weapon.training_sword", 4u)));
+        Assert.That(remote.Appearance, Is.EqualTo(items));
+        Assert.That(world.UnknownEntityEvents, Is.EqualTo(2), "an unknown entity, and the local player's own");
+    }
+
     [Test]
     public void OnSnapshot_AcrossTickWrapAround_TreatsTheWrappedTickAsNewer()
     {

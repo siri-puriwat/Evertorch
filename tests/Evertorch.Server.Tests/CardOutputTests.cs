@@ -112,7 +112,7 @@ public sealed class CardOutputTests
         Settle(server, owner);
 
         MessageOpcode[] observed = Heard(server, observer);
-        Assert.That(observed, Does.Contain(MessageOpcode.WornWeaponChanged), "the item, as before the cards");
+        Assert.That(observed, Does.Contain(MessageOpcode.EquipmentAppearance), "the item alone, in the appearance");
         Assert.That(observed.Intersect(CardCarriers), Is.Empty, "no message that names a card");
     }
 

@@ -2,7 +2,8 @@ namespace Evertorch.Protocol
 {
 /// <summary>
 ///     Stable wire identities. Client-to-server messages use 0x0001–0x7FFF and server-to-client messages use
-///     0x8000–0xFFFF. A value is never reused with an incompatible meaning.
+///     0x8000–0xFFFF. A value is never reused with an incompatible meaning, and a retired one never again: 0x8020, the
+///     worn weapon's change until protocol 49.
 /// </summary>
 public enum MessageOpcode : ushort
 {
@@ -83,7 +84,6 @@ public enum MessageOpcode : ushort
     NpcServices = 0x801D,
     QuestLog = 0x801E,
     CharacterSheet = 0x801F,
-    WornWeaponChanged = 0x8020,
     PartyEvent = 0x8021,
     PartyRoster = 0x8022,
     PartyMemberStatus = 0x8023,
@@ -99,6 +99,7 @@ public enum MessageOpcode : ushort
     RefineTable = 0x802D,
     RefineOutcome = 0x802E,
     CardRemovalFees = 0x802F,
-    InspectedEquipment = 0x8030
+    InspectedEquipment = 0x8030,
+    EquipmentAppearance = 0x8031
 }
 }

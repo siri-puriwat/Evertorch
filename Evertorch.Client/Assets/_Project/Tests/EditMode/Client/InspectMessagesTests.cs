@@ -44,7 +44,9 @@ public sealed class InspectMessagesTests
     [Test]
     public void Lines_NameEachWornItem_ItsCards_AndAnEmptySlot()
     {
-        var shown = new InspectedEquipment(new EntityId(9), new InspectedItem(Sword, 7, new[] { Keen, Keen }), default);
+        var items = new InspectedItem[8];
+        items[0] = new InspectedItem(Sword, 7, new[] { Keen, Keen });
+        var shown = new PlayerInspection(new EntityId(9), 3, items);
 
         Assert.That(
             InspectMessages.Lines(Content(), shown),

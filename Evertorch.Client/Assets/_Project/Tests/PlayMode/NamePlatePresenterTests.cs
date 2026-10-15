@@ -99,7 +99,6 @@ public sealed class NamePlatePresenterTests
                 new WorldDirection(0f, 1f),
                 EntityStateFlags.None,
                 healthPermille,
-                string.Empty,
                 name));
     }
 

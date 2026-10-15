@@ -72,7 +72,6 @@ public sealed class MessageFuzzTests
                     new WorldDirection(0f, 1f),
                     EntityStateFlags.Moving,
                     0,
-                    "",
                     "Anna")),
             payload => EntitySpawn.TryRead(payload, out EntitySpawn? message) ? Encode(message!) : null);
         yield return Case(
@@ -98,13 +97,14 @@ public sealed class MessageFuzzTests
                     new WorldDirection(0f, 1f),
                     EntityStateFlags.None,
                     0,
-                    "item.weapon.training_sword",
                     "Abcdefghijklmnopqrstuvw")),
             payload => EntitySpawn.TryRead(payload, out EntitySpawn? message) ? Encode(message!) : null);
         yield return Case(
-            "WornWeaponChanged",
-            Encode(WornWeaponChangedTests.Golden),
-            payload => WornWeaponChanged.TryRead(payload, out WornWeaponChanged? message) ? Encode(message!) : null);
+            "EquipmentAppearance",
+            Encode(EquipmentAppearanceTests.Golden.GetEncodedLength(), EquipmentAppearanceTests.Golden.Write),
+            payload => EquipmentAppearance.TryRead(payload, out EquipmentAppearance? message)
+                ? Encode(message!.GetEncodedLength(), message.Write)
+                : null);
         yield return Case(
             "ChatSend",
             Encode(ChatMessageTests.SendGolden),
@@ -1125,12 +1125,6 @@ public sealed class MessageFuzzTests
         return buffer;
     }
 
-    private static byte[] Encode(WornWeaponChanged message)
-    {
-        byte[] buffer = new byte[message.GetEncodedLength()];
-        message.Write(buffer);
-        return buffer;
-    }
 
     private static byte[] Encode(CharacterSheet message)
     {

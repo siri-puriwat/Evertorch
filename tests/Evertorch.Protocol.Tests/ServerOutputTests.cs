@@ -68,9 +68,9 @@ public sealed class ServerOutputTests
         ["EntitySnapshot"] = new[] { "Entities", "LastProcessedInputSequence", "ServerTick" },
         ["EntitySpawn"] = new[]
         {
-            "DefinitionId", "Entity", "Facing", "HealthPermille", "Kind", "Name", "Position", "StateFlags",
-            "WornWeapon"
+            "DefinitionId", "Entity", "Facing", "HealthPermille", "Kind", "Name", "Position", "StateFlags"
         },
+        ["EquipmentAppearance"] = new[] { "Entity", "Items", "Revision" },
         ["EntityState"] = new[] { "Entity", "Facing", "Position", "StateFlags", "VelocityX", "VelocityY", "VelocityZ" },
         ["InventoryChanged"] = new[] { "Changes", "Coins", "NewRevision", "PriorRevision" },
         ["InventoryEntry"] = new[] { "Cards", "InventoryItem", "Item", "Quantity", "RefineLevel", "Slot" },
@@ -92,7 +92,8 @@ public sealed class ServerOutputTests
         },
         ["CardRemovalFees"] = new[] { "Entries", "Npc" },
         ["CardRemovalFee"] = new[] { "Card", "Fee" },
-        ["InspectedEquipment"] = new[] { "Armor", "Entity", "Weapon" },
+        ["InspectedEquipment"] = new[] { "CommandSequence", "Entity", "Entries", "Part", "PartCount", "Revision" },
+        ["InspectedEntry"] = new[] { "Item", "Slot" },
         ["InspectedItem"] = new[] { "Cards", "IsEmpty", "Item", "RefineLevel" },
         ["QuestDefinitionId"] = new[] { "Value" },
         ["RefineOutcome"] = new[] { "InventoryItem", "Item", "LevelAfter", "LevelBefore", "Outcome" },
@@ -129,8 +130,7 @@ public sealed class ServerOutputTests
             "Facing", "Job", "LastCommandSequence", "Level", "LocalEntity", "Map", "MapEpoch", "MapInstance",
             "MaximumHealth", "MaximumSpirit", "MovementSpeed", "Position", "ServerTick"
         },
-        ["WorldPosition"] = new[] { "X", "Y", "Z" },
-        ["WornWeaponChanged"] = new[] { "Entity", "WornWeapon" }
+        ["WorldPosition"] = new[] { "X", "Y", "Z" }
     };
 
     // An NPC's prices, the board's, a refine's chances, and a quest's terms travel on purpose, because the player must

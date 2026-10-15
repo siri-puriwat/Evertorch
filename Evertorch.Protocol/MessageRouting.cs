@@ -65,7 +65,6 @@ public static class MessageRouting
             case MessageOpcode.ServerHello:
             case MessageOpcode.WorldEntered:
             case MessageOpcode.EntitySpawn:
-            case MessageOpcode.WornWeaponChanged:
             case MessageOpcode.EntityDespawn:
             case MessageOpcode.TargetChanged:
             case MessageOpcode.AttackStarted:
@@ -107,6 +106,7 @@ public static class MessageRouting
             case MessageOpcode.RefineOutcome:
             case MessageOpcode.CardRemovalFees:
             case MessageOpcode.InspectedEquipment:
+            case MessageOpcode.EquipmentAppearance:
                 return true;
             case MessageOpcode.MoveInput:
             case MessageOpcode.StopMovement:
