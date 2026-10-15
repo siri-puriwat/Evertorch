@@ -210,6 +210,19 @@ public sealed class MonsterAiSystem : ITickPhase
             brain.IdleUntilMs = now + DrawPause(monster.Definition);
         }
 
+        // A held monster neither decides nor steers, so it draws nothing and its leash waits; its decisions resume on
+        // their schedule once it is free (Gameplay Systems §9.1).
+        if (monster.IsHeld)
+        {
+            brain.DesiredDirection = default;
+            while (brain.NextDecisionMs <= now)
+            {
+                brain.NextDecisionMs += monster.Definition.ScanIntervalMs;
+            }
+
+            return;
+        }
+
         if (now >= brain.NextDecisionMs)
         {
             // Carried like an attack schedule: each decision adds the interval to the previous one's time.

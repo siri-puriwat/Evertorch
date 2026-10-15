@@ -1014,6 +1014,13 @@ public sealed class SessionManager : ITickPhase
             return CommandRejectionReason.NotAllowedNow;
         }
 
+        // A stun, a freeze, or a sleep holds the body, and a silence takes its skills (Gameplay Systems §9.1).
+        if ((player.IsHeld && IsRefusedWhileHeld(command.Kind))
+            || (command.Kind == InboundEventKind.UseSkill && player.HasAilment(Ailment.Silence)))
+        {
+            return CommandRejectionReason.NotAllowedNow;
+        }
+
         if (player.IsDead)
         {
             return command.Kind == InboundEventKind.Respawn && m_life.TryRespawn(session, tick)
@@ -1123,6 +1130,24 @@ public sealed class SessionManager : ITickPhase
                 command.CommandSequence),
             _ => CommandRejectionReason.NotAllowedNow
         };
+    }
+
+    // Held, the character neither fights, casts, picks up, uses an item or a card, deals with an NPC, nor starts or
+    // answers a trade; it may still equip, unequip, chat, target, cancel, spend points, inspect, and go on with an open
+    // trade (owner decision 25).
+    private static bool IsRefusedWhileHeld(InboundEventKind kind)
+    {
+        switch (kind)
+        {
+            case InboundEventKind.Equip:
+            case InboundEventKind.Unequip:
+                return false;
+            case InboundEventKind.TradeRequest:
+            case InboundEventKind.TradeReply:
+                return true;
+            default:
+                return IsBusyWhileTrading(kind);
+        }
     }
 
     private static bool IsBusyWhileTrading(InboundEventKind kind)

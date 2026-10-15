@@ -60,8 +60,9 @@ public sealed class MovementSystem : ITickPhase
     private static void MoveMonster(MonsterEntity monster, MapInstance map, in TickContext context)
     {
         WorldDirection direction = monster.IsDead || monster.Combat.IsSwinging || monster.Combat.IsCasting
-            ? default
-            : monster.Brain.DesiredDirection;
+            || monster.IsHeld
+                ? default
+                : monster.Brain.DesiredDirection;
         MovementStep step = MovementModel.Step(
             map.Definition.Navigation,
             monster.Position,
@@ -83,10 +84,14 @@ public sealed class MovementSystem : ITickPhase
 
     private void Move(PlayerEntity player, MapInstance map, PlayerInputState input, in TickContext context)
     {
-        // From a swing's start to its impact, through a cast, while dead, and while trading, input is consumed and
-        // acknowledged but applied as a zero direction (Gameplay Systems §5). Storing the zero keeps the hold timeout
-        // from resuming the walk later.
-        bool isHeld = player.IsDead || player.Combat.IsSwinging || player.Combat.IsCasting || player.IsTrading;
+        // From a swing's start to its impact, through a cast, while dead, while trading, and while stunned, frozen, or
+        // asleep, input is consumed and acknowledged but applied as a zero direction (Gameplay Systems §5). Storing
+        // the zero keeps the hold timeout from resuming the walk later.
+        bool isHeld = player.IsDead
+            || player.Combat.IsSwinging
+            || player.Combat.IsCasting
+            || player.IsTrading
+            || player.IsHeld;
         if (input.Queue.TryDequeue(out MoveIntent intent))
         {
             input.Direction = isHeld

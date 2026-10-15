@@ -78,6 +78,7 @@ public sealed class CombatSystem : ITickPhase
         foreach (MapInstance map in m_world.Maps)
         {
             InterruptCastsOnDepartedTargets(map);
+            HoldTheHeld(map);
             ResolveImpacts(map, now, context.Tick);
             BeginSwings(map, now, context.Tick);
             foreach (WorldEntity entity in map.Entities)
@@ -103,6 +104,8 @@ public sealed class CombatSystem : ITickPhase
         long now = TickMilliseconds(tick);
         CombatState combat = player.Combat;
         if (player.IsDead
+            || player.IsHeld
+            || player.HasAilment(Ailment.Silence)
             || !player.Skills.TryGetValue(skillId, out int level)
             || !m_content.Skills.TryGetValue(skillId, out SkillDefinition? skill)
             || !skill.HasEffect
@@ -185,6 +188,8 @@ public sealed class CombatSystem : ITickPhase
         long now = TickMilliseconds(tick);
         CombatState combat = monster.Combat;
         return !monster.IsDead
+            && !monster.IsHeld
+            && !monster.HasAilment(Ailment.Silence)
             && !target.IsDead
             && m_content.Skills.TryGetValue(skillId, out SkillDefinition? skill)
             && skill.HasEffect
@@ -449,6 +454,7 @@ public sealed class CombatSystem : ITickPhase
             EntityId targetId = attacker.Combat.SwingTarget;
             attacker.Combat.EndSwing();
             if (attacker.IsDead
+                || attacker.IsHeld
                 || !map.TryGetEntity(targetId, out WorldEntity? target)
                 || target == null
                 || target.IsDead)
@@ -848,6 +854,25 @@ public sealed class CombatSystem : ITickPhase
         }
     }
 
+    // A stun, a freeze, or a sleep interrupts a cast under way, and a silence does too; a held player's auto-attack
+    // ends, while a held monster keeps its target and swings again once free (Gameplay Systems §9.1).
+    private void HoldTheHeld(MapInstance map)
+    {
+        foreach (WorldEntity entity in map.Entities)
+        {
+            bool isHeld = entity.IsHeld;
+            if (entity.Combat.IsCasting && (isHeld || entity.HasAilment(Ailment.Silence)))
+            {
+                InterruptCast(entity);
+            }
+
+            if (isHeld && entity is PlayerEntity && entity.Combat.IsAutoAttacking)
+            {
+                entity.Combat.IsAutoAttacking = false;
+            }
+        }
+    }
+
     private void BeginSwings(MapInstance map, long now, uint tick)
     {
         m_attackers.Clear();
@@ -858,7 +883,8 @@ public sealed class CombatSystem : ITickPhase
                 && !entity.Combat.IsSwinging
                 && !entity.Combat.IsCasting
                 && now >= entity.Combat.DelayEndsMs
-                && !entity.IsDead)
+                && !entity.IsDead
+                && !entity.IsHeld)
             {
                 m_attackers.Add(entity);
             }
