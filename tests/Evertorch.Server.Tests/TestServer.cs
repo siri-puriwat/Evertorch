@@ -709,11 +709,39 @@ internal sealed class TestServer
         Inbound.OnPayload(connection, ProtocolChannel.Control, payload);
     }
 
-    public void SendEquip(ConnectionId connection, long inventoryItem, uint commandSequence)
+    /// <summary>
+    ///     Sends an equip of <paramref name="inventoryItem" /> to <paramref name="destination" />, or, when none is named,
+    ///     to the row's own position as an inventory press sends it: the first of its category's. A row the session does
+    ///     not hold goes to the weapon's position.
+    /// </summary>
+    public void SendEquip(
+        ConnectionId connection,
+        long inventoryItem,
+        uint commandSequence,
+        EquipmentSlot destination = EquipmentSlot.None)
     {
+        if (destination == EquipmentSlot.None)
+        {
+            destination = OwnPositionOf(connection, inventoryItem);
+        }
+
         byte[] payload = new byte[EquipItem.EncodedLength];
-        new EquipItem(inventoryItem, commandSequence).Write(payload);
+        new EquipItem(inventoryItem, destination, commandSequence).Write(payload);
         Inbound.OnPayload(connection, ProtocolChannel.Control, payload);
+    }
+
+    private EquipmentSlot OwnPositionOf(ConnectionId connection, long inventoryItem)
+    {
+        if (!Sessions.TryGet(connection, out ClientSession? session)
+            || session?.Character == null
+            || !session.Character.Inventory.TryGetRow(inventoryItem, out InventoryEntry row)
+            || !Content.Items.TryGetValue(row.Item, out ItemDefinition? item))
+        {
+            return EquipmentSlot.Weapon;
+        }
+
+        IReadOnlyList<EquipmentSlot> positions = EquipmentPositions.Of(item.Type);
+        return positions.Count > 0 ? positions[0] : EquipmentSlot.Weapon;
     }
 
     public void SendUnequip(ConnectionId connection, EquipmentSlot slot, uint commandSequence)

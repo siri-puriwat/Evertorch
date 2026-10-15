@@ -84,7 +84,7 @@ public readonly struct InventoryEntry
             || !WireCards.TryRead(ref reader, quantity, out ItemDefinitionId[] cards)
             || inventoryItem <= 0
             || (quantity == 0 && !allowsZero)
-            || slot > (byte)EquipmentSlot.Armor
+            || slot > (byte)EquipmentSlot.Accessory2
             || (quantity == 0 && slot != (byte)EquipmentSlot.None)
             || (refineLevel > 0 && quantity != 1)
             || !ItemDefinitionId.TryCreate(itemText, out ItemDefinitionId item))
@@ -96,21 +96,24 @@ public readonly struct InventoryEntry
         return true;
     }
 
-    // A slot holds one row at most, so no message may say two rows are worn in it.
+    // A position holds one row at most, so no message may say two rows are worn in it.
     internal static bool IsEachSlotWornOnce(IReadOnlyList<InventoryEntry> entries)
     {
-        bool isWeaponWorn = false;
-        bool isArmorWorn = false;
+        int worn = 0;
         foreach (InventoryEntry entry in entries)
         {
-            if ((entry.Slot == EquipmentSlot.Weapon && isWeaponWorn)
-                || (entry.Slot == EquipmentSlot.Armor && isArmorWorn))
+            if (entry.Slot == EquipmentSlot.None)
+            {
+                continue;
+            }
+
+            int position = 1 << (int)entry.Slot;
+            if ((worn & position) != 0)
             {
                 return false;
             }
 
-            isWeaponWorn |= entry.Slot == EquipmentSlot.Weapon;
-            isArmorWorn |= entry.Slot == EquipmentSlot.Armor;
+            worn |= position;
         }
 
         return true;

@@ -633,7 +633,7 @@ public sealed class HostileSocketTests
         player.PumpFor(TimeSpan.FromMilliseconds(1100));
         for (int index = 0; index <= itemBurst; index++)
         {
-            player.Connection.SendEquip(999999);
+            player.Connection.SendEquip(999999, EquipmentSlot.Weapon);
         }
 
         player.PumpFor(TimeSpan.FromMilliseconds(1100));
@@ -1081,7 +1081,7 @@ public sealed class HostileSocketTests
         anna.Connection.SendAttack(bobby.World.LocalEntity);
         anna.Connection.SendUseSkill(new SkillDefinitionId("skill.first_aid"), default);
         anna.Connection.SendPickup(new EntityId(999999));
-        anna.Connection.SendEquip(gel);
+        anna.Connection.SendEquip(gel, EquipmentSlot.Weapon);
         anna.Connection.SendSell(quartermaster.Entity, gel, 1);
         anna.Connection.SendStorageOpen(storekeeper.Entity);
         anna.Connection.SendStorageDeposit(storekeeper.Entity, gel, 1);

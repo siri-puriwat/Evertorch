@@ -267,7 +267,11 @@ public sealed class InboundQueue
                     return false;
                 }
 
-                decoded = InboundEvent.ForEquip(connection, equip.InventoryItem, equip.CommandSequence);
+                decoded = InboundEvent.ForEquip(
+                    connection,
+                    equip.InventoryItem,
+                    equip.Destination,
+                    equip.CommandSequence);
                 return true;
             case MessageOpcode.UnequipItem:
                 if (!UnequipItem.TryRead(payload, out UnequipItem unequip))

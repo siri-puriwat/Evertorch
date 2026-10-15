@@ -649,16 +649,22 @@ WHERE character_quests.state = {CharacterQuestRow.ActiveState} AND character_que
                             item => item.Id == equip.InventoryItemId && item.CharacterId == equip.CharacterId,
                             cancellationToken)
                         .ConfigureAwait(false);
+                    // A row worn in any position, the destination's own included, is refused before anything is
+                    // written, so moving it between the accessory positions never meets the unique index.
+                    if (row == null
+                        || row.Quantity < 1
+                        || await context.Equipment
+                            .AnyAsync(slot => slot.InventoryItemId == row.Id, cancellationToken)
+                            .ConfigureAwait(false))
+                    {
+                        return Refused(character);
+                    }
+
                     EquipmentRow? worn = await context.Equipment
                         .SingleOrDefaultAsync(
                             slot => slot.CharacterId == equip.CharacterId && slot.Slot == equip.Slot,
                             cancellationToken)
                         .ConfigureAwait(false);
-                    if (row == null || row.Quantity < 1 || worn?.InventoryItemId == row.Id)
-                    {
-                        return Refused(character);
-                    }
-
                     long? displaced = worn?.InventoryItemId;
                     if (worn == null)
                     {
@@ -683,6 +689,7 @@ WHERE character_quests.state = {CharacterQuestRow.ActiveState} AND character_que
                                 OperationType = LedgerRow.EquipOperation,
                                 ItemInstanceId = row.Id,
                                 ItemDefinitionId = row.ItemDefinitionId,
+                                MetadataJson = SlotMetadata(equip.Slot),
                                 CreatedAt = equip.At
                             },
                             displaced.HasValue ? new[] { row.Id, displaced.Value } : new[] { row.Id },
@@ -743,6 +750,7 @@ WHERE character_quests.state = {CharacterQuestRow.ActiveState} AND character_que
                                 OperationType = LedgerRow.UnequipOperation,
                                 ItemInstanceId = worn.InventoryItemId,
                                 ItemDefinitionId = item,
+                                MetadataJson = SlotMetadata(unequip.Slot),
                                 CreatedAt = unequip.At
                             },
                             new[] { worn.InventoryItemId },
@@ -1216,6 +1224,7 @@ WHERE character_quests.state = {CharacterQuestRow.ActiveState} AND character_que
                                 OperationType = LedgerRow.UnequipOperation,
                                 ItemInstanceId = worn.InventoryItemId,
                                 ItemDefinitionId = item,
+                                MetadataJson = SlotMetadata(worn.Slot),
                                 CreatedAt = change.At
                             },
                             new[] { worn.InventoryItemId },
@@ -2717,6 +2726,11 @@ WHERE character_quests.state = {CharacterQuestRow.ActiveState} AND character_que
     private static string StorageMetadata(long storageItemId)
     {
         return JsonSerializer.Serialize(new { storageItem = storageItemId });
+    }
+
+    private static string SlotMetadata(string slot)
+    {
+        return JsonSerializer.Serialize(new { slot });
     }
 
     private static StorageResult Unstored(InventoryStatus status, CharacterRow character, AccountStorageRow storage)

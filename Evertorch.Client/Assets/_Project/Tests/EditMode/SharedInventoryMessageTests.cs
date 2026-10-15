@@ -49,10 +49,12 @@ public sealed class SharedInventoryMessageTests
         0x10, 0x80, 0x07, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0xFA, 0x00, 0x00, 0x00, 0x00
     };
 
+    // Protocol 48: the row, its destination (accessory 2 here), and the sequence.
     private static readonly byte[] EquipBytes =
     {
         0x10, 0x00,
         0x08, 0x07, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01,
+        0x08,
         0x0D, 0x0C, 0x0B, 0x0A
     };
 
@@ -76,13 +78,14 @@ public sealed class SharedInventoryMessageTests
     public void EquipItem_WriteAndRead_MatchGoldenBytes()
     {
         byte[] buffer = new byte[EquipItem.EncodedLength];
-        new EquipItem(0x0102030405060708L, 0x0A0B0C0D).Write(buffer);
+        new EquipItem(0x0102030405060708L, EquipmentSlot.Accessory2, 0x0A0B0C0D).Write(buffer);
 
         bool isRead = EquipItem.TryRead(EquipBytes, out EquipItem read);
 
         Assert.That(buffer, Is.EqualTo(EquipBytes));
         Assert.That(isRead, Is.True);
         Assert.That(read.InventoryItem, Is.EqualTo(0x0102030405060708L));
+        Assert.That(read.Destination, Is.EqualTo(EquipmentSlot.Accessory2));
         Assert.That(read.CommandSequence, Is.EqualTo(0x0A0B0C0Du));
     }
 

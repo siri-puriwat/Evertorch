@@ -264,12 +264,17 @@ public sealed class ItemActionSystem : ITickPhase
     public event Action<CharacterSession>? Settled;
 
     /// <summary>
-    ///     Checks an equip (Gameplay Systems §11.1) and, when it passes, queues its commit: the row goes into the slot its
-    ///     item fills, and a row the slot held comes out of it. A weapon of a type the job cannot wield is refused with
-    ///     <see cref="CommandRejectionReason.RequirementNotMet" />. The caller has already refused a dead or leaving
-    ///     character.
+    ///     Checks an equip (Gameplay Systems §11.1) and, when it passes, queues its commit: the row goes into
+    ///     <paramref name="destination" />, and a row the position held comes out of it. A destination the row's category
+    ///     cannot go to, or a row worn anywhere, is refused with <see cref="CommandRejectionReason.NotAllowedNow" />; a
+    ///     weapon of a type the job cannot wield with <see cref="CommandRejectionReason.RequirementNotMet" />. The caller
+    ///     has already refused a dead or leaving character.
     /// </summary>
-    public CommandRejectionReason TryEquip(ClientSession session, long inventoryItem, uint commandSequence)
+    public CommandRejectionReason TryEquip(
+        ClientSession session,
+        long inventoryItem,
+        EquipmentSlot destination,
+        uint commandSequence)
     {
         CharacterSession character = session.Character!;
         // First: only a settled inventory answers for the database, and one operation at a time keeps the changes in
@@ -284,11 +289,10 @@ public sealed class ItemActionSystem : ITickPhase
             return CommandRejectionReason.InvalidTarget;
         }
 
+        // A row worn in the other accessory position is refused here, not moved, so it never reaches the database's
+        // one-position-per-row index (Persistence §5).
         ItemDefinition item = m_content.Items[row.Item];
-        IReadOnlyList<EquipmentSlot> positions = EquipmentPositions.Of(item.Type);
-        EquipmentSlot slot = positions.Count > 0 ? positions[0] : EquipmentSlot.None;
-        long worn = character.Inventory.WornIn(slot);
-        if (slot == EquipmentSlot.None || worn == inventoryItem)
+        if (!EquipmentPositions.Fits(item.Type, destination) || row.Slot != EquipmentSlot.None)
         {
             return CommandRejectionReason.NotAllowedNow;
         }
@@ -299,6 +303,7 @@ public sealed class ItemActionSystem : ITickPhase
             return CommandRejectionReason.RequirementNotMet;
         }
 
+        long worn = character.Inventory.WornIn(destination);
         ReportedRow? displaced = character.Inventory.TryGetRow(worn, out InventoryEntry wornRow)
             ? new ReportedRow(worn, wornRow.Item.Value)
             : null;
@@ -311,7 +316,7 @@ public sealed class ItemActionSystem : ITickPhase
             operation.OperationId,
             character.Character.Value,
             inventoryItem,
-            CharacterInventory.StoredNameOf(slot),
+            CharacterInventory.StoredNameOf(destination),
             ReportRows(operation),
             m_time.GetUtcNow().UtcDateTime);
         return TryCommit(session, operation, (store, cancellation) => store.CommitEquipAsync(commit, cancellation));

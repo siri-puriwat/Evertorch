@@ -21,7 +21,7 @@ public readonly struct UnequipItem
     public uint CommandSequence { get; }
 
     /// <summary>
-    ///     False for a malformed message, including a slot other than the weapon's or the armor's.
+    ///     False for a malformed message, including a slot that is none of the eight positions.
     /// </summary>
     public static bool TryRead(ReadOnlySpan<byte> source, out UnequipItem message)
     {
@@ -31,7 +31,7 @@ public readonly struct UnequipItem
             || !reader.TryReadByte(out byte slot)
             || !reader.TryReadUInt32(out uint sequence)
             || !reader.IsAtEnd
-            || (slot != (byte)EquipmentSlot.Weapon && slot != (byte)EquipmentSlot.Armor))
+            || !EquipmentPositions.IsPosition((EquipmentSlot)slot))
         {
             return false;
         }

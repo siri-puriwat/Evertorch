@@ -59,7 +59,7 @@ public sealed class InboundQueueTests
     private static byte[] EquipPayload()
     {
         byte[] payload = new byte[EquipItem.EncodedLength];
-        new EquipItem(41, 9).Write(payload);
+        new EquipItem(41, EquipmentSlot.Accessory2, 9).Write(payload);
         return payload;
     }
 
@@ -446,8 +446,9 @@ public sealed class InboundQueueTests
     }
 
     // Milestone 6's, 7's, and 9's commands cut short, one byte too long, or carrying a value no client may send
-    // (Network Protocol §11). The item row sits after the opcode, the slot, the NPC, and the statistic too, the skill
-    // ID's text after its two-byte length, and the quest ID's after the NPC and its length.
+    // (Network Protocol §11). The item row sits after the opcode, the slot, the NPC, and the statistic too, an equip's
+    // destination after its row, the skill ID's text after its two-byte length, and the quest ID's after the NPC and its
+    // length.
     private static IEnumerable<TestCaseData> MalformedItemAndSkillCommands()
     {
         byte[] useSkill = UseSkillPayload();
@@ -479,8 +480,10 @@ public sealed class InboundQueueTests
         yield return new TestCaseData(With(useSkill, text - 2, 2, 0xFF)).SetName("UseSkill longer than any ID");
         yield return new TestCaseData(With(equip, 2, 8, 0x00)).SetName("EquipItem of row 0");
         yield return new TestCaseData(With(equip, 2, 8, 0xFF)).SetName("EquipItem of row -1");
+        yield return new TestCaseData(With(equip, 10, 1, 0)).SetName("EquipItem to slot 0");
+        yield return new TestCaseData(With(equip, 10, 1, 9)).SetName("EquipItem to slot 9");
         yield return new TestCaseData(With(unequip, 2, 1, 0)).SetName("UnequipItem of slot 0");
-        yield return new TestCaseData(With(unequip, 2, 1, 3)).SetName("UnequipItem of slot 3");
+        yield return new TestCaseData(With(unequip, 2, 1, 9)).SetName("UnequipItem of slot 9");
         yield return new TestCaseData(With(useItem, 2, 8, 0x00)).SetName("UseItem of row 0");
         yield return new TestCaseData(With(useItem, 2, 8, 0xFF)).SetName("UseItem of row -1");
         yield return new TestCaseData(With(buy, 2, 8, 0x00)).SetName("BuyItem from NPC 0");
@@ -707,12 +710,14 @@ public sealed class InboundQueueTests
 
         var kinds = new List<InboundEventKind>();
         InboundEvent allocate = default;
+        InboundEvent equip = default;
         InboundEvent learn = default;
         InboundEvent reset = default;
         InboundEvent change = default;
         while (queue.TryDequeue(out InboundEvent inboundEvent))
         {
             kinds.Add(inboundEvent.Kind);
+            equip = inboundEvent.Kind == InboundEventKind.Equip ? inboundEvent : equip;
             learn = inboundEvent.Kind == InboundEventKind.LearnSkill ? inboundEvent : learn;
             reset = inboundEvent.Kind == InboundEventKind.ResetBuild ? inboundEvent : reset;
             change = inboundEvent.Kind == InboundEventKind.ChangeJob ? inboundEvent : change;
@@ -734,6 +739,10 @@ public sealed class InboundQueueTests
             (allocate.Stat, allocate.Quantity, allocate.CommandSequence),
             Is.EqualTo((PrimaryStat.Agi, 2u, 9u)),
             "the statistic and its steps");
+        Assert.That(
+            (equip.InventoryItem, equip.Slot, equip.CommandSequence),
+            Is.EqualTo((41L, EquipmentSlot.Accessory2, 9u)),
+            "the row and its destination");
         Assert.That((learn.Skill, learn.CommandSequence), Is.EqualTo((new SkillDefinitionId("skill.strike"), 9u)));
         Assert.That((reset.Target, reset.CommandSequence), Is.EqualTo((new EntityId(15), 9u)));
         Assert.That(

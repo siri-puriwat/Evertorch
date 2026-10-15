@@ -1038,7 +1038,11 @@ public sealed class SessionManager : ITickPhase
                 m_combat.TryBeginCast(session.Map!, player, command.Skill, command.Target, tick)),
             InboundEventKind.Logout => TryLogout(session, command.CommandSequence),
             InboundEventKind.Pickup => m_pickups.TryStart(session, command.Target, command.CommandSequence, tick),
-            InboundEventKind.Equip => m_items.TryEquip(session, command.InventoryItem, command.CommandSequence),
+            InboundEventKind.Equip => m_items.TryEquip(
+                session,
+                command.InventoryItem,
+                command.Slot,
+                command.CommandSequence),
             InboundEventKind.Unequip => m_items.TryUnequip(session, command.Slot, command.CommandSequence),
             InboundEventKind.UseItem => m_items.TryUse(session, command.InventoryItem, command.CommandSequence),
             InboundEventKind.Buy => m_items.TryBuy(

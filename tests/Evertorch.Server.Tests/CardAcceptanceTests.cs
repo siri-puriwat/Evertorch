@@ -216,7 +216,7 @@ public sealed class CardAcceptanceTests
         bobby.Connection.InspectedEquipmentReceived += seen.Add;
         anna.Connection.InspectedEquipmentReceived += heard.Add;
 
-        Assert.That(anna.Connection.SendEquip(sword), Is.Not.Zero, $"{step}: worn");
+        Assert.That(anna.Connection.SendEquip(sword, EquipmentSlot.Weapon), Is.Not.Zero, $"{step}: worn");
         Assert.That(
             SocketClients.PumpUntil(
                 () => world.Inventory.Rows.Any(row => row.InventoryItem == sword && row.Slot == EquipmentSlot.Weapon),

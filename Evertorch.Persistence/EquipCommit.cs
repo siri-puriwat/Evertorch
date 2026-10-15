@@ -4,8 +4,8 @@ using System.Collections.Generic;
 namespace Evertorch.Persistence
 {
 /// <summary>
-///     One equip to commit (Persistence §5): the row to wear in its slot, under a new operation ID. The rows to report
-///     name what the server believes the slot holds, for an answer found in the ledger after a repeat.
+///     One equip to commit (Persistence §5): the row to wear in its destination, under a new operation ID. The rows to
+///     report name what the server believes the destination holds, for an answer found in the ledger after a repeat.
 /// </summary>
 public sealed class EquipCommit
 {

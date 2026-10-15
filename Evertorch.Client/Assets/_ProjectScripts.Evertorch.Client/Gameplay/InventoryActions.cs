@@ -5,18 +5,16 @@ using Evertorch.Protocol;
 namespace Evertorch.Client
 {
 /// <summary>
-///     What a press of an inventory row asks the server for (Prototype Content §2): a weapon or armor is put on, or
-///     taken off when it is worn, and a consumable is used. A card's press opens the Card window, which the interface
-///     does, so it asks the server for nothing here; any other row asks for nothing either.
+///     What a press of an inventory row asks the server for (Prototype Content §2): a piece of equipment is put on in its
+///     own position, the first of its category's, or taken off when it is worn, and a consumable is used. A card's press
+///     opens the Card window, which the interface does, so it asks the server for nothing here; any other row asks for
+///     nothing either.
 /// </summary>
 public static class InventoryActions
 {
     public static bool HasAction(ItemType type)
     {
-        return type == ItemType.Weapon
-            || type == ItemType.Armor
-            || type == ItemType.Consumable
-            || type == ItemType.Card;
+        return EquipmentPositions.IsEquipment(type) || type == ItemType.Consumable || type == ItemType.Card;
     }
 
     /// <summary>
@@ -30,12 +28,14 @@ public static class InventoryActions
             return commands.SendUseItem(row.InventoryItem);
         }
 
-        if (type != ItemType.Weapon && type != ItemType.Armor)
+        if (!EquipmentPositions.IsEquipment(type))
         {
             return 0;
         }
 
-        return row.Slot == EquipmentSlot.None ? commands.SendEquip(row.InventoryItem) : commands.SendUnequip(row.Slot);
+        return row.Slot == EquipmentSlot.None
+            ? commands.SendEquip(row.InventoryItem, EquipmentPositions.Of(type)[0])
+            : commands.SendUnequip(row.Slot);
     }
 
     /// <summary>

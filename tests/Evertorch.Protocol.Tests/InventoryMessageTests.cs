@@ -83,7 +83,7 @@ public sealed class InventoryMessageTests
     [TestCase(13, (byte)0x00)]
     [TestCase(23, (byte)0x6A)]
     [TestCase(29, (byte)0x00)]
-    [TestCase(33, (byte)0x03)]
+    [TestCase(33, (byte)0x09)]
     public void InventorySnapshot_WithABadPartACountAnIdAnItemAZeroQuantityOrASlot_IsRefused(int offset, byte value)
     {
         byte[] bytes = WireMatrix.With(SnapshotBytes, offset, value);
@@ -94,7 +94,7 @@ public sealed class InventoryMessageTests
     [TestCase(14, (byte)0x0D)]
     [TestCase(15, (byte)0x00)]
     [TestCase(25, (byte)0x6A)]
-    [TestCase(35, (byte)0x03)]
+    [TestCase(35, (byte)0x09)]
     [TestCase(35, (byte)0x01)]
     public void InventoryChanged_WithABadCountAnIdAnItemOrASlot_IsRefused(int offset, byte value)
     {
@@ -105,6 +105,12 @@ public sealed class InventoryMessageTests
 
     [TestCase(EquipmentSlot.Weapon)]
     [TestCase(EquipmentSlot.Armor)]
+    [TestCase(EquipmentSlot.Headgear)]
+    [TestCase(EquipmentSlot.Shield)]
+    [TestCase(EquipmentSlot.Garment)]
+    [TestCase(EquipmentSlot.Footwear)]
+    [TestCase(EquipmentSlot.Accessory1)]
+    [TestCase(EquipmentSlot.Accessory2)]
     public void InventoryMessages_WithTwoRowsWornInOneSlot_AreRefused(EquipmentSlot slot)
     {
         InventoryEntry[] entries = { new(11, ItemA, 1, slot), new(12, ItemA, 1, slot) };
@@ -219,6 +225,23 @@ public sealed class InventoryMessageTests
         Assert.That((read!.NewRevision, read.Coins, read.Changes.Count), Is.EqualTo((8u, 250u, 0)));
         WireMatrix.AssertRejectsEveryTruncation(CoinsOnlyBytes, ReadChanged);
         WireMatrix.AssertRejectsTrailingData(CoinsOnlyBytes, ReadChanged);
+    }
+
+    [Test]
+    public void InventoryMessages_WithARowInEachOfTheEightPositions_AreRead()
+    {
+        InventoryEntry[] entries = EquipmentPositions.All
+            .Select((slot, index) => new InventoryEntry(11 + index, ItemA, 1, slot))
+            .ToArray();
+
+        bool isSnapshotRead =
+            InventorySnapshot.TryRead(Encode(new InventorySnapshot(7, 0, 0, 1, entries)), out InventorySnapshot? read);
+        bool isChangeRead =
+            InventoryChanged.TryRead(Encode(new InventoryChanged(7, 8, 0, entries)), out InventoryChanged? changed);
+
+        Assert.That((isSnapshotRead, isChangeRead), Is.EqualTo((true, true)));
+        Assert.That(read!.Entries.Select(entry => entry.Slot), Is.EqualTo(EquipmentPositions.All));
+        Assert.That(changed!.Changes.Select(entry => entry.Slot), Is.EqualTo(EquipmentPositions.All));
     }
 
     [Test]

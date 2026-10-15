@@ -776,7 +776,7 @@ public sealed class TownLoopAcceptanceTests
     private static void EquipRow(string step, SocketClient client, long row, EquipmentSlot slot)
     {
         ClientWorld world = client.World;
-        client.Connection.SendEquip(row);
+        client.Connection.SendEquip(row, slot);
         Assert.That(
             client.PumpUntil(() => world.Inventory.Rows.Any(entry => entry.InventoryItem == row && entry.Slot == slot)),
             Is.True,
@@ -794,7 +794,7 @@ public sealed class TownLoopAcceptanceTests
         }
 
         long row = world.Inventory.Rows.First(entry => entry.Item.Value == item).InventoryItem;
-        client.Connection.SendEquip(row);
+        client.Connection.SendEquip(row, slot);
         Assert.That(
             client.PumpUntil(() => world.Inventory.Rows.Any(entry => entry.InventoryItem == row && entry.Slot == slot)),
             Is.True,

@@ -163,6 +163,10 @@ public sealed class JobChangeStoreTests
         Assert.That(Job(character), Is.EqualTo($"{Vanguard} 1 0"));
         Assert.That(Worn(character), Is.Empty);
         Assert.That(Ledger(character), Is.EqualTo($"unequip {operation} {staff}"));
+        Assert.That(
+            m_sql.Text($"SELECT metadata_json ->> 'slot' FROM economy_ledger WHERE operation_id = '{operation}'"),
+            Is.EqualTo("Weapon"),
+            "the ledger names the position");
     }
 
     [Test]

@@ -20,9 +20,9 @@ public sealed class InventoryActionsTests
     {
         public List<string> Sent { get; } = new();
 
-        public uint SendEquip(long inventoryItem)
+        public uint SendEquip(long inventoryItem, EquipmentSlot destination)
         {
-            Sent.Add($"equip {inventoryItem}");
+            Sent.Add($"equip {inventoryItem} {destination}");
             return (uint)Sent.Count;
         }
 
@@ -92,7 +92,38 @@ public sealed class InventoryActionsTests
         InventoryActions.Press(commands, new InventoryEntry(12, Cloth, 1, EquipmentSlot.Armor), ItemType.Armor);
 
         Assert.That((equip, unequip), Is.EqualTo((1u, 2u)));
-        Assert.That(commands.Sent, Is.EqualTo(new[] { "equip 11", "unequip Weapon", "unequip Armor" }));
+        Assert.That(commands.Sent, Is.EqualTo(new[] { "equip 11 Weapon", "unequip Weapon", "unequip Armor" }));
+    }
+
+    // Each piece goes to its own position, an accessory to the first of the two (Gameplay Systems §11.1), and a worn
+    // piece comes off wherever it is worn.
+    [Test]
+    public void Press_OfEachCategory_SendsItsOwnPosition_OrTakesItOffWhereItIsWorn()
+    {
+        var commands = new Commands();
+        var item = new ItemDefinitionId("item.headgear.trail_cap");
+        ItemType[] categories =
+        {
+            ItemType.Weapon, ItemType.Armor, ItemType.Headgear, ItemType.Shield, ItemType.Garment,
+            ItemType.Footwear, ItemType.Accessory
+        };
+
+        foreach (ItemType category in categories)
+        {
+            InventoryActions.Press(commands, new InventoryEntry(20, item, 1), category);
+        }
+
+        InventoryActions.Press(commands, new InventoryEntry(21, item, 1, EquipmentSlot.Accessory2), ItemType.Accessory);
+
+        Assert.That(
+            commands.Sent,
+            Is.EqualTo(
+                new[]
+                {
+                    "equip 20 Weapon", "equip 20 Armor", "equip 20 Headgear", "equip 20 Shield", "equip 20 Garment",
+                    "equip 20 Footwear", "equip 20 Accessory1", "unequip Accessory2"
+                }));
+        Assert.That(categories, Has.All.Matches<ItemType>(InventoryActions.HasAction));
     }
 
     [Test]

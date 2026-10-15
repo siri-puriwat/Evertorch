@@ -210,7 +210,7 @@ public sealed class EquipmentAcceptanceTests
     private static void WearRow(string step, SocketClient anna, SocketClient bobby, string item, EquipmentSlot slot)
     {
         long row = Row(anna, item).InventoryItem;
-        Assert.That(anna.Connection.SendEquip(row), Is.Not.Zero, $"{step}: {item} sent");
+        Assert.That(anna.Connection.SendEquip(row, slot), Is.Not.Zero, $"{step}: {item} sent");
         Assert.That(
             SocketClients.PumpUntil(
                 () => anna.World.Inventory.Rows.Any(entry => entry.InventoryItem == row && entry.Slot == slot),

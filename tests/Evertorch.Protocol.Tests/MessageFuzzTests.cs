@@ -587,7 +587,7 @@ public sealed class MessageFuzzTests
             payload => PickupItem.TryRead(payload, out PickupItem message) ? Encode(message) : null);
         yield return Case(
             "EquipItem",
-            Encode(new EquipItem(41, 9)),
+            Encode(new EquipItem(41, EquipmentSlot.Accessory1, 9)),
             payload => EquipItem.TryRead(payload, out EquipItem message) ? Encode(message) : null);
         yield return Case(
             "UnequipItem",

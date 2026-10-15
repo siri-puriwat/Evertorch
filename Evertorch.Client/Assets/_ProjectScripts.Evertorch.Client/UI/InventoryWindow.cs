@@ -174,7 +174,7 @@ public sealed class InventoryWindow : MonoBehaviour
     private static string RowText(InventoryEntry row, ClientItem? item, uint offered, ClientContent? content)
     {
         string name = ShopMessages.RowName(content, row.Item, row.RefineLevel, row.Cards);
-        bool isEquipment = item != null && (item.Type == ItemType.Weapon || item.Type == ItemType.Armor);
+        bool isEquipment = item != null && EquipmentPositions.IsEquipment(item.Type);
         string text = isEquipment && row.Quantity == 1 ? name : $"{name} x {row.Quantity}";
         text = row.Slot == EquipmentSlot.None ? text : $"{text} (equipped)";
         return offered > 0 ? $"{text} (offered x {offered})" : text;

@@ -104,7 +104,7 @@ public sealed class ArtPassAcceptanceTests
         var spawns = new List<EntityId>();
         observer.World.RemoteWornWeaponChanged += remote => changes.Add(remote.WornWeapon);
         observer.World.RemoteSpawned += remote => spawns.Add(remote.Entity);
-        wearer.Connection.SendEquip(SwordOf(wearer).InventoryItem);
+        wearer.Connection.SendEquip(SwordOf(wearer).InventoryItem, EquipmentSlot.Weapon);
         Assert.That(
             SocketClients.PumpUntil(() => SwordOf(wearer).Slot == EquipmentSlot.Weapon, wearer, observer),
             Is.True,
@@ -173,7 +173,7 @@ public sealed class ArtPassAcceptanceTests
         const string step = "staff";
         var changes = new List<string>();
         observer.World.RemoteWornWeaponChanged += remote => changes.Add(remote.WornWeapon);
-        wearer.Connection.SendEquip(StaffOf(wearer).InventoryItem);
+        wearer.Connection.SendEquip(StaffOf(wearer).InventoryItem, EquipmentSlot.Weapon);
         Assert.That(
             SocketClients.PumpUntil(() => StaffOf(wearer).Slot == EquipmentSlot.Weapon, wearer, observer),
             Is.True,

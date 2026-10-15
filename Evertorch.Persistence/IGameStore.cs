@@ -129,16 +129,16 @@ public interface IGameStore
     Task<InventoryResult> CommitPickupAsync(PickupCommit pickup, CancellationToken cancellationToken);
 
     /// <summary>
-    ///     Wears the row in its slot in one transaction with its ledger row (Persistence §5): under the character's
-    ///     lock, a repeat of the operation ID changes nothing and answers from the ledger; a row the slot held comes
-    ///     out of it, a swap; the inventory revision goes up by one. <see cref="InventoryStatus.Refused" /> when the
-    ///     row is not the character's or already in the slot.
+    ///     Wears the row in its destination in one transaction with its ledger row, which names the destination
+    ///     (Persistence §5): under the character's lock, a repeat of the operation ID changes nothing and answers from
+    ///     the ledger; a row the destination held comes out of it, a swap; the inventory revision goes up by one.
+    ///     <see cref="InventoryStatus.Refused" /> when the row is not the character's or is worn in any position.
     /// </summary>
     Task<InventoryResult> CommitEquipAsync(EquipCommit equip, CancellationToken cancellationToken);
 
     /// <summary>
-    ///     Empties the slot in one transaction with its ledger row, like <see cref="CommitEquipAsync" />;
-    ///     <see cref="InventoryStatus.Refused" /> when the slot is already empty.
+    ///     Empties the position in one transaction with its ledger row, like <see cref="CommitEquipAsync" />;
+    ///     <see cref="InventoryStatus.Refused" /> when the position is already empty.
     /// </summary>
     Task<InventoryResult> CommitUnequipAsync(UnequipCommit unequip, CancellationToken cancellationToken);
 

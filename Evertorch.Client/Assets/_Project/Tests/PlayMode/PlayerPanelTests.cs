@@ -2568,8 +2568,8 @@ public sealed class PlayerPanelTests
         (ClientWorld world, RecordingConnection recording) = GiveRecordedWorld(client);
         var lines = ChatPanel.Create(client);
         m_created.Add(lines.gameObject);
-        uint first = recording.Connection.SendEquip(7);
-        uint second = recording.Connection.SendEquip(8);
+        uint first = recording.Connection.SendEquip(7, EquipmentSlot.Weapon);
+        uint second = recording.Connection.SendEquip(8, EquipmentSlot.Weapon);
         uint learn = recording.Connection.SendLearnSkill(new SkillDefinitionId("skill.strike"));
         yield return null;
 

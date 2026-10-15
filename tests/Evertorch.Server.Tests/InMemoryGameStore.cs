@@ -2180,7 +2180,8 @@ internal sealed class InMemoryGameStore : IGameStore
     {
         Row row = m_characters[equip.CharacterId];
         row.Equipment.TryGetValue(equip.Slot, out long worn);
-        if (row.Items.All(item => item.Id != equip.InventoryItemId) || worn == equip.InventoryItemId)
+        if (row.Items.All(item => item.Id != equip.InventoryItemId)
+            || row.Equipment.ContainsValue(equip.InventoryItemId))
         {
             return Unchanged(InventoryStatus.Refused, row);
         }

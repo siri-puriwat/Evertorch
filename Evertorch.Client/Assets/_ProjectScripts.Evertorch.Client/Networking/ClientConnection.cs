@@ -482,10 +482,10 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
     }
 
     /// <summary>
-    ///     Asks the server to wear the inventory row <paramref name="inventoryItem" /> in the slot its item fills.
-    ///     Returns the command's sequence, or 0 outside the world.
+    ///     Asks the server to wear the inventory row <paramref name="inventoryItem" /> in
+    ///     <paramref name="destination" />. Returns the command's sequence, or 0 outside the world.
     /// </summary>
-    public uint SendEquip(long inventoryItem)
+    public uint SendEquip(long inventoryItem, EquipmentSlot destination)
     {
         if (State != ClientConnectionState.InWorld)
         {
@@ -493,7 +493,7 @@ public sealed class ClientConnection : IClientTransportListener, IMoveIntentSink
         }
 
         uint sequence = NextCommandSequence();
-        new EquipItem(inventoryItem, sequence).Write(m_sendBuffer);
+        new EquipItem(inventoryItem, destination, sequence).Write(m_sendBuffer);
         SendRouted(MessageOpcode.EquipItem, EquipItem.EncodedLength);
         if (m_equipSequences.Count >= MaxEquipSequences)
         {

@@ -150,7 +150,7 @@ public sealed class PresentationBoundaryTests
             "world.Level = 3;", "world.LocalSpirit = 0;", "world.OnSkillResolved(resolved);",
             "m_world.OnLocalCancel();", "var use = new UseSkill(skill, target, 3);",
             "SkillState? skill = m_client.Skill;", "world.OnStatusEffects(effects);",
-            "InventoryActions.Press(commands, row, item.Type);", "var equip = new EquipItem(row, 3);",
+            "InventoryActions.Press(commands, row, item.Type);", "var equip = new EquipItem(row, slot, 3);",
             "var off = new UnequipItem(EquipmentSlot.Weapon, 4);", "var drink = new UseItem(row, 5);",
             "IItemCommandSink items = client;", "ISkillCommandSink skills = client;",
             "var talk = new TalkState(world, controller);", "TalkState? talk = m_client.Talk;",

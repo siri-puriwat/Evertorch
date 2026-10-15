@@ -770,7 +770,7 @@ public sealed class PrototypeAcceptanceTests
             $"{step}: {item} was picked up");
         long row = player.World.Inventory.Rows.Single(entry => entry.Item.Value == item).InventoryItem;
 
-        player.Connection.SendEquip(row);
+        player.Connection.SendEquip(row, slot);
 
         Assert.That(
             SocketClients.PumpUntil(

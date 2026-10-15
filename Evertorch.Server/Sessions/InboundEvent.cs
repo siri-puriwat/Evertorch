@@ -104,7 +104,8 @@ public readonly struct InboundEvent
     public long InventoryItem { get; }
 
     /// <summary>
-    ///     For <see cref="InboundEventKind.Unequip" />, the slot to empty.
+    ///     For <see cref="InboundEventKind.Equip" />, the position to wear the row in; for
+    ///     <see cref="InboundEventKind.Unequip" />, the position to empty.
     /// </summary>
     public EquipmentSlot Slot { get; }
 
@@ -241,7 +242,11 @@ public readonly struct InboundEvent
         return new InboundEvent(InboundEventKind.Pickup, connection, null, default, default, drop, commandSequence);
     }
 
-    public static InboundEvent ForEquip(ConnectionId connection, long inventoryItem, uint commandSequence)
+    public static InboundEvent ForEquip(
+        ConnectionId connection,
+        long inventoryItem,
+        EquipmentSlot destination,
+        uint commandSequence)
     {
         return new InboundEvent(
             InboundEventKind.Equip,
@@ -250,7 +255,8 @@ public readonly struct InboundEvent
             default,
             default,
             commandSequence: commandSequence,
-            inventoryItem: inventoryItem);
+            inventoryItem: inventoryItem,
+            slot: destination);
     }
 
     public static InboundEvent ForUseItem(ConnectionId connection, long inventoryItem, uint commandSequence)
