@@ -213,6 +213,15 @@
                     "initialStateCheck": false
                 },
                 {
+                    "name": "Slot9",
+                    "type": "Button",
+                    "id": "ee2f25f8-b3ad-451c-b300-51e17a7024b8",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                },
+                {
                     "name": "SkillPage",
                     "type": "Button",
                     "id": "3a8b16bb-9feb-4808-981c-d078939bcb4d",
@@ -803,6 +812,17 @@
                     "processors": "",
                     "groups": ";Keyboard&Mouse",
                     "action": "Slot8",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "324ca605-43eb-4c41-ab8e-b019434d9584",
+                    "path": "<Keyboard>/9",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": ";Keyboard&Mouse",
+                    "action": "Slot9",
                     "isComposite": false,
                     "isPartOfComposite": false
                 },

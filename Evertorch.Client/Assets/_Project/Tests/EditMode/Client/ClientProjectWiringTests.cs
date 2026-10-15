@@ -171,8 +171,12 @@ public sealed class ClientProjectWiringTests
         Assert.That(Paths(actions, "Player/Slot6"), Is.EquivalentTo(new[] { "<Keyboard>/6" }), "the page reaches it");
         Assert.That(Paths(actions, "Player/Slot7"), Is.EquivalentTo(new[] { "<Keyboard>/7" }));
         Assert.That(Paths(actions, "Player/Slot8"), Is.EquivalentTo(new[] { "<Keyboard>/8" }));
+        Assert.That(
+            Paths(actions, "Player/Slot9"),
+            Is.EquivalentTo(new[] { "<Keyboard>/9" }),
+            "the second page's d-pad right, Talk's, reaches it");
         Assert.That(Paths(actions, "Player/SkillPage"), Is.EquivalentTo(new[] { "<Gamepad>/dpad/left" }));
-        Assert.That(SkillSlots.Count, Is.EqualTo(8), "one action per slot of the bar");
+        Assert.That(SkillSlots.Count, Is.EqualTo(9), "one action per slot of the bar");
     }
 
     [Test]

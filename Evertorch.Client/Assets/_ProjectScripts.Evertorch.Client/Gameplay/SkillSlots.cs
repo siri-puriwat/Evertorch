@@ -7,11 +7,11 @@ namespace Evertorch.Client
 /// <summary>
 ///     The skill bar's slots (Prototype Content §4), following the server's skill list: slots 1 to 3 hold the base
 ///     job's tree, the first three entries, slots 4 and 5 each a potion, which shows while the inventory has one, and
-///     slots 6 to 8 a first job's own tree, the entries after the base job's.
+///     slots 6 to 9 a first job's own tree, the entries after the base job's.
 /// </summary>
 public static class SkillSlots
 {
-    public const int Count = 8;
+    public const int Count = 9;
 
     /// <summary>
     ///     The first of the slots that hold a first job's own tree, which the gamepad's second page reaches.
@@ -46,7 +46,7 @@ public static class SkillSlots
     }
 
     /// <summary>
-    ///     Whether <paramref name="skills" /> reach past the base job's tree, so slots 6 to 8 and the gamepad's second
+    ///     Whether <paramref name="skills" /> reach past the base job's tree, so slots 6 to 9 and the gamepad's second
     ///     page are in use.
     /// </summary>
     public static bool HasOwnSkills(IReadOnlyList<SkillListEntry> skills)

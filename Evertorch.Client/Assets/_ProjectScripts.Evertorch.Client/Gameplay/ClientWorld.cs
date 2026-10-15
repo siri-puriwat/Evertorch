@@ -121,6 +121,17 @@ public sealed class ClientWorld
     public EntityStateFlags LocalStateFlags { get; private set; }
 
     /// <summary>
+    ///     Whether a stun, a freeze, or sleep holds the living local character: it steps, swings, casts, picks up,
+    ///     talks, and uses items no more than the server lets it (Gameplay Systems §9.1).
+    /// </summary>
+    public bool IsHeld => !IsLocalDead && (LocalStateFlags & Ailments.Holds) != 0;
+
+    /// <summary>
+    ///     Whether the local character is silenced, so uses no skill.
+    /// </summary>
+    public bool IsSilenced => !IsLocalDead && (LocalStateFlags & EntityStateFlags.Silenced) != 0;
+
+    /// <summary>
     ///     The basic attack's range, which the client walks within before asking for nothing more: the server checks
     ///     range itself when a swing begins.
     /// </summary>
@@ -271,7 +282,8 @@ public sealed class ClientWorld
     public event Action? QuestsChanged;
 
     /// <summary>
-    ///     The local player's own cast ended before its time: it died, its target died or left, or it cancelled.
+    ///     The local player's own cast ended before its time: it died, was held or silenced, its target died or left, or
+    ///     it cancelled.
     /// </summary>
     public event Action? LocalCastEnded;
 
@@ -981,6 +993,13 @@ public sealed class ClientWorld
             {
                 EntityStateFlags flagsBefore = LocalStateFlags;
                 LocalStateFlags = state.StateFlags;
+
+                // The server interrupts the cast as the hold or the silence lands; no message says so.
+                if ((state.StateFlags & ~flagsBefore & Ailments.EndCasts) != 0)
+                {
+                    EndLocalCast();
+                }
+
                 NoticeAilments(LocalEntity, flagsBefore, state.StateFlags);
                 WorldPosition before = Predictor.Position;
                 Predictor.Reconcile(state, snapshot.LastProcessedInputSequence);

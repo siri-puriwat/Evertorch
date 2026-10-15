@@ -502,10 +502,10 @@ public sealed class SkillStateTests
         Assert.That(rig.Skill.SkillsSent, Is.EqualTo(1));
     }
 
-    // The slots follow the skill list: the base job's tree on 1 to 3 and a first job's own on 6 to 8 (Prototype
+    // The slots follow the skill list: the base job's tree on 1 to 3 and a first job's own on 6 to 9 (Prototype
     // Content §4).
     [Test]
-    public void SkillSlots_FollowTheSkillList_TheBaseTreeOnOneToThree_AndTheOwnTreeOnSixToEight()
+    public void SkillSlots_FollowTheSkillList_TheBaseTreeOnOneToThree_AndTheOwnTreeOnSixToNine()
     {
         SkillListEntry[] adventurer = Entries("skill.strike", "skill.first_aid", "skill.focus");
         SkillListEntry[] vanguard = Entries(
@@ -515,22 +515,32 @@ public sealed class SkillStateTests
             "skill.heavy_blow",
             "skill.war_cry",
             "skill.iron_guard");
+        SkillListEntry[] arcanist = Entries(
+            "skill.strike",
+            "skill.first_aid",
+            "skill.focus",
+            "skill.arcane_bolt",
+            "skill.clarity",
+            "skill.mend",
+            "skill.frost_lance");
 
         Assert.That(
             SlotsOf(adventurer),
-            Is.EqualTo(new[] { "-", "skill.strike", "skill.first_aid", "skill.focus", "-", "-", "-", "-", "-", "-" }));
+            Is.EqualTo(
+                new[] { "-", "skill.strike", "skill.first_aid", "skill.focus", "-", "-", "-", "-", "-", "-", "-" }));
         Assert.That(
             SlotsOf(vanguard),
             Is.EqualTo(
                 new[]
                 {
                     "-", "skill.strike", "skill.first_aid", "skill.focus", "-", "-", "skill.heavy_blow",
-                    "skill.war_cry", "skill.iron_guard", "-"
+                    "skill.war_cry", "skill.iron_guard", "-", "-"
                 }));
+        Assert.That(SlotsOf(arcanist)[9], Is.EqualTo("skill.frost_lance"), "an Arcanist's fourth skill on 9");
         Assert.That(
             (SkillSlots.HasOwnSkills(adventurer), SkillSlots.HasOwnSkills(vanguard)),
             Is.EqualTo((false, true)));
-        Assert.That(SkillSlots.Count, Is.EqualTo(8));
+        Assert.That(SkillSlots.Count, Is.EqualTo(9));
     }
 
     [Test]
@@ -548,7 +558,7 @@ public sealed class SkillStateTests
                 new[]
                 {
                     "-", "-", "-", "-", "item.consumable.minor_health", "item.consumable.minor_mana", "-", "-", "-",
-                    "-"
+                    "-", "-"
                 }));
     }
 

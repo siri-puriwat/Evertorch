@@ -83,6 +83,7 @@ public sealed class GameClient : MonoBehaviour
 
     // An inspection is scored when throttled too (Network Protocol §11).
     private readonly ChatThrottle m_inspectThrottle = new(ChatThrottle.ReadBurst);
+    private readonly HashSet<HeldAct> m_ailmentRefusalsSaid = new();
     private IClientTransport? m_socket;
     private ManualMoveSource? m_manualSource;
     private PointerMoveSource? m_pointerSource;
@@ -112,6 +113,7 @@ public sealed class GameClient : MonoBehaviour
     private CombatHud? m_hud;
     private LoginPanel? m_login;
     private StatusBar? m_statusBar;
+    private BlindVignette? m_vignette;
     private TargetFrame? m_targetFrame;
     private InventoryWindow? m_inventoryWindow;
     private NpcWindow? m_npcWindow;
@@ -121,6 +123,7 @@ public sealed class GameClient : MonoBehaviour
     private InspectWindow? m_inspectWindow;
     private TradeWindow? m_tradeWindow;
     private bool m_hasSaidHeld;
+    private EntityStateFlags m_ailmentRefusalsSaidUnder;
     private SkillBar? m_skillBar;
     private ChatPanel? m_chat;
     private PartyList? m_partyList;
@@ -338,6 +341,8 @@ public sealed class GameClient : MonoBehaviour
         Touch = TouchControls.Create(toggleOverlay, () => m_chat?.Open());
         Touch.transform.SetParent(transform, false);
         Touch.SetVisible(Application.isMobilePlatform);
+        m_vignette = BlindVignette.Create(this);
+        m_vignette.transform.SetParent(transform, false);
         m_hud = CombatHud.Create(this);
         m_hud.transform.SetParent(transform, false);
         m_statusBar = StatusBar.Create(this);
@@ -404,10 +409,17 @@ public sealed class GameClient : MonoBehaviour
 
         float yaw = m_camera == null ? 0f : m_camera.YawDegrees;
         m_manualSource?.Apply(m_controller, yaw);
-        if (m_world.Trade.IsOpen && m_controller.HasManualDirection)
+        if (m_controller.HasManualDirection && (m_world.Trade.IsOpen || m_world.IsHeld))
         {
             m_controller.SetManualDirection(0f, 0f);
-            SayHeld();
+            if (m_world.Trade.IsOpen)
+            {
+                SayHeld();
+            }
+            else
+            {
+                IsRefusedByAilment(HeldAct.Move);
+            }
         }
 
         m_targetCandidates.Clear();
@@ -779,6 +791,11 @@ public sealed class GameClient : MonoBehaviour
                 return;
             }
 
+            if (item.Type == ItemType.Consumable && IsRefusedByAilment(HeldAct.UseItems))
+            {
+                return;
+            }
+
             InventoryActions.Press(Connection, row, item.Type);
         }
     }
@@ -1100,6 +1117,11 @@ public sealed class GameClient : MonoBehaviour
             return;
         }
 
+        if (IsRefusedByAilment(SkillSlots.TryGetItem(slot, out _) ? HeldAct.UseItems : HeldAct.UseSkills))
+        {
+            return;
+        }
+
         if (SkillSlots.TryGetItem(slot, out ItemDefinitionId item))
         {
             if (m_world != null
@@ -1302,6 +1324,7 @@ public sealed class GameClient : MonoBehaviour
         world.RemoteWornWeaponChanged += HoldRemoteWeapon;
         world.Inventory.Changed += HoldLocalWeapon;
         world.LocalJobChanged += ReplaceLocalBody;
+        world.AilmentsChanged += OnAilmentsChanged;
         m_combat = new CombatPresenter(
             world,
             1.0 / Connection.ServerTickRate,
@@ -1462,6 +1485,12 @@ public sealed class GameClient : MonoBehaviour
             return;
         }
 
+        if (m_world.IsHeld)
+        {
+            HoldPointerWhileHeld(result, entity);
+            return;
+        }
+
         if (result == PointerMoveResult.Accepted)
         {
             m_autoAttack?.OnWalkRequested();
@@ -1509,13 +1538,29 @@ public sealed class GameClient : MonoBehaviour
             return;
         }
 
-        CombatRequest request = m_combatSource.TakeRequest();
+        CombatRequest request = m_combatSource.TakeRequest(out bool isFromGamepad);
+
+        // On the gamepad's second page the d-pad's right presses slot 9, and Talk waits for the first page
+        // (Prototype Content §4).
+        if (request == CombatRequest.Talk && isFromGamepad && IsGamepadOnOwnSkills)
+        {
+            UseSkillSlot(SkillSlots.Count, true);
+            return;
+        }
+
         if (m_world.Trade.IsOpen
             && (request == CombatRequest.Attack
                 || request == CombatRequest.Pickup
                 || request == CombatRequest.Talk))
         {
             SayHeld();
+            return;
+        }
+
+        if ((request == CombatRequest.Attack && IsRefusedByAilment(HeldAct.Attack))
+            || (request == CombatRequest.Pickup && IsRefusedByAilment(HeldAct.PickUp))
+            || (request == CombatRequest.Talk && IsRefusedByAilment(HeldAct.Talk)))
+        {
             return;
         }
 
@@ -1980,6 +2025,106 @@ public sealed class GameClient : MonoBehaviour
         }
     }
 
+    // A hold ends whatever the character was doing, as an opened trade does, and a silence a skill on its way; the
+    // server interrupts a cast itself, and ClientWorld ends the local one (Gameplay Systems §9.1).
+    private void OnAilmentsChanged(EntityId entity, EntityStateFlags before)
+    {
+        if (m_world == null || entity != m_world.LocalEntity)
+        {
+            return;
+        }
+
+        EntityStateFlags started = m_world.LocalStateFlags & ~before;
+        if ((started & Ailments.Holds) != 0)
+        {
+            m_targeting.Cancel();
+            m_controller?.CancelPath();
+            m_controller?.SetManualDirection(0f, 0f);
+            m_autoAttack?.OnWalkRequested();
+            m_pickup?.Cancel();
+            m_skill?.Cancel();
+            m_talk?.Cancel();
+            m_follow?.Cancel();
+        }
+        else if ((started & EntityStateFlags.Silenced) != 0)
+        {
+            m_targeting.Cancel();
+            m_skill?.Cancel();
+        }
+    }
+
+    // A press an ailment refuses says why, once for each kind until the ailments change; nothing is sent for it.
+    private bool IsRefusedByAilment(HeldAct act)
+    {
+        string? refusal = m_world != null ? Refusal(m_world, act) : null;
+        if (refusal == null)
+        {
+            return false;
+        }
+
+        if ((m_world!.LocalStateFlags & Ailments.All) != m_ailmentRefusalsSaidUnder)
+        {
+            m_ailmentRefusalsSaidUnder = m_world.LocalStateFlags & Ailments.All;
+            m_ailmentRefusalsSaid.Clear();
+        }
+
+        if (m_ailmentRefusalsSaid.Add(act))
+        {
+            ChatLog.AddSystem(refusal);
+        }
+
+        return true;
+    }
+
+    private static string? Refusal(ClientWorld world, HeldAct act)
+    {
+        return world.IsHeld || (act == HeldAct.UseSkills && world.IsSilenced)
+            ? AilmentMessages.Refusal(world.LocalStateFlags, act)
+            : null;
+    }
+
+    // While held a click on the ground walks nowhere and one on a monster only selects it; a player is still selected
+    // (Gameplay Systems §9.1).
+    private void HoldPointerWhileHeld(PointerMoveResult result, EntityId entity)
+    {
+        if (result == PointerMoveResult.Accepted)
+        {
+            m_controller!.CancelPath();
+            IsRefusedByAilment(HeldAct.Move);
+            return;
+        }
+
+        if (result != PointerMoveResult.Entity)
+        {
+            return;
+        }
+
+        EntityKind kind = m_world!.Remotes.TryGetValue(entity, out RemoteEntity? remote)
+            ? remote.Kind
+            : EntityKind.None;
+        if (kind == EntityKind.Player)
+        {
+            SelectPlayer(entity);
+        }
+        else if (kind == EntityKind.ItemDrop)
+        {
+            IsRefusedByAilment(HeldAct.PickUp);
+        }
+        else if (kind == EntityKind.Npc)
+        {
+            IsRefusedByAilment(HeldAct.Talk);
+        }
+        else
+        {
+            if (kind == EntityKind.Monster && m_world.Target != entity)
+            {
+                Connection?.SendTarget(entity);
+            }
+
+            IsRefusedByAilment(HeldAct.Attack);
+        }
+    }
+
     private void SayHeld()
     {
         if (!m_hasSaidHeld)
@@ -2277,6 +2422,7 @@ public sealed class GameClient : MonoBehaviour
             m_world.RemoteWornWeaponChanged -= HoldRemoteWeapon;
             m_world.Inventory.Changed -= HoldLocalWeapon;
             m_world.LocalJobChanged -= ReplaceLocalBody;
+            m_world.AilmentsChanged -= OnAilmentsChanged;
         }
 
         m_combat?.Dispose();

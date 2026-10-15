@@ -25,6 +25,11 @@ public sealed class StatusBar : MonoBehaviour
     private const float ExperienceBarHeight = 6f;
 
     private const float JobExperienceBarHeight = 4f;
+    private const float EffectsFontSize = 12f;
+    private const float MinimumFontSize = 12f;
+
+    // What the effects' width keeps over half their one line's, so a word that does not split evenly still leaves two.
+    private const float EffectsSlack = 1.15f;
 
     // An effect with this many seconds left or more shows whole minutes.
     private const int MinutesFrom = 100;
@@ -43,6 +48,7 @@ public sealed class StatusBar : MonoBehaviour
     private TMP_Text? m_health;
     private TMP_Text? m_spirit;
     private TMP_Text? m_effects;
+    private LayoutElement? m_effectsLayout;
     private TMP_Text? m_quests;
     private RectTransform? m_experienceFill;
     private RectTransform? m_jobExperienceFill;
@@ -220,7 +226,13 @@ public sealed class StatusBar : MonoBehaviour
                 .Append(shown < 0 ? 'm' : 's');
         }
 
-        Write(m_effects!, text.ToString());
+        string line = text.ToString();
+        Write(m_effects!, line);
+        float width = line.Length == 0
+            ? 0f
+            : Mathf.Ceil(m_effects!.GetPreferredValues(line, float.PositiveInfinity, 0f).x / 2f * EffectsSlack);
+        m_effectsLayout!.minWidth = width;
+        m_effectsLayout.preferredWidth = width;
     }
 
     // Each active quest by its objective, "Forest Crawler 3/5" and "(ready)" at its count (Prototype Content §2): the
@@ -379,13 +391,17 @@ public sealed class StatusBar : MonoBehaviour
         m_health = CreatePart("Health", TextAlignmentOptions.Midline);
         m_spirit = CreatePart("Spirit", TextAlignmentOptions.Midline);
         m_effects = CreatePart("Effects", TextAlignmentOptions.Midline);
+
+        // A grotto fight's eight effects, ailments first, wrap to a second line at 12 points (owner decision 23): they
+        // take half their one line's width, and the other parts share the rest, shrinking to fit as the quests do.
+        m_effects.enableAutoSizing = false;
+        m_effects.fontSize = EffectsFontSize;
+        m_effects.textWrappingMode = TextWrappingModes.Normal;
+        m_effectsLayout = m_effects.gameObject.AddComponent<LayoutElement>();
         m_quests = CreatePart("Quests", TextAlignmentOptions.Midline);
 
-        // A quest's objective and progress take more room than the other parts, and shrink to fit on a narrow screen.
+        // A quest's objective and progress take more room than the other parts; every part shrinks to fit, to 12 points.
         m_quests.gameObject.AddComponent<LayoutElement>().flexibleWidth = 2f;
-        m_quests.enableAutoSizing = true;
-        m_quests.fontSizeMin = 12f;
-        m_quests.fontSizeMax = m_quests.fontSize;
         m_map = CreatePart("Map", TextAlignmentOptions.Midline);
         m_ping = CreatePart("Ping", TextAlignmentOptions.MidlineRight);
 
@@ -419,6 +435,9 @@ public sealed class StatusBar : MonoBehaviour
         TMP_Text part = Ui.CreateLabel(objectName, m_bar!.transform);
         part.alignment = alignment;
         part.textWrappingMode = TextWrappingModes.NoWrap;
+        part.enableAutoSizing = true;
+        part.fontSizeMin = MinimumFontSize;
+        part.fontSizeMax = part.fontSize;
         return part;
     }
 

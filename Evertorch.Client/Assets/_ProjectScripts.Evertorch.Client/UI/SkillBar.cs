@@ -13,7 +13,7 @@ namespace Evertorch.Client
 ///     The skill bar across the bottom centre while in the world (Prototype Content §2, §4): a button for each skill
 ///     slot the skill list fills, with the slot's key or what is left of the skill's cooldown once the skill is learned
 ///     and "Locked" until then, and for each potion slot while the inventory holds its potion, with how many and the
-///     key. With a first job's own skills on 6 to 8 the slots narrow so all eight fit between the stick and the touch
+///     key. With a first job's own skills on 6 to 9 the slots narrow so all nine fit between the stick and the touch
 ///     buttons, and the keys the gamepad's page reaches are shown in brackets. It is text only, and a press asks for
 ///     the slot exactly as its key does; a locked slot's press does nothing. The slot of a skill waiting for its target
 ///     is drawn in the accent colour until the target is chosen or the wait ends (Prototype Content §4).
@@ -36,8 +36,8 @@ public sealed class SkillBar : MonoBehaviour
     private const int SortingOrder = 6;
     private const float SlotWidth = 112f;
 
-    // Eight slots of 70 with the padding and the spacing make 628, within the 636 between the stick and the buttons.
-    private const float NarrowSlotWidth = 70f;
+    // Nine slots of 62 with the padding and the spacing make 634, within the 636 between the stick and the buttons.
+    private const float NarrowSlotWidth = 62f;
     private const int NarrowSlotCount = 6;
     private const float SlotHeight = 76f;
     private const float Spacing = 8f;
@@ -120,7 +120,7 @@ public sealed class SkillBar : MonoBehaviour
     }
 
     /// <summary>
-    ///     The bar's width in canvas units while <paramref name="shownSlots" /> slots show: a slot of 6 to 8 narrows them
+    ///     The bar's width in canvas units while <paramref name="shownSlots" /> slots show: a slot of 6 to 9 narrows them
     ///     all.
     /// </summary>
     public static float WidthFor(int shownSlots)
@@ -255,7 +255,8 @@ public sealed class SkillBar : MonoBehaviour
             button.SetActive(false);
             TMP_Text label = button.GetComponentInChildren<TMP_Text>(true);
 
-            // A potion's name is longer than a slot is wide, so a label shrinks to fit rather than overflow.
+            // A potion's name is longer than a slot is wide, so a label wraps and shrinks to fit rather than overflow.
+            label.textWrappingMode = TextWrappingModes.Normal;
             label.enableAutoSizing = true;
             label.fontSizeMin = 12f;
             label.fontSizeMax = label.fontSize;

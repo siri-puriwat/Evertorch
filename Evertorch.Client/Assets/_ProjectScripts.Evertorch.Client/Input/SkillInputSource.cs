@@ -7,7 +7,8 @@ namespace Evertorch.Client
 /// <summary>
 ///     The skill bar's keys and gamepad buttons (Prototype Content §4). It only reports which slot was asked for; the
 ///     slot's button on the bar asks for the same thing through <see cref="GameClient.UseSkillSlot" />. The gamepad has
-///     three skill buttons, South and the triggers, so D-pad left pages them between slots 1 to 3 and slots 6 to 8.
+///     three skill buttons, South and the triggers, so D-pad left pages them between slots 1 to 3 and slots 6 to 8;
+///     on the second page the d-pad's right, Talk on the first, presses slot 9 (<see cref="GameClient" /> routes it).
 /// </summary>
 public sealed class SkillInputSource : IDisposable
 {
@@ -51,7 +52,7 @@ public sealed class SkillInputSource : IDisposable
     }
 
     /// <summary>
-    ///     Whether the gamepad's skill buttons ask for slots 6 to 8 rather than 1 to 3.
+    ///     Whether the gamepad's skill buttons ask for slots 6 to 8 rather than 1 to 3, and its d-pad's right for slot 9.
     /// </summary>
     public bool IsOnOwnSkills { get; set; }
 
@@ -115,7 +116,7 @@ public sealed class SkillInputSource : IDisposable
         m_isRequestedByGamepad = device is Gamepad;
     }
 
-    // Only the gamepad's buttons follow the page; the keys 1 to 8 always ask for their own slot.
+    // Only the gamepad's buttons follow the page; the keys 1 to 9 always ask for their own slot.
     private int SlotFor(int slot, InputDevice? device)
     {
         return IsOnOwnSkills && device is Gamepad && slot <= GamepadSkillButtons

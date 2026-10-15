@@ -1424,10 +1424,10 @@ public sealed class PlayerPanelTests
         Assert.That(Slot(bar, 1).GetComponent<Button>().navigation.mode, Is.EqualTo(Navigation.Mode.None));
     }
 
-    // A first job's own tree fills slots 6 to 8, and all eight narrow to 70 units; the keys the gamepad's first page
+    // A first job's own tree fills slots 6 on, and all the slots narrow to 62 units; the keys the gamepad's first page
     // reaches read in brackets (Prototype Content §2, §4).
     [UnityTest]
-    public IEnumerator SkillBar_ForAFirstJob_ShowsEightNarrowSlots_TheOwnTreeOnSixToEight()
+    public IEnumerator SkillBar_ForAFirstJob_ShowsNarrowSlots_TheOwnTreeFromSix()
     {
         GameClient client = CreateIdleClient();
         ClientWorld world = GiveWorld(client);
@@ -1444,7 +1444,8 @@ public sealed class PlayerPanelTests
         yield return null;
 
         Assert.That((adventurerWidth, isSixShown, strike), Is.EqualTo((112f, false, "skill.strike\n1")));
-        Assert.That(bar.ShownSlotWidth, Is.EqualTo(70f));
+        Assert.That(bar.ShownSlotWidth, Is.EqualTo(62f));
+        Assert.That(Slot(bar, 9).activeSelf, Is.False, "a Vanguard's tree holds three");
         Assert.That(
             new[] { 1, 6, 7, 8 }.Select(slot => SlotText(bar, slot)),
             Is.EqualTo(
@@ -1455,8 +1456,126 @@ public sealed class PlayerPanelTests
         Assert.That(Slot(bar, 6).GetComponent<Button>().interactable, Is.True, "Heavy Blow learned");
         Assert.That(
             Slot(bar, 6).GetComponent<LayoutElement>().preferredWidth,
-            Is.EqualTo(70f),
-            "all eight fit between the stick and the touch buttons");
+            Is.EqualTo(62f),
+            "all nine fit between the stick and the touch buttons");
+    }
+
+    // An Arcanist's four skills fill slots 6 to 9 beside both potions: nine slots of 62, each label within its button
+    // at 12 points or more, the potion's the longest (Prototype Content §2).
+    [UnityTest]
+    public IEnumerator SkillBar_OfAnArcanistWithPotions_FitsNineSlots_EachLabelAt12PointsOrMore()
+    {
+        GameClient client = CreateIdleClient();
+        ClientWorld world = GiveWorld(client);
+        string[] names = { "Strike", "First Aid", "Focus", "Arcane Bolt", "Clarity", "Mend", "Frost Lance" };
+        string[] ids =
+        {
+            "skill.strike", "skill.first_aid", "skill.focus", "skill.arcane_bolt", "skill.clarity", "skill.mend",
+            "skill.frost_lance"
+        };
+        GiveContent(
+            client,
+            new[]
+            {
+                new ClientItem(new ItemDefinitionId("item.consumable.minor_health"), "Minor Health Potion",
+                    ItemType.Consumable, "pickup_minor_health", "icon"),
+                new ClientItem(new ItemDefinitionId("item.consumable.minor_mana"), "Minor Mana Potion",
+                    ItemType.Consumable, "pickup_minor_mana", "icon")
+            },
+            skills: ids.Select((id, index) => new ClientSkill(new SkillDefinitionId(id), names[index],
+                    SkillTargetType.Enemy, id))
+                .ToDictionary(skill => skill.Id));
+        var bar = SkillBar.Create(client);
+        m_created.Add(bar.gameObject);
+        world.OnSkillList(new SkillList(ids.Select(id => new SkillListEntry(new SkillDefinitionId(id), 8f, 8, 0, 0, 0,
+            1, 5, SkillListEntry.NoPrerequisite, 0)).ToArray()));
+        world.Inventory.OnSnapshot(
+            new InventorySnapshot(
+                4,
+                0,
+                0,
+                1,
+                new[]
+                {
+                    new InventoryEntry(7, new ItemDefinitionId("item.consumable.minor_health"), 99),
+                    new InventoryEntry(8, new ItemDefinitionId("item.consumable.minor_mana"), 99)
+                }));
+        yield return null;
+        yield return null;
+
+        Assert.That(Enumerable.Range(1, 9).Select(slot => Slot(bar, slot).activeSelf), Is.All.True);
+        Assert.That(SlotText(bar, 9), Is.EqualTo("Frost Lance\n9"));
+        Assert.That(SlotText(bar, 4), Is.EqualTo("Minor Health Potion x 99\n4"));
+        Assert.That(((RectTransform)bar.transform.Find("Bar")).rect.width, Is.EqualTo(634f).Within(0.5f));
+        foreach (int slot in Enumerable.Range(1, 9))
+        {
+            TMP_Text label = Slot(bar, slot).GetComponentInChildren<TMP_Text>();
+            label.ForceMeshUpdate();
+            Rect box = label.rectTransform.rect;
+            Assert.That(label.fontSize, Is.GreaterThanOrEqualTo(12f), $"slot {slot}");
+            Assert.That(label.textBounds.size.x, Is.LessThanOrEqualTo(box.width + 0.5f), $"slot {slot}");
+            Assert.That(label.textBounds.size.y, Is.LessThanOrEqualTo(box.height + 0.5f), $"slot {slot}");
+        }
+    }
+
+    // A grotto Vanguard's eight effects, ailments first, wrap to two lines at 12 points within the bar, beside its real
+    // name, HP, quest, map, and ping (Prototype Content §2; owner decision 23).
+    [UnityTest]
+    public IEnumerator StatusBar_FitsAGrottoVanguardsEightEffects_OnTwoLines_BesideEveryOtherPart()
+    {
+        GameClient client = CreateIdleClient();
+        ClientWorld world = GiveWorld(client);
+        var bar = StatusBar.Create(client);
+        m_created.Add(bar.gameObject);
+        (string Id, string Name, uint Ms)[] effects =
+        {
+            ("status.poisoned", "Poisoned", 20_000), ("status.silenced", "Silenced", 15_000),
+            ("status.blinded", "Blinded", 20_000), ("status.focus", "Focus", 60_000),
+            ("status.war_cry", "War Cry", 60_000), ("status.iron_guard", "Iron Guard", 60_000),
+            ("status.numbed", "Numbed", 10_000), ("status.fire_weapon", "Fire Weapon", 1_200_000)
+        };
+        object loader = typeof(GameClient)
+            .GetField("m_contentLoader", BindingFlags.NonPublic | BindingFlags.Instance)!
+            .GetValue(client);
+        typeof(StreamingContentLoader).GetProperty(nameof(StreamingContentLoader.Content))!.SetValue(
+            loader,
+            new ClientContent(
+                "0000000000000000",
+                new Dictionary<MapDefinitionId, ClientMap>
+                {
+                    [new MapDefinitionId("map.training_ground")] = new(new MapDefinitionId("map.training_ground"),
+                        "Umbral Grotto", "UmbralGrotto", YardGrid())
+                },
+                new Dictionary<JobDefinitionId, ClientJob>(),
+                new Dictionary<MonsterDefinitionId, ClientMonster>(),
+                new Dictionary<ItemDefinitionId, ClientItem>(),
+                new Dictionary<SkillDefinitionId, ClientSkill>(),
+                effects.ToDictionary(
+                    effect => new StatusDefinitionId(effect.Id),
+                    effect => new ClientStatusEffect(new StatusDefinitionId(effect.Id), effect.Name, null))));
+        world.OnStatusEffects(new StatusEffects(effects
+            .Select(effect => new StatusEffectEntry(new StatusDefinitionId(effect.Id), effect.Ms))
+            .ToArray()));
+        world.OnQuestLog(HuntAt(QuestState.Active, 3));
+        yield return null;
+        bar.ShowCharacter("Vanguardian", 25, "Vanguard", 10);
+        bar.ShowHealth(1234, 1234, false);
+        bar.ShowPing(120);
+        yield return null;
+
+        TMP_Text shown = Label(bar, "Effects");
+        Assert.That(shown.text, Does.StartWith("Poisoned 20s   Silenced 15s   Blinded 20s"));
+        Assert.That(shown.text, Does.EndWith("Fire Weapon 20m"));
+        Assert.That(shown.fontSize, Is.EqualTo(12f));
+        foreach (TMP_Text part in bar.GetComponentsInChildren<TMP_Text>())
+        {
+            part.ForceMeshUpdate();
+            Rect box = part.rectTransform.rect;
+            Assert.That(part.textBounds.size.x, Is.LessThanOrEqualTo(box.width + 0.5f), part.name + ": " + part.text);
+            Assert.That(part.textBounds.size.y, Is.LessThanOrEqualTo(box.height + 0.5f), part.name + ": " + part.text);
+        }
+
+        Assert.That(shown.textInfo.lineCount, Is.EqualTo(2), "two lines");
     }
 
     // A key or a bar button of a skill for an enemy waits for a click on its target (owner's walk, 2026-09-30): its slot

@@ -59,7 +59,7 @@ public sealed class PanelLayoutTests
         Rect bar = SkillBar.BoundsFor(width, SkillSlots.Count);
         Rect lines = ChatPanel.BoundsFor(true);
         Rect stick = TouchControls.StickBounds;
-        Assert.That(bar.width, Is.EqualTo(628f), "eight slots of 70 with the padding and the spacing");
+        Assert.That(bar.width, Is.EqualTo(634f), "nine slots of 62 with the padding and the spacing");
         Assert.That(SkillBar.WidthFor(5), Is.EqualTo(604f), "five keep their 112");
         Rect column = TouchControls.ButtonColumnBounds(width);
 

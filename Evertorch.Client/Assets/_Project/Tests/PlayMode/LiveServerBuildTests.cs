@@ -474,7 +474,7 @@ public sealed class LiveServerBuildTests : InputTestFixture
         Assert.That(other.MalformedMessages + other.UnexpectedMessages, Is.Zero, "the healed player's traffic");
     }
 
-    // A Vanguard with Heavy Blow 1 sees eight narrow slots, its own tree on 6 to 8; D-pad left turns the gamepad's page,
+    // A Vanguard with Heavy Blow 1 sees narrow slots, its own tree on 6 to 8; D-pad left turns the gamepad's page,
     // which the brackets follow, and Tab then South cast Heavy Blow from slot 6 on a slime (Prototype Content §2, §4).
     [UnityTest]
     [Timeout(TestTimeoutMs)]
@@ -499,7 +499,7 @@ public sealed class LiveServerBuildTests : InputTestFixture
         Assert.That(
             new[] { 1, 7, 8 }.Select(slot => SlotLabel(bar, slot).text),
             Is.EqualTo(new[] { "Strike\nLocked", "War Cry\nLocked", "Iron Guard\nLocked" }));
-        Assert.That(bar.ShownSlotWidth, Is.EqualTo(70f), "eight slots narrow");
+        Assert.That(bar.ShownSlotWidth, Is.EqualTo(62f), "the slots narrow");
 
         yield return Tap(gamepad.dpad.left);
         yield return WaitUntil(() => SlotLabel(bar, 6).text == "Heavy Blow\n[6]", 2f);

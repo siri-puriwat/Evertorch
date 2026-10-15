@@ -17,6 +17,7 @@ public sealed class CombatInputSource : IDisposable
     private readonly InputAction m_pickup;
     private readonly InputAction m_talk;
     private CombatRequest m_request;
+    private bool m_isFromGamepad;
 
     public CombatInputSource(
         InputAction next,
@@ -63,9 +64,26 @@ public sealed class CombatInputSource : IDisposable
 
     public CombatRequest TakeRequest()
     {
+        return TakeRequest(out bool _);
+    }
+
+    /// <summary>
+    ///     The request since the last call; <paramref name="isFromGamepad" /> says whether a gamepad asked, since the
+    ///     d-pad's right is slot 9 on the gamepad's second page (Prototype Content §4).
+    /// </summary>
+    public CombatRequest TakeRequest(out bool isFromGamepad)
+    {
         CombatRequest request = m_request;
+        isFromGamepad = request != CombatRequest.None && m_isFromGamepad;
         m_request = CombatRequest.None;
+        m_isFromGamepad = false;
         return request;
+    }
+
+    private void Set(CombatRequest request, InputAction.CallbackContext context)
+    {
+        m_request = request;
+        m_isFromGamepad = context.control?.device is Gamepad;
     }
 
     private void OnNext(InputAction.CallbackContext context)
@@ -76,37 +94,37 @@ public sealed class CombatInputSource : IDisposable
             return;
         }
 
-        m_request = CombatRequest.Next;
+        Set(CombatRequest.Next, context);
     }
 
     private void OnPrevious(InputAction.CallbackContext context)
     {
-        m_request = CombatRequest.Previous;
+        Set(CombatRequest.Previous, context);
     }
 
     private void OnClear(InputAction.CallbackContext context)
     {
-        m_request = CombatRequest.Clear;
+        Set(CombatRequest.Clear, context);
     }
 
     private void OnAttack(InputAction.CallbackContext context)
     {
-        m_request = CombatRequest.Attack;
+        Set(CombatRequest.Attack, context);
     }
 
     private void OnRespawn(InputAction.CallbackContext context)
     {
-        m_request = CombatRequest.Respawn;
+        Set(CombatRequest.Respawn, context);
     }
 
     private void OnPickup(InputAction.CallbackContext context)
     {
-        m_request = CombatRequest.Pickup;
+        Set(CombatRequest.Pickup, context);
     }
 
     private void OnTalk(InputAction.CallbackContext context)
     {
-        m_request = CombatRequest.Talk;
+        Set(CombatRequest.Talk, context);
     }
 }
 }
