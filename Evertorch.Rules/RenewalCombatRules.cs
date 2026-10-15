@@ -41,9 +41,9 @@ public sealed class RenewalCombatRules : ICombatRules
 
     public HitResult CalculateHit(HitContext context)
     {
-        int hitChance = Math.Max(
-            MinHitChancePercent,
-            Math.Min(MaxHitChancePercent, context.AttackerHit - context.DefenderFlee));
+        int hit = context.IsAttackerBlinded ? LessAQuarter(context.AttackerHit) : context.AttackerHit;
+        int flee = context.IsDefenderBlinded ? LessAQuarter(context.DefenderFlee) : context.DefenderFlee;
+        int hitChance = Math.Max(MinHitChancePercent, Math.Min(MaxHitChancePercent, hit - flee));
 
         // Every stage reached draws exactly one number, even at zero chance, so a seed replays identically
         // whatever the statistics are.
@@ -53,13 +53,19 @@ public sealed class RenewalCombatRules : ICombatRules
         }
 
         int criticalChance = context.AttackerCritical - 2 * context.DefenderLuk;
+        if (context.IsDefenderAsleep)
+        {
+            criticalChance *= 2;
+        }
+
         if (context.Random.Next(PermilleRange) < criticalChance)
         {
             return new HitResult(HitOutcome.Critical, hitChance);
         }
 
-        HitOutcome outcome = context.Random.Next(PercentRange) < hitChance ? HitOutcome.Hit : HitOutcome.Miss;
-        return new HitResult(outcome, hitChance);
+        // A held body is always hit; the roll still draws, so a seed replays whatever holds whom.
+        bool isHit = context.Random.Next(PercentRange) < hitChance || context.IsDefenderHeld;
+        return new HitResult(isHit ? HitOutcome.Hit : HitOutcome.Miss, hitChance);
     }
 
     public DamageResult CalculateDamage(DamageContext context)
@@ -89,8 +95,25 @@ public sealed class RenewalCombatRules : ICombatRules
         }
 
         raw = raw * context.RatioPercent / 100;
-        long reduced = raw * (DefenseScale + context.HardDefense) / (DefenseScale + 10L * context.HardDefense)
-            - context.SoftDefense;
+        long hardDefense = context.HardDefense;
+        long softDefense = context.SoftDefense;
+        if (context.IsDefenderFrozen)
+        {
+            hardDefense /= 2;
+        }
+
+        // A monster has hard defense alone, a player both; poison cuts the part that varies with the defender's own
+        // body, after the freeze's half (Gameplay Systems §9.1).
+        if (context.IsDefenderPoisoned && context.AttackerKind == AttackerKind.Character)
+        {
+            hardDefense -= hardDefense * 25 / 100;
+        }
+        else if (context.IsDefenderPoisoned)
+        {
+            softDefense -= softDefense * 25 / 100;
+        }
+
+        long reduced = raw * (DefenseScale + hardDefense) / (DefenseScale + 10L * hardDefense) - softDefense;
         long amount = Math.Max(1, reduced);
         if (context.IsCritical)
         {
@@ -151,6 +174,12 @@ public sealed class RenewalCombatRules : ICombatRules
     public static int SizePercent(WeaponType? weapon, BodySize size)
     {
         return weapon == WeaponType.Sword && size != BodySize.Medium ? 75 : 100;
+    }
+
+    // Blind's cut of a HIT or a FLEE (Gameplay Systems §9.1).
+    private static int LessAQuarter(int value)
+    {
+        return value - value * 25 / 100;
     }
 
     // The element table's cell for a part of the given element against the defender's; without an attack element

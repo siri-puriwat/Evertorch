@@ -14,7 +14,9 @@ public readonly struct DamageContext
         IRandomSource random,
         int ratioPercent = 100,
         int flatAttack = 0,
-        DamageModifiers modifiers = default)
+        DamageModifiers modifiers = default,
+        bool isDefenderFrozen = false,
+        bool isDefenderPoisoned = false)
     {
         if (statusAttack < 0
             || weaponAttack < 0
@@ -36,6 +38,8 @@ public readonly struct DamageContext
         RatioPercent = ratioPercent;
         FlatAttack = flatAttack;
         Modifiers = modifiers;
+        IsDefenderFrozen = isDefenderFrozen;
+        IsDefenderPoisoned = isDefenderPoisoned;
     }
 
     public AttackerKind AttackerKind { get; }
@@ -74,6 +78,18 @@ public readonly struct DamageContext
     public DamageModifiers Modifiers { get; }
 
     /// <summary>
+    ///     Whether the defender is frozen, which halves its hard defense (Gameplay Systems §9.1); its Water comes in the
+    ///     modifiers' defense element.
+    /// </summary>
+    public bool IsDefenderFrozen { get; }
+
+    /// <summary>
+    ///     Whether the defender is poisoned, which takes a quarter off a player's soft defense and a monster's hard
+    ///     defense, after the freeze's half.
+    /// </summary>
+    public bool IsDefenderPoisoned { get; }
+
+    /// <summary>
     ///     The same inputs for a skill's damage: never critical, at the skill's share of the raw damage (Gameplay
     ///     Systems §9), every other input kept.
     /// </summary>
@@ -89,7 +105,9 @@ public readonly struct DamageContext
             Random,
             ratioPercent,
             FlatAttack,
-            Modifiers);
+            Modifiers,
+            IsDefenderFrozen,
+            IsDefenderPoisoned);
     }
 }
 }

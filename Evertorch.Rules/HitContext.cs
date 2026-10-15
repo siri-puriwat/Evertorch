@@ -10,7 +10,11 @@ public readonly struct HitContext
         int defenderFlee,
         int defenderPerfectDodge,
         int defenderLuk,
-        IRandomSource random)
+        IRandomSource random,
+        bool isDefenderHeld = false,
+        bool isDefenderAsleep = false,
+        bool isAttackerBlinded = false,
+        bool isDefenderBlinded = false)
     {
         if (attackerHit < 0 || attackerCritical < 0 || defenderFlee < 0 || defenderPerfectDodge < 0 || defenderLuk < 0)
         {
@@ -23,6 +27,10 @@ public readonly struct HitContext
         DefenderPerfectDodge = defenderPerfectDodge;
         DefenderLuk = defenderLuk;
         Random = random ?? throw new ArgumentNullException(nameof(random));
+        IsDefenderHeld = isDefenderHeld;
+        IsDefenderAsleep = isDefenderAsleep;
+        IsAttackerBlinded = isAttackerBlinded;
+        IsDefenderBlinded = isDefenderBlinded;
     }
 
     public int AttackerHit { get; }
@@ -40,12 +48,37 @@ public readonly struct HitContext
     public IRandomSource Random { get; }
 
     /// <summary>
+    ///     Whether the defender is stunned, frozen, or asleep (Gameplay Systems §9.1): then every hit lands but a perfect
+    ///     dodge.
+    /// </summary>
+    public bool IsDefenderHeld { get; }
+
+    /// <summary>Whether the defender sleeps, which doubles the attacker's critical chance.</summary>
+    public bool IsDefenderAsleep { get; }
+
+    /// <summary>Whether the attacker is blinded, which takes a quarter off its HIT.</summary>
+    public bool IsAttackerBlinded { get; }
+
+    /// <summary>Whether the defender is blinded, which takes a quarter off its FLEE.</summary>
+    public bool IsDefenderBlinded { get; }
+
+    /// <summary>
     ///     The same inputs with no chance of a critical, as a skill rolls (Gameplay Systems §9); the critical stage
     ///     still draws.
     /// </summary>
     public HitContext WithoutCritical()
     {
-        return new HitContext(AttackerHit, 0, DefenderFlee, DefenderPerfectDodge, DefenderLuk, Random);
+        return new HitContext(
+            AttackerHit,
+            0,
+            DefenderFlee,
+            DefenderPerfectDodge,
+            DefenderLuk,
+            Random,
+            IsDefenderHeld,
+            IsDefenderAsleep,
+            IsAttackerBlinded,
+            IsDefenderBlinded);
     }
 }
 }
