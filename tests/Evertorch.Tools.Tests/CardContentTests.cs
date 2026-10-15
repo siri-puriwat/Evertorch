@@ -520,16 +520,20 @@ public sealed class CardContentTests
             Is.EqualTo(
                 new[]
                 {
-                    ("item.card.barrow_crawler", 0.001, 1, 1, "item.consumable.earth_converter"),
-                    ("item.card.forest_crawler", 0.001, 1, 1, "item.consumable.earth_converter"),
-                    ("item.card.gloom_wisp", 0.001, 1, 1, "item.consumable.fire_converter"),
+                    ("item.card.barrow_crawler", 0.001, 1, 1,
+                        "item.consumable.earth_converter item.consumable.grand_remedy"),
+                    ("item.card.forest_crawler", 0.001, 1, 1, "item.consumable.earth_converter item.consumable.remedy"),
+                    ("item.card.gloom_wisp", 0.001, 1, 1,
+                        "item.consumable.fire_converter item.consumable.grand_remedy"),
                     ("item.card.grotto_crawler", 0.001, 1, 1, "item.consumable.wind_converter"),
-                    ("item.card.hollow_wisp", 0.001, 1, 1, "item.consumable.water_converter"),
-                    ("item.card.slime_monarch", 0.01, 1, 1, "item.consumable.fire_converter"),
-                    ("item.card.spark_wisp", 0.001, 1, 1, "item.consumable.wind_converter"),
+                    ("item.card.hollow_wisp", 0.001, 1, 1,
+                        "item.consumable.water_converter item.consumable.grand_remedy"),
+                    ("item.card.slime_monarch", 0.01, 1, 1,
+                        "item.consumable.fire_converter item.consumable.grand_remedy"),
+                    ("item.card.spark_wisp", 0.001, 1, 1, "item.consumable.wind_converter item.consumable.remedy"),
                     ("item.card.training_slime", 0.001, 1, 1, "")
                 }),
-            "each monster's own card last but its converter, so every earlier draw keeps its place");
+            "each monster's own card last but its converter and its remedy, so every earlier draw keeps its place");
         Assert.That(
             result.Content.Items
                 .Where(item => item.Definition.Slot != EquipmentSlot.None)

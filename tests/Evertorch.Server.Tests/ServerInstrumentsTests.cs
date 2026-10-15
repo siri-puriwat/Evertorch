@@ -175,7 +175,7 @@ public sealed class ServerInstrumentsTests
     }
 
     [Test]
-    public void Ailments_AreCountedByAilmentAndOutcome_AndABreakAsAChange()
+    public void Ailments_AreCountedByAilmentAndOutcome_AndABreakAndACureAsChanges()
     {
         var server = new TestServer(withEveryMap: true, withGrotto: true, withMonsters: true, withMonsterAi: false);
         using var recorder = new MeterRecorder(server.Instruments.Meter);
@@ -192,6 +192,9 @@ public sealed class ServerInstrumentsTests
         rolls.Roll(player, boss, frozen, 10_000, 8000);
         rolls.Roll(player, player, new StatusDefinitionId("status.poisoned"), 5000, 20_000);
         bool hasBroken = rolls.Break(crawler);
+        server.StatusEffects.Apply(player, new StatusDefinitionId("status.blinded"), default,
+            server.World.NowMs + 9000);
+        server.StatusEffects.Cure(player, new[] { Ailment.Blind, Ailment.Poison });
 
         Assert.That(SumTagged(recorder, "evertorch.combat.ailments", "outcome", "landed"), Is.EqualTo(1));
         Assert.That(SumTagged(recorder, "evertorch.combat.ailments", "outcome", "refused"), Is.EqualTo(1));
@@ -200,6 +203,7 @@ public sealed class ServerInstrumentsTests
         Assert.That(SumTagged(recorder, "evertorch.combat.ailments", "ailment", "freeze"), Is.EqualTo(3));
         Assert.That(hasBroken, Is.True);
         Assert.That(SumTagged(recorder, "evertorch.combat.status_effects", "change", "broken"), Is.EqualTo(1));
+        Assert.That(SumTagged(recorder, "evertorch.combat.status_effects", "change", "cured"), Is.EqualTo(1));
     }
 
     [Test]

@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using Evertorch.Game;
 using Evertorch.Protocol;
 using Evertorch.Rules;
@@ -128,6 +130,14 @@ public sealed class StatusEffectSystem : ITickPhase
         }
 
         return count;
+    }
+
+    /// <summary>
+    ///     Ends the ailments of <paramref name="cures" /> active on <paramref name="entity" /> (Gameplay Systems §11.2).
+    /// </summary>
+    public int Cure(WorldEntity entity, IReadOnlyList<Ailment> cures)
+    {
+        return cures.Count == 0 ? 0 : EndAilments(entity, cures.Contains, StatusEffectChange.Cured);
     }
 
     /// <summary>

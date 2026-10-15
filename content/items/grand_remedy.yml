@@ -1,0 +1,19 @@
+id: item.consumable.grand_remedy
+displayName: Grand Remedy
+type: consumable
+stackLimit: 20
+server:
+  # No shop trades it; the board sells it.
+  weight: 5
+  sellPrice: 0
+  effect:
+    hp: 120
+    sp: 40
+    cures: [poison, silence, blind]
+  market:
+    basePrice: 120
+    floor: 30
+# The mana potion's icon and pickup until its own art arrives.
+client:
+  icon: item_minor_mana
+  model: pickup_minor_mana

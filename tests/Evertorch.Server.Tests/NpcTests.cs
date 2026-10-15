@@ -197,6 +197,7 @@ public sealed class NpcTests
                 {
                     ("item.armor.cloth", 40u, 20u), ("item.armor.leather", 0u, 45u),
                     ("item.consumable.minor_health", 20u, 10u), ("item.consumable.minor_mana", 30u, 15u),
+                    ("item.consumable.remedy", 30u, 15u),
                     ("item.material.crawler_shell", 0u, 5u), ("item.material.gloom_dust", 0u, 14u),
                     ("item.material.grotto_carapace", 0u, 12u), ("item.material.monarch_jelly", 0u, 40u),
                     ("item.material.slime_gel", 0u, 2u), ("item.weapon.ash_staff", 0u, 60u),
@@ -234,7 +235,8 @@ public sealed class NpcTests
         Assert.That(shop.JobChanges.Concat(warden.JobChanges), Is.Empty, "only the Guildmaster changes jobs");
         Assert.That(
             (shop.GetEncodedLength(), warden.GetEncodedLength(), guildmaster.GetEncodedLength()),
-            Is.EqualTo((457, 211, 78)));
+            Is.EqualTo((489, 211, 78)),
+            "the Quartermaster's fourteen items in 489 bytes (Network Protocol §6)");
         NpcServices storekeeper = NpcOf(server, Storekeeper).Services;
         Assert.That(
             server.World.Maps.SelectMany(map => map.Npcs).Where(npc => npc.Services.KeepsStorage)

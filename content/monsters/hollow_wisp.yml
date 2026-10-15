@@ -37,6 +37,9 @@ drops:
   - item: item.consumable.water_converter
     chance: 0.03
     amount: { min: 1, max: 1 }
+  - item: item.consumable.grand_remedy
+    chance: 0.02
+    amount: { min: 1, max: 1 }
 rewards:
   baseExperience: 165
   jobExperience: 120

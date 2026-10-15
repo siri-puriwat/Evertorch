@@ -9,15 +9,15 @@ server:
     - spCost: 12
       castTimeMs: { fixed: 1000 }
       effect:
-        heal: { hp: 40 }
+        heal: { hp: 40, cures: [poison, silence, blind] }
     - spCost: 15
       castTimeMs: { fixed: 1000 }
       effect:
-        heal: { hp: 70 }
+        heal: { hp: 70, cures: [poison, silence, blind] }
     - spCost: 18
       castTimeMs: { fixed: 1000 }
       effect:
-        heal: { hp: 100 }
+        heal: { hp: 100, cures: [poison, silence, blind] }
 client:
   icon: skill_mend
-  description: Mend the wounds of a player you choose, or your own. You stand still while you cast. Each level heals more.
+  description: Mend the wounds of a player you choose, or your own, and end poison, silence, and blind. You stand still while you cast. Each level heals more.

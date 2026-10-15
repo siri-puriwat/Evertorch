@@ -16,6 +16,9 @@ public enum StatusEffectChange
     Dropped,
 
     /// <summary>A freeze or a sleep a landed hit ended (Gameplay Systems §9.1).</summary>
-    Broken
+    Broken,
+
+    /// <summary>An ailment a Remedy, a Grand Remedy, or Mend ended (Gameplay Systems §11.2).</summary>
+    Cured
 }
 }

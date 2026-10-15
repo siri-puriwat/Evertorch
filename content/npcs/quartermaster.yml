@@ -7,6 +7,8 @@ server:
       price: 20
     - item: item.consumable.minor_mana
       price: 30
+    - item: item.consumable.remedy
+      price: 30
     - item: item.armor.cloth
       price: 40
     - item: item.weapon.training_sword

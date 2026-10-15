@@ -634,6 +634,7 @@ public sealed class CombatSystem : ITickPhase
         if (resolution.Result == SkillResult.Healed)
         {
             target.CurrentHealth = Math.Min(target.MaxHealth, target.CurrentHealth + resolution.Amount);
+            m_statusEffects.Cure(target, values.Effect.Cures);
             AnnounceResolved(map, caster, target, skill.Id, SkillOutcome.Healed, resolution.Amount, tick);
             if (target is PlayerEntity healed)
             {

@@ -229,7 +229,7 @@ public sealed class NpcContentTests
                 new[]
                 {
                     ("item.consumable.minor_health", 20), ("item.consumable.minor_mana", 30),
-                    ("item.armor.cloth", 40), ("item.weapon.training_sword", 50),
+                    ("item.consumable.remedy", 30), ("item.armor.cloth", 40), ("item.weapon.training_sword", 50),
                     ("item.weapon.training_staff", 50)
                 }));
         foreach (ShopEntry entry in quartermaster.Definition.Shop)

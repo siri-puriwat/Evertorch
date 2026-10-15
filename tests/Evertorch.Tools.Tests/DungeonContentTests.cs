@@ -282,9 +282,9 @@ public sealed class DungeonContentTests
                 new[]
                 {
                     "item.material.gloom_dust 0.5 item.consumable.minor_mana 0.25 item.card.hollow_wisp 0.001 "
-                    + "item.consumable.water_converter 0.03",
+                    + "item.consumable.water_converter 0.03 item.consumable.grand_remedy 0.02",
                     "item.material.grotto_carapace 0.5 item.consumable.minor_health 0.25 item.card.barrow_crawler 0.001 "
-                    + "item.consumable.earth_converter 0.03"
+                    + "item.consumable.earth_converter 0.03 item.consumable.grand_remedy 0.02"
                 }));
 
         MonsterSpawn[] spawns = grotto.MonsterSpawns.Skip(3).ToArray();
@@ -352,9 +352,10 @@ public sealed class DungeonContentTests
                     ("item.material.monarch_jelly", 1d), ("item.weapon.iron_sword", 0.25),
                     ("item.weapon.ash_staff", 0.25), ("item.armor.leather", 0.25),
                     ("item.material.emberstone", 1d), ("item.material.wardstone", 1d),
-                    ("item.card.slime_monarch", 0.01), ("item.consumable.fire_converter", 1d)
+                    ("item.card.slime_monarch", 0.01), ("item.consumable.fire_converter", 1d),
+                    ("item.consumable.grand_remedy", 1d)
                 }),
-            "both ores, the card, then the converter, last, so every earlier draw keeps its place");
+            "both ores, the card, the converter, then the Grand Remedy, last, so every earlier draw keeps its place");
         Assert.That(
             (slam.TargetType, slam.DamageType, slam.AreaRadius, slam.Levels.Single().FixedCastMs),
             Is.EqualTo((SkillTargetType.Self, (SkillDamageType?)SkillDamageType.Magical, 4d, 1500)));

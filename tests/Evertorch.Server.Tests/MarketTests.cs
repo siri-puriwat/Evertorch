@@ -706,6 +706,7 @@ public sealed class MarketTests
                     ("item.card.hollow_wisp", 2400u, 0u), ("item.card.slime_monarch", 24000u, 0u),
                     ("item.card.spark_wisp", 800u, 0u), ("item.card.training_slime", 800u, 0u),
                     ("item.consumable.earth_converter", 60u, 0u), ("item.consumable.fire_converter", 60u, 0u),
+                    ("item.consumable.grand_remedy", 120u, 0u),
                     ("item.consumable.water_converter", 60u, 0u), ("item.consumable.wind_converter", 60u, 0u),
                     ("item.material.emberstone", 40u, 0u), (Dust, 28u, 0u),
                     ("item.material.grotto_carapace", 24u, 0u), ("item.material.monarch_jelly", 80u, 0u),

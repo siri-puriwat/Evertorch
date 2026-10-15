@@ -2278,8 +2278,8 @@ public sealed class ItemActionSystem : ITickPhase
         }
     }
 
-    // A use restores what its item gives once its commit returns, capped at the maximums, and starts its status from
-    // that tick (Gameplay Systems §11.2). A character that died meanwhile gets nothing, even one already respawned: the
+    // A use restores what its item gives once its commit returns, capped at the maximums, starts its status from that
+    // tick, and ends the ailments it cures (Gameplay Systems §11.2). A character that died meanwhile gets nothing, even one already respawned: the
     // unit is spent either way.
     private void Restore(PlayerEntity player, ItemEffect effect, int deathsAtUse)
     {
@@ -2302,6 +2302,8 @@ public sealed class ItemActionSystem : ITickPhase
             long now = (long)m_tick * MillisecondsPerSecond / m_tickRate;
             m_statusEffects.Apply(player, status, default, now + effect.StatusDurationMs);
         }
+
+        m_statusEffects.Cure(player, effect.Cures);
     }
 
     // The statistics follow the slots as committed (Gameplay Systems §2); the owner hears of new maximums as of any

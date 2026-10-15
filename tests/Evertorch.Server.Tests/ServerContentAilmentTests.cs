@@ -182,7 +182,7 @@ public sealed class ServerContentAilmentTests
     }
 
     [Test]
-    public void Load_ForTheRepositoryContent_ReadsTheSixAilmentsStatuses_AndNoRiderCureOrCardAilmentYet()
+    public void Load_ForTheRepositoryContent_ReadsTheSixAilmentsStatuses_MendsAndTheRemediesCures()
     {
         ServerContent content = ServerContentLoader.Load(PackageFixture.BuildRepositoryPackage());
 
@@ -207,17 +207,24 @@ public sealed class ServerContentAilmentTests
                 .Select(status => status.DurationMs),
             Is.All.Zero);
         Assert.That(
-            content.Skills.Values.SelectMany(skill => skill.Levels).Select(level => level.Effect)
-                .Where(effect => effect.Rider != null || effect.Cures.Count > 0
-                    || effect.ChanceBasisPoints != ContentLimits.MaxChanceBasisPoints),
-            Is.Empty);
+            content.Skills.Values.Where(skill => skill.Levels.Any(level => level.Effect.Cures.Count > 0))
+                .Select(skill => skill.Id.Value),
+            Is.EqualTo(new[] { "skill.mend" }));
+        Assert.That(
+            content.Skills[new SkillDefinitionId("skill.mend")].Levels.Select(level => level.Effect.Cures),
+            Is.All.EqualTo(new[] { Ailment.Poison, Ailment.Silence, Ailment.Blind }), "every level");
         Assert.That(
             content.Items.Values.Where(item => item.Card != null)
                 .Select(item => item.Card!.Bonus.Inflict.Count + item.Card.Bonus.Resist.Count),
             Is.EqualTo(new[] { 0, 0, 0, 0, 0, 0, 0, 0 }));
         Assert.That(
-            content.Items.Values.Where(item => item.Effect != null).Select(item => item.Effect!.Cures.Count),
-            Is.All.Zero);
+            content.Items.Values.Where(item => item.Effect != null && item.Effect.Cures.Count > 0)
+                .Select(item => (item.Id.Value, item.Effect!.Health, item.Effect.Spirit, item.Effect.Cures.Count))
+                .OrderBy(cure => cure.Value, StringComparer.Ordinal),
+            Is.EqualTo(new[]
+            {
+                ("item.consumable.grand_remedy", 120, 40, 3), ("item.consumable.remedy", 0, 0, 3)
+            }));
     }
 
     [Test]

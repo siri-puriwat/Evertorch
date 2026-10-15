@@ -1,0 +1,13 @@
+id: item.consumable.remedy
+displayName: Remedy
+type: consumable
+stackLimit: 50
+server:
+  weight: 3
+  sellPrice: 15
+  effect:
+    cures: [poison, silence, blind]
+# The health potion's icon and pickup until its own art arrives.
+client:
+  icon: item_minor_health
+  model: pickup_minor_health

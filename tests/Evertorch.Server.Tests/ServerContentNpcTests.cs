@@ -143,7 +143,8 @@ public sealed class ServerContentNpcTests
                     "npc.broker", "npc.gate_warden", "npc.guildmaster", "npc.quartermaster", "npc.smith",
                     "npc.storekeeper"
                 }));
-        Assert.That(content.Npcs[new NpcDefinitionId(Quartermaster)].Shop, Has.Count.EqualTo(5));
+        Assert.That(content.Npcs[new NpcDefinitionId(Quartermaster)].Shop, Has.Count.EqualTo(6),
+            "the Remedy the sixth");
         Assert.That(content.Npcs[new NpcDefinitionId("npc.gate_warden")].HasShop, Is.False);
         Assert.That(
             content.Npcs.Values.Where(npc => npc.OffersReset).Select(npc => npc.Id.Value),
