@@ -22,6 +22,7 @@ public sealed class ClientWorld
     private readonly Dictionary<EntityId, uint> m_lifeChangeTicks = new();
     private readonly double m_tickSeconds;
     private EntityId m_localCastTarget;
+    private bool m_hasLocalState;
     private double m_afterCastDelayEndsAt;
 
     public ClientWorld(NavigationGrid grid, WorldEntered entered, uint serverTickRate)
@@ -130,6 +131,11 @@ public sealed class ClientWorld
     ///     Whether the local character is silenced, so uses no skill.
     /// </summary>
     public bool IsSilenced => !IsLocalDead && (LocalStateFlags & EntityStateFlags.Silenced) != 0;
+
+    /// <summary>
+    ///     How many times the local character's ailments changed in this world, its baseline not counted.
+    /// </summary>
+    public int LocalAilmentChanges { get; private set; }
 
     /// <summary>
     ///     The basic attack's range, which the client walks within before asking for nothing more: the server checks
@@ -991,7 +997,9 @@ public sealed class ClientWorld
 
             if (state.Entity == LocalEntity)
             {
-                EntityStateFlags flagsBefore = LocalStateFlags;
+                // The first state is the baseline: an ailment the character entered with did not just start.
+                EntityStateFlags flagsBefore = m_hasLocalState ? LocalStateFlags : state.StateFlags;
+                m_hasLocalState = true;
                 LocalStateFlags = state.StateFlags;
 
                 // The server interrupts the cast as the hold or the silence lands; no message says so.
@@ -1033,6 +1041,11 @@ public sealed class ClientWorld
     {
         if (((before ^ after) & Ailments.All) != 0)
         {
+            if (entity == LocalEntity)
+            {
+                LocalAilmentChanges++;
+            }
+
             AilmentsChanged?.Invoke(entity, before);
         }
     }

@@ -71,7 +71,7 @@ public sealed class CardWindow : MonoBehaviour
         }
 
         ClientWorld? world = m_client != null ? m_client.World : null;
-        if (world == null || world != m_world || !TryGetCard(world, out InventoryEntry card))
+        if (world == null || world != m_world || world.IsHeld || !TryGetCard(world, out InventoryEntry card))
         {
             Close();
             return;

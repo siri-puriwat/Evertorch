@@ -144,6 +144,7 @@ public sealed class NpcWindow : MonoBehaviour
             || world == null
             || world != m_world
             || world.IsLocalDead
+            || world.IsHeld
             || !m_client.RemoteViews.TryGetValue(Npc, out EntityView? view)
             || view == null)
         {

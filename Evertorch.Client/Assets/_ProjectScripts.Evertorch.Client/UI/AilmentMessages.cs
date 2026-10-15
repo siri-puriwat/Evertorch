@@ -36,6 +36,7 @@ public static class AilmentMessages
             HeldAct.PickUp => "pick things up",
             HeldAct.Talk => "talk",
             HeldAct.UseItems => "use items",
+            HeldAct.Trade => "trade",
             _ => "use skills"
         };
     }
@@ -51,6 +52,7 @@ public enum HeldAct
     PickUp,
     Talk,
     UseItems,
-    UseSkills
+    UseSkills,
+    Trade
 }
 }

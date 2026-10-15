@@ -130,6 +130,44 @@ public sealed class AilmentHoldClientTests
         Assert.That(recording.Sent, Is.Empty);
     }
 
+    // A freeze that ends and comes back says its words again, with no press between (review of Milestone 19).
+    [Test]
+    public void AHoldThatEndsAndComesBack_SaysItsWordsAgain()
+    {
+        (GameClient client, RecordingConnection recording) = Entering();
+        ClientWorld world = client.World!;
+        Flag(world, 1, EntityStateFlags.Frozen);
+        client.UseSkillSlot(1);
+        Flag(world, 2, EntityStateFlags.None);
+        Flag(world, 3, EntityStateFlags.Frozen);
+        client.UseSkillSlot(1);
+
+        Assert.That(
+            client.ChatLog.Lines.Select(line => line.Text),
+            Is.EqualTo(new[] { "You can't use skills while frozen.", "You can't use skills while frozen." }));
+        Assert.That(recording.Sent, Is.Empty);
+    }
+
+    // A held player begins no trade and answers none, as the server would refuse both; the request waits.
+    [Test]
+    public void ATrade_WhileHeld_IsNeitherAskedNorAnswered()
+    {
+        (GameClient client, RecordingConnection recording) = Entering();
+        ClientWorld world = client.World!;
+        Flag(world, 1, EntityStateFlags.Asleep);
+        world.Trade.Apply(new TradeEvent(TradeEventKind.Requested, "Bobby"));
+
+        uint asked = client.RequestTrade("Bobby");
+        uint answered = client.AnswerTradeRequest(true);
+
+        Assert.That((asked, answered), Is.EqualTo((0u, 0u)));
+        Assert.That(client.ChatLog.Lines.Select(line => line.Text),
+            Is.EqualTo(new[] { "You can't trade while asleep." }));
+        Assert.That(recording.SentOf(MessageOpcode.TradeRequest).Concat(recording.SentOf(MessageOpcode.TradeReply)),
+            Is.Empty);
+        Assert.That(world.Trade.Requester, Is.EqualTo("Bobby"), "the request still waits");
+    }
+
     [UnityTest]
     public IEnumerator Blind_DarkensTheView_TillItEnds()
     {

@@ -130,6 +130,8 @@ public sealed class AilmentContentTests
         "is only for a card that fits armor")]
     [TestCase(WeaponCardText, "7.31% chance", "7.3% chance", "client.description",
         "must state every value of the card above 0, and leaves out 7.31")]
+    [TestCase(WeaponCardText, "7.31% chance", "123456789012345678901234567890% chance", "client.description",
+        "leaves out 7.31")]
     [TestCase(WeaponCardText, "to poison on", "to sicken on", "client.description",
         "must name every ailment of the card, and leaves out poison")]
     [TestCase(ArmorCardText, "resist: { stun: 30, freeze: 50 }", "inflict: { poison: 0.05 }", "server.card.inflict",

@@ -123,7 +123,8 @@ public sealed class GameClient : MonoBehaviour
     private InspectWindow? m_inspectWindow;
     private TradeWindow? m_tradeWindow;
     private bool m_hasSaidHeld;
-    private EntityStateFlags m_ailmentRefusalsSaidUnder;
+    private ClientWorld? m_ailmentRefusalsSaidIn;
+    private int m_ailmentRefusalsSaidAt;
     private SkillBar? m_skillBar;
     private ChatPanel? m_chat;
     private PartyList? m_partyList;
@@ -2056,16 +2057,23 @@ public sealed class GameClient : MonoBehaviour
     // A press an ailment refuses says why, once for each kind until the ailments change; nothing is sent for it.
     private bool IsRefusedByAilment(HeldAct act)
     {
-        string? refusal = m_world != null ? Refusal(m_world, act) : null;
-        if (refusal == null)
+        if (m_world == null)
         {
             return false;
         }
 
-        if ((m_world!.LocalStateFlags & Ailments.All) != m_ailmentRefusalsSaidUnder)
+        // Each ailment change, and each new world, lets every word be said once more.
+        if (m_world != m_ailmentRefusalsSaidIn || m_world.LocalAilmentChanges != m_ailmentRefusalsSaidAt)
         {
-            m_ailmentRefusalsSaidUnder = m_world.LocalStateFlags & Ailments.All;
+            m_ailmentRefusalsSaidIn = m_world;
+            m_ailmentRefusalsSaidAt = m_world.LocalAilmentChanges;
             m_ailmentRefusalsSaid.Clear();
+        }
+
+        string? refusal = Refusal(m_world, act);
+        if (refusal == null)
+        {
+            return false;
         }
 
         if (m_ailmentRefusalsSaid.Add(act))
@@ -2179,6 +2187,11 @@ public sealed class GameClient : MonoBehaviour
             return 0;
         }
 
+        if (IsRefusedByAilment(HeldAct.Trade))
+        {
+            return 0;
+        }
+
         return Connection != null && TakeTradeToken() ? Connection.SendTradeRequest(name) : 0;
     }
 
@@ -2255,7 +2268,7 @@ public sealed class GameClient : MonoBehaviour
     public uint AnswerTradeRequest(bool isAccepted)
     {
         string? requester = m_world?.Trade.Requester;
-        if (requester == null || Connection == null || !TakeTradeToken())
+        if (requester == null || Connection == null || IsRefusedByAilment(HeldAct.Trade) || !TakeTradeToken())
         {
             return 0;
         }

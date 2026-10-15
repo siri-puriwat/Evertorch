@@ -294,10 +294,12 @@ internal static class ItemDefinitionReader
         return (basisPoints / 100m).ToString("0.##", CultureInfo.InvariantCulture);
     }
 
+    // A run of digits too long for a decimal is kept as written; it states no value a card can have.
     private static string Normalized(string number)
     {
-        return decimal.Parse(number, NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture)
-            .ToString("0.############", CultureInfo.InvariantCulture);
+        return decimal.TryParse(number, NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out decimal value)
+            ? value.ToString("0.############", CultureInfo.InvariantCulture)
+            : number;
     }
 
     // Every name a card's description must hold: each race, element, and size its groups name and the element it gives

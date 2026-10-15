@@ -96,6 +96,11 @@ public static class Ailments
 
     private static string Join(EntityStateFlags flags, bool isShort, string separator)
     {
+        if ((flags & All) == 0)
+        {
+            return string.Empty;
+        }
+
         var text = new StringBuilder();
         foreach (Entry entry in Entries)
         {

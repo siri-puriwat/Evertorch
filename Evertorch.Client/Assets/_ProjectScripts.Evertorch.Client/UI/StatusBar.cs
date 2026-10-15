@@ -228,9 +228,18 @@ public sealed class StatusBar : MonoBehaviour
 
         string line = text.ToString();
         Write(m_effects!, line);
-        float width = line.Length == 0
-            ? 0f
-            : Mathf.Ceil(m_effects!.GetPreferredValues(line, float.PositiveInfinity, 0f).x / 2f * EffectsSlack);
+        float width = 0f;
+        if (line.Length > 0)
+        {
+            // Never narrower than the widest single effect, so none breaks inside a word.
+            width = Mathf.Ceil(m_effects!.GetPreferredValues(line, float.PositiveInfinity, 0f).x / 2f * EffectsSlack);
+            foreach (string effect in line.Split(new[] { "   " }, StringSplitOptions.None))
+            {
+                width = Mathf.Max(width,
+                    Mathf.Ceil(m_effects.GetPreferredValues(effect, float.PositiveInfinity, 0f).x));
+            }
+        }
+
         m_effectsLayout!.minWidth = width;
         m_effectsLayout.preferredWidth = width;
     }

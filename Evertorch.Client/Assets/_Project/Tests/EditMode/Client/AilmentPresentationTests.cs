@@ -172,6 +172,8 @@ public sealed class AilmentPresentationTests
                 + " blind 40"));
     }
 
+    // The player's first state is its baseline: an ailment it entered with, after a map change or a reconnect, did
+    // not just start (review of Milestone 19).
     [Test]
     public void Snapshot_KeepsThePlayersOwnFlags_AndTellsOfEachChangeOfAnyBodysAilments()
     {
@@ -203,13 +205,13 @@ public sealed class AilmentPresentationTests
                 State(Crawler, crawler, EntityStateFlags.Stunned)));
 
         Assert.That(localAfterFirst, Is.EqualTo(EntityStateFlags.Poisoned));
-        Assert.That(afterMovingOnly, Is.EqualTo(2), "a change of movement alone tells nothing");
+        Assert.That(afterMovingOnly, Is.EqualTo(1), "the baseline and a change of movement alone tell nothing");
         Assert.That(
             changes,
             Is.EqualTo(
                 new[]
                 {
-                    (ClientWorldFixture.LocalEntity, EntityStateFlags.None), (Crawler, EntityStateFlags.None),
+                    (Crawler, EntityStateFlags.None),
                     (ClientWorldFixture.LocalEntity, EntityStateFlags.Poisoned | EntityStateFlags.Moving),
                     (Crawler, EntityStateFlags.Frozen)
                 }));

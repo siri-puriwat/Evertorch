@@ -446,7 +446,17 @@ public sealed class CombatSystem : ITickPhase
         {
             if (attacker.Combat.IsCasting)
             {
-                ResolveCast(map, attacker, now, tick);
+                // An earlier impact this tick may have held or silenced the caster, which interrupts its cast as at
+                // the phase's start (Gameplay Systems §9.1).
+                if (attacker.IsHeld || attacker.HasAilment(Ailment.Silence))
+                {
+                    InterruptCast(attacker);
+                }
+                else
+                {
+                    ResolveCast(map, attacker, now, tick);
+                }
+
                 continue;
             }
 

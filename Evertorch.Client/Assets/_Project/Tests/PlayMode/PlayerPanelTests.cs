@@ -874,6 +874,25 @@ public sealed class PlayerPanelTests
         Assert.That(learn != null, Is.True, "the button pressed is still there");
     }
 
+    // A hold closes the NPC window, as a death does: a held player deals with no NPC (review of Milestone 19).
+    [UnityTest]
+    public IEnumerator NpcWindow_ClosesWhenAHoldStarts()
+    {
+        NpcWindow window = OpenShop(out ClientWorld world);
+        yield return null;
+        bool isOpenFree = window.IsOpen;
+
+        world.OnSnapshot(new EntitySnapshot(1, 0, new[]
+        {
+            new EntityState(Local, world.Predictor.Position, new WorldDirection(0f, 1f), 0f, 0f, 0f,
+                EntityStateFlags.Stunned)
+        }));
+        yield return null;
+
+        Assert.That(isOpenFree, Is.True);
+        Assert.That(window.IsOpen, Is.False, "stunned");
+    }
+
     [UnityTest]
     public IEnumerator StatsWindow_ClosesWhenTheWorldChanges()
     {

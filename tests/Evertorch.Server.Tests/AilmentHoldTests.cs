@@ -1,6 +1,9 @@
+using System;
+using System.Collections.Generic;
 using System.Linq;
 using Evertorch.Game;
 using Evertorch.Protocol;
+using Evertorch.Rules;
 using NUnit.Framework;
 
 namespace Evertorch.Server.Tests
@@ -54,6 +57,41 @@ public sealed class AilmentHoldTests
 
         Assert.That(held, Is.EqualTo(start));
         Assert.That(rig.Entity.Position, Is.Not.EqualTo(start), "free again, it walks");
+    }
+
+    // Every hit lands at the least of its draws, criticals and dodges draw high, and every ailment's roll draws 0.
+    private sealed class LandingDraws : IRandomSource
+    {
+        public int Next(int exclusiveMax)
+        {
+            return exclusiveMax == 1000 ? 999 : 0;
+        }
+    }
+
+    // The player's swing lands first in the tick and its card stuns the slime, whose bite is due later in the same
+    // tick: the bite is interrupted, not resolved (review of Milestone 19).
+    [Test]
+    public void AHold_LandedEarlierInATick_InterruptsACastDueLaterInIt()
+    {
+        var rig = new CombatRig(combatRandom: new LandingDraws());
+        TestServer server = rig.Server;
+        rig.Entity.CardBonus = new CardBonus(new PrimaryStats(0, 0, 0, 0, 0, 0), 0, 0, 0, 0, 0, 0, 0,
+            inflict: new Dictionary<Ailment, int> { [Ailment.Stun] = 10_000 });
+        server.Tick();
+        long now = server.World.NowMs;
+        rig.Entity.Combat.BeginSwing(rig.Slime.Id, server.CurrentTick, now + 10,
+            new AttackTiming(TimeSpan.FromSeconds(1), TimeSpan.Zero, TimeSpan.Zero, TimeSpan.Zero));
+        rig.Slime.Combat.BeginCast(new SkillDefinitionId("skill.venom_bite"), 1, rig.Entity.Id, now, now + 20, true);
+        server.Transport.ClearSent();
+
+        server.Tick();
+
+        Assert.That(rig.Slime.HasAilment(Ailment.Stun), Is.True, "the swing's card stunned it");
+        Assert.That(rig.Slime.Combat.IsCasting, Is.False);
+        Assert.That(
+            server.Transport.ControlOpcodesSentTo(rig.Player),
+            Has.No.Member(MessageOpcode.SkillResolved),
+            "the bite never resolved");
     }
 
     [Test]
