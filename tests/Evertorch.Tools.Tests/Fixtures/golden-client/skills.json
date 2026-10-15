@@ -15,12 +15,25 @@
       "icon": "skill_focus"
     },
     {
+      "id": "skill.slime_bite",
+      "displayName": "Slime Bite",
+      "targetType": "enemy",
+      "element": "water",
+      "icon": "skill_slime_bite"
+    },
+    {
       "id": "skill.strike",
       "displayName": "Strike",
       "targetType": "enemy",
       "element": "weapon",
       "icon": "skill_strike",
       "description": "Hits the target harder than a swing."
+    },
+    {
+      "id": "skill.venom_spit",
+      "displayName": "Venom Spit",
+      "targetType": "enemy",
+      "icon": "skill_venom_spit"
     }
   ]
 }

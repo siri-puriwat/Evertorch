@@ -6,8 +6,8 @@ namespace Evertorch.Game
 /// <summary>
 ///     What a card adds while the item holding it is worn (Gameplay Systems §11.1, §11.7): primary statistics; a flat
 ///     attack, magic attack, defense, max HP, and max SP; the boss modifiers, in percent; the damage it adds to a race,
-///     an element, or a size and takes off an element, in percent by name; and the element an armor card gives its
-///     wearer. Server-only content.
+///     an element, or a size and takes off an element, in percent by name; the element an armor card gives its wearer;
+///     and the ailments a weapon card may bring on a hit and an armor card resists (§9.1). Server-only content.
 /// </summary>
 public sealed class CardBonus
 {
@@ -26,7 +26,9 @@ public sealed class CardBonus
         IReadOnlyDictionary<Element, int>? elementDamage = null,
         IReadOnlyDictionary<BodySize, int>? sizeDamage = null,
         IReadOnlyDictionary<Element, int>? elementDamageReduction = null,
-        Element armorElement = Element.Neutral)
+        Element armorElement = Element.Neutral,
+        IReadOnlyDictionary<Ailment, int>? inflict = null,
+        IReadOnlyDictionary<Ailment, int>? resist = null)
     {
         if (attack < 0
             || magicAttack < 0
@@ -38,7 +40,9 @@ public sealed class CardBonus
             || HasNegative(raceDamage)
             || HasNegative(elementDamage)
             || HasNegative(sizeDamage)
-            || HasNegative(elementDamageReduction))
+            || HasNegative(elementDamageReduction)
+            || HasNegative(inflict)
+            || HasNegative(resist))
         {
             throw new ArgumentOutOfRangeException(nameof(attack), "A card's values cannot be negative.");
         }
@@ -56,6 +60,8 @@ public sealed class CardBonus
         SizeDamage = sizeDamage ?? NoValues<BodySize>.Map;
         ElementDamageReduction = elementDamageReduction ?? NoValues<Element>.Map;
         ArmorElement = armorElement;
+        Inflict = inflict ?? NoValues<Ailment>.Map;
+        Resist = resist ?? NoValues<Ailment>.Map;
     }
 
     /// <summary>Added to the wearer's primary statistics.</summary>
@@ -99,6 +105,17 @@ public sealed class CardBonus
     public Element ArmorElement { get; }
 
     /// <summary>
+    ///     The chance a weapon card brings each ailment on its wearer's physical hits, in basis points by ailment; combat
+    ///     caps the worn cards' sum of one ailment at 10,000.
+    /// </summary>
+    public IReadOnlyDictionary<Ailment, int> Inflict { get; }
+
+    /// <summary>
+    ///     How much an armor card resists each ailment, in percent by ailment; combat caps the worn cards' sum at 100.
+    /// </summary>
+    public IReadOnlyDictionary<Ailment, int> Resist { get; }
+
+    /// <summary>
     ///     Both bonuses together, as the cards of every worn row add up (Gameplay Systems §11.1): every value summed, by
     ///     name where it has one, and this bonus's armor element unless it gives none.
     /// </summary>
@@ -128,7 +145,9 @@ public sealed class CardBonus
             Summed(ElementDamage, other.ElementDamage),
             Summed(SizeDamage, other.SizeDamage),
             Summed(ElementDamageReduction, other.ElementDamageReduction),
-            ArmorElement != Element.Neutral ? ArmorElement : other.ArmorElement);
+            ArmorElement != Element.Neutral ? ArmorElement : other.ArmorElement,
+            Summed(Inflict, other.Inflict),
+            Summed(Resist, other.Resist));
     }
 
     /// <summary>The percentage this bonus adds to the damage dealt to <paramref name="race" />.</summary>
@@ -153,6 +172,18 @@ public sealed class CardBonus
     public int ReductionFrom(Element element)
     {
         return ElementDamageReduction.TryGetValue(element, out int percent) ? percent : 0;
+    }
+
+    /// <summary>The chance, in basis points, this bonus brings <paramref name="ailment" /> on a hit.</summary>
+    public int ChanceToInflict(Ailment ailment)
+    {
+        return Inflict.TryGetValue(ailment, out int basisPoints) ? basisPoints : 0;
+    }
+
+    /// <summary>The percentage this bonus resists <paramref name="ailment" /> by.</summary>
+    public int ResistanceTo(Ailment ailment)
+    {
+        return Resist.TryGetValue(ailment, out int percent) ? percent : 0;
     }
 
     private static bool HasNegative<TKey>(IReadOnlyDictionary<TKey, int>? values)

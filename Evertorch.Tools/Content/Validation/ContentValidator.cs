@@ -11,18 +11,22 @@ namespace Evertorch.Tools
 /// </summary>
 public static class ContentValidator
 {
-    // One StatusEffects message carries at most this many (Network Protocol §9).
-    private const int MaxStatusEffects = 14;
+    // One StatusEffects message (Network Protocol §6) carries every status at once: at most 24 entries, its header, and
+    // each status's ID with 6 bytes more, within the 1,020 bytes one reliable message carries.
+    private const int MaxStatusEffects = 24;
+    private const int StatusListHeaderBytes = 3;
+    private const int StatusEntryBytes = 6;
     private const int MaxQuests = 14;
 
-    // One NpcServices message (Network Protocol §6): its header, then each item the NPC trades, each quest it gives,
-    // and each job change it offers at their largest, with every ID at the 64-byte limit; one datagram carries 1,020
-    // bytes.
+    // One NpcServices message (Network Protocol §6): its header, then each item the NPC trades, 10 bytes and its ID's,
+    // each quest it gives, and each job change it offers, those at their largest with every ID at the 64-byte limit;
+    // at most 24 items.
     private const int ServicesHeaderBytes = 14;
-    private const int ServicesEntryBytes = 74;
+    private const int ServicesEntryBytes = 10;
     private const int ServicesOfferBytes = 154;
     private const int ServicesJobChangeBytes = 134;
-    private const int MaxServicesBytes = 1020;
+    private const int MaxServicesEntries = 24;
+    private const int MaxMessageBytes = 1020;
 
     public static void Validate(ContentSet content, List<ContentDiagnostic> diagnostics)
     {
@@ -81,42 +85,35 @@ public static class ContentValidator
             known.UnionWith(content.DeclaredIds);
         }
 
-        for (int index = MaxStatusEffects; index < content.StatusEffects.Count; index++)
+        RequireStatusesFit(content.StatusEffects, diagnostics);
+        var statusesById = new Dictionary<string, StatusEffectDefinition>(StringComparer.Ordinal);
+        foreach (AuthoredStatusEffect status in content.StatusEffects)
         {
-            Report(
-                content.StatusEffects[index].Source,
-                "id",
-                string.Format(
-                    CultureInfo.InvariantCulture,
-                    "is one more than the {0} status effects a status list carries",
-                    MaxStatusEffects),
-                diagnostics);
+            statusesById[status.Definition.Id.Value] = status.Definition;
         }
 
+        HashSet<Ailment> ailments = RequireOneStatusPerAilment(content.StatusEffects, diagnostics);
         foreach (AuthoredSkill skill in content.Skills)
         {
-            for (int index = 0; index < skill.Definition.Levels.Count; index++)
+            RequireSkillStatuses(skill, statusEffects, statusesById, diagnostics);
+        }
+
+        foreach (AuthoredItem item in content.Items)
+        {
+            foreach (Ailment ailment in item.Definition.Card?.Bonus.Inflict.Keys ?? Enumerable.Empty<Ailment>())
             {
-                SkillEffect effect = skill.Definition.Levels[index].Effect;
-                if (effect.Kind == SkillEffectKind.Status)
+                if (!ailments.Contains(ailment))
                 {
-                    RequireReference(
-                        statusEffects,
-                        effect.Status.Value,
-                        "status effect",
-                        skill.Source,
-                        string.Format(CultureInfo.InvariantCulture, "server.levels[{0}].effect.status.status", index),
+                    Report(
+                        item.Source,
+                        "server.card.inflict." + EnumText.Of(ailment),
+                        $"names ailment '{EnumText.Of(ailment)}', which no status is",
                         diagnostics);
                 }
             }
         }
 
         // A consumable starts only a status that sets an attack element, a converter's (Content Pipeline §7).
-        var statusesById = new Dictionary<string, StatusEffectDefinition>(StringComparer.Ordinal);
-        foreach (AuthoredStatusEffect status in content.StatusEffects)
-        {
-            statusesById[status.Definition.Id.Value] = status.Definition;
-        }
 
         foreach (AuthoredItem item in content.Items)
         {
@@ -403,6 +400,142 @@ public static class ContentValidator
         }
     }
 
+    // Every status travels in one message at once, so content holds no more than it carries (Content Pipeline §4).
+    private static void RequireStatusesFit(
+        IReadOnlyList<AuthoredStatusEffect> statuses,
+        List<ContentDiagnostic> diagnostics)
+    {
+        int size = StatusListHeaderBytes;
+        for (int index = 0; index < statuses.Count; index++)
+        {
+            size += StatusEntryBytes + statuses[index].Definition.Id.Value.Length;
+            if (index >= MaxStatusEffects || size > MaxMessageBytes)
+            {
+                Report(
+                    statuses[index].Source,
+                    "id",
+                    string.Format(
+                        CultureInfo.InvariantCulture,
+                        "is one more than a status list carries: {0} status effects within {1} bytes",
+                        MaxStatusEffects,
+                        MaxMessageBytes),
+                    diagnostics);
+                return;
+            }
+        }
+    }
+
+    // Each ailment is one status, which a card's landing starts and a cure ends (Gameplay Systems §9.1). Returns the
+    // ailments content has a status for.
+    private static HashSet<Ailment> RequireOneStatusPerAilment(
+        IReadOnlyList<AuthoredStatusEffect> statuses,
+        List<ContentDiagnostic> diagnostics)
+    {
+        var first = new Dictionary<Ailment, string>();
+        foreach (AuthoredStatusEffect status in statuses)
+        {
+            Ailment ailment = status.Definition.Ailment;
+            if (ailment == Ailment.None)
+            {
+                continue;
+            }
+
+            if (first.TryGetValue(ailment, out string? other))
+            {
+                Report(
+                    status.Source,
+                    "server.ailment",
+                    $"names ailment '{EnumText.Of(ailment)}', which status '{other}' already is",
+                    diagnostics);
+            }
+            else
+            {
+                first.Add(ailment, status.Definition.Id.Value);
+            }
+        }
+
+        return new HashSet<Ailment>(first.Keys);
+    }
+
+    // A skill's status exists. A rider names an ailment's status; an ailment skill targets an enemy or, as a monster's
+    // area skill, the players around its caster, and changes no statistic; only an ailment skill has a chance or an
+    // area among status skills (Content Pipeline §4, §7).
+    private static void RequireSkillStatuses(
+        AuthoredSkill skill,
+        HashSet<string> knownStatuses,
+        Dictionary<string, StatusEffectDefinition> statusesById,
+        List<ContentDiagnostic> diagnostics)
+    {
+        SkillDefinition definition = skill.Definition;
+        for (int index = 0; index < definition.Levels.Count; index++)
+        {
+            SkillEffect effect = definition.Levels[index].Effect;
+            string prefix = string.Format(CultureInfo.InvariantCulture, "server.levels[{0}].effect", index);
+            if (effect.Rider != null)
+            {
+                string riderPath = prefix + ".damage.ailment.status";
+                string rider = effect.Rider.Status.Value;
+                RequireReference(knownStatuses, rider, "status effect", skill.Source, riderPath, diagnostics);
+                if (statusesById.TryGetValue(rider, out StatusEffectDefinition? ridden)
+                    && ridden.Ailment == Ailment.None)
+                {
+                    Report(skill.Source, riderPath, $"names '{rider}', which is no ailment's status", diagnostics);
+                }
+            }
+
+            if (effect.Kind != SkillEffectKind.Status)
+            {
+                continue;
+            }
+
+            string statusPath = prefix + ".status.status";
+            string applied = effect.Status.Value;
+            RequireReference(knownStatuses, applied, "status effect", skill.Source, statusPath, diagnostics);
+            if (!statusesById.TryGetValue(applied, out StatusEffectDefinition? status))
+            {
+                continue;
+            }
+
+            if (status.Ailment == Ailment.None)
+            {
+                if (effect.ChanceBasisPoints != ContentLimits.MaxChanceBasisPoints)
+                {
+                    Report(skill.Source, prefix + ".status.chance", "is only for an ailment's status", diagnostics);
+                }
+
+                if (definition.HasArea)
+                {
+                    Report(
+                        skill.Source,
+                        "area",
+                        $"is only for a damage or an ailment skill, and '{applied}' is no ailment's status",
+                        diagnostics);
+                }
+
+                continue;
+            }
+
+            bool isOnPlayersAround = definition.TargetType == SkillTargetType.Self && definition.HasArea;
+            if (definition.TargetType != SkillTargetType.Enemy && !isOnPlayersAround)
+            {
+                Report(
+                    skill.Source,
+                    "targetType",
+                    $"must be enemy, or self with an area, for an ailment's status '{applied}'",
+                    diagnostics);
+            }
+
+            if (effect.StatPercent != default)
+            {
+                Report(
+                    skill.Source,
+                    prefix + ".status.statPercent",
+                    $"must be all 0 for an ailment's status '{applied}'",
+                    diagnostics);
+            }
+        }
+    }
+
     // An NPC's services travel in one message: every item it trades (its stock and, with a shop, every item it buys)
     // and every quest it gives.
     private static void RequireServicesFit(AuthoredNpc npc, ContentSet content, List<ContentDiagnostic> diagnostics)
@@ -437,10 +570,10 @@ public static class ContentValidator
             ? content.Jobs.Count(job => job.Definition.BaseJob != null)
             : 0;
         int size = ServicesHeaderBytes
-            + ServicesEntryBytes * traded.Count
+            + traded.Sum(item => ServicesEntryBytes + item.Length)
             + ServicesOfferBytes * offers
             + ServicesJobChangeBytes * jobChanges;
-        if (size > MaxServicesBytes)
+        if (size > MaxMessageBytes)
         {
             Report(
                 npc.Source,
@@ -449,7 +582,20 @@ public static class ContentValidator
                     CultureInfo.InvariantCulture,
                     "offers services that take {0} bytes, more than the {1} one message carries",
                     size,
-                    MaxServicesBytes),
+                    MaxMessageBytes),
+                diagnostics);
+        }
+
+        if (traded.Count > MaxServicesEntries)
+        {
+            Report(
+                npc.Source,
+                "id",
+                string.Format(
+                    CultureInfo.InvariantCulture,
+                    "trades {0} items, more than the {1} one message carries",
+                    traded.Count,
+                    MaxServicesEntries),
                 diagnostics);
         }
     }

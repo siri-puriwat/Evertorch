@@ -1,0 +1,9 @@
+id: status.stunned
+displayName: Stunned
+server:
+  # How long a worn card's landing lasts before resistance; a skill names its own.
+  ailment: stun
+  durationMs: 4000
+client:
+  # A key and no art yet.
+  icon: status_stunned

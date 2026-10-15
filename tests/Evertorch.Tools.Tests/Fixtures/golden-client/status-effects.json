@@ -7,6 +7,11 @@
       "icon": "status_focus"
     },
     {
+      "id": "status.poisoned",
+      "displayName": "Poisoned",
+      "icon": "status_poisoned"
+    },
+    {
       "id": "status.wind_weapon",
       "displayName": "Wind Weapon"
     }

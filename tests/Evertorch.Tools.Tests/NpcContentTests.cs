@@ -50,11 +50,12 @@ public sealed class NpcContentTests
     }
 
     // Writes a material item that sells for 1, so any NPC with a shop also buys it.
-    private static void AddSellableItem(ContentWorkspace workspace, int index)
+    private static void AddSellableItem(ContentWorkspace workspace, int index, int idLength = 22)
     {
+        string id = $"item.material.extra_{index:D2}" + new string('x', idLength - 22);
         workspace.Write(
             $"items/extra_{index:D2}.yml",
-            $"id: item.material.extra_{index:D2}\ndisplayName: Extra\ntype: material\nstackLimit: 1\n"
+            $"id: {id}\ndisplayName: Extra\ntype: material\nstackLimit: 1\n"
             + "server:\n  weight: 1\n  sellPrice: 1\nclient:\n  icon: item_extra\n  model: pickup_extra\n");
     }
 
@@ -84,11 +85,39 @@ public sealed class NpcContentTests
         workspace.Write(Map, string.Join("\n", lines));
     }
 
-    // With the quest it gives (154 bytes) and the header (14), the Quartermaster's services fit one message while it
-    // trades at most 11 items of 74 bytes: 14 + 11 × 74 + 154 = 982, where 12 items take 1,056 of the 1,020.
-    [TestCase(9, true)]
-    [TestCase(10, false)]
+    // With the quest it gives (154 bytes) and the header (14), the Quartermaster's services fit one message while its
+    // items, 10 bytes each and their IDs', fit the rest: the gel and the potion take 33 and 38, so ten more of 64-byte
+    // IDs bring 979 bytes and an eleventh 1,053, past the 1,020 (Network Protocol §6).
+    [TestCase(10, true)]
+    [TestCase(11, false)]
     public void Run_ForAnNpcsServices_AcceptsWhatFitsOneMessage(int extraItems, bool isValid)
+    {
+        using (var workspace = new ContentWorkspace())
+        {
+            for (int index = 0; index < extraItems; index++)
+            {
+                AddSellableItem(workspace, index, 64);
+            }
+
+            ContentPipelineResult result = ContentPipeline.Run(workspace.ContentRoot);
+
+            Assert.That(
+                result.Diagnostics.Select(diagnostic => (diagnostic.File, diagnostic.FieldPath, diagnostic.Message)),
+                isValid
+                    ? Is.Empty
+                    : Is.EqualTo(
+                        new[]
+                        {
+                            (Npc, "id", "offers services that take 1053 bytes, more than the 1020 one message carries")
+                        }),
+                Describe(result));
+        }
+    }
+
+    // Short IDs fit many more bytes, but one message carries 24 items: the gel, the potion, and 22 more.
+    [TestCase(22, true)]
+    [TestCase(23, false)]
+    public void Run_ForAnNpcsServices_AcceptsAtMostTwentyFourItems(int extraItems, bool isValid)
     {
         using (var workspace = new ContentWorkspace())
         {
@@ -103,11 +132,7 @@ public sealed class NpcContentTests
                 result.Diagnostics.Select(diagnostic => (diagnostic.File, diagnostic.FieldPath, diagnostic.Message)),
                 isValid
                     ? Is.Empty
-                    : Is.EqualTo(
-                        new[]
-                        {
-                            (Npc, "id", "offers services that take 1056 bytes, more than the 1020 one message carries")
-                        }),
+                    : Is.EqualTo(new[] { (Npc, "id", "trades 25 items, more than the 24 one message carries") }),
                 Describe(result));
         }
     }

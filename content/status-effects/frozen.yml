@@ -1,0 +1,9 @@
+id: status.frozen
+displayName: Frozen
+server:
+  # How long a worn card's landing lasts before resistance; a skill names its own.
+  ailment: freeze
+  durationMs: 8000
+client:
+  # A key and no art yet.
+  icon: status_frozen

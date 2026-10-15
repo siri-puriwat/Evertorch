@@ -23,12 +23,28 @@ internal static class StatusEffectReader
 
         string displayName = root.RequiredString("displayName");
 
-        // A converter's status sets the element of the wearer's swings and weapon skills (Gameplay Systems §9.1).
+        // A converter's status sets the element of the wearer's swings and weapon skills, and an ailment's names the time
+        // a worn card's landing lasts; no status is both (Gameplay Systems §9.1).
         Element? attackElement = null;
+        Ailment ailment = Ailment.None;
+        int durationMs = 0;
         if (root.Has("server"))
         {
             YamlFieldReader server = root.RequiredMapping("server");
             attackElement = server.Has("attackElement") ? server.RequiredEnum<Element>("attackElement") : null;
+            if (server.Has("ailment"))
+            {
+                ailment = server.RequiredAilment("ailment");
+                durationMs = server.RequiredInt("durationMs", 1, ContentLimits.MaxDurationMs);
+                if (server.Has("attackElement"))
+                {
+                    server.ReportField("ailment", "is not for a status that sets an attack element");
+                }
+            }
+            else if (server.Has("durationMs"))
+            {
+                server.ReportField("durationMs", "is only for an ailment's status");
+            }
         }
 
         string? icon = null;
@@ -44,7 +60,7 @@ internal static class StatusEffectReader
             return null;
         }
 
-        var definition = new StatusEffectDefinition(id, displayName, attackElement);
+        var definition = new StatusEffectDefinition(id, displayName, attackElement, ailment, durationMs);
         return new AuthoredStatusEffect(root.ToSource(), definition, icon);
     }
 }

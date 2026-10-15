@@ -31,7 +31,8 @@ public sealed class ConsumableContentTests
     }
 
     [TestCase("  effect:\n    hp: 30\n", "", "server.effect", "required field is missing")]
-    [TestCase("    hp: 30\n", "    hp: 0\n", "server.effect", "must restore HP or SP, or start a status")]
+    [TestCase("    hp: 30\n", "    hp: 0\n", "server.effect",
+        "must restore HP or SP, start a status, or end an ailment")]
     [TestCase("    hp: 30\n", "    hp: -1\n", "server.effect.hp", "between 0 and")]
     [TestCase("    hp: 30\n", "    hp: 30\n    mp: 3\n", "server.effect.mp", "unknown field")]
     public void Run_WhenAConsumableIsBroken_ReportsThatField(

@@ -1,0 +1,9 @@
+id: status.blinded
+displayName: Blinded
+server:
+  # How long a worn card's landing lasts before resistance; a skill names its own.
+  ailment: blind
+  durationMs: 20000
+client:
+  # A key and no art yet.
+  icon: status_blinded

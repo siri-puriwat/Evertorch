@@ -1,0 +1,13 @@
+id: skill.slime_bite
+displayName: Slime Bite
+targetType: enemy
+damageType: physical
+element: water
+server:
+  range: 1.5
+  levels:
+    - cooldownMs: 6000
+      effect:
+        damage: { ratio: 150, ailment: { status: status.poisoned, chance: 0.2087, durationMs: 23167 } }
+client:
+  icon: skill_slime_bite

@@ -117,6 +117,31 @@ public sealed class DefinitionShapeTests
     }
 
     [Test]
+    public void CardBonus_WithAilments_AnswersEach_AndPlusSumsThemByAilment()
+    {
+        var stats = new PrimaryStats(0, 0, 0, 0, 0, 0);
+        var keen = new CardBonus(stats, 8, 0, 0, 0, 0, 0, 0,
+            inflict: new Dictionary<Ailment, int> { [Ailment.Poison] = 500 });
+        var second = new CardBonus(stats, 0, 0, 0, 0, 0, 0, 0,
+            inflict: new Dictionary<Ailment, int> { [Ailment.Poison] = 500, [Ailment.Sleep] = 100 });
+        var earthen = new CardBonus(stats, 0, 0, 10, 0, 0, 0, 0,
+            resist: new Dictionary<Ailment, int> { [Ailment.Stun] = 30 });
+        Action negative = () => _ = new CardBonus(stats, 0, 0, 0, 0, 0, 0, 0,
+            resist: new Dictionary<Ailment, int> { [Ailment.Stun] = -1 });
+
+        CardBonus worn = CardBonus.None.Plus(keen).Plus(second).Plus(earthen).Plus(earthen);
+
+        Assert.That((CardBonus.None.Inflict.Count, CardBonus.None.Resist.Count), Is.EqualTo((0, 0)));
+        Assert.That(
+            (worn.ChanceToInflict(Ailment.Poison), worn.ChanceToInflict(Ailment.Sleep),
+                worn.ChanceToInflict(Ailment.Blind), worn.ResistanceTo(Ailment.Stun),
+                worn.ResistanceTo(Ailment.Poison)),
+            Is.EqualTo((1000, 100, 0, 60, 0)),
+            "summed uncapped; combat caps them");
+        Assert.That(negative, Throws.TypeOf<ArgumentOutOfRangeException>());
+    }
+
+    [Test]
     public void ExperienceTableDefinition_WithValues_ExposesThem()
     {
         var table = new ExperienceTableDefinition(new ExperienceDefinitionId("experience.adventurer"),
@@ -143,6 +168,18 @@ public sealed class DefinitionShapeTests
         Assert.That(item.StackLimit, Is.EqualTo(999));
         Assert.That(item.Weight, Is.EqualTo(1));
         Assert.That(item.SellPrice, Is.EqualTo(4));
+    }
+
+    [Test]
+    public void ItemEffect_EndingAilmentsAlone_ExposesThem_AndANameTwiceThrows()
+    {
+        var remedy = new ItemEffect(0, 0, cures: new[] { Ailment.Poison, Ailment.Silence, Ailment.Blind });
+        Action twice = () => _ = new ItemEffect(0, 0, cures: new[] { Ailment.Blind, Ailment.Blind });
+
+        Assert.That((remedy.Health, remedy.Spirit, remedy.Status), Is.EqualTo((0, 0, (StatusDefinitionId?)null)));
+        Assert.That(remedy.Cures, Is.EqualTo(new[] { Ailment.Poison, Ailment.Silence, Ailment.Blind }));
+        Assert.That(new ItemEffect(30, 0).Cures, Is.Empty);
+        Assert.That(twice, Throws.ArgumentException);
     }
 
     [Test]
@@ -522,6 +559,38 @@ public sealed class DefinitionShapeTests
     }
 
     [Test]
+    public void SkillEffect_WithAnAilment_KeepsItsRiderChanceOrCures_AndRefusesWhatCannotBe()
+    {
+        var stunned = new StatusDefinitionId("status.stunned");
+        var rider = new AilmentRider(stunned, 500, 4000);
+        var blow = SkillEffect.Damage(200, rider);
+        var hush = SkillEffect.StatusEffect(new StatusDefinitionId("status.silenced"), 15_000, default, 6000);
+        var mend = SkillEffect.Heal(40, new[] { Ailment.Poison, Ailment.Silence, Ailment.Blind });
+        Action noChance = () => _ = new AilmentRider(stunned, 0, 4000);
+        Action certainAndMore = () => _ = new AilmentRider(stunned, 10_001, 4000);
+        Action noTime = () => _ = new AilmentRider(stunned, 500, 0);
+        Action noStatus = () => _ = new AilmentRider(default, 500, 4000);
+        Action noSkillChance = () => SkillEffect.StatusEffect(stunned, 4000, default, 0);
+        Action twice = () => SkillEffect.Heal(40, new[] { Ailment.Poison, Ailment.Poison });
+        Action none = () => SkillEffect.Heal(40, new[] { Ailment.None });
+
+        Assert.That((blow.Rider, blow.ChanceBasisPoints, blow.Cures.Count), Is.EqualTo((rider, 10_000, 0)));
+        Assert.That((hush.ChanceBasisPoints, hush.Rider), Is.EqualTo((6000, (AilmentRider?)null)));
+        Assert.That(SkillEffect.StatusEffect(stunned, 4000, default).ChanceBasisPoints, Is.EqualTo(10_000));
+        Assert.That(mend.Cures, Is.EqualTo(new[] { Ailment.Poison, Ailment.Silence, Ailment.Blind }));
+        Assert.That(SkillEffect.Heal(40).Cures, Is.Empty);
+        foreach (Action action in new[] { noChance, certainAndMore, noTime, noSkillChance })
+        {
+            Assert.That(action, Throws.TypeOf<ArgumentOutOfRangeException>());
+        }
+
+        foreach (Action action in new[] { noStatus, twice, none })
+        {
+            Assert.That(action, Throws.ArgumentException);
+        }
+    }
+
+    [Test]
     public void StatPercentages_OfTwoEffects_AddUp_ADebuffsTakingAway()
     {
         StatPercentages sum = new StatPercentages(1, 2, 3, 4, 5, 6).Plus(new StatPercentages(10, 0, 0, 0, 10, 0));
@@ -530,6 +599,30 @@ public sealed class DefinitionShapeTests
 
         Assert.That(sum, Is.EqualTo(new StatPercentages(11, 2, 3, 4, 15, 6)));
         Assert.That(focusedAndNumbed, Is.EqualTo(new StatPercentages(0, 60, 0, 0, 100, 0)));
+    }
+
+    [Test]
+    public void StatusEffectDefinition_ForAnAilment_NamesItsDuration_AndRefusesWhatCannotBe()
+    {
+        var id = new StatusDefinitionId("status.poisoned");
+        var poisoned = new StatusEffectDefinition(id, "Poisoned", null, Ailment.Poison, 20_000);
+        Action noDuration = () => _ = new StatusEffectDefinition(id, "Poisoned", null, Ailment.Poison);
+        Action durationAlone = () => _ = new StatusEffectDefinition(id, "Poisoned", durationMs: 1000);
+        Action withElement = () => _ = new StatusEffectDefinition(id, "Poisoned", Element.Fire, Ailment.Poison, 1000);
+        Action seventh = () => _ = new StatusEffectDefinition(id, "Poisoned", null, (Ailment)7, 1000);
+
+        Assert.That(
+            (poisoned.Ailment, poisoned.DurationMs, poisoned.AttackElement),
+            Is.EqualTo((Ailment.Poison, 20_000, (Element?)null)));
+        Assert.That(
+            (new StatusEffectDefinition(id, "Focus").Ailment, new StatusEffectDefinition(id, "Focus").DurationMs),
+            Is.EqualTo((Ailment.None, 0)));
+        foreach (Action action in new[] { noDuration, durationAlone, withElement })
+        {
+            Assert.That(action, Throws.ArgumentException);
+        }
+
+        Assert.That(seventh, Throws.TypeOf<ArgumentOutOfRangeException>());
     }
 
     [Test]

@@ -138,13 +138,13 @@ public sealed class ContentValidationTests
         "targetType: enemy",
         "targetType: enemy\narea: { radius: 2.5 }",
         "area",
-        "is only for a damage skill cast on its caster")]
+        "is only for a damage or an ailment skill cast on its caster")]
     [TestCase(
         Focus,
         "targetType: self",
         "targetType: self\narea: { radius: 2.5 }",
         "area",
-        "is only for a damage skill cast on its caster")]
+        "is only for a damage or an ailment skill, and 'status.focus' is no ailment's status")]
     [TestCase(Strike, "targetType: enemy", "targetType: self\narea: { radius: 0 }", "area.radius", "greater than 0")]
     [TestCase(
         Focus,
@@ -512,6 +512,36 @@ public sealed class ContentValidationTests
         }
     }
 
+    // Thirteen statuses of 64-byte IDs, 70 bytes each, and the fixture's three take 976 bytes; with a fourteenth,
+    // Poisoned, after them by ID, ends at 1,022, past the 1,020 one message carries.
+    [TestCase(13, true)]
+    [TestCase(14, false)]
+    public void Run_ForStatusEffectsWithLongIds_RefusesWhatOneMessageCannotCarry(int longIds, bool isValid)
+    {
+        using (var workspace = new ContentWorkspace())
+        {
+            for (int index = 0; index < longIds; index++)
+            {
+                string id = $"status.long_{index:D2}" + new string('x', 64 - 14);
+                workspace.Write($"status-effects/long_{index:D2}.yml", $"id: {id}\ndisplayName: Long\n");
+            }
+
+            ContentPipelineResult result = ContentPipeline.Run(workspace.ContentRoot);
+
+            Assert.That(
+                result.Diagnostics.Select(diagnostic => (diagnostic.File, diagnostic.Message)),
+                isValid
+                    ? Is.Empty
+                    : Is.EqualTo(
+                        new[]
+                        {
+                            ("status-effects/poisoned.yml",
+                                "is one more than a status list carries: 24 status effects within 1020 bytes")
+                        }),
+                Describe(result));
+        }
+    }
+
     [Test]
     public void Run_ForASkillWithoutOptionalNumbers_TakesThemAsZeroAndPaysAtResolution()
     {
@@ -571,11 +601,11 @@ public sealed class ContentValidationTests
             Assert.That(result.Packages, Is.Not.Null);
             Assert.That(result.Content.Items, Has.Count.EqualTo(3));
             Assert.That(result.Content.Monsters, Has.Count.EqualTo(1));
-            Assert.That(result.Content.Skills, Has.Count.EqualTo(3));
+            Assert.That(result.Content.Skills, Has.Count.EqualTo(5));
             Assert.That(result.Content.Jobs, Has.Count.EqualTo(1));
             Assert.That(result.Content.Maps, Has.Count.EqualTo(1));
             Assert.That(result.Content.ExperienceTables, Has.Count.EqualTo(2));
-            Assert.That(result.Content.StatusEffects, Has.Count.EqualTo(2));
+            Assert.That(result.Content.StatusEffects, Has.Count.EqualTo(3));
             Assert.That(result.Content.Npcs, Has.Count.EqualTo(1));
             Assert.That(result.Content.Quests, Has.Count.EqualTo(1));
             Assert.That(
@@ -617,29 +647,33 @@ public sealed class ContentValidationTests
         }
     }
 
+    // The fixture's Focus, Poisoned, and Wind Weapon and 22 more of 15-byte IDs make 25 statuses in 528 bytes, well
+    // within 1,020, but one list carries 24.
     [Test]
-    public void Run_WhenAStatusEffectHasNoIcon_IsValid_AndMoreThanFourteenAreRefused()
+    public void Run_WhenAStatusEffectHasNoIcon_IsValid_AndMoreThanTwentyFourAreRefused()
     {
         using (var workspace = new ContentWorkspace())
         {
             workspace.Replace(FocusStatus, "client:\n  icon: status_focus\n", "");
             ContentPipelineResult withoutIcon = ContentPipeline.Run(workspace.ContentRoot);
-            for (int index = 1; index <= 13; index++)
+            for (int index = 1; index <= 22; index++)
             {
                 workspace.Write(
                     $"status-effects/extra_{index:D2}.yml",
                     $"id: status.extra_{index:D2}\ndisplayName: Extra\n");
             }
 
-            ContentPipelineResult fifteen = ContentPipeline.Run(workspace.ContentRoot);
+            ContentPipelineResult twentyFive = ContentPipeline.Run(workspace.ContentRoot);
 
             Assert.That(withoutIcon.Diagnostics, Is.Empty, Describe(withoutIcon));
-            Assert.That(fifteen.Diagnostics, Has.Count.EqualTo(1), Describe(fifteen));
+            Assert.That(twentyFive.Diagnostics, Has.Count.EqualTo(1), Describe(twentyFive));
             Assert.That(
-                fifteen.Diagnostics[0].File,
+                twentyFive.Diagnostics[0].File,
                 Is.EqualTo("status-effects/wind_weapon.yml"),
-                "the fifteenth by ID, after the fixture's converter status and Focus");
-            Assert.That(fifteen.Diagnostics[0].Message, Does.Contain("more than the 14 status effects"));
+                "the twenty-fifth by ID, after the extras, Focus, and Poisoned");
+            Assert.That(
+                twentyFive.Diagnostics[0].Message,
+                Is.EqualTo("is one more than a status list carries: 24 status effects within 1020 bytes"));
         }
     }
 

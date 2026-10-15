@@ -1,0 +1,7 @@
+id: status.poisoned
+displayName: Poisoned
+server:
+  ailment: poison
+  durationMs: 13127
+client:
+  icon: status_poisoned

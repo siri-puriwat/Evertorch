@@ -109,6 +109,17 @@ public static class ContentLimits
     /// </summary>
     public const int MaxCardDamageReductionPercent = 90;
 
+    /// <summary>
+    ///     A certain chance in basis points (Gameplay Systems §9.1): content writes an ailment's chance from 0.0001 to 1,
+    ///     with at most four decimals, so every chance is a whole number of them.
+    /// </summary>
+    public const int MaxChanceBasisPoints = 10_000;
+
+    /// <summary>
+    ///     The most an armor card resists one ailment, in percent; combat caps the worn cards' sum there too.
+    /// </summary>
+    public const int MaxCardResistPercent = 100;
+
     public const int MaxKillCount = 1000;
     public const int MaxExperience = 1_000_000_000;
     public const int MaxDurationMs = 86_400_000;

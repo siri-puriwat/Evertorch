@@ -202,13 +202,13 @@ public sealed class ElementContentTests
     }
 
     [Test]
-    public void RepositoryContent_HoldsNineStatusEffects_TheFourConvertersAloneSettingAnElement()
+    public void RepositoryContent_HoldsFifteenStatusEffects_TheFourConvertersAloneSettingAnElement()
     {
         ContentPipelineResult result = ContentPipeline.Run(
             Path.Combine(ContentValidationTests.RepositoryRoot(), "content"));
         Assert.That(result.Diagnostics, Is.Empty);
 
-        Assert.That(result.Content.StatusEffects, Has.Count.EqualTo(9));
+        Assert.That(result.Content.StatusEffects, Has.Count.EqualTo(15));
         Assert.That(
             result.Content.StatusEffects
                 .Where(status => status.Definition.AttackElement.HasValue)

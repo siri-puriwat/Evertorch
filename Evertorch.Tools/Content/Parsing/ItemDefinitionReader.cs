@@ -12,7 +12,7 @@ internal static class ItemDefinitionReader
     private const int MaxDescriptionLength = 240;
 
     private static readonly Regex Prefix = new("^[A-Z][A-Za-z]{0,7}$", RegexOptions.CultureInvariant);
-    private static readonly Regex Number = new("[0-9]+", RegexOptions.CultureInvariant);
+    private static readonly Regex Number = new(@"[0-9]+(?:\.[0-9]+)?", RegexOptions.CultureInvariant);
 
     public static AuthoredItem? Read(
         YamlFieldReader root,
@@ -229,10 +229,23 @@ internal static class ItemDefinitionReader
             OptionalMap<Element>(card, "elementDamage", ContentLimits.MaxCardDamagePercent),
             OptionalMap<BodySize>(card, "sizeDamage", ContentLimits.MaxCardDamagePercent),
             OptionalMap<Element>(card, "elementDamageReduction", ContentLimits.MaxCardDamageReductionPercent),
-            card.Has("armorElement") ? card.RequiredEnum<Element>("armorElement") : Element.Neutral);
+            card.Has("armorElement") ? card.RequiredEnum<Element>("armorElement") : Element.Neutral,
+            card.Has("inflict") ? card.RequiredAilmentChanceMap("inflict") : null,
+            card.Has("resist") ? card.RequiredAilmentMap("resist", 1, ContentLimits.MaxCardResistPercent) : null);
         if (card.Has("armorElement") && fits != EquipmentSlot.Armor)
         {
             card.ReportField("armorElement", "is only for a card that fits armor");
+        }
+
+        // A weapon card brings an ailment on its wearer's hits, and an armor card resists one (Gameplay Systems §11.7).
+        if (card.Has("inflict") && fits != EquipmentSlot.Weapon)
+        {
+            card.ReportField("inflict", "is only for a card that fits a weapon");
+        }
+
+        if (card.Has("resist") && fits != EquipmentSlot.Armor)
+        {
+            card.ReportField("resist", "is only for a card that fits armor");
         }
 
         removalFee = card.RequiredInt("removalFee", 0, ContentLimits.MaxCardRemovalFee);
@@ -245,8 +258,14 @@ internal static class ItemDefinitionReader
         return bonus;
     }
 
-    // Every value a card adds, in its fields' order, its groups' percentages after them.
+    // Every value a card adds: its numbers, then its ailments' chances in basis points and their resistances.
     private static IEnumerable<int> ValuesOf(CardBonus bonus)
+    {
+        return NumbersOf(bonus).Concat(bonus.Inflict.Values).Concat(bonus.Resist.Values);
+    }
+
+    // Every number a card adds, in its fields' order, its groups' percentages after them.
+    private static IEnumerable<int> NumbersOf(CardBonus bonus)
     {
         return new[]
             {
@@ -258,6 +277,27 @@ internal static class ItemDefinitionReader
             .Concat(bonus.ElementDamage.Values)
             .Concat(bonus.SizeDamage.Values)
             .Concat(bonus.ElementDamageReduction.Values);
+    }
+
+    // Every number a card's description must hold, as the player reads it: each value, an ailment's chance in percent.
+    private static IEnumerable<string> StatedValuesOf(CardBonus bonus)
+    {
+        return NumbersOf(bonus)
+            .Concat(bonus.Resist.Values)
+            .Where(value => value > 0)
+            .Select(value => value.ToString(CultureInfo.InvariantCulture))
+            .Concat(bonus.Inflict.Values.Select(Percent));
+    }
+
+    private static string Percent(int basisPoints)
+    {
+        return (basisPoints / 100m).ToString("0.##", CultureInfo.InvariantCulture);
+    }
+
+    private static string Normalized(string number)
+    {
+        return decimal.Parse(number, NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture)
+            .ToString("0.############", CultureInfo.InvariantCulture);
     }
 
     // Every name a card's description must hold: each race, element, and size its groups name and the element it gives
@@ -284,6 +324,12 @@ internal static class ItemDefinitionReader
         {
             yield return new[] { size.ToString() };
         }
+    }
+
+    // A card's ailments stand in its description by name, in any case: "a 5% chance to poison", "Stun resistance".
+    private static IEnumerable<Ailment> AilmentsOf(CardBonus bonus)
+    {
+        return bonus.Inflict.Keys.Concat(bonus.Resist.Keys).Distinct();
     }
 
     private static IReadOnlyDictionary<TEnum, int>? OptionalMap<TEnum>(YamlFieldReader card, string key, int max)
@@ -332,17 +378,25 @@ internal static class ItemDefinitionReader
 
         if (bonus != null)
         {
-            var stated = new HashSet<string>(
-                Number.Matches(description).Select(match => match.Value.TrimStart('0')));
-            int[] missing = ValuesOf(bonus)
-                .Where(value => value > 0 && !stated.Contains(value.ToString(CultureInfo.InvariantCulture)))
-                .ToArray();
+            var stated = new HashSet<string>(Number.Matches(description).Select(match => Normalized(match.Value)));
+            string[] missing = StatedValuesOf(bonus).Where(value => !stated.Contains(value)).ToArray();
             if (missing.Length > 0)
             {
                 client.ReportField(
                     "description",
-                    "must state every value of the card above 0, and leaves out "
-                    + string.Join(", ", missing.Select(value => value.ToString(CultureInfo.InvariantCulture))));
+                    "must state every value of the card above 0, and leaves out " + string.Join(", ", missing));
+                return null;
+            }
+
+            string[] unnamedAilments = AilmentsOf(bonus)
+                .Select(EnumText.Of)
+                .Where(name => description.IndexOf(name, StringComparison.OrdinalIgnoreCase) < 0)
+                .ToArray();
+            if (unnamedAilments.Length > 0)
+            {
+                client.ReportField(
+                    "description",
+                    $"must name every ailment of the card, and leaves out {string.Join(", ", unnamedAilments)}");
                 return null;
             }
 
@@ -389,8 +443,9 @@ internal static class ItemDefinitionReader
         return new ItemEquipment(attack, penalty, defense, bonus, weaponType);
     }
 
-    // A consumable restores HP and SP, each an optional flat amount, or starts a status for a while, at least one of
-    // the three; the validator checks that the status exists and sets an attack element (Content Pipeline §4).
+    // A consumable restores HP and SP, each an optional flat amount, starts a status for a while, or ends ailments, at
+    // least one of the four; the validator checks that the status exists and sets an attack element (Content Pipeline
+    // §4).
     private static ItemEffect? ReadEffect(YamlFieldReader server, YamlFieldReader effect)
     {
         int health = OptionalStat(effect, "hp");
@@ -411,13 +466,19 @@ internal static class ItemDefinitionReader
             }
         }
 
-        if (health == 0 && spirit == 0 && status == null)
+        IReadOnlyList<Ailment> cures =
+            effect.Has("cures") ? effect.RequiredAilmentSequence("cures") : new List<Ailment>();
+        if (health == 0 && spirit == 0 && status == null && cures.Count == 0)
         {
-            server.ReportField("effect", "must restore HP or SP, or start a status");
+            if (!effect.Has("cures"))
+            {
+                server.ReportField("effect", "must restore HP or SP, start a status, or end an ailment");
+            }
+
             return null;
         }
 
-        return new ItemEffect(health, spirit, status, durationMs);
+        return new ItemEffect(health, spirit, status, durationMs, cures);
     }
 
     // A listable item's terms (Content Pipeline §4): a base, and a floor and a ceiling that default to the sell price,

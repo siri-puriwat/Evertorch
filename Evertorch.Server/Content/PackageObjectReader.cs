@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Text.Json;
+using Evertorch.Game;
 
 namespace Evertorch.Server
 {
@@ -12,6 +13,10 @@ internal delegate bool TryCreatePackageId<T>(string? value, out T id);
 /// </summary>
 internal sealed class PackageObjectReader
 {
+    // The six names the tools give the ailments; None is no ailment's name.
+    private static readonly Ailment[] Ailments =
+        { Ailment.Poison, Ailment.Stun, Ailment.Freeze, Ailment.Sleep, Ailment.Silence, Ailment.Blind };
+
     private readonly JsonElement m_element;
     private readonly string m_file;
     private readonly string m_path;
@@ -215,44 +220,94 @@ internal sealed class PackageObjectReader
     public IReadOnlyDictionary<TEnum, int> RequiredEnumMap<TEnum>(string name, int minimum, int maximum)
         where TEnum : struct, Enum
     {
-        var values = new Dictionary<TEnum, int>();
-        PackageObjectReader? map = RequiredObject(name);
-        if (map == null)
+        return ReadNamedValues(
+            name,
+            (TEnum[])Enum.GetValues(typeof(TEnum)),
+            (map, key) => map.RequiredInt(key, minimum, maximum));
+    }
+
+    /// <summary>
+    ///     An object from ailment names to whole numbers within their bounds, such as an armor card's resistances.
+    /// </summary>
+    public IReadOnlyDictionary<Ailment, int> RequiredAilmentMap(string name, int minimum, int maximum)
+    {
+        return ReadNamedValues(name, Ailments, (map, key) => map.RequiredInt(key, minimum, maximum));
+    }
+
+    /// <summary>
+    ///     An object from ailment names to chances (<see cref="RequiredChance" />), such as a weapon card's.
+    /// </summary>
+    public IReadOnlyDictionary<Ailment, int> RequiredAilmentChanceMap(string name)
+    {
+        return ReadNamedValues(name, Ailments, (map, key) => map.RequiredChance(key));
+    }
+
+    /// <summary>
+    ///     A chance as the tools write it, from 0.0001 to 1 with at most four decimals (Content Pipeline §7), in basis
+    ///     points.
+    /// </summary>
+    public int RequiredChance(string name)
+    {
+        if (!TryGet(name, JsonValueKind.Number, "a number", out JsonElement value))
         {
-            return values;
+            return ContentLimits.MaxChanceBasisPoints;
         }
 
-        foreach (JsonProperty property in map.m_element.EnumerateObject())
+        if (!value.TryGetDecimal(out decimal chance)
+            || chance < 0.0001m
+            || chance > 1m
+            || decimal.Round(chance, 4) != chance)
         {
-            map.m_requested.Add(property.Name);
-            TEnum? key = null;
-            foreach (TEnum candidate in (TEnum[])Enum.GetValues(typeof(TEnum)))
-            {
-                string candidateName = candidate.ToString();
-                if (string.Equals(
-                        $"{char.ToLowerInvariant(candidateName[0])}{candidateName.Substring(1)}",
-                        property.Name,
-                        StringComparison.Ordinal))
-                {
-                    key = candidate;
-                }
-            }
+            Report(name, "must be a chance from 0.0001 to 1 with at most four decimals");
+            return ContentLimits.MaxChanceBasisPoints;
+        }
 
-            if (key == null)
+        return (int)(chance * ContentLimits.MaxChanceBasisPoints);
+    }
+
+    /// <summary>
+    ///     One of the six ailments by its camelCase name; None after a report.
+    /// </summary>
+    public Ailment RequiredAilment(string name)
+    {
+        string text = RequiredString(name);
+        if (TryNameOf(Ailments, text, out Ailment ailment))
+        {
+            return ailment;
+        }
+
+        if (text.Length != 0)
+        {
+            Report(name, $"unknown ailment '{text}'");
+        }
+
+        return Ailment.None;
+    }
+
+    /// <summary>
+    ///     An array of ailment names, each at most once, such as a cure's; empty when it names none.
+    /// </summary>
+    public IReadOnlyList<Ailment> RequiredAilmentArray(string name)
+    {
+        var ailments = new List<Ailment>();
+        IReadOnlyList<string> names = RequiredStringArray(name);
+        for (int index = 0; index < names.Count; index++)
+        {
+            if (!TryNameOf(Ailments, names[index], out Ailment ailment))
             {
-                map.Report(property.Name, "unknown name");
+                m_problems.Add($"{m_file}: {Combine(name)}[{index}]: unknown ailment '{names[index]}'");
             }
-            else if (values.ContainsKey(key.Value))
+            else if (ailments.Contains(ailment))
             {
-                map.Report(property.Name, "appears more than once");
+                m_problems.Add($"{m_file}: {Combine(name)}[{index}]: appears more than once");
             }
             else
             {
-                values.Add(key.Value, map.RequiredInt(property.Name, minimum, maximum));
+                ailments.Add(ailment);
             }
         }
 
-        return values;
+        return ailments;
     }
 
     public IReadOnlyList<string> RequiredStringArray(string name)
@@ -344,6 +399,59 @@ internal sealed class PackageObjectReader
     public void Report(string name, string message)
     {
         m_problems.Add($"{m_file}: {Combine(name)}: {message}");
+    }
+
+    private static bool TryNameOf<TEnum>(IEnumerable<TEnum> candidates, string text, out TEnum named)
+        where TEnum : struct, Enum
+    {
+        foreach (TEnum candidate in candidates)
+        {
+            string candidateName = candidate.ToString();
+            if (string.Equals(
+                    $"{char.ToLowerInvariant(candidateName[0])}{candidateName.Substring(1)}",
+                    text,
+                    StringComparison.Ordinal))
+            {
+                named = candidate;
+                return true;
+            }
+        }
+
+        named = default;
+        return false;
+    }
+
+    private IReadOnlyDictionary<TEnum, int> ReadNamedValues<TEnum>(
+        string name,
+        IEnumerable<TEnum> candidates,
+        Func<PackageObjectReader, string, int> read)
+        where TEnum : struct, Enum
+    {
+        var values = new Dictionary<TEnum, int>();
+        PackageObjectReader? map = RequiredObject(name);
+        if (map == null)
+        {
+            return values;
+        }
+
+        foreach (JsonProperty property in map.m_element.EnumerateObject())
+        {
+            map.m_requested.Add(property.Name);
+            if (!TryNameOf(candidates, property.Name, out TEnum key))
+            {
+                map.Report(property.Name, "unknown name");
+            }
+            else if (values.ContainsKey(key))
+            {
+                map.Report(property.Name, "appears more than once");
+            }
+            else
+            {
+                values.Add(key, read(map, property.Name));
+            }
+        }
+
+        return values;
     }
 
     private bool TryGet(string name, JsonValueKind kind, string description, out JsonElement value)

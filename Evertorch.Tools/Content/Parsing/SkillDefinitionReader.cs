@@ -74,9 +74,11 @@ internal static class SkillDefinitionReader
             root.ReportField("targetType", "must be enemy for a damage effect, or self with an area");
         }
 
-        if (hasArea && (kind != SkillEffectKind.Damage || !isOnCaster))
+        // A status skill cast on its caster with an area puts its status on the players around it; the validator keeps
+        // that to an ailment's status (Content Pipeline §4).
+        if (hasArea && (kind == SkillEffectKind.Heal || !isOnCaster))
         {
-            root.ReportField("area", "is only for a damage skill cast on its caster");
+            root.ReportField("area", "is only for a damage or an ailment skill cast on its caster");
         }
 
         // Another player may only be healed: there is no PvP (Gameplay Systems §6, §9). A status effect lands on its
@@ -215,8 +217,17 @@ internal static class SkillDefinitionReader
 
         if (isDamage)
         {
-            int ratio = effect.RequiredMapping("damage").RequiredInt("ratio", 1, ContentLimits.MaxDamageRatioPercent);
-            return ratio > 0 ? SkillEffect.Damage(ratio) : null;
+            YamlFieldReader damage = effect.RequiredMapping("damage");
+            int ratio = damage.RequiredInt("ratio", 1, ContentLimits.MaxDamageRatioPercent);
+            AilmentRider? rider = null;
+            bool isRiderRead = true;
+            if (damage.Has("ailment"))
+            {
+                rider = ReadRider(damage.RequiredMapping("ailment"));
+                isRiderRead = rider != null;
+            }
+
+            return ratio > 0 && isRiderRead ? SkillEffect.Damage(ratio, rider) : null;
         }
 
         if (isStatus)
@@ -235,11 +246,31 @@ internal static class SkillDefinitionReader
                 OptionalPercent(percent, "int"),
                 OptionalPercent(percent, "dex"),
                 OptionalPercent(percent, "luk"));
-            return id != default && durationMs > 0 ? SkillEffect.StatusEffect(id, durationMs, statPercent) : null;
+            int chance = status.Has("chance") ? status.RequiredChance("chance") : ContentLimits.MaxChanceBasisPoints;
+            return id != default && durationMs > 0 && chance > 0
+                ? SkillEffect.StatusEffect(id, durationMs, statPercent, chance)
+                : null;
         }
 
-        int hp = effect.RequiredMapping("heal").RequiredInt("hp", 1, ContentLimits.MaxHp);
-        return hp > 0 ? SkillEffect.Heal(hp) : null;
+        YamlFieldReader heal = effect.RequiredMapping("heal");
+        int hp = heal.RequiredInt("hp", 1, ContentLimits.MaxHp);
+        IReadOnlyList<Ailment> cures = heal.Has("cures") ? heal.RequiredAilmentSequence("cures") : new List<Ailment>();
+        return hp > 0 ? SkillEffect.Heal(hp, cures) : null;
+    }
+
+    // The ailment a landed hit may also bring: an ailment's status, which the validator checks, its chance, and how long
+    // it lasts (Content Pipeline §4).
+    private static AilmentRider? ReadRider(YamlFieldReader rider)
+    {
+        StatusDefinitionId status = rider.RequiredId<StatusDefinitionId>(
+            "status",
+            StatusDefinitionId.TryCreate,
+            StatusDefinitionId.KindPrefix);
+        int chance = rider.RequiredChance("chance");
+        int durationMs = rider.RequiredInt("durationMs", 1, ContentLimits.MaxDurationMs);
+        return status != default && chance > 0 && durationMs > 0
+            ? new AilmentRider(status, chance, durationMs)
+            : null;
     }
 
     private static int OptionalPercent(YamlFieldReader reader, string key)

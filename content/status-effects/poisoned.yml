@@ -1,0 +1,9 @@
+id: status.poisoned
+displayName: Poisoned
+server:
+  # How long a worn card's landing lasts before resistance; a skill names its own.
+  ailment: poison
+  durationMs: 20000
+client:
+  # A key and no art yet.
+  icon: status_poisoned

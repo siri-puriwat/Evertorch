@@ -314,12 +314,13 @@ public sealed class CardContentTests
                     {
                         "bonus", "attack", "magicAttack", "defense", "maxHp", "maxSp", "bossDamage",
                         "bossDamageReduction", "raceDamage", "elementDamage", "sizeDamage", "elementDamageReduction",
-                        "armorElement", "removalFee"
+                        "armorElement", "inflict", "resist", "removalFee"
                     }),
-                "every value, 0 when absent, every group empty, and no element");
+                "every value, 0 when absent, every group empty, no element, and no ailment");
             Assert.That(
-                (values.GetProperty("raceDamage").GetRawText(), values.GetProperty("armorElement").GetString()),
-                Is.EqualTo(("{}", "neutral")));
+                (values.GetProperty("raceDamage").GetRawText(), values.GetProperty("armorElement").GetString(),
+                    values.GetProperty("inflict").GetRawText(), values.GetProperty("resist").GetRawText()),
+                Is.EqualTo(("{}", "neutral", "{}", "{}")));
             Assert.That(
                 (values.GetProperty("bonus").GetProperty("str").GetInt32(), values.GetProperty("maxHp").GetInt32()),
                 Is.EqualTo((2, 0)));

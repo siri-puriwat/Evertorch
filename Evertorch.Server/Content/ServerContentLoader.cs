@@ -31,14 +31,17 @@ public static class ServerContentLoader
     private const int ContentVersionLength = 16;
     private const float GroundHeightTolerance = 0.01f;
 
-    // One NpcServices message (Network Protocol §6): its header, then each item the NPC trades, each quest it gives,
-    // and each job change it offers at their largest, with every ID at the 64-byte limit; one datagram carries 1,020
-    // bytes. The tools check the same.
+    // One NpcServices message (Network Protocol §6): its header, then each item the NPC trades, 10 bytes and its ID's,
+    // each quest it gives, and each job change it offers, those at their largest with every ID at the 64-byte limit.
+    // The tools check the same.
     private const int ServicesHeaderBytes = 14;
-    private const int ServicesEntryBytes = 74;
+    private const int ServicesEntryBytes = 10;
     private const int ServicesOfferBytes = 154;
     private const int ServicesJobChangeBytes = 134;
-    private const int MaxServicesBytes = 1020;
+
+    // One StatusEffects message carries every status at once: its header, then each status's ID and 6 bytes more.
+    private const int StatusListHeaderBytes = 3;
+    private const int StatusEntryBytes = 6;
 
     // What a first job takes from its base job, so its entry omits them (Content Pipeline §4).
     private static readonly string[] InheritedJobFields =
@@ -169,11 +172,13 @@ public static class ServerContentLoader
             ReadRefineTable);
         Dictionary<JobDefinitionId, JobDefinition> jobs =
             ResolveJobs(jobEntries, experienceTables, declaredJobs, problems);
-        if (declaredStatusEffects.Count > StatusEffects.MaxEntries)
+        int statusListBytes = StatusListHeaderBytes
+            + declaredStatusEffects.Sum(status => StatusEntryBytes + Encoding.UTF8.GetByteCount(status.Value));
+        if (declaredStatusEffects.Count > StatusEffects.MaxEntries || statusListBytes > StatusEffects.MaxEncodedLength)
         {
             problems.Add(
-                $"{StatusEffectsFile}: lists more than the {StatusEffects.MaxEntries} status effects a status list "
-                + "carries");
+                $"{StatusEffectsFile}: lists more than a status list carries: {StatusEffects.MaxEntries} status "
+                + $"effects within {StatusEffects.MaxEncodedLength} bytes");
         }
 
         // A character keeps every quest it takes, and one quest log carries them all.
@@ -196,6 +201,7 @@ public static class ServerContentLoader
             declaredStatusEffects,
             problems);
         CheckStartedStatuses(items, statusEffects, declaredStatusEffects, problems);
+        CheckAilments(skills.Values, items.Values, statusEffects, declaredStatusEffects, problems);
         CheckNpcsAndQuests(
             npcs.Values,
             quests.Values,
@@ -519,11 +525,23 @@ public static class ServerContentLoader
             values.RequiredEnumMap<Element>("elementDamage", 1, ContentLimits.MaxCardDamagePercent),
             values.RequiredEnumMap<BodySize>("sizeDamage", 1, ContentLimits.MaxCardDamagePercent),
             values.RequiredEnumMap<Element>("elementDamageReduction", 1, ContentLimits.MaxCardDamageReductionPercent),
-            values.RequiredEnum<Element>("armorElement"));
+            values.RequiredEnum<Element>("armorElement"),
+            values.RequiredAilmentChanceMap("inflict"),
+            values.RequiredAilmentMap("resist", 1, ContentLimits.MaxCardResistPercent));
         int removalFee = values.RequiredInt("removalFee", 0, ContentLimits.MaxCardRemovalFee);
         if (bonus.ArmorElement != Element.Neutral && fits != EquipmentSlot.Armor)
         {
             values.Report("armorElement", "is only for a card that fits armor");
+        }
+
+        if (bonus.Inflict.Count > 0 && fits != EquipmentSlot.Weapon)
+        {
+            values.Report("inflict", "is only for a card that fits a weapon");
+        }
+
+        if (bonus.Resist.Count > 0 && fits != EquipmentSlot.Armor)
+        {
+            values.Report("resist", "is only for a card that fits armor");
         }
 
         stats.ReportUnexpectedProperties();
@@ -538,6 +556,8 @@ public static class ServerContentLoader
                 .Concat(bonus.ElementDamage.Values)
                 .Concat(bonus.SizeDamage.Values)
                 .Concat(bonus.ElementDamageReduction.Values)
+                .Concat(bonus.Inflict.Values)
+                .Concat(bonus.Resist.Values)
                 .Any(value => value > 0)
             || bonus.ArmorElement != Element.Neutral;
         if (!addsAny)
@@ -604,14 +624,15 @@ public static class ServerContentLoader
             durationMs = values.RequiredInt("durationMs", 1, ContentLimits.MaxDurationMs);
         }
 
+        IReadOnlyList<Ailment> cures = values.RequiredAilmentArray("cures");
         values.ReportUnexpectedProperties();
-        if (health == 0 && spirit == 0 && status == null)
+        if (health == 0 && spirit == 0 && status == null && cures.Count == 0)
         {
-            entry.Report("effect", "must restore HP or SP, or start a status");
+            entry.Report("effect", "must restore HP or SP, start a status, or end an ailment");
             return null;
         }
 
-        return new ItemEffect(health, spirit, status, durationMs);
+        return new ItemEffect(health, spirit, status, durationMs, cures);
     }
 
     // A weapon names its type and keeps its attack-speed penalty within a job's limit (Gameplay Systems §11.1).
@@ -873,9 +894,10 @@ public static class ServerContentLoader
             entry.Report("targetType", "must be enemy for a damage effect, or self with an area");
         }
 
-        if (hasArea && (kind != SkillEffectKind.Damage || !isOnCaster))
+        // An area status puts an ailment on the players around its caster (CheckAilments).
+        if (hasArea && (kind == SkillEffectKind.Heal || !isOnCaster))
         {
-            entry.Report("areaRadius", "is only for a damage skill cast on its caster");
+            entry.Report("areaRadius", "is only for a damage or an ailment skill cast on its caster");
         }
 
         // Another player may only be healed: there is no PvP (Gameplay Systems §6, §9). A status effect lands on its
@@ -933,23 +955,42 @@ public static class ServerContentLoader
         else if (isDamage)
         {
             int ratio = effect.RequiredInt("damageRatio", 1, ContentLimits.MaxDamageRatioPercent);
-            read = ratio > 0 ? SkillEffect.Damage(ratio) : null;
+            AilmentRider? rider = effect.Has("ailment") ? ReadRider(effect.RequiredObject("ailment")) : null;
+            read = ratio > 0 ? SkillEffect.Damage(ratio, rider) : null;
         }
         else if (isStatus)
         {
             StatusDefinitionId status = effect.RequiredId<StatusDefinitionId>("status", StatusDefinitionId.TryCreate);
             int durationMs = effect.RequiredInt("durationMs", 1, ContentLimits.MaxDurationMs);
             StatPercentages percent = ReadStatPercent(effect.RequiredObject("statPercent"));
-            read = status != default && durationMs > 0 ? SkillEffect.StatusEffect(status, durationMs, percent) : null;
+            int chance = effect.Has("chance") ? effect.RequiredChance("chance") : ContentLimits.MaxChanceBasisPoints;
+            read = status != default && durationMs > 0
+                ? SkillEffect.StatusEffect(status, durationMs, percent, chance)
+                : null;
         }
         else
         {
             int hp = effect.RequiredInt("healHp", 1, ContentLimits.MaxHp);
-            read = hp > 0 ? SkillEffect.Heal(hp) : null;
+            IReadOnlyList<Ailment> cures = effect.RequiredAilmentArray("cures");
+            read = hp > 0 ? SkillEffect.Heal(hp, cures) : null;
         }
 
         effect.ReportUnexpectedProperties();
         return read;
+    }
+
+    private static AilmentRider? ReadRider(PackageObjectReader? rider)
+    {
+        if (rider == null)
+        {
+            return null;
+        }
+
+        StatusDefinitionId status = rider.RequiredId<StatusDefinitionId>("status", StatusDefinitionId.TryCreate);
+        int chance = rider.RequiredChance("chance");
+        int durationMs = rider.RequiredInt("durationMs", 1, ContentLimits.MaxDurationMs);
+        rider.ReportUnexpectedProperties();
+        return status != default ? new AilmentRider(status, chance, durationMs) : null;
     }
 
     private static StatPercentages ReadStatPercent(PackageObjectReader? percent)
@@ -1359,9 +1400,21 @@ public static class ServerContentLoader
         int problemsBefore = problems.Count;
         string displayName = entry.RequiredString("displayName");
         Element? attackElement = entry.Has("attackElement") ? entry.RequiredEnum<Element>("attackElement") : null;
+        Ailment ailment = Ailment.None;
+        int durationMs = 0;
+        if (entry.Has("ailment"))
+        {
+            ailment = entry.RequiredAilment("ailment");
+            durationMs = entry.RequiredInt("durationMs", 1, ContentLimits.MaxDurationMs);
+            if (attackElement != null)
+            {
+                entry.Report("ailment", "is not for a status that sets an attack element");
+            }
+        }
+
         entry.ReportUnexpectedProperties();
         return problems.Count == problemsBefore
-            ? new StatusEffectDefinition(id, displayName, attackElement)
+            ? new StatusEffectDefinition(id, displayName, attackElement, ailment, durationMs)
             : null;
     }
 
@@ -1666,6 +1719,97 @@ public static class ServerContentLoader
         }
     }
 
+    // Each ailment is one status; a rider names an ailment's status; an ailment skill targets an enemy or, cast on
+    // itself with an area, the players around it, and changes no statistic; only an ailment skill has a chance or an
+    // area among status skills; a weapon card brings only an ailment content has a status for (Content Pipeline §7).
+    private static void CheckAilments(
+        IEnumerable<SkillDefinition> skills,
+        IEnumerable<ItemDefinition> items,
+        IReadOnlyDictionary<StatusDefinitionId, StatusEffectDefinition> statusEffects,
+        HashSet<StatusDefinitionId> declaredStatusEffects,
+        List<string> problems)
+    {
+        var ailments = new Dictionary<Ailment, StatusDefinitionId>();
+        foreach (StatusEffectDefinition status in statusEffects.Values.OrderBy(status => status.Id.Value,
+                     StringComparer.Ordinal))
+        {
+            if (status.Ailment == Ailment.None)
+            {
+                continue;
+            }
+
+            if (ailments.TryGetValue(status.Ailment, out StatusDefinitionId first))
+            {
+                problems.Add($"{StatusEffectsFile}: {status.Id}: is the ailment of '{first}' too");
+            }
+            else
+            {
+                ailments.Add(status.Ailment, status.Id);
+            }
+        }
+
+        foreach (SkillDefinition skill in skills)
+        {
+            foreach (SkillEffect effect in skill.Levels.Select(level => level.Effect))
+            {
+                if (effect.Rider != null)
+                {
+                    StatusDefinitionId rider = effect.Rider.Status;
+                    if (!declaredStatusEffects.Contains(rider))
+                    {
+                        problems.Add($"{SkillsFile}: {skill.Id}: brings unknown status effect '{rider}'");
+                    }
+                    else if (statusEffects.TryGetValue(rider, out StatusEffectDefinition? ridden)
+                             && ridden.Ailment == Ailment.None)
+                    {
+                        problems.Add($"{SkillsFile}: {skill.Id}: brings '{rider}', which is no ailment's status");
+                    }
+                }
+
+                if (effect.Kind != SkillEffectKind.Status
+                    || !statusEffects.TryGetValue(effect.Status, out StatusEffectDefinition? status))
+                {
+                    continue;
+                }
+
+                if (status.Ailment == Ailment.None)
+                {
+                    if (effect.ChanceBasisPoints != ContentLimits.MaxChanceBasisPoints)
+                    {
+                        problems.Add($"{SkillsFile}: {skill.Id}: has a chance, which is only for an ailment's status");
+                    }
+
+                    if (skill.HasArea)
+                    {
+                        problems.Add($"{SkillsFile}: {skill.Id}: strikes an area with '{status.Id}', no ailment");
+                    }
+                }
+                else if (skill.TargetType != SkillTargetType.Enemy
+                         && !(skill.TargetType == SkillTargetType.Self && skill.HasArea))
+                {
+                    problems.Add(
+                        $"{SkillsFile}: {skill.Id}: puts ailment status '{status.Id}' on neither an enemy nor the "
+                        + "players around its caster");
+                }
+                else if (effect.StatPercent != default)
+                {
+                    problems.Add($"{SkillsFile}: {skill.Id}: changes statistics with ailment status '{status.Id}'");
+                }
+            }
+        }
+
+        foreach (ItemDefinition item in items)
+        {
+            foreach (Ailment ailment in item.Card?.Bonus.Inflict.Keys ?? Enumerable.Empty<Ailment>())
+            {
+                if (!ailments.ContainsKey(ailment))
+                {
+                    problems.Add($"{ItemsFile}: {item.Id}: brings ailment '{ailment}', which no status is");
+                }
+            }
+        }
+    }
+
     private static void CheckReferences(
         IEnumerable<MonsterDefinition> monsters,
         IEnumerable<JobDefinition> jobs,
@@ -1946,13 +2090,20 @@ public static class ServerContentLoader
 
             int offers = questList.Count(quest => quest.Giver == npc.Id);
             int size = ServicesHeaderBytes
-                + ServicesEntryBytes * traded.Count
+                + traded.Sum(item => ServicesEntryBytes + Encoding.UTF8.GetByteCount(item.Value))
                 + ServicesOfferBytes * offers
                 + (npc.OffersJobChange ? ServicesJobChangeBytes * firstJobs : 0);
-            if (size > MaxServicesBytes)
+            if (size > NpcServices.MaxEncodedLength)
             {
                 problems.Add(
-                    $"{NpcsFile}: {npc.Id}: its services take {size} bytes, more than the {MaxServicesBytes} one "
+                    $"{NpcsFile}: {npc.Id}: its services take {size} bytes, more than the "
+                    + $"{NpcServices.MaxEncodedLength} one message carries");
+            }
+
+            if (traded.Count > NpcServices.MaxEntries)
+            {
+                problems.Add(
+                    $"{NpcsFile}: {npc.Id}: trades {traded.Count} items, more than the {NpcServices.MaxEntries} one "
                     + "message carries");
             }
         }

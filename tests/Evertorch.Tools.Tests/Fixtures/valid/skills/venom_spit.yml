@@ -1,0 +1,12 @@
+id: skill.venom_spit
+displayName: Venom Spit
+targetType: enemy
+server:
+  range: 6.0
+  levels:
+    - castTimeMs: { fixed: 800 }
+      cooldownMs: 12000
+      effect:
+        status: { status: status.poisoned, durationMs: 9157, chance: 0.6113, statPercent: {} }
+client:
+  icon: skill_venom_spit

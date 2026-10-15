@@ -80,16 +80,19 @@ public sealed class ServerContentNpcTests
         Assert.That(ProblemsOf(files), Is.EqualTo(new[] { $"{file}: {expected}" }));
     }
 
-    // The fixture NPC gives one quest (154 bytes) beside the header (14), so its shop may trade 11 items of 74 bytes:
-    // 982 bytes, where 12 items take 1,056 of the 1,020 one message carries.
-    [TestCase(11, false)]
-    [TestCase(12, true)]
-    public void Load_ForAnNpcsServices_TakesWhatFitsOneMessage(int items, bool isRefused)
+    // The fixture NPC gives one quest (154 bytes) beside the header (14) and trades the gel (33): each item more
+    // takes 10 bytes and its ID's, so eleven of 64-byte IDs bring 1,015 of the 1,020 one message carries and twelve
+    // 1,089; short IDs fit, but one message carries 24 items (Network Protocol §6).
+    [TestCase(11, 64, "")]
+    [TestCase(12, 64, "its services take 1089 bytes, more than the 1020 one message carries")]
+    [TestCase(23, 22, "")]
+    [TestCase(24, 22, "trades 25 items, more than the 24 one message carries")]
+    public void Load_ForAnNpcsServices_TakesWhatFitsOneMessage(int extras, int idLength, string problem)
     {
         Dictionary<string, byte[]> files = PackageFixture.BuildFixturePackage();
-        IEnumerable<string> extra = Enumerable.Range(1, items - 1).Select(index =>
-            $"{{\"id\":\"item.material.extra_{index:D2}\",\"displayName\":\"Extra\",\"type\":\"material\","
-            + "\"stackLimit\":1,\"weight\":1,\"sellPrice\":1}");
+        IEnumerable<string> extra = Enumerable.Range(1, extras).Select(index =>
+            $"{{\"id\":\"item.material.extra_{index:D2}{new string('x', idLength - 22)}\",\"displayName\":\"Extra\","
+            + "\"type\":\"material\",\"stackLimit\":1,\"weight\":1,\"sellPrice\":1}");
         string gel = PackageFixture.ReadText(files, "items.json");
         int start = gel.IndexOf('[', StringComparison.Ordinal) + 1;
         PackageFixture.Replace(files, "items.json", gel.Substring(0, start),
@@ -97,14 +100,7 @@ public sealed class ServerContentNpcTests
 
         Assert.That(
             ProblemsOf(files),
-            isRefused
-                ? Is.EqualTo(
-                    new[]
-                    {
-                        "npcs.json: npc.quartermaster: its services take 1056 bytes, more than the 1020 one message "
-                        + "carries"
-                    })
-                : Is.Empty);
+            problem.Length == 0 ? Is.Empty : Is.EqualTo(new[] { $"npcs.json: npc.quartermaster: {problem}" }));
     }
 
     [Test]

@@ -207,8 +207,9 @@ public sealed class FirstJobContentTests
     }
 
     // An NPC that changes jobs offers every first job, 134 bytes each at the longest, beside its header of 14 bytes,
-    // the 74 of each item it trades, and the 154 of its quest: with nine items more the Quartermaster trades eleven in
-    // 982 bytes, which fit, and a first job's change brings them to 1,116.
+    // each item it trades, 10 bytes and its ID's, and the 154 of its quest: with nine items more of 64-byte IDs the
+    // Quartermaster trades eleven in 14 + 33 + 38 + 9 × 74 + 154 = 905 bytes, which fit, and a first job's change
+    // brings them to 1,039.
     [TestCase(false, true)]
     [TestCase(true, false)]
     public void Run_ForAnNpcThatChangesJobs_CountsEachFirstJobInItsServices(bool isChanging, bool isValid)
@@ -218,10 +219,14 @@ public sealed class FirstJobContentTests
         for (int index = 0; index < 9; index++)
         {
             workspace.Write(
-                string.Format(CultureInfo.InvariantCulture, "items/extra_{0}.yml", index),
+                string.Format(CultureInfo.InvariantCulture, "items/extra_{0:D2}.yml", index),
                 workspace.Read("items/slime_gel.yml").Replace(
                     "id: item.material.slime_gel",
-                    string.Format(CultureInfo.InvariantCulture, "id: item.material.extra_{0}", index),
+                    string.Format(
+                        CultureInfo.InvariantCulture,
+                        "id: item.material.extra_{0:D2}{1}",
+                        index,
+                        new string('x', 64 - 22)),
                     StringComparison.Ordinal));
         }
 
@@ -240,7 +245,7 @@ public sealed class FirstJobContentTests
         }
         else
         {
-            AssertReports(result, Npc, "id", "offers services that take 1116 bytes");
+            AssertReports(result, Npc, "id", "offers services that take 1039 bytes");
         }
     }
 

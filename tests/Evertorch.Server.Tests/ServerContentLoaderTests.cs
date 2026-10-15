@@ -304,6 +304,33 @@ public sealed class ServerContentLoaderTests
                 : Is.Empty);
     }
 
+    // One list carries 24 statuses within 1,020 bytes: its header of 3, then each ID and 6 bytes more, so 14 of
+    // 64-byte IDs take 983 and 15 take 1,053 (Network Protocol §6).
+    [TestCase(24, 9, false)]
+    [TestCase(25, 9, true)]
+    [TestCase(14, 64, false)]
+    [TestCase(15, 64, true)]
+    public void Load_WithMoreStatusEffectsThanAStatusListCarries_Fails(int count, int idLength, bool isRefused)
+    {
+        Dictionary<string, byte[]> files = PackageFixture.BuildFixturePackage();
+        string statuses = string.Join(
+            ", ",
+            Enumerable.Range(10, count).Select(index =>
+                $"{{ \"id\": \"status.{index}{new string('s', idLength - 9)}\", \"displayName\": \"S\" }}"));
+        PackageFixture.Replace(files, StatusEffectsFile, "\"definitions\": []", $"\"definitions\": [ {statuses} ]");
+
+        Assert.That(
+            ProblemsOf(files),
+            isRefused
+                ? Is.EqualTo(
+                    new[]
+                    {
+                        "status-effects.json: lists more than a status list carries: 24 status effects within 1020 "
+                        + "bytes"
+                    })
+                : Is.Empty);
+    }
+
     [Test]
     public void LoadFromDirectory_ForWrittenPackage_Loads()
     {
@@ -713,7 +740,7 @@ public sealed class ServerContentLoaderTests
 
         Assert.That(
             ProblemsOf(onAnEnemy),
-            Is.EqualTo(new[] { $"{Skills}: {field}: is only for a damage skill cast on its caster" }));
+            Is.EqualTo(new[] { $"{Skills}: {field}: is only for a damage or an ailment skill cast on its caster" }));
         Assert.That(
             ProblemsOf(known),
             Is.EqualTo(new[] { "jobs.json: job.adventurer: knows skill 'skill.strike', which strikes an area" }));
@@ -724,17 +751,23 @@ public sealed class ServerContentLoaderTests
     {
         Dictionary<string, byte[]> material = PackageFixture.BuildFixturePackage();
         PackageFixture.Replace(material, Items, "\"weight\": 1",
-            "\"weight\": 1,\n      \"effect\": { \"hp\": 1, \"sp\": 0 }");
+            "\"weight\": 1,\n      \"effect\": { \"hp\": 1, \"sp\": 0, \"cures\": [] }");
         Dictionary<string, byte[]> consumable = PackageFixture.BuildFixturePackage();
         PackageFixture.Replace(consumable, Items, "\"type\": \"material\"", "\"type\": \"consumable\"");
         Dictionary<string, byte[]> empty = PackageFixture.BuildFixturePackage();
         PackageFixture.Replace(empty, Items, "\"type\": \"material\"", "\"type\": \"consumable\"");
         PackageFixture.Replace(empty, Items, "\"weight\": 1",
-            "\"weight\": 1,\n      \"effect\": { \"hp\": 0, \"sp\": 0 }");
+            "\"weight\": 1,\n      \"effect\": { \"hp\": 0, \"sp\": 0, \"cures\": [] }");
 
         Assert.That(ProblemsOf(material), Has.Some.Contains("effect: is only for a consumable"));
         Assert.That(ProblemsOf(consumable), Has.Some.Contains("effect: required property is missing"));
-        Assert.That(ProblemsOf(empty), Has.Some.Contains("effect: must restore HP or SP, or start a status"));
+        Assert.That(
+            ProblemsOf(empty),
+            Is.EqualTo(
+                new[]
+                {
+                    "items.json: definitions[0].effect: must restore HP or SP, start a status, or end an ailment"
+                }));
     }
 
     [Test]
@@ -983,21 +1016,6 @@ public sealed class ServerContentLoaderTests
         files["extra.json"] = new[] { (byte)'{', (byte)'}' };
 
         Assert.That(ProblemsOf(files), Is.EqualTo(new[] { "extra.json: not listed in the manifest" }));
-    }
-
-    [Test]
-    public void Load_WithMoreStatusEffectsThanAStatusListCarries_Fails()
-    {
-        Dictionary<string, byte[]> files = PackageFixture.BuildFixturePackage();
-        string fifteen = string.Join(
-            ", ",
-            Enumerable.Range(1, 15).Select(index =>
-                $"{{ \"id\": \"status.s{index}\", \"displayName\": \"S\" }}"));
-        PackageFixture.Replace(files, StatusEffectsFile, "\"definitions\": []", $"\"definitions\": [ {fifteen} ]");
-
-        Assert.That(
-            ProblemsOf(files),
-            Is.EqualTo(new[] { "status-effects.json: lists more than the 14 status effects a status list carries" }));
     }
 
     [Test]

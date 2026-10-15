@@ -137,6 +137,7 @@ internal static class ServerProjection
                     writer.WriteNumber("durationMs", item.Effect.StatusDurationMs);
                 }
 
+                WriteCures(writer, item.Effect.Cures);
                 writer.WriteEndObject();
             }
 
@@ -185,6 +186,17 @@ internal static class ServerProjection
         WriteMap(writer, "sizeDamage", bonus.SizeDamage);
         WriteMap(writer, "elementDamageReduction", bonus.ElementDamageReduction);
         writer.WriteString("armorElement", EnumText.Of(bonus.ArmorElement));
+        writer.WriteStartObject("inflict");
+        foreach (Ailment ailment in Enum.GetValues<Ailment>())
+        {
+            if (bonus.Inflict.TryGetValue(ailment, out int basisPoints))
+            {
+                writer.WriteNumber(EnumText.Of(ailment), Chance(basisPoints));
+            }
+        }
+
+        writer.WriteEndObject();
+        WriteMap(writer, "resist", bonus.Resist);
         writer.WriteNumber("removalFee", card.RemovalFee);
         writer.WriteEndObject();
     }
@@ -532,11 +544,24 @@ internal static class ServerProjection
         if (effect.Kind == SkillEffectKind.Damage)
         {
             writer.WriteNumber("damageRatio", effect.DamageRatioPercent);
+            if (effect.Rider != null)
+            {
+                writer.WriteStartObject("ailment");
+                writer.WriteString("status", effect.Rider.Status.Value);
+                writer.WriteNumber("chance", Chance(effect.Rider.ChanceBasisPoints));
+                writer.WriteNumber("durationMs", effect.Rider.DurationMs);
+                writer.WriteEndObject();
+            }
         }
         else if (effect.Kind == SkillEffectKind.Status)
         {
             writer.WriteString("status", effect.Status.Value);
             writer.WriteNumber("durationMs", effect.StatusDurationMs);
+            if (effect.ChanceBasisPoints != ContentLimits.MaxChanceBasisPoints)
+            {
+                writer.WriteNumber("chance", Chance(effect.ChanceBasisPoints));
+            }
+
             writer.WriteStartObject("statPercent");
             writer.WriteNumber("str", effect.StatPercent.Str);
             writer.WriteNumber("agi", effect.StatPercent.Agi);
@@ -549,10 +574,29 @@ internal static class ServerProjection
         else
         {
             writer.WriteNumber("healHp", effect.HealHp);
+            WriteCures(writer, effect.Cures);
         }
 
         writer.WriteEndObject();
         writer.WriteEndObject();
+    }
+
+    // Every heal's and every consumable's, empty when it ends none, so the loader reads each name it knows.
+    private static void WriteCures(Utf8JsonWriter writer, IReadOnlyList<Ailment> cures)
+    {
+        writer.WriteStartArray("cures");
+        foreach (Ailment ailment in cures)
+        {
+            writer.WriteStringValue(EnumText.Of(ailment));
+        }
+
+        writer.WriteEndArray();
+    }
+
+    // A chance as content writes it, from basis points: exact, since a decimal keeps its four places.
+    private static decimal Chance(int basisPoints)
+    {
+        return basisPoints / (decimal)ContentLimits.MaxChanceBasisPoints;
     }
 
     private static void WriteStatusEffects(Utf8JsonWriter writer, ContentSet content)
@@ -567,6 +611,12 @@ internal static class ServerProjection
             if (status.AttackElement.HasValue)
             {
                 writer.WriteString("attackElement", EnumText.Of(status.AttackElement.Value));
+            }
+
+            if (status.Ailment != Ailment.None)
+            {
+                writer.WriteString("ailment", EnumText.Of(status.Ailment));
+                writer.WriteNumber("durationMs", status.DurationMs);
             }
 
             writer.WriteEndObject();

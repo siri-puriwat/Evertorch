@@ -16,6 +16,10 @@ public delegate bool TryCreateId<T>(string? value, out T id);
 /// </summary>
 public sealed class YamlFieldReader
 {
+    // The six names content gives the ailments (Content Pipeline §4); None is no ailment's name.
+    private static readonly Dictionary<string, Ailment> AilmentNames = NamesOf(
+        new[] { Ailment.Poison, Ailment.Stun, Ailment.Freeze, Ailment.Sleep, Ailment.Silence, Ailment.Blind });
+
     private readonly YamlMappingNode m_node;
     private readonly string m_file;
     private readonly string m_path;
@@ -265,36 +269,115 @@ public sealed class YamlFieldReader
     public IReadOnlyDictionary<TEnum, int> RequiredEnumMap<TEnum>(string key, int min, int max)
         where TEnum : struct, Enum
     {
-        YamlFieldReader mapping = RequiredMapping(key);
-        var names = new Dictionary<string, TEnum>(StringComparer.Ordinal);
-        foreach (TEnum candidate in Enum.GetValues<TEnum>())
+        return ReadNamedValues(
+            key,
+            NamesOf(Enum.GetValues<TEnum>()),
+            (mapping, name) => mapping.RequiredInt(name, min, max),
+            value => value >= min && value <= max);
+    }
+
+    /// <summary>
+    ///     One of the six ailments by its name (Content Pipeline §4); None after a report.
+    /// </summary>
+    public Ailment RequiredAilment(string key)
+    {
+        YamlScalarNode? scalar = RequiredScalar(key);
+        if (scalar == null)
         {
-            names.Add(EnumText.Of(candidate), candidate);
+            return Ailment.None;
         }
 
-        var values = new Dictionary<TEnum, int>();
-        foreach (KeyValuePair<YamlNode, YamlNode> child in mapping.m_node.Children)
+        if (scalar.Value != null && AilmentNames.TryGetValue(scalar.Value, out Ailment ailment))
         {
-            if (!(child.Key is YamlScalarNode keyNode) || keyNode.Value == null)
-            {
-                continue;
-            }
+            return ailment;
+        }
 
-            if (!names.TryGetValue(keyNode.Value, out TEnum name))
-            {
-                mapping.m_readKeys.Add(keyNode.Value);
-                mapping.Report(keyNode.Value, keyNode, $"must be one of: {string.Join(", ", names.Keys)}");
-                continue;
-            }
+        Report(key, scalar, AilmentNamesMessage());
+        return Ailment.None;
+    }
 
-            int value = mapping.RequiredInt(keyNode.Value, min, max);
-            if (value >= min && value <= max)
+    /// <summary>
+    ///     A sequence of at least one ailment name, each at most once, such as a cure's; a name outside the six or a
+    ///     repeated one is reported at its index and left out.
+    /// </summary>
+    public IReadOnlyList<Ailment> RequiredAilmentSequence(string key)
+    {
+        var ailments = new List<Ailment>();
+        IReadOnlyList<string> names = RequiredStringSequence(key);
+        if (Find(key) is YamlSequenceNode sequence && sequence.Children.Count == 0)
+        {
+            ReportField(key, "must name at least one ailment");
+        }
+
+        for (int index = 0; index < names.Count; index++)
+        {
+            string element = string.Format(CultureInfo.InvariantCulture, "{0}[{1}]", key, index);
+            if (!AilmentNames.TryGetValue(names[index], out Ailment ailment))
             {
-                values[name] = value;
+                ReportField(element, AilmentNamesMessage());
+            }
+            else if (ailments.Contains(ailment))
+            {
+                ReportField(element, $"names {names[index]} more than once");
+            }
+            else
+            {
+                ailments.Add(ailment);
             }
         }
 
-        return values;
+        return ailments;
+    }
+
+    /// <summary>
+    ///     A mapping from ailment names to whole numbers within their bounds, such as an armor card's resistance by
+    ///     ailment; a name outside the six or a number out of bounds is reported on its own field and left out.
+    /// </summary>
+    public IReadOnlyDictionary<Ailment, int> RequiredAilmentMap(string key, int min, int max)
+    {
+        return ReadNamedValues(
+            key,
+            AilmentNames,
+            (mapping, name) => mapping.RequiredInt(name, min, max),
+            value => value >= min && value <= max);
+    }
+
+    /// <summary>
+    ///     A mapping from ailment names to chances (<see cref="RequiredChance" />), such as a weapon card's chance to
+    ///     bring each, in basis points; a name outside the six or a chance out of bounds is reported and left out.
+    /// </summary>
+    public IReadOnlyDictionary<Ailment, int> RequiredAilmentChanceMap(string key)
+    {
+        return ReadNamedValues(key, AilmentNames, (mapping, name) => mapping.RequiredChance(name), value => value > 0);
+    }
+
+    /// <summary>
+    ///     A chance from 0.0001 to 1 with at most four decimals (Content Pipeline §4), returned in basis points, so 1 is
+    ///     10,000; 0 after a report.
+    /// </summary>
+    public int RequiredChance(string key)
+    {
+        YamlScalarNode? scalar = RequiredScalar(key);
+        if (scalar == null)
+        {
+            return 0;
+        }
+
+        if (scalar.Style != ScalarStyle.Plain
+            || !decimal.TryParse(
+                scalar.Value,
+                NumberStyles.AllowDecimalPoint,
+                CultureInfo.InvariantCulture,
+                out decimal chance)
+            || chance < 0.0001m
+            || chance > 1m
+            || decimal.Round(chance, 4) != chance)
+        {
+            Report(key, scalar, "must be a chance from 0.0001 to 1, with at most four decimals");
+            return 0;
+        }
+
+        return (int)(chance * ContentLimits.MaxChanceBasisPoints);
     }
 
     public YamlFieldReader RequiredMapping(string key)
@@ -503,6 +586,23 @@ public sealed class YamlFieldReader
         return m_path.Length == 0 ? key : $"{m_path}.{key}";
     }
 
+    private static Dictionary<string, TEnum> NamesOf<TEnum>(IEnumerable<TEnum> values)
+        where TEnum : struct, Enum
+    {
+        var names = new Dictionary<string, TEnum>(StringComparer.Ordinal);
+        foreach (TEnum value in values)
+        {
+            names.Add(EnumText.Of(value), value);
+        }
+
+        return names;
+    }
+
+    private static string AilmentNamesMessage()
+    {
+        return $"must be one of: {string.Join(", ", AilmentNames.Keys)}";
+    }
+
     private static bool IsColor(string value)
     {
         if (value.Length != 7 || value[0] != '#')
@@ -541,6 +641,39 @@ public sealed class YamlFieldReader
         }
 
         return true;
+    }
+
+    private IReadOnlyDictionary<TEnum, int> ReadNamedValues<TEnum>(
+        string key,
+        IReadOnlyDictionary<string, TEnum> names,
+        Func<YamlFieldReader, string, int> read,
+        Func<int, bool> isValid)
+        where TEnum : struct, Enum
+    {
+        YamlFieldReader mapping = RequiredMapping(key);
+        var values = new Dictionary<TEnum, int>();
+        foreach (KeyValuePair<YamlNode, YamlNode> child in mapping.m_node.Children)
+        {
+            if (!(child.Key is YamlScalarNode keyNode) || keyNode.Value == null)
+            {
+                continue;
+            }
+
+            if (!names.TryGetValue(keyNode.Value, out TEnum name))
+            {
+                mapping.m_readKeys.Add(keyNode.Value);
+                mapping.Report(keyNode.Value, keyNode, $"must be one of: {string.Join(", ", names.Keys)}");
+                continue;
+            }
+
+            int value = read(mapping, keyNode.Value);
+            if (isValid(value))
+            {
+                values[name] = value;
+            }
+        }
+
+        return values;
     }
 
     private YamlFieldReader AddChild(YamlMappingNode mapping, string path, bool isPlaceholder)
