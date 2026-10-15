@@ -213,6 +213,65 @@ public sealed class AilmentContentTests
     }
 
     [Test]
+    public void RepositoryContent_GivesTheMonstersTheirAilmentSkills_AndSparkBoltAndGraveBiteTheirRiders()
+    {
+        ContentPipelineResult result = ContentPipeline.Run(
+            Path.Combine(ContentValidationTests.RepositoryRoot(), "content"));
+        Assert.That(result.Diagnostics, Is.Empty, Describe(result));
+
+        SkillDefinition Skill(string id)
+        {
+            return result.Content.Skills.Single(skill => skill.Definition.Id.Value == id).Definition;
+        }
+
+        string Rider(string id)
+        {
+            AilmentRider rider = Skill(id).Levels.Single().Effect.Rider!;
+            return $"{rider.Status.Value} {rider.ChanceBasisPoints} {rider.DurationMs}";
+        }
+
+        string Pure(string id)
+        {
+            SkillDefinition skill = Skill(id);
+            SkillLevel level = skill.Levels.Single();
+            return $"{skill.TargetType} {skill.AreaRadius} {skill.Range} {level.FixedCastMs} {level.CooldownMs} "
+                + $"{level.Effect.Status.Value} {level.Effect.StatusDurationMs} {level.Effect.ChanceBasisPoints}";
+        }
+
+        string Tried(string monster)
+        {
+            return string.Join(" ", result.Content.Monsters.Single(entry => entry.Definition.Id.Value == monster)
+                .Definition.Skills.Select(entry => $"{entry.Skill.Value} {entry.Chance}"));
+        }
+
+        Assert.That(
+            (Rider("skill.venom_bite"), Rider("skill.crushing_bite"), Rider("skill.spark_bolt"),
+                Rider("skill.grave_bite")),
+            Is.EqualTo(("status.poisoned 2000 20000", "status.stunned 1500 4000", "status.blinded 1500 20000",
+                "status.poisoned 2500 20000")));
+        Assert.That(
+            (Skill("skill.venom_bite").Element, Skill("skill.venom_bite").Levels.Single().Effect.DamageRatioPercent,
+                Skill("skill.crushing_bite").Element,
+                Skill("skill.crushing_bite").Levels.Single().Effect.DamageRatioPercent),
+            Is.EqualTo(((SkillElement?)SkillElement.Poison, 100, (SkillElement?)SkillElement.Earth, 120)));
+        Assert.That(
+            (Pure("skill.hush"), Pure("skill.lull"), Pure("skill.frost_breath")),
+            Is.EqualTo(("Enemy 0 6 800 12000 status.silenced 15000 10000",
+                "Enemy 0 6 1000 15000 status.asleep 15000 10000", "Self 4 0 1500 20000 status.frozen 8000 10000")));
+        Assert.That(
+            new[]
+            {
+                Tried("monster.forest_crawler"), Tried("monster.grotto_crawler"), Tried("monster.gloom_wisp"),
+                Tried("monster.hollow_wisp"), Tried("monster.slime_monarch")
+            },
+            Is.EqualTo(new[]
+            {
+                "skill.venom_bite 0.15", "skill.crushing_bite 0.1", "skill.numbing_spark 0.15 skill.hush 0.15",
+                "skill.lull 0.15", "skill.quake_slam 0.25 skill.frost_breath 0.15"
+            }));
+    }
+
+    [Test]
     public void RepositoryContent_HoldsTheSixAilmentsStatuses()
     {
         ContentPipelineResult result = ContentPipeline.Run(

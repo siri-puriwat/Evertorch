@@ -59,6 +59,7 @@ public sealed class LiveServerDungeonTests
 
     private LiveDatabase? m_database;
     private LiveServer? m_server;
+    private LiveTestPackage? m_package;
     private GameObject? m_client;
     private InputActionAsset? m_actions;
 
@@ -73,6 +74,8 @@ public sealed class LiveServerDungeonTests
 
         m_server?.Dispose();
         m_server = null;
+        m_package?.Dispose();
+        m_package = null;
         m_database?.Dispose();
         m_database = null;
         if (m_actions != null)
@@ -184,7 +187,8 @@ public sealed class LiveServerDungeonTests
                 ["physicalAttack"] = "0",
                 ["flee"] = "0",
                 ["magicAttack"] = "0"
-            });
+            },
+            LiveTestPackage.AilmentSkills);
         yield return StartDatabaseAndServer(package.Path);
         LiveServer server = m_server!;
         GameClient client = CreateClient(actionsPath);
@@ -351,6 +355,8 @@ public sealed class LiveServerDungeonTests
         Assert.That(starting.IsFaulted, Is.False, starting.Exception?.GetBaseException().Message);
         m_database = starting.Result;
 
+        // Milestone 19's monster skills stay out of these fights, which predate them.
+        contentPath ??= (m_package = LiveTestPackage.WithoutSkills(LiveTestPackage.AilmentSkills)).Path;
         LiveServer server = m_server = new LiveServer();
         server.Start(m_database, "--World:RandomSeed=13", contentPath);
         Assert.That(server.IsTiedToEditor || !KillOnCloseJob.IsSupported, Is.True, "the server ends with the editor");

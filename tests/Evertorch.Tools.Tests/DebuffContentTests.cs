@@ -75,7 +75,8 @@ public sealed class DebuffContentTests
             Is.EqualTo((16, MonsterBehavior.Passive, 3.5)));
         Assert.That(
             wisp.Definition.Skills.Select(entry => (entry.Skill.Value, entry.Chance)),
-            Is.EqualTo(new[] { ("skill.numbing_spark", 0.15) }));
+            Is.EqualTo(new[] { ("skill.numbing_spark", 0.15), ("skill.hush", 0.15) }),
+            "Hush after Numbing Spark, which keeps its place");
         Assert.That((wisp.Prefab, wisp.Scale, wisp.Tint), Is.EqualTo(("monster_spark_wisp", (double?)null, "#6A4C9C")));
         Assert.That(spark.TargetType, Is.EqualTo(SkillTargetType.Enemy));
         Assert.That(

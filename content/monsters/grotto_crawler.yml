@@ -25,6 +25,9 @@ ai:
   scanIntervalMs: 100
   assist: true
   assistRadius: 11.0
+skills:
+  - skill: skill.crushing_bite
+    chance: 0.10
 drops:
   - item: item.material.grotto_carapace
     chance: 0.60

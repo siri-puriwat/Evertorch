@@ -1,0 +1,14 @@
+id: skill.crushing_bite
+displayName: Crushing Bite
+targetType: enemy
+damageType: physical
+element: earth
+server:
+  range: 1.5
+  levels:
+    - cooldownMs: 8000
+      effect:
+        damage: { ratio: 120, ailment: { status: status.stunned, chance: 0.15, durationMs: 4000 } }
+client:
+  # A key and no art yet.
+  icon: skill_crushing_bite

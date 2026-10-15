@@ -506,13 +506,15 @@ public sealed class ElementAcceptanceTests
         using var root = new TemporaryDirectory();
         PackageFixture.WriteTo(
             Path.Combine(root.Path, "content", "server"),
-            DungeonPackage.Build(
+            DungeonPackage.Build(DungeonPackage.WithoutAilmentSkills().Concat(new[]
+            {
                 DungeonPackage.Disarm(HollowWisp),
                 DungeonPackage.Disarm(BarrowCrawler),
                 DungeonPackage.AlwaysCast(BarrowCrawler),
                 DungeonPackage.Disarm(SlimeMonarch),
                 DungeonPackage.AlwaysCast(SlimeMonarch),
-                MagicAttack(SlimeMonarch, SoftSlam)));
+                MagicAttack(SlimeMonarch, SoftSlam)
+            }).ToArray()));
 
         ServerContent content;
         using (IHost host = StartHost(root.Path))

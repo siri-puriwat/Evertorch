@@ -9,6 +9,6 @@ server:
     - castTimeMs: { fixed: 500, variable: 1000 }
       cooldownMs: 5000
       effect:
-        damage: { ratio: 100 }
+        damage: { ratio: 100, ailment: { status: status.blinded, chance: 0.15, durationMs: 20000 } }
 client:
   icon: skill_spark_bolt

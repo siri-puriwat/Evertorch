@@ -28,6 +28,8 @@ ai:
 skills:
   - skill: skill.numbing_spark
     chance: 0.15
+  - skill: skill.hush
+    chance: 0.15
 drops:
   - item: item.material.gloom_dust
     chance: 0.60

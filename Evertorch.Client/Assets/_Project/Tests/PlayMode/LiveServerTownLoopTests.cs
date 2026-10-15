@@ -50,6 +50,7 @@ public sealed class LiveServerTownLoopTests : InputTestFixture
 
     private LiveDatabase? m_database;
     private LiveServer? m_server;
+    private LiveTestPackage? m_package;
     private GameObject? m_client;
     private InputActionAsset? m_actions;
 
@@ -64,6 +65,8 @@ public sealed class LiveServerTownLoopTests : InputTestFixture
 
         m_server?.Dispose();
         m_server = null;
+        m_package?.Dispose();
+        m_package = null;
         m_database?.Dispose();
         m_database = null;
         if (m_actions != null)
@@ -551,8 +554,10 @@ public sealed class LiveServerTownLoopTests : InputTestFixture
         Assert.That(starting.IsFaulted, Is.False, starting.Exception?.GetBaseException().Message);
         m_database = starting.Result;
 
+        // Milestone 19's monster skills stay out of these fights, which predate them.
+        m_package = LiveTestPackage.WithoutSkills(LiveTestPackage.AilmentSkills);
         LiveServer server = m_server = new LiveServer();
-        server.Start(m_database, "--World:RandomSeed=11");
+        server.Start(m_database, "--World:RandomSeed=11", m_package.Path);
         Assert.That(server.IsTiedToEditor || !KillOnCloseJob.IsSupported, Is.True, "the server ends with the editor");
         yield return WaitUntil(() => server.TryReadListeningPort(out int _), StartTimeoutSeconds);
     }

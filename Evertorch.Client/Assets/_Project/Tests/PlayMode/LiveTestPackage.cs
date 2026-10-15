@@ -8,13 +8,24 @@ using System.Text;
 namespace Evertorch.Client.Tests.PlayMode
 {
 /// <summary>
-///     A copy of the repository's server package with server-only values of one monster changed, signed again with the
-///     same client content version, so the real client still connects to the server that loads it (Coding Standards
-///     §10). The copy lives in a temporary folder until it is disposed.
+///     A copy of the repository's server package with server-only values of one monster changed, or skills taken off
+///     monsters, signed again with the same client content version, so the real client still connects to the server
+///     that loads it (Coding Standards §10). The copy lives in a temporary folder until it is disposed.
 /// </summary>
 public sealed class LiveTestPackage : IDisposable
 {
     private const string ManifestFile = "manifest.json";
+
+    /// <summary>
+    ///     Milestone 19's monster skills, which the classes written before them take off, so their seeded fights draw as
+    ///     they did; the riders of Spark Bolt and Grave Bite still draw.
+    /// </summary>
+    public static readonly IReadOnlyList<(string Monster, string Skill)> AilmentSkills = new[]
+    {
+        ("monster.forest_crawler", "skill.venom_bite"), ("monster.grotto_crawler", "skill.crushing_bite"),
+        ("monster.gloom_wisp", "skill.hush"), ("monster.hollow_wisp", "skill.lull"),
+        ("monster.slime_monarch", "skill.frost_breath")
+    };
 
     private LiveTestPackage(string path)
     {
@@ -32,10 +43,21 @@ public sealed class LiveTestPackage : IDisposable
     }
 
     /// <summary>
-    ///     Copies the repository's server package and sets each named field of <paramref name="monster" /> to its new
-    ///     JSON value.
+    ///     Copies the repository's server package and takes each named skill off its monster's list.
     /// </summary>
-    public static LiveTestPackage WithMonster(string monster, IReadOnlyDictionary<string, string> fields)
+    public static LiveTestPackage WithoutSkills(IReadOnlyList<(string Monster, string Skill)> skills)
+    {
+        return WithMonster(null, new Dictionary<string, string>(), skills);
+    }
+
+    /// <summary>
+    ///     Copies the repository's server package, sets each named field of <paramref name="monster" /> to its new JSON
+    ///     value, and takes each of <paramref name="skills" /> off its monster's list.
+    /// </summary>
+    public static LiveTestPackage WithMonster(
+        string? monster,
+        IReadOnlyDictionary<string, string> fields,
+        IReadOnlyList<(string Monster, string Skill)>? skills = null)
     {
         string path = System.IO.Path.Combine(
             System.IO.Path.GetTempPath(),
@@ -48,9 +70,52 @@ public sealed class LiveTestPackage : IDisposable
         }
 
         string monstersPath = System.IO.Path.Combine(path, "monsters.json");
-        File.WriteAllText(monstersPath, Edit(File.ReadAllText(monstersPath), monster, fields));
+        string json = File.ReadAllText(monstersPath);
+        if (monster != null)
+        {
+            json = Edit(json, monster, fields);
+        }
+
+        foreach ((string owner, string skill) in skills ?? Array.Empty<(string, string)>())
+        {
+            json = WithoutSkill(json, owner, skill);
+        }
+
+        File.WriteAllText(monstersPath, json);
         package.Sign();
         return package;
+    }
+
+    // Takes the skill's object out of the monster's list with the comma that joins it to a neighbour.
+    private static string WithoutSkill(string json, string monster, string skill)
+    {
+        int definition = json.IndexOf($"\"id\": \"{monster}\"", StringComparison.Ordinal);
+        int named = definition < 0 ? -1 : json.IndexOf($"\"skill\": \"{skill}\"", definition, StringComparison.Ordinal);
+        if (named < 0)
+        {
+            throw new InvalidOperationException($"'{monster}' tries no '{skill}'.");
+        }
+
+        int start = json.LastIndexOf('{', named);
+        int end = json.IndexOf('}', named) + 1;
+        int before = start - 1;
+        while (char.IsWhiteSpace(json[before]))
+        {
+            before--;
+        }
+
+        int after = end;
+        while (char.IsWhiteSpace(json[after]))
+        {
+            after++;
+        }
+
+        if (json[before] == ',')
+        {
+            return json.Remove(before, end - before);
+        }
+
+        return json[after] == ',' ? json.Remove(start, after + 1 - start) : json.Remove(start, end - start);
     }
 
     // The tools write one field to a line; each is changed within the monster's own definition.

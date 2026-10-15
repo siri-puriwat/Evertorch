@@ -60,6 +60,33 @@ internal static class DungeonPackage
         return files => PackageFixture.SetValue(files, Monsters, monster, "skills[0].chance", Number(1));
     }
 
+    /// <summary>
+    ///     Milestone 19's monster skills taken off their monsters, so the classes written before them draw as they did;
+    ///     the riders of Spark Bolt and Grave Bite still draw.
+    /// </summary>
+    public static Action<Dictionary<string, byte[]>>[] WithoutAilmentSkills()
+    {
+        return new[]
+        {
+            NeverCast("monster.forest_crawler", 0), NeverCast("monster.grotto_crawler", 0),
+            NeverCast("monster.gloom_wisp", 1), NeverCast("monster.hollow_wisp", 0),
+            NeverCast("monster.slime_monarch", 1)
+        };
+    }
+
+    /// <summary>
+    ///     A monster without the skill at <paramref name="index" /> of its list, so it neither casts it nor draws for it.
+    /// </summary>
+    public static Action<Dictionary<string, byte[]>> NeverCast(string monster, int index)
+    {
+        return files =>
+        {
+            JsonArray definitions = JsonNode.Parse(files[Monsters])!["definitions"]!.AsArray();
+            definitions.Single(node => (string?)node!["id"] == monster)!["skills"]!.AsArray().RemoveAt(index);
+            files[Monsters] = Encoding.UTF8.GetBytes(definitions.Root.ToJsonString());
+        };
+    }
+
     /// <summary>A quest that asks for fewer kills, so a test earns it in a few.</summary>
     public static Action<Dictionary<string, byte[]>> Shorten(string quest, int count)
     {

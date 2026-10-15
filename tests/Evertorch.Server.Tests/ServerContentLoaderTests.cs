@@ -543,7 +543,11 @@ public sealed class ServerContentLoaderTests
         MonsterSpawn spawn = content.Maps[new MapDefinitionId("map.umbral_grotto")].MonsterSpawns
             .Single(entry => entry.Monster == new MonsterDefinitionId("monster.slime_monarch"));
         Assert.That((slam.TargetType, slam.AreaRadius, slam.HasArea), Is.EqualTo((SkillTargetType.Self, 4d, true)));
-        Assert.That(content.Skills.Values.Count(skill => skill.HasArea), Is.EqualTo(1));
+        Assert.That(
+            content.Skills.Values.Where(skill => skill.HasArea).Select(skill => skill.Id.Value).OrderBy(id => id,
+                StringComparer.Ordinal),
+            Is.EqualTo(new[] { "skill.frost_breath", "skill.quake_slam" }),
+            "the Monarch's two");
         Assert.That((spawn.RespawnMs, spawn.RespawnVarianceMs), Is.EqualTo((3_600_000, 600_000)));
     }
 

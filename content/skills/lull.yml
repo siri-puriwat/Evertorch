@@ -1,0 +1,14 @@
+id: skill.lull
+displayName: Lull
+targetType: enemy
+server:
+  range: 6.0
+  # Sleep for 15 s, certain before resistance: the player's AGI and a higher level resist it, and a hit wakes it.
+  levels:
+    - castTimeMs: { fixed: 1000 }
+      cooldownMs: 15000
+      effect:
+        status: { status: status.asleep, durationMs: 15000, statPercent: {} }
+client:
+  # A key and no art yet.
+  icon: skill_lull

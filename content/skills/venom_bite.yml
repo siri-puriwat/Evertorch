@@ -1,0 +1,14 @@
+id: skill.venom_bite
+displayName: Venom Bite
+targetType: enemy
+damageType: physical
+element: poison
+server:
+  range: 1.5
+  levels:
+    - cooldownMs: 6000
+      effect:
+        damage: { ratio: 100, ailment: { status: status.poisoned, chance: 0.2, durationMs: 20000 } }
+client:
+  # A key and no art yet.
+  icon: skill_venom_bite

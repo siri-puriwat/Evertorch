@@ -1,0 +1,16 @@
+id: skill.frost_breath
+displayName: Frost Breath
+targetType: self
+# A breath around its caster: every player within the area and in its sight when the cast ends draws for the freeze,
+# each on its own, so the way out is to step out before then.
+area: { radius: 4.0 }
+server:
+  range: 0
+  levels:
+    - castTimeMs: { fixed: 1500 }
+      cooldownMs: 20000
+      effect:
+        status: { status: status.frozen, durationMs: 8000, statPercent: {} }
+client:
+  # A key and no art yet.
+  icon: skill_frost_breath

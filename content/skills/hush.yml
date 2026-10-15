@@ -1,0 +1,14 @@
+id: skill.hush
+displayName: Hush
+targetType: enemy
+server:
+  range: 6.0
+  # Silence for 15 s, certain before resistance: the player's INT and a higher level resist it.
+  levels:
+    - castTimeMs: { fixed: 800 }
+      cooldownMs: 12000
+      effect:
+        status: { status: status.silenced, durationMs: 15000, statPercent: {} }
+client:
+  # A key and no art yet.
+  icon: skill_hush

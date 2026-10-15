@@ -265,8 +265,9 @@ public sealed class DungeonContentTests
                     ("monster_forest_crawler", (double?)1.1, "#CFC8B0")
                 }));
         Assert.That(
-            (wisp.Definition.AttackRange, wisp.Definition.KeepDistance, wisp.Definition.Skills.Count),
-            Is.EqualTo((6d, 3.5d, 0)));
+            (wisp.Definition.AttackRange, wisp.Definition.KeepDistance,
+                string.Join(" ", wisp.Definition.Skills.Select(entry => $"{entry.Skill.Value} {entry.Chance}"))),
+            Is.EqualTo((6d, 3.5d, "skill.lull 0.15")));
         Assert.That(
             crawler.Definition.Skills.Select(entry => (entry.Skill.Value, entry.Chance)),
             Is.EqualTo(new[] { ("skill.grave_bite", 0.2) }));
@@ -343,7 +344,8 @@ public sealed class DungeonContentTests
             Is.EqualTo(("monster_training_slime", (double?)2.6, "#C9A227")));
         Assert.That(
             definition.Skills.Select(entry => (entry.Skill.Value, entry.Chance)),
-            Is.EqualTo(new[] { ("skill.quake_slam", 0.25) }));
+            Is.EqualTo(new[] { ("skill.quake_slam", 0.25), ("skill.frost_breath", 0.15) }),
+            "Frost Breath after Quake Slam, which keeps its place");
         Assert.That(
             definition.Drops.Select(drop => (drop.Item.Value, drop.Chance)),
             Is.EqualTo(

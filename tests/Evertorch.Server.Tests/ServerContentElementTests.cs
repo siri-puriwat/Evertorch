@@ -193,8 +193,10 @@ public sealed class ServerContentElementTests
             Is.EqualTo(
                 new[]
                 {
-                    "skill.arcane_bolt Ghost", "skill.basic_attack Weapon", "skill.grave_bite Shadow",
-                    "skill.heavy_blow Weapon", "skill.quake_slam Earth", "skill.spark_bolt Wind", "skill.strike Weapon"
+                    "skill.arcane_bolt Ghost", "skill.basic_attack Weapon", "skill.crushing_bite Earth",
+                    "skill.grave_bite Shadow", "skill.heavy_blow Weapon", "skill.quake_slam Earth",
+                    "skill.spark_bolt Wind",
+                    "skill.strike Weapon", "skill.venom_bite Poison"
                 }));
         Assert.That(
             content.Skills.Values.Where(skill => skill.DamageType == null).Select(skill => skill.Element),

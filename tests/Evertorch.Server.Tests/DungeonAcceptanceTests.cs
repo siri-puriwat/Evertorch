@@ -633,7 +633,8 @@ public sealed class DungeonAcceptanceTests
         using var root = new TemporaryDirectory();
         PackageFixture.WriteTo(
             Path.Combine(root.Path, "content", "server"),
-            DungeonPackage.Build(
+            DungeonPackage.Build(DungeonPackage.WithoutAilmentSkills().Concat(new[]
+            {
                 DungeonPackage.Disarm(GrottoCrawler),
                 DungeonPackage.Expose(GrottoCrawler),
                 DungeonPackage.Disarm(GloomWisp),
@@ -647,7 +648,8 @@ public sealed class DungeonAcceptanceTests
                 DungeonPackage.Weaken(GrottoCrawler, 100),
                 DungeonPackage.Shorten(GrottoHunt, 1),
                 DungeonPackage.Unspawn(UmbralGrotto, "monster.hollow_wisp"),
-                DungeonPackage.Unspawn(UmbralGrotto, "monster.barrow_crawler")));
+                DungeonPackage.Unspawn(UmbralGrotto, "monster.barrow_crawler")
+            }).ToArray()));
 
         using IHost host = StartHost(root.Path);
         ServerContent content = host.Services.GetRequiredService<ServerContent>();

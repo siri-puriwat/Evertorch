@@ -8,7 +8,7 @@ server:
   levels:
     - cooldownMs: 6000
       effect:
-        damage: { ratio: 150 }
+        damage: { ratio: 150, ailment: { status: status.poisoned, chance: 0.25, durationMs: 20000 } }
 client:
   # A key and no art yet.
   icon: skill_grave_bite
