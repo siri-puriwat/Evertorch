@@ -11,7 +11,6 @@ namespace Evertorch.Server
 /// </summary>
 public sealed class PlayerEntity : WorldEntity
 {
-    private readonly List<ActiveStatusEffect> m_statusEffects = new();
     private readonly Dictionary<SkillDefinitionId, int> m_skills = new();
 
     public PlayerEntity(
@@ -127,7 +126,7 @@ public sealed class PlayerEntity : WorldEntity
     {
         get
         {
-            foreach (ActiveStatusEffect effect in m_statusEffects)
+            foreach (ActiveStatusEffect effect in StatusEffects)
             {
                 if (effect.AttackElement.HasValue)
                 {
@@ -182,12 +181,6 @@ public sealed class PlayerEntity : WorldEntity
 
     public long NextSpiritRegenerationMs { get; set; } = long.MinValue;
 
-    /// <summary>
-    ///     The status effects on the player, in the order they started; the checkpoint saves them with their time left
-    ///     (Gameplay Systems §9.1).
-    /// </summary>
-    public IReadOnlyList<ActiveStatusEffect> StatusEffects => m_statusEffects;
-
     public override EntityKind Kind => EntityKind.Player;
 
     public override string DefinitionId => Job.Value;
@@ -205,48 +198,6 @@ public sealed class PlayerEntity : WorldEntity
 
         WornWeapon = item;
         AppearancePending = true;
-    }
-
-    /// <summary>
-    ///     Adds <paramref name="effect" />, or renews the active effect of the same status to its end. True when it was
-    ///     not active.
-    /// </summary>
-    public bool StartStatusEffect(ActiveStatusEffect effect)
-    {
-        for (int index = 0; index < m_statusEffects.Count; index++)
-        {
-            if (m_statusEffects[index].Status == effect.Status)
-            {
-                m_statusEffects[index] = effect;
-                return false;
-            }
-        }
-
-        m_statusEffects.Add(effect);
-        return true;
-    }
-
-    /// <summary>
-    ///     Ends the effects whose time is up at <paramref name="nowMs" />; returns how many ended.
-    /// </summary>
-    public int EndStatusEffectsDueBy(long nowMs)
-    {
-        return m_statusEffects.RemoveAll(effect => effect.EndMs <= nowMs);
-    }
-
-    /// <summary>
-    ///     Ends every effect that sets an attack element but one of <paramref name="kept" />; returns how many ended.
-    /// </summary>
-    public int EndAttackElementEffects(StatusDefinitionId? kept = null)
-    {
-        return m_statusEffects.RemoveAll(effect => effect.AttackElement.HasValue && effect.Status != kept);
-    }
-
-    public int EndAllStatusEffects()
-    {
-        int count = m_statusEffects.Count;
-        m_statusEffects.Clear();
-        return count;
     }
 
     /// <summary>

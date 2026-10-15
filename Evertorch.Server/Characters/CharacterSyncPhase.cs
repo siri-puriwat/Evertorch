@@ -102,13 +102,22 @@ public sealed class CharacterSyncPhase : ITickPhase
 
     private StatusEffects CreateStatusEffects(PlayerEntity player, long now)
     {
+        // Ailments first, so the status bar, which tells no ailment from another status, shows them first.
         m_effects.Clear();
+        AddEffects(player, now, true);
+        AddEffects(player, now, false);
+        return new StatusEffects(m_effects.ToArray());
+    }
+
+    private void AddEffects(PlayerEntity player, long now, bool areAilments)
+    {
         foreach (ActiveStatusEffect effect in player.StatusEffects)
         {
-            m_effects.Add(new StatusEffectEntry(effect.Status, (uint)Math.Max(0, effect.EndMs - now)));
+            if (effect.Ailment != Ailment.None == areAilments)
+            {
+                m_effects.Add(new StatusEffectEntry(effect.Status, (uint)Math.Max(0, effect.EndMs - now)));
+            }
         }
-
-        return new StatusEffects(m_effects.ToArray());
     }
 
     private static int IndexOf(IReadOnlyList<SkillDefinitionId> tree, SkillDefinitionId skill)

@@ -282,8 +282,9 @@ public sealed class CombatSystem : ITickPhase
         if (entity is PlayerEntity dead)
         {
             dead.Deaths++;
-            m_statusEffects.EndAll(dead);
         }
+
+        m_statusEffects.EndAll(entity);
 
         foreach (WorldEntity other in map.Entities)
         {

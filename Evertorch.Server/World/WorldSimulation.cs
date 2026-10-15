@@ -300,9 +300,11 @@ public sealed class WorldSimulation
                 continue;
             }
 
+            // A restored poison drains on its own schedule again, a second after the load.
             player.StartStatusEffect(
                 new ActiveStatusEffect(status, effect.StatPercent, NowMs + effect.RemainingMs,
-                    definition.AttackElement));
+                    definition.AttackElement, definition.Ailment,
+                    definition.Ailment == Ailment.Poison ? NowMs + 1000 : long.MaxValue));
             restored++;
         }
 

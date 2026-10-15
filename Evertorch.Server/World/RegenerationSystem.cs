@@ -1,4 +1,5 @@
 using System;
+using Evertorch.Game;
 using Evertorch.Rules;
 using Microsoft.Extensions.Options;
 
@@ -53,11 +54,13 @@ public sealed class RegenerationSystem : ITickPhase
             return;
         }
 
+        // Poison stops the gains, never the schedule (Gameplay Systems §9.1).
+        bool isGaining = !player.IsDead && !player.HasAilment(Ailment.Poison);
         bool hasChanged = false;
         if (now >= player.NextHealthRegenerationMs)
         {
             player.NextHealthRegenerationMs += regeneration.HealthIntervalMs;
-            if (!player.IsDead && player.CurrentHealth < player.MaxHealth)
+            if (isGaining && player.CurrentHealth < player.MaxHealth)
             {
                 player.CurrentHealth = Math.Min(player.MaxHealth, player.CurrentHealth + regeneration.Health);
                 hasChanged = true;
@@ -67,7 +70,7 @@ public sealed class RegenerationSystem : ITickPhase
         if (now >= player.NextSpiritRegenerationMs)
         {
             player.NextSpiritRegenerationMs += regeneration.SpiritIntervalMs;
-            if (!player.IsDead && player.CurrentSpirit < player.MaxSpirit)
+            if (isGaining && player.CurrentSpirit < player.MaxSpirit)
             {
                 player.CurrentSpirit = Math.Min(player.MaxSpirit, player.CurrentSpirit + regeneration.Spirit);
                 hasChanged = true;
