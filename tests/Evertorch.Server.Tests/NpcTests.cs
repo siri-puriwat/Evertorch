@@ -195,16 +195,20 @@ public sealed class NpcTests
             Is.EqualTo(
                 new[]
                 {
+                    ("item.accessory.grotto_charm", 0u, 40u), ("item.accessory.traveler_charm", 40u, 20u),
                     ("item.armor.cloth", 40u, 20u), ("item.armor.leather", 0u, 45u),
                     ("item.consumable.minor_health", 20u, 10u), ("item.consumable.minor_mana", 30u, 15u),
-                    ("item.consumable.remedy", 30u, 15u),
-                    ("item.material.crawler_shell", 0u, 5u), ("item.material.gloom_dust", 0u, 14u),
-                    ("item.material.grotto_carapace", 0u, 12u), ("item.material.monarch_jelly", 0u, 40u),
-                    ("item.material.slime_gel", 0u, 2u), ("item.weapon.ash_staff", 0u, 60u),
-                    ("item.weapon.iron_sword", 0u, 60u), ("item.weapon.training_staff", 50u, 25u),
-                    ("item.weapon.training_sword", 50u, 25u)
+                    ("item.consumable.remedy", 30u, 15u), ("item.footwear.grotto_boots", 0u, 30u),
+                    ("item.footwear.trail_boots", 30u, 15u), ("item.garment.gloom_cape", 0u, 30u),
+                    ("item.garment.travel_cape", 30u, 15u), ("item.headgear.grotto_circlet", 0u, 30u),
+                    ("item.headgear.trail_cap", 30u, 15u), ("item.material.crawler_shell", 0u, 5u),
+                    ("item.material.gloom_dust", 0u, 14u), ("item.material.grotto_carapace", 0u, 12u),
+                    ("item.material.monarch_jelly", 0u, 40u), ("item.material.slime_gel", 0u, 2u),
+                    ("item.shield.carapace", 0u, 50u), ("item.shield.wooden_buckler", 50u, 25u),
+                    ("item.weapon.ash_staff", 0u, 60u), ("item.weapon.iron_sword", 0u, 60u),
+                    ("item.weapon.training_staff", 50u, 25u), ("item.weapon.training_sword", 50u, 25u)
                 }),
-            "the second tier is bought back, never sold");
+            "the second tier and the dungeon's pieces are bought back, never sold");
         Assert.That(shop.Offers, Is.Empty);
         Assert.That(warden.Npc, Is.EqualTo(NpcOf(server, GateWarden).Id));
         Assert.That(warden.Entries, Is.Empty);
@@ -235,8 +239,8 @@ public sealed class NpcTests
         Assert.That(shop.JobChanges.Concat(warden.JobChanges), Is.Empty, "only the Guildmaster changes jobs");
         Assert.That(
             (shop.GetEncodedLength(), warden.GetEncodedLength(), guildmaster.GetEncodedLength()),
-            Is.EqualTo((489, 211, 78)),
-            "the Quartermaster's fourteen items in 489 bytes (Network Protocol §6)");
+            Is.EqualTo((840, 211, 78)),
+            "the Quartermaster's twenty-four items in 840 bytes (Network Protocol §6)");
         NpcServices storekeeper = NpcOf(server, Storekeeper).Services;
         Assert.That(
             server.World.Maps.SelectMany(map => map.Npcs).Where(npc => npc.Services.KeepsStorage)

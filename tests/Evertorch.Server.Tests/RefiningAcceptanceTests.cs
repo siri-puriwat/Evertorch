@@ -182,8 +182,8 @@ public sealed class RefiningAcceptanceTests
             $"{step}: Anna walked up to it, at {world.Predictor.Position}");
         Assert.That(
             tables.Where(table => table.Npc == smith.Entity).Select(table => table.Index),
-            Is.EqualTo(new byte[] { 0, 1, 2 }),
-            $"{step}: its three tables");
+            Is.EqualTo(new byte[] { 0, 1, 2, 3 }),
+            $"{step}: its four tables");
         long sword = world.Inventory.Rows.Single(row => row.Item.Value == TrainingSword).InventoryItem;
         for (int level = SwordLevel; level < SafeLevel; level++)
         {

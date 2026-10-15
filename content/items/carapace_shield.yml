@@ -1,0 +1,19 @@
+id: item.shield.carapace
+displayName: Carapace Shield
+type: shield
+stackLimit: 1
+slots: 1
+server:
+  # The dungeon's shield, which the grotto crawler drops at 6 %; the shop buys it back but never sells it.
+  weight: 60
+  sellPrice: 50
+  market:
+    basePrice: 100
+  refine: refine.light_armor
+  equipment:
+    defense: 10
+    attackSpeedPenalty: 5
+client:
+  # The cloth armor's look until ArtDelivery-03's pieces arrive.
+  icon: item_cloth_armor
+  model: pickup_cloth_armor

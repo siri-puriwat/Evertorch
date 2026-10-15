@@ -22,6 +22,11 @@ public sealed class EquipmentLoadoutTests
     private const string Cloth = "item.armor.cloth";
     private const string Royal = "item.card.slime_monarch";
     private const string FireConverter = "item.consumable.fire_converter";
+    private const string Insight = "item.card.spark_wisp_insight";
+    private const string Bulwark = "item.card.grotto_crawler_bulwark";
+    private const string Veil = "item.card.gloom_wisp_veil";
+    private const string Stride = "item.card.forest_crawler_stride";
+    private const string Poise = "item.card.hollow_wisp_poise";
     private const uint Revision = 5;
 
     private static readonly Lazy<ServerContent> Gear = new(() => ServerContentLoader.Load(GearPackage.Build()));
@@ -30,12 +35,12 @@ public sealed class EquipmentLoadoutTests
     private static readonly Piece[] FullLoadout =
     {
         new(Sword, EquipmentSlot.Weapon), new(Cloth, EquipmentSlot.Armor, Royal),
-        new(GearPackage.Cap, EquipmentSlot.Headgear, GearPackage.Insight),
-        new(GearPackage.Buckler, EquipmentSlot.Shield, GearPackage.Bulwark),
-        new(GearPackage.Cape, EquipmentSlot.Garment, GearPackage.Veil),
-        new(GearPackage.Boots, EquipmentSlot.Footwear, GearPackage.Stride),
-        new(GearPackage.Charm, EquipmentSlot.Accessory1, GearPackage.Poise),
-        new(GearPackage.Bead, EquipmentSlot.Accessory2, GearPackage.Poise)
+        new(GearPackage.Cap, EquipmentSlot.Headgear, Insight),
+        new(GearPackage.Buckler, EquipmentSlot.Shield, Bulwark),
+        new(GearPackage.Cape, EquipmentSlot.Garment, Veil),
+        new(GearPackage.Boots, EquipmentSlot.Footwear, Stride),
+        new(GearPackage.Charm, EquipmentSlot.Accessory1, Poise),
+        new(GearPackage.Bead, EquipmentSlot.Accessory2, Poise)
     };
 
     private static CharacterSession CharacterOf(TestServer server, ConnectionId player)
@@ -134,7 +139,7 @@ public sealed class EquipmentLoadoutTests
         ConnectionId player = EnterWearing(
             server,
             new Piece(Cloth, EquipmentSlot.Armor, "item.card.grotto_crawler"),
-            new Piece(GearPackage.Cape, EquipmentSlot.Garment, GearPackage.Veil),
+            new Piece(GearPackage.Cape, EquipmentSlot.Garment, Veil),
             new Piece(GearPackage.Charm, EquipmentSlot.Accessory1, GearPackage.Ward));
 
         PlayerEntity entity = server.PlayerOf(player);
@@ -299,7 +304,7 @@ public sealed class EquipmentLoadoutTests
     {
         var server = new TestServer(content: Gear.Value);
         ConnectionId player =
-            EnterWearing(server, new Piece(GearPackage.Boots, EquipmentSlot.Footwear, GearPackage.Stride));
+            EnterWearing(server, new Piece(GearPackage.Boots, EquipmentSlot.Footwear, Stride));
         PlayerEntity entity = server.PlayerOf(player);
         int worn = entity.MaxHealth;
         long boots = RowOf(server, player, GearPackage.Boots);
@@ -322,7 +327,7 @@ public sealed class EquipmentLoadoutTests
 
         ConnectionId player = EnterWearing(
             server,
-            new Piece(GearPackage.Cape, EquipmentSlot.Garment, GearPackage.Veil),
+            new Piece(GearPackage.Cape, EquipmentSlot.Garment, Veil),
             new Piece(GearPackage.Charm, EquipmentSlot.Accessory1, GearPackage.Ward),
             new Piece(GearPackage.Bead, EquipmentSlot.Accessory2, GearPackage.Ward));
 

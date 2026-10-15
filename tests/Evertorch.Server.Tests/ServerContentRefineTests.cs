@@ -112,7 +112,7 @@ public sealed class ServerContentRefineTests
     }
 
     [Test]
-    public void Load_ForRepositoryContent_ReadsTheThreeTables_AndEveryWeaponAndArmorsTable()
+    public void Load_ForRepositoryContent_ReadsTheFourTables_AndEveryPiecesTableButTheCharms()
     {
         ServerContent content = ServerContentLoader.Load(PackageFixture.BuildRepositoryPackage());
 
@@ -125,7 +125,7 @@ public sealed class ServerContentRefineTests
             Is.EqualTo(new[] { 5, 10, 15, 20, 28, 36, 44, 52, 62, 72 }));
         Assert.That(
             content.RefineTables.Keys.Select(id => id.Value).OrderBy(id => id, StringComparer.Ordinal),
-            Is.EqualTo(new[] { Armor, "refine.weapon_dungeon", "refine.weapon_training" }));
+            Is.EqualTo(new[] { Armor, "refine.light_armor", "refine.weapon_dungeon", "refine.weapon_training" }));
         Assert.That(
             content.Items.Values
                 .Where(item => item.Refine.HasValue)
@@ -133,10 +133,10 @@ public sealed class ServerContentRefineTests
                 .OrderBy(id => id, StringComparer.Ordinal),
             Is.EqualTo(
                 content.Items.Values
-                    .Where(item => item.Type == ItemType.Weapon || item.Type == ItemType.Armor)
+                    .Where(item => item.IsEquipment && item.Type != ItemType.Accessory)
                     .Select(item => item.Id.Value)
                     .OrderBy(id => id, StringComparer.Ordinal)),
-            "every weapon and armor names a table");
+            "every piece but an accessory names a table");
     }
 }
 }

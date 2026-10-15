@@ -1,0 +1,23 @@
+id: item.card.gloom_wisp_veil
+displayName: Gloom Wisp Veil Card
+type: card
+stackLimit: 999
+fits: garment
+server:
+  # The gloom wisp's second card, dropped at 0.1 %; no shop trades it, and the board sells it.
+  weight: 1
+  sellPrice: 0
+  market:
+    # It sells to no shop, so its floor is authored.
+    basePrice: 2400
+    floor: 240
+  card:
+    elementDamageReduction: { shadow: 10 }
+    resist: { blind: 10 }
+    removalFee: 600
+client:
+  # The slime gel's look until art for the cards arrives.
+  icon: item_slime_gel
+  model: pickup_slime_gel
+  prefix: Veil
+  description: Damage from Shadow -10% and blind resistance +10%.

@@ -84,13 +84,16 @@ public sealed class ServerContentMarketTests
             Is.EqualTo(
                 new[]
                 {
-                    ("item.armor.leather", 90, 45, 900), ("item.armor.monarch_mantle", 1000, 250, 10000),
+                    ("item.accessory.grotto_charm", 80, 40, 800), ("item.armor.leather", 90, 45, 900),
+                    ("item.armor.monarch_mantle", 1000, 250, 10000),
                     ("item.consumable.earth_converter", 60, 15, 600), ("item.consumable.fire_converter", 60, 15, 600),
                     ("item.consumable.grand_remedy", 120, 30, 1200),
                     ("item.consumable.water_converter", 60, 15, 600), ("item.consumable.wind_converter", 60, 15, 600),
-                    ("item.material.emberstone", 40, 10, 400), ("item.material.gloom_dust", 28, 14, 280),
-                    ("item.material.grotto_carapace", 24, 12, 240), ("item.material.monarch_jelly", 80, 40, 800),
-                    ("item.material.wardstone", 40, 10, 400), ("item.weapon.ash_staff", 120, 60, 1200),
+                    ("item.footwear.grotto_boots", 60, 30, 600), ("item.garment.gloom_cape", 60, 30, 600),
+                    ("item.headgear.grotto_circlet", 60, 30, 600), ("item.material.emberstone", 40, 10, 400),
+                    ("item.material.gloom_dust", 28, 14, 280), ("item.material.grotto_carapace", 24, 12, 240),
+                    ("item.material.monarch_jelly", 80, 40, 800), ("item.material.wardstone", 40, 10, 400),
+                    ("item.shield.carapace", 100, 50, 1000), ("item.weapon.ash_staff", 120, 60, 1200),
                     ("item.weapon.iron_sword", 120, 60, 1200)
                 }));
         Assert.That(

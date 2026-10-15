@@ -1,0 +1,18 @@
+id: refine.light_armor
+# Every headgear, shield, garment, and footwear: always safe to +4, then a failure lowers the piece one level and never
+# breaks it (Gameplay Systems §11.6).
+material: item.material.wardstone
+materialQuantity: 1
+onFailure: downgrade
+downgradeBy: 1
+levels:
+  - { chance: 100, coins: 30, bonus: 2 }
+  - { chance: 100, coins: 30, bonus: 4 }
+  - { chance: 100, coins: 30, bonus: 6 }
+  - { chance: 100, coins: 30, bonus: 8 }
+  - { chance: 60, coins: 30, bonus: 10 }
+  - { chance: 50, coins: 30, bonus: 12 }
+  - { chance: 40, coins: 30, bonus: 14 }
+  - { chance: 30, coins: 30, bonus: 16 }
+  - { chance: 20, coins: 30, bonus: 18 }
+  - { chance: 10, coins: 30, bonus: 20 }

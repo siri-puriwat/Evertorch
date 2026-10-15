@@ -88,7 +88,7 @@ public sealed class RefineOutputTests
 
         MessageOpcode[] refinerHeard = server.Transport.SentTo(refiner).Select(message => message.Opcode).ToArray();
         MessageOpcode[] observerHeard = server.Transport.SentTo(observer).Select(message => message.Opcode).ToArray();
-        Assert.That(tables, Is.EqualTo(3), "the observer sees the Smith and heard its tables");
+        Assert.That(tables, Is.EqualTo(4), "the observer sees the Smith and heard its tables");
         Assert.That(
             refinerHeard.Where(opcode => opcode != MessageOpcode.EntitySnapshot),
             Is.EqualTo(new[] { MessageOpcode.InventoryChanged, MessageOpcode.RefineOutcome }),

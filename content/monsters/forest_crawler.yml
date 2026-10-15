@@ -48,6 +48,9 @@ drops:
   - item: item.consumable.remedy
     chance: 0.03
     amount: { min: 1, max: 1 }
+  - item: item.card.forest_crawler_stride
+    chance: 0.001
+    amount: { min: 1, max: 1 }
 rewards:
   baseExperience: 25
   jobExperience: 25

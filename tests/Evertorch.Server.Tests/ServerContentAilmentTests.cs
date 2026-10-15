@@ -219,9 +219,13 @@ public sealed class ServerContentAilmentTests
                 .Select(item => (item.Id.Value, item.Card!.Bonus.Inflict.Count, item.Card.Bonus.Resist.Count)),
             Is.EqualTo(new[]
             {
-                ("item.card.barrow_crawler", 0, 1), ("item.card.forest_crawler", 1, 0), ("item.card.gloom_wisp", 1, 0),
-                ("item.card.grotto_crawler", 0, 1), ("item.card.hollow_wisp", 1, 0), ("item.card.slime_monarch", 0, 1),
-                ("item.card.spark_wisp", 0, 0), ("item.card.training_slime", 0, 0)
+                ("item.card.barrow_crawler", 0, 1), ("item.card.forest_crawler", 1, 0),
+                ("item.card.forest_crawler_stride", 0, 0), ("item.card.gloom_wisp", 1, 0),
+                ("item.card.gloom_wisp_veil", 0, 1), ("item.card.grotto_crawler", 0, 1),
+                ("item.card.grotto_crawler_bulwark", 0, 0), ("item.card.hollow_wisp", 1, 0),
+                ("item.card.hollow_wisp_poise", 0, 0), ("item.card.slime_monarch", 0, 1),
+                ("item.card.spark_wisp", 0, 0), ("item.card.spark_wisp_insight", 0, 0),
+                ("item.card.training_slime", 0, 0)
             }),
             "six cards with an ailment, Hardy and Arcane without");
         Assert.That(

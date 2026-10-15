@@ -85,7 +85,7 @@ public sealed class ServerContentCardTests
         Assert.That(
             (withCards.RemovesCards,
                 NpcServicesBuilder.BuildCardRemovalFees(new EntityId(2), smith, repository)!.Entries.Count),
-            Is.EqualTo((true, 8)));
+            Is.EqualTo((true, 13)));
     }
 
     [Test]
@@ -116,7 +116,7 @@ public sealed class ServerContentCardTests
         Dictionary<string, byte[]> files = PackageFixture.BuildRepositoryPackage();
         JsonArray definitions = JsonNode.Parse(files[Items])!["definitions"]!.AsArray();
         JsonNode keen = definitions.Single(definition => (string?)definition!["id"] == Keen)!;
-        for (int index = 0; index < 7; index++)
+        for (int index = 0; index < 2; index++)
         {
             JsonObject copy = JsonNode.Parse(keen.ToJsonString())!.AsObject();
             copy["id"] = $"item.card.copy_{index:00}";
@@ -132,7 +132,7 @@ public sealed class ServerContentCardTests
     }
 
     [Test]
-    public void Load_ForRepositoryContent_ReadsTheEightCards_AndEveryWeaponAndArmorsSlots()
+    public void Load_ForRepositoryContent_ReadsTheThirteenCards_AndEveryPiecesSlots()
     {
         ServerContent content = ServerContentLoader.Load(PackageFixture.BuildRepositoryPackage());
 
@@ -148,11 +148,18 @@ public sealed class ServerContentCardTests
                 {
                     ("item.card.barrow_crawler", ItemType.Armor, 600, Stats(), 0, 0, 0, 30, 0, 0),
                     (Keen, ItemType.Weapon, 200, Stats(), 8, 0, 0, 0, 0, 0),
+                    ("item.card.forest_crawler_stride", ItemType.Footwear, 200, new PrimaryStats(0, 1, 0, 0, 0, 0), 0,
+                        0, 0, 10, 0, 0),
                     ("item.card.gloom_wisp", ItemType.Weapon, 600, Stats(), 0, 0, 0, 0, 20, 0),
+                    ("item.card.gloom_wisp_veil", ItemType.Garment, 600, Stats(), 0, 0, 0, 0, 0, 0),
                     ("item.card.grotto_crawler", ItemType.Armor, 600, Stats(), 0, 0, 10, 0, 0, 0),
+                    ("item.card.grotto_crawler_bulwark", ItemType.Shield, 600, Stats(), 0, 0, 5, 0, 0, 5),
                     ("item.card.hollow_wisp", ItemType.Weapon, 600, Stats(), 0, 0, 0, 0, 0, 0),
+                    ("item.card.hollow_wisp_poise", ItemType.Accessory, 600, new PrimaryStats(0, 0, 0, 0, 1, 1), 0,
+                        0, 0, 0, 0, 0),
                     ("item.card.slime_monarch", ItemType.Armor, 5000, Stats(), 0, 0, 0, 40, 0, 25),
                     ("item.card.spark_wisp", ItemType.Weapon, 200, Stats(@int: 1), 0, 10, 0, 0, 0, 0),
+                    ("item.card.spark_wisp_insight", ItemType.Headgear, 200, Stats(@int: 1), 0, 0, 0, 0, 0, 0),
                     ("item.card.training_slime", ItemType.Armor, 200, Stats(1), 0, 0, 0, 20, 0, 0)
                 }));
         Assert.That(
@@ -167,12 +174,15 @@ public sealed class ServerContentCardTests
                 new[]
                 {
                     (0, 0, 0, 0, 30, Element.Neutral), (0, 0, 10, 0, 0, Element.Neutral),
-                    (10, 0, 0, 0, 0, Element.Neutral), (0, 0, 0, 0, 0, Element.Earth),
-                    (0, 20, 0, 0, 0, Element.Neutral), (0, 0, 0, 0, 0, Element.Neutral),
-                    (0, 0, 0, 0, 0, Element.Neutral), (0, 0, 0, 20, 0, Element.Neutral)
+                    (0, 0, 0, 0, 0, Element.Neutral), (10, 0, 0, 0, 0, Element.Neutral),
+                    (0, 0, 0, 0, 10, Element.Neutral), (0, 0, 0, 0, 0, Element.Earth),
+                    (0, 0, 0, 0, 0, Element.Neutral), (0, 20, 0, 0, 0, Element.Neutral),
+                    (0, 0, 0, 0, 0, Element.Neutral), (0, 0, 0, 0, 0, Element.Neutral),
+                    (0, 0, 0, 0, 0, Element.Neutral), (0, 0, 0, 0, 0, Element.Neutral),
+                    (0, 0, 0, 20, 0, Element.Neutral)
                 }),
-            "Shrouded from Shadow, Keen to Small, Bane to Insect, Earthen armor, Spectral to the Undead, "
-            + "Hardy from Wind; Royal and Arcane as they were");
+            "Shrouded from Shadow, Keen to Small, Bane to Insect, Veil from Shadow, Earthen armor, Spectral to the "
+            + "Undead, Hardy from Wind; Royal, Arcane, and the other new cards as they are");
         Assert.That(
             content.Items.Values
                 .Where(item => item.IsEquipment)
@@ -181,9 +191,13 @@ public sealed class ServerContentCardTests
             Is.EqualTo(
                 new[]
                 {
+                    ("item.accessory.grotto_charm", 1), ("item.accessory.traveler_charm", 1),
                     ("item.armor.cloth", 1), ("item.armor.leather", 1), ("item.armor.monarch_mantle", 1),
-                    ("item.weapon.ash_staff", 2), ("item.weapon.iron_sword", 2), ("item.weapon.training_staff", 1),
-                    ("item.weapon.training_sword", 1)
+                    ("item.footwear.grotto_boots", 1), ("item.footwear.trail_boots", 1),
+                    ("item.garment.gloom_cape", 1), ("item.garment.travel_cape", 1),
+                    ("item.headgear.grotto_circlet", 1), ("item.headgear.trail_cap", 1), ("item.shield.carapace", 1),
+                    ("item.shield.wooden_buckler", 1), ("item.weapon.ash_staff", 2), ("item.weapon.iron_sword", 2),
+                    ("item.weapon.training_staff", 1), ("item.weapon.training_sword", 1)
                 }));
         Assert.That(
             content.Items.Values.Where(item => item.Type != ItemType.Card).Select(item => item.Card),
@@ -198,11 +212,16 @@ public sealed class ServerContentCardTests
                 new[]
                 {
                     ("item.card.barrow_crawler", 999, 0, 2400, 240, 24000), (Keen, 999, 0, 800, 80, 8000),
+                    ("item.card.forest_crawler_stride", 999, 0, 800, 80, 8000),
                     ("item.card.gloom_wisp", 999, 0, 2400, 240, 24000),
+                    ("item.card.gloom_wisp_veil", 999, 0, 2400, 240, 24000),
                     ("item.card.grotto_crawler", 999, 0, 2400, 240, 24000),
+                    ("item.card.grotto_crawler_bulwark", 999, 0, 2400, 240, 24000),
                     ("item.card.hollow_wisp", 999, 0, 2400, 240, 24000),
+                    ("item.card.hollow_wisp_poise", 999, 0, 2400, 240, 24000),
                     ("item.card.slime_monarch", 999, 0, 24000, 2400, 240000),
                     ("item.card.spark_wisp", 999, 0, 800, 80, 8000),
+                    ("item.card.spark_wisp_insight", 999, 0, 800, 80, 8000),
                     ("item.card.training_slime", 999, 0, 800, 80, 8000)
                 }),
             "every card on the board, none sold to a shop");

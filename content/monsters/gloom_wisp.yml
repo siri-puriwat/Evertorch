@@ -52,6 +52,12 @@ drops:
   - item: item.consumable.grand_remedy
     chance: 0.02
     amount: { min: 1, max: 1 }
+  - item: item.garment.gloom_cape
+    chance: 0.06
+    amount: { min: 1, max: 1 }
+  - item: item.card.gloom_wisp_veil
+    chance: 0.001
+    amount: { min: 1, max: 1 }
 rewards:
   baseExperience: 150
   jobExperience: 110

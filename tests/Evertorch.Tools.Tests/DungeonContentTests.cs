@@ -219,9 +219,11 @@ public sealed class DungeonContentTests
                     ("item.material.grotto_carapace", 0.6), ("item.weapon.iron_sword", 0.05),
                     ("item.armor.leather", 0.05), ("item.consumable.minor_health", 0.25),
                     ("item.material.wardstone", 0.08), ("item.card.grotto_crawler", 0.001),
-                    ("item.consumable.wind_converter", 0.03)
+                    ("item.consumable.wind_converter", 0.03), ("item.shield.carapace", 0.06),
+                    ("item.footwear.grotto_boots", 0.06), ("item.card.grotto_crawler_bulwark", 0.001)
                 }),
-            "Wardstone, the card, then the converter, last, so every earlier draw keeps its place");
+            "Wardstone, the card, the converter, then Milestone 20's two pieces and second card, last, so every earlier "
+            + "draw keeps its place");
         MonsterSpawn spawn = MapOf(result, Grotto).MonsterSpawns
             .Single(candidate => candidate.Monster == definition.Id);
         Assert.That(spawn.Count, Is.EqualTo(6));
@@ -283,9 +285,11 @@ public sealed class DungeonContentTests
                 new[]
                 {
                     "item.material.gloom_dust 0.5 item.consumable.minor_mana 0.25 item.card.hollow_wisp 0.001 "
-                    + "item.consumable.water_converter 0.03 item.consumable.grand_remedy 0.02",
+                    + "item.consumable.water_converter 0.03 item.consumable.grand_remedy 0.02 "
+                    + "item.headgear.grotto_circlet 0.06 item.card.hollow_wisp_poise 0.001",
                     "item.material.grotto_carapace 0.5 item.consumable.minor_health 0.25 item.card.barrow_crawler 0.001 "
-                    + "item.consumable.earth_converter 0.03 item.consumable.grand_remedy 0.02"
+                    + "item.consumable.earth_converter 0.03 item.consumable.grand_remedy 0.02 "
+                    + "item.accessory.grotto_charm 0.06"
                 }));
 
         MonsterSpawn[] spawns = grotto.MonsterSpawns.Skip(3).ToArray();

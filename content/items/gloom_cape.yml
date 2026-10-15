@@ -1,0 +1,20 @@
+id: item.garment.gloom_cape
+displayName: Gloom Cape
+type: garment
+stackLimit: 1
+slots: 1
+server:
+  # The dungeon's garment, which the gloom wisp drops at 6 %; the shop buys it back but never sells it.
+  weight: 25
+  sellPrice: 30
+  market:
+    basePrice: 60
+  refine: refine.light_armor
+  equipment:
+    defense: 4
+    bonus:
+      vit: 1
+client:
+  # The cloth armor's look until ArtDelivery-03's pieces arrive.
+  icon: item_cloth_armor
+  model: pickup_cloth_armor

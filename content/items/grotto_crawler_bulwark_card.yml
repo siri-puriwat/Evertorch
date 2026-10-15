@@ -1,0 +1,23 @@
+id: item.card.grotto_crawler_bulwark
+displayName: Grotto Crawler Bulwark Card
+type: card
+stackLimit: 999
+fits: shield
+server:
+  # The grotto crawler's second card, dropped at 0.1 %; no shop trades it, and the board sells it.
+  weight: 1
+  sellPrice: 0
+  market:
+    # It sells to no shop, so its floor is authored.
+    basePrice: 2400
+    floor: 240
+  card:
+    defense: 5
+    bossDamageReduction: 5
+    removalFee: 600
+client:
+  # The slime gel's look until art for the cards arrives.
+  icon: item_slime_gel
+  model: pickup_slime_gel
+  prefix: Bulwark
+  description: Defense +5 and damage from bosses -5%.

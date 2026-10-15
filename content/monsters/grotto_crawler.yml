@@ -50,6 +50,15 @@ drops:
   - item: item.consumable.wind_converter
     chance: 0.03
     amount: { min: 1, max: 1 }
+  - item: item.shield.carapace
+    chance: 0.06
+    amount: { min: 1, max: 1 }
+  - item: item.footwear.grotto_boots
+    chance: 0.06
+    amount: { min: 1, max: 1 }
+  - item: item.card.grotto_crawler_bulwark
+    chance: 0.001
+    amount: { min: 1, max: 1 }
 rewards:
   baseExperience: 120
   jobExperience: 90

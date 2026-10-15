@@ -355,7 +355,7 @@ public sealed class CardAcceptanceTests
             boards.SelectMany(board => board.Entries).Single(entry => entry.Item.Value == Keen).Stock,
             Is.EqualTo(1u),
             $"{step}: the card on the board for Bobby");
-        Assert.That(boards, Has.Count.EqualTo(2), $"{step}: fifteen goods in two messages");
+        Assert.That(boards, Has.Count.EqualTo(3), $"{step}: thirty-two goods in three messages");
         Assert.That(anna.World.Inventory.Rows.Any(row => row.Item.Value == Keen), Is.False, $"{step}: the card left");
     }
 

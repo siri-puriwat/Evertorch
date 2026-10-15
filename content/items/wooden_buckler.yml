@@ -1,0 +1,17 @@
+id: item.shield.wooden_buckler
+displayName: Wooden Buckler
+type: shield
+stackLimit: 1
+slots: 1
+server:
+  # The town's shield, which the Quartermaster sells; the board never lists it.
+  weight: 40
+  sellPrice: 25
+  refine: refine.light_armor
+  equipment:
+    defense: 6
+    attackSpeedPenalty: 5
+client:
+  # The cloth armor's look until ArtDelivery-03's pieces arrive.
+  icon: item_cloth_armor
+  model: pickup_cloth_armor

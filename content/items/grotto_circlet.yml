@@ -1,0 +1,20 @@
+id: item.headgear.grotto_circlet
+displayName: Grotto Circlet
+type: headgear
+stackLimit: 1
+slots: 1
+server:
+  # The dungeon's headgear, which the hollow wisp drops at 6 %; the shop buys it back but never sells it.
+  weight: 25
+  sellPrice: 30
+  market:
+    basePrice: 60
+  refine: refine.light_armor
+  equipment:
+    defense: 4
+    bonus:
+      int: 1
+client:
+  # The cloth armor's look until ArtDelivery-03's pieces arrive.
+  icon: item_cloth_armor
+  model: pickup_cloth_armor

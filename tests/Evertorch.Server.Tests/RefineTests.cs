@@ -145,16 +145,19 @@ public sealed class RefineTests
                 new[]
                 {
                     ("item.card.barrow_crawler", 600u), ("item.card.forest_crawler", 200u),
-                    ("item.card.gloom_wisp", 600u), ("item.card.grotto_crawler", 600u),
-                    ("item.card.hollow_wisp", 600u), ("item.card.slime_monarch", 5000u),
-                    ("item.card.spark_wisp", 200u), ("item.card.training_slime", 200u)
+                    ("item.card.forest_crawler_stride", 200u), ("item.card.gloom_wisp", 600u),
+                    ("item.card.gloom_wisp_veil", 600u), ("item.card.grotto_crawler", 600u),
+                    ("item.card.grotto_crawler_bulwark", 600u), ("item.card.hollow_wisp", 600u),
+                    ("item.card.hollow_wisp_poise", 600u), ("item.card.slime_monarch", 5000u),
+                    ("item.card.spark_wisp", 200u), ("item.card.spark_wisp_insight", 200u),
+                    ("item.card.training_slime", 200u)
                 }));
         Assert.That(
             services.Where(service => service.RemovesCards).Select(service => service.Npc),
             Is.EqualTo(new[] { smith }));
     }
 
-    // Network Protocol §9: a refiner's three tables follow its services, in the order of their IDs, each with its items;
+    // Network Protocol §9: a refiner's four tables follow its services, in the order of their IDs, each with its items;
     // no other NPC sends one.
     [Test]
     public void Entering_TellsTheSmithsTablesAfterItsServices_InIndexOrder()
@@ -172,7 +175,7 @@ public sealed class RefineTests
             .ToArray();
 
         Assert.That(
-            sent.Skip(services + 1).Take(3).Select(message => message.Opcode),
+            sent.Skip(services + 1).Take(4).Select(message => message.Opcode),
             Is.All.EqualTo(MessageOpcode.RefineTable));
         Assert.That(tables.Select(table => table.Npc), Is.All.EqualTo(smith));
         Assert.That(
@@ -183,11 +186,15 @@ public sealed class RefineTests
                 {
                     ((byte)0, "item.material.wardstone", 10,
                         "item.armor.cloth item.armor.leather item.armor.monarch_mantle"),
-                    ((byte)1, Ember, 10, "item.weapon.ash_staff item.weapon.iron_sword"),
-                    ((byte)2, Ember, 10, "item.weapon.training_staff item.weapon.training_sword")
+                    ((byte)1, "item.material.wardstone", 10,
+                        "item.footwear.grotto_boots item.footwear.trail_boots item.garment.gloom_cape "
+                        + "item.garment.travel_cape item.headgear.grotto_circlet item.headgear.trail_cap "
+                        + "item.shield.carapace item.shield.wooden_buckler"),
+                    ((byte)2, Ember, 10, "item.weapon.ash_staff item.weapon.iron_sword"),
+                    ((byte)3, Ember, 10, "item.weapon.training_staff item.weapon.training_sword")
                 }));
         Assert.That(
-            tables[2].Steps.Select(step => (step.Chance, step.Coins)).Skip(6),
+            tables[3].Steps.Select(step => (step.Chance, step.Coins)).Skip(6),
             Is.EqualTo(new[] { ((byte)100, 20u), ((byte)60, 20u), ((byte)40, 20u), ((byte)20, 20u) }));
     }
 

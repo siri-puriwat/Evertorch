@@ -468,7 +468,7 @@ public sealed class CardContentTests
     }
 
     [Test]
-    public void Run_ForRepositoryContent_ReadsTheEightCards_TheirDropsLastButAConverter_AndTheSlots()
+    public void Run_ForRepositoryContent_ReadsTheThirteenCards_TheirDropsLastButTheLaterOnes_AndTheSlots()
     {
         ContentPipelineResult result = ContentPipeline.Run(
             Path.Combine(ContentValidationTests.RepositoryRoot(), "content"));
@@ -486,11 +486,16 @@ public sealed class CardContentTests
                 {
                     ("item.card.barrow_crawler", ItemType.Armor, 999, 1, 0, 600, 2400, 240, 24000),
                     ("item.card.forest_crawler", ItemType.Weapon, 999, 1, 0, 200, 800, 80, 8000),
+                    ("item.card.forest_crawler_stride", ItemType.Footwear, 999, 1, 0, 200, 800, 80, 8000),
                     ("item.card.gloom_wisp", ItemType.Weapon, 999, 1, 0, 600, 2400, 240, 24000),
+                    ("item.card.gloom_wisp_veil", ItemType.Garment, 999, 1, 0, 600, 2400, 240, 24000),
                     ("item.card.grotto_crawler", ItemType.Armor, 999, 1, 0, 600, 2400, 240, 24000),
+                    ("item.card.grotto_crawler_bulwark", ItemType.Shield, 999, 1, 0, 600, 2400, 240, 24000),
                     ("item.card.hollow_wisp", ItemType.Weapon, 999, 1, 0, 600, 2400, 240, 24000),
+                    ("item.card.hollow_wisp_poise", ItemType.Accessory, 999, 1, 0, 600, 2400, 240, 24000),
                     ("item.card.slime_monarch", ItemType.Armor, 999, 1, 0, 5000, 24000, 2400, 240000),
                     ("item.card.spark_wisp", ItemType.Weapon, 999, 1, 0, 200, 800, 80, 8000),
+                    ("item.card.spark_wisp_insight", ItemType.Headgear, 999, 1, 0, 200, 800, 80, 8000),
                     ("item.card.training_slime", ItemType.Armor, 999, 1, 0, 200, 800, 80, 8000)
                 }),
             "stacking to 999, selling to no shop, every one listable at ten times its base at most");
@@ -504,11 +509,16 @@ public sealed class CardContentTests
                 {
                     ("item.card.barrow_crawler", "Shrouded", "maxHp 30 from Shadow 30 resist Poison 30"),
                     ("item.card.forest_crawler", "Keen", "attack 8 to Small 10 inflict Poison 500"),
+                    ("item.card.forest_crawler_stride", "Stride", "agi 1 maxHp 10"),
                     ("item.card.gloom_wisp", "Bane", "boss 20 to Insect 10 inflict Silence 500"),
+                    ("item.card.gloom_wisp_veil", "Veil", "from Shadow 10 resist Blind 10"),
                     ("item.card.grotto_crawler", "Earthen", "defense 10 armor Earth resist Stun 30"),
+                    ("item.card.grotto_crawler_bulwark", "Bulwark", "defense 5 reduction 5"),
                     ("item.card.hollow_wisp", "Spectral", "to Undead 20 inflict Sleep 500"),
+                    ("item.card.hollow_wisp_poise", "Poise", "dex 1 luk 1"),
                     ("item.card.slime_monarch", "Royal", "maxHp 40 reduction 25 resist Freeze 50"),
                     ("item.card.spark_wisp", "Arcane", "int 1 magicAttack 10"),
+                    ("item.card.spark_wisp_insight", "Insight", "int 1 maxSp 15"),
                     ("item.card.training_slime", "Hardy", "vit 1 maxHp 20 from Wind 20")
                 }));
         MonsterDefinition[] monsters = result.Content.Monsters
@@ -524,19 +534,26 @@ public sealed class CardContentTests
                 new[]
                 {
                     ("item.card.barrow_crawler", 0.001, 1, 1,
-                        "item.consumable.earth_converter item.consumable.grand_remedy"),
-                    ("item.card.forest_crawler", 0.001, 1, 1, "item.consumable.earth_converter item.consumable.remedy"),
+                        "item.consumable.earth_converter item.consumable.grand_remedy item.accessory.grotto_charm"),
+                    ("item.card.forest_crawler", 0.001, 1, 1,
+                        "item.consumable.earth_converter item.consumable.remedy item.card.forest_crawler_stride"),
                     ("item.card.gloom_wisp", 0.001, 1, 1,
-                        "item.consumable.fire_converter item.consumable.grand_remedy"),
-                    ("item.card.grotto_crawler", 0.001, 1, 1, "item.consumable.wind_converter"),
+                        "item.consumable.fire_converter item.consumable.grand_remedy item.garment.gloom_cape "
+                        + "item.card.gloom_wisp_veil"),
+                    ("item.card.grotto_crawler", 0.001, 1, 1,
+                        "item.consumable.wind_converter item.shield.carapace item.footwear.grotto_boots "
+                        + "item.card.grotto_crawler_bulwark"),
                     ("item.card.hollow_wisp", 0.001, 1, 1,
-                        "item.consumable.water_converter item.consumable.grand_remedy"),
+                        "item.consumable.water_converter item.consumable.grand_remedy item.headgear.grotto_circlet "
+                        + "item.card.hollow_wisp_poise"),
                     ("item.card.slime_monarch", 0.01, 1, 1,
                         "item.consumable.fire_converter item.consumable.grand_remedy"),
-                    ("item.card.spark_wisp", 0.001, 1, 1, "item.consumable.wind_converter item.consumable.remedy"),
+                    ("item.card.spark_wisp", 0.001, 1, 1,
+                        "item.consumable.wind_converter item.consumable.remedy item.card.spark_wisp_insight"),
                     ("item.card.training_slime", 0.001, 1, 1, "")
                 }),
-            "each monster's own card last but its converter and its remedy, so every earlier draw keeps its place");
+            "each monster's own card last but its converter, its remedy, and Milestone 20's pieces and second card, so "
+            + "every earlier draw keeps its place");
         Assert.That(
             result.Content.Items
                 .Where(item => item.Definition.IsEquipment)
@@ -545,9 +562,13 @@ public sealed class CardContentTests
             Is.EqualTo(
                 new[]
                 {
+                    ("item.accessory.grotto_charm", 1), ("item.accessory.traveler_charm", 1),
                     ("item.armor.cloth", 1), ("item.armor.leather", 1), ("item.armor.monarch_mantle", 1),
-                    ("item.weapon.ash_staff", 2), ("item.weapon.iron_sword", 2), ("item.weapon.training_staff", 1),
-                    ("item.weapon.training_sword", 1)
+                    ("item.footwear.grotto_boots", 1), ("item.footwear.trail_boots", 1),
+                    ("item.garment.gloom_cape", 1), ("item.garment.travel_cape", 1),
+                    ("item.headgear.grotto_circlet", 1), ("item.headgear.trail_cap", 1), ("item.shield.carapace", 1),
+                    ("item.shield.wooden_buckler", 1), ("item.weapon.ash_staff", 2), ("item.weapon.iron_sword", 2),
+                    ("item.weapon.training_staff", 1), ("item.weapon.training_sword", 1)
                 }));
     }
 }

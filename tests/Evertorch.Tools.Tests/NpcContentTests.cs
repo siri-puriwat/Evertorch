@@ -230,7 +230,9 @@ public sealed class NpcContentTests
                 {
                     ("item.consumable.minor_health", 20), ("item.consumable.minor_mana", 30),
                     ("item.consumable.remedy", 30), ("item.armor.cloth", 40), ("item.weapon.training_sword", 50),
-                    ("item.weapon.training_staff", 50)
+                    ("item.weapon.training_staff", 50), ("item.headgear.trail_cap", 30),
+                    ("item.shield.wooden_buckler", 50), ("item.garment.travel_cape", 30),
+                    ("item.footwear.trail_boots", 30), ("item.accessory.traveler_charm", 40)
                 }));
         foreach (ShopEntry entry in quartermaster.Definition.Shop)
         {

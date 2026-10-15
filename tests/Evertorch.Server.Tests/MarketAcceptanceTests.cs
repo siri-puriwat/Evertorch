@@ -218,17 +218,22 @@ public sealed class MarketAcceptanceTests
             Is.EqualTo(
                 new[]
                 {
-                    ("item.armor.leather", 90u, 0u), ("item.armor.monarch_mantle", 1000u, 0u),
-                    ("item.card.barrow_crawler", 2400u, 0u), ("item.card.forest_crawler", 800u, 0u),
-                    ("item.card.gloom_wisp", 2400u, 0u), ("item.card.grotto_crawler", 2400u, 0u),
-                    ("item.card.hollow_wisp", 2400u, 0u), ("item.card.slime_monarch", 24000u, 0u),
-                    ("item.card.spark_wisp", 800u, 0u), ("item.card.training_slime", 800u, 0u),
+                    ("item.accessory.grotto_charm", 80u, 0u), ("item.armor.leather", 90u, 0u),
+                    ("item.armor.monarch_mantle", 1000u, 0u), ("item.card.barrow_crawler", 2400u, 0u),
+                    ("item.card.forest_crawler", 800u, 0u), ("item.card.forest_crawler_stride", 800u, 0u),
+                    ("item.card.gloom_wisp", 2400u, 0u), ("item.card.gloom_wisp_veil", 2400u, 0u),
+                    ("item.card.grotto_crawler", 2400u, 0u), ("item.card.grotto_crawler_bulwark", 2400u, 0u),
+                    ("item.card.hollow_wisp", 2400u, 0u), ("item.card.hollow_wisp_poise", 2400u, 0u),
+                    ("item.card.slime_monarch", 24000u, 0u), ("item.card.spark_wisp", 800u, 0u),
+                    ("item.card.spark_wisp_insight", 800u, 0u), ("item.card.training_slime", 800u, 0u),
                     ("item.consumable.earth_converter", 60u, 0u), ("item.consumable.fire_converter", 60u, 0u),
                     ("item.consumable.grand_remedy", 120u, 0u),
                     ("item.consumable.water_converter", 60u, 0u), ("item.consumable.wind_converter", 60u, 0u),
-                    ("item.material.emberstone", 40u, 0u), (GloomDust, 28u, 0u),
-                    ("item.material.grotto_carapace", 24u, 0u), ("item.material.monarch_jelly", 80u, 0u),
-                    ("item.material.wardstone", 40u, 0u), ("item.weapon.ash_staff", 120u, 0u), (IronSword, 120u, 0u)
+                    ("item.footwear.grotto_boots", 60u, 0u), ("item.garment.gloom_cape", 60u, 0u),
+                    ("item.headgear.grotto_circlet", 60u, 0u), ("item.material.emberstone", 40u, 0u),
+                    (GloomDust, 28u, 0u), ("item.material.grotto_carapace", 24u, 0u),
+                    ("item.material.monarch_jelly", 80u, 0u), ("item.material.wardstone", 40u, 0u),
+                    ("item.shield.carapace", 100u, 0u), ("item.weapon.ash_staff", 120u, 0u), (IronSword, 120u, 0u)
                 }),
             $"{step}: every listable item at its base");
         Assert.That(heard.Mines.Single().Entries, Is.Empty, $"{step}: nothing listed yet");

@@ -1,0 +1,24 @@
+id: item.card.forest_crawler_stride
+displayName: Forest Crawler Stride Card
+type: card
+stackLimit: 999
+fits: footwear
+server:
+  # The forest crawler's second card, dropped at 0.1 %; no shop trades it, and the board sells it.
+  weight: 1
+  sellPrice: 0
+  market:
+    # It sells to no shop, so its floor is authored.
+    basePrice: 800
+    floor: 80
+  card:
+    bonus:
+      agi: 1
+    maxHp: 10
+    removalFee: 200
+client:
+  # The slime gel's look until art for the cards arrives.
+  icon: item_slime_gel
+  model: pickup_slime_gel
+  prefix: Stride
+  description: AGI +1 and max HP +10.

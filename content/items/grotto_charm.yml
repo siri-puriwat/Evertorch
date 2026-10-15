@@ -1,0 +1,20 @@
+id: item.accessory.grotto_charm
+displayName: Grotto Charm
+type: accessory
+stackLimit: 1
+slots: 1
+server:
+  # The dungeon's accessory, which the barrow crawler drops at 6 %; the shop buys it back but never sells it, and no
+  # table refines it.
+  weight: 5
+  sellPrice: 40
+  market:
+    basePrice: 80
+  equipment:
+    bonus:
+      str: 1
+      int: 1
+client:
+  # The cloth armor's look until ArtDelivery-03's pieces arrive.
+  icon: item_cloth_armor
+  model: pickup_cloth_armor

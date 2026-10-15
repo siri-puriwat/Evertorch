@@ -252,7 +252,7 @@ public sealed class RefineContentTests
     }
 
     [Test]
-    public void Run_ForRepositoryContent_RefinesEveryWeaponAndArmor_ThroughThreeTables()
+    public void Run_ForRepositoryContent_RefinesEveryPieceButTheCharms_ThroughFourTables()
     {
         ContentPipelineResult result = ContentPipeline.Run(
             Path.Combine(ContentValidationTests.RepositoryRoot(), "content"));
@@ -260,19 +260,27 @@ public sealed class RefineContentTests
         Assert.That(result.Diagnostics, Is.Empty, Describe(result));
         Assert.That(
             result.Content.Items
-                .Where(item => item.Definition.Type == ItemType.Weapon || item.Definition.Type == ItemType.Armor)
+                .Where(item => item.Definition.IsEquipment)
                 .Select(item => (item.Definition.Id.Value, item.Definition.Refine?.Value))
                 .OrderBy(pair => pair.Item1, StringComparer.Ordinal),
             Is.EqualTo(
                 new[]
                 {
+                    ("item.accessory.grotto_charm", null), ("item.accessory.traveler_charm", null),
                     ("item.armor.cloth", "refine.armor"), ("item.armor.leather", "refine.armor"),
-                    ("item.armor.monarch_mantle", "refine.armor"), ("item.weapon.ash_staff", "refine.weapon_dungeon"),
+                    ("item.armor.monarch_mantle", "refine.armor"), ("item.footwear.grotto_boots", "refine.light_armor"),
+                    ("item.footwear.trail_boots", "refine.light_armor"),
+                    ("item.garment.gloom_cape", "refine.light_armor"),
+                    ("item.garment.travel_cape", "refine.light_armor"),
+                    ("item.headgear.grotto_circlet", "refine.light_armor"),
+                    ("item.headgear.trail_cap", "refine.light_armor"), ("item.shield.carapace", "refine.light_armor"),
+                    ("item.shield.wooden_buckler", "refine.light_armor"),
+                    ("item.weapon.ash_staff", "refine.weapon_dungeon"),
                     ("item.weapon.iron_sword", "refine.weapon_dungeon"),
                     ("item.weapon.training_staff", "refine.weapon_training"),
                     ("item.weapon.training_sword", "refine.weapon_training")
                 }),
-            "every weapon and armor, the Mantle on the armor's table");
+            "every piece but the charms, the Mantle on the armor's table and the four light categories on theirs");
         Assert.That(
             result.Content.RefineTables.Select(authored => authored.Definition).Select(table => (table.Id.Value,
                 table.Material.Value, table.MaterialQuantity, table.OnFailure,
@@ -282,13 +290,16 @@ public sealed class RefineContentTests
                 {
                     ("refine.armor", "item.material.wardstone", 1, RefineFailure.Destroy,
                         "100/60/5 100/60/10 100/60/15 100/60/20 60/60/28 50/60/36 40/60/44 30/60/52 20/60/62 10/60/72"),
+                    ("refine.light_armor", "item.material.wardstone", 1, RefineFailure.Downgrade,
+                        "100/30/2 100/30/4 100/30/6 100/30/8 60/30/10 50/30/12 40/30/14 30/30/16 20/30/18 10/30/20"),
                     ("refine.weapon_dungeon", "item.material.emberstone", 1, RefineFailure.Destroy,
                         "100/100/3 100/100/6 100/100/9 100/100/12 100/100/15 100/100/18 60/100/21 40/100/24 30/100/27 "
                         + "20/100/30"),
                     ("refine.weapon_training", "item.material.emberstone", 1, RefineFailure.Destroy,
                         "100/20/2 100/20/4 100/20/6 100/20/8 100/20/10 100/20/12 100/20/14 60/20/16 40/20/18 20/20/20")
                 }),
-            "safe to +4, +6, and +7; the armor's defense scaled to the 4,000 divisor");
+            "safe to +4, +4, +6, and +7; the armor's defense scaled to the 4,000 divisor; a light piece lowered, never "
+            + "broken");
         Assert.That(
             result.Content.Items
                 .Where(item => item.Definition.Id.Value.EndsWith("stone", StringComparison.Ordinal))
@@ -304,12 +315,12 @@ public sealed class RefineContentTests
         MonsterDefinition wisp = result.Content.Monsters
             .Single(monster => monster.Definition.Id.Value == "monster.gloom_wisp")
             .Definition;
-        MonsterDrop ember = wisp.Drops[wisp.Drops.Count - 4];
+        MonsterDrop ember = wisp.Drops[wisp.Drops.Count - 6];
         Assert.That(
             (ember.Item.Value, ember.Chance, ember.MinAmount, ember.MaxAmount),
             Is.EqualTo(("item.material.emberstone", 0.08, 1, 1)),
-            "the wisp's Emberstone last but its card, its converter, and its Grand Remedy, so every earlier draw keeps "
-            + "its place");
+            "the wisp's Emberstone last but its card, its converter, its Grand Remedy, and Milestone 20's cape and "
+            + "second card, so every earlier draw keeps its place");
     }
 
     [Test]

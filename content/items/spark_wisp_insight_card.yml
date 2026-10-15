@@ -1,0 +1,24 @@
+id: item.card.spark_wisp_insight
+displayName: Spark Wisp Insight Card
+type: card
+stackLimit: 999
+fits: headgear
+server:
+  # The spark wisp's second card, dropped at 0.1 %; no shop trades it, and the board sells it.
+  weight: 1
+  sellPrice: 0
+  market:
+    # It sells to no shop, so its floor is authored.
+    basePrice: 800
+    floor: 80
+  card:
+    bonus:
+      int: 1
+    maxSp: 15
+    removalFee: 200
+client:
+  # The slime gel's look until art for the cards arrives.
+  icon: item_slime_gel
+  model: pickup_slime_gel
+  prefix: Insight
+  description: INT +1 and max SP +15.

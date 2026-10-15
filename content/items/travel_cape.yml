@@ -1,0 +1,16 @@
+id: item.garment.travel_cape
+displayName: Travel Cape
+type: garment
+stackLimit: 1
+slots: 1
+server:
+  # The town's garment, which the Quartermaster sells; the board never lists it.
+  weight: 20
+  sellPrice: 15
+  refine: refine.light_armor
+  equipment:
+    defense: 2
+client:
+  # The cloth armor's look until ArtDelivery-03's pieces arrive.
+  icon: item_cloth_armor
+  model: pickup_cloth_armor

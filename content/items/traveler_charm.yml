@@ -1,0 +1,16 @@
+id: item.accessory.traveler_charm
+displayName: Traveler Charm
+type: accessory
+stackLimit: 1
+slots: 1
+server:
+  # The town's accessory, which the Quartermaster sells; the board never lists it, and no table refines it.
+  weight: 5
+  sellPrice: 20
+  equipment:
+    bonus:
+      dex: 1
+client:
+  # The cloth armor's look until ArtDelivery-03's pieces arrive.
+  icon: item_cloth_armor
+  model: pickup_cloth_armor

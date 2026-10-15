@@ -15,5 +15,15 @@ server:
       price: 50
     - item: item.weapon.training_staff
       price: 50
+    - item: item.headgear.trail_cap
+      price: 30
+    - item: item.shield.wooden_buckler
+      price: 50
+    - item: item.garment.travel_cape
+      price: 30
+    - item: item.footwear.trail_boots
+      price: 30
+    - item: item.accessory.traveler_charm
+      price: 40
 client:
   prefab: npc_quartermaster
