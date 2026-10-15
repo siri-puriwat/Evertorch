@@ -34,24 +34,25 @@ internal static class ItemDefinitionReader
         ItemType type = root.RequiredEnum<ItemType>("type");
         int stackLimit = root.RequiredInt("stackLimit", 1, ContentLimits.MaxStack);
         int slots = ReadSlots(root, type);
-        EquipmentSlot fits = ReadFits(root, type);
+        ItemType? fits = ReadFits(root, type);
 
         YamlFieldReader server = root.RequiredMapping("server");
         int weight = server.RequiredInt("weight", 0, ContentLimits.MaxStack);
         int sellPrice = server.RequiredInt("sellPrice", 0, ContentLimits.MaxPrice);
         ItemEquipment? equipment = null;
-        if (type == ItemType.Weapon || type == ItemType.Armor)
+        bool isEquipment = EquipmentPositions.IsEquipment(type);
+        if (isEquipment)
         {
             if (stackLimit != 1)
             {
-                root.ReportField("stackLimit", "must be 1 for a weapon or armor");
+                root.ReportField("stackLimit", "must be 1 for equipment");
             }
 
             equipment = ReadEquipment(server.RequiredMapping("equipment"), type);
         }
         else if (server.Has("equipment"))
         {
-            server.ReportField("equipment", "is only for a weapon or armor");
+            server.ReportField("equipment", "is only for equipment");
         }
 
         ItemEffect? effect = null;
@@ -79,11 +80,16 @@ internal static class ItemDefinitionReader
             ? ReadMarket(server.RequiredMapping("market"), sellPrice, stackLimit)
             : null;
 
-        // A weapon or an armor may name the table that refines it (Content Pipeline §4); the validator checks the name.
+        // Equipment but an accessory may name the table that refines it (Content Pipeline §4); the validator checks the
+        // name.
         RefineDefinitionId? refine = null;
         if (server.Has("refine"))
         {
-            if (type == ItemType.Weapon || type == ItemType.Armor)
+            if (type == ItemType.Accessory)
+            {
+                server.ReportField("refine", "is not for an accessory");
+            }
+            else if (isEquipment)
             {
                 refine = server.RequiredId<RefineDefinitionId>(
                     "refine",
@@ -92,7 +98,7 @@ internal static class ItemDefinitionReader
             }
             else
             {
-                server.ReportField("refine", "is only for a weapon or armor");
+                server.ReportField("refine", "is only for equipment");
             }
         }
 
@@ -145,11 +151,11 @@ internal static class ItemDefinitionReader
             market,
             refine,
             slots,
-            type == ItemType.Card ? new ItemCard(fits, bonus!, removalFee) : null);
+            type == ItemType.Card ? new ItemCard(fits!.Value, bonus!, removalFee) : null);
         return new AuthoredItem(root.ToSource(), definition, icon, model, held, prefix, description);
     }
 
-    // A weapon holds up to four cards and an armor one (Content Pipeline §4); 0 when absent.
+    // A weapon holds up to four cards and any other piece of equipment one (Content Pipeline §4); 0 when absent.
     private static int ReadSlots(YamlFieldReader root, ItemType type)
     {
         if (!root.Has("slots"))
@@ -157,20 +163,20 @@ internal static class ItemDefinitionReader
             return 0;
         }
 
-        switch (type)
+        if (!EquipmentPositions.IsEquipment(type))
         {
-            case ItemType.Weapon:
-                return root.RequiredInt("slots", 0, ContentLimits.MaxWeaponSlots);
-            case ItemType.Armor:
-                return root.RequiredInt("slots", 0, ContentLimits.MaxArmorSlots);
-            default:
-                root.ReportField("slots", "is only for a weapon or armor");
-                return 0;
+            root.ReportField("slots", "is only for equipment");
+            return 0;
         }
+
+        return root.RequiredInt(
+            "slots",
+            0,
+            type == ItemType.Weapon ? ContentLimits.MaxWeaponSlots : ContentLimits.MaxArmorSlots);
     }
 
-    // A card fits a weapon or an armor, and no other item names a fit.
-    private static EquipmentSlot ReadFits(YamlFieldReader root, ItemType type)
+    // A card fits one category of equipment, and no other item names a fit.
+    private static ItemType? ReadFits(YamlFieldReader root, ItemType type)
     {
         if (type != ItemType.Card)
         {
@@ -179,27 +185,30 @@ internal static class ItemDefinitionReader
                 root.ReportField("fits", "is only for a card");
             }
 
-            return EquipmentSlot.None;
+            return null;
         }
 
-        switch (root.RequiredString("fits"))
+        string name = root.RequiredString("fits");
+        foreach (ItemType category in Enum.GetValues(typeof(ItemType)))
         {
-            case "weapon":
-                return EquipmentSlot.Weapon;
-            case "armor":
-                return EquipmentSlot.Armor;
-            case "":
-                return EquipmentSlot.None;
-            default:
-                root.ReportField("fits", "must be weapon or armor");
-                return EquipmentSlot.None;
+            if (EquipmentPositions.IsEquipment(category) && EnumText.Of(category) == name)
+            {
+                return category;
+            }
         }
+
+        if (name.Length > 0)
+        {
+            root.ReportField("fits", "must be weapon, armor, headgear, shield, garment, footwear, or accessory");
+        }
+
+        return null;
     }
 
     // What a card adds while worn, each value optional and 0 when absent, at least one above 0, and the fee to take it
     // out (Content Pipeline §4). The damage it adds by race, element, and size and takes off by element are maps from
     // names to percentages, and only a card that fits armor may give its wearer an element.
-    private static CardBonus? ReadCard(YamlFieldReader card, EquipmentSlot fits, out int removalFee)
+    private static CardBonus? ReadCard(YamlFieldReader card, ItemType? fits, out int removalFee)
     {
         var stats = new PrimaryStats(0, 0, 0, 0, 0, 0);
         if (card.Has("bonus"))
@@ -232,20 +241,21 @@ internal static class ItemDefinitionReader
             card.Has("armorElement") ? card.RequiredEnum<Element>("armorElement") : Element.Neutral,
             card.Has("inflict") ? card.RequiredAilmentChanceMap("inflict") : null,
             card.Has("resist") ? card.RequiredAilmentMap("resist", 1, ContentLimits.MaxCardResistPercent) : null);
-        if (card.Has("armorElement") && fits != EquipmentSlot.Armor)
+        if (card.Has("armorElement") && fits != ItemType.Armor)
         {
             card.ReportField("armorElement", "is only for a card that fits armor");
         }
 
-        // A weapon card brings an ailment on its wearer's hits, and an armor card resists one (Gameplay Systems §11.7).
-        if (card.Has("inflict") && fits != EquipmentSlot.Weapon)
+        // A weapon card brings an ailment on its wearer's hits, and any other card may resist one (Gameplay Systems
+        // §11.7).
+        if (card.Has("inflict") && fits != ItemType.Weapon)
         {
             card.ReportField("inflict", "is only for a card that fits a weapon");
         }
 
-        if (card.Has("resist") && fits != EquipmentSlot.Armor)
+        if (card.Has("resist") && fits == ItemType.Weapon)
         {
-            card.ReportField("resist", "is only for a card that fits armor");
+            card.ReportField("resist", "is not for a card that fits a weapon");
         }
 
         removalFee = card.RequiredInt("removalFee", 0, ContentLimits.MaxCardRemovalFee);
@@ -418,17 +428,29 @@ internal static class ItemDefinitionReader
         return description;
     }
 
-    // A weapon has an attack, an attack-speed penalty within the job's limit, and a type, armor a defense; either may
-    // add to primary statistics.
+    // A weapon has an attack, an attack-speed penalty within the job's limit, and a type; armor a defense; a piece of
+    // another category an optional defense, and a shield an optional penalty; any may add to primary statistics.
     private static ItemEquipment ReadEquipment(YamlFieldReader equipment, ItemType type)
     {
         bool isWeapon = type == ItemType.Weapon;
         int attack = isWeapon ? equipment.RequiredInt("attack", 0, ContentLimits.MaxStat) : 0;
-        int penalty = isWeapon
-            ? equipment.RequiredInt("attackSpeedPenalty", 0, ContentLimits.MaxAttackSpeedPenalty)
-            : 0;
+        int penalty = 0;
+        if (isWeapon || (type == ItemType.Shield && equipment.Has("attackSpeedPenalty")))
+        {
+            penalty = equipment.RequiredInt("attackSpeedPenalty", 0, ContentLimits.MaxAttackSpeedPenalty);
+        }
+        else if (equipment.Has("attackSpeedPenalty"))
+        {
+            equipment.ReportField("attackSpeedPenalty", "is only for a weapon or a shield");
+        }
+
         WeaponType? weaponType = isWeapon ? equipment.RequiredEnum<WeaponType>("weaponType") : null;
-        int defense = isWeapon ? 0 : equipment.RequiredInt("defense", 0, ContentLimits.MaxStat);
+        int defense = 0;
+        if (type == ItemType.Armor || (!isWeapon && equipment.Has("defense")))
+        {
+            defense = equipment.RequiredInt("defense", 0, ContentLimits.MaxStat);
+        }
+
         var bonus = new PrimaryStats(0, 0, 0, 0, 0, 0);
         if (equipment.Has("bonus"))
         {

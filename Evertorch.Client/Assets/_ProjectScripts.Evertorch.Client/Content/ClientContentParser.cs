@@ -386,7 +386,8 @@ public static class ClientContentParser
 
             if (!TryParseItemType(item.type, out ItemType type))
             {
-                error = $"Item '{item.id}': type is not material, consumable, weapon, armor, or card.";
+                error = $"Item '{item.id}': type is not material, consumable, weapon, armor, card, headgear, shield, "
+                    + "garment, footwear, or accessory.";
                 return null;
             }
 
@@ -403,19 +404,16 @@ public static class ClientContentParser
                 return null;
             }
 
-            int maxSlots = type switch
-            {
-                ItemType.Weapon => ContentLimits.MaxWeaponSlots,
-                ItemType.Armor => ContentLimits.MaxArmorSlots,
-                _ => 0
-            };
+            int maxSlots = type == ItemType.Weapon ? ContentLimits.MaxWeaponSlots
+                : EquipmentPositions.IsEquipment(type) ? ContentLimits.MaxArmorSlots
+                : 0;
             if (item.slots < 0 || item.slots > maxSlots)
             {
                 error = $"Item '{item.id}': slots is outside 0 to {maxSlots}.";
                 return null;
             }
 
-            if (!TryParseCard(item, type, out EquipmentSlot fits, out error))
+            if (!TryParseCard(item, type, out ItemType fits, out error))
             {
                 return null;
             }
@@ -439,11 +437,11 @@ public static class ClientContentParser
         return items;
     }
 
-    // A card fits a weapon or an armor and names a prefix of 1 to 8 letters, the first a capital, and a description of 1
-    // to 240 printable characters; no other item names any of them.
-    private static bool TryParseCard(ItemDto item, ItemType type, out EquipmentSlot fits, out string error)
+    // A card fits one category of equipment and names a prefix of 1 to 8 letters, the first a capital, and a description
+    // of 1 to 240 printable characters; no other item names any of them.
+    private static bool TryParseCard(ItemDto item, ItemType type, out ItemType fits, out string error)
     {
-        fits = EquipmentSlot.None;
+        fits = ItemType.Material;
         error = string.Empty;
         string fitsText = item.fits ?? string.Empty;
         string prefix = item.prefix ?? string.Empty;
@@ -459,15 +457,9 @@ public static class ClientContentParser
             return true;
         }
 
-        fits = fitsText switch
+        if (!TryParseItemType(fitsText, out fits) || !EquipmentPositions.IsEquipment(fits))
         {
-            "weapon" => EquipmentSlot.Weapon,
-            "armor" => EquipmentSlot.Armor,
-            _ => EquipmentSlot.None
-        };
-        if (fits == EquipmentSlot.None)
-        {
-            error = $"Item '{item.id}': fits is not weapon or armor.";
+            error = $"Item '{item.id}': fits is not a category of equipment.";
             return false;
         }
 
@@ -696,6 +688,21 @@ public static class ClientContentParser
                 return true;
             case "card":
                 type = ItemType.Card;
+                return true;
+            case "headgear":
+                type = ItemType.Headgear;
+                return true;
+            case "shield":
+                type = ItemType.Shield;
+                return true;
+            case "garment":
+                type = ItemType.Garment;
+                return true;
+            case "footwear":
+                type = ItemType.Footwear;
+                return true;
+            case "accessory":
+                type = ItemType.Accessory;
                 return true;
             default:
                 type = ItemType.Material;

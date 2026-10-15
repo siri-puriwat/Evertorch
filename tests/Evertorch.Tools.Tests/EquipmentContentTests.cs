@@ -62,7 +62,7 @@ public sealed class EquipmentContentTests
         return string.Join("\n", result.Diagnostics.Select(diagnostic => diagnostic.ToString()));
     }
 
-    [TestCase(Sword, "stackLimit: 1", "stackLimit: 2", "stackLimit", "must be 1 for a weapon or armor")]
+    [TestCase(Sword, "stackLimit: 1", "stackLimit: 2", "stackLimit", "must be 1 for equipment")]
     [TestCase(Sword, "    attack: 20\n", "", "server.equipment.attack", "required field is missing")]
     [TestCase(Sword, "    attack: 20", "    attack: 20\n    defense: 3", "server.equipment.defense", "unknown field")]
     [TestCase(Sword, "    attack: 20", "    attack: -1", "server.equipment.attack", "between 0 and")]
@@ -178,7 +178,7 @@ public sealed class EquipmentContentTests
 
             Assert.That(
                 result.Diagnostics.Select(diagnostic => (diagnostic.FieldPath, diagnostic.Message)),
-                Has.Some.EqualTo(("server.equipment", "is only for a weapon or armor")),
+                Has.Some.EqualTo(("server.equipment", "is only for equipment")),
                 Describe(result));
         }
     }

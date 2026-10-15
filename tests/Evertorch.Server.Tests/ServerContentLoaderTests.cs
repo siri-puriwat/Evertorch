@@ -526,12 +526,12 @@ public sealed class ServerContentLoaderTests
         ItemDefinition gel = content.Items[new ItemDefinitionId("item.material.slime_gel")];
 
         Assert.That(
-            (sword.Slot, sword.StackLimit, sword.Equipment!.Attack, sword.Equipment.AttackSpeedPenalty),
-            Is.EqualTo((EquipmentSlot.Weapon, 1, 20, 50)));
+            (sword.Type, sword.StackLimit, sword.Equipment!.Attack, sword.Equipment.AttackSpeedPenalty),
+            Is.EqualTo((ItemType.Weapon, 1, 20, 50)));
         Assert.That((staff.Equipment!.Attack, staff.Equipment.Bonus.Int), Is.EqualTo((8, 10)));
-        Assert.That((armor.Slot, armor.Equipment!.Defense, armor.Equipment.Attack),
-            Is.EqualTo((EquipmentSlot.Armor, 8, 0)));
-        Assert.That((gel.Slot, gel.Equipment), Is.EqualTo((EquipmentSlot.None, (ItemEquipment?)null)));
+        Assert.That((armor.Type, armor.Equipment!.Defense, armor.Equipment.Attack),
+            Is.EqualTo((ItemType.Armor, 8, 0)));
+        Assert.That((gel.IsEquipment, gel.Equipment), Is.EqualTo((false, (ItemEquipment?)null)));
     }
 
     [Test]
@@ -787,8 +787,8 @@ public sealed class ServerContentLoaderTests
         Dictionary<string, byte[]> weapon = PackageFixture.BuildFixturePackage();
         PackageFixture.Replace(weapon, Items, "\"type\": \"material\"", "\"type\": \"weapon\"");
 
-        Assert.That(ProblemsOf(material), Has.Some.Contains("equipment: is only for a weapon or armor"));
-        Assert.That(ProblemsOf(weapon), Has.Some.Contains("stackLimit: must be 1 for a weapon or armor"));
+        Assert.That(ProblemsOf(material), Has.Some.Contains("equipment: is only for equipment"));
+        Assert.That(ProblemsOf(weapon), Has.Some.Contains("stackLimit: must be 1 for equipment"));
         Assert.That(ProblemsOf(weapon), Has.Some.Contains("equipment: required property is missing"));
     }
 

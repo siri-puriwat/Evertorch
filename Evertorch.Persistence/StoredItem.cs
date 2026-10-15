@@ -31,7 +31,7 @@ public sealed class StoredItem
     public int Quantity { get; }
 
     /// <summary>
-    ///     The equipment slot that holds the row, <c>Weapon</c> or <c>Armor</c>, or null when it is not equipped.
+    ///     The stored name of the equipment position that holds the row, one of the eight, or null when it is not worn.
     /// </summary>
     public string? EquippedSlot { get; }
 

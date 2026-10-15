@@ -405,10 +405,10 @@ public static class ServerContentLoader
         int weight = entry.RequiredInt("weight", 0, ContentLimits.MaxStack);
         int sellPrice = entry.RequiredInt("sellPrice", 0, ContentLimits.MaxPrice);
         ItemEquipment? equipment = null;
-        bool isEquipment = type == ItemType.Weapon || type == ItemType.Armor;
+        bool isEquipment = EquipmentPositions.IsEquipment(type);
         if (isEquipment && stackLimit != 1)
         {
-            entry.Report("stackLimit", "must be 1 for a weapon or armor");
+            entry.Report("stackLimit", "must be 1 for equipment");
         }
 
         int slots = 0;
@@ -417,15 +417,15 @@ public static class ServerContentLoader
             slots = entry.RequiredInt(
                 "slots",
                 0,
-                type == ItemType.Armor ? ContentLimits.MaxArmorSlots : ContentLimits.MaxWeaponSlots);
+                type == ItemType.Weapon ? ContentLimits.MaxWeaponSlots : ContentLimits.MaxArmorSlots);
             if (!isEquipment)
             {
-                entry.Report("slots", "is only for a weapon or armor");
+                entry.Report("slots", "is only for equipment");
             }
         }
         else if (isEquipment)
         {
-            entry.Report("slots", "required property is missing for a weapon or armor");
+            entry.Report("slots", "required property is missing for equipment");
         }
 
         ItemCard? card = null;
@@ -443,15 +443,15 @@ public static class ServerContentLoader
 
         if (entry.Has("equipment"))
         {
-            equipment = ReadEquipment(entry.RequiredObject("equipment"), type == ItemType.Weapon);
+            equipment = ReadEquipment(entry.RequiredObject("equipment"), type);
             if (!isEquipment)
             {
-                entry.Report("equipment", "is only for a weapon or armor");
+                entry.Report("equipment", "is only for equipment");
             }
         }
         else if (isEquipment)
         {
-            entry.Report("equipment", "required property is missing for a weapon or armor");
+            entry.Report("equipment", "required property is missing for equipment");
         }
 
         ItemEffect? effect = null;
@@ -475,9 +475,13 @@ public static class ServerContentLoader
         if (entry.Has("refine"))
         {
             refine = entry.RequiredId<RefineDefinitionId>("refine", RefineDefinitionId.TryCreate);
-            if (!isEquipment)
+            if (type == ItemType.Accessory)
             {
-                entry.Report("refine", "is only for a weapon or armor");
+                entry.Report("refine", "is not for an accessory");
+            }
+            else if (!isEquipment)
+            {
+                entry.Report("refine", "is only for equipment");
             }
         }
 
@@ -493,10 +497,10 @@ public static class ServerContentLoader
     // Pipeline §7).
     private static ItemCard? ReadCard(PackageObjectReader entry)
     {
-        EquipmentSlot fits = entry.RequiredEnum<EquipmentSlot>("fits");
-        if (fits == EquipmentSlot.None && entry.Has("fits"))
+        ItemType fits = entry.RequiredEnum<ItemType>("fits");
+        if (!EquipmentPositions.IsEquipment(fits) && entry.Has("fits"))
         {
-            entry.Report("fits", "must be weapon or armor");
+            entry.Report("fits", "must be weapon, armor, headgear, shield, garment, footwear, or accessory");
         }
 
         PackageObjectReader? values = entry.RequiredObject("card");
@@ -529,19 +533,19 @@ public static class ServerContentLoader
             values.RequiredAilmentChanceMap("inflict"),
             values.RequiredAilmentMap("resist", 1, ContentLimits.MaxCardResistPercent));
         int removalFee = values.RequiredInt("removalFee", 0, ContentLimits.MaxCardRemovalFee);
-        if (bonus.ArmorElement != Element.Neutral && fits != EquipmentSlot.Armor)
+        if (bonus.ArmorElement != Element.Neutral && fits != ItemType.Armor)
         {
             values.Report("armorElement", "is only for a card that fits armor");
         }
 
-        if (bonus.Inflict.Count > 0 && fits != EquipmentSlot.Weapon)
+        if (bonus.Inflict.Count > 0 && fits != ItemType.Weapon)
         {
             values.Report("inflict", "is only for a card that fits a weapon");
         }
 
-        if (bonus.Resist.Count > 0 && fits != EquipmentSlot.Armor)
+        if (bonus.Resist.Count > 0 && fits == ItemType.Weapon)
         {
-            values.Report("resist", "is only for a card that fits armor");
+            values.Report("resist", "is not for a card that fits a weapon");
         }
 
         stats.ReportUnexpectedProperties();
@@ -566,7 +570,7 @@ public static class ServerContentLoader
             return null;
         }
 
-        return fits == EquipmentSlot.None ? null : new ItemCard(fits, bonus, removalFee);
+        return EquipmentPositions.IsEquipment(fits) ? new ItemCard(fits, bonus, removalFee) : null;
     }
 
     // A listable item's terms as the tools resolved them, held to the same rules (Content Pipeline §7): the floor from
@@ -635,9 +639,11 @@ public static class ServerContentLoader
         return new ItemEffect(health, spirit, status, durationMs, cures);
     }
 
-    // A weapon names its type and keeps its attack-speed penalty within a job's limit (Gameplay Systems §11.1).
-    private static ItemEquipment? ReadEquipment(PackageObjectReader? values, bool isWeapon)
+    // A weapon names its type and keeps its attack-speed penalty within a job's limit, and only a weapon or a shield
+    // has a penalty (Gameplay Systems §11.1).
+    private static ItemEquipment? ReadEquipment(PackageObjectReader? values, ItemType type)
     {
+        bool isWeapon = type == ItemType.Weapon;
         PackageObjectReader? bonus = values?.RequiredObject("bonus");
         if (values == null || bonus == null)
         {
@@ -668,6 +674,11 @@ public static class ServerContentLoader
             values.RequiredInt("defense", 0, ContentLimits.MaxStat),
             stats,
             weaponType);
+        if (equipment.AttackSpeedPenalty > 0 && !isWeapon && type != ItemType.Shield)
+        {
+            values.Report("attackSpeedPenalty", "is only for a weapon or a shield");
+        }
+
         values.ReportUnexpectedProperties();
         return equipment;
     }

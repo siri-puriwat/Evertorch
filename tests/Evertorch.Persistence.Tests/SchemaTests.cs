@@ -25,6 +25,7 @@ public sealed class SchemaTests
     private const string AddMarketBoard = "20261010111957_AddMarketBoard";
     private const string AddRefining = "20261011013231_AddRefining";
     private const string AddCards = "20261012164717_AddCards";
+    private const string AddSavedStatusEffects = "20261014172003_AddSavedStatusEffects";
 
     private PostgresFixture m_database = null!;
     private Sql m_sql = null!;
@@ -768,6 +769,18 @@ public sealed class SchemaTests
         AssertFailsWith(ForeignKeyViolation, Sql.EquipmentInsert(other, "Weapon", item));
     }
 
+    // Moving a row between the accessory positions without taking it off first is the case the store must refuse
+    // before the database does (Persistence §5); the unique worn row still holds it here.
+    [Test]
+    public void Equipment_HoldingOneItemInBothAccessorySlots_IsRejected()
+    {
+        long character = NewCharacter();
+        long charm = m_sql.InsertItem(character, 1);
+        m_sql.Execute(Sql.EquipmentInsert(character, "Accessory1", charm));
+
+        AssertFailsWith(UniqueViolation, Sql.EquipmentInsert(character, "Accessory2", charm));
+    }
+
     [Test]
     public void Equipment_HoldingOneItemInTwoSlots_IsRejected()
     {
@@ -785,6 +798,63 @@ public sealed class SchemaTests
         long item = m_sql.InsertItem(character, 1);
 
         AssertFailsWith(CheckViolation, Sql.EquipmentInsert(character, "Ring", item));
+    }
+
+    // The eight positions of Persistence §4, each once a character.
+    [Test]
+    public void Equipment_InEachOfTheEightSlots_IsStored_AndASecondRowInOneIsRejected()
+    {
+        long character = NewCharacter();
+        string[] slots = { "Weapon", "Armor", "Headgear", "Shield", "Garment", "Footwear", "Accessory1", "Accessory2" };
+        foreach (string slot in slots)
+        {
+            m_sql.Execute(Sql.EquipmentInsert(character, slot, m_sql.InsertItem(character, 1)));
+        }
+
+        Assert.That(m_sql.Scalar($"SELECT count(*) FROM equipment WHERE character_id = {character}"), Is.EqualTo(8));
+        AssertFailsWith(UniqueViolation, Sql.EquipmentInsert(character, "Shield", m_sql.InsertItem(character, 1)));
+    }
+
+    // ExpandEquipmentSlots runs down only while every worn row is in the weapon's or the body armor's slot; over a row
+    // in another it rolls back with nothing changed (Persistence §4, §11).
+    [Test]
+    public void ExpandEquipmentSlots_Down_IsRefusedOverARowInANewSlot_AndOtherwisePasses()
+    {
+        using var worn = PostgresFixture.Start();
+        var wornSql = new Sql(worn.ConnectionString);
+        long character = wornSql.InsertCharacter(wornSql.InsertAccount(), "Wearer");
+        wornSql.Execute(Sql.EquipmentInsert(character, "Weapon", wornSql.InsertItem(character, 1)));
+        long charm = wornSql.InsertItem(character, 1);
+        wornSql.Execute(Sql.EquipmentInsert(character, "Accessory2", charm));
+
+        Exception? refused = null;
+        try
+        {
+            EvertorchDatabase.ApplyMigrationsAsync(worn.ConnectionString, AddSavedStatusEffects, CancellationToken.None)
+                .GetAwaiter()
+                .GetResult();
+        }
+        catch (PostgresException exception)
+        {
+            refused = exception;
+        }
+
+        long rowsAfterRefusal = wornSql.Scalar($"SELECT count(*) FROM equipment WHERE character_id = {character}");
+        wornSql.Execute($"DELETE FROM equipment WHERE inventory_item_id = {charm}");
+        EvertorchDatabase.ApplyMigrationsAsync(worn.ConnectionString, AddSavedStatusEffects, CancellationToken.None)
+            .GetAwaiter()
+            .GetResult();
+
+        Assert.That((refused as PostgresException)?.SqlState, Is.EqualTo(CheckViolation), "a charm worn holds it up");
+        Assert.That(rowsAfterRefusal, Is.EqualTo(2), "the refused down kept both rows");
+        Assert.That(
+            wornSql.Scalar($"SELECT count(*) FROM equipment WHERE character_id = {character} AND slot = 'Weapon'"),
+            Is.EqualTo(1),
+            "the weapon kept through the down");
+        Assert.That(
+            SqlStateOf(wornSql, Sql.EquipmentInsert(character, "Accessory1", charm)),
+            Is.EqualTo(CheckViolation),
+            "the two names alone again");
     }
 
     [Test]

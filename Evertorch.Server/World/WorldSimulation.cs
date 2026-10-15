@@ -179,11 +179,11 @@ public sealed class WorldSimulation
                 }
             }
 
-            // A row worn in a slot its item no longer fills is a content change the character cannot load under.
+            // A row worn in a position its item cannot go to is a content change the character cannot load under.
             EquipmentSlot slot = CharacterInventory.SlotOf(item);
-            if (slot != EquipmentSlot.None && slot != itemDefinition!.Slot)
+            if (slot != EquipmentSlot.None && !EquipmentPositions.Fits(itemDefinition!.Type, slot))
             {
-                problem = $"{(slot == EquipmentSlot.Weapon ? "weapon" : "armor")} '{item.ItemDefinitionId}'";
+                problem = $"{CharacterInventory.StoredNameOf(slot).ToLowerInvariant()} '{item.ItemDefinitionId}'";
                 return false;
             }
 

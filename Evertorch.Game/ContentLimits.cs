@@ -78,7 +78,7 @@ public static class ContentLimits
     public const int MaxRefineItems = 13;
 
     /// <summary>
-    ///     The most cards a weapon holds, and an armor (Gameplay Systems §11.7).
+    ///     The most cards a weapon holds, and any other piece of equipment (Gameplay Systems §11.7).
     /// </summary>
     public const int MaxWeaponSlots = 4;
 

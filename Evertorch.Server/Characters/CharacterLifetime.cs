@@ -184,7 +184,7 @@ public sealed class CharacterLifetime
     // table; the item stays worn at its level and counts the table's last bonus, or none (Gameplay Systems §11.1).
     private void LogLevelsPastTheirTables(CharacterSession character)
     {
-        foreach (EquipmentSlot slot in new[] { EquipmentSlot.Weapon, EquipmentSlot.Armor })
+        foreach (EquipmentSlot slot in EquipmentPositions.All)
         {
             if (!character.Inventory.TryGetRow(character.Inventory.WornIn(slot), out InventoryEntry row))
             {
@@ -210,7 +210,7 @@ public sealed class CharacterLifetime
     // and count (Gameplay Systems §11.1).
     private void LogCardsOutOfPlace(CharacterSession character)
     {
-        foreach (EquipmentSlot slot in new[] { EquipmentSlot.Weapon, EquipmentSlot.Armor })
+        foreach (EquipmentSlot slot in EquipmentPositions.All)
         {
             if (!character.Inventory.TryGetRow(character.Inventory.WornIn(slot), out InventoryEntry row)
                 || row.Cards.Count == 0)
@@ -220,7 +220,7 @@ public sealed class CharacterLifetime
 
             ItemDefinition item = m_content.Items[row.Item];
             string[] misfits = row.Cards
-                .Where(card => !Fits(card, slot))
+                .Where(card => !Fits(card, item.Type))
                 .Select(card => card.Value)
                 .ToArray();
             if (misfits.Length > 0 || row.Cards.Count > item.Slots)
@@ -238,9 +238,9 @@ public sealed class CharacterLifetime
         }
     }
 
-    private bool Fits(ItemDefinitionId card, EquipmentSlot slot)
+    private bool Fits(ItemDefinitionId card, ItemType category)
     {
-        return m_content.Items.TryGetValue(card, out ItemDefinition? held) && held.Card?.Fits == slot;
+        return m_content.Items.TryGetValue(card, out ItemDefinition? held) && held.Card?.Fits == category;
     }
 
     /// <summary>

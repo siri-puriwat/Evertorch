@@ -285,7 +285,8 @@ public sealed class ItemActionSystem : ITickPhase
         }
 
         ItemDefinition item = m_content.Items[row.Item];
-        EquipmentSlot slot = item.Slot;
+        IReadOnlyList<EquipmentSlot> positions = EquipmentPositions.Of(item.Type);
+        EquipmentSlot slot = positions.Count > 0 ? positions[0] : EquipmentSlot.None;
         long worn = character.Inventory.WornIn(slot);
         if (slot == EquipmentSlot.None || worn == inventoryItem)
         {
@@ -1028,7 +1029,7 @@ public sealed class ItemActionSystem : ITickPhase
         }
 
         ItemDefinition item = m_content.Items[row.Item];
-        if (item.Slot != fits.Fits || row.Slot != EquipmentSlot.None || row.Cards.Count >= item.Slots)
+        if (item.Type != fits.Fits || row.Slot != EquipmentSlot.None || row.Cards.Count >= item.Slots)
         {
             return CommandRejectionReason.NotAllowedNow;
         }

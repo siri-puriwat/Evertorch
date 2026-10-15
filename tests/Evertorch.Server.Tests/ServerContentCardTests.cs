@@ -40,11 +40,11 @@ public sealed class ServerContentCardTests
     [TestCase(Keen, "card.removalFee", "1000001", "must be at most 1000000")]
     [TestCase(Keen, "card.maxSp", "-1", "must be at least 0")]
     [TestCase(Keen, "card.price", "3", "unknown property")]
-    [TestCase(Keen, "fits", "\"shield\"", "unknown value 'shield'")]
-    [TestCase(Keen, "fits", "\"none\"", "must be weapon or armor")]
+    [TestCase(Keen, "fits", "\"ring\"", "unknown value 'ring'")]
+    [TestCase(Keen, "fits", "\"material\"", "must be weapon, armor, headgear, shield, garment, footwear, or accessory")]
     [TestCase("item.weapon.iron_sword", "slots", "5", "must be at most 4")]
     [TestCase("item.armor.leather", "slots", "2", "must be at most 1")]
-    [TestCase("item.material.slime_gel", "slots", "1", "is only for a weapon or armor")]
+    [TestCase("item.material.slime_gel", "slots", "1", "is only for equipment")]
     [TestCase("item.material.slime_gel", "fits", "\"weapon\"", "is only for a card")]
     [TestCase("item.weapon.iron_sword", "card", "{}", "is only for a card")]
     public void Load_ForACardOrSlotsOutOfBounds_RefusesThem(string id, string path, string json, string message)
@@ -146,14 +146,14 @@ public sealed class ServerContentCardTests
             Is.EqualTo(
                 new[]
                 {
-                    ("item.card.barrow_crawler", EquipmentSlot.Armor, 600, Stats(), 0, 0, 0, 30, 0, 0),
-                    (Keen, EquipmentSlot.Weapon, 200, Stats(), 8, 0, 0, 0, 0, 0),
-                    ("item.card.gloom_wisp", EquipmentSlot.Weapon, 600, Stats(), 0, 0, 0, 0, 20, 0),
-                    ("item.card.grotto_crawler", EquipmentSlot.Armor, 600, Stats(), 0, 0, 10, 0, 0, 0),
-                    ("item.card.hollow_wisp", EquipmentSlot.Weapon, 600, Stats(), 0, 0, 0, 0, 0, 0),
-                    ("item.card.slime_monarch", EquipmentSlot.Armor, 5000, Stats(), 0, 0, 0, 40, 0, 25),
-                    ("item.card.spark_wisp", EquipmentSlot.Weapon, 200, Stats(@int: 1), 0, 10, 0, 0, 0, 0),
-                    ("item.card.training_slime", EquipmentSlot.Armor, 200, Stats(1), 0, 0, 0, 20, 0, 0)
+                    ("item.card.barrow_crawler", ItemType.Armor, 600, Stats(), 0, 0, 0, 30, 0, 0),
+                    (Keen, ItemType.Weapon, 200, Stats(), 8, 0, 0, 0, 0, 0),
+                    ("item.card.gloom_wisp", ItemType.Weapon, 600, Stats(), 0, 0, 0, 0, 20, 0),
+                    ("item.card.grotto_crawler", ItemType.Armor, 600, Stats(), 0, 0, 10, 0, 0, 0),
+                    ("item.card.hollow_wisp", ItemType.Weapon, 600, Stats(), 0, 0, 0, 0, 0, 0),
+                    ("item.card.slime_monarch", ItemType.Armor, 5000, Stats(), 0, 0, 0, 40, 0, 25),
+                    ("item.card.spark_wisp", ItemType.Weapon, 200, Stats(@int: 1), 0, 10, 0, 0, 0, 0),
+                    ("item.card.training_slime", ItemType.Armor, 200, Stats(1), 0, 0, 0, 20, 0, 0)
                 }));
         Assert.That(
             content.Items.Values
@@ -175,7 +175,7 @@ public sealed class ServerContentCardTests
             + "Hardy from Wind; Royal and Arcane as they were");
         Assert.That(
             content.Items.Values
-                .Where(item => item.Slot != EquipmentSlot.None)
+                .Where(item => item.IsEquipment)
                 .Select(item => (item.Id.Value, item.Slots))
                 .OrderBy(item => item.Value, StringComparer.Ordinal),
             Is.EqualTo(

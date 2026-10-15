@@ -92,7 +92,7 @@ internal static class ServerProjection
             writer.WriteNumber("stackLimit", item.StackLimit);
             writer.WriteNumber("weight", item.Weight);
             writer.WriteNumber("sellPrice", item.SellPrice);
-            if (item.Slot != EquipmentSlot.None)
+            if (item.IsEquipment)
             {
                 writer.WriteNumber("slots", item.Slots);
             }

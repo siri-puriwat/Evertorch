@@ -376,6 +376,32 @@ public sealed class EquipmentTests
         Assert.That(SlotOf(server, 7, gel), Is.EqualTo("Weapon"));
     }
 
+    // A weapon can go to the weapon's position alone (Gameplay Systems §11.1), so a row stored in an accessory position
+    // keeps its character out, as any misplaced row does.
+    [Test]
+    public void Load_OfAWeaponWornInAnAccessoryPosition_IsRefused_AndTheDataIsKept()
+    {
+        var server = new TestServer();
+        server.Disconnect(server.EnterWorld(7));
+        server.Tick(2);
+        server.Store.GiveItems(7, Sword, 1, 1, 1);
+        long sword = RowOf(server, 7, Sword);
+        server.Store.Wear(7, sword, "Accessory2");
+
+        ConnectionId connection = server.Connect();
+        server.SignInWithCharacter(connection, 7);
+        server.SendEnterWorld(connection, 7);
+        server.TickUntil(() => server.SessionOf(connection).State != SessionState.EnteringWorld);
+
+        Assert.That(server.SessionOf(connection).State, Is.EqualTo(SessionState.Authenticated));
+        Assert.That(
+            server.Log.Entries
+                .Where(entry => entry.EventId.Name == "CharacterContentMismatch")
+                .Select(entry => entry.Message),
+            Has.Some.Contains("accessory2 'item.weapon.training_sword'"));
+        Assert.That(SlotOf(server, 7, sword), Is.EqualTo("Accessory2"));
+    }
+
     [Test]
     public void OneInventoryOperationAtATime_APickupAndAnEquipRefuseEachOtherWithReason9()
     {

@@ -19,7 +19,7 @@ public sealed class UnequipCommit
 
     public long CharacterId { get; }
 
-    /// <summary><c>Weapon</c> or <c>Armor</c>.</summary>
+    /// <summary>The emptied position's stored name, one of the eight (Persistence §4).</summary>
     public string Slot { get; }
 
     public DateTime At { get; }

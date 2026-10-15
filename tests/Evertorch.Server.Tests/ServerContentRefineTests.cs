@@ -86,7 +86,7 @@ public sealed class ServerContentRefineTests
         IReadOnlyList<string> problems = ProblemsOf(files);
 
         Assert.That(problems, Has.Member($"{Items}: item.weapon.iron_sword: names unknown refine table 'refine.axe'"));
-        Assert.That(problems, Has.Member($"{Items}: {gel}: is only for a weapon or armor"));
+        Assert.That(problems, Has.Member($"{Items}: {gel}: is only for equipment"));
     }
 
     [Test]

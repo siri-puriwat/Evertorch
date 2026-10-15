@@ -133,7 +133,7 @@ public sealed class CardContentTests
         return result.Diagnostics.Select(diagnostic => (diagnostic.File, diagnostic.FieldPath)).ToArray();
     }
 
-    [TestCase("fits: weapon", "fits: shield", "fits")]
+    [TestCase("fits: weapon", "fits: ring", "fits")]
     [TestCase("fits: weapon\n", "", "fits")]
     [TestCase("    attack: 8", "    attack: 10000", "server.card.attack")]
     [TestCase("      str: 2", "      str: 10000", "server.card.bonus.str")]
@@ -298,7 +298,7 @@ public sealed class CardContentTests
             ItemCard card = authored.Definition.Card!;
             Assert.That(
                 (card.Fits, card.Bonus.Stats, card.Bonus.Attack, card.Bonus.BossDamagePercent, card.RemovalFee),
-                Is.EqualTo((EquipmentSlot.Weapon, new PrimaryStats(2, 0, 0, 0, 0, 0), 8, 20, 200)));
+                Is.EqualTo((ItemType.Weapon, new PrimaryStats(2, 0, 0, 0, 0, 0), 8, 20, 200)));
             Assert.That(
                 (authored.Prefix, authored.Description),
                 Is.EqualTo(("Keen", "STR +2, attack +8, and damage to bosses +20%.")));
@@ -484,14 +484,14 @@ public sealed class CardContentTests
             Is.EqualTo(
                 new[]
                 {
-                    ("item.card.barrow_crawler", EquipmentSlot.Armor, 999, 1, 0, 600, 2400, 240, 24000),
-                    ("item.card.forest_crawler", EquipmentSlot.Weapon, 999, 1, 0, 200, 800, 80, 8000),
-                    ("item.card.gloom_wisp", EquipmentSlot.Weapon, 999, 1, 0, 600, 2400, 240, 24000),
-                    ("item.card.grotto_crawler", EquipmentSlot.Armor, 999, 1, 0, 600, 2400, 240, 24000),
-                    ("item.card.hollow_wisp", EquipmentSlot.Weapon, 999, 1, 0, 600, 2400, 240, 24000),
-                    ("item.card.slime_monarch", EquipmentSlot.Armor, 999, 1, 0, 5000, 24000, 2400, 240000),
-                    ("item.card.spark_wisp", EquipmentSlot.Weapon, 999, 1, 0, 200, 800, 80, 8000),
-                    ("item.card.training_slime", EquipmentSlot.Armor, 999, 1, 0, 200, 800, 80, 8000)
+                    ("item.card.barrow_crawler", ItemType.Armor, 999, 1, 0, 600, 2400, 240, 24000),
+                    ("item.card.forest_crawler", ItemType.Weapon, 999, 1, 0, 200, 800, 80, 8000),
+                    ("item.card.gloom_wisp", ItemType.Weapon, 999, 1, 0, 600, 2400, 240, 24000),
+                    ("item.card.grotto_crawler", ItemType.Armor, 999, 1, 0, 600, 2400, 240, 24000),
+                    ("item.card.hollow_wisp", ItemType.Weapon, 999, 1, 0, 600, 2400, 240, 24000),
+                    ("item.card.slime_monarch", ItemType.Armor, 999, 1, 0, 5000, 24000, 2400, 240000),
+                    ("item.card.spark_wisp", ItemType.Weapon, 999, 1, 0, 200, 800, 80, 8000),
+                    ("item.card.training_slime", ItemType.Armor, 999, 1, 0, 200, 800, 80, 8000)
                 }),
             "stacking to 999, selling to no shop, every one listable at ten times its base at most");
         Assert.That(
@@ -539,7 +539,7 @@ public sealed class CardContentTests
             "each monster's own card last but its converter and its remedy, so every earlier draw keeps its place");
         Assert.That(
             result.Content.Items
-                .Where(item => item.Definition.Slot != EquipmentSlot.None)
+                .Where(item => item.Definition.IsEquipment)
                 .Select(item => (item.Definition.Id.Value, item.Definition.Slots))
                 .OrderBy(item => item.Value, StringComparer.Ordinal),
             Is.EqualTo(

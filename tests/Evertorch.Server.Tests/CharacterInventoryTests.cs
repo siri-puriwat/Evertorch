@@ -110,9 +110,24 @@ public sealed class CharacterInventoryTests
     [Test]
     public void SlotOf_AStoredSlotNoSlotHas_Throws()
     {
-        Action read = () => CharacterInventory.SlotOf(new StoredItem(1, SwordId, 1, "Shield"));
+        Action read = () => CharacterInventory.SlotOf(new StoredItem(1, SwordId, 1, "Ring"));
 
         Assert.That(read, Throws.InstanceOf<InvalidOperationException>());
+    }
+
+    [Test]
+    public void StoredNameOf_EachOfTheEightPositions_IsItsOwnName_WhichSlotOfReadsBack()
+    {
+        Assert.That(
+            EquipmentPositions.All.Select(CharacterInventory.StoredNameOf),
+            Is.EqualTo(
+                new[] { "Weapon", "Armor", "Headgear", "Shield", "Garment", "Footwear", "Accessory1", "Accessory2" }));
+        Assert.That(
+            EquipmentPositions.All.Select(slot =>
+                CharacterInventory.SlotOf(new StoredItem(1, SwordId, 1, CharacterInventory.StoredNameOf(slot)))),
+            Is.EqualTo(EquipmentPositions.All));
+        Action none = () => CharacterInventory.StoredNameOf(EquipmentSlot.None);
+        Assert.That(none, Throws.InstanceOf<ArgumentOutOfRangeException>());
     }
 }
 }

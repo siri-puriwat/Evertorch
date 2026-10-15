@@ -75,7 +75,7 @@ public sealed class ServerContentAilmentTests
     [TestCase(Items, Keen, "card.inflict", "{\"poison\": 1.5}", "must be a chance from 0.0001 to 1")]
     [TestCase(Items, Keen, "card.inflict", "{\"none\": 0.05}", "unknown name")]
     [TestCase(Items, Keen, "card.inflict", "[]", "must be an object")]
-    [TestCase(Items, Keen, "card.resist", "{\"stun\": 30}", "is only for a card that fits armor")]
+    [TestCase(Items, Keen, "card.resist", "{\"stun\": 30}", "is not for a card that fits a weapon")]
     [TestCase(Items, Hardy, "card.inflict", "{\"poison\": 0.05}", "is only for a card that fits a weapon")]
     [TestCase(Items, Hardy, "card.resist", "{\"stun\": 101}", "must be at most 100")]
     [TestCase(Items, Hardy, "card.resist", "{\"stun\": 0}", "must be at least 1")]

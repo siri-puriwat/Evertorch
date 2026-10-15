@@ -62,7 +62,7 @@ internal static class ClientProjection
                 writer.WriteString("held", authored.Held);
             }
 
-            if (item.Slot != EquipmentSlot.None)
+            if (item.IsEquipment)
             {
                 writer.WriteNumber("slots", item.Slots);
             }

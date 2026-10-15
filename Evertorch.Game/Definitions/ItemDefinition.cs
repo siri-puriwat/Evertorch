@@ -42,7 +42,7 @@ public sealed class ItemDefinition
 
     public int SellPrice { get; }
 
-    /// <summary>A weapon's or an armor's values; null for every other type.</summary>
+    /// <summary>A piece of equipment's values; null for every other type.</summary>
     public ItemEquipment? Equipment { get; }
 
     /// <summary>What a consumable restores; null for every other type.</summary>
@@ -52,24 +52,19 @@ public sealed class ItemDefinition
     public ItemMarket? Market { get; }
 
     /// <summary>
-    ///     The refine table that refines a weapon or an armor (Gameplay Systems §11.6); null when the item is not refined.
+    ///     The refine table that refines a piece of equipment (Gameplay Systems §11.6); null when the item is not refined.
     /// </summary>
     public RefineDefinitionId? Refine { get; }
 
     /// <summary>
-    ///     The cards a weapon or an armor holds (Gameplay Systems §11.7); 0 for every other type.
+    ///     The cards a piece of equipment holds (Gameplay Systems §11.7); 0 for every other type.
     /// </summary>
     public int Slots { get; }
 
     /// <summary>A card's facts; null for every other type.</summary>
     public ItemCard? Card { get; }
 
-    /// <summary>The slot a weapon or an armor fills; <see cref="EquipmentSlot.None" /> for every other type.</summary>
-    public EquipmentSlot Slot => Type switch
-    {
-        ItemType.Weapon => EquipmentSlot.Weapon,
-        ItemType.Armor => EquipmentSlot.Armor,
-        _ => EquipmentSlot.None
-    };
+    /// <summary>Whether the item is worn: a weapon, armor, or a piece of another category (Gameplay Systems §11.1).</summary>
+    public bool IsEquipment => EquipmentPositions.IsEquipment(Type);
 }
 }

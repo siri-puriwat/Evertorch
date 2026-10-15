@@ -25,6 +25,7 @@ public sealed class MigrationUpgradeTests
     private const string AddMarketBoard = "20261010111957_AddMarketBoard";
     private const string AddRefining = "20261011013231_AddRefining";
     private const string AddCards = "20261012164717_AddCards";
+    private const string AddSavedStatusEffects = "20261014172003_AddSavedStatusEffects";
     private const string ForeignKeyViolation = "23503";
     private const string CheckViolation = "23514";
     private const string UndefinedTable = "42P01";
@@ -403,6 +404,74 @@ public sealed class MigrationUpgradeTests
             SqlStateOf(sql, $"DELETE FROM economy_ledger WHERE actor_character_id = {character}"),
             Is.EqualTo("23001"),
             "still append-only");
+    }
+
+    // The eight positions widen one check (Persistence §4): the migration changes no row, refined and carded gear stays
+    // worn where it was, and saved statuses stay.
+    [Test]
+    public void Upgrade_FromAddSavedStatusEffects_KeepsEveryRow_AndWidensTheEquipmentSlots()
+    {
+        using var database = PostgresFixture.Start(targetMigration: AddSavedStatusEffects);
+        var sql = new Sql(database.ConnectionString);
+        long account = sql.InsertAccount();
+        long character = sql.InsertCharacter(account, Sql.UniqueName("Up"));
+        long other = sql.InsertCharacter(sql.InsertAccount(), Sql.UniqueName("Up"));
+        long weapon = sql.Scalar(
+            "INSERT INTO inventory_items (character_id, item_definition_id, quantity, refine_level, version, "
+            + "instance_data_json) VALUES "
+            + $"({character}, 'item.weapon.iron_sword', 1, 7, 0, '{{\"cards\": [\"item.card.forest_crawler\"]}}') "
+            + "RETURNING id");
+        long armor = sql.Scalar(
+            "INSERT INTO inventory_items (character_id, item_definition_id, quantity, refine_level, version, "
+            + "instance_data_json) VALUES "
+            + $"({character}, 'item.armor.leather', 1, 4, 0, '{{\"cards\": [\"item.card.training_slime\"]}}') "
+            + "RETURNING id");
+        long unworn = sql.InsertItem(character, 1);
+        sql.Execute(Sql.EquipmentInsert(character, "Weapon", weapon));
+        sql.Execute(Sql.EquipmentInsert(character, "Armor", armor));
+        sql.Scalar(Sql.LedgerInsert(Guid.NewGuid(), character, "equip"));
+        sql.Execute(Sql.StatusEffectInsert(character, "status.focus", 30_000, 100));
+        sql.Execute(Sql.QuestInsert(character, "quest.crawler_hunt", "completed", 5));
+        sql.Execute(Sql.SessionTokenInsert(account));
+        sql.Execute(Sql.SkillInsert(character, "skill.strike", 2));
+        sql.Scalar(Sql.PartyInsert(character, character, other));
+        sql.Execute($"INSERT INTO account_storages (account_id, revision, version) VALUES ({account}, 1, 0)");
+        sql.Execute(
+            "INSERT INTO storage_items (account_id, item_definition_id, quantity, refine_level, version) "
+            + $"VALUES ({account}, 'item.armor.cloth', 1, 4, 0)");
+        long listing = sql.Scalar(Sql.ListingInsert(character, "item.material.gloom_dust", 5, 3, 56));
+        sql.Execute(Sql.SaleInsert(Guid.NewGuid(), listing, character, other, 2, 56));
+        sql.Execute(Sql.RefineAttemptInsert(Guid.NewGuid(), character, "refined", 6, "7"));
+        sql.Execute(Sql.CardChangeInsert(Guid.NewGuid(), character, "insert", 1));
+        string? headgearBefore = SqlStateOf(sql, Sql.EquipmentInsert(character, "Headgear", unworn));
+        string[] more =
+        {
+            "character_quests", "session_tokens", "character_skills", "parties", "party_members",
+            "account_storages", "storage_items", "market_listings", "market_sales", "refine_attempts", "card_changes",
+            "character_status_effects"
+        };
+        string before = Dump(sql, more);
+
+        EvertorchDatabase.ApplyMigrationsAsync(database.ConnectionString, CancellationToken.None)
+            .GetAwaiter()
+            .GetResult();
+
+        IReadOnlyList<string> pending = EvertorchDatabase
+            .GetPendingMigrationsAsync(database.ConnectionString, CancellationToken.None)
+            .GetAwaiter()
+            .GetResult();
+        Assert.That(headgearBefore, Is.EqualTo(CheckViolation), "two slots before");
+        Assert.That(pending, Is.Empty);
+        Assert.That(Dump(sql, more), Is.EqualTo(before), "every row as it was");
+        Assert.That(SqlStateOf(sql, Sql.EquipmentInsert(character, "Headgear", unworn)), Is.Null, "a headgear now");
+        Assert.That(
+            SqlStateOf(sql, Sql.EquipmentInsert(character, "Accessory2", sql.InsertItem(character, 1))),
+            Is.Null,
+            "and the second accessory");
+        Assert.That(
+            SqlStateOf(sql, Sql.EquipmentInsert(character, "Ring", sql.InsertItem(character, 1))),
+            Is.EqualTo(CheckViolation),
+            "but no ninth name");
     }
 
     // Every existing character stays at job level 1 with no learned skill (Persistence §4; owner decision 8 of the

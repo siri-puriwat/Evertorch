@@ -50,7 +50,7 @@ public sealed class ShopMessagesTests
             "pickup_slime_gel",
             "item_slime_gel",
             stackLimit: 999,
-            fits: EquipmentSlot.Weapon,
+            fits: ItemType.Weapon,
             prefix: prefix,
             description: "Attack +8.");
     }

@@ -31,7 +31,7 @@ public sealed class EquipCommit
 
     public long InventoryItemId { get; }
 
-    /// <summary><c>Weapon</c> or <c>Armor</c>.</summary>
+    /// <summary>The destination's stored name, one of the eight (Persistence §4).</summary>
     public string Slot { get; }
 
     public IReadOnlyCollection<ReportedRow> ReportRows { get; }

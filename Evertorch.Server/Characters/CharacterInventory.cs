@@ -13,9 +13,6 @@ namespace Evertorch.Server
 /// </summary>
 public sealed class CharacterInventory
 {
-    private const string WeaponSlotName = "Weapon";
-    private const string ArmorSlotName = "Armor";
-
     private readonly List<InventoryEntry> m_rows = new();
 
     public CharacterInventory(uint revision, IEnumerable<InventoryEntry> rows)
@@ -56,13 +53,20 @@ public sealed class CharacterInventory
     /// </summary>
     public static EquipmentSlot SlotOf(StoredItem item)
     {
-        return item.EquippedSlot switch
+        if (item.EquippedSlot == null)
         {
-            null => EquipmentSlot.None,
-            WeaponSlotName => EquipmentSlot.Weapon,
-            ArmorSlotName => EquipmentSlot.Armor,
-            _ => throw new InvalidOperationException($"Row {item.Id} is worn in an unknown slot '{item.EquippedSlot}'.")
-        };
+            return EquipmentSlot.None;
+        }
+
+        foreach (EquipmentSlot slot in EquipmentPositions.All)
+        {
+            if (StoredNameOf(slot) == item.EquippedSlot)
+            {
+                return slot;
+            }
+        }
+
+        throw new InvalidOperationException($"Row {item.Id} is worn in an unknown slot '{item.EquippedSlot}'.");
     }
 
     /// <summary>
@@ -70,13 +74,13 @@ public sealed class CharacterInventory
     /// </summary>
     public static string StoredNameOf(EquipmentSlot slot)
     {
-        return slot switch
+        if (!EquipmentPositions.IsPosition(slot))
         {
-            EquipmentSlot.Weapon => WeaponSlotName,
-            EquipmentSlot.Armor => ArmorSlotName,
-            _ => throw new ArgumentOutOfRangeException(nameof(slot), slot,
-                "Only the weapon and armor slots are stored.")
-        };
+            throw new ArgumentOutOfRangeException(nameof(slot), slot, "Only the eight positions are stored.");
+        }
+
+        // The stored names are the enum's own, body armor's "Armor" among them (Persistence §4).
+        return slot.ToString();
     }
 
     public bool TryGetRow(long inventoryItem, out InventoryEntry row)

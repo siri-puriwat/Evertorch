@@ -13,30 +13,25 @@ public static class CardMessages
     public const string InsertPrompt = "Press again to insert";
 
     /// <summary>
-    ///     "Fits: weapon" or "Fits: armor".
+    ///     "Fits: weapon", "Fits: armor", "Fits: headgear", and the like.
     /// </summary>
-    public static string Fits(EquipmentSlot fits)
+    public static string Fits(ItemType fits)
     {
-        return fits switch
-        {
-            EquipmentSlot.Weapon => "Fits: weapon",
-            EquipmentSlot.Armor => "Fits: armor",
-            _ => "Fits: nothing"
-        };
+        return EquipmentPositions.IsEquipment(fits) ? $"Fits: {fits.ToString().ToLowerInvariant()}" : "Fits: nothing";
     }
 
     /// <summary>
     ///     How many free slots <paramref name="row" /> has for a card that fits <paramref name="fits" />: 0 for a worn
-    ///     row, a row of another kind, or one whose slots are full.
+    ///     row, a row of another category, or one whose slots are full.
     /// </summary>
-    public static int FreeSlots(ClientContent? content, InventoryEntry row, EquipmentSlot fits)
+    public static int FreeSlots(ClientContent? content, InventoryEntry row, ItemType fits)
     {
         if (row.Slot != EquipmentSlot.None
-            || fits == EquipmentSlot.None
+            || !EquipmentPositions.IsEquipment(fits)
             || content == null
             || !content.TryGetItem(row.Item, out ClientItem? item)
             || item == null
-            || SlotOf(item.Type) != fits)
+            || item.Type != fits)
         {
             return 0;
         }
@@ -109,27 +104,17 @@ public static class CardMessages
             return $"Take off {name} first.";
         }
 
-        EquipmentSlot fits = content != null && content.TryGetItem(request.Card, out ClientItem? card) && card != null
+        ItemType fits = content != null && content.TryGetItem(request.Card, out ClientItem? card) && card != null
             ? card.Fits
-            : EquipmentSlot.None;
+            : ItemType.Material;
         return content != null && IsOfKind(content, row, fits)
             ? $"{name} has no free slot."
             : $"{ShopMessages.ItemName(content, request.Card)} does not fit {name}.";
     }
 
-    private static bool IsOfKind(ClientContent content, InventoryEntry row, EquipmentSlot fits)
+    private static bool IsOfKind(ClientContent content, InventoryEntry row, ItemType fits)
     {
-        return content.TryGetItem(row.Item, out ClientItem? item) && item != null && SlotOf(item.Type) == fits;
-    }
-
-    private static EquipmentSlot SlotOf(ItemType type)
-    {
-        return type switch
-        {
-            ItemType.Weapon => EquipmentSlot.Weapon,
-            ItemType.Armor => EquipmentSlot.Armor,
-            _ => EquipmentSlot.None
-        };
+        return content.TryGetItem(row.Item, out ClientItem? item) && item != null && item.Type == fits;
     }
 
     private static bool TryFind(IReadOnlyList<InventoryEntry> rows, long inventoryItem, out InventoryEntry row)

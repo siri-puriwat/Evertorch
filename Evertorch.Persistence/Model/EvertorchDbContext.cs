@@ -211,7 +211,9 @@ internal sealed class EvertorchDbContext : DbContext
         {
             table.HasCheckConstraint(
                 "ck_equipment_slot",
-                $"slot IN ('{EquipmentRow.WeaponSlot}', '{EquipmentRow.ArmorSlot}')");
+                $"slot IN ('{EquipmentRow.WeaponSlot}', '{EquipmentRow.ArmorSlot}', '{EquipmentRow.HeadgearSlot}', "
+                + $"'{EquipmentRow.ShieldSlot}', '{EquipmentRow.GarmentSlot}', '{EquipmentRow.FootwearSlot}', "
+                + $"'{EquipmentRow.FirstAccessorySlot}', '{EquipmentRow.SecondAccessorySlot}')");
         });
         equipment.HasKey(row => new { row.CharacterId, row.Slot }).HasName("pk_equipment");
         equipment.Property(row => row.Slot).HasMaxLength(MaxSlotLength).IsRequired();

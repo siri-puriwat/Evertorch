@@ -3,16 +3,16 @@ using System;
 namespace Evertorch.Game
 {
 /// <summary>
-///     A card's facts (Gameplay Systems §11.7): the kind of item it fits, what it adds while that item is worn, and the
-///     Smith's fee to take it out. The fit reaches the client; the rest is server-only content.
+///     A card's facts (Gameplay Systems §11.7): the category of item it fits, what it adds while that item is worn,
+///     and the Smith's fee to take it out. The fit reaches the client; the rest is server-only content.
 /// </summary>
 public sealed class ItemCard
 {
-    public ItemCard(EquipmentSlot fits, CardBonus bonus, int removalFee)
+    public ItemCard(ItemType fits, CardBonus bonus, int removalFee)
     {
-        if (fits != EquipmentSlot.Weapon && fits != EquipmentSlot.Armor)
+        if (!EquipmentPositions.IsEquipment(fits))
         {
-            throw new ArgumentOutOfRangeException(nameof(fits), fits, "A card fits a weapon or an armor.");
+            throw new ArgumentOutOfRangeException(nameof(fits), fits, "A card fits a category of equipment.");
         }
 
         if (removalFee < 0)
@@ -25,7 +25,8 @@ public sealed class ItemCard
         RemovalFee = removalFee;
     }
 
-    public EquipmentSlot Fits { get; }
+    /// <summary>The category of equipment the card enters.</summary>
+    public ItemType Fits { get; }
 
     public CardBonus Bonus { get; }
 

@@ -478,7 +478,7 @@ namespace Evertorch.Persistence
 
                     b.ToTable("equipment", null, t =>
                         {
-                            t.HasCheckConstraint("ck_equipment_slot", "slot IN ('Weapon', 'Armor')");
+                            t.HasCheckConstraint("ck_equipment_slot", "slot IN ('Weapon', 'Armor', 'Headgear', 'Shield', 'Garment', 'Footwear', 'Accessory1', 'Accessory2')");
                         });
                 });
 

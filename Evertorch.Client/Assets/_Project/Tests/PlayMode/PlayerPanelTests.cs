@@ -165,7 +165,7 @@ public sealed class PlayerPanelTests
     // Monarch Mantle with one, and three cards.
     private static IEnumerable<ClientItem> CardedItems()
     {
-        ClientItem Card(string id, string name, EquipmentSlot fits, string prefix)
+        ClientItem Card(string id, string name, ItemType fits, string prefix)
         {
             return new ClientItem(
                 new ItemDefinitionId(id),
@@ -195,9 +195,9 @@ public sealed class PlayerPanelTests
                 "pickup_cloth_armor",
                 "armor",
                 slots: 1),
-            Card(Keen, "Forest Crawler Card", EquipmentSlot.Weapon, "Keen"),
-            Card(Arcane, "Spark Wisp Card", EquipmentSlot.Weapon, "Arcane"),
-            Card(Shelled, "Grotto Crawler Card", EquipmentSlot.Armor, "Shelled")
+            Card(Keen, "Forest Crawler Card", ItemType.Weapon, "Keen"),
+            Card(Arcane, "Spark Wisp Card", ItemType.Weapon, "Arcane"),
+            Card(Shelled, "Grotto Crawler Card", ItemType.Armor, "Shelled")
         };
     }
 

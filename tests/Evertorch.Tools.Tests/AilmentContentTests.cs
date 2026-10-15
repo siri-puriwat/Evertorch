@@ -127,7 +127,7 @@ public sealed class AilmentContentTests
         "server.card.inflict.confusion", "must be one of: poison, stun")]
     [TestCase(WeaponCardText, "poison", "stun", "server.card.inflict.stun", "names ailment 'stun', which no status is")]
     [TestCase(WeaponCardText, "inflict: { poison: 0.0731 }", "resist: { poison: 30 }", "server.card.resist",
-        "is only for a card that fits armor")]
+        "is not for a card that fits a weapon")]
     [TestCase(WeaponCardText, "7.31% chance", "7.3% chance", "client.description",
         "must state every value of the card above 0, and leaves out 7.31")]
     [TestCase(WeaponCardText, "7.31% chance", "123456789012345678901234567890% chance", "client.description",

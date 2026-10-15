@@ -33,7 +33,7 @@ public sealed class CardMessagesTests
                 "pickup_slime_gel",
                 "item_slime_gel",
                 stackLimit: 999,
-                fits: EquipmentSlot.Weapon,
+                fits: ItemType.Weapon,
                 prefix: "Keen",
                 description: "Attack +8."),
             [Bane] = new(
@@ -43,7 +43,7 @@ public sealed class CardMessagesTests
                 "pickup_slime_gel",
                 "item_slime_gel",
                 stackLimit: 999,
-                fits: EquipmentSlot.Weapon,
+                fits: ItemType.Weapon,
                 prefix: "Bane",
                 description: "Damage to bosses +20 %."),
             [Gel] = new(Gel, "Slime Gel", ItemType.Material, "pickup_slime_gel", "gel")
@@ -212,21 +212,22 @@ public sealed class CardMessagesTests
         Assert.That(
             new[]
             {
-                CardMessages.FreeSlots(content, new InventoryEntry(1, Sword, 1), EquipmentSlot.Weapon),
+                CardMessages.FreeSlots(content, new InventoryEntry(1, Sword, 1), ItemType.Weapon),
                 CardMessages.FreeSlots(
                     content,
                     new InventoryEntry(2, Sword, 1, EquipmentSlot.None, 0, new[] { Keen }),
-                    EquipmentSlot.Weapon),
+                    ItemType.Weapon),
                 CardMessages.FreeSlots(content, new InventoryEntry(3, Sword, 1, EquipmentSlot.Weapon),
-                    EquipmentSlot.Weapon),
-                CardMessages.FreeSlots(content, new InventoryEntry(4, Cloth, 1), EquipmentSlot.Weapon),
-                CardMessages.FreeSlots(content, new InventoryEntry(5, Gel, 3), EquipmentSlot.Weapon)
+                    ItemType.Weapon),
+                CardMessages.FreeSlots(content, new InventoryEntry(4, Cloth, 1), ItemType.Weapon),
+                CardMessages.FreeSlots(content, new InventoryEntry(5, Gel, 3), ItemType.Weapon)
             },
             Is.EqualTo(new[] { 2, 1, 0, 0, 0 }),
             "free, one taken, worn, armor, a gel");
         Assert.That(
-            (CardMessages.Fits(EquipmentSlot.Weapon), CardMessages.Fits(EquipmentSlot.Armor)),
-            Is.EqualTo(("Fits: weapon", "Fits: armor")));
+            (CardMessages.Fits(ItemType.Weapon), CardMessages.Fits(ItemType.Armor),
+                CardMessages.Fits(ItemType.Accessory), CardMessages.Fits(ItemType.Material)),
+            Is.EqualTo(("Fits: weapon", "Fits: armor", "Fits: accessory", "Fits: nothing")));
     }
 
     [Test]

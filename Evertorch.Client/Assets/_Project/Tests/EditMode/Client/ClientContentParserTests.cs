@@ -245,8 +245,9 @@ public sealed class ClientContentParserTests
     [TestCase(
         ClientContentParser.ItemsFile,
         "\"type\":\"material\"",
-        "\"type\":\"shield\"",
-        "Item 'item.material.slime_gel': type is not material, consumable, weapon, armor, or card")]
+        "\"type\":\"ring\"",
+        "Item 'item.material.slime_gel': type is not material, consumable, weapon, armor, card, headgear, shield, "
+        + "garment, footwear, or accessory")]
     [TestCase(
         ClientContentParser.SkillsFile,
         "\"targetType\":\"self\"",
@@ -436,8 +437,8 @@ public sealed class ClientContentParserTests
     // Content Pipeline §5: a card's fit, prefix, and description, bounded as the tools bound them, and slots only where
     // an item holds cards.
     [TestCase("\"type\":\"material\"",
-        "\"type\":\"card\",\"fits\":\"shield\",\"prefix\":\"Gooey\",\"description\":\"Attack +8.\"",
-        "fits is not weapon or armor")]
+        "\"type\":\"card\",\"fits\":\"ring\",\"prefix\":\"Gooey\",\"description\":\"Attack +8.\"",
+        "fits is not a category of equipment")]
     [TestCase(
         "\"type\":\"material\"",
         "\"type\":\"card\",\"fits\":\"weapon\",\"prefix\":\"gooey\",\"description\":\"Attack +8.\"",
@@ -457,6 +458,12 @@ public sealed class ClientContentParserTests
     [TestCase("\"type\":\"material\"", "\"type\":\"material\",\"slots\":1", "slots is outside 0 to 0")]
     [TestCase("\"type\":\"material\"", "\"type\":\"weapon\",\"slots\":5", "slots is outside 0 to 4")]
     [TestCase("\"type\":\"material\"", "\"type\":\"armor\",\"slots\":2", "slots is outside 0 to 1")]
+    [TestCase("\"type\":\"material\"", "\"type\":\"headgear\",\"slots\":2", "slots is outside 0 to 1")]
+    [TestCase("\"type\":\"material\"", "\"type\":\"accessory\",\"slots\":2", "slots is outside 0 to 1")]
+    [TestCase(
+        "\"type\":\"material\"",
+        "\"type\":\"card\",\"fits\":\"card\",\"prefix\":\"Gooey\",\"description\":\"Attack +8.\"",
+        "fits is not a category of equipment")]
     public void Parse_ForACardOrSlotsOutOfBounds_IsRefusedWithAReason(string oldText, string newText, string expected)
     {
         string items = Package.DefaultTexts(Maps)[ClientContentParser.ItemsFile].Replace(oldText, newText);
@@ -480,6 +487,34 @@ public sealed class ClientContentParserTests
         }
     }
 
+    // The five categories beyond the weapon and armor, and a card fitting one (Content Pipeline §5).
+    [TestCase("headgear", ItemType.Headgear)]
+    [TestCase("shield", ItemType.Shield)]
+    [TestCase("garment", ItemType.Garment)]
+    [TestCase("footwear", ItemType.Footwear)]
+    [TestCase("accessory", ItemType.Accessory)]
+    public void Parse_APieceOfANewCategory_ReadsItsTypeAndSlot_AndACardMayFitIt(string name, ItemType type)
+    {
+        string items = Package.DefaultTexts(Maps)[ClientContentParser.ItemsFile]
+            .Replace("\"type\":\"material\"", $"\"type\":\"{name}\",\"slots\":1");
+        string cards = Package.DefaultTexts(Maps)[ClientContentParser.ItemsFile]
+            .Replace(
+                "\"type\":\"material\"",
+                $"\"type\":\"card\",\"fits\":\"{name}\",\"prefix\":\"Gooey\",\"description\":\"Attack +8.\"");
+        var piecePackage = Package.With(ClientContentParser.ItemsFile, items);
+        var cardPackage = Package.With(ClientContentParser.ItemsFile, cards);
+
+        ClientContent? piece = ClientContentParser.Parse(piecePackage.Manifest, piecePackage.Files, out string error);
+        ClientContent? card = ClientContentParser.Parse(cardPackage.Manifest, cardPackage.Files, out string cardError);
+
+        Assert.That((error, cardError), Is.EqualTo((string.Empty, string.Empty)));
+        var gel = new ItemDefinitionId("item.material.slime_gel");
+        Assert.That(piece!.TryGetItem(gel, out ClientItem? read), Is.True);
+        Assert.That((read!.Type, read.Slots), Is.EqualTo((type, 1)));
+        Assert.That(card!.TryGetItem(gel, out ClientItem? fitting), Is.True);
+        Assert.That(fitting!.Fits, Is.EqualTo(type));
+    }
+
     // A card is an item of its own type (Gameplay Systems §11.7).
     [Test]
     public void Parse_ACard_ReadsItsTypeFitPrefixAndDescription()
@@ -495,7 +530,7 @@ public sealed class ClientContentParserTests
         Assert.That(content!.TryGetItem(new ItemDefinitionId("item.material.slime_gel"), out ClientItem? gel), Is.True);
         Assert.That(
             (gel!.Type, gel.Fits, gel.Prefix, gel.Description, gel.Slots),
-            Is.EqualTo((ItemType.Card, EquipmentSlot.Weapon, "Gooey", "Attack +8.", 0)));
+            Is.EqualTo((ItemType.Card, ItemType.Weapon, "Gooey", "Attack +8.", 0)));
     }
 
     [Test]
@@ -623,7 +658,7 @@ public sealed class ClientContentParserTests
             Is.True);
         Assert.That(
             (card!.Type, card.DisplayName, card.Fits, card.Prefix, card.Description),
-            Is.EqualTo((ItemType.Card, "Forest Crawler Card", EquipmentSlot.Weapon, "Keen",
+            Is.EqualTo((ItemType.Card, "Forest Crawler Card", ItemType.Weapon, "Keen",
                 "Attack +8, damage to Small +10%, and a 5% chance to poison on a hit.")));
         Assert.That(
             content.TryGetItem(new ItemDefinitionId("item.weapon.iron_sword"), out ClientItem? sword)

@@ -183,7 +183,7 @@ public sealed class CardWindow : MonoBehaviour
         m_name!.text = item != null ? item.DisplayName : card.Item.Value;
         AppendText(m_name.text);
         AddLine(item != null ? item.Description : string.Empty, true);
-        EquipmentSlot fits = item != null ? item.Fits : EquipmentSlot.None;
+        ItemType fits = item != null ? item.Fits : ItemType.Material;
         AddLine(CardMessages.Fits(fits), false);
         int listed = 0;
         foreach (InventoryEntry row in inventory.Rows)

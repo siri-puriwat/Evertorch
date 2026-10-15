@@ -5,7 +5,7 @@ namespace Evertorch.Client
 {
 /// <summary>
 ///     The client-safe part of an item definition: its name, its type, how many a stack holds, the logical key of its view
-///     as a world drop, its icon, a weapon's model in a hand, the cards a weapon or an armor holds, and a card's fit,
+///     as a world drop, its icon, a weapon's model in a hand, the cards a piece of equipment holds, and a card's fit,
 ///     prefix, and description, which the player sees.
 /// </summary>
 public sealed class ClientItem
@@ -19,7 +19,7 @@ public sealed class ClientItem
         string heldKey = "",
         int stackLimit = 1,
         int slots = 0,
-        EquipmentSlot fits = EquipmentSlot.None,
+        ItemType fits = ItemType.Material,
         string prefix = "",
         string description = "")
     {
@@ -60,14 +60,14 @@ public sealed class ClientItem
     public int StackLimit { get; }
 
     /// <summary>
-    ///     The cards a weapon or an armor holds, " [2]" in its name (Prototype Content §2); 0 for every other item.
+    ///     The cards a piece of equipment holds, " [2]" in its name (Prototype Content §2); 0 for every other item.
     /// </summary>
     public int Slots { get; }
 
     /// <summary>
-    ///     The kind of item a card fits; <see cref="EquipmentSlot.None" /> for every other item.
+    ///     The category of equipment a card fits; <see cref="ItemType.Material" />, no category, for every other item.
     /// </summary>
-    public EquipmentSlot Fits { get; }
+    public ItemType Fits { get; }
 
     /// <summary>
     ///     A card's word in the names of the items holding it, "Keen"; empty for every other item.
