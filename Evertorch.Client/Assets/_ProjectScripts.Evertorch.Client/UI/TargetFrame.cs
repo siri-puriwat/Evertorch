@@ -10,9 +10,9 @@ using UnityEngine.UI;
 namespace Evertorch.Client
 {
 /// <summary>
-///     The confirmed target (Prototype Content §2, §4): a monster's name, its HP ratio as a bar, its element, race, and
-///     size, its distance, how the player's attacks fare against it, and whether it is dead, or a selected player's
-///     name and job, "Ann · Vanguard", with its HP bar only for a party
+///     The confirmed target (Prototype Content §2, §4): a monster's name, its HP ratio as a bar, its element of the
+///     moment, race, size, and ailments, its distance, how the player's attacks fare against it, and whether it is dead,
+///     or a selected player's name and job, "Ann · Vanguard", with its ailments, and its HP bar only for a party
 ///     member, since others' HP is not shown, and Invite while the player could join the party (Prototype Content §2),
 ///     or Follow for a member (§4), beside Trade for anyone else while no trade is open (Gameplay Systems §16). It shows
 ///     only a target the server confirmed with <c>TargetChanged</c>, and the HP
@@ -77,11 +77,13 @@ public sealed class TargetFrame : MonoBehaviour
     private string m_label = string.Empty;
     private ClientMonster? m_hinted;
     private Element m_hintedElement;
+    private Element m_hintedDefense;
     private IReadOnlyList<SkillListEntry>? m_hintedSkills;
     private string m_hint = string.Empty;
     private string? m_shownName;
     private string? m_shownFacts;
     private string? m_shownHint;
+    private string? m_shownAilments;
     private int m_shownPermille = -1;
     private int m_shownTenths = -1;
     private bool m_isShownPlayer;
@@ -123,7 +125,8 @@ public sealed class TargetFrame : MonoBehaviour
             ShowPlayer(
                 PlayerLabel(target.Name,
                     BuildMessages.JobName(m_client.Content, new JobDefinitionId(target.DefinitionId))),
-                health / 1000f);
+                health / 1000f,
+                Ailments.Names(target.StateFlags));
             m_targetName = target.Name;
             UiBuilder.SetActive(m_invite!, CanInvite(m_client, target.Name));
             UiBuilder.SetActive(m_trade!, CanTrade(m_client, target.Name));
@@ -174,31 +177,50 @@ public sealed class TargetFrame : MonoBehaviour
             ratio,
             distance,
             isDead,
-            monster != null ? Facts(monster) : string.Empty,
-            CachedHint(monster, world.Sheet?.AttackElement ?? Element.Neutral, world.Skills, m_client.Content));
+            monster != null ? Facts(monster, target.StateFlags) : string.Empty,
+            CachedHint(
+                monster,
+                world.Sheet?.AttackElement ?? Element.Neutral,
+                monster != null ? ElementOf(monster, target.StateFlags) : Element.Neutral,
+                world.Skills,
+                m_client.Content));
     }
 
     /// <summary>
-    ///     A monster's element, race, and size, "Earth · Insect · Small" (Prototype Content §2).
+    ///     A monster's element of the moment, race, size, and ailments, "Earth · Insect · Small", or "Water · Insect ·
+    ///     Small · Poisoned · Frozen" while it is poisoned and frozen (Prototype Content §2).
     /// </summary>
-    public static string Facts(ClientMonster monster)
+    public static string Facts(ClientMonster monster, EntityStateFlags flags = EntityStateFlags.None)
     {
-        return $"{monster.Element} \u00B7 {monster.Race} \u00B7 {monster.Size}";
+        string facts = $"{ElementOf(monster, flags)} \u00B7 {monster.Race} \u00B7 {monster.Size}";
+        string ailments = Ailments.Names(flags);
+        return ailments.Length == 0 ? facts : $"{facts} \u00B7 {ailments}";
+    }
+
+    /// <summary>
+    ///     The element a monster defends with now: Water while it is frozen, else its own (Gameplay Systems §9.1).
+    /// </summary>
+    public static Element ElementOf(ClientMonster monster, EntityStateFlags flags)
+    {
+        return (flags & EntityStateFlags.Frozen) != 0 ? Element.Water : monster.Element;
     }
 
     /// <summary>
     ///     How the player's attacks fare against <paramref name="monster" />, "Swing 150% · Arcane Bolt 150%": the swing
     ///     with the attack element, then each learned skill that deals damage with its own element, a skill of the
-    ///     weapon's taking the swing's, each only when it is not 100 % (Gameplay Systems §3).
+    ///     weapon's taking the swing's, each only when it is not 100 % (Gameplay Systems §3), against
+    ///     <paramref name="defense" />, the monster's element of the moment, or else its own.
     /// </summary>
     public static string Hint(
         ClientMonster monster,
         Element attackElement,
         IReadOnlyList<SkillListEntry> skills,
-        ClientContent? content)
+        ClientContent? content,
+        Element? defense = null)
     {
+        Element against = defense ?? monster.Element;
         var parts = new List<string>();
-        AddMatchup(parts, "Swing", ElementTable.Percent(attackElement, monster.Element));
+        AddMatchup(parts, "Swing", ElementTable.Percent(attackElement, against));
         foreach (SkillListEntry entry in skills)
         {
             if (entry.Level > 0
@@ -210,7 +232,7 @@ public sealed class TargetFrame : MonoBehaviour
                 AddMatchup(
                     parts,
                     skill.DisplayName,
-                    ElementTable.Percent(ElementTable.Of(element, attackElement), monster.Element));
+                    ElementTable.Percent(ElementTable.Of(element, attackElement), against));
             }
         }
 
@@ -370,10 +392,11 @@ public sealed class TargetFrame : MonoBehaviour
     }
 
     /// <summary>
-    ///     A selected player: <paramref name="label" />, without a distance, and with the HP bar at
-    ///     <paramref name="ratio" /> for a party member whose status has come, or no bar.
+    ///     A selected player: <paramref name="label" />, without a distance, with the HP bar at
+    ///     <paramref name="ratio" /> for a party member whose status has come, or no bar, and its
+    ///     <paramref name="ailments" /> on the detail row.
     /// </summary>
-    public void ShowPlayer(string label, float? ratio = null)
+    public void ShowPlayer(string label, float? ratio = null, string ailments = "")
     {
         UiBuilder.SetActive(m_panel!, true);
         ShowName(label);
@@ -389,7 +412,7 @@ public sealed class TargetFrame : MonoBehaviour
             }
         }
 
-        if (m_isShownPlayer)
+        if (m_isShownPlayer && string.Equals(ailments, m_shownAilments, StringComparison.Ordinal))
         {
             return;
         }
@@ -398,7 +421,8 @@ public sealed class TargetFrame : MonoBehaviour
         m_shownTenths = -1;
         m_shownDead = false;
         m_shownHint = null;
-        Write(m_detail!, string.Empty);
+        m_shownAilments = ailments;
+        Write(m_detail!, ailments);
     }
 
     public void Hide()
@@ -466,10 +490,11 @@ public sealed class TargetFrame : MonoBehaviour
         return m_label;
     }
 
-    // The hint is built again only for another monster, attack element, or skill list.
+    // The hint is built again only for another monster, attack element, element of the moment, or skill list.
     private string CachedHint(
         ClientMonster? monster,
         Element attackElement,
+        Element defense,
         IReadOnlyList<SkillListEntry> skills,
         ClientContent? content)
     {
@@ -478,12 +503,16 @@ public sealed class TargetFrame : MonoBehaviour
             return string.Empty;
         }
 
-        if (!ReferenceEquals(monster, m_hinted) || attackElement != m_hintedElement || skills != m_hintedSkills)
+        if (!ReferenceEquals(monster, m_hinted)
+            || attackElement != m_hintedElement
+            || defense != m_hintedDefense
+            || skills != m_hintedSkills)
         {
             m_hinted = monster;
             m_hintedElement = attackElement;
+            m_hintedDefense = defense;
             m_hintedSkills = skills;
-            m_hint = Hint(monster, attackElement, skills, content);
+            m_hint = Hint(monster, attackElement, skills, content, defense);
         }
 
         return m_hint;
@@ -525,8 +554,13 @@ public sealed class TargetFrame : MonoBehaviour
         m_fill = UiBuilder.CreateBar("Bar", panel, BarBackColor, BarFillColor);
         m_fill.parent.gameObject.AddComponent<LayoutElement>().preferredHeight = BarHeight;
 
+        // The facts with many ailments wrap to a second line at a smaller size, within the row's height.
         m_facts = Ui.CreateLabel("Facts", panel);
         m_facts.alignment = TextAlignmentOptions.Center;
+        m_facts.textWrappingMode = TextWrappingModes.Normal;
+        m_facts.enableAutoSizing = true;
+        m_facts.fontSizeMin = 10f;
+        m_facts.fontSizeMax = m_facts.fontSize;
         m_detail = Ui.CreateLabel("Detail", panel);
         m_detail.alignment = TextAlignmentOptions.Center;
         m_detail.textWrappingMode = TextWrappingModes.NoWrap;

@@ -115,6 +115,12 @@ public sealed class ClientWorld
     public bool IsLocalDead { get; private set; }
 
     /// <summary>
+    ///     The local character's state flags as the last snapshot gave them, its ailments among them; the movement its
+    ///     own prediction draws.
+    /// </summary>
+    public EntityStateFlags LocalStateFlags { get; private set; }
+
+    /// <summary>
     ///     The basic attack's range, which the client walks within before asking for nothing more: the server checks
     ///     range itself when a swing begins.
     /// </summary>
@@ -232,6 +238,12 @@ public sealed class ClientWorld
     ///     A player this client sees now wears another weapon, or none.
     /// </summary>
     public event Action<RemoteEntity>? RemoteWornWeaponChanged;
+
+    /// <summary>
+    ///     A snapshot changed the ailments of an entity this client knows, the local player included; its flags before
+    ///     the change are passed along (Gameplay Systems §9.1).
+    /// </summary>
+    public event Action<EntityId, EntityStateFlags>? AilmentsChanged;
 
     public event Action? TargetChanged;
 
@@ -967,6 +979,9 @@ public sealed class ClientWorld
 
             if (state.Entity == LocalEntity)
             {
+                EntityStateFlags flagsBefore = LocalStateFlags;
+                LocalStateFlags = state.StateFlags;
+                NoticeAilments(LocalEntity, flagsBefore, state.StateFlags);
                 WorldPosition before = Predictor.Position;
                 Predictor.Reconcile(state, snapshot.LastProcessedInputSequence);
                 if (IsLocalDead)
@@ -982,14 +997,24 @@ public sealed class ClientWorld
             }
             else if (m_remotes.TryGetValue(state.Entity, out RemoteEntity? remote))
             {
+                EntityStateFlags flagsBefore = remote.StateFlags;
                 remote.StateFlags = state.StateFlags;
                 remote.Buffer.Add(serverTime, state.Position, state.Facing);
+                NoticeAilments(remote.Entity, flagsBefore, state.StateFlags);
             }
             else
             {
                 // The spawn travels on the reliable stream and may still be on its way.
                 UnknownEntityStates++;
             }
+        }
+    }
+
+    private void NoticeAilments(EntityId entity, EntityStateFlags before, EntityStateFlags after)
+    {
+        if (((before ^ after) & Ailments.All) != 0)
+        {
+            AilmentsChanged?.Invoke(entity, before);
         }
     }
 

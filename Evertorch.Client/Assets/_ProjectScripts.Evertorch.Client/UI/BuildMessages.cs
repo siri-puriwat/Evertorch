@@ -79,6 +79,17 @@ public static class BuildMessages
     }
 
     /// <summary>
+    ///     The sheet's resistance to each ailment in percent, "Resist: poison 30 · stun 30 · freeze 25 · sleep 12 ·
+    ///     silence 40 · blind 40" (Prototype Content §2).
+    /// </summary>
+    public static string Resistances(CharacterSheet sheet)
+    {
+        return $"Resist: poison {Number(sheet.PoisonResistance)} \u00B7 stun {Number(sheet.StunResistance)}"
+            + $" \u00B7 freeze {Number(sheet.FreezeResistance)} \u00B7 sleep {Number(sheet.SleepResistance)}"
+            + $" \u00B7 silence {Number(sheet.SilenceResistance)} \u00B7 blind {Number(sheet.BlindResistance)}";
+    }
+
+    /// <summary>
     ///     The chat's system lines for what <paramref name="after" /> raised over <paramref name="before" />: "Job level 3."
     ///     and "AGI 6.", each statistic that rose with its new value, or "Every point returned." for the Guildmaster's
     ///     reset, the only change that lowers a statistic or gives skill points back without a job level. A world's

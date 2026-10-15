@@ -670,7 +670,8 @@ public sealed class PlayerPanelTests
             Is.EqualTo(
                 "Points: 3\nSTR 5, next 2, +\nAGI 11, next 3, +\nVIT 99, max\nINT 5, next 2, +\nDEX 21, next 4"
                 + "\nLUK 1, next 2, +\nAttack 46\nMagic attack 12\nDefense 5\nMagic defense 6\nHit 188\nFlee 125"
-                + "\nCritical 1.3%\nAttack speed 154\nNeutral attack\nNeutral armor"));
+                + "\nCritical 1.3%\nAttack speed 154\nNeutral attack\nNeutral armor"
+                + "\nResist: poison 0 \u00B7 stun 0 \u00B7 freeze 0 \u00B7 sleep 0 \u00B7 silence 0 \u00B7 blind 0"));
         Assert.That(
             Enumerable.Range(1, 6).Select(stat => window.IsRaiseShown((PrimaryStat)stat)),
             Is.EqualTo(new[] { true, true, false, true, false, true }),
@@ -892,6 +893,33 @@ public sealed class PlayerPanelTests
     }
 
     // Stopped above the chat on this screen, the rows that do not fit scroll (Prototype Content §2).
+    // The resistance row under the derived statistics fits the window at 12 points or more, on its two rows' height
+    // (Prototype Content §2).
+    [UnityTest]
+    public IEnumerator StatsWindow_ShowsTheResistances_WithinItsRow_At12PointsOrMore()
+    {
+        GameClient client = CreateIdleClient();
+        ClientWorld world = GiveWorld(client);
+        var window = StatsWindow.Create(client);
+        m_created.Add(window.gameObject);
+        CharacterSheetStat[] stats = Enumerable.Repeat(new CharacterSheetStat(5, 2), 6).ToArray();
+        world.OnCharacterSheet(new CharacterSheet(1, new JobDefinitionId("job.vanguard"), 0, 50, 0, 0, stats, 10, 5,
+            2, 3, 182, 105, 11, 153, poisonResistance: 100, stunResistance: 100, freezeResistance: 100,
+            sleepResistance: 100, silenceResistance: 100, blindResistance: 100));
+        window.Open();
+        yield return null;
+        yield return null;
+        TMP_Text row = Label(window, "Resistances");
+        row.ForceMeshUpdate();
+        Rect box = row.rectTransform.rect;
+
+        Assert.That(window.Text, Does.EndWith("\nResist: poison 100 \u00B7 stun 100 \u00B7 freeze 100 \u00B7 sleep 100"
+            + " \u00B7 silence 100 \u00B7 blind 100"));
+        Assert.That(row.fontSize, Is.GreaterThanOrEqualTo(12f));
+        Assert.That(row.textBounds.size.x, Is.LessThanOrEqualTo(box.width + 0.5f));
+        Assert.That(row.textBounds.size.y, Is.LessThanOrEqualTo(box.height + 0.5f));
+    }
+
     [UnityTest]
     public IEnumerator StatsWindow_StopsAboveTheChat_AndKeepsEveryRow()
     {
@@ -1137,6 +1165,108 @@ public sealed class PlayerPanelTests
             "name, bar, facts, and detail, within the layout's height");
         Assert.That(buttons, Is.Empty, "no button row for a monster");
         Assert.That(TargetFrame.TallestHeight, Is.EqualTo(142f));
+    }
+
+    // A monster's facts name its element of the moment and its ailments, and the hint follows that element; a player's
+    // detail row names its ailments, written again only when they change (Prototype Content §2).
+    [UnityTest]
+    public IEnumerator TargetFrame_NamesTheTargetsAilments_AndAFrozenMonstersWater()
+    {
+        GameClient client = CreateIdleClient();
+        ClientWorld world = GiveWorld(client);
+        var crawler = new MonsterDefinitionId("monster.grotto_crawler");
+        GiveContent(
+            client,
+            new ClientItem[0],
+            monsters: new Dictionary<MonsterDefinitionId, ClientMonster>
+            {
+                [crawler] = new(crawler, "Grotto Crawler", "monster_grotto_crawler", "crawler", level: 14,
+                    element: Element.Earth, race: Race.Insect, size: BodySize.Small)
+            });
+        var frame = TargetFrame.Create(client);
+        m_created.Add(frame.gameObject);
+        Spawn(world, 7, EntityKind.Monster, crawler.Value, 1000);
+        Spawn(world, 8, EntityKind.Player, "job.vanguard", 0, "Bobby");
+
+        world.OnSnapshot(new EntitySnapshot(1, 0, new[]
+        {
+            new EntityState(new EntityId(7), new WorldPosition(2.5f, 0f, 2.5f), new WorldDirection(0f, 1f), 0f, 0f, 0f,
+                EntityStateFlags.Frozen | EntityStateFlags.Poisoned),
+            new EntityState(new EntityId(8), new WorldPosition(2.5f, 0f, 2.5f), new WorldDirection(0f, 1f), 0f, 0f, 0f,
+                EntityStateFlags.Silenced | EntityStateFlags.Blinded)
+        }));
+        world.OnTargetChanged(new TargetChanged(Local, new EntityId(7)));
+        yield return null;
+        yield return null;
+        string facts = Label(frame, "Facts").text;
+        world.OnTargetChanged(new TargetChanged(Local, new EntityId(8)));
+        yield return null;
+        string detail = Label(frame, "Detail").text;
+        int changes = frame.TextChanges;
+        yield return null;
+        int changesLater = frame.TextChanges;
+        world.OnSnapshot(new EntitySnapshot(2, 0, new[]
+        {
+            new EntityState(new EntityId(8), new WorldPosition(2.5f, 0f, 2.5f), new WorldDirection(0f, 1f), 0f, 0f, 0f,
+                EntityStateFlags.None)
+        }));
+        yield return null;
+
+        Assert.That(facts, Is.EqualTo("Water \u00B7 Insect \u00B7 Small \u00B7 Poisoned \u00B7 Frozen"),
+            "an Earth crawler is Water while frozen");
+        Assert.That(detail, Is.EqualTo("Silenced \u00B7 Blinded"));
+        Assert.That(changesLater, Is.EqualTo(changes), "unchanged ailments rewrite nothing");
+        Assert.That(Label(frame, "Detail").text, Is.Empty);
+    }
+
+    // The facts with every ailment, the longest they can be, fit beside a window within their row, so the frame stays
+    // 142 tall (Prototype Content §2).
+    [UnityTest]
+    public IEnumerator TargetFrame_BesideAWindow_FitsTheFactsWithEveryAilment()
+    {
+        var frame = TargetFrame.Create(CreateIdleClient());
+        m_created.Add(frame.gameObject);
+        yield return null;
+        typeof(TargetFrame)
+            .GetMethod("PlaceBeside", BindingFlags.NonPublic | BindingFlags.Instance)!
+            .Invoke(frame, new object[] { true, false });
+        var monster = new ClientMonster(new MonsterDefinitionId("monster.a"), "A", "a", "a", race: Race.Humanoid);
+
+        frame.ShowTarget("Spark Wisp \u00B7 Lv 9", 1f, 12.34f, false, TargetFrame.Facts(monster, Ailments.All),
+            "Swing 150% \u00B7 Strike 150% \u00B7 Heavy Blow 150%");
+        yield return null;
+        TMP_Text facts = Label(frame, "Facts");
+        facts.ForceMeshUpdate();
+        Rect box = facts.rectTransform.rect;
+
+        Assert.That(facts.text, Does.StartWith("Water \u00B7 Humanoid \u00B7 Medium \u00B7 Poisoned"));
+        Assert.That(facts.textBounds.size.x, Is.LessThanOrEqualTo(box.width + 0.5f));
+        Assert.That(facts.textBounds.size.y, Is.LessThanOrEqualTo(box.height + 0.5f));
+    }
+
+    // The Arcanist's hint with Frost Lance fits beside a window at 12 points or more too. It holds the swing and one
+    // skill at most, since Arcane Bolt differs from 100 % only on Neutral and Ghost and Frost Lance only on the natural
+    // elements (Prototype Content §2; Gameplay Systems §3).
+    [UnityTest]
+    public IEnumerator TargetFrame_BesideAWindow_FitsTheArcanistsHint_WithFrostLance()
+    {
+        var frame = TargetFrame.Create(CreateIdleClient());
+        m_created.Add(frame.gameObject);
+        yield return null;
+        typeof(TargetFrame)
+            .GetMethod("PlaceBeside", BindingFlags.NonPublic | BindingFlags.Instance)!
+            .Invoke(frame, new object[] { true, false });
+
+        frame.ShowTarget("Hollow Wisp \u00B7 Lv 22", 1f, 12.34f, false,
+            "Water \u00B7 Undead \u00B7 Small \u00B7 Frozen",
+            "Swing 150% \u00B7 Frost Lance 150%");
+        yield return null;
+        TMP_Text detail = Label(frame, "Detail");
+        detail.ForceMeshUpdate();
+
+        Assert.That(detail.fontSize, Is.GreaterThanOrEqualTo(12f));
+        Assert.That(detail.textBounds.size.x,
+            Is.LessThanOrEqualTo(((RectTransform)detail.transform).rect.width + 0.5f));
     }
 
     // The hint fits beside a window at 12 points or more at its longest in real content: a Vanguard's swing, Strike,

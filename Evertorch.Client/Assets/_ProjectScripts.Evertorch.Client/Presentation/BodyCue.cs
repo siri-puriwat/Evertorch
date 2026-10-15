@@ -68,5 +68,10 @@ public struct BodyCue
     public string AttackClip;
 
     public bool IsTalking;
+
+    /// <summary>
+    ///     Whether a stun, a freeze, or sleep holds the body: it keeps the pose it had (Prototype Content §2).
+    /// </summary>
+    public bool IsHeld;
 }
 }

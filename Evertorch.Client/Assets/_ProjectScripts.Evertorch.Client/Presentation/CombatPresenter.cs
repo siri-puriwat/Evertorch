@@ -10,8 +10,9 @@ using Object = UnityEngine.Object;
 namespace Evertorch.Client
 {
 /// <summary>
-///     Shows the fight the server reports: lunges, squashes, floating numbers, heals, monster health bars, cast bars,
-///     and dead bodies. It listens to <see cref="ClientWorld" /> and only draws; nothing here sends a command or
+///     Shows the fight the server reports: lunges, squashes, floating numbers, heals, poison ticks, monster health
+///     bars, cast bars, dead bodies, and the ailments' tints, held poses, and words (Prototype Content §2). It listens to
+///     <see cref="ClientWorld" /> and only draws; nothing here sends a command or
 ///     changes what the client believes about the fight.
 /// </summary>
 public sealed class CombatPresenter : IDisposable
@@ -29,6 +30,8 @@ public sealed class CombatPresenter : IDisposable
     private static readonly Color MissColor = new(0.7f, 0.7f, 0.75f);
     private static readonly Color LocalHitColor = new(1f, 0.35f, 0.3f);
     private static readonly Color HealColor = new(0.35f, 0.9f, 0.4f);
+    private static readonly Color PoisonColor = new(0.6f, 0.85f, 0.15f);
+    private static readonly Color AilmentWordColor = new(0.8f, 0.85f, 1f);
     private static readonly Color BarBackColor = new(0.15f, 0.05f, 0.05f);
     private static readonly Color BarFillColor = new(0.85f, 0.2f, 0.2f);
     private static readonly Color CastBackColor = new(0.05f, 0.08f, 0.2f);
@@ -76,6 +79,7 @@ public sealed class CombatPresenter : IDisposable
         m_world.EntityRevivedReceived += OnEntityRevived;
         m_world.RemoteSpawned += OnRemoteSpawned;
         m_world.RemoteDespawned += OnRemoteDespawned;
+        m_world.AilmentsChanged += OnAilmentsChanged;
         foreach (RemoteEntity remote in m_world.Remotes.Values)
         {
             OnRemoteSpawned(remote);
@@ -102,6 +106,7 @@ public sealed class CombatPresenter : IDisposable
         m_world.EntityRevivedReceived -= OnEntityRevived;
         m_world.RemoteSpawned -= OnRemoteSpawned;
         m_world.RemoteDespawned -= OnRemoteDespawned;
+        m_world.AilmentsChanged -= OnAilmentsChanged;
         foreach (HealthBar bar in m_bars.Values)
         {
             if (bar != null)
@@ -158,7 +163,8 @@ public sealed class CombatPresenter : IDisposable
                 Timeline.Lunge(self, localNow, remoteNow),
                 Timeline.Squash(self, localNow, remoteNow),
                 isLocalShownDead);
-            Animate(local, self, isLocalShownDead, localNow, remoteNow);
+            local.ShowAilments(m_world.LocalStateFlags);
+            Animate(local, self, m_world.LocalStateFlags, isLocalShownDead, localNow, remoteNow);
             PresentCastBar(self, local, localNow, remoteNow, camera);
         }
 
@@ -174,7 +180,8 @@ public sealed class CombatPresenter : IDisposable
                 Timeline.Lunge(pair.Key, localNow, remoteNow),
                 Timeline.Squash(pair.Key, localNow, remoteNow),
                 isShownDead);
-            Animate(pair.Value, pair.Key, isShownDead, localNow, remoteNow);
+            pair.Value.ShowAilments(remote.StateFlags);
+            Animate(pair.Value, pair.Key, remote.StateFlags, isShownDead, localNow, remoteNow);
             if (remote.Kind == EntityKind.Monster)
             {
                 PresentHealthBar(remote, pair.Value, isShownDead, camera);
@@ -195,6 +202,11 @@ public sealed class CombatPresenter : IDisposable
             return "+" + hit.Amount.ToString(CultureInfo.InvariantCulture);
         }
 
+        if (!string.IsNullOrEmpty(hit.Word))
+        {
+            return hit.Word;
+        }
+
         return hit.Result switch
         {
             CombatResult.Miss => "Miss",
@@ -207,7 +219,13 @@ public sealed class CombatPresenter : IDisposable
     // A rigged body plays its clips from the same moments the procedural pose follows (Gameplay Systems §8). The
     // skill's target type comes from the client content, since a cast's target of 0 also means one the receiver does
     // not know.
-    private void Animate(EntityView view, EntityId entity, bool isShownDead, double localNow, double remoteNow)
+    private void Animate(
+        EntityView view,
+        EntityId entity,
+        EntityStateFlags flags,
+        bool isShownDead,
+        double localNow,
+        double remoteNow)
     {
         if (!view.HasClips)
         {
@@ -220,7 +238,8 @@ public sealed class CombatPresenter : IDisposable
             IsDead = isShownDead,
             DeathSince = Timeline.DeadSince(entity, localNow, remoteNow),
             AttackClip = view.AttackClip,
-            IsTalking = entity != default && entity == TalkingNpc
+            IsTalking = entity != default && entity == TalkingNpc,
+            IsHeld = (flags & Ailments.Holds) != 0
         };
         if (Timeline.TryGetSwing(entity, localNow, remoteNow, out double swingSince, out AttackTiming timing))
         {
@@ -333,7 +352,7 @@ public sealed class CombatPresenter : IDisposable
     private void ShowHit(HitMark hit, EntityView? local, IReadOnlyDictionary<EntityId, EntityView> remotes)
     {
         bool isLocal = hit.Target == m_world.LocalEntity;
-        if (!isLocal)
+        if (!isLocal && hit.Result != CombatResult.None)
         {
             m_shownHealth[hit.Target] = hit.TargetHealthPermille;
         }
@@ -350,6 +369,8 @@ public sealed class CombatPresenter : IDisposable
             {
                 CombatResult.Miss or CombatResult.Immune => MissColor,
                 CombatResult.Critical => CriticalColor,
+                CombatResult.Poison => PoisonColor,
+                CombatResult.None => AilmentWordColor,
                 _ => isLocal ? LocalHitColor : HitColor
             };
         float scale = hit.Result == CombatResult.Critical ? CriticalScale : 1f;
@@ -396,6 +417,7 @@ public sealed class CombatPresenter : IDisposable
     private void OnSkillResolved(SkillResolved resolved)
     {
         CombatResult result;
+        string word = string.Empty;
         switch (resolved.Outcome)
         {
             case SkillOutcome.Hit:
@@ -411,6 +433,10 @@ public sealed class CombatPresenter : IDisposable
             case SkillOutcome.Immune:
                 result = CombatResult.Immune;
                 break;
+            case SkillOutcome.Resisted:
+                result = CombatResult.Miss;
+                word = "Resisted";
+                break;
             default:
                 return;
         }
@@ -425,7 +451,41 @@ public sealed class CombatPresenter : IDisposable
                 result,
                 resolved.Amount,
                 resolved.TargetHealthPermille,
-                resolved.Outcome == SkillOutcome.Healed));
+                resolved.Outcome == SkillOutcome.Healed,
+                word));
+    }
+
+    // A word rises for each ailment that starts, at its snapshot's moment on its body's timeline; a hold or silence
+    // ends the cast bar, since no message tells of the interrupted cast (Prototype Content §2).
+    private void OnAilmentsChanged(EntityId entity, EntityStateFlags before)
+    {
+        bool isLocal = entity == m_world.LocalEntity;
+        EntityStateFlags now;
+        if (isLocal)
+        {
+            now = m_world.LocalStateFlags;
+        }
+        else if (m_world.Remotes.TryGetValue(entity, out RemoteEntity? remote))
+        {
+            now = remote.StateFlags;
+        }
+        else
+        {
+            return;
+        }
+
+        EntityStateFlags started = now & ~before & Ailments.All;
+        if ((started & Ailments.EndCasts) != 0)
+        {
+            Timeline.EndCast(entity);
+        }
+
+        double at = isLocal ? m_world.ServerTime.Now : m_world.LatestServerTick * m_tickSeconds;
+        foreach (EntityStateFlags ailment in Ailments.Of(started))
+        {
+            Timeline.AddHit(new HitMark(entity, at, isLocal, CombatResult.None, 0, 0,
+                word: Ailments.Name(ailment) + "!"));
+        }
     }
 
     private void OnLocalCastEnded()

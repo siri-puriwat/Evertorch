@@ -328,6 +328,37 @@ public sealed class PartyPanelTests
         Assert.That(list.transform.Find("Panel/Row3/Bars").gameObject.activeSelf, Is.False, "elsewhere, the map");
     }
 
+    // A member's ailments end its bottom line in short words, the bars or the whereabouts beside them in what is left
+    // (Prototype Content §2).
+    [UnityTest]
+    public IEnumerator ARow_EndsWithItsMembersAilments_InShortWords_BesideItsBars()
+    {
+        (GameClient client, _) = Enter();
+        PartyList list = Track(PartyList.Create(client));
+        client.Party.Apply(Roster(0, ("Ann0", Ground), ("Bobby", Ground), ("Cora", Field)));
+        client.Party.Apply(new PartyMemberStatus("Bobby", 250, 800, 0x23));
+        client.Party.Apply(new PartyMemberStatus("Cora", 500, 500, 0x10));
+        yield return null;
+
+        TMP_Text words = list.transform.Find("Panel/Row2/Ailments").GetComponent<TMP_Text>();
+        var bars = (RectTransform)list.transform.Find("Panel/Row2/Bars");
+        words.ForceMeshUpdate();
+        Assert.That(words.text, Is.EqualTo("Psn Stn Bld"));
+        Assert.That(list.Text.Split('\n')[1], Does.EndWith("  Psn Stn Bld"));
+        Assert.That(list.Text.Split('\n')[2], Does.EndWith("  Sil"), "beside the map's name");
+        Assert.That(words.fontSize, Is.EqualTo(12f));
+        Assert.That(
+            bars.offsetMax.x + words.textBounds.size.x,
+            Is.LessThanOrEqualTo(words.rectTransform.offsetMax.x + 0.5f),
+            "the bars end before the words");
+        Assert.That(bars.rect.width, Is.GreaterThan(20f), "the bars keep some width");
+
+        client.Party.Apply(new PartyMemberStatus("Bobby", 250, 800));
+        yield return null;
+        Assert.That(words.text, Is.Empty);
+        Assert.That(bars.rect.width, Is.EqualTo(words.rectTransform.rect.width).Within(0.01f), "the whole line again");
+    }
+
     // A press on a member's row selects it as a click on its body would; one the client does not see is left alone
     // (Prototype Content §2, §4).
     [UnityTest]

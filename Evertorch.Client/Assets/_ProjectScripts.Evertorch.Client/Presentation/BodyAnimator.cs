@@ -90,6 +90,13 @@ public sealed class BodyAnimator : MonoBehaviour
         }
 
         MeasureWalk(root, deltaSeconds);
+
+        // The graph runs by hand, so a body left unevaluated keeps its last pose.
+        if (cue.IsHeld && !cue.IsDead && CurrentClip.Length > 0)
+        {
+            return;
+        }
+
         cue.Speed = m_speed;
         cue.Travelled = m_travelled;
         cue.Clock = clock;

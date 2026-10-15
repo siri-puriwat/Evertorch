@@ -6,8 +6,8 @@ using Evertorch.Protocol;
 namespace Evertorch.Client
 {
 /// <summary>
-///     One member as the party list shows it: what the roster says, and its health and SP in thousandths once a
-///     status has come.
+///     One member as the party list shows it: what the roster says, and its health and SP in thousandths and its
+///     ailments once a status has come.
 /// </summary>
 public sealed class PartyMember
 {
@@ -41,6 +41,11 @@ public sealed class PartyMember
     public int? HealthPermille { get; internal set; }
 
     public int? SpiritPermille { get; internal set; }
+
+    /// <summary>
+    ///     The member's ailments as its last status gave them, as state flags; none before one has come.
+    /// </summary>
+    public EntityStateFlags Ailments { get; internal set; }
 }
 
 /// <summary>
@@ -123,20 +128,25 @@ public sealed class ClientParty
             throw new ArgumentNullException(nameof(roster));
         }
 
-        var statuses = new Dictionary<string, (int? Health, int? Spirit)>(StringComparer.OrdinalIgnoreCase);
+        var statuses =
+            new Dictionary<string, (int? Health, int? Spirit, EntityStateFlags Ailments)>(
+                StringComparer.OrdinalIgnoreCase);
         foreach (PartyMember member in m_members)
         {
-            statuses[member.Name] = (member.HealthPermille, member.SpiritPermille);
+            statuses[member.Name] = (member.HealthPermille, member.SpiritPermille, member.Ailments);
         }
 
         m_members.Clear();
         for (int index = 0; index < roster.Members.Count; index++)
         {
             var member = new PartyMember(roster.Members[index], index == roster.LeaderIndex);
-            if (statuses.TryGetValue(member.Name, out (int? Health, int? Spirit) status))
+            if (statuses.TryGetValue(
+                    member.Name,
+                    out (int? Health, int? Spirit, EntityStateFlags Ailments) status))
             {
                 member.HealthPermille = status.Health;
                 member.SpiritPermille = status.Spirit;
+                member.Ailments = status.Ailments;
             }
 
             m_members.Add(member);
@@ -156,6 +166,7 @@ public sealed class ClientParty
         {
             member!.HealthPermille = status.HealthPermille;
             member.SpiritPermille = status.SpiritPermille;
+            member.Ailments = Ailments.FromParty(status.Ailments);
             Changed?.Invoke();
         }
     }

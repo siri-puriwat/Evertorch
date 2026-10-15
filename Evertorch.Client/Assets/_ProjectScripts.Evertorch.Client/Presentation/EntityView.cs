@@ -1,5 +1,6 @@
 using System;
 using Evertorch.Game;
+using Evertorch.Protocol;
 using UnityEngine;
 
 namespace Evertorch.Client
@@ -35,8 +36,20 @@ public sealed class EntityView : MonoBehaviour
     private static readonly Vector3 DeadScale = new(1.3f, 0.3f, 1.3f);
     private static readonly Vector3 DefaultProjectilePoint = new(0f, DefaultProjectileHeight, 0f);
 
+    /// <summary>
+    ///     The icy blue over a frozen body (Prototype Content §2).
+    /// </summary>
+    public static readonly Color FrozenTint = new(0.55f, 0.8f, 1f);
+
+    /// <summary>
+    ///     The green over a poisoned body.
+    /// </summary>
+    public static readonly Color PoisonedTint = new(0.45f, 0.85f, 0.3f);
+
     private Color? m_tint;
     private Color? m_bodyTint;
+    private Color? m_ailmentTint;
+    private EntityBody? m_anchors;
     private float m_scale = 1f;
 
     private Transform? m_pose;
@@ -86,6 +99,11 @@ public sealed class EntityView : MonoBehaviour
     ///     How many times its model's size the body is drawn (Prototype Content §2).
     /// </summary>
     public float Scale => m_scale;
+
+    /// <summary>
+    ///     The ailment's tint laid over the body, frozen's or poisoned's; null while it shows its own colours.
+    /// </summary>
+    public Color? AilmentTint => m_ailmentTint;
 
     /// <summary>
     ///     Creates the view and requests its body by <paramref name="key" />. <paramref name="tint" /> is a player's
@@ -196,6 +214,38 @@ public sealed class EntityView : MonoBehaviour
         float widen = 1f + SquashWiden * squash;
         m_pose.localPosition = Vector3.forward * (LungeDistance * lunge);
         m_pose.localScale = new Vector3(widen, 1f - SquashFlatten * squash, widen);
+    }
+
+    /// <summary>
+    ///     The tint <paramref name="flags" /> lay over a body: frozen's, winning over poisoned's, or none.
+    /// </summary>
+    public static Color? AilmentTintFor(EntityStateFlags flags)
+    {
+        if ((flags & EntityStateFlags.Frozen) != 0)
+        {
+            return FrozenTint;
+        }
+
+        return (flags & EntityStateFlags.Poisoned) != 0 ? PoisonedTint : null;
+    }
+
+    /// <summary>
+    ///     Lays the tint of the body's ailments over it, or restores its own colours once they end; a placeholder takes
+    ///     none (Prototype Content §2). A body still loading takes it as it attaches.
+    /// </summary>
+    public void ShowAilments(EntityStateFlags flags)
+    {
+        Color? tint = AilmentTintFor(flags);
+        if (tint == m_ailmentTint)
+        {
+            return;
+        }
+
+        m_ailmentTint = tint;
+        if (HasBody)
+        {
+            ApplyAilmentTint();
+        }
     }
 
     /// <summary>
@@ -332,6 +382,7 @@ public sealed class EntityView : MonoBehaviour
         }
 
         EntityBody? anchors = body.TryGetComponent(out EntityBody found) ? found : null;
+        m_anchors = anchors;
         if (anchors != null)
         {
             ReadAnchors(anchors);
@@ -343,18 +394,57 @@ public sealed class EntityView : MonoBehaviour
         }
 
         ShowHeld();
-
-        if (!IsPlaceholder && m_tint != null)
-        {
-            ApplyTint(body, anchors, m_tint.Value);
-        }
-
-        if (!IsPlaceholder && m_bodyTint != null)
-        {
-            ApplyBodyTint(body, m_bodyTint.Value);
-        }
-
+        ApplyOwnTints();
         HasBody = true;
+        if (m_ailmentTint != null)
+        {
+            ApplyAilmentTint();
+        }
+    }
+
+    private void ApplyOwnTints()
+    {
+        if (IsPlaceholder || m_body == null)
+        {
+            return;
+        }
+
+        if (m_tint != null)
+        {
+            ApplyTint(m_body.gameObject, m_anchors, m_tint.Value);
+        }
+
+        if (m_bodyTint != null)
+        {
+            ApplyBodyTint(m_body.gameObject, m_bodyTint.Value);
+        }
+    }
+
+    // The ailment's tint lies on each renderer's own block; a Trim slot's per-material block, which Unity draws over
+    // it, keeps a player's identity colour. Clearing the renderers' blocks and laying the own tints again restores
+    // the body.
+    private void ApplyAilmentTint()
+    {
+        if (IsPlaceholder || m_body == null)
+        {
+            return;
+        }
+
+        if (m_ailmentTint != null)
+        {
+            ApplyBodyTint(m_body.gameObject, m_ailmentTint.Value);
+            return;
+        }
+
+        foreach (Renderer part in m_body.GetComponentsInChildren<Renderer>(true))
+        {
+            if (part.GetComponentInParent<HeldWeapon>(true) == null)
+            {
+                part.SetPropertyBlock(null);
+            }
+        }
+
+        ApplyOwnTints();
     }
 
     // Read once, as offsets from the view, so that neither a squash nor a death moves a bar or a number.

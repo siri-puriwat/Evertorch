@@ -10,8 +10,8 @@ namespace Evertorch.Client
 /// <summary>
 ///     Draws the telegraph of an area skill (Gameplay Systems §9; Prototype Content §2): from its cast's start, for its
 ///     cast time, a ring of the skill's radius at the feet of its caster as drawn, on the interpolated timeline. Only the
-///     caster's death or despawn ends it early, since no message tells of an interrupted cast. Like the combat presenter
-///     it only draws.
+///     caster's death, despawn, hold, or silence ends it early, since no message tells of an interrupted cast. Like the
+///     combat presenter it only draws.
 /// </summary>
 public sealed class AreaTelegraphPresenter : IDisposable
 {
@@ -43,6 +43,7 @@ public sealed class AreaTelegraphPresenter : IDisposable
         m_world.SkillCastStartedReceived += OnSkillCastStarted;
         m_world.EntityDiedReceived += OnEntityDied;
         m_world.RemoteDespawned += OnRemoteDespawned;
+        m_world.AilmentsChanged += OnAilmentsChanged;
     }
 
     /// <summary>
@@ -55,6 +56,7 @@ public sealed class AreaTelegraphPresenter : IDisposable
         m_world.SkillCastStartedReceived -= OnSkillCastStarted;
         m_world.EntityDiedReceived -= OnEntityDied;
         m_world.RemoteDespawned -= OnRemoteDespawned;
+        m_world.AilmentsChanged -= OnAilmentsChanged;
         foreach (Telegraph telegraph in m_telegraphs)
         {
             telegraph.Destroy();
@@ -146,6 +148,19 @@ public sealed class AreaTelegraphPresenter : IDisposable
     private void OnRemoteDespawned(RemoteEntity remote)
     {
         EndCastsOf(remote.Entity);
+    }
+
+    private void OnAilmentsChanged(EntityId entity, EntityStateFlags before)
+    {
+        EntityStateFlags now = entity == m_world.LocalEntity
+            ? m_world.LocalStateFlags
+            : m_world.Remotes.TryGetValue(entity, out RemoteEntity? remote)
+                ? remote.StateFlags
+                : EntityStateFlags.None;
+        if ((now & ~before & Ailments.EndCasts) != 0)
+        {
+            EndCastsOf(entity);
+        }
     }
 
     private void EndCastsOf(EntityId caster)

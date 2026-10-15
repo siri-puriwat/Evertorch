@@ -11,7 +11,8 @@ namespace Evertorch.Client
 /// <summary>
 ///     The Stats window (Gameplay Systems §2; Prototype Content §2), at the NPC window's place and never beside it: the
 ///     stat points left, each primary statistic with its value, its next cost, and "+" while the points cover it, and
-///     the derived statistics, all from the owner's <see cref="CharacterSheet" />. A "+" asks for one raise through
+///     the derived statistics and the resistances, all from the owner's <see cref="CharacterSheet" />. A "+" asks for one
+///     raise through
 ///     <see cref="GameClient" />, and only the next sheet moves the rows. It closes when the world changes or the
 ///     connection closes.
 /// </summary>
@@ -29,8 +30,10 @@ public sealed class StatsWindow : MonoBehaviour
     private const float StatWidth = 150f;
     private const float RaiseWidth = 60f;
 
-    // Six statistics and five rows of two derived ones, the last the attack and armor elements.
-    private const int ListRows = CharacterSheet.StatCount + 5;
+    // Six statistics, five rows of two derived ones, the last the attack and armor elements, and the resistances,
+    // which wrap within two rows' height.
+    private const int ResistanceRows = 2;
+    private const int ListRows = CharacterSheet.StatCount + 5 + ResistanceRows;
 
     private const float CloseWidth = 80f;
 
@@ -44,6 +47,7 @@ public sealed class StatsWindow : MonoBehaviour
     private readonly TMP_Text[] m_costs = new TMP_Text[CharacterSheet.StatCount];
     private readonly Button[] m_raises = new Button[CharacterSheet.StatCount];
     private readonly TMP_Text[] m_derived = new TMP_Text[10];
+    private TMP_Text? m_resistances;
     private GameClient? m_client;
     private GameObject? m_panel;
     private TMP_Text? m_points;
@@ -202,6 +206,9 @@ public sealed class StatsWindow : MonoBehaviour
             m_derived[index].text = derived[index];
             AppendText(derived[index]);
         }
+
+        m_resistances!.text = BuildMessages.Resistances(sheet);
+        AppendText(m_resistances.text);
     }
 
     private void AppendText(string text)
@@ -276,6 +283,15 @@ public sealed class StatsWindow : MonoBehaviour
             m_derived[2 * row] = CreateCell(line.transform, "Left", 0f, 1f);
             m_derived[2 * row + 1] = CreateCell(line.transform, "Right", 0f, 1f);
         }
+
+        m_resistances = Ui.CreateLabel("Resistances", rows);
+        m_resistances.alignment = TextAlignmentOptions.MidlineLeft;
+        m_resistances.textWrappingMode = TextWrappingModes.Normal;
+        m_resistances.enableAutoSizing = true;
+        m_resistances.fontSizeMin = 12f;
+        m_resistances.fontSizeMax = m_resistances.fontSize;
+        m_resistances.gameObject.AddComponent<LayoutElement>().preferredHeight =
+            ResistanceRows * RowHeight + (ResistanceRows - 1) * RowSpacing;
 
         m_panel.SetActive(false);
     }

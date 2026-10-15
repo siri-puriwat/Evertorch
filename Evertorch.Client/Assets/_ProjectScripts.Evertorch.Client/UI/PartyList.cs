@@ -12,7 +12,8 @@ namespace Evertorch.Client
 /// <summary>
 ///     The party list under the status bar at the left (Prototype Content §2): a row per member with its name, level,
 ///     and job, "(L)" for the leader, its HP and SP bars once its status has come and it is beside the player, or
-///     "Offline" or the map's name. It offers Leave, and the leader Kick and Lead on each other member's row, each armed
+///     "Offline" or the map's name, and its ailments in short words, "Psn Stn", at the bottom line's end. It offers Leave,
+///     and the leader Kick and Lead on each other member's row, each armed
 ///     by a first press; a press on a row selects a member the client sees. It hides while a side window shows, and
 ///     outside a party.
 /// </summary>
@@ -42,7 +43,11 @@ public sealed class PartyList : MonoBehaviour
     private const float TouchLeft = 118f;
     private const float ActionWidth = 40f;
     private const float FontSize = 14f;
+    private const float AilmentFontSize = 12f;
     private const float Inset = 4f;
+
+    // The bottom line's width, between the inset and the Kick and Lead buttons.
+    private const float LineWidth = Width - 2f * ActionWidth - Inset;
 
     private static readonly Color AwayColor = new(0.55f, 0.57f, 0.6f);
     private static readonly Color BarBackColor = new(0.12f, 0.12f, 0.14f);
@@ -264,8 +269,11 @@ public sealed class PartyList : MonoBehaviour
             Place(row.Root.GetComponent<RectTransform>(), 0f, Width, top, rowHeight);
             string name = PartyMessages.Row(member, content);
             string where = PartyMessages.Whereabouts(member, ownMap, content);
+            string ailments = member.IsInWorld ? Ailments.ShortNames(member.Ailments) : string.Empty;
             UiBuilder.SetText(row.Name, name);
             UiBuilder.SetText(row.Where, where);
+            UiBuilder.SetText(row.Ailments, ailments);
+            FitBottomLine(row, ailments);
             row.Name.color = member.IsInWorld ? UiBuilder.TextColor : AwayColor;
             bool hasBars = where.Length == 0 && member.HealthPermille.HasValue && member.SpiritPermille.HasValue;
             UiBuilder.SetActive(row.Bars, hasBars);
@@ -282,11 +290,28 @@ public sealed class PartyList : MonoBehaviour
             row.Member = member.Name;
             UiBuilder.SetText(row.KickLabel, IsArmed(Kick, member.Name) ? Confirm : Kick);
             UiBuilder.SetText(row.LeadLabel, IsArmed(Lead, member.Name) ? Confirm : Lead);
-            text.Append(where.Length == 0 ? name : $"{name}  {where}").Append('\n');
+            text.Append(where.Length == 0 ? name : $"{name}  {where}");
+            if (ailments.Length > 0)
+            {
+                text.Append("  ").Append(ailments);
+            }
+
+            text.Append('\n');
         }
 
         UiBuilder.SetText(m_leaveLabel!, IsArmed(Leave, string.Empty) ? Confirm : Leave);
         Text = text.ToString().TrimEnd('\n');
+    }
+
+    // The ailments' words take the bottom line's end, and the bars or the whereabouts what is left of it.
+    private static void FitBottomLine(Row row, string ailments)
+    {
+        float words = ailments.Length == 0
+            ? 0f
+            : Mathf.Ceil(row.Ailments.GetPreferredValues(ailments).x) + Inset;
+        float rest = Math.Max(0f, LineWidth - words);
+        StretchBottom(row.Where.rectTransform, Inset, rest);
+        StretchBottom((RectTransform)row.Bars.transform, Inset, rest);
     }
 
     private bool IsArmed(string action, string member)
@@ -316,9 +341,15 @@ public sealed class PartyList : MonoBehaviour
         row.Where.color = AwayColor;
         row.Where.textWrappingMode = TextWrappingModes.NoWrap;
         row.Where.overflowMode = TextOverflowModes.Ellipsis;
-        StretchBottom(row.Where.rectTransform, Inset, Width - 2f * ActionWidth - Inset);
+        StretchBottom(row.Where.rectTransform, Inset, LineWidth);
         row.Bars = UiBuilder.CreateUiObject("Bars", root.transform);
-        StretchBottom((RectTransform)row.Bars.transform, Inset, Width - 2f * ActionWidth - Inset);
+        StretchBottom((RectTransform)row.Bars.transform, Inset, LineWidth);
+        row.Ailments = Ui.CreateLabel("Ailments", root.transform);
+        row.Ailments.richText = false;
+        row.Ailments.fontSize = AilmentFontSize;
+        row.Ailments.alignment = TextAlignmentOptions.MidlineRight;
+        row.Ailments.textWrappingMode = TextWrappingModes.NoWrap;
+        StretchBottom(row.Ailments.rectTransform, Inset, LineWidth);
         row.Health = UiBuilder.CreateBar("Health", row.Bars.transform, BarBackColor, HealthColor);
         Band((RectTransform)row.Health.parent, 0.45f, 0.9f);
         row.Spirit = UiBuilder.CreateBar("Spirit", row.Bars.transform, BarBackColor, SpiritColor);
@@ -393,6 +424,8 @@ public sealed class PartyList : MonoBehaviour
         public TMP_Text Name { get; set; } = null!;
 
         public TMP_Text Where { get; set; } = null!;
+
+        public TMP_Text Ailments { get; set; } = null!;
 
         public GameObject Bars { get; set; } = null!;
 

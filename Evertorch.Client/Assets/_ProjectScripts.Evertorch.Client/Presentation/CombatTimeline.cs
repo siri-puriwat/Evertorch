@@ -161,7 +161,11 @@ public sealed class CombatTimeline
     public void AddHit(HitMark hit)
     {
         m_pending.Add(hit);
-        if (hit.Result != CombatResult.Miss && hit.Result != CombatResult.Immune && !hit.IsHeal)
+        if (hit.Result != CombatResult.Miss
+            && hit.Result != CombatResult.Immune
+            && hit.Result != CombatResult.Poison
+            && hit.Result != CombatResult.None
+            && !hit.IsHeal)
         {
             m_impacts[hit.Target] = new Moment(hit.Seconds, hit.IsOnLocalClock);
         }
@@ -306,7 +310,7 @@ public sealed class CombatTimeline
 }
 
 /// <summary>
-///     One hit, miss, critical, or heal to show over its target when its moment comes.
+///     One hit, miss, critical, heal, poison tick, or word to show over its target when its moment comes.
 /// </summary>
 public readonly struct HitMark
 {
@@ -317,7 +321,8 @@ public readonly struct HitMark
         CombatResult result,
         uint amount,
         ushort targetHealthPermille,
-        bool isHeal = false)
+        bool isHeal = false,
+        string word = "")
     {
         Target = target;
         Seconds = seconds;
@@ -326,6 +331,7 @@ public readonly struct HitMark
         Amount = amount;
         TargetHealthPermille = targetHealthPermille;
         IsHeal = isHeal;
+        Word = word;
     }
 
     public EntityId Target { get; }
@@ -344,5 +350,11 @@ public readonly struct HitMark
     ///     HP restored rather than lost: no squash, and a green number.
     /// </summary>
     public bool IsHeal { get; }
+
+    /// <summary>
+    ///     A word drawn in place of a number: "Resisted" with a miss, or an ailment's start, "Frozen!", with no result,
+    ///     which moves no bar.
+    /// </summary>
+    public string Word { get; }
 }
 }
