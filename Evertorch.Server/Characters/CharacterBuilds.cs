@@ -205,8 +205,7 @@ public sealed class CharacterBuilds
 
         DerivedStats derived = player.Stats;
         WornEquipment worn = player.Equipment;
-        PrimaryStats weapon = player.Weapon?.Bonus ?? default;
-        PrimaryStats armor = player.Armor?.Bonus ?? default;
+        PrimaryStats pieces = worn.Bonus;
         PrimaryStats cards = player.CardBonus.Stats;
         return new CharacterSheet(
             (ushort)Math.Min(ushort.MaxValue, player.JobLevel),
@@ -227,12 +226,12 @@ public sealed class CharacterBuilds
             Clamp(worn.WeaponAttack + worn.FlatAttack),
             Clamp(worn.MagicAttack),
             Clamp(worn.HardDefense),
-            Clamp(weapon.Str + armor.Str + cards.Str),
-            Clamp(weapon.Agi + armor.Agi + cards.Agi),
-            Clamp(weapon.Vit + armor.Vit + cards.Vit),
-            Clamp(weapon.Int + armor.Int + cards.Int),
-            Clamp(weapon.Dex + armor.Dex + cards.Dex),
-            Clamp(weapon.Luk + armor.Luk + cards.Luk),
+            Clamp(pieces.Str + cards.Str),
+            Clamp(pieces.Agi + cards.Agi),
+            Clamp(pieces.Vit + cards.Vit),
+            Clamp(pieces.Int + cards.Int),
+            Clamp(pieces.Dex + cards.Dex),
+            Clamp(pieces.Luk + cards.Luk),
             player.AttackElement,
             player.ArmorElement,
             ResistanceOf(player, Ailment.Poison),
@@ -370,7 +369,7 @@ public sealed class CharacterBuilds
             stat == PrimaryStat.Luk ? value : primary.Luk);
     }
 
-    // What the Stats window's row shows: the statistic's and the armor cards' resistance together against a source of
+    // What the Stats window's row shows: the statistic's and the worn cards' resistance together against a source of
     // the player's own level (Gameplay Systems §9.1).
     private static byte ResistanceOf(PlayerEntity player, Ailment ailment)
     {

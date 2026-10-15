@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Generic;
 using Evertorch.Game;
 using Evertorch.Protocol;
@@ -7,21 +6,30 @@ using Evertorch.Rules;
 namespace Evertorch.Server
 {
 /// <summary>
-///     What a player's worn weapon and armor add in combat (Gameplay Systems §11.1): the weapon's attack, its refine
-///     bonus and the worn cards' attack as a flat attack, a staff's refine bonus and the cards' magic attack to magic
-///     attack, and the armor's defense with its refine bonus and the cards' defense as hard defense. Combat reads it at
-///     each hit and the sheet shows it, so the two never disagree.
+///     What a player's worn pieces add (Gameplay Systems §2, §11.1), the eight positions visited once each in position
+///     order: the weapon's attack, its refine bonus and the worn cards' attack as a flat attack, a staff's refine bonus
+///     and the cards' magic attack to magic attack, every other piece's defense with its refine bonus and the cards'
+///     defense as hard defense, every piece's statistic bonuses, and every other piece's attack-speed penalty, a
+///     shield's. Combat and the statistics read it and the sheet shows it, so the three never disagree.
 /// </summary>
 public sealed class WornEquipment
 {
     public static readonly WornEquipment None = new(0, 0, 0, 0);
 
-    public WornEquipment(int weaponAttack, int flatAttack, int magicAttack, int hardDefense)
+    public WornEquipment(
+        int weaponAttack,
+        int flatAttack,
+        int magicAttack,
+        int hardDefense,
+        PrimaryStats bonus = default,
+        int attackSpeedPenalty = 0)
     {
         WeaponAttack = weaponAttack;
         FlatAttack = flatAttack;
         MagicAttack = magicAttack;
         HardDefense = hardDefense;
+        Bonus = bonus;
+        AttackSpeedPenalty = attackSpeedPenalty;
     }
 
     /// <summary>The worn weapon's own attack, which its draw varies; 0 unarmed.</summary>
@@ -33,39 +41,64 @@ public sealed class WornEquipment
     /// <summary>A worn staff's refine bonus and the worn cards' magic attack, with any weapon.</summary>
     public int MagicAttack { get; }
 
-    /// <summary>The worn armor's defense with its refine bonus, and the worn cards' defense.</summary>
+    /// <summary>Every worn piece but the weapon's defense with its refine bonus, and the worn cards' defense.</summary>
     public int HardDefense { get; }
 
+    /// <summary>Every worn piece's statistic bonuses, summed; the cards' are the player's card bonus.</summary>
+    public PrimaryStats Bonus { get; }
+
     /// <summary>
-    ///     What the given worn items add, each at its refine level, with their cards; a level past its table counts the
+    ///     What every worn piece but the weapon adds to the weapon's attack-speed penalty, or to the job's unarmed one: a
+    ///     shield's (Gameplay Systems §7).
+    /// </summary>
+    public int AttackSpeedPenalty { get; }
+
+    /// <summary>
+    ///     What the given worn pieces add, each at its refine level, with their cards; a level past its table counts the
     ///     table's last bonus, and an item without a table counts none.
     /// </summary>
-    public static WornEquipment Of(
-        ItemDefinition? weapon,
-        RefineTableDefinition? weaponTable,
-        int weaponLevel,
-        ItemDefinition? armor,
-        RefineTableDefinition? armorTable,
-        int armorLevel,
-        CardBonus? cards = null)
+    public static WornEquipment Of(IReadOnlyList<WornPiece> pieces, CardBonus? cards = null)
     {
         CardBonus added = cards ?? CardBonus.None;
-        int weaponBonus = weapon == null ? 0 : RefineRules.BonusAt(weaponTable, weaponLevel);
-        bool isStaff = weapon?.Equipment?.WeaponType == WeaponType.Staff;
-        int armorDefense = armor == null
-            ? 0
-            : (armor.Equipment?.Defense ?? 0) + RefineRules.BonusAt(armorTable, armorLevel);
+        int weaponAttack = 0;
+        int weaponBonus = 0;
+        int staffBonus = 0;
+        int defense = 0;
+        int penalty = 0;
+        PrimaryStats bonus = default;
+        foreach (WornPiece piece in pieces)
+        {
+            ItemEquipment? equipment = piece.Item.Equipment;
+            int refineBonus = RefineRules.BonusAt(piece.Table, piece.RefineLevel);
+            if (piece.Slot == EquipmentSlot.Weapon)
+            {
+                weaponAttack = equipment?.Attack ?? 0;
+                weaponBonus = refineBonus;
+                staffBonus = equipment?.WeaponType == WeaponType.Staff ? refineBonus : 0;
+            }
+            else
+            {
+                defense += (equipment?.Defense ?? 0) + refineBonus;
+                penalty += equipment?.AttackSpeedPenalty ?? 0;
+            }
+
+            bonus = CharacterStats.Plus(bonus, equipment?.Bonus);
+        }
+
         return new WornEquipment(
-            weapon?.Equipment?.Attack ?? 0,
+            weaponAttack,
             weaponBonus + added.Attack,
-            (isStaff ? weaponBonus : 0) + added.MagicAttack,
-            armorDefense + added.Defense);
+            staffBonus + added.MagicAttack,
+            defense + added.Defense,
+            bonus,
+            penalty);
     }
 
     /// <summary>
-    ///     What the cards in the given worn rows add, summed; a card the content no longer holds as a card adds nothing.
+    ///     What the cards in the given worn rows add, summed in the rows' order, so the body armor's first card that gives
+    ///     an element gives its wearer's; a card the content no longer holds as a card adds nothing.
     /// </summary>
-    public static CardBonus CardsOf(ServerContent content, params IReadOnlyList<ItemDefinitionId>[] rows)
+    public static CardBonus CardsOf(ServerContent content, IEnumerable<IReadOnlyList<ItemDefinitionId>> rows)
     {
         CardBonus sum = CardBonus.None;
         foreach (IReadOnlyList<ItemDefinitionId> cards in rows)
@@ -83,56 +116,63 @@ public sealed class WornEquipment
     }
 
     /// <summary>
-    ///     The one place a player's worn items are set (Gameplay Systems §11.1): at the load and at every change of what is
-    ///     worn. The worn items' values, the weapon seen in hand, and what they add in combat follow the given rows.
+    ///     The one place a player's worn pieces are set (Gameplay Systems §11.1): at the load and at every change of what
+    ///     is worn. <paramref name="worn" /> holds the worn rows in position order; the pieces' values, the weapon seen in
+    ///     hand, the cards, and what they add follow them.
     /// </summary>
-    public static void Dress(
-        PlayerEntity player,
-        ServerContent content,
-        ItemDefinitionId? weapon,
-        int weaponLevel,
-        ItemDefinitionId? armor,
-        int armorLevel,
-        IReadOnlyList<ItemDefinitionId>? weaponCards = null,
-        IReadOnlyList<ItemDefinitionId>? armorCards = null)
+    public static void Dress(PlayerEntity player, ServerContent content, IReadOnlyList<InventoryEntry> worn)
     {
-        ItemDefinition? weaponItem = weapon.HasValue ? content.Items[weapon.Value] : null;
-        ItemDefinition? armorItem = armor.HasValue ? content.Items[armor.Value] : null;
-        CardBonus cards = CardsOf(
-            content,
-            weaponItem == null ? Array.Empty<ItemDefinitionId>() : weaponCards ?? Array.Empty<ItemDefinitionId>(),
-            armorItem == null ? Array.Empty<ItemDefinitionId>() : armorCards ?? Array.Empty<ItemDefinitionId>());
-        player.Weapon = weaponItem?.Equipment;
+        var pieces = new List<WornPiece>(worn.Count);
+        var cards = new List<IReadOnlyList<ItemDefinitionId>>(worn.Count);
+        ItemDefinitionId? weapon = null;
+        ItemEquipment? weaponEquipment = null;
+        ItemEquipment? armorEquipment = null;
+        foreach (InventoryEntry row in worn)
+        {
+            ItemDefinition item = content.Items[row.Item];
+            pieces.Add(new WornPiece(row.Slot, item, TableOf(content, item), row.RefineLevel));
+            cards.Add(row.Cards);
+            if (row.Slot == EquipmentSlot.Weapon)
+            {
+                weapon = row.Item;
+                weaponEquipment = item.Equipment;
+            }
+            else if (row.Slot == EquipmentSlot.Armor)
+            {
+                armorEquipment = item.Equipment;
+            }
+        }
+
+        CardBonus bonus = CardsOf(content, cards);
+        player.Weapon = weaponEquipment;
         player.SetWornWeapon(weapon);
-        player.Armor = armorItem?.Equipment;
-        player.CardBonus = cards;
-        player.Equipment = Of(
-            weaponItem,
-            TableOf(content, weaponItem),
-            weaponLevel,
-            armorItem,
-            TableOf(content, armorItem),
-            armorLevel,
-            cards);
+        player.Armor = armorEquipment;
+        player.CardBonus = bonus;
+        player.Equipment = Of(pieces, bonus);
     }
 
     /// <summary>
-    ///     <see cref="Dress(PlayerEntity, ServerContent, ItemDefinitionId?, int, ItemDefinitionId?, int)" /> from the
-    ///     character's settled inventory.
+    ///     <see cref="Dress(PlayerEntity, ServerContent, IReadOnlyList{InventoryEntry})" /> from the character's settled
+    ///     inventory.
     /// </summary>
     public static void Dress(PlayerEntity player, ServerContent content, CharacterInventory inventory)
     {
-        bool hasWeapon = inventory.TryGetRow(inventory.WornIn(EquipmentSlot.Weapon), out InventoryEntry weapon);
-        bool hasArmor = inventory.TryGetRow(inventory.WornIn(EquipmentSlot.Armor), out InventoryEntry armor);
-        Dress(
-            player,
-            content,
-            hasWeapon ? weapon.Item : null,
-            hasWeapon ? weapon.RefineLevel : 0,
-            hasArmor ? armor.Item : null,
-            hasArmor ? armor.RefineLevel : 0,
-            hasWeapon ? weapon.Cards : null,
-            hasArmor ? armor.Cards : null);
+        Dress(player, content, WornRowsOf(inventory));
+    }
+
+    /// <summary>The rows <paramref name="inventory" /> wears, in position order.</summary>
+    public static IReadOnlyList<InventoryEntry> WornRowsOf(CharacterInventory inventory)
+    {
+        var worn = new List<InventoryEntry>(EquipmentPositions.All.Count);
+        foreach (EquipmentSlot slot in EquipmentPositions.All)
+        {
+            if (inventory.TryGetRow(inventory.WornIn(slot), out InventoryEntry row))
+            {
+                worn.Add(row);
+            }
+        }
+
+        return worn;
     }
 
     /// <summary>

@@ -40,7 +40,7 @@ public sealed class AilmentRules
         return Clamped(level - (long)advantage);
     }
 
-    /// <summary>A player's worn armor cards' resistance to one ailment, their sum capped at 100.</summary>
+    /// <summary>A player's worn cards' resistance to one ailment, their sum capped at 100.</summary>
     public int CardResistance(int sum)
     {
         return Clamped(sum);
@@ -76,7 +76,7 @@ public sealed class AilmentRules
     }
 
     /// <summary>
-    ///     What an armor card's and a statistic's resistance together keep out against a same-level source, the Stats
+    ///     What the worn cards' and a statistic's resistance together keep out against a same-level source, the Stats
     ///     window's row: ⌊100 − (100 − R) × (100 − C) ÷ 100⌋.
     /// </summary>
     public int SheetResistance(int resistance, int cardResistance)

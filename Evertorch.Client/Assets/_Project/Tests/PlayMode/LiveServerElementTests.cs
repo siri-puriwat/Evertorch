@@ -221,7 +221,9 @@ public sealed class LiveServerElementTests
             bite ??= resolved.Skill.Value == GraveBite && resolved.Target == world.LocalEntity ? resolved : null;
         client.Connection!.SendAttack(crawler);
         float deadline = Time.realtimeSinceStartup + FightTimeoutSeconds;
-        while (bite == null && Time.realtimeSinceStartup < deadline)
+
+        // A bite may come before the first swing lands, so the fight goes on until both happened.
+        while ((bite == null || !isHit) && Time.realtimeSinceStartup < deadline)
         {
             StepBeside(client, world, crawler);
             yield return new WaitForSecondsRealtime(0.5f);

@@ -51,15 +51,23 @@ public sealed class RefineBonusTests
 
     private static WornEquipment Of(string? weapon, int weaponLevel, string? armor, int armorLevel)
     {
-        ItemDefinition? weaponItem = weapon == null ? null : Item(weapon);
-        ItemDefinition? armorItem = armor == null ? null : Item(armor);
-        return WornEquipment.Of(
-            weaponItem,
-            WornEquipment.TableOf(Content, weaponItem),
-            weaponLevel,
-            armorItem,
-            WornEquipment.TableOf(Content, armorItem),
-            armorLevel);
+        var pieces = new List<WornPiece>();
+        if (weapon != null)
+        {
+            pieces.Add(new WornPiece(EquipmentSlot.Weapon, Item(weapon), Table(weapon), weaponLevel));
+        }
+
+        if (armor != null)
+        {
+            pieces.Add(new WornPiece(EquipmentSlot.Armor, Item(armor), Table(armor), armorLevel));
+        }
+
+        return WornEquipment.Of(pieces);
+    }
+
+    private static RefineTableDefinition? Table(string item)
+    {
+        return WornEquipment.TableOf(Content, Item(item));
     }
 
     private static ConnectionId EnterWearing(TestServer server, string item, int level)
@@ -116,7 +124,12 @@ public sealed class RefineBonusTests
     [Test]
     public void Of_AnItemWithoutATable_CountsNoBonus()
     {
-        var worn = WornEquipment.Of(Item(Sword), null, 7, Item("item.armor.cloth"), null, 4);
+        var worn = WornEquipment.Of(
+            new[]
+            {
+                new WornPiece(EquipmentSlot.Weapon, Item(Sword), null, 7),
+                new WornPiece(EquipmentSlot.Armor, Item("item.armor.cloth"), null, 4)
+            });
 
         Assert.That(Parts(worn), Is.EqualTo((20, 0, 0, 8)));
     }

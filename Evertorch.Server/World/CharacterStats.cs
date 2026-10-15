@@ -5,8 +5,8 @@ namespace Evertorch.Server
 {
 /// <summary>
 ///     The one path that derives a character's statistics (Gameplay Systems §2): its level, its primary statistics
-///     with its status effects' percentages and its equipment's bonuses, its weapon's attack-speed penalty, and its
-///     job's tuning, through the character rules.
+///     with its status effects' percentages and its equipment's bonuses, its weapon's attack-speed penalty with what a
+///     shield adds, and its job's tuning, through the character rules.
 /// </summary>
 public sealed class CharacterStats
 {
@@ -18,7 +18,13 @@ public sealed class CharacterStats
     }
 
     /// <param name="weapon">The worn weapon, whose penalty replaces the job's unarmed one; null when unarmed.</param>
-    public DerivedStats Calculate(JobDefinition job, int level, PrimaryStats primary, ItemEquipment? weapon = null)
+    /// <param name="addedPenalty">What the other worn pieces add to that penalty, a shield's (Gameplay Systems §7).</param>
+    public DerivedStats Calculate(
+        JobDefinition job,
+        int level,
+        PrimaryStats primary,
+        ItemEquipment? weapon = null,
+        int addedPenalty = 0)
     {
         var build = new CharacterBuild(
             level,
@@ -27,7 +33,7 @@ public sealed class CharacterStats
             job.HealthPerLevel,
             job.SpiritBase,
             job.SpiritPerLevel,
-            weapon?.AttackSpeedPenalty ?? job.UnarmedAttackSpeedPenalty,
+            (weapon?.AttackSpeedPenalty ?? job.UnarmedAttackSpeedPenalty) + addedPenalty,
             (float)job.BaseSpeed);
         return m_rules.CalculateDerivedStats(build);
     }
@@ -50,17 +56,18 @@ public sealed class CharacterStats
         }
 
         // A status effect's percentage is of the statistic without the equipment's bonuses (equipment research note),
-        // and the worn cards add theirs as the items do.
+        // and the worn cards add theirs as the pieces do.
         CardBonus cards = player.CardBonus;
-        PrimaryStats primary = Plus(
-            Plus(Plus(m_rules.ApplyStatPercent(player.Primary, percent), player.Weapon?.Bonus), player.Armor?.Bonus),
-            cards.Stats);
-        DerivedStats stats = WithMaxima(Calculate(job, player.Level, primary, player.Weapon), cards);
+        WornEquipment worn = player.Equipment;
+        PrimaryStats primary = Plus(Plus(m_rules.ApplyStatPercent(player.Primary, percent), worn.Bonus), cards.Stats);
+        DerivedStats stats = WithMaxima(
+            Calculate(job, player.Level, primary, player.Weapon, worn.AttackSpeedPenalty),
+            cards);
         player.ApplyStats(stats, m_rules.CalculateRegeneration(primary, stats));
         player.EffectivePrimary = primary;
     }
 
-    private static PrimaryStats Plus(PrimaryStats stats, PrimaryStats? bonus)
+    internal static PrimaryStats Plus(PrimaryStats stats, PrimaryStats? bonus)
     {
         if (!bonus.HasValue)
         {

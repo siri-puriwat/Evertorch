@@ -7,7 +7,8 @@ namespace Evertorch.Game
 ///     What a card adds while the item holding it is worn (Gameplay Systems §11.1, §11.7): primary statistics; a flat
 ///     attack, magic attack, defense, max HP, and max SP; the boss modifiers, in percent; the damage it adds to a race,
 ///     an element, or a size and takes off an element, in percent by name; the element an armor card gives its wearer;
-///     and the ailments a weapon card may bring on a hit and an armor card resists (§9.1). Server-only content.
+///     and the ailments a weapon card may bring on a hit and a card of any other category resists (§9.1). Server-only
+///     content.
 /// </summary>
 public sealed class CardBonus
 {
@@ -111,7 +112,8 @@ public sealed class CardBonus
     public IReadOnlyDictionary<Ailment, int> Inflict { get; }
 
     /// <summary>
-    ///     How much an armor card resists each ailment, in percent by ailment; combat caps the worn cards' sum at 100.
+    ///     How much a card that fits anything but a weapon resists each ailment, in percent by ailment; combat caps the
+    ///     worn cards' sum at 100.
     /// </summary>
     public IReadOnlyDictionary<Ailment, int> Resist { get; }
 

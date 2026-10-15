@@ -106,8 +106,8 @@ public sealed class PlayerEntity : WorldEntity
     public ItemEquipment? Armor { get; set; }
 
     /// <summary>
-    ///     What the worn weapon and armor add in combat, refine bonuses included (Gameplay Systems §11.1); only
-    ///     <see cref="WornEquipment.Dress(PlayerEntity, ServerContent, CharacterInventory)" /> sets it.
+    ///     What the worn pieces add in combat and to the statistics, refine bonuses included (Gameplay Systems §11.1);
+    ///     only <see cref="WornEquipment" />'s <c>Dress</c> sets it.
     /// </summary>
     public WornEquipment Equipment { get; set; } = WornEquipment.None;
 
