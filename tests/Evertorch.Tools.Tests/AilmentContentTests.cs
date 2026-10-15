@@ -213,6 +213,42 @@ public sealed class AilmentContentTests
     }
 
     [Test]
+    public void RepositoryContent_GivesHeavyBlowItsStun_AndTheArcanistFrostLance()
+    {
+        ContentPipelineResult result = ContentPipeline.Run(
+            Path.Combine(ContentValidationTests.RepositoryRoot(), "content"));
+        Assert.That(result.Diagnostics, Is.Empty, Describe(result));
+        AuthoredSkill blow = result.Content.Skills.Single(skill => skill.Definition.Id.Value == "skill.heavy_blow");
+        AuthoredSkill lance = result.Content.Skills.Single(skill => skill.Definition.Id.Value == "skill.frost_lance");
+
+        Assert.That(
+            blow.Definition.Levels.Select(level => (level.Effect.Rider!.Status.Value,
+                level.Effect.Rider.ChanceBasisPoints,
+                level.Effect.Rider.DurationMs)),
+            Is.EqualTo(new[] { 500, 1000, 1500, 2000, 2500 }.Select(chance => ("status.stunned", chance, 4000))));
+        Assert.That(blow.Description, Does.Contain("stun"));
+        Assert.That(
+            lance.Definition.Levels.Select(level => (level.SpCost, level.Effect.DamageRatioPercent,
+                level.Effect.Rider!.ChanceBasisPoints, level.Effect.Rider.DurationMs)),
+            Is.EqualTo(new[]
+            {
+                (12, 100, 3000, 4000), (14, 110, 3500, 5000), (16, 120, 4000, 6000), (18, 130, 4500, 7000),
+                (20, 140, 5000, 8000)
+            }));
+        Assert.That(
+            (lance.Definition.TargetType, lance.Definition.DamageType, lance.Definition.Element, lance.Definition.Range,
+                lance.Definition.Requires!.Skill.Value, lance.Definition.Requires.Level),
+            Is.EqualTo((SkillTargetType.Enemy, (SkillDamageType?)SkillDamageType.Magical,
+                (SkillElement?)SkillElement.Water, 8d, "skill.arcane_bolt", 2)));
+        Assert.That(
+            lance.Definition.Levels.Select(level => (level.FixedCastMs, level.VariableCastMs, level.AfterCastDelayMs)),
+            Is.All.EqualTo((300, 800, 800)));
+        Assert.That(
+            (lance.Icon, lance.Projectile, lance.Description!.Contains("freeze"), lance.Description.Contains("Water")),
+            Is.EqualTo(("skill_frost_lance", "projectile_spark", true, true)));
+    }
+
+    [Test]
     public void RepositoryContent_GivesTheMonstersTheirAilmentSkills_AndSparkBoltAndGraveBiteTheirRiders()
     {
         ContentPipelineResult result = ContentPipeline.Run(

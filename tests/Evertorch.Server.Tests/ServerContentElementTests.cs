@@ -194,7 +194,8 @@ public sealed class ServerContentElementTests
                 new[]
                 {
                     "skill.arcane_bolt Ghost", "skill.basic_attack Weapon", "skill.crushing_bite Earth",
-                    "skill.grave_bite Shadow", "skill.heavy_blow Weapon", "skill.quake_slam Earth",
+                    "skill.frost_lance Water", "skill.grave_bite Shadow", "skill.heavy_blow Weapon",
+                    "skill.quake_slam Earth",
                     "skill.spark_bolt Wind",
                     "skill.strike Weapon", "skill.venom_bite Poison"
                 }));

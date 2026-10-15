@@ -218,6 +218,9 @@ public sealed class CardContentTests
             groups = groups.Append($"armor {bonus.ArmorElement}");
         }
 
+        groups = groups.Concat(bonus.Inflict.Select(entry => $"inflict {entry.Key} {entry.Value}"))
+            .Concat(bonus.Resist.Select(entry => $"resist {entry.Key} {entry.Value}"));
+
         return string.Join(
             " ",
             values.Where(value => value.Value > 0).Select(value => $"{value.Name} {value.Value}").Concat(groups));
@@ -499,12 +502,12 @@ public sealed class CardContentTests
             Is.EqualTo(
                 new[]
                 {
-                    ("item.card.barrow_crawler", "Shrouded", "maxHp 30 from Shadow 30"),
-                    ("item.card.forest_crawler", "Keen", "attack 8 to Small 10"),
-                    ("item.card.gloom_wisp", "Bane", "boss 20 to Insect 10"),
-                    ("item.card.grotto_crawler", "Earthen", "defense 10 armor Earth"),
-                    ("item.card.hollow_wisp", "Spectral", "to Undead 20"),
-                    ("item.card.slime_monarch", "Royal", "maxHp 40 reduction 25"),
+                    ("item.card.barrow_crawler", "Shrouded", "maxHp 30 from Shadow 30 resist Poison 30"),
+                    ("item.card.forest_crawler", "Keen", "attack 8 to Small 10 inflict Poison 500"),
+                    ("item.card.gloom_wisp", "Bane", "boss 20 to Insect 10 inflict Silence 500"),
+                    ("item.card.grotto_crawler", "Earthen", "defense 10 armor Earth resist Stun 30"),
+                    ("item.card.hollow_wisp", "Spectral", "to Undead 20 inflict Sleep 500"),
+                    ("item.card.slime_monarch", "Royal", "maxHp 40 reduction 25 resist Freeze 50"),
                     ("item.card.spark_wisp", "Arcane", "int 1 magicAttack 10"),
                     ("item.card.training_slime", "Hardy", "vit 1 maxHp 20 from Wind 20")
                 }));

@@ -6,33 +6,33 @@ element: weapon
 server:
   range: 1.5
   maxLevel: 5
-  # Each level hits 25 % harder for 2 SP more.
+  # Each level hits 25 % harder and stuns 5 % more often for 2 SP more.
   levels:
     - spCost: 12
       afterCastDelayMs: 800
       cooldownMs: 4000
       effect:
-        damage: { ratio: 200 }
+        damage: { ratio: 200, ailment: { status: status.stunned, chance: 0.05, durationMs: 4000 } }
     - spCost: 14
       afterCastDelayMs: 800
       cooldownMs: 4000
       effect:
-        damage: { ratio: 225 }
+        damage: { ratio: 225, ailment: { status: status.stunned, chance: 0.1, durationMs: 4000 } }
     - spCost: 16
       afterCastDelayMs: 800
       cooldownMs: 4000
       effect:
-        damage: { ratio: 250 }
+        damage: { ratio: 250, ailment: { status: status.stunned, chance: 0.15, durationMs: 4000 } }
     - spCost: 18
       afterCastDelayMs: 800
       cooldownMs: 4000
       effect:
-        damage: { ratio: 275 }
+        damage: { ratio: 275, ailment: { status: status.stunned, chance: 0.2, durationMs: 4000 } }
     - spCost: 20
       afterCastDelayMs: 800
       cooldownMs: 4000
       effect:
-        damage: { ratio: 300 }
+        damage: { ratio: 300, ailment: { status: status.stunned, chance: 0.25, durationMs: 4000 } }
 client:
   icon: skill_heavy_blow
-  description: A crushing blow at your target, far harder than Strike but slow to recover from. Each level hits harder for more SP.
+  description: A crushing blow at your target, far harder than Strike but slow to recover from, that may stun it. Each level hits harder and stuns more often for more SP.

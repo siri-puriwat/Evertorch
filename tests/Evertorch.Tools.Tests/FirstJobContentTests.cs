@@ -334,7 +334,10 @@ public sealed class FirstJobContentTests
             Is.EqualTo(adventurerTree.Concat(new[] { "skill.heavy_blow", "skill.war_cry", "skill.iron_guard" })));
         Assert.That(
             Job("job.arcanist").Tree.Select(skill => skill.Value),
-            Is.EqualTo(adventurerTree.Concat(new[] { "skill.arcane_bolt", "skill.clarity", "skill.mend" })));
+            Is.EqualTo(adventurerTree.Concat(new[]
+            {
+                "skill.arcane_bolt", "skill.clarity", "skill.mend", "skill.frost_lance"
+            })));
         Assert.That(
             new[] { "job.vanguard", "job.arcanist" }.Select(id => (Job(id).BaseJob?.Value, Job(id).CarriedSkillPoints,
                 Job(id).JobExperienceTable.Value)),

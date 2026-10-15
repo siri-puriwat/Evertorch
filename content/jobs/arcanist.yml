@@ -6,7 +6,7 @@ server:
   health: { base: 60, perLevel: 5 }
   spirit: { base: 20, perLevel: 7 }
   jobExperienceTable: experience.first_job
-  skills: [skill.arcane_bolt, skill.clarity, skill.mend]
+  skills: [skill.arcane_bolt, skill.clarity, skill.mend, skill.frost_lance]
   weapons: [staff]
 client:
   prefab: character_arcanist

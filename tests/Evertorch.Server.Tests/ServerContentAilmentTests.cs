@@ -164,8 +164,8 @@ public sealed class ServerContentAilmentTests
             Is.EqualTo(("status.stunned", 500, 4000)));
         Assert.That(
             content.Skills[new SkillDefinitionId("skill.heavy_blow")].Levels.Skip(1)
-                .Select(level => level.Effect.Rider),
-            Is.All.Null,
+                .Select(level => level.Effect.Rider!.ChanceBasisPoints),
+            Is.EqualTo(new[] { 1000, 1500, 2000, 2500 }),
             "a rider is each level's own");
         Assert.That((hush.Status.Value, hush.ChanceBasisPoints), Is.EqualTo(("status.silenced", 6000)));
         Assert.That(
@@ -182,7 +182,7 @@ public sealed class ServerContentAilmentTests
     }
 
     [Test]
-    public void Load_ForTheRepositoryContent_ReadsTheSixAilmentsStatuses_MendsAndTheRemediesCures()
+    public void Load_ForTheRepositoryContent_ReadsTheSixAilmentsStatuses_TheCuresAndTheCardsAilments()
     {
         ServerContent content = ServerContentLoader.Load(PackageFixture.BuildRepositoryPackage());
 
@@ -215,8 +215,15 @@ public sealed class ServerContentAilmentTests
             Is.All.EqualTo(new[] { Ailment.Poison, Ailment.Silence, Ailment.Blind }), "every level");
         Assert.That(
             content.Items.Values.Where(item => item.Card != null)
-                .Select(item => item.Card!.Bonus.Inflict.Count + item.Card.Bonus.Resist.Count),
-            Is.EqualTo(new[] { 0, 0, 0, 0, 0, 0, 0, 0 }));
+                .OrderBy(item => item.Id.Value, StringComparer.Ordinal)
+                .Select(item => (item.Id.Value, item.Card!.Bonus.Inflict.Count, item.Card.Bonus.Resist.Count)),
+            Is.EqualTo(new[]
+            {
+                ("item.card.barrow_crawler", 0, 1), ("item.card.forest_crawler", 1, 0), ("item.card.gloom_wisp", 1, 0),
+                ("item.card.grotto_crawler", 0, 1), ("item.card.hollow_wisp", 1, 0), ("item.card.slime_monarch", 0, 1),
+                ("item.card.spark_wisp", 0, 0), ("item.card.training_slime", 0, 0)
+            }),
+            "six cards with an ailment, Hardy and Arcane without");
         Assert.That(
             content.Items.Values.Where(item => item.Effect != null && item.Effect.Cures.Count > 0)
                 .Select(item => (item.Id.Value, item.Effect!.Health, item.Effect.Spirit, item.Effect.Cures.Count))

@@ -115,7 +115,9 @@ public sealed class LiveServerCardTests
         yield return WaitUntil(() => Row(cards, "Training Sword [1] · 1 free") != null, StartTimeoutSeconds);
         Assert.That(
             cards.Text,
-            Does.StartWith("Forest Crawler Card\nAttack +8 and damage to Small +10%.\nFits: weapon"),
+            Does.StartWith(
+                "Forest Crawler Card\nAttack +8, damage to Small +10%, and a 5% chance to poison on a hit."
+                + "\nFits: weapon"),
             "the Card window");
         Row(cards, "Training Sword [1] · 1 free")!.onClick.Invoke();
         yield return WaitUntil(() => Row(cards, CardMessages.InsertPrompt) != null, StartTimeoutSeconds);

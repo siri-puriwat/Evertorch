@@ -624,7 +624,7 @@ public sealed class ClientContentParserTests
         Assert.That(
             (card!.Type, card.DisplayName, card.Fits, card.Prefix, card.Description),
             Is.EqualTo((ItemType.Card, "Forest Crawler Card", EquipmentSlot.Weapon, "Keen",
-                "Attack +8 and damage to Small +10%.")));
+                "Attack +8, damage to Small +10%, and a 5% chance to poison on a hit.")));
         Assert.That(
             content.TryGetItem(new ItemDefinitionId("item.weapon.iron_sword"), out ClientItem? sword)
                 ? sword!.Slots

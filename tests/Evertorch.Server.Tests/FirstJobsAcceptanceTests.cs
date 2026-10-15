@@ -300,9 +300,9 @@ public sealed class FirstJobsAcceptanceTests
                 new[]
                 {
                     (Strike, (byte)1), (FirstAid, (byte)1), (Focus, (byte)2), (ArcaneBolt, (byte)1), (Clarity, (byte)1),
-                    (Mend, (byte)1)
+                    (Mend, (byte)1), ("skill.frost_lance", (byte)0)
                 }),
-            "restart: the Arcanist's trees as learned");
+            "restart: the Arcanist's trees as learned, Frost Lance not yet");
         AssertSees("restart", mender, changer, Vanguard);
         AssertSees("restart", changer, mender, Arcanist);
         Assert.That(StoredJob(ChangerName), Is.EqualTo((Vanguard, 1, 0L)), "restart: the change stored");

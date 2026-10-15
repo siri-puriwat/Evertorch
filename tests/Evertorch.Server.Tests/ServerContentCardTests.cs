@@ -94,6 +94,7 @@ public sealed class ServerContentCardTests
         Dictionary<string, byte[]> files = PackageFixture.BuildRepositoryPackage();
         string card = PackageFixture.SetValue(files, Items, Keen, "card.attack", "0");
         PackageFixture.SetValue(files, Items, Keen, "card.sizeDamage", "{}");
+        PackageFixture.SetValue(files, Items, Keen, "card.inflict", "{}");
         JsonArray definitions = JsonNode.Parse(files[Items])!["definitions"]!.AsArray();
         JsonObject wisp = definitions
             .Single(definition => (string?)definition!["id"] == "item.card.gloom_wisp")!

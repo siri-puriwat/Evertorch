@@ -7,6 +7,7 @@ using Evertorch.Client;
 using Evertorch.Game;
 using Evertorch.Persistence.Tests;
 using Evertorch.Protocol;
+using Evertorch.Rules;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Npgsql;
@@ -20,9 +21,12 @@ namespace Evertorch.Server.Tests
 ///     that disarms the Grotto Crawlers and takes their dodge away, and two clients of two accounts built from the
 ///     client's production networking and gameplay code. Sora, a level-25 Vanguard with Heavy Blow 5 and Iron Guard 3
 ///     wearing the Iron Sword, and Ines, a level-25 Arcanist with Arcane Bolt 5 and Mend 3 wearing the Ash Staff, stored
-///     in the Umbral Grotto's crawler hall, enter and see each other by name. Sora raises Iron Guard, Ines Mends Sora,
-///     and Sora's Heavy Blow strikes a Grotto Crawler. After a clean stop a second host on the same database lets both in
-///     again in the hall, each with its job and its skills, and Sora with its Iron Guard and the time it had left.
+///     in the Umbral Grotto's crawler hall, enter and see each other by name. Sora raises Iron Guard and Ines Mends Sora.
+///     Ines's Frost Lance freezes a Grotto Crawler, which both see; Sora's Heavy Blow on it thaws it and stuns nothing,
+///     and
+///     the next blow stuns it, which both see too, every ailment's draw landing. After a clean stop a second host on the
+///     same database lets both in again in the hall, each with its job and its skills, and Sora with its Iron Guard and
+///     the time it had left.
 /// </summary>
 [TestFixture]
 [NonParallelizable]
@@ -46,6 +50,7 @@ public sealed class AilmentAcceptanceTests
     private static readonly SkillDefinitionId ArcaneBolt = new("skill.arcane_bolt");
     private static readonly SkillDefinitionId Clarity = new("skill.clarity");
     private static readonly SkillDefinitionId Mend = new("skill.mend");
+    private static readonly SkillDefinitionId FrostLance = new("skill.frost_lance");
     private static readonly TimeSpan FightLimit = TimeSpan.FromSeconds(30);
 
     // Two places on the crawler hall's floor, at its south end, far from the passive pack around (-18.5, 0, 16.5).
@@ -61,7 +66,10 @@ public sealed class AilmentAcceptanceTests
 
     private static readonly BuildSeed InesBuild = new(
         10,
-        new Dictionary<string, int> { [ArcaneBolt.Value] = 5, [Clarity.Value] = 1, [Mend.Value] = 3 },
+        new Dictionary<string, int>
+        {
+            [ArcaneBolt.Value] = 5, [Clarity.Value] = 1, [Mend.Value] = 3, [FrostLance.Value] = 5
+        },
         Arcanist);
 
     private PostgresFixture m_database = null!;
@@ -79,7 +87,8 @@ public sealed class AilmentAcceptanceTests
     }
 
     // No reconnect grace, so a player who leaves is out of the world at once. Every hit lands at the least of its
-    // draws, and nothing drops, since network timing decides which draw each roll gets (Coding Standards §10).
+    // draws, every ailment's roll lands, and nothing drops, since network timing decides which draw each roll gets
+    // (Coding Standards §10).
     private IHost StartHost(string contentRootPath)
     {
         HostApplicationBuilder builder = TestHosts.CreateBuilderWithDatabase(
@@ -90,7 +99,7 @@ public sealed class AilmentAcceptanceTests
             },
             contentRootPath,
             m_database.ConnectionString);
-        TestHosts.ScriptOutcomes(builder, new SureHitRandom(), new ScriptedRandom(999_999));
+        TestHosts.ScriptOutcomes(builder, new LandingRandom(), new ScriptedRandom(999_999));
         IHost host = builder.Build();
         host.Start();
         return host;
@@ -197,13 +206,89 @@ public sealed class AilmentAcceptanceTests
         Assert.That(heal.Amount, Is.EqualTo(100u), $"{step}: Mend 3's 100 HP");
     }
 
-    // Sora selects a Grotto Crawler and uses Heavy Blow: the client walks into its reach, and the blow strikes, since
-    // every hit lands (Gameplay Systems §9).
-    private static void HeavyBlowOnACrawler(SocketClient sora, SocketClient ines)
+    // Ines selects a Grotto Crawler and casts Frost Lance: it strikes, and its freeze lands, which both clients see in
+    // the crawler's flags (Gameplay Systems §9.1).
+    private static EntityId FrostLanceOnACrawler(SocketClient ines, SocketClient sora)
+    {
+        const string step = "Frost Lance";
+        ClientWorld world = ines.World;
+        EntityId crawler = TargetA(step, GrottoCrawler, ines, sora);
+        var resolved = new List<SkillResolved>();
+        world.SkillResolvedReceived += resolved.Add;
+
+        Assert.That(ines.UseSkill(FrostLance), Is.True, $"{step}: cast");
+        Assert.That(
+            SocketClients.PumpUntil(
+                () => resolved.Any(skill => skill.Caster == world.LocalEntity && skill.Skill == FrostLance),
+                FightLimit,
+                ines,
+                sora),
+            Is.True,
+            $"{step}: resolved ({world.LastRejection})");
+        world.SkillResolvedReceived -= resolved.Add;
+
+        SkillResolved lance = resolved.First(skill => skill.Caster == world.LocalEntity && skill.Skill == FrostLance);
+        Assert.That((lance.Target, lance.Outcome), Is.EqualTo((crawler, SkillOutcome.Hit)), $"{step}: on the crawler");
+        AssertFlag(step, crawler, EntityStateFlags.Frozen, true, ines, sora);
+        return crawler;
+    }
+
+    // Both clients see the flag on the entity as the server set it (Network Protocol §6).
+    private static void AssertFlag(
+        string step,
+        EntityId entity,
+        EntityStateFlags flag,
+        bool isSet,
+        params SocketClient[] clients)
+    {
+        foreach (SocketClient client in clients)
+        {
+            Assert.That(
+                SocketClients.PumpUntil(
+                    () => client.World.Remotes.TryGetValue(entity, out RemoteEntity? remote)
+                        && (remote.StateFlags & flag) != 0 == isSet,
+                    clients),
+                Is.True,
+                $"{step}: {flag} {(isSet ? "seen" : "gone")}");
+        }
+    }
+
+    // Sora's first Heavy Blow on the frozen crawler thaws it and, the hit having broken a hold, stuns nothing; its next
+    // blow stuns it (Gameplay Systems §9.1).
+    private static void HeavyBlowsOn(EntityId crawler, SocketClient sora, SocketClient ines)
     {
         const string step = "Heavy Blow";
         ClientWorld world = sora.World;
-        EntityId crawler = TargetA(step, GrottoCrawler, sora, ines);
+        for (int tries = 0; tries < 8 && world.Target != crawler; tries++)
+        {
+            EntityId next = sora.CycleTarget(true);
+            SocketClients.PumpUntil(() => world.Target == next, sora, ines);
+        }
+
+        Assert.That(world.Target, Is.EqualTo(crawler), $"{step}: Sora selects Ines's crawler");
+        Blow(step, crawler, sora, ines);
+        AssertFlag(step, crawler, EntityStateFlags.Frozen, false, sora, ines);
+        Assert.That(
+            world.Remotes[crawler].StateFlags & EntityStateFlags.Stunned,
+            Is.EqualTo(EntityStateFlags.None),
+            $"{step}: the breaking blow stuns nothing");
+        Assert.That(
+            SocketClients.PumpUntil(
+                () => world.CooldownRemaining(HeavyBlow) <= 0.0 && world.AfterCastDelayRemaining <= 0.0,
+                FightLimit,
+                sora,
+                ines),
+            Is.True,
+            $"{step}: cooled down");
+        Blow($"{step} again", crawler, sora, ines);
+        AssertFlag($"{step} again", crawler, EntityStateFlags.Stunned, true, sora, ines);
+    }
+
+    // Sora uses Heavy Blow on its selected crawler: the client walks into its reach, and the blow strikes, since every
+    // hit lands (Gameplay Systems §9).
+    private static void Blow(string step, EntityId crawler, SocketClient sora, SocketClient ines)
+    {
+        ClientWorld world = sora.World;
         var resolved = new List<SkillResolved>();
         world.SkillResolvedReceived += resolved.Add;
 
@@ -221,6 +306,15 @@ public sealed class AilmentAcceptanceTests
         SkillResolved blow = resolved.First(skill => skill.Caster == world.LocalEntity && skill.Skill == HeavyBlow);
         Assert.That((blow.Target, blow.Outcome), Is.EqualTo((crawler, SkillOutcome.Hit)), $"{step}: on the crawler");
         Assert.That(blow.Amount, Is.GreaterThan(0u), $"{step}: some damage");
+    }
+
+    // Every hit lands at the least of its draws, as SureHitRandom's, and every ailment's roll draws 0, so lands.
+    private sealed class LandingRandom : IRandomSource
+    {
+        public int Next(int exclusiveMax)
+        {
+            return exclusiveMax == 1000 ? 999 : 0;
+        }
     }
 
     // Tab until the server confirms a target of the given monster.
@@ -327,7 +421,10 @@ public sealed class AilmentAcceptanceTests
         using var root = new TemporaryDirectory();
         PackageFixture.WriteTo(
             Path.Combine(root.Path, "content", "server"),
-            DungeonPackage.Build(DungeonPackage.Disarm(GrottoCrawler), DungeonPackage.Expose(GrottoCrawler)));
+            DungeonPackage.Build(
+                DungeonPackage.Disarm(GrottoCrawler),
+                DungeonPackage.Expose(GrottoCrawler),
+                DungeonPackage.NeverCast(GrottoCrawler, 0)));
 
         ServerContent content;
         using (IHost host = StartHost(root.Path))
@@ -344,7 +441,9 @@ public sealed class AilmentAcceptanceTests
             RaiseIronGuard(sora, ines);
             MendSora(ines, sora);
             AssertCleanTraffic("Mend", sora, ines);
-            HeavyBlowOnACrawler(sora, ines);
+            EntityId crawler = FrostLanceOnACrawler(ines, sora);
+            AssertCleanTraffic("Frost Lance", sora, ines);
+            HeavyBlowsOn(crawler, sora, ines);
             AssertCleanTraffic("Heavy Blow", sora, ines);
             Stop(host, sora, ines);
         }

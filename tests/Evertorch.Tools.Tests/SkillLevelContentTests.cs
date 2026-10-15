@@ -103,7 +103,7 @@ public sealed class SkillLevelContentTests
                 new[]
                 {
                     "skill.strike", "skill.first_aid", "skill.focus", "skill.heavy_blow", "skill.war_cry",
-                    "skill.iron_guard", "skill.arcane_bolt", "skill.clarity", "skill.mend"
+                    "skill.iron_guard", "skill.arcane_bolt", "skill.clarity", "skill.mend", "skill.frost_lance"
                 }),
             "each skill of the jobs' trees is described");
     }

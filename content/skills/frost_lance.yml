@@ -1,0 +1,41 @@
+id: skill.frost_lance
+displayName: Frost Lance
+targetType: enemy
+damageType: magical
+element: water
+server:
+  range: 8.0
+  maxLevel: 5
+  requires: { skill: skill.arcane_bolt, level: 2 }
+  # Each level hits 10 % harder, freezes 5 % more often and 1 s longer, for 2 SP more.
+  levels:
+    - spCost: 12
+      castTimeMs: { fixed: 300, variable: 800 }
+      afterCastDelayMs: 800
+      effect:
+        damage: { ratio: 100, ailment: { status: status.frozen, chance: 0.3, durationMs: 4000 } }
+    - spCost: 14
+      castTimeMs: { fixed: 300, variable: 800 }
+      afterCastDelayMs: 800
+      effect:
+        damage: { ratio: 110, ailment: { status: status.frozen, chance: 0.35, durationMs: 5000 } }
+    - spCost: 16
+      castTimeMs: { fixed: 300, variable: 800 }
+      afterCastDelayMs: 800
+      effect:
+        damage: { ratio: 120, ailment: { status: status.frozen, chance: 0.4, durationMs: 6000 } }
+    - spCost: 18
+      castTimeMs: { fixed: 300, variable: 800 }
+      afterCastDelayMs: 800
+      effect:
+        damage: { ratio: 130, ailment: { status: status.frozen, chance: 0.45, durationMs: 7000 } }
+    - spCost: 20
+      castTimeMs: { fixed: 300, variable: 800 }
+      afterCastDelayMs: 800
+      effect:
+        damage: { ratio: 140, ailment: { status: status.frozen, chance: 0.5, durationMs: 8000 } }
+client:
+  # A key and no art yet; the spark's projectile until its own arrives.
+  icon: skill_frost_lance
+  projectile: projectile_spark
+  description: Hurl a lance of ice at your target as a Water bolt that may freeze it in place. You stand still while you cast. Each level hits harder and freezes more often and longer for more SP.

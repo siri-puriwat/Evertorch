@@ -14,10 +14,11 @@ server:
   card:
     maxHp: 30
     elementDamageReduction: { shadow: 30 }
+    resist: { poison: 30 }
     removalFee: 600
 client:
   # The slime gel's look until art for the cards arrives.
   icon: item_slime_gel
   model: pickup_slime_gel
   prefix: Shrouded
-  description: Damage from Shadow -30% and max HP +30.
+  description: Damage from Shadow -30%, max HP +30, and poison resistance +30%.

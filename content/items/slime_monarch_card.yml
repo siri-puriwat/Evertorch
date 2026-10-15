@@ -14,10 +14,11 @@ server:
   card:
     maxHp: 40
     bossDamageReduction: 25
+    resist: { freeze: 50 }
     removalFee: 5000
 client:
   # The slime gel's look until art for the cards arrives.
   icon: item_slime_gel
   model: pickup_slime_gel
   prefix: Royal
-  description: Damage from bosses -25% and max HP +40.
+  description: Damage from bosses -25%, max HP +40, and freeze resistance +50%.

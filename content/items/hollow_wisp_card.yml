@@ -13,10 +13,11 @@ server:
     floor: 240
   card:
     raceDamage: { undead: 20 }
+    inflict: { sleep: 0.05 }
     removalFee: 600
 client:
   # The slime gel's look until art for the cards arrives.
   icon: item_slime_gel
   model: pickup_slime_gel
   prefix: Spectral
-  description: Damage to the Undead race +20%.
+  description: Damage to the Undead race +20% and a 5% chance to put to sleep on a hit.

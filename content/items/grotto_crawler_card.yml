@@ -15,10 +15,11 @@ server:
     # Earth armor takes a quarter of the Monarch's Earth slam.
     defense: 10
     armorElement: earth
+    resist: { stun: 30 }
     removalFee: 600
 client:
   # The slime gel's look until art for the cards arrives.
   icon: item_slime_gel
   model: pickup_slime_gel
   prefix: Earthen
-  description: Earth armor and defense +10.
+  description: Earth armor, defense +10, and stun resistance +30%.
