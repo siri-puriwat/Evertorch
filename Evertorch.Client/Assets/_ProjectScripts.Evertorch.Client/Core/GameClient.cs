@@ -1412,7 +1412,7 @@ public sealed class GameClient : MonoBehaviour
             EntityViewKeys.ForJob(m_contentLoader.Content, world.LocalJob),
             m_viewCatalog,
             LocalColor);
-        m_localView.Hold(LocalHeldKey());
+        DressLocal();
         foreach (RemoteEntity remote in world.Remotes.Values)
         {
             AddRemoteView(remote);
@@ -1420,8 +1420,8 @@ public sealed class GameClient : MonoBehaviour
 
         world.RemoteSpawned += AddRemoteView;
         world.RemoteDespawned += RemoveRemoteView;
-        world.RemoteAppearanceChanged += HoldRemoteWeapon;
-        world.Inventory.Changed += HoldLocalWeapon;
+        world.RemoteAppearanceChanged += DressRemote;
+        world.Inventory.Changed += DressLocal;
         world.LocalJobChanged += ReplaceLocalBody;
         world.AilmentsChanged += OnAilmentsChanged;
         m_combat = new CombatPresenter(
@@ -2791,8 +2791,8 @@ public sealed class GameClient : MonoBehaviour
         {
             m_world.RemoteSpawned -= AddRemoteView;
             m_world.RemoteDespawned -= RemoveRemoteView;
-            m_world.RemoteAppearanceChanged -= HoldRemoteWeapon;
-            m_world.Inventory.Changed -= HoldLocalWeapon;
+            m_world.RemoteAppearanceChanged -= DressRemote;
+            m_world.Inventory.Changed -= DressLocal;
             m_world.LocalJobChanged -= ReplaceLocalBody;
             m_world.AilmentsChanged -= OnAilmentsChanged;
         }
@@ -2903,25 +2903,39 @@ public sealed class GameClient : MonoBehaviour
         if (remote.Kind == EntityKind.Player)
         {
             view.Hold(HeldKeyOf(remote.WornWeapon));
+            view.Wear(remote.Appearance);
         }
     }
 
-    // Others' weapons come from the server's spawn and each change it announces; the local player's from its own
-    // inventory (Prototype Content §2; Network Protocol §9).
-    private void HoldRemoteWeapon(RemoteEntity remote)
+    // What others wear comes from the appearance that follows each spawn and each change the server announces; what
+    // the local player wears, from its own inventory (Prototype Content §2; Network Protocol §9).
+    private void DressRemote(RemoteEntity remote)
     {
         if (m_remoteViews.TryGetValue(remote.Entity, out EntityView? view))
         {
             view.Hold(HeldKeyOf(remote.WornWeapon));
+            view.Wear(remote.Appearance);
         }
     }
 
-    private void HoldLocalWeapon()
+    private void DressLocal()
     {
-        if (m_localView != null)
+        if (m_localView == null)
         {
-            m_localView.Hold(LocalHeldKey());
+            return;
         }
+
+        m_localView.Hold(LocalHeldKey());
+        var appearance = new ItemDefinitionId[EquipmentPositions.All.Count];
+        foreach (InventoryEntry row in m_world?.Inventory.Rows ?? Array.Empty<InventoryEntry>())
+        {
+            if (EquipmentPositions.IsPosition(row.Slot))
+            {
+                appearance[(int)row.Slot - 1] = row.Item;
+            }
+        }
+
+        m_localView.Wear(appearance);
     }
 
     private string LocalHeldKey()
@@ -3008,7 +3022,7 @@ public sealed class GameClient : MonoBehaviour
             m_viewCatalog,
             LocalColor);
         m_localView.SetPose(m_world.Smoother.Sample(m_clock?.Alpha ?? 1f), m_world.Predictor.Facing);
-        m_localView.Hold(LocalHeldKey());
+        DressLocal();
         if (m_camera != null && m_map != null)
         {
             m_camera.Follow(m_localView.transform, CameraState, m_map.GroundCollider);

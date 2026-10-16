@@ -25,9 +25,6 @@ public sealed class UiBuilder
 
     private static readonly Navigation NoNavigation = new() { mode = Navigation.Mode.None };
 
-    // ScrollIntoView's corners, so a scroll allocates nothing.
-    private static readonly Vector3[] Corners = new Vector3[4];
-
     private readonly float m_fontSize;
     private readonly float m_rowHeight;
     private readonly float m_labelWidth;
@@ -282,9 +279,10 @@ public sealed class UiBuilder
         Canvas.ForceUpdateCanvases();
         var viewport = (RectTransform)scroll.transform;
         Rect view = viewport.rect;
-        row.GetWorldCorners(Corners);
-        float bottom = viewport.InverseTransformPoint(Corners[0]).y;
-        float top = viewport.InverseTransformPoint(Corners[1]).y;
+        var corners = new Vector3[4];
+        row.GetWorldCorners(corners);
+        float bottom = viewport.InverseTransformPoint(corners[0]).y;
+        float top = viewport.InverseTransformPoint(corners[1]).y;
         float shift = top > view.yMax ? top - view.yMax : bottom < view.yMin ? bottom - view.yMin : 0f;
         if (shift != 0f)
         {

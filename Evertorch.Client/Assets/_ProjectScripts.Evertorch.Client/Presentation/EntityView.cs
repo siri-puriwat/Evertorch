@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Evertorch.Game;
 using Evertorch.Protocol;
 using UnityEngine;
@@ -7,7 +8,8 @@ namespace Evertorch.Client
 {
 /// <summary>
 ///     The drawn body of one entity. It is told where to stand every frame and decides nothing. The body is a prefab
-///     loaded by its content key, or an explicit placeholder when the key does not resolve.
+///     loaded by its content key, or an explicit placeholder when the key does not resolve. A player's body holds its
+///     weapon and wears its other pieces as stand-ins until their art is delivered.
 /// </summary>
 public sealed class EntityView : MonoBehaviour
 {
@@ -46,6 +48,10 @@ public sealed class EntityView : MonoBehaviour
     /// </summary>
     public static readonly Color PoisonedTint = new(0.45f, 0.85f, 0.3f);
 
+    // What each position wears, and the stand-in parts drawn for it.
+    private readonly ItemDefinitionId[] m_worn = new ItemDefinitionId[EquipmentPositions.All.Count];
+    private readonly List<GameObject>[] m_wornParts = CreatePartLists();
+
     private Color? m_tint;
     private Color? m_bodyTint;
     private Color? m_ailmentTint;
@@ -61,6 +67,7 @@ public sealed class EntityView : MonoBehaviour
     private GameObject? m_held;
     private Vector3 m_projectileOrigin = DefaultProjectilePoint;
     private Vector3 m_projectileArrival = DefaultProjectilePoint;
+    private IReadOnlyList<StandInPlacement>[]? m_wornPlacements;
 
     /// <summary>
     ///     The Addressables key the body was requested with; empty when the content did not know the entity.
@@ -286,6 +293,97 @@ public sealed class EntityView : MonoBehaviour
         }
     }
 
+    /// <summary>
+    ///     Draws what the body wears besides its weapon (owner decision 12 of Milestone 20): each piece a stand-in in its
+    ///     item's colour (<see cref="WornStandIns" />) until its art is delivered. <paramref name="appearance" /> names the
+    ///     item in each of the eight positions in position order, default where none; the weapon is held
+    ///     (<see cref="Hold" />). A body without the shared skeleton's bones, such as a placeholder, wears nothing.
+    /// </summary>
+    public void Wear(IReadOnlyList<ItemDefinitionId> appearance)
+    {
+        if (appearance == null)
+        {
+            throw new ArgumentNullException(nameof(appearance));
+        }
+
+        for (int index = 1; index < m_worn.Length && index < appearance.Count; index++)
+        {
+            if (appearance[index] != m_worn[index])
+            {
+                m_worn[index] = appearance[index];
+                ShowWorn(index);
+            }
+        }
+    }
+
+    /// <summary>
+    ///     The stand-in parts drawn for what <paramref name="position" /> holds; none while it holds nothing or the body
+    ///     has not attached.
+    /// </summary>
+    public IReadOnlyList<GameObject> WornParts(EquipmentSlot position)
+    {
+        return m_wornParts[(int)position - 1];
+    }
+
+    private static List<GameObject>[] CreatePartLists()
+    {
+        var lists = new List<GameObject>[EquipmentPositions.All.Count];
+        for (int index = 0; index < lists.Length; index++)
+        {
+            lists[index] = new List<GameObject>();
+        }
+
+        return lists;
+    }
+
+    // A Trim part takes the player's colour in a block of its material, which an ailment's tint never clears.
+    private void ShowWorn(int index)
+    {
+        List<GameObject> parts = m_wornParts[index];
+        foreach (GameObject part in parts)
+        {
+            Destroy(part);
+        }
+
+        parts.Clear();
+        ItemDefinitionId item = m_worn[index];
+        if (m_wornPlacements == null || m_catalog == null || item.Value.Length == 0)
+        {
+            return;
+        }
+
+        var position = (EquipmentSlot)(index + 1);
+        Material material = m_catalog.GetStandInMaterial(WornStandIns.ColourOf(item));
+        foreach (StandInPlacement placement in m_wornPlacements[index])
+        {
+            var part = new GameObject(placement.IsTrim ? $"Worn {position} Trim" : $"Worn {position}");
+            part.transform.SetParent(placement.Bone, false);
+            part.transform.localPosition = placement.LocalPosition;
+            part.transform.localRotation = placement.LocalRotation;
+            part.transform.localScale = placement.LocalScale;
+            part.AddComponent<MeshFilter>().sharedMesh = m_catalog.GetStandInMesh(placement.Shape);
+            MeshRenderer renderer = part.AddComponent<MeshRenderer>();
+            renderer.sharedMaterial = placement.IsTrim
+                ? m_catalog.GetStandInMaterial(WornStandIns.TrimColor)
+                : material;
+            var block = new MaterialPropertyBlock();
+            if (placement.IsTrim && m_tint != null)
+            {
+                block.SetColor(BaseColorId, m_tint.Value);
+                renderer.SetPropertyBlock(block, 0);
+            }
+
+            if (m_ailmentTint != null)
+            {
+                block.Clear();
+                block.SetColor(BaseColorId, m_ailmentTint.Value);
+                renderer.SetPropertyBlock(block);
+            }
+
+            parts.Add(part);
+        }
+    }
+
     // A load that finishes after the weapon changed, or after the view went, is dropped.
     private void TakeHeld(string heldKey, GameObject? prefab)
     {
@@ -391,6 +489,15 @@ public sealed class EntityView : MonoBehaviour
         if (body.TryGetComponent(out BodyAnimator animator) && animator.HasClips)
         {
             m_animator = animator;
+        }
+
+        // Read now, while the body still stands in its bind pose: its clips start on a later frame.
+        m_wornPlacements = new IReadOnlyList<StandInPlacement>[m_worn.Length];
+        m_wornPlacements[0] = Array.Empty<StandInPlacement>();
+        for (int index = 1; index < m_worn.Length; index++)
+        {
+            m_wornPlacements[index] = WornStandIns.Place(body.transform, (EquipmentSlot)(index + 1), anchors?.Overhead);
+            ShowWorn(index);
         }
 
         ShowHeld();

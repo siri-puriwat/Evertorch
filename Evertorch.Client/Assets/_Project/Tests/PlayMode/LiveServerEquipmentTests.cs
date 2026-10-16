@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Threading.Tasks;
+using Evertorch.Game;
 using Evertorch.Protocol;
 using NUnit.Framework;
 using UnityEngine;
@@ -116,6 +117,10 @@ public sealed class LiveServerEquipmentTests
             $"the leather back in the bag: {world.LastRejection}");
         yield return WaitUntil(() => world.Sheet?.EquipmentDefense == 8, StartTimeoutSeconds);
         Assert.That(world.Sheet?.EquipmentDefense, Is.EqualTo(8), "the cloth alone");
+        Assert.That(
+            StandInDifference(client, EquipmentSlot.Armor, ClothArmor),
+            Is.LessThan(0.002f),
+            "the body wears the cloth's stand-in");
 
         yield return EnterTheOther(client, port);
         ClientConnection other = m_other!;
@@ -193,7 +198,32 @@ public sealed class LiveServerEquipmentTests
             $"worn as accessory 2: {world.LastRejection}");
         Assert.That(equipment.Text, Does.Contain("\nAccessory 1: empty\n"));
         Assert.That(Row(bag, "Traveler Charm [1] (equipped)"), Is.Not.Null, "the bag marks it worn");
+        Assert.That(
+            StandInDifference(client, EquipmentSlot.Accessory2, TravelerCharm),
+            Is.LessThan(0.002f),
+            "the charm's stand-in hangs at the right hip");
         Assert.That(client.Connection!.MalformedMessages + client.Connection.UnexpectedMessages, Is.Zero);
+    }
+
+    // How far the colour of the stand-in the real client's own body wears in a position is from the item's; 1 while it
+    // wears none there.
+    private static float StandInDifference(GameClient client, EquipmentSlot position, string item)
+    {
+        var body = (EntityView?)typeof(GameClient)
+            .GetField("m_localView", BindingFlags.NonPublic | BindingFlags.Instance)!
+            .GetValue(client);
+        GameObject? part = body != null ? body.WornParts(position).FirstOrDefault() : null;
+        if (part == null)
+        {
+            return 1f;
+        }
+
+        Color shown = part.GetComponent<Renderer>().sharedMaterial.color;
+        Color expected = WornStandIns.ColourOf(new ItemDefinitionId(item));
+        return Mathf.Max(
+            Mathf.Abs(shown.r - expected.r),
+            Mathf.Abs(shown.g - expected.g),
+            Mathf.Abs(shown.b - expected.b));
     }
 
     private static Button? Row(Component window, string name)
