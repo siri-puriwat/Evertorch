@@ -1,0 +1,19 @@
+id: skill.furnace_burst
+displayName: Furnace Burst
+targetType: self
+damageType: magical
+element: fire
+# A burst around its caster: every player within the area and in its sight takes it when the cast ends, each with its
+# own roll and none of it split, so the way out is to step out before then; the delay after it holds its next swing.
+area: { radius: 5.0 }
+server:
+  range: 0
+  levels:
+    - castTimeMs: { fixed: 2000 }
+      afterCastDelayMs: 1000
+      cooldownMs: 12000
+      effect:
+        damage: { ratio: 160 }
+client:
+  # A key and no art yet.
+  icon: skill_furnace_burst

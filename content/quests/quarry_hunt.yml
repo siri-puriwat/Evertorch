@@ -1,0 +1,12 @@
+# As the Crawler Hunt pays for its kills: 1.2 times their base experience, as much job experience, and 0.8 coins a
+# point of it (ten Cinder Crawlers give 2,000).
+id: quest.quarry_hunt
+displayName: Quarry Hunt
+server:
+  giver: npc.gate_warden
+  objective:
+    kill: { monster: monster.cinder_crawler, count: 10 }
+  rewards:
+    baseExperience: 2400
+    jobExperience: 2400
+    currency: 1600

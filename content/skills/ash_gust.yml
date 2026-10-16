@@ -1,0 +1,15 @@
+id: skill.ash_gust
+displayName: Ash Gust
+targetType: enemy
+damageType: magical
+element: wind
+server:
+  range: 6.0
+  levels:
+    - castTimeMs: { fixed: 600 }
+      cooldownMs: 10000
+      effect:
+        damage: { ratio: 100 }
+client:
+  # A key and no art yet.
+  icon: skill_ash_gust

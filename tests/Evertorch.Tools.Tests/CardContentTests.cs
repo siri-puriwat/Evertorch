@@ -470,7 +470,7 @@ public sealed class CardContentTests
     }
 
     [Test]
-    public void Run_ForRepositoryContent_ReadsTheThirteenCards_TheirDropsLastButTheLaterOnes_AndTheSlots()
+    public void Run_ForRepositoryContent_ReadsTheSeventeenCards_TheirDropsLastButTheLaterOnes_AndTheSlots()
     {
         ContentPipelineResult result = ContentPipeline.Run(
             Path.Combine(ContentValidationTests.RepositoryRoot(), "content"));
@@ -486,9 +486,13 @@ public sealed class CardContentTests
             Is.EqualTo(
                 new[]
                 {
+                    ("item.card.ash_wisp", ItemType.Weapon, 999, 1, 0, 600, 2400, 240, 24000),
                     ("item.card.barrow_crawler", ItemType.Armor, 999, 1, 0, 600, 2400, 240, 24000),
+                    ("item.card.basalt_crawler", ItemType.Shield, 999, 1, 0, 600, 2400, 240, 24000),
+                    ("item.card.cinder_crawler", ItemType.Garment, 999, 1, 0, 600, 2400, 240, 24000),
                     ("item.card.forest_crawler", ItemType.Weapon, 999, 1, 0, 200, 800, 80, 8000),
                     ("item.card.forest_crawler_stride", ItemType.Footwear, 999, 1, 0, 200, 800, 80, 8000),
+                    ("item.card.furnace_heart", ItemType.Armor, 999, 1, 0, 5000, 24000, 2400, 240000),
                     ("item.card.gloom_wisp", ItemType.Weapon, 999, 1, 0, 600, 2400, 240, 24000),
                     ("item.card.gloom_wisp_veil", ItemType.Garment, 999, 1, 0, 600, 2400, 240, 24000),
                     ("item.card.grotto_crawler", ItemType.Armor, 999, 1, 0, 600, 2400, 240, 24000),
@@ -509,9 +513,13 @@ public sealed class CardContentTests
             Is.EqualTo(
                 new[]
                 {
+                    ("item.card.ash_wisp", "Dousing", "to Fire 20"),
                     ("item.card.barrow_crawler", "Shrouded", "maxHp 30 from Shadow 30 resist Poison 30"),
+                    ("item.card.basalt_crawler", "Steady", "resist Stun 20"),
+                    ("item.card.cinder_crawler", "Fireward", "from Fire 20"),
                     ("item.card.forest_crawler", "Keen", "attack 8 to Small 10 inflict Poison 500"),
                     ("item.card.forest_crawler_stride", "Stride", "agi 1 maxHp 10"),
+                    ("item.card.furnace_heart", "Molten", "armor Fire"),
                     ("item.card.gloom_wisp", "Bane", "boss 20 to Insect 10 inflict Silence 500"),
                     ("item.card.gloom_wisp_veil", "Veil", "from Shadow 10 resist Blind 10"),
                     ("item.card.grotto_crawler", "Earthen", "defense 10 armor Earth resist Stun 30"),
@@ -535,10 +543,14 @@ public sealed class CardContentTests
             Is.EqualTo(
                 new[]
                 {
+                    ("item.card.ash_wisp", 0.001, 1, 1, ""),
                     ("item.card.barrow_crawler", 0.001, 1, 1,
                         "item.consumable.earth_converter item.consumable.grand_remedy item.accessory.grotto_charm"),
+                    ("item.card.basalt_crawler", 0.001, 1, 1, ""),
+                    ("item.card.cinder_crawler", 0.001, 1, 1, ""),
                     ("item.card.forest_crawler", 0.001, 1, 1,
                         "item.consumable.earth_converter item.consumable.remedy item.card.forest_crawler_stride"),
+                    ("item.card.furnace_heart", 0.01, 1, 1, ""),
                     ("item.card.gloom_wisp", 0.001, 1, 1,
                         "item.consumable.fire_converter item.consumable.grand_remedy item.garment.gloom_cape "
                         + "item.card.gloom_wisp_veil"),
@@ -555,7 +567,7 @@ public sealed class CardContentTests
                     ("item.card.training_slime", 0.001, 1, 1, "")
                 }),
             "each monster's own card last but its converter, its remedy, and Milestone 20's pieces and second card, so "
-            + "every earlier draw keeps its place");
+            + "every earlier draw keeps its place; the quarry's monsters drop theirs last");
         Assert.That(
             result.Content.Items
                 .Where(item => item.Definition.IsEquipment)

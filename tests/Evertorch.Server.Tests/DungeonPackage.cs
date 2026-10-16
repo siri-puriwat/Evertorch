@@ -21,7 +21,17 @@ internal static class DungeonPackage
 
     public static Dictionary<string, byte[]> Build(params Action<Dictionary<string, byte[]>>[] edits)
     {
-        Dictionary<string, byte[]> files = PackageFixture.BuildSeededPackage();
+        return Build(false, edits);
+    }
+
+    /// <summary>
+    ///     The seeded package, with the Ashen Quarry's spawns when <paramref name="withQuarrySpawns" />, edited.
+    /// </summary>
+    public static Dictionary<string, byte[]> Build(
+        bool withQuarrySpawns,
+        params Action<Dictionary<string, byte[]>>[] edits)
+    {
+        Dictionary<string, byte[]> files = PackageFixture.BuildSeededPackage(withQuarrySpawns);
         string clientContentVersion = PackageFixture.ClientContentVersionOf(files);
         foreach (Action<Dictionary<string, byte[]>> edit in edits)
         {

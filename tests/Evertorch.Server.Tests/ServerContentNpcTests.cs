@@ -155,7 +155,12 @@ public sealed class ServerContentNpcTests
             Is.EqualTo(new[] { ("npc.storekeeper", (int?)20, false) }));
         Assert.That(
             content.Quests.Keys.Select(id => id.Value),
-            Is.EquivalentTo(new[] { "quest.crawler_hunt", "quest.grotto_hunt", "quest.slime_monarch" }));
+            Is.EquivalentTo(
+                new[]
+                {
+                    "quest.crawler_hunt", "quest.furnace_heart", "quest.grotto_hunt", "quest.quarry_hunt",
+                    "quest.slime_monarch"
+                }));
         Assert.That(
             content.Maps[new MapDefinitionId(Ground)].Npcs.Select(npc => npc.Npc.Value),
             Is.EqualTo(
@@ -232,7 +237,9 @@ public sealed class ServerContentNpcTests
                     "maps.json: map.training_ground: places NPC 'npc.quartermaster', which 'map.training_ground' "
                     + "already places",
                     "quests.json: quest.crawler_hunt: is given by NPC 'npc.gate_warden', which no map places",
+                    "quests.json: quest.furnace_heart: is given by NPC 'npc.gate_warden', which no map places",
                     "quests.json: quest.grotto_hunt: is given by NPC 'npc.gate_warden', which no map places",
+                    "quests.json: quest.quarry_hunt: is given by NPC 'npc.gate_warden', which no map places",
                     "quests.json: quest.slime_monarch: is given by NPC 'npc.gate_warden', which no map places"
                 }));
     }

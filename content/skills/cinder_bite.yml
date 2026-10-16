@@ -1,0 +1,15 @@
+id: skill.cinder_bite
+displayName: Cinder Bite
+targetType: enemy
+damageType: physical
+element: fire
+server:
+  range: 1.5
+  # Twice a swing, in Fire: what makes Fire armor and the Fireward card matter in the quarry.
+  levels:
+    - cooldownMs: 8000
+      effect:
+        damage: { ratio: 200 }
+client:
+  # A key and no art yet.
+  icon: skill_cinder_bite

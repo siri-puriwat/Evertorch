@@ -219,7 +219,9 @@ public sealed class NpcTests
                 new[]
                 {
                     ("quest.crawler_hunt", "monster.forest_crawler", (ushort)5, 150ul, 100u),
+                    ("quest.furnace_heart", "monster.furnace_heart", (ushort)1, 3000ul, 2000u),
                     ("quest.grotto_hunt", "monster.grotto_crawler", (ushort)10, 1440ul, 960u),
+                    ("quest.quarry_hunt", "monster.cinder_crawler", (ushort)10, 2400ul, 1600u),
                     ("quest.slime_monarch", "monster.slime_monarch", (ushort)1, 2400ul, 1600u)
                 }),
             "the Gate Warden's quests, by ID");
@@ -239,7 +241,7 @@ public sealed class NpcTests
         Assert.That(shop.JobChanges.Concat(warden.JobChanges), Is.Empty, "only the Guildmaster changes jobs");
         Assert.That(
             (shop.GetEncodedLength(), warden.GetEncodedLength(), guildmaster.GetEncodedLength()),
-            Is.EqualTo((840, 211, 78)),
+            Is.EqualTo((840, 342, 78)),
             "the Quartermaster's twenty-four items in 840 bytes (Network Protocol §6)");
         NpcServices storekeeper = NpcOf(server, Storekeeper).Services;
         Assert.That(

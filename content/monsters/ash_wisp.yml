@@ -1,0 +1,61 @@
+id: monster.ash_wisp
+displayName: Ash Wisp
+level: 23
+element: wind
+race: formless
+size: small
+stats:
+  hp: 650
+  physicalAttack: 34
+  physicalDefense: 10
+  hit: 250
+  flee: 192
+  magicAttack: 80
+movement:
+  baseSpeed: 4.4
+combat:
+  # A ranged basic attack; it walks away from anyone nearer than ai.keepDistance.
+  attackRange: 6.0
+  attackIntervalMs: 1800
+ai:
+  behavior: passive
+  perceptionRadius: 6.0
+  leashRadius: 14.0
+  roamRadius: 4.0
+  idlePauseMs: { min: 4000, max: 5000 }
+  scanIntervalMs: 100
+  keepDistance: 3.5
+skills:
+  - skill: skill.ash_gust
+    chance: 0.15
+  - skill: skill.hush
+    chance: 0.15
+drops:
+  - item: item.material.gloom_dust
+    chance: 0.60
+    amount: { min: 1, max: 2 }
+  - item: item.consumable.minor_mana
+    chance: 0.25
+    amount: { min: 1, max: 2 }
+  - item: item.material.emberstone
+    chance: 0.10
+    amount: { min: 1, max: 1 }
+  - item: item.consumable.earth_converter
+    chance: 0.03
+    amount: { min: 1, max: 1 }
+  - item: item.consumable.grand_remedy
+    chance: 0.02
+    amount: { min: 1, max: 1 }
+  - item: item.card.ash_wisp
+    chance: 0.001
+    amount: { min: 1, max: 1 }
+rewards:
+  baseExperience: 260
+  jobExperience: 195
+client:
+  # The spark wisp's body, in ash white.
+  prefab: monster_spark_wisp
+  icon: monster_spark_wisp_icon
+  projectile: projectile_spark
+  scale: 1.0
+  tint: "#D2CABD"

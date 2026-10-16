@@ -139,16 +139,18 @@ public sealed class RefineTests
 
         Assert.That(sent[lastTable + 1].Opcode, Is.EqualTo(MessageOpcode.CardRemovalFees), "right after its tables");
         Assert.That(
-            (fees.Single().Npc, fees.Single().Part, fees.Single().PartCount),
-            Is.EqualTo((smith, (byte)0, (byte)1)),
-            "thirteen cards in one part");
+            fees.Select(part => (part.Npc, part.Part, part.PartCount, part.Entries.Count)),
+            Is.EqualTo(new[] { (smith, (byte)0, (byte)2, 14), (smith, (byte)1, (byte)2, 3) }),
+            "seventeen cards in two parts");
         Assert.That(
-            fees.Single().Entries.Select(entry => (entry.Card.Value, entry.Fee)),
+            fees.SelectMany(part => part.Entries).Select(entry => (entry.Card.Value, entry.Fee)),
             Is.EqualTo(
                 new[]
                 {
-                    ("item.card.barrow_crawler", 600u), ("item.card.forest_crawler", 200u),
-                    ("item.card.forest_crawler_stride", 200u), ("item.card.gloom_wisp", 600u),
+                    ("item.card.ash_wisp", 600u), ("item.card.barrow_crawler", 600u),
+                    ("item.card.basalt_crawler", 600u), ("item.card.cinder_crawler", 600u),
+                    ("item.card.forest_crawler", 200u), ("item.card.forest_crawler_stride", 200u),
+                    ("item.card.furnace_heart", 5000u), ("item.card.gloom_wisp", 600u),
                     ("item.card.gloom_wisp_veil", 600u), ("item.card.grotto_crawler", 600u),
                     ("item.card.grotto_crawler_bulwark", 600u), ("item.card.hollow_wisp", 600u),
                     ("item.card.hollow_wisp_poise", 600u), ("item.card.slime_monarch", 5000u),
@@ -206,7 +208,7 @@ public sealed class RefineTests
     [Test]
     public void Entering_WithMoreCardsThanAPartHolds_TellsTheFeesInConsecutivePartsAfterTheTables()
     {
-        var server = new TestServer(withNpcs: true, content: ServerContentLoader.Load(FeePackage.Build(3)));
+        var server = new TestServer(withNpcs: true, content: ServerContentLoader.Load(FeePackage.Build(12)));
         ConnectionId player = server.EnterWorld(1);
         server.Tick(5);
         EntityId smith = server.NpcOf(Smith).Id;
@@ -218,12 +220,13 @@ public sealed class RefineTests
         string[] cards = parts.SelectMany(part => part.Entries).Select(entry => entry.Card.Value).ToArray();
 
         Assert.That(
-            sent.Skip(lastTable + 1).Take(2).Select(message => message.Opcode),
-            Is.EqualTo(new[] { MessageOpcode.CardRemovalFees, MessageOpcode.CardRemovalFees }),
-            "two parts, right after the tables");
+            sent.Skip(lastTable + 1).Take(3).Select(message => message.Opcode),
+            Is.All.EqualTo(MessageOpcode.CardRemovalFees),
+            "three parts, right after the tables");
         Assert.That(
             parts.Select(part => (part.Npc, part.Part, part.PartCount, part.Entries.Count)),
-            Is.EqualTo(new[] { (smith, (byte)0, (byte)2, 14), (smith, (byte)1, (byte)2, 2) }));
+            Is.EqualTo(
+                new[] { (smith, (byte)0, (byte)3, 14), (smith, (byte)1, (byte)3, 14), (smith, (byte)2, (byte)3, 1) }));
         Assert.That(cards, Is.EqualTo(cards.OrderBy(card => card, StringComparer.Ordinal).Distinct()), "by ID, once");
     }
 

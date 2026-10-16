@@ -5,6 +5,68 @@ server:
     # The arrival yard, in front of the south gate; no monster reaches it.
     position: { x: 0.0, y: 0.0, z: -37.0 }
     facing: { x: 0.0, z: 1.0 }
+  monsterSpawns:
+    # The cinder basin's crawlers, one to a spawn, each spawn at least 11.7 m from the next, so a hunter meets them one
+    # at a time; the nearest lies 30.5 m from the arrival, beyond their radius, roam, and perception.
+    - monster: monster.cinder_crawler
+      center: { x: -33.0, y: 0.0, z: -28.0 }
+      radius: 2.0
+      count: 1
+      respawnMs: 20000
+    - monster: monster.cinder_crawler
+      center: { x: -23.0, y: 0.0, z: -17.0 }
+      radius: 2.0
+      count: 1
+      respawnMs: 20000
+    - monster: monster.cinder_crawler
+      center: { x: -33.0, y: 0.0, z: -6.0 }
+      radius: 2.0
+      count: 1
+      respawnMs: 20000
+    - monster: monster.cinder_crawler
+      center: { x: -23.0, y: 0.0, z: 5.0 }
+      radius: 2.0
+      count: 1
+      respawnMs: 20000
+    - monster: monster.cinder_crawler
+      center: { x: -33.0, y: 0.0, z: 11.0 }
+      radius: 2.0
+      count: 1
+      respawnMs: 20000
+    # The basalt galleries' pairs, one to a walled alcove, out of sight of one another.
+    - monster: monster.basalt_crawler
+      center: { x: 32.0, y: 0.0, z: -27.0 }
+      radius: 1.5
+      count: 2
+      respawnMs: 20000
+    - monster: monster.basalt_crawler
+      center: { x: 32.0, y: 0.0, z: -6.0 }
+      radius: 1.5
+      count: 2
+      respawnMs: 20000
+    - monster: monster.basalt_crawler
+      center: { x: 32.0, y: 0.0, z: 12.0 }
+      radius: 1.5
+      count: 2
+      respawnMs: 20000
+    # The ash terraces' wisps, three on each.
+    - monster: monster.ash_wisp
+      center: { x: -27.0, y: 0.0, z: 28.0 }
+      radius: 4.0
+      count: 3
+      respawnMs: 20000
+    - monster: monster.ash_wisp
+      center: { x: 27.0, y: 0.0, z: 28.0 }
+      radius: 4.0
+      count: 3
+      respawnMs: 20000
+    # The Furnace Heart alone at the heart of its arena, back an hour after its death, give or take ten minutes.
+    - monster: monster.furnace_heart
+      center: { x: 0.0, y: 0.0, z: 28.0 }
+      radius: 0.0
+      count: 1
+      respawnMs: 3600000
+      respawnVarianceMs: 600000
   portals:
     # In front of the south gate; arrivals on the field face south under its north wall.
     - center: { x: 0.0, y: 0.0, z: -38.5 }
@@ -54,12 +116,12 @@ navigation:
     - "##########....########################....####################................##"
     - "##########....########################....####################................##"
     - "##....................################....####################................##"
-    - "##.oo..............oo.################....####################................##"
-    - "##.oo..............oo.################....####################................##"
+    - "##.................oo.################....####################................##"
+    - "##.................oo.################....####################................##"
     - "##....................################....####################................##"
     - "##....................################....####################................##"
-    - "##....................################....####################................##"
-    - "##....................################....####################....##############"
+    - "##.oo.................################....####################................##"
+    - "##.oo.................################....####################....##############"
     - "##....................################....####################....##############"
     - "##....................################....####################....##############"
     - "##.........oo.........################....####################....##############"

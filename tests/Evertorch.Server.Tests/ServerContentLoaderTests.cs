@@ -567,8 +567,8 @@ public sealed class ServerContentLoaderTests
         Assert.That(
             content.Skills.Values.Where(skill => skill.HasArea).Select(skill => skill.Id.Value).OrderBy(id => id,
                 StringComparer.Ordinal),
-            Is.EqualTo(new[] { "skill.frost_breath", "skill.quake_slam" }),
-            "the Monarch's two");
+            Is.EqualTo(new[] { "skill.ash_cloud", "skill.frost_breath", "skill.furnace_burst", "skill.quake_slam" }),
+            "the Monarch's two and the Furnace Heart's two");
         Assert.That((spawn.RespawnMs, spawn.RespawnVarianceMs), Is.EqualTo((3_600_000, 600_000)));
     }
 

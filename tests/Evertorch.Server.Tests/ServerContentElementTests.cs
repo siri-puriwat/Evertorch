@@ -193,8 +193,10 @@ public sealed class ServerContentElementTests
             Is.EqualTo(
                 new[]
                 {
-                    "skill.arcane_bolt Ghost", "skill.basic_attack Weapon", "skill.crushing_bite Earth",
-                    "skill.frost_lance Water", "skill.grave_bite Shadow", "skill.heavy_blow Weapon",
+                    "skill.arcane_bolt Ghost", "skill.ash_gust Wind", "skill.basalt_bash Earth",
+                    "skill.basic_attack Weapon", "skill.cinder_bite Fire", "skill.crushing_bite Earth",
+                    "skill.frost_lance Water", "skill.furnace_burst Fire", "skill.grave_bite Shadow",
+                    "skill.heavy_blow Weapon",
                     "skill.quake_slam Earth",
                     "skill.spark_bolt Wind",
                     "skill.strike Weapon", "skill.venom_bite Poison"
@@ -216,7 +218,9 @@ public sealed class ServerContentElementTests
             Is.EqualTo(
                 new[]
                 {
-                    "monster.barrow_crawler Undead Undead Medium", "monster.forest_crawler Earth Insect Small",
+                    "monster.ash_wisp Wind Formless Small", "monster.barrow_crawler Undead Undead Medium",
+                    "monster.basalt_crawler Earth Insect Large", "monster.cinder_crawler Fire Insect Medium",
+                    "monster.forest_crawler Earth Insect Small", "monster.furnace_heart Fire Formless Large",
                     "monster.gloom_wisp Shadow Demon Small", "monster.grotto_crawler Earth Insect Medium",
                     "monster.hollow_wisp Ghost Demon Small", "monster.slime_monarch Water Plant Large",
                     "monster.spark_wisp Wind Formless Small", "monster.training_slime Water Plant Medium"

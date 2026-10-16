@@ -1,0 +1,17 @@
+id: skill.ash_cloud
+displayName: Ash Cloud
+targetType: self
+# A cloud around its caster: every player within the area and in its sight when the cast ends is blinded, each on its
+# own, so the way out is to step out before then; a Remedy, a Grand Remedy, or Mend ends it.
+area: { radius: 6.0 }
+server:
+  range: 0
+  levels:
+    - castTimeMs: { fixed: 2000 }
+      afterCastDelayMs: 1000
+      cooldownMs: 18000
+      effect:
+        status: { status: status.blinded, durationMs: 12000, statPercent: {} }
+client:
+  # A key and no art yet.
+  icon: skill_ash_cloud

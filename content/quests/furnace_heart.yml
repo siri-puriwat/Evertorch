@@ -1,0 +1,12 @@
+# A party's quest: the Crawler Hunt's rates on one member's share when three bring the Furnace Heart's 7,500 base
+# experience down together (2,500).
+id: quest.furnace_heart
+displayName: The Furnace Heart
+server:
+  giver: npc.gate_warden
+  objective:
+    kill: { monster: monster.furnace_heart, count: 1 }
+  rewards:
+    baseExperience: 3000
+    jobExperience: 3000
+    currency: 2000

@@ -1,0 +1,53 @@
+id: monster.cinder_crawler
+displayName: Cinder Crawler
+level: 20
+element: fire
+race: insect
+size: medium
+stats:
+  hp: 1000
+  physicalAttack: 48
+  physicalDefense: 20
+  hit: 240
+  flee: 178
+movement:
+  baseSpeed: 4.8
+combat:
+  attackRange: 1.5
+  attackIntervalMs: 1600
+ai:
+  # Aggressive and alone: its spawns lie far enough apart that a hunter meets one at a time.
+  behavior: aggressive
+  perceptionRadius: 5.0
+  leashRadius: 12.0
+  roamRadius: 3.0
+  idlePauseMs: { min: 4000, max: 6000 }
+  scanIntervalMs: 100
+skills:
+  - skill: skill.cinder_bite
+    chance: 0.15
+drops:
+  - item: item.material.grotto_carapace
+    chance: 0.60
+    amount: { min: 1, max: 2 }
+  - item: item.consumable.minor_health
+    chance: 0.25
+    amount: { min: 1, max: 2 }
+  - item: item.material.emberstone
+    chance: 0.10
+    amount: { min: 1, max: 1 }
+  - item: item.consumable.water_converter
+    chance: 0.03
+    amount: { min: 1, max: 1 }
+  - item: item.card.cinder_crawler
+    chance: 0.001
+    amount: { min: 1, max: 1 }
+rewards:
+  baseExperience: 200
+  jobExperience: 150
+client:
+  # The forest crawler's body, larger by 15 % and in ember red.
+  prefab: monster_forest_crawler
+  icon: monster_forest_crawler_icon
+  scale: 1.15
+  tint: "#9C3D1F"

@@ -1,0 +1,14 @@
+id: skill.basalt_bash
+displayName: Basalt Bash
+targetType: enemy
+damageType: physical
+element: earth
+server:
+  range: 1.5
+  levels:
+    - cooldownMs: 10000
+      effect:
+        damage: { ratio: 150, ailment: { status: status.stunned, chance: 0.20, durationMs: 2000 } }
+client:
+  # A key and no art yet.
+  icon: skill_basalt_bash

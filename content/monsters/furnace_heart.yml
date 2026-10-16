@@ -1,0 +1,64 @@
+id: monster.furnace_heart
+displayName: Furnace Heart
+level: 25
+boss: true
+element: fire
+race: formless
+size: large
+stats:
+  hp: 42000
+  physicalAttack: 70
+  physicalDefense: 40
+  hit: 300
+  flee: 165
+  magicAttack: 140
+movement:
+  baseSpeed: 4.0
+combat:
+  attackRange: 2.0
+  attackIntervalMs: 2000
+ai:
+  # Its arena keeps every walkable cell outside it beyond its spawn's radius, roam, and perception together, and its
+  # leash reaches past the arena's farthest corner, so no fight inside resets it.
+  behavior: aggressive
+  perceptionRadius: 6.0
+  leashRadius: 18.0
+  roamRadius: 2.0
+  idlePauseMs: { min: 5000, max: 8000 }
+  scanIntervalMs: 100
+skills:
+  - skill: skill.furnace_burst
+    chance: 0.25
+  - skill: skill.ash_cloud
+    chance: 0.20
+drops:
+  - item: item.material.emberstone
+    chance: 1.0
+    amount: { min: 5, max: 10 }
+  - item: item.material.wardstone
+    chance: 1.0
+    amount: { min: 5, max: 10 }
+  - item: item.consumable.water_converter
+    chance: 1.0
+    amount: { min: 1, max: 3 }
+  - item: item.consumable.grand_remedy
+    chance: 1.0
+    amount: { min: 2, max: 4 }
+  - item: item.card.furnace_heart
+    chance: 0.01
+    amount: { min: 1, max: 1 }
+# Its most valuable player's prize: ten Emberstones, straight into that player's bag.
+mvpDrops:
+  - item: item.material.emberstone
+    chance: 1.0
+    amount: 10
+rewards:
+  baseExperience: 7500
+  jobExperience: 3750
+  mvpExperience: 3750
+client:
+  # The training slime's body at 2.8 times its size, in furnace orange.
+  prefab: monster_training_slime
+  icon: monster_training_slime_icon
+  scale: 2.8
+  tint: "#C4501C"

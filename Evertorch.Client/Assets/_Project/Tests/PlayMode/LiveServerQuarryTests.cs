@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -10,6 +11,8 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
+using UnityEngine.UI;
+using EntityId = Evertorch.Game.EntityId;
 using Object = UnityEngine.Object;
 
 namespace Evertorch.Client.Tests.PlayMode
@@ -27,6 +30,17 @@ public sealed class LiveServerQuarryTests
     private const string FieldScene = "11_TrainingField";
     private const string QuarryScene = "13_AshenQuarry";
     private const string Smith = "npc.smith";
+    private const string CinderCrawler = "monster.cinder_crawler";
+    private const string FurnaceHeart = "monster.furnace_heart";
+    private const string Unlit = "Universal Render Pipeline/Unlit";
+
+    private const string Fallen = "The Furnace Heart has fallen. MVP: " + ClientName + ".";
+
+    // A Vanguard at base level 25, the cap, gains none of the MVP's 3,750 experience.
+    private const string Awarded = "You are the MVP: 10 Emberstone.";
+
+    // A row of part 1 of the Smith's fees: the Training Slime Card sorts after the fourteen cards of part 0.
+    private const string TakeOutTheSlimeCard = "Take out Training Slime Card · 200 coins";
     private const float StartTimeoutSeconds = 30f;
     private const float StepTimeoutSeconds = 20f;
     private const int TestTimeoutMs = 300_000;
@@ -38,6 +52,13 @@ public sealed class LiveServerQuarryTests
     private static readonly WorldPosition UnderTheNorthWall = new(-12f, 0f, 20.5f);
     private static readonly WorldPosition FieldNorthPortal = new(-12f, 0f, 22.2f);
     private static readonly WorldPosition QuarrySouthPortal = new(0f, 0f, -38.2f);
+
+    // In the quarry: the crossroads, the west road above the cinder basin, the north road, and 2.5 m south of the
+    // Furnace Heart's home at (0, 28), inside its 5 m burst.
+    private static readonly WorldPosition AtTheCrossroads = new(0f, 0f, -5f);
+    private static readonly WorldPosition OnTheWestRoad = new(-16f, 0f, -5f);
+    private static readonly WorldPosition UpTheNorthRoad = new(0f, 0f, 10f);
+    private static readonly WorldPosition BeforeTheBoss = new(0f, 0f, 25.5f);
 
     // The balance baseline's Vanguard (owner decision 24) and the complete +0 dungeon set it wears.
     private static readonly string[] VanguardSkills =
@@ -110,8 +131,13 @@ public sealed class LiveServerQuarryTests
                 && ground.CardRemovalFeesOf(smith.Entity).Count > 0,
             StepTimeoutSeconds);
         Assert.That(smith, Is.Not.Null, "the Smith in view");
-        Assert.That(ground.CardRemovalFeesOf(smith!.Entity).Count, Is.EqualTo(13), "the Smith's fees for every card");
+        Assert.That(ground.CardRemovalFeesOf(smith!.Entity).Count, Is.EqualTo(17), "the Smith's fees for every card");
         Assert.That(ground.DroppedFeeLists, Is.Zero, "no list of fees dropped");
+        yield return OpenTheSmith(client, ground, smith.Entity);
+        NpcWindow window = client.GetComponentsInChildren<NpcWindow>(true).Single();
+        yield return WaitUntil(() => Row(window, TakeOutTheSlimeCard) != null, StepTimeoutSeconds);
+        Assert.That(Row(window, TakeOutTheSlimeCard), Is.Not.Null, $"a fee of the second part: {window.Text}");
+        window.Close();
 
         Assert.That(
             client.Controller!.TryMoveTo(ground.Predictor.Position, GroundEastPortal),
@@ -164,6 +190,126 @@ public sealed class LiveServerQuarryTests
             $"under the north wall, at {back}");
     }
 
+    // The real client meets the quarry's monsters and its boss (Prototype Content §2): a Cinder Crawler's body in the
+    // basin; then, before the Furnace Heart, its burst's telegraph, an unlit ring of 5 m at its feet; the client brings
+    // the boss down, and its chat log says so and says the most valuable player's ten Emberstones. The test package
+    // leaves the boss 1 HP and no dodge, has its swings and its burst strike for 1, and takes its Ash Cloud off.
+    [UnityTest]
+    [Timeout(TestTimeoutMs)]
+    public IEnumerator Boss_TheRealClientDrawsTheBurstsTelegraph_AndLogsTheMvpsEmberstones()
+    {
+        string actionsPath = RequirePrerequisites();
+        using var package = LiveTestPackage.WithMonster(
+            FurnaceHeart,
+            new Dictionary<string, string>
+            {
+                ["hp"] = "1",
+                ["physicalAttack"] = "0",
+                ["flee"] = "0",
+                ["magicAttack"] = "0"
+            },
+            new[] { (FurnaceHeart, "skill.ash_cloud") },
+            true);
+        yield return StartDatabaseAndServer(package.Path);
+        LiveServer server = m_server!;
+        GameClient client = CreateClient(actionsPath);
+        yield return EnterByName(client, ClientName, () => StoreTheVanguard(ClientName));
+        yield return CrossIntoTheQuarry(client, server);
+        ClientWorld quarry = client.World!;
+
+        yield return WalkTo(client, quarry, AtTheCrossroads, "at the crossroads");
+        yield return WalkTo(client, quarry, OnTheWestRoad, "on the west road");
+        yield return WaitUntil(() => CinderView(client) != null, StepTimeoutSeconds);
+        Assert.That(CinderView(client), Is.Not.Null, "a Cinder Crawler drawn in the basin below");
+        Assert.That(
+            CinderView(client)!.transform.Find("Pose/Scale").localScale.x,
+            Is.EqualTo(1.15f).Within(1e-3f),
+            "at its scale");
+
+        yield return WalkTo(client, quarry, AtTheCrossroads, "back at the crossroads");
+        yield return WalkTo(client, quarry, UpTheNorthRoad, "up the north road");
+        yield return WalkTo(client, quarry, BeforeTheBoss, "before the boss");
+        GameObject? ring = null;
+        yield return WaitUntil(() => (ring = ShownTelegraph()) != null, StepTimeoutSeconds);
+        Assert.That(ring, Is.Not.Null, $"the burst's telegraph: {server.JoinOutput()}");
+        RemoteEntity boss = quarry.Remotes.Values.Single(remote => remote.DefinitionId == FurnaceHeart);
+        Vector3 feet = client.RemoteViews[boss.Entity].transform.position;
+        Vector3 drawn = ring!.transform.position;
+        Assert.That(ring.GetComponent<MeshFilter>().sharedMesh.bounds.extents.x, Is.EqualTo(5f).Within(1e-3f));
+        Assert.That(new Vector2(drawn.x - feet.x, drawn.z - feet.z).magnitude, Is.LessThan(0.1f), "at its feet");
+
+        client.Connection!.SendAttack(boss.Entity);
+        float deadline = Time.realtimeSinceStartup + StepTimeoutSeconds;
+        while (!HasLine(client, Fallen) && Time.realtimeSinceStartup < deadline)
+        {
+            if (client.RemoteViews.TryGetValue(boss.Entity, out EntityView? view) && view != null)
+            {
+                Vector3 at = view.transform.position;
+                client.Controller!.TryMoveTo(quarry.Predictor.Position, new WorldPosition(at.x, 0f, at.z - 1.2f));
+            }
+
+            yield return new WaitForSecondsRealtime(0.5f);
+        }
+
+        Assert.That(HasLine(client, Fallen), Is.True, server.JoinOutput());
+        yield return WaitUntil(() => HasLine(client, Awarded), StepTimeoutSeconds);
+        Assert.That(HasLine(client, Awarded), Is.True, server.JoinOutput());
+        Assert.That(client.Connection.MalformedMessages + client.Connection.UnexpectedMessages, Is.Zero);
+    }
+
+    // Walks up beside the Smith and opens its window.
+    private static IEnumerator OpenTheSmith(GameClient client, ClientWorld world, EntityId smith)
+    {
+        NpcWindow window = client.GetComponentsInChildren<NpcWindow>(true).Single();
+        yield return WaitUntil(() => client.RemoteViews.ContainsKey(smith), StepTimeoutSeconds);
+        Vector3 at = client.RemoteViews[smith].transform.position;
+        yield return WalkTo(client, world, new WorldPosition(at.x + 1.5f, 0f, at.z), "beside the Smith");
+        window.Open(smith);
+        yield return WaitUntil(() => window.IsOpen && window.ShownName == "Smith", StepTimeoutSeconds);
+        Assert.That(window.ShownName, Is.EqualTo("Smith"), window.Text);
+    }
+
+    // Walks from the training ground across the field into the quarry, whose scene and world it then holds.
+    private IEnumerator CrossIntoTheQuarry(GameClient client, LiveServer server)
+    {
+        ClientWorld ground = client.World!;
+        Assert.That(client.Controller!.TryMoveTo(ground.Predictor.Position, GroundEastPortal), Is.True, "east");
+        yield return WaitUntil(
+            () => client.World != null && client.World != ground && client.World.Inventory.IsCurrent,
+            StepTimeoutSeconds);
+        ClientWorld field = client.World!;
+        yield return WalkTo(client, field, UnderTheNorthWall, "under the north wall");
+        Assert.That(client.Controller!.TryMoveTo(field.Predictor.Position, FieldNorthPortal), Is.True, "north");
+        yield return WaitUntil(
+            () => client.World != null && client.World != field && client.World.Inventory.IsCurrent,
+            StepTimeoutSeconds);
+        Assert.That(client.World!.Map.Value, Is.EqualTo("map.ashen_quarry"), $"{client.Status} {server.JoinOutput()}");
+    }
+
+    private static bool HasLine(GameClient client, string text)
+    {
+        return client.ChatLog.Lines.Any(line => line.Text == text);
+    }
+
+    private static Button? Row(Component window, string name)
+    {
+        return window.GetComponentsInChildren<Button>().FirstOrDefault(button => button.name == name);
+    }
+
+    private static GameObject? ShownTelegraph()
+    {
+        return Object.FindObjectsByType<MeshFilter>(FindObjectsSortMode.None)
+            .Select(filter => filter.gameObject)
+            .FirstOrDefault(ring => ring.name == AreaTelegraphPresenter.ObjectName && ring.activeInHierarchy);
+    }
+
+    private static EntityView? CinderView(GameClient client)
+    {
+        RemoteEntity? remote = client.World?.Remotes.Values
+            .FirstOrDefault(entity => entity.DefinitionId == CinderCrawler);
+        return remote != null && client.RemoteViews.TryGetValue(remote.Entity, out EntityView? view) ? view : null;
+    }
+
     private void StoreTheVanguard(string name)
     {
         LiveDatabase database = m_database!;
@@ -175,6 +321,12 @@ public sealed class LiveServerQuarryTests
             "INSERT INTO character_skills (character_id, skill_definition_id, level) SELECT c.id, s.skill, s.level "
             + $"FROM characters c, (VALUES {string.Join(", ", VanguardSkills)}) AS s(skill, level) "
             + $"WHERE c.name = '{name}'");
+        // The JSON is built in SQL, since the command line that carries the statement to the container drops quotes.
+        database.Execute(
+            "INSERT INTO inventory_items (character_id, item_definition_id, quantity, refine_level, instance_data_json, "
+            + "version) SELECT id, 'item.armor.cloth', 1, 0, "
+            + "jsonb_build_object('cards', jsonb_build_array('item.card.training_slime')), 0 "
+            + $"FROM characters WHERE name = '{name}'");
         foreach ((string item, string slot) in VanguardWorn)
         {
             database.Execute(

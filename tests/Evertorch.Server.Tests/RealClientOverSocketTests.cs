@@ -24,7 +24,7 @@ public sealed class RealClientOverSocketTests
     public void Client_InTown_PutsTheSmithsFeesTogetherFromTheirParts()
     {
         using var root = new TemporaryDirectory();
-        PackageFixture.WriteTo(Path.Combine(root.Path, "content", "server"), FeePackage.Build(3));
+        PackageFixture.WriteTo(Path.Combine(root.Path, "content", "server"), FeePackage.Build(12));
         var store = new InMemoryGameStore();
         using IHost host = TestHosts
             .CreateBuilder(new[] { "--Network:Port=0", "--DevelopmentAuthentication:Enabled=true" }, root.Path, store)
@@ -42,7 +42,7 @@ public sealed class RealClientOverSocketTests
             && world.CardRemovalFeesOf(smith.Entity).Count > 0);
 
         Assert.That(isWhole, Is.True, "the Smith's fees");
-        Assert.That(world.CardRemovalFeesOf(smith!.Entity), Has.Count.EqualTo(16), "every card, from two parts");
+        Assert.That(world.CardRemovalFeesOf(smith!.Entity), Has.Count.EqualTo(29), "every card, from three parts");
         Assert.That(world.DroppedFeeLists, Is.Zero, "nothing dropped");
         Assert.That(client.Connection.MalformedMessages + client.Connection.UnexpectedMessages, Is.Zero);
         host.StopAsync().GetAwaiter().GetResult();

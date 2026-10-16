@@ -249,7 +249,9 @@ public sealed class NpcContentTests
                 new[]
                 {
                     ("quest.crawler_hunt", "npc.gate_warden", "monster.forest_crawler", 5),
+                    ("quest.furnace_heart", "npc.gate_warden", "monster.furnace_heart", 1),
                     ("quest.grotto_hunt", "npc.gate_warden", "monster.grotto_crawler", 10),
+                    ("quest.quarry_hunt", "npc.gate_warden", "monster.cinder_crawler", 10),
                     ("quest.slime_monarch", "npc.gate_warden", "monster.slime_monarch", 1)
                 }));
         QuestDefinition hunt = result.Content.Quests.Single(quest => quest.Definition.Id.Value == "quest.crawler_hunt")
