@@ -6,7 +6,8 @@ element: fire
 race: formless
 size: large
 stats:
-  hp: 42000
+  # 42,000 until the balance fixture found one Vanguard and two Arcanists taking up to 341 s (owner decision 25).
+  hp: 38500
   physicalAttack: 70
   physicalDefense: 40
   hit: 300

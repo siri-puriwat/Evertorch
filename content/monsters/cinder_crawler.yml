@@ -6,7 +6,8 @@ race: insect
 size: medium
 stats:
   hp: 1000
-  physicalAttack: 48
+  # 48 until the balance fixture found an Arcanist losing 45 % of its HP to one (owner decision 25).
+  physicalAttack: 40
   physicalDefense: 20
   hit: 240
   flee: 178

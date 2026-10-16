@@ -106,7 +106,7 @@ public sealed class TwoBossesTests
             bosses.Select(boss => (boss.Definition.Id.Value, boss.MaxHealth, boss.CurrentHealth)),
             Is.EqualTo(
                 bosses.Select(boss => (boss.Definition.Id.Value, boss.Definition.Hp / 10, boss.Definition.Hp / 10))));
-        Assert.That(bosses[0].MaxHealth, Is.EqualTo(4200), "the Furnace Heart's 42,000 HP");
+        Assert.That(bosses[0].MaxHealth, Is.EqualTo(3850), "the Furnace Heart's 38,500 HP");
         Assert.That(
             server.World.Maps.SelectMany(map => map.Monsters)
                 .Where(monster => !monster.Definition.IsBoss)

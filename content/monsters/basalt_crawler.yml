@@ -6,7 +6,8 @@ race: insect
 size: large
 stats:
   hp: 900
-  physicalAttack: 44
+  # 44 until the balance fixture found an Arcanist losing 73 % of its HP to a pair (owner decision 25).
+  physicalAttack: 36
   physicalDefense: 28
   hit: 245
   flee: 172

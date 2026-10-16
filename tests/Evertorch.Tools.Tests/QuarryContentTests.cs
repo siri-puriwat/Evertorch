@@ -249,8 +249,8 @@ public sealed class QuarryContentTests
             Is.EqualTo(
                 new[]
                 {
-                    (1000, 48, 20, 240, 178, 0), (900, 44, 28, 245, 172, 0), (650, 34, 10, 250, 192, 80),
-                    (42_000, 70, 40, 300, 165, 140)
+                    (1000, 40, 20, 240, 178, 0), (900, 36, 28, 245, 172, 0), (650, 34, 10, 250, 192, 80),
+                    (38_500, 70, 40, 300, 165, 140)
                 }));
         Assert.That(
             definitions.Select(monster => (monster.AttackRange, monster.AttackIntervalMs, monster.BaseSpeed,
