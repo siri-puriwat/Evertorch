@@ -136,6 +136,7 @@ public sealed class DungeonDeterminismTests
         string bosses = string.Join(
             ";",
             server.MonsterAi.DescribeBosses(server.CurrentTick)
+                .Where(boss => boss.Map == Grotto)
                 .Select(boss => $"{boss.Monster.Value} {boss.IsAlive} {boss.ReturnsInMs}"));
         var messages = server.Transport.ControlSentTo(player).ToList();
         var outcomes = messages

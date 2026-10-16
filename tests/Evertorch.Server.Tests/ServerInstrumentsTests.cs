@@ -180,9 +180,10 @@ public sealed class ServerInstrumentsTests
         var server = new TestServer(withEveryMap: true, withGrotto: true, withMonsters: true, withMonsterAi: false);
         using var recorder = new MeterRecorder(server.Instruments.Meter);
         PlayerEntity player = server.PlayerOf(server.EnterWorld(1));
-        MonsterEntity[] grotto = server.World.Maps.SelectMany(map => map.Monsters).ToArray();
+        server.World.TryGetMap(new MapDefinitionId("map.umbral_grotto"), out MapInstance? map);
+        MonsterEntity[] grotto = map!.Monsters.ToArray();
         MonsterEntity crawler = grotto.First(monster => monster.Definition.Id.Value == "monster.grotto_crawler");
-        MonsterEntity boss = grotto.First(monster => monster.Definition.IsBoss);
+        MonsterEntity boss = grotto.Single(monster => monster.Definition.Id.Value == "monster.slime_monarch");
         var rolls = new AilmentRolls(server.Content, server.StatusEffects, server.World, new ScriptedRandom(9999, 0),
             server.Instruments, 1);
         var frozen = new StatusDefinitionId("status.frozen");

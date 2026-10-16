@@ -70,6 +70,12 @@ public sealed class BossAnnouncementTests
         return output.ToString().Trim();
     }
 
+    // The console's line about the grotto's boss, whatever other bosses the world holds.
+    private static string GrottoLine(string output)
+    {
+        return output.Split('\n').Select(line => line.Trim()).Single(line => line.Contains($" on {Grotto.Value}: "));
+    }
+
     // The status the console reads is published once a second.
     private static void Publish(TestServer server)
     {
@@ -81,11 +87,11 @@ public sealed class BossAnnouncementTests
     {
         (TestServer server, ConnectionId grotto, ConnectionId town) = Players(true);
         Publish(server);
-        string alive = Console(server, "boss");
+        string alive = GrottoLine(Console(server, "boss"));
         string status = Console(server, "status");
         server.Combat.Kill(GrottoOf(server), MonarchOf(server), server.PlayerOf(grotto), server.CurrentTick);
         Publish(server);
-        string returning = Console(server, "boss");
+        string returning = GrottoLine(Console(server, "boss"));
         server.Transport.ClearSent();
 
         string respawned = Console(server, "boss respawn");
@@ -93,7 +99,7 @@ public sealed class BossAnnouncementTests
         Publish(server);
 
         Assert.That(alive, Is.EqualTo("boss monster.slime_monarch on map.umbral_grotto: alive"));
-        Assert.That(status, Does.EndWith("boss monster.slime_monarch on map.umbral_grotto: alive"));
+        Assert.That(GrottoLine(status), Is.EqualTo("boss monster.slime_monarch on map.umbral_grotto: alive"));
         int minutes = int.Parse(
             returning.Replace("boss monster.slime_monarch on map.umbral_grotto: returns in about ", string.Empty)
                 .Replace(" min", string.Empty));
@@ -108,7 +114,9 @@ public sealed class BossAnnouncementTests
                 .Select(entry => entry.Fields["Bosses"]),
             Is.EqualTo(new[] { "monster.slime_monarch", "none" }));
         Assert.That(MonarchOf(server).CurrentHealth, Is.EqualTo(MonarchOf(server).MaxHealth));
-        Assert.That(Console(server, "boss"), Is.EqualTo("boss monster.slime_monarch on map.umbral_grotto: alive"));
+        Assert.That(
+            GrottoLine(Console(server, "boss")),
+            Is.EqualTo("boss monster.slime_monarch on map.umbral_grotto: alive"));
     }
 
     [Test]

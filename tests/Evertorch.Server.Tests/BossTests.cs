@@ -183,13 +183,9 @@ public sealed class BossTests
     {
         var server = new TestServer(withEveryMap: true, withGrotto: true, withMonsters: true, withMonsterAi: false);
 
-        MonsterEntity[] bosses = server.World.Maps
-            .SelectMany(map => map.Monsters)
-            .Where(monster => monster.Definition.IsBoss)
-            .ToArray();
+        MonsterEntity[] bosses = GrottoOf(server).Monsters.Where(monster => monster.Definition.IsBoss).ToArray();
         Assert.That(bosses.Select(boss => boss.Definition.Id), Is.EqualTo(new[] { Monarch }));
         Assert.That((bosses[0].Position.X, bosses[0].Position.Z), Is.EqualTo((18f, 18f)));
-        Assert.That(GrottoOf(server).Monsters, Does.Contain(bosses[0]));
     }
 
     // Its target dies near home: the boss walks home, as any monster does, but keeps its wounds and its logs, so the
