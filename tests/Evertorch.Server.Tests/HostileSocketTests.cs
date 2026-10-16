@@ -557,7 +557,7 @@ public sealed class HostileSocketTests
     // accessory position while the first wears it, and of her worn cap again, and an unequip of the empty shield
     // position, each refused and audited; an inspection of Bobby answered with his eight positions; a burst of equips
     // over the item bucket; then equips and unequips naming no position or a ninth, malformed until the connection is
-    // closed. Nothing she holds or wears moves.
+    // closed. No refused command moves anything.
     [Test]
     public void HostileEquipmentCommands_AreRefusedThrottledAndScored_AndLeaveNoNameInTheLogs()
     {
@@ -598,11 +598,14 @@ public sealed class HostileSocketTests
         anna.World.CommandRejectedReceived += rejection => refused.Add(rejection.Reason);
         var inspected = new List<InspectedEquipment>();
         anna.Connection.InspectedEquipmentReceived += inspected.Add;
-        SocketClients.PumpUntil(
-            () => anna.World.Inventory.IsCurrent && bobby.World.Inventory.IsCurrent
-                && anna.World.Remotes.ContainsKey(bobby.World.LocalEntity),
-            anna,
-            bobby);
+        Assert.That(
+            SocketClients.PumpUntil(
+                () => anna.World.Inventory.IsCurrent && bobby.World.Inventory.IsCurrent
+                    && anna.World.Remotes.ContainsKey(bobby.World.LocalEntity),
+                anna,
+                bobby),
+            Is.True,
+            "both in the world, Bobby in Anna's view");
         long bobbysCap = bobby.World.Inventory.Rows.Single().InventoryItem;
         long cap = anna.World.Inventory.Rows.Single(row => row.Item.Value == "item.headgear.trail_cap").InventoryItem;
         long charm = anna.World.Inventory.Rows.Single(row => row.Item.Value == "item.accessory.traveler_charm")
@@ -612,18 +615,25 @@ public sealed class HostileSocketTests
         anna.Connection.SendEquip(cap, EquipmentSlot.Weapon);
         anna.Connection.SendEquip(charm, EquipmentSlot.Accessory2);
         anna.Connection.SendUnequip(EquipmentSlot.Shield);
-        SocketClients.PumpUntil(() => refused.Count >= 4, anna, bobby);
+        Assert.That(SocketClients.PumpUntil(() => refused.Count >= 4, anna, bobby), Is.True, "four refusals");
         var named = refused.ToList();
         anna.Connection.SendEquip(cap, EquipmentSlot.Headgear);
-        SocketClients.PumpUntil(
-            () => anna.World.Inventory.Rows.Any(row => row.InventoryItem == cap && row.Slot == EquipmentSlot.Headgear),
-            anna,
-            bobby);
+        Assert.That(
+            SocketClients.PumpUntil(
+                () => anna.World.Inventory.Rows.Any(row =>
+                    row.InventoryItem == cap && row.Slot == EquipmentSlot.Headgear),
+                anna,
+                bobby),
+            Is.True,
+            "her cap worn");
         anna.PumpFor(TimeSpan.FromMilliseconds(1100));
         refused.Clear();
         anna.Connection.SendEquip(cap, EquipmentSlot.Headgear);
         anna.Connection.SendInspectPlayer(bobby.World.LocalEntity);
-        SocketClients.PumpUntil(() => refused.Count >= 1 && inspected.Count >= 1, anna, bobby);
+        Assert.That(
+            SocketClients.PumpUntil(() => refused.Count >= 1 && inspected.Count >= 1, anna, bobby),
+            Is.True,
+            "the worn cap refused and Bobby inspected");
         var again = refused.ToList();
         anna.PumpFor(TimeSpan.FromMilliseconds(1100));
 

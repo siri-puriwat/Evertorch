@@ -260,7 +260,7 @@ public sealed class LiveServerEquipmentTests
         return actionsPath;
     }
 
-    // Creates the named character, stores what the test gives it, and enters the world with it.
+    // The seed runs between the character's creation and its entry: the server reads the bag as it enters.
     private static IEnumerator EnterByName(GameClient client, string name, Action seed)
     {
         yield return LiveSignIn.PressConnect(client);

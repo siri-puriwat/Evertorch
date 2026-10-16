@@ -562,6 +562,10 @@ public static class ArtDeliveryImporter
             Find(body, PickAnchor),
             asset.PickRadius,
             trimSlots.ToArray());
+        if (asset.Kind == "humanoid")
+        {
+            AddSockets(body, asset.Key, KeptSockets());
+        }
 
         body.TryGetComponent(out Animator? animator);
         if (animator == null && asset.Kind == "humanoid")
@@ -587,10 +591,6 @@ public static class ArtDeliveryImporter
         }
 
         bodyAnimator.Configure(clips);
-        if (asset.Kind == "humanoid")
-        {
-            AddSockets(body, asset.Key, KeptSockets());
-        }
     }
 
     // Every kept manifest's socket tables, so rebuilding an outfit from an earlier delivery keeps the sockets a later

@@ -207,12 +207,11 @@ public sealed class WornPieceTests
 
         view.Wear(cap);
         view.Wear(circlet);
-        yield return WaitUntil(() => view.WornParts(EquipmentSlot.Headgear).Count > 0);
-        float settle = Time.realtimeSinceStartup + 0.5f;
-        while (Time.realtimeSinceStartup < settle)
-        {
-            yield return null;
-        }
+        // The catalog answers its callers in order, so once this answer comes the view's own, older one has come too.
+        bool isCapLoaded = false;
+        m_catalog.Request("worn_trail_cap", _ => isCapLoaded = true);
+        yield return WaitUntil(() => isCapLoaded && view.WornParts(EquipmentSlot.Headgear).Count > 0);
+        yield return null;
 
         Assert.That(
             view.WornParts(EquipmentSlot.Headgear).Select(PieceOf),
@@ -264,10 +263,9 @@ public sealed class WornPieceTests
         first.Wear(FullLoadout);
         yield return WaitUntil(() => first.HasBody && IsDressed(first, FullLoadout));
 
-        Assert.That(
-            second.WornParts(EquipmentSlot.Headgear)[0].GetComponent<MeshFilter>().sharedMesh,
-            Is.Not.Null,
-            "the second body's cap keeps its mesh");
+        // Unity's own comparison: a destroyed mesh is still a reference, so NUnit's null check would pass it.
+        Mesh mesh = second.WornParts(EquipmentSlot.Headgear)[0].GetComponent<MeshFilter>().sharedMesh;
+        Assert.That(mesh != null && mesh.vertexCount > 0, Is.True, "the second body's cap keeps its mesh");
         Assert.That(IsDressed(first, FullLoadout), Is.True, "a new body wears the same models");
     }
 

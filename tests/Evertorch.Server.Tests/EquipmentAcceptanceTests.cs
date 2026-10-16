@@ -150,6 +150,8 @@ public sealed class EquipmentAcceptanceTests
 
         Assert.That(bobby.Connection.SendInspectPlayer(anna.World.LocalEntity), Is.Not.Zero, $"{step}: asked");
         Assert.That(SocketClients.PumpUntil(() => seen.Count == 1, anna, bobby), Is.True, $"{step}: answered");
+        // A copy sent to Anna as well would arrive about when Bobby's does: both run on before her silence counts.
+        SocketClients.PumpFor(TimeSpan.FromMilliseconds(300), anna, bobby);
         bobby.Connection.InspectedEquipmentReceived -= seen.Add;
         anna.Connection.InspectedEquipmentReceived -= heard.Add;
 

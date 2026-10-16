@@ -411,6 +411,14 @@ public sealed class ArtContractTests
     public void Sockets_OfADelivery_HangUnderTheirBonesOnEveryOutfit(string folder)
     {
         ArtManifest manifest = ReadManifest(folder);
+        if (manifest.Assets.Any(asset => asset.Kind == ArtManifestAsset.WornKind))
+        {
+            Assert.That(
+                manifest.Sockets.Select(socket => socket.Outfit).Distinct(),
+                Is.EquivalentTo(new[] { "character_adventurer", "character_vanguard", "character_arcanist" }),
+                "worn pieces come with every player outfit's sockets");
+        }
+
         foreach (IGrouping<string, ArtManifestSocket> outfit in manifest.Sockets.GroupBy(socket => socket.Outfit))
         {
             GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(FindPrefab(outfit.Key));

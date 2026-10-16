@@ -946,6 +946,24 @@ public sealed class SharedIntentPathTests : InputTestFixture
         Assert.That(actions.FindAction("Player/Move", true).enabled, Is.True, "the Player map open again");
     }
 
+    // The client's own end of the focus asks the held stick to centre before it walks again (review of Milestone 20).
+    [Test]
+    public void FocusEnding_InTheClient_AsksTheStickToCentreFirst()
+    {
+        (GameClient client, ClientWorld _, Gamepad gamepad, InputActionAsset _) = CreateFocusClient();
+        PressAndRelease(gamepad.selectButton);
+        Frame(client);
+        object source = typeof(GameClient).GetField("m_manualSource", ClientField)!.GetValue(client)!;
+        FieldInfo isCentreRequired = source.GetType().GetField("m_isCentreRequired", ClientField)!;
+        isCentreRequired.SetValue(source, false);
+
+        PressAndRelease(gamepad.selectButton);
+        Frame(client);
+
+        Assert.That(client.HasWindowFocus, Is.False);
+        Assert.That(isCentreRequired.GetValue(source), Is.EqualTo(true), "the stick centres before it walks");
+    }
+
     // However the focused window closes, a click on its Close among them, the focus ends with it.
     [Test]
     public void FocusedMenu_ClosedByItsButton_EndsTheFocus()
