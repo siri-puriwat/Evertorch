@@ -11,6 +11,7 @@ server:
   equipment:
     defense: 2
 client:
-  # The cloth armor's look until ArtDelivery-03's pieces arrive.
+  # The cloth armor's icon until art for the pieces' icons arrives.
   icon: item_cloth_armor
-  model: pickup_cloth_armor
+  model: pickup_trail_cap
+  worn: worn_trail_cap

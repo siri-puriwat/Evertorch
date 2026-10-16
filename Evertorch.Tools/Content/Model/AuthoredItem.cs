@@ -14,7 +14,8 @@ public sealed class AuthoredItem
         string model,
         string? held = null,
         string? prefix = null,
-        string? description = null)
+        string? description = null,
+        string? worn = null)
     {
         Source = source;
         Definition = definition;
@@ -23,6 +24,7 @@ public sealed class AuthoredItem
         Held = held;
         Prefix = prefix;
         Description = description;
+        Worn = worn;
     }
 
     public DefinitionSource Source { get; }
@@ -37,6 +39,11 @@ public sealed class AuthoredItem
     ///     A weapon's model in a hand (Content Pipeline §4); null when the item names none.
     /// </summary>
     public string? Held { get; }
+
+    /// <summary>
+    ///     A piece's model on the body (Content Pipeline §5): every piece but a weapon names one; null for any other item.
+    /// </summary>
+    public string? Worn { get; }
 
     /// <summary>
     ///     A card's word in the names of the items holding it (Prototype Content §2); null for every other item.

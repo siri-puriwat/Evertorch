@@ -43,7 +43,8 @@ public sealed class EquipmentContentTests
         + "    defense: 8\n"
         + "client:\n"
         + "  icon: item_cloth_armor\n"
-        + "  model: pickup_cloth_armor\n";
+        + "  model: pickup_cloth_armor\n"
+        + "  worn: worn_cloth_armor\n";
 
     private static JsonElement Item(ContentPackage package, string id)
     {
@@ -94,6 +95,14 @@ public sealed class EquipmentContentTests
         "",
         "server.equipment",
         "required field is missing")]
+    [TestCase(Armor, "  worn: worn_cloth_armor\n", "", "client.worn", "required field is missing")]
+    [TestCase(Armor, "worn: worn_cloth_armor", "worn: Worn Cloth", "client.worn", "logical asset key")]
+    [TestCase(
+        Sword,
+        "  model: pickup_training_sword\n",
+        "  model: pickup_training_sword\n  worn: worn_cloth_armor\n",
+        "client.worn",
+        "is only for equipment worn on the body")]
     public void Run_WhenAWeaponOrArmorIsBroken_ReportsThatField(
         string file,
         string oldText,
@@ -161,6 +170,29 @@ public sealed class EquipmentContentTests
             Assert.That(Item(result.Packages.Client, "item.armor.cloth").TryGetProperty("held", out _), Is.False);
             Assert.That(
                 Item(result.Packages.Server, "item.weapon.training_sword").TryGetProperty("held", out _),
+                Is.False,
+                "a presentation key stays out of the server's package");
+        }
+    }
+
+    [Test]
+    public void Build_WithArmorsWornModel_WritesItForTheClientAlone()
+    {
+        using (var workspace = new ContentWorkspace())
+        {
+            workspace.Write(Sword, SwordText);
+            workspace.Write(Armor, ArmorText);
+
+            ContentPipelineResult result = ContentPipeline.Run(workspace.ContentRoot);
+
+            Assert.That(result.Diagnostics, Is.Empty, Describe(result));
+            JsonElement armor = Item(result.Packages!.Client, "item.armor.cloth");
+            Assert.That(armor.GetProperty("worn").GetString(), Is.EqualTo("worn_cloth_armor"));
+            Assert.That(Item(result.Packages.Client, "item.weapon.training_sword").TryGetProperty("worn", out _),
+                Is.False,
+                "a weapon is held, not worn");
+            Assert.That(
+                Item(result.Packages.Server, "item.armor.cloth").TryGetProperty("worn", out _),
                 Is.False,
                 "a presentation key stays out of the server's package");
         }

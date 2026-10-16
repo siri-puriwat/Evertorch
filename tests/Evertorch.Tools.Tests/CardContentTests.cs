@@ -95,7 +95,8 @@ public sealed class CardContentTests
         + "    defense: 8\n"
         + "client:\n"
         + "  icon: item_cloth_armor\n"
-        + "  model: pickup_cloth_armor\n";
+        + "  model: pickup_cloth_armor\n"
+        + "  worn: worn_cloth_armor\n";
 
     private static string Describe(ContentPipelineResult result)
     {

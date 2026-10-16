@@ -12,8 +12,8 @@ namespace Evertorch.Client.Tests.EditMode
 /// <summary>
 ///     Every committed art delivery against its manifest and the art delivery contract (Prototype Content §2.1; Content
 ///     Pipeline §6): its files as delivered, imported as its own validation imported them, within the art brief's
-///     budgets, with its anchors, radii, slots, clips, and markers in the prefabs. A new delivery's gaps show here
-///     first.
+///     budgets, with its anchors, radii, slots, clips, and markers in the prefabs, its worn pieces' parts and pickups,
+///     and its body sockets on the outfits. A new delivery's gaps show here first.
 /// </summary>
 [TestFixture]
 public sealed class ArtContractTests
@@ -44,12 +44,16 @@ public sealed class ArtContractTests
         return File.Exists(staged) ? staged : $"{PrefabsRoot}/{key}.prefab";
     }
 
-    private static int TriangleBudget(string kind)
+    // A worn piece's budget is its category's, all its parts together (ArtDelivery-03's brief, §6).
+    private static int TriangleBudget(ArtManifestAsset asset)
     {
-        return kind switch
+        return (asset.Kind, asset.Category) switch
         {
-            "humanoid" => 7000,
-            "monster" => 3000,
+            ("humanoid", _) => 7000,
+            ("monster", _) => 3000,
+            (ArtManifestAsset.WornKind, "armor") => 1200,
+            (ArtManifestAsset.WornKind, "accessory") => 200,
+            (ArtManifestAsset.WornKind, _) => 600,
             _ => 800
         };
     }
@@ -217,9 +221,12 @@ public sealed class ArtContractTests
                     Is.EqualTo(path.EndsWith("_BaseMap.png") || path.EndsWith("_Emission.png")), path);
                 Assert.That(
                     importer.maxTextureSize,
-                    Is.EqualTo(asset.Kind == "weapon"
-                        ? ArtImportSettings.WeaponTextureSize
-                        : ArtImportSettings.BodyTextureSize),
+                    Is.EqualTo(asset.Kind switch
+                    {
+                        "weapon" => ArtImportSettings.WeaponTextureSize,
+                        ArtManifestAsset.WornKind => ArtImportSettings.WornTextureSize,
+                        _ => ArtImportSettings.BodyTextureSize
+                    }),
                     path);
             }
         }
@@ -234,7 +241,7 @@ public sealed class ArtContractTests
             Mesh[] meshes = AssetDatabase.LoadAllAssetsAtPath(path).OfType<Mesh>().ToArray();
             int triangles = meshes.Sum(mesh =>
                 Enumerable.Range(0, mesh.subMeshCount).Sum(sub => (int)mesh.GetIndexCount(sub)) / 3);
-            Assert.That(triangles, Is.LessThanOrEqualTo(TriangleBudget(asset.Kind)), $"{path}: triangles");
+            Assert.That(triangles, Is.LessThanOrEqualTo(TriangleBudget(asset)), $"{path}: triangles");
             foreach (Mesh mesh in meshes)
             {
                 using NativeArray<byte> counts = mesh.GetBonesPerVertex();
@@ -252,6 +259,12 @@ public sealed class ArtContractTests
             if (asset.Kind == "weapon")
             {
                 AssertWeapon(asset);
+                continue;
+            }
+
+            if (asset.Kind == ArtManifestAsset.WornKind)
+            {
+                AssertWorn(asset);
                 continue;
             }
 
@@ -332,6 +345,94 @@ public sealed class ArtContractTests
         Assert.That(pickup.TryGetComponent(out EntityBody body), Is.True, $"{pickupKey}: its EntityBody");
         Assert.That(body.Pick, Is.Null, $"{pickupKey}: picked by the sphere every drop has");
         Assert.That(body.Overhead!.localPosition.y, Is.GreaterThan(0f), pickupKey);
+    }
+
+    // Each part of a worn piece is its own node at no offset, so it sits on its socket as delivered; the prefab names
+    // its socket and, on a piece with a Trim slot, the material slot the player's tint takes. Nothing collides and
+    // nothing is skinned.
+    private static void AssertWorn(ArtManifestAsset asset)
+    {
+        GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(FindPrefab(asset.Key));
+        Assert.That(prefab, Is.Not.Null, asset.Key);
+        Assert.That(prefab.TryGetComponent(out WornPiece piece), Is.True, $"{asset.Key}: its WornPiece");
+        Assert.That(
+            piece.Parts.Select(part => (part.Node != null ? part.Node.name : string.Empty, part.Socket)),
+            Is.EqualTo(asset.Parts.Select(part => (part.Node, part.Socket))),
+            $"{asset.Key}: its parts on their sockets");
+        Assert.That(asset.Materials.Count, Is.InRange(1, 2), $"{asset.Key}: Body and at most a Trim slot");
+        bool hasTrim = asset.Materials.Contains(ArtDeliveryImporter.TrimSlot);
+        if (asset.Category is "armor" or "garment" or "shield")
+        {
+            Assert.That(hasTrim, Is.True, $"{asset.Key}: a Trim band");
+        }
+
+        foreach (WornPiece.Part part in piece.Parts)
+        {
+            Transform node = part.Node!;
+            Assert.That(
+                (node.localPosition.magnitude < 0.0001f,
+                    Quaternion.Angle(node.localRotation, Quaternion.identity) < 0.01f,
+                    Vector3.Distance(node.localScale, Vector3.one) < 0.0001f),
+                Is.EqualTo((true, true, true)),
+                $"{asset.Key} {node.name}: at no offset");
+            Material[] materials = node.GetComponent<Renderer>().sharedMaterials;
+            Assert.That(
+                part.TrimSlot >= 0 ? materials[part.TrimSlot].name : string.Empty,
+                Is.EqualTo(hasTrim ? $"Art_{asset.Key}_{ArtDeliveryImporter.TrimSlot}" : string.Empty),
+                $"{asset.Key} {node.name}: its Trim slot");
+        }
+
+        Assert.That(prefab.GetComponentsInChildren<Collider>(true), Is.Empty, $"{asset.Key}: no collider");
+        Assert.That(prefab.GetComponentsInChildren<SkinnedMeshRenderer>(true), Is.Empty, $"{asset.Key}: rigid");
+
+        GameObject pickup = AssetDatabase.LoadAssetAtPath<GameObject>(FindPrefab(asset.Pickup));
+        Assert.That(pickup, Is.Not.Null, asset.Pickup);
+        Assert.That(pickup.TryGetComponent(out EntityBody body), Is.True, $"{asset.Pickup}: its EntityBody");
+        Assert.That(body.Pick, Is.Null, $"{asset.Pickup}: picked by the sphere every drop has");
+        Assert.That(body.Overhead!.localPosition.y, Is.GreaterThan(0f), asset.Pickup);
+        Assert.That(pickup.GetComponentsInChildren<Collider>(true), Is.Empty, $"{asset.Pickup}: no collider");
+        GameObject laid = Object.Instantiate(pickup);
+        try
+        {
+            Assert.That(
+                laid.GetComponentsInChildren<Renderer>(true).Min(renderer => renderer.bounds.min.y),
+                Is.EqualTo(0f).Within(0.001f),
+                $"{asset.Pickup}: on the ground");
+        }
+        finally
+        {
+            Object.DestroyImmediate(laid);
+        }
+    }
+
+    // Every outfit a delivery measured carries each socket as an empty transform under its bone, where the manifest
+    // puts it, and every worn part's socket, either hip for an accessory.
+    [TestCaseSource(nameof(Deliveries))]
+    public void Sockets_OfADelivery_HangUnderTheirBonesOnEveryOutfit(string folder)
+    {
+        ArtManifest manifest = ReadManifest(folder);
+        foreach (IGrouping<string, ArtManifestSocket> outfit in manifest.Sockets.GroupBy(socket => socket.Outfit))
+        {
+            GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(FindPrefab(outfit.Key));
+            Assert.That(prefab, Is.Not.Null, outfit.Key);
+            foreach (ArtManifestSocket socket in outfit)
+            {
+                string what = $"{outfit.Key} {socket.Name}";
+                Transform? placed = ArtDeliveryImporter.Find(prefab, socket.Name);
+                Assert.That(placed, Is.Not.Null, what);
+                Assert.That(placed!.parent.name, Is.EqualTo(socket.Bone), $"{what}: its bone");
+                Assert.That(Vector3.Distance(placed.localPosition, socket.Position), Is.LessThan(0.0001f), what);
+                Assert.That(Quaternion.Angle(placed.localRotation, socket.Rotation), Is.LessThan(0.01f), what);
+                Assert.That(Vector3.Distance(placed.localScale, socket.Scale), Is.LessThan(0.0001f), what);
+                Assert.That(placed.GetComponents<Component>().Length, Is.EqualTo(1), $"{what}: empty");
+            }
+
+            IEnumerable<string> needed = manifest.Assets
+                .SelectMany(asset => asset.Parts)
+                .Select(part => part.Socket)
+                .Append(WornPiece.SecondAccessorySocket);
+            Assert.That(outfit.Select(socket => socket.Name), Is.SupersetOf(needed.Distinct()), outfit.Key);
+        }
     }
 
     [Test]

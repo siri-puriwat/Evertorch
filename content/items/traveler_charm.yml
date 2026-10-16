@@ -11,6 +11,7 @@ server:
     bonus:
       dex: 1
 client:
-  # The cloth armor's look until ArtDelivery-03's pieces arrive.
+  # The cloth armor's icon until art for the pieces' icons arrives.
   icon: item_cloth_armor
-  model: pickup_cloth_armor
+  model: pickup_traveler_charm
+  worn: worn_traveler_charm

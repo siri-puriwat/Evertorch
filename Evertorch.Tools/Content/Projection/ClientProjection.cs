@@ -62,6 +62,11 @@ internal static class ClientProjection
                 writer.WriteString("held", authored.Held);
             }
 
+            if (authored.Worn != null)
+            {
+                writer.WriteString("worn", authored.Worn);
+            }
+
             if (item.IsEquipment)
             {
                 writer.WriteNumber("slots", item.Slots);

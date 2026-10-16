@@ -398,6 +398,7 @@ public static class ClientContentParser
                 return null;
             }
 
+
             if (item.stackLimit < 1)
             {
                 error = $"Item '{item.id}': stackLimit is below 1.";
@@ -418,6 +419,14 @@ public static class ClientContentParser
                 return null;
             }
 
+            string worn = item.worn ?? string.Empty;
+            bool isWorn = EquipmentPositions.IsEquipment(type) && type != ItemType.Weapon;
+            if (isWorn != worn.Length > 0 || (isWorn && !IsLogicalKey(worn)))
+            {
+                error = $"Item '{item.id}': worn is not the logical key every piece but a weapon names.";
+                return null;
+            }
+
             items.Add(
                 id,
                 new ClientItem(
@@ -431,7 +440,8 @@ public static class ClientContentParser
                     item.slots,
                     fits,
                     item.prefix ?? string.Empty,
-                    item.description ?? string.Empty));
+                    item.description ?? string.Empty,
+                    worn));
         }
 
         return items;
@@ -1069,6 +1079,7 @@ public static class ClientContentParser
         public string? model = string.Empty;
         public string? icon = string.Empty;
         public string? held = string.Empty;
+        public string? worn = string.Empty;
         public int stackLimit = 0;
         public int slots = 0;
         public string? fits = string.Empty;

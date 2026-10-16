@@ -15,6 +15,7 @@ server:
   equipment:
     defense: 22
 client:
-  # The cloth armor's look until art arrives.
+  # The cloth armor's icon until art for the pieces' icons arrives.
   icon: item_cloth_armor
-  model: pickup_cloth_armor
+  model: pickup_monarch_mantle
+  worn: worn_monarch_mantle

@@ -49,6 +49,39 @@ public sealed class ManifestJsonTests
   ]
 }";
 
+    private const string WornManifest = @"{
+  ""delivery"": ""ArtDelivery-99-Worn"",
+  ""fps"": 30,
+  ""assets"": [
+    {
+      ""key"": ""worn_test_boots"",
+      ""kind"": ""worn"",
+      ""category"": ""footwear"",
+      ""file"": ""Worn/worn_test_boots.fbx"",
+      ""triangles"": 540,
+      ""vertices"": 410,
+      ""materials"": [""Body""],
+      ""textures"": [""Worn/Textures/worn_test_boots_BaseMap.png""],
+      ""pickup"": ""pickup_test_boots"",
+      ""parts"": [
+        { ""node"": ""Boot_L"", ""socket"": ""Socket_Foot_L"" },
+        { ""node"": ""Boot_R"", ""socket"": ""Socket_Foot_R"" }
+      ]
+    }
+  ],
+  ""clips"": [],
+  ""sockets"": {
+    ""character_test"": {
+      ""Socket_Foot_L"": {
+        ""bone"": ""LeftFoot"",
+        ""position"": [0.0, 0.02, 0.03],
+        ""rotation"": [0.1, 0.2, 0.3, 0.9],
+        ""scale"": [1.0, 1.1, 1.2]
+      }
+    }
+  }
+}";
+
     [TestCase("\"key\": \"monster_a\"", "\"key\": \"../monster_a\"")]
     [TestCase("\"rig\": \"monster_a\",\n      \"name\": \"move\"", "\"rig\": \"Monster A\",\n      \"name\": \"move\"")]
     [TestCase("\"delivery\": \"ArtDelivery-99-Test\"", "\"delivery\": \"../Elsewhere\"")]
@@ -58,6 +91,18 @@ public sealed class ManifestJsonTests
     {
         Assert.That(Manifest, Does.Contain(oldText));
         Assert.Throws<FormatException>(() => ArtManifest.Parse(Manifest.Replace(oldText, newText)));
+    }
+
+    [TestCase("\"category\": \"footwear\"", "\"category\": \"boots\"")]
+    [TestCase("\"pickup\": \"pickup_test_boots\"", "\"pickup\": \"Pickup Boots\"")]
+    [TestCase("\"vertices\": 410,", "")]
+    [TestCase("\"node\": \"Boot_L\"", "\"node\": \"Boot/L\"")]
+    [TestCase("[0.1, 0.2, 0.3, 0.9]", "[0.1, 0.2, 0.3]")]
+    [TestCase("\"bone\": \"LeftFoot\"", "\"bone\": \"../LeftFoot\"")]
+    public void ReadManifest_WhenAWornPieceOrSocketIsBroken_Throws(string oldText, string newText)
+    {
+        Assert.That(WornManifest, Does.Contain(oldText));
+        Assert.Throws<FormatException>(() => ArtManifest.Parse(WornManifest.Replace(oldText, newText)));
     }
 
     [Test]
@@ -166,6 +211,38 @@ public sealed class ManifestJsonTests
         var manifest = ArtManifest.Parse(crawler);
 
         Assert.That(manifest.Clips[0].CalibrationSpeed, Is.EqualTo(4.8f));
+    }
+
+    [Test]
+    public void ReadManifest_ForAWornPieceWithoutParts_Throws()
+    {
+        int start = WornManifest.IndexOf("[\n        { \"node\"", StringComparison.Ordinal);
+        int end = WornManifest.IndexOf("]\n    }\n  ],", StringComparison.Ordinal);
+        string bare = WornManifest.Substring(0, start) + "[" + WornManifest.Substring(end);
+
+        Assert.Throws<FormatException>(() => ArtManifest.Parse(bare));
+    }
+
+    [Test]
+    public void ReadManifest_ForAWornPiece_ReadsItsCategoryPickupPartsAndTheSockets()
+    {
+        var manifest = ArtManifest.Parse(WornManifest);
+
+        ArtManifestAsset boots = manifest.Assets.Single();
+        Assert.That(
+            (boots.Kind, boots.Category, boots.Triangles, boots.Vertices, boots.Pickup),
+            Is.EqualTo(("worn", "footwear", 540, 410, "pickup_test_boots")));
+        Assert.That(boots.Anchors, Is.Empty, "a worn piece names no anchors");
+        Assert.That(
+            boots.Parts.Select(part => (part.Node, part.Socket)),
+            Is.EqualTo(new[] { ("Boot_L", "Socket_Foot_L"), ("Boot_R", "Socket_Foot_R") }));
+        ArtManifestSocket socket = manifest.Sockets.Single();
+        Assert.That((socket.Outfit, socket.Name, socket.Bone),
+            Is.EqualTo(("character_test", "Socket_Foot_L", "LeftFoot")));
+        Assert.That(socket.Position, Is.EqualTo(new Vector3(0f, 0.02f, 0.03f)));
+        Assert.That(socket.Rotation, Is.EqualTo(new Quaternion(0.1f, 0.2f, 0.3f, 0.9f)), "x, y, z, w");
+        Assert.That(socket.Scale, Is.EqualTo(new Vector3(1f, 1.1f, 1.2f)));
+        Assert.That(ArtManifest.Parse(Manifest).Sockets, Is.Empty, "a delivery without worn pieces has none");
     }
 
     // A monster's clips belong to the deepest monster folder that holds them, and a monster whose model lies in no

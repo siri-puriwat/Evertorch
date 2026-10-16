@@ -13,6 +13,7 @@ server:
   equipment:
     defense: 15
 client:
-  # The cloth armor's look until art for the second tier arrives.
+  # The cloth armor's icon until art for the pieces' icons arrives.
   icon: item_cloth_armor
-  model: pickup_cloth_armor
+  model: pickup_leather_armor
+  worn: worn_leather_armor

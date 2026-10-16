@@ -5,8 +5,8 @@ namespace Evertorch.Client
 {
 /// <summary>
 ///     The client-safe part of an item definition: its name, its type, how many a stack holds, the logical key of its view
-///     as a world drop, its icon, a weapon's model in a hand, the cards a piece of equipment holds, and a card's fit,
-///     prefix, and description, which the player sees.
+///     as a world drop, its icon, a weapon's model in a hand, any other piece's model on the body, the cards a piece of
+///     equipment holds, and a card's fit, prefix, and description, which the player sees.
 /// </summary>
 public sealed class ClientItem
 {
@@ -21,7 +21,8 @@ public sealed class ClientItem
         int slots = 0,
         ItemType fits = ItemType.Material,
         string prefix = "",
-        string description = "")
+        string description = "",
+        string wornKey = "")
     {
         Id = id;
         DisplayName = displayName ?? throw new ArgumentNullException(nameof(displayName));
@@ -34,6 +35,7 @@ public sealed class ClientItem
         Fits = fits;
         Prefix = prefix ?? throw new ArgumentNullException(nameof(prefix));
         Description = description ?? throw new ArgumentNullException(nameof(description));
+        WornKey = wornKey ?? throw new ArgumentNullException(nameof(wornKey));
     }
 
     public ItemDefinitionId Id { get; }
@@ -53,6 +55,12 @@ public sealed class ClientItem
     ///     A weapon's model in a hand (Prototype Content §2); empty when the item names none.
     /// </summary>
     public string HeldKey { get; }
+
+    /// <summary>
+    ///     A piece's model on the body (Prototype Content §2.1); empty for a weapon and for every item that is not
+    ///     equipment.
+    /// </summary>
+    public string WornKey { get; }
 
     /// <summary>
     ///     The most one row holds, so an amount can be clamped before the server would refuse it.

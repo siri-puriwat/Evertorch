@@ -2903,7 +2903,7 @@ public sealed class GameClient : MonoBehaviour
         if (remote.Kind == EntityKind.Player)
         {
             view.Hold(HeldKeyOf(remote.WornWeapon));
-            view.Wear(remote.Appearance);
+            view.Wear(WornKeysOf(remote.Appearance));
         }
     }
 
@@ -2914,7 +2914,7 @@ public sealed class GameClient : MonoBehaviour
         if (m_remoteViews.TryGetValue(remote.Entity, out EntityView? view))
         {
             view.Hold(HeldKeyOf(remote.WornWeapon));
-            view.Wear(remote.Appearance);
+            view.Wear(WornKeysOf(remote.Appearance));
         }
     }
 
@@ -2935,7 +2935,24 @@ public sealed class GameClient : MonoBehaviour
             }
         }
 
-        m_localView.Wear(appearance);
+        m_localView.Wear(WornKeysOf(appearance));
+    }
+
+    // Each position's model on the body, empty where it wears nothing or the content names none.
+    private string[] WornKeysOf(IReadOnlyList<ItemDefinitionId> appearance)
+    {
+        ClientContent? content = m_contentLoader.Content;
+        string[] keys = new string[appearance.Count];
+        for (int index = 0; index < keys.Length; index++)
+        {
+            keys[index] = content != null
+                && content.TryGetItem(appearance[index], out ClientItem? definition)
+                && definition != null
+                    ? definition.WornKey
+                    : string.Empty;
+        }
+
+        return keys;
     }
 
     private string LocalHeldKey()

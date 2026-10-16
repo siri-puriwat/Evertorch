@@ -4,7 +4,6 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Threading.Tasks;
-using Evertorch.Game;
 using Evertorch.Protocol;
 using NUnit.Framework;
 using UnityEngine;
@@ -117,10 +116,13 @@ public sealed class LiveServerEquipmentTests
             $"the leather back in the bag: {world.LastRejection}");
         yield return WaitUntil(() => world.Sheet?.EquipmentDefense == 8, StartTimeoutSeconds);
         Assert.That(world.Sheet?.EquipmentDefense, Is.EqualTo(8), "the cloth alone");
+        yield return WaitUntil(
+            () => WornLook(client, EquipmentSlot.Armor) == "Socket_Chest worn_cloth_armor",
+            StartTimeoutSeconds);
         Assert.That(
-            StandInDifference(client, EquipmentSlot.Armor, ClothArmor),
-            Is.LessThan(0.002f),
-            "the body wears the cloth's stand-in");
+            WornLook(client, EquipmentSlot.Armor),
+            Is.EqualTo("Socket_Chest worn_cloth_armor"),
+            "the body wears the cloth's model");
 
         yield return EnterTheOther(client, port);
         ClientConnection other = m_other!;
@@ -198,16 +200,19 @@ public sealed class LiveServerEquipmentTests
             $"worn as accessory 2: {world.LastRejection}");
         Assert.That(equipment.Text, Does.Contain("\nAccessory 1: empty\n"));
         Assert.That(Row(bag, "Traveler Charm [1] (equipped)"), Is.Not.Null, "the bag marks it worn");
+        yield return WaitUntil(
+            () => WornLook(client, EquipmentSlot.Accessory2) == "Socket_Hip_R worn_traveler_charm",
+            StartTimeoutSeconds);
         Assert.That(
-            StandInDifference(client, EquipmentSlot.Accessory2, TravelerCharm),
-            Is.LessThan(0.002f),
-            "the charm's stand-in hangs at the right hip");
+            WornLook(client, EquipmentSlot.Accessory2),
+            Is.EqualTo("Socket_Hip_R worn_traveler_charm"),
+            "the charm hangs at the right hip");
         Assert.That(client.Connection!.MalformedMessages + client.Connection.UnexpectedMessages, Is.Zero);
     }
 
-    // How far the colour of the stand-in the real client's own body wears in a position is from the item's; 1 while it
-    // wears none there.
-    private static float StandInDifference(GameClient client, EquipmentSlot position, string item)
+    // The socket the real client's own body hangs a position's first part from, and the worn model that part came
+    // from, by its material; empty while it wears nothing there.
+    private static string WornLook(GameClient client, EquipmentSlot position)
     {
         var body = (EntityView?)typeof(GameClient)
             .GetField("m_localView", BindingFlags.NonPublic | BindingFlags.Instance)!
@@ -215,15 +220,13 @@ public sealed class LiveServerEquipmentTests
         GameObject? part = body != null ? body.WornParts(position).FirstOrDefault() : null;
         if (part == null)
         {
-            return 1f;
+            return string.Empty;
         }
 
-        Color shown = part.GetComponent<Renderer>().sharedMaterial.color;
-        Color expected = WornStandIns.ColourOf(new ItemDefinitionId(item));
-        return Mathf.Max(
-            Mathf.Abs(shown.r - expected.r),
-            Mathf.Abs(shown.g - expected.g),
-            Mathf.Abs(shown.b - expected.b));
+        string material = part.GetComponent<Renderer>().sharedMaterials
+            .Select(shared => shared.name)
+            .FirstOrDefault(name => name.StartsWith("Art_worn_", StringComparison.Ordinal)) ?? "Art_?_";
+        return $"{part.transform.parent.name} {material.Substring(4, material.LastIndexOf('_') - 4)}";
     }
 
     private static Button? Row(Component window, string name)

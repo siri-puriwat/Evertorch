@@ -62,6 +62,11 @@ public static class AddressablesKeyCheck
             NoteOptional(addresses, item.IconKey, $"{item.Id.Value} icon", missingOptional);
 
             // A weapon names its model in a hand on purpose, so it must resolve (Content Pipeline §6).
+            if (item.WornKey.Length > 0)
+            {
+                RequirePrefab(addresses, item.WornKey, $"{item.Id.Value} worn", missing);
+            }
+
             if (item.HeldKey.Length > 0)
             {
                 RequirePrefab(addresses, item.HeldKey, $"{item.Id.Value} held", missing);

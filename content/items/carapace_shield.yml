@@ -14,6 +14,7 @@ server:
     defense: 10
     attackSpeedPenalty: 5
 client:
-  # The cloth armor's look until ArtDelivery-03's pieces arrive.
+  # The cloth armor's icon until art for the pieces' icons arrives.
   icon: item_cloth_armor
-  model: pickup_cloth_armor
+  model: pickup_carapace_shield
+  worn: worn_carapace_shield

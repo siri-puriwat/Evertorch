@@ -52,7 +52,7 @@ public sealed class ContentProjectionTests
         ["items.json"] = new[]
         {
             "schemaVersion", "definitions", "id", "displayName", "type", "stackLimit", "icon", "model", "held",
-            "slots", "fits", "prefix", "description"
+            "worn", "slots", "fits", "prefix", "description"
         },
         ["jobs.json"] = new[] { "schemaVersion", "definitions", "id", "displayName", "prefab" },
         ["manifest.json"] = new[] { "schemaVersion", "clientContentVersion", "files", "path", "sha256" },

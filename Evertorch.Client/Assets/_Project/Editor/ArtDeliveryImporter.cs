@@ -14,8 +14,9 @@ namespace Evertorch.Client.Editor
 /// <summary>
 ///     Brings an accepted art delivery into the project (Content Pipeline §6; Prototype Content §2.1). It checks every
 ///     file it copies against the delivery's <c>manifest.sha256</c>, copies only the models, clips, and textures the
-///     manifest names, makes their URP Lit materials, writes each rig's <see cref="BodyClips" />, and builds each body's
-///     prefab in <see cref="ArtPaths.StagedPrefabsRoot" />. It only reads the delivery's folder, and running it again
+///     manifest names, makes their URP Lit materials, writes each rig's <see cref="BodyClips" />, and builds the
+///     prefabs of each body, weapon, and worn piece in <see cref="ArtPaths.StagedPrefabsRoot" />. Every player outfit it
+///     builds takes the body sockets of every kept manifest. It only reads the delivery's folder, and running it again
 ///     over the same delivery changes nothing.
 /// </summary>
 public static class ArtDeliveryImporter
@@ -34,6 +35,9 @@ public static class ArtDeliveryImporter
 
     // A ground pickup's anchors, derived from its body laid flat: the overhead stands this far above it.
     private const float PickupOverheadClearance = 0.25f;
+
+    // How far apart a worn piece's parts lie on the ground, such as a pair of boots.
+    private const float PickupPartGap = 0.04f;
 
     private const string LitShader = "Universal Render Pipeline/Lit";
     private const string CommandLineOption = "-artDelivery";
@@ -204,6 +208,7 @@ public static class ArtDeliveryImporter
             BuildPrefabs(asset, materials);
         }
 
+        AddSocketsToBuiltOutfits(manifest);
         AssetDatabase.SaveAssets();
         Debug.Log(
             $"ArtDeliveryImported: {manifest.Delivery}, {manifest.Assets.Count} assets, {manifest.Clips.Count} clips");
@@ -502,6 +507,13 @@ public static class ArtDeliveryImporter
             return;
         }
 
+        if (asset.Kind == ArtManifestAsset.WornKind)
+        {
+            BuildWorn(asset, model, materials);
+            BuildWornPickup(asset, model);
+            return;
+        }
+
         var body = (GameObject)PrefabUtility.InstantiatePrefab(model);
         try
         {
@@ -575,6 +587,80 @@ public static class ArtDeliveryImporter
         }
 
         bodyAnimator.Configure(clips);
+        if (asset.Kind == "humanoid")
+        {
+            AddSockets(body, asset.Key, KeptSockets());
+        }
+    }
+
+    // Every kept manifest's socket tables, so rebuilding an outfit from an earlier delivery keeps the sockets a later
+    // one measured (Content Pipeline §6).
+    private static IReadOnlyList<ArtManifestSocket> KeptSockets()
+    {
+        if (!Directory.Exists(ArtPaths.DeliveriesRoot))
+        {
+            return Array.Empty<ArtManifestSocket>();
+        }
+
+        return Directory.GetDirectories(ArtPaths.DeliveriesRoot)
+            .Select(folder => $"{folder.Replace('\\', '/')}/{ArtPaths.ManifestFile}")
+            .Where(File.Exists)
+            .OrderBy(path => path, StringComparer.Ordinal)
+            .SelectMany(path => ArtManifest.Parse(File.ReadAllText(path)).Sockets)
+            .ToList();
+    }
+
+    // A socket is an empty transform under its bone, never part of the model file or the avatar.
+    private static void AddSockets(GameObject body, string outfit, IEnumerable<ArtManifestSocket> sockets)
+    {
+        foreach (ArtManifestSocket socket in sockets.Where(socket => socket.Outfit == outfit))
+        {
+            Transform bone = Find(body, socket.Bone) ?? throw new InvalidOperationException(
+                $"{outfit} has no bone {socket.Bone} for {socket.Name}.");
+            Transform? placed = Find(body, socket.Name);
+            if (placed != null && placed.parent != bone)
+            {
+                Object.DestroyImmediate(placed.gameObject);
+                placed = null;
+            }
+
+            placed ??= NewAnchor(bone.gameObject, socket.Name, Vector3.zero);
+            placed.localPosition = socket.Position;
+            placed.localRotation = Quaternion.Normalize(socket.Rotation);
+            placed.localScale = socket.Scale;
+        }
+    }
+
+    // An outfit this delivery measured but did not deliver keeps its prefab and gains the sockets in place.
+    private static void AddSocketsToBuiltOutfits(ArtManifest manifest)
+    {
+        IReadOnlyList<ArtManifestSocket> sockets = KeptSockets();
+        foreach (string outfit in manifest.Sockets.Select(socket => socket.Outfit).Distinct())
+        {
+            if (manifest.Assets.Any(asset => asset.Key == outfit))
+            {
+                continue;
+            }
+
+            string path = BuiltPrefab(outfit) ?? throw new InvalidOperationException(
+                $"The sockets' outfit {outfit} has no prefab: import its delivery first.");
+            GameObject contents = PrefabUtility.LoadPrefabContents(path);
+            try
+            {
+                AddSockets(contents, outfit, sockets);
+                PrefabUtility.SaveAsPrefabAsset(contents, path);
+            }
+            finally
+            {
+                PrefabUtility.UnloadPrefabContents(contents);
+            }
+        }
+    }
+
+    private static string? BuiltPrefab(string key)
+    {
+        string target = PrefabTarget(key);
+        return File.Exists(target) ? target : null;
     }
 
     private static void BuildHeldWeapon(string key, GameObject model, WeaponGrip grip)
@@ -627,6 +713,76 @@ public static class ArtDeliveryImporter
         }
     }
 
+    // A worn piece's parts, each its own node of the model, hang on the body's sockets when worn; the prefab names
+    // which, and the material slot of each that takes the player's tint.
+    private static void BuildWorn(ArtManifestAsset asset, GameObject model,
+        IReadOnlyDictionary<string, Material> materials)
+    {
+        var worn = (GameObject)PrefabUtility.InstantiatePrefab(model);
+        try
+        {
+            worn.name = asset.Key;
+            materials.TryGetValue(MaterialKey(asset.Key, TrimSlot), out Material? trim);
+            var parts = new List<WornPiece.Part>();
+            foreach (ArtManifestPart part in asset.Parts)
+            {
+                Transform node = Find(worn, part.Node) ?? throw new InvalidOperationException(
+                    $"{asset.Key} has no node {part.Node}.");
+                Material[] shared = node.TryGetComponent(out Renderer renderer)
+                    ? renderer.sharedMaterials
+                    : Array.Empty<Material>();
+                parts.Add(new WornPiece.Part(node, part.Socket, trim == null ? -1 : Array.IndexOf(shared, trim)));
+            }
+
+            worn.AddComponent<WornPiece>().Configure(parts.ToArray());
+            PrefabUtility.SaveAsPrefabAsset(worn, PrefabTarget(asset.Key));
+        }
+        finally
+        {
+            Object.DestroyImmediate(worn);
+        }
+    }
+
+    // A worn piece on the ground: body armor and a shield lie face up, a garment with its outside up, and headgear,
+    // footwear, and an accessory stand as worn, the parts side by side and centred on the drop's position.
+    private static void BuildWornPickup(ArtManifestAsset asset, GameObject model)
+    {
+        var pickup = new GameObject(asset.Pickup);
+        try
+        {
+            var laid = (GameObject)PrefabUtility.InstantiatePrefab(model, pickup.transform);
+            Quaternion turn = asset.Category switch
+            {
+                "armor" or "shield" => Quaternion.Euler(-90f, 0f, 0f),
+                "garment" => Quaternion.Euler(90f, 0f, 0f),
+                _ => Quaternion.identity
+            };
+            float across = 0f;
+            foreach (ArtManifestPart part in asset.Parts)
+            {
+                Transform node = Find(laid, part.Node)!;
+                node.localRotation = turn;
+                node.localPosition = Vector3.zero;
+                Bounds bounds = BoundsOf(node.gameObject);
+                node.localPosition = new Vector3(across - bounds.min.x, -bounds.min.y, -bounds.center.z);
+                across += bounds.size.x + PickupPartGap;
+            }
+
+            Bounds all = BoundsOf(laid);
+            laid.transform.localPosition = new Vector3(-all.center.x, 0f, 0f);
+            all = BoundsOf(laid);
+            Transform overhead =
+                NewAnchor(pickup, OverheadAnchor, new Vector3(0f, all.max.y + PickupOverheadClearance, 0f));
+            EntityBody body = pickup.AddComponent<EntityBody>();
+            body.Configure(overhead, null, null, EntityBody.MaxPickRadius, Array.Empty<EntityBody.TrimSlot>());
+            PrefabUtility.SaveAsPrefabAsset(pickup, PrefabTarget(asset.Pickup));
+        }
+        finally
+        {
+            Object.DestroyImmediate(pickup);
+        }
+    }
+
     // A body already addressed as art is rebuilt where it is, keeping its address; anything else waits staged until
     // it is addressed (Content Pipeline §6).
     private static string PrefabTarget(string key)
@@ -634,7 +790,9 @@ public static class ArtDeliveryImporter
         string addressed = ArtPaths.AddressedPrefabPath(key);
         GameObject? existing = AssetDatabase.LoadAssetAtPath<GameObject>(addressed);
         bool isArt = existing != null
-            && (existing.TryGetComponent(out EntityBody _) || existing.TryGetComponent(out HeldWeapon _));
+            && (existing.TryGetComponent(out EntityBody _)
+                || existing.TryGetComponent(out HeldWeapon _)
+                || existing.TryGetComponent(out WornPiece _));
         if (isArt)
         {
             return addressed;

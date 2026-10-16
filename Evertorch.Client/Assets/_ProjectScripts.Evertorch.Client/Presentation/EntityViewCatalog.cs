@@ -11,18 +11,15 @@ namespace Evertorch.Client
 /// <summary>
 ///     Loads entity body prefabs by their logical Addressables key, once per key, and hands them to the views that
 ///     asked. A key that does not resolve gets an explicit placeholder and one warning; the view never waits forever.
-///     It also keeps the worn pieces' stand-in meshes and materials, one of each shape and colour, for its views.
+///     Every prefab stays loaded until the catalog is disposed, so one body's change never releases a model another
+///     still wears.
 /// </summary>
 public sealed class EntityViewCatalog : IDisposable
 {
-    private const float StandInSmoothness = 0.2f;
-
     private static readonly Color PlaceholderColor = new(1f, 0f, 1f);
-    private static readonly int SmoothnessId = Shader.PropertyToID("_Smoothness");
 
     private readonly Dictionary<string, Entry> m_entries = new(StringComparer.Ordinal);
-    private readonly Dictionary<StandInShape, Mesh> m_standInMeshes = new();
-    private readonly Dictionary<Color, Material> m_standInMaterials = new();
+    private readonly HashSet<string> m_warned = new(StringComparer.Ordinal);
     private Material? m_placeholderMaterial;
     private bool m_isDisposed;
 
@@ -48,19 +45,6 @@ public sealed class EntityViewCatalog : IDisposable
         {
             Object.Destroy(m_placeholderMaterial);
         }
-
-        foreach (Mesh mesh in m_standInMeshes.Values)
-        {
-            Object.Destroy(mesh);
-        }
-
-        foreach (Material material in m_standInMaterials.Values)
-        {
-            Object.Destroy(material);
-        }
-
-        m_standInMeshes.Clear();
-        m_standInMaterials.Clear();
     }
 
     /// <summary>
@@ -112,32 +96,14 @@ public sealed class EntityViewCatalog : IDisposable
     }
 
     /// <summary>
-    ///     The unit mesh of a stand-in's <paramref name="shape" />, made once (<see cref="WornStandIns.CreateMesh" />).
+    ///     Logs <paramref name="message" /> as a warning the first time any view asks.
     /// </summary>
-    public Mesh GetStandInMesh(StandInShape shape)
+    public void WarnOnce(string message)
     {
-        if (!m_standInMeshes.TryGetValue(shape, out Mesh? mesh))
+        if (m_warned.Add(message))
         {
-            mesh = WornStandIns.CreateMesh(shape);
-            m_standInMeshes.Add(shape, mesh);
+            Debug.LogWarning(message);
         }
-
-        return mesh;
-    }
-
-    /// <summary>
-    ///     A matte lit material of <paramref name="colour" /> for stand-ins, made once per colour.
-    /// </summary>
-    public Material GetStandInMaterial(Color colour)
-    {
-        if (!m_standInMaterials.TryGetValue(colour, out Material? material))
-        {
-            material = new Material(Shader.Find("Universal Render Pipeline/Lit")) { color = colour };
-            material.SetFloat(SmoothnessId, StandInSmoothness);
-            m_standInMaterials.Add(colour, material);
-        }
-
-        return material;
     }
 
     private void Load(string key, Entry entry)

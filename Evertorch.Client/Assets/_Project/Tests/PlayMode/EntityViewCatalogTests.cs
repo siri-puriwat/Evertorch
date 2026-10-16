@@ -60,7 +60,7 @@ public sealed class EntityViewCatalogTests
     public IEnumerator Create_ForAGrayboxBody_KeepsTodaysHeights_AndPosesAPivotAboveTheBody()
     {
         m_catalog = new EntityViewCatalog();
-        m_view = EntityView.Create("Cloth", "pickup_cloth_armor", m_catalog, null);
+        m_view = EntityView.Create("Gel", "pickup_slime_gel", m_catalog, null);
 
         yield return WaitForBody(m_view);
 

@@ -9,20 +9,31 @@ namespace Evertorch.Client.Editor
 {
 /// <summary>
 ///     An art delivery's <c>manifest.json</c> (Prototype Content §2.1): its assets with their anchors and pick radius,
-///     and its clips with their markers. Only the fields the importer and its checks use are read.
+///     or a worn piece's parts, its clips with their markers, and the player outfits' socket tables. Only the fields
+///     the importer and its checks use are read.
 /// </summary>
 public sealed class ArtManifest
 {
     // The names that become folders and files in the project: a key or rig as the content writes its keys, a delivery
-    // as its folder is named. A file is a path inside the delivery, with forward slashes and no step up.
+    // as its folder is named. A file is a path inside the delivery, with forward slashes and no step up. A node or
+    // socket is a transform's name in a model or a body.
     private static readonly Regex LogicalKey = new("^[a-z0-9_]+$");
     private static readonly Regex DeliveryName = new("^[A-Za-z0-9_-]+$");
+    private static readonly Regex NodeName = new("^[A-Za-z0-9_]+$");
 
-    private ArtManifest(string delivery, IReadOnlyList<ArtManifestAsset> assets, IReadOnlyList<ArtManifestClip> clips)
+    private static readonly string[] WornCategories =
+        { "armor", "headgear", "shield", "garment", "footwear", "accessory" };
+
+    private ArtManifest(
+        string delivery,
+        IReadOnlyList<ArtManifestAsset> assets,
+        IReadOnlyList<ArtManifestClip> clips,
+        IReadOnlyList<ArtManifestSocket> sockets)
     {
         Delivery = delivery;
         Assets = assets;
         Clips = clips;
+        Sockets = sockets;
     }
 
     public string Delivery { get; }
@@ -30,6 +41,11 @@ public sealed class ArtManifest
     public IReadOnlyList<ArtManifestAsset> Assets { get; }
 
     public IReadOnlyList<ArtManifestClip> Clips { get; }
+
+    /// <summary>
+    ///     The body sockets the delivery measured on each player outfit; none in a delivery without worn pieces.
+    /// </summary>
+    public IReadOnlyList<ArtManifestSocket> Sockets { get; }
 
     public static ArtManifest Parse(string json)
     {
@@ -47,41 +63,144 @@ public sealed class ArtManifest
             .ToList();
         string delivery = Text(root, "delivery", "the manifest");
         RequireName(delivery, DeliveryName, "the delivery");
-        return new ArtManifest(delivery, assets, clips);
+        List<ArtManifestSocket> sockets = root.TryGetValue("sockets", out object? tables)
+            ? ReadSockets(AsObject(tables, "sockets"))
+            : new List<ArtManifestSocket>();
+        return new ArtManifest(delivery, assets, clips, sockets);
     }
 
     private static ArtManifestAsset ReadAsset(Dictionary<string, object?> asset)
     {
         string key = Text(asset, "key", "an asset");
         RequireName(key, LogicalKey, "an asset's key");
-        Dictionary<string, object?> anchorValues = AsObject(Field(asset, "anchors", key), $"{key}'s anchors");
-        var anchors = new Dictionary<string, Vector3>(StringComparer.Ordinal);
-        foreach (KeyValuePair<string, object?> anchor in anchorValues)
+        string kind = Text(asset, "kind", key);
+        string file = RelativeFile(Text(asset, "file", key), key);
+        var materials = AsArray(Field(asset, "materials", key), $"{key}'s materials")
+            .Select(value => AsText(value, key))
+            .ToList();
+        var textures = AsArray(Field(asset, "textures", key), $"{key}'s textures")
+            .Select(value => RelativeFile(AsText(value, key), key))
+            .ToList();
+        int triangles = (int)Number(asset, "triangles", key);
+        if (kind == ArtManifestAsset.WornKind)
         {
-            List<object?> xyz = AsArray(anchor.Value, $"{key}'s {anchor.Key}");
-            if (xyz.Count != 3)
-            {
-                throw new FormatException($"Manifest: {key}'s {anchor.Key} needs three numbers.");
-            }
+            return ReadWorn(asset, key, file, triangles, materials, textures);
+        }
 
-            anchors[anchor.Key] = new Vector3(
-                (float)AsNumber(xyz[0], anchor.Key),
-                (float)AsNumber(xyz[1], anchor.Key),
-                (float)AsNumber(xyz[2], anchor.Key));
+        var anchors = new Dictionary<string, Vector3>(StringComparer.Ordinal);
+        foreach (KeyValuePair<string, object?> anchor in AsObject(Field(asset, "anchors", key), $"{key}'s anchors"))
+        {
+            anchors[anchor.Key] = Vector(anchor.Value, $"{key}'s {anchor.Key}");
         }
 
         return new ArtManifestAsset(
             key,
-            Text(asset, "kind", key),
-            RelativeFile(Text(asset, "file", key), key),
-            (int)Number(asset, "triangles", key),
+            kind,
+            file,
+            triangles,
             (int)Number(asset, "bones", key),
-            AsArray(Field(asset, "materials", key), $"{key}'s materials").Select(value => AsText(value, key)).ToList(),
-            AsArray(Field(asset, "textures", key), $"{key}'s textures")
-                .Select(value => RelativeFile(AsText(value, key), key))
-                .ToList(),
+            materials,
+            textures,
             anchors,
             (float)Number(asset, "pickRadius", key));
+    }
+
+    // A worn piece has no bones, anchors, or pick radius: its parts hang on a body, and its pickup is built laid flat.
+    private static ArtManifestAsset ReadWorn(
+        Dictionary<string, object?> asset,
+        string key,
+        string file,
+        int triangles,
+        IReadOnlyList<string> materials,
+        IReadOnlyList<string> textures)
+    {
+        string category = Text(asset, "category", key);
+        if (!WornCategories.Contains(category))
+        {
+            throw new FormatException($"Manifest: {key}'s category '{category}' is not a worn category.");
+        }
+
+        string pickup = Text(asset, "pickup", key);
+        RequireName(pickup, LogicalKey, $"{key}'s pickup");
+        var parts = AsArray(Field(asset, "parts", key), $"{key}'s parts")
+            .Select(value => ReadPart(AsObject(value, $"a part of {key}"), key))
+            .ToList();
+        if (parts.Count == 0)
+        {
+            throw new FormatException($"Manifest: {key} has no parts.");
+        }
+
+        return new ArtManifestAsset(
+            key,
+            ArtManifestAsset.WornKind,
+            file,
+            triangles,
+            0,
+            materials,
+            textures,
+            new Dictionary<string, Vector3>(StringComparer.Ordinal),
+            0f,
+            category,
+            (int)Number(asset, "vertices", key),
+            pickup,
+            parts);
+    }
+
+    private static ArtManifestPart ReadPart(Dictionary<string, object?> part, string key)
+    {
+        string node = Text(part, "node", $"a part of {key}");
+        string socket = Text(part, "socket", $"{key}'s {node}");
+        RequireName(node, NodeName, $"{key}'s node");
+        RequireName(socket, NodeName, $"{key}'s socket");
+        return new ArtManifestPart(node, socket);
+    }
+
+    private static List<ArtManifestSocket> ReadSockets(Dictionary<string, object?> tables)
+    {
+        var sockets = new List<ArtManifestSocket>();
+        foreach (KeyValuePair<string, object?> outfit in tables)
+        {
+            RequireName(outfit.Key, LogicalKey, "a socket table's outfit");
+            foreach (KeyValuePair<string, object?> socket in AsObject(outfit.Value, $"{outfit.Key}'s sockets"))
+            {
+                RequireName(socket.Key, NodeName, $"{outfit.Key}'s socket");
+                string what = $"{outfit.Key}'s {socket.Key}";
+                Dictionary<string, object?> fields = AsObject(socket.Value, what);
+                string bone = Text(fields, "bone", what);
+                RequireName(bone, NodeName, $"{what}'s bone");
+                List<object?> xyzw = AsArray(Field(fields, "rotation", what), $"{what}'s rotation");
+                if (xyzw.Count != 4)
+                {
+                    throw new FormatException($"Manifest: {what}'s rotation needs four numbers.");
+                }
+
+                var rotation = new Quaternion(
+                    (float)AsNumber(xyzw[0], what),
+                    (float)AsNumber(xyzw[1], what),
+                    (float)AsNumber(xyzw[2], what),
+                    (float)AsNumber(xyzw[3], what));
+                sockets.Add(new ArtManifestSocket(
+                    outfit.Key,
+                    socket.Key,
+                    bone,
+                    Vector(Field(fields, "position", what), $"{what}'s position"),
+                    rotation,
+                    Vector(Field(fields, "scale", what), $"{what}'s scale")));
+            }
+        }
+
+        return sockets;
+    }
+
+    private static Vector3 Vector(object? value, string what)
+    {
+        List<object?> xyz = AsArray(value, what);
+        if (xyz.Count != 3)
+        {
+            throw new FormatException($"Manifest: {what} needs three numbers.");
+        }
+
+        return new Vector3((float)AsNumber(xyz[0], what), (float)AsNumber(xyz[1], what), (float)AsNumber(xyz[2], what));
     }
 
     private static ArtManifestClip ReadClip(Dictionary<string, object?> clip, IReadOnlyList<ArtManifestAsset> assets)
@@ -216,10 +335,12 @@ public sealed class ArtManifest
 }
 
 /// <summary>
-///     One delivered model: a humanoid outfit, a monster, or a weapon.
+///     One delivered model: a humanoid outfit, a monster, a weapon, or a worn piece.
 /// </summary>
 public sealed class ArtManifestAsset
 {
+    public const string WornKind = "worn";
+
     public ArtManifestAsset(
         string key,
         string kind,
@@ -229,7 +350,11 @@ public sealed class ArtManifestAsset
         IReadOnlyList<string> materials,
         IReadOnlyList<string> textures,
         IReadOnlyDictionary<string, Vector3> anchors,
-        float pickRadius)
+        float pickRadius,
+        string category = "",
+        int vertices = 0,
+        string pickup = "",
+        IReadOnlyList<ArtManifestPart>? parts = null)
     {
         Key = key;
         Kind = kind;
@@ -240,12 +365,16 @@ public sealed class ArtManifestAsset
         Textures = textures;
         Anchors = anchors;
         PickRadius = pickRadius;
+        Category = category;
+        Vertices = vertices;
+        Pickup = pickup;
+        Parts = parts ?? Array.Empty<ArtManifestPart>();
     }
 
     public string Key { get; }
 
     /// <summary>
-    ///     <c>humanoid</c>, <c>monster</c>, or <c>weapon</c>.
+    ///     <c>humanoid</c>, <c>monster</c>, <c>weapon</c>, or <c>worn</c>.
     /// </summary>
     public string Kind { get; }
 
@@ -262,6 +391,65 @@ public sealed class ArtManifestAsset
     public IReadOnlyDictionary<string, Vector3> Anchors { get; }
 
     public float PickRadius { get; }
+
+    /// <summary>
+    ///     A worn piece's category, which sets its budget (the art brief, §6); empty for any other model.
+    /// </summary>
+    public string Category { get; }
+
+    public int Vertices { get; }
+
+    /// <summary>
+    ///     The key of a worn piece's ground pickup, built from its model laid flat.
+    /// </summary>
+    public string Pickup { get; }
+
+    public IReadOnlyList<ArtManifestPart> Parts { get; }
+}
+
+/// <summary>
+///     One rigid part of a worn piece: its mesh node in the model and the body socket it hangs from at no offset.
+/// </summary>
+public readonly struct ArtManifestPart
+{
+    public ArtManifestPart(string node, string socket)
+    {
+        Node = node;
+        Socket = socket;
+    }
+
+    public string Node { get; }
+
+    public string Socket { get; }
+}
+
+/// <summary>
+///     One body socket of a player outfit: an empty transform under a bone, in the bone's Unity axes.
+/// </summary>
+public sealed class ArtManifestSocket
+{
+    public ArtManifestSocket(string outfit, string name, string bone, Vector3 position, Quaternion rotation,
+        Vector3 scale)
+    {
+        Outfit = outfit;
+        Name = name;
+        Bone = bone;
+        Position = position;
+        Rotation = rotation;
+        Scale = scale;
+    }
+
+    public string Outfit { get; }
+
+    public string Name { get; }
+
+    public string Bone { get; }
+
+    public Vector3 Position { get; }
+
+    public Quaternion Rotation { get; }
+
+    public Vector3 Scale { get; }
 }
 
 /// <summary>

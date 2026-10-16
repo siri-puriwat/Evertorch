@@ -15,6 +15,7 @@ public static class ArtImportSettings
     public const float MinBoneWeight = 0.001f;
     public const int BodyTextureSize = 1024;
     public const int WeaponTextureSize = 512;
+    public const int WornTextureSize = 512;
 
     public static void ApplyModel(ModelImporter importer, bool importsAnimation)
     {
@@ -45,7 +46,9 @@ public static class ArtImportSettings
 
         importer.mipmapEnabled = true;
         importer.alphaSource = TextureImporterAlphaSource.FromInput;
-        importer.maxTextureSize = assetPath.Contains("/weapon_") ? WeaponTextureSize : BodyTextureSize;
+        importer.maxTextureSize = assetPath.Contains("/weapon_") ? WeaponTextureSize
+            : assetPath.Contains("/worn_") ? WornTextureSize
+            : BodyTextureSize;
         importer.textureCompression = TextureImporterCompression.Compressed;
     }
 }

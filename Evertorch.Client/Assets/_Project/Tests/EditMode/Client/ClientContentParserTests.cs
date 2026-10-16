@@ -219,6 +219,21 @@ public sealed class ClientContentParserTests
         "Item 'item.material.slime_gel': held is not a weapon's logical key")]
     [TestCase(
         ClientContentParser.ItemsFile,
+        "\"model\":\"pickup_slime_gel\"",
+        "\"model\":\"pickup_slime_gel\",\"worn\":\"worn_slime_gel\"",
+        "Item 'item.material.slime_gel': worn is not the logical key every piece but a weapon names")]
+    [TestCase(
+        ClientContentParser.ItemsFile,
+        "\"type\":\"material\"",
+        "\"type\":\"armor\",\"slots\":1",
+        "Item 'item.material.slime_gel': worn is not the logical key every piece but a weapon names")]
+    [TestCase(
+        ClientContentParser.ItemsFile,
+        "\"type\":\"material\"",
+        "\"type\":\"headgear\",\"worn\":\"Worn Cap\"",
+        "Item 'item.material.slime_gel': worn is not the logical key every piece but a weapon names")]
+    [TestCase(
+        ClientContentParser.ItemsFile,
         "\"id\":\"item.material.slime_gel\"",
         "\"id\":\"job.slime_gel\"",
         "invalid or repeated item ID")]
@@ -496,7 +511,7 @@ public sealed class ClientContentParserTests
     public void Parse_APieceOfANewCategory_ReadsItsTypeAndSlot_AndACardMayFitIt(string name, ItemType type)
     {
         string items = Package.DefaultTexts(Maps)[ClientContentParser.ItemsFile]
-            .Replace("\"type\":\"material\"", $"\"type\":\"{name}\",\"slots\":1");
+            .Replace("\"type\":\"material\"", $"\"type\":\"{name}\",\"slots\":1,\"worn\":\"worn_{name}\"");
         string cards = Package.DefaultTexts(Maps)[ClientContentParser.ItemsFile]
             .Replace(
                 "\"type\":\"material\"",
@@ -510,7 +525,7 @@ public sealed class ClientContentParserTests
         Assert.That((error, cardError), Is.EqualTo((string.Empty, string.Empty)));
         var gel = new ItemDefinitionId("item.material.slime_gel");
         Assert.That(piece!.TryGetItem(gel, out ClientItem? read), Is.True);
-        Assert.That((read!.Type, read.Slots), Is.EqualTo((type, 1)));
+        Assert.That((read!.Type, read.Slots, read.WornKey), Is.EqualTo((type, 1, $"worn_{name}")));
         Assert.That(card!.TryGetItem(gel, out ClientItem? fitting), Is.True);
         Assert.That(fitting!.Fits, Is.EqualTo(type));
     }

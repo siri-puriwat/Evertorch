@@ -15,6 +15,16 @@ MonoBehaviour:
   m_GroupName: Default Local Group
   m_GUID: 1ec1c596f20b4e54984a63d9557e2b1a
   m_SerializeEntries:
+  - m_GUID: 02c69dfc75cbed94ba68f93d77e8a639
+    m_Address: worn_monarch_mantle
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 03838a6e7dbeeb744b50ccbd3beeaea0
+    m_Address: worn_wooden_buckler
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 0502bb26f9301534a9ceda6ed1081d92
     m_Address: pickup_minor_mana
     m_ReadOnly: 0
@@ -35,8 +45,33 @@ MonoBehaviour:
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 1851f8c7b214b1148a2b4029574cbce3
+    m_Address: worn_leather_armor
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 1a2521c229a4e4541bc27084da67ff29
+    m_Address: pickup_travel_cape
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 1f9cc3b05fcf02f4fa8da4e3d20073c4
+    m_Address: pickup_grotto_circlet
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 1ffbee368e745204584b63636be25f48
     m_Address: pickup_training_staff
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 2cc154b339ccbbb48905ff2c67f62852
+    m_Address: worn_travel_cape
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 31d2d1c6831729443a295d5580fdf2bf
+    m_Address: pickup_leather_armor
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
@@ -47,6 +82,56 @@ MonoBehaviour:
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 3844e0cd56465e648a735610eef9f443
     m_Address: npc_quartermaster
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 38b16fa9b8b894346bedc768e352b25b
+    m_Address: pickup_cloth_armor
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 3b0bcbf3481244d47869d89562e3ff88
+    m_Address: pickup_grotto_charm
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 3e59c5da9ffc5e84f91f4791338e7fc5
+    m_Address: pickup_wooden_buckler
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 403c8d8d21579994da24760395b86d5d
+    m_Address: pickup_trail_boots
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 4ef395f980fa3e54db2a2f1e35d8ba33
+    m_Address: pickup_carapace_shield
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 517d2523c413ca7479fa3aaba314819e
+    m_Address: pickup_traveler_charm
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 59cc3999b12b1464f87e8f1b75a37dbc
+    m_Address: worn_grotto_boots
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 5cf555deb6488ac48acfe461a94f1bfe
+    m_Address: pickup_grotto_boots
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 70c54e6c6a3fe604d8faaf1d94e85c21
+    m_Address: pickup_trail_cap
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 710bca396b8fc2540845ba7804b1ce37
+    m_Address: pickup_gloom_cape
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
@@ -65,13 +150,33 @@ MonoBehaviour:
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 894d36375784b1d47be50575e8af4341
+    m_Address: worn_trail_cap
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 9625b086c8efbe34187040ae09439928
     m_Address: character_vanguard
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
-  - m_GUID: a3303732436a6fb4f8fffae27b100733
-    m_Address: pickup_cloth_armor
+  - m_GUID: 96e50dbeeb3a91e4fa57659765dcea4d
+    m_Address: worn_grotto_circlet
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 9a586ccd6ab882b43b610c610d241ec1
+    m_Address: worn_gloom_cape
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: af1ebd209d14e59469f16076bb4811f2
+    m_Address: worn_cloth_armor
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: b587dd3c6100a924a9e7501ad81565c9
+    m_Address: pickup_monarch_mantle
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
@@ -100,8 +205,18 @@ MonoBehaviour:
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: d674e7b50617ff946a234945076034b5
+    m_Address: worn_grotto_charm
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: da8bc024bd0261040bfdea74df400725
     m_Address: weapon_training_staff
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: dadeee1b4e05c8c489e05b9034749b77
+    m_Address: worn_carapace_shield
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
@@ -112,6 +227,16 @@ MonoBehaviour:
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: e0d21cc4eb917d642b80e216681934b6
     m_Address: projectile_arcane_bolt
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: e4056c9124a7ebd4da59a9ffe4654a36
+    m_Address: worn_trail_boots
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: f266b9432c04bc44391bbf110bed64d8
+    m_Address: worn_traveler_charm
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0

@@ -1,0 +1,886 @@
+{
+  "delivery": "ArtDelivery-03-Equipment",
+  "fps": 30,
+  "assets": [
+    {
+      "key": "worn_cloth_armor",
+      "kind": "worn",
+      "category": "armor",
+      "file": "Worn/worn_cloth_armor.fbx",
+      "triangles": 520,
+      "vertices": 441,
+      "materials": [
+        "Body",
+        "Trim"
+      ],
+      "textures": [
+        "Worn/Textures/worn_cloth_armor_BaseMap.png",
+        "Worn/Textures/worn_cloth_armor_MaskMap.png"
+      ],
+      "pickup": "pickup_cloth_armor",
+      "parts": [
+        {
+          "node": "Shell",
+          "socket": "Socket_Chest"
+        }
+      ]
+    },
+    {
+      "key": "worn_leather_armor",
+      "kind": "worn",
+      "category": "armor",
+      "file": "Worn/worn_leather_armor.fbx",
+      "triangles": 520,
+      "vertices": 436,
+      "materials": [
+        "Body",
+        "Trim"
+      ],
+      "textures": [
+        "Worn/Textures/worn_leather_armor_BaseMap.png",
+        "Worn/Textures/worn_leather_armor_MaskMap.png"
+      ],
+      "pickup": "pickup_leather_armor",
+      "parts": [
+        {
+          "node": "Shell",
+          "socket": "Socket_Chest"
+        }
+      ]
+    },
+    {
+      "key": "worn_monarch_mantle",
+      "kind": "worn",
+      "category": "armor",
+      "file": "Worn/worn_monarch_mantle.fbx",
+      "triangles": 600,
+      "vertices": 554,
+      "materials": [
+        "Body",
+        "Trim"
+      ],
+      "textures": [
+        "Worn/Textures/worn_monarch_mantle_BaseMap.png",
+        "Worn/Textures/worn_monarch_mantle_MaskMap.png"
+      ],
+      "pickup": "pickup_monarch_mantle",
+      "parts": [
+        {
+          "node": "Mantle",
+          "socket": "Socket_Chest"
+        }
+      ]
+    },
+    {
+      "key": "worn_trail_cap",
+      "kind": "worn",
+      "category": "headgear",
+      "file": "Worn/worn_trail_cap.fbx",
+      "triangles": 420,
+      "vertices": 390,
+      "materials": [
+        "Body"
+      ],
+      "textures": [
+        "Worn/Textures/worn_trail_cap_BaseMap.png",
+        "Worn/Textures/worn_trail_cap_MaskMap.png"
+      ],
+      "pickup": "pickup_trail_cap",
+      "parts": [
+        {
+          "node": "Cap",
+          "socket": "Socket_Head"
+        }
+      ]
+    },
+    {
+      "key": "worn_grotto_circlet",
+      "kind": "worn",
+      "category": "headgear",
+      "file": "Worn/worn_grotto_circlet.fbx",
+      "triangles": 172,
+      "vertices": 218,
+      "materials": [
+        "Body"
+      ],
+      "textures": [
+        "Worn/Textures/worn_grotto_circlet_BaseMap.png",
+        "Worn/Textures/worn_grotto_circlet_MaskMap.png"
+      ],
+      "pickup": "pickup_grotto_circlet",
+      "parts": [
+        {
+          "node": "Circlet",
+          "socket": "Socket_Head"
+        }
+      ]
+    },
+    {
+      "key": "worn_wooden_buckler",
+      "kind": "worn",
+      "category": "shield",
+      "file": "Worn/worn_wooden_buckler.fbx",
+      "triangles": 320,
+      "vertices": 273,
+      "materials": [
+        "Body",
+        "Trim"
+      ],
+      "textures": [
+        "Worn/Textures/worn_wooden_buckler_BaseMap.png",
+        "Worn/Textures/worn_wooden_buckler_MaskMap.png"
+      ],
+      "pickup": "pickup_wooden_buckler",
+      "parts": [
+        {
+          "node": "Buckler",
+          "socket": "Socket_Shield"
+        }
+      ]
+    },
+    {
+      "key": "worn_carapace_shield",
+      "kind": "worn",
+      "category": "shield",
+      "file": "Worn/worn_carapace_shield.fbx",
+      "triangles": 352,
+      "vertices": 233,
+      "materials": [
+        "Body",
+        "Trim"
+      ],
+      "textures": [
+        "Worn/Textures/worn_carapace_shield_BaseMap.png",
+        "Worn/Textures/worn_carapace_shield_MaskMap.png"
+      ],
+      "pickup": "pickup_carapace_shield",
+      "parts": [
+        {
+          "node": "Shield",
+          "socket": "Socket_Shield"
+        }
+      ]
+    },
+    {
+      "key": "worn_travel_cape",
+      "kind": "worn",
+      "category": "garment",
+      "file": "Worn/worn_travel_cape.fbx",
+      "triangles": 464,
+      "vertices": 355,
+      "materials": [
+        "Body",
+        "Trim"
+      ],
+      "textures": [
+        "Worn/Textures/worn_travel_cape_BaseMap.png",
+        "Worn/Textures/worn_travel_cape_MaskMap.png"
+      ],
+      "pickup": "pickup_travel_cape",
+      "parts": [
+        {
+          "node": "Cape",
+          "socket": "Socket_Back"
+        }
+      ]
+    },
+    {
+      "key": "worn_gloom_cape",
+      "kind": "worn",
+      "category": "garment",
+      "file": "Worn/worn_gloom_cape.fbx",
+      "triangles": 464,
+      "vertices": 390,
+      "materials": [
+        "Body",
+        "Trim"
+      ],
+      "textures": [
+        "Worn/Textures/worn_gloom_cape_BaseMap.png",
+        "Worn/Textures/worn_gloom_cape_MaskMap.png"
+      ],
+      "pickup": "pickup_gloom_cape",
+      "parts": [
+        {
+          "node": "Cape",
+          "socket": "Socket_Back"
+        }
+      ]
+    },
+    {
+      "key": "worn_trail_boots",
+      "kind": "worn",
+      "category": "footwear",
+      "file": "Worn/worn_trail_boots.fbx",
+      "triangles": 528,
+      "vertices": 516,
+      "materials": [
+        "Body"
+      ],
+      "textures": [
+        "Worn/Textures/worn_trail_boots_BaseMap.png",
+        "Worn/Textures/worn_trail_boots_MaskMap.png"
+      ],
+      "pickup": "pickup_trail_boots",
+      "parts": [
+        {
+          "node": "Boot_L",
+          "socket": "Socket_Foot_L"
+        },
+        {
+          "node": "Boot_R",
+          "socket": "Socket_Foot_R"
+        }
+      ]
+    },
+    {
+      "key": "worn_grotto_boots",
+      "kind": "worn",
+      "category": "footwear",
+      "file": "Worn/worn_grotto_boots.fbx",
+      "triangles": 528,
+      "vertices": 520,
+      "materials": [
+        "Body"
+      ],
+      "textures": [
+        "Worn/Textures/worn_grotto_boots_BaseMap.png",
+        "Worn/Textures/worn_grotto_boots_MaskMap.png"
+      ],
+      "pickup": "pickup_grotto_boots",
+      "parts": [
+        {
+          "node": "Boot_L",
+          "socket": "Socket_Foot_L"
+        },
+        {
+          "node": "Boot_R",
+          "socket": "Socket_Foot_R"
+        }
+      ]
+    },
+    {
+      "key": "worn_traveler_charm",
+      "kind": "worn",
+      "category": "accessory",
+      "file": "Worn/worn_traveler_charm.fbx",
+      "triangles": 180,
+      "vertices": 262,
+      "materials": [
+        "Body"
+      ],
+      "textures": [
+        "Worn/Textures/worn_traveler_charm_BaseMap.png",
+        "Worn/Textures/worn_traveler_charm_MaskMap.png"
+      ],
+      "pickup": "pickup_traveler_charm",
+      "parts": [
+        {
+          "node": "Charm",
+          "socket": "Socket_Hip_L"
+        }
+      ]
+    },
+    {
+      "key": "worn_grotto_charm",
+      "kind": "worn",
+      "category": "accessory",
+      "file": "Worn/worn_grotto_charm.fbx",
+      "triangles": 112,
+      "vertices": 178,
+      "materials": [
+        "Body"
+      ],
+      "textures": [
+        "Worn/Textures/worn_grotto_charm_BaseMap.png",
+        "Worn/Textures/worn_grotto_charm_MaskMap.png"
+      ],
+      "pickup": "pickup_grotto_charm",
+      "parts": [
+        {
+          "node": "Charm",
+          "socket": "Socket_Hip_L"
+        }
+      ]
+    }
+  ],
+  "clips": [],
+  "sockets": {
+    "character_adventurer": {
+      "Socket_Chest": {
+        "bone": "UpperChest",
+        "position": [
+          0.0,
+          -0.08,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "Socket_UpperArm_L": {
+        "bone": "LeftUpperArm",
+        "position": [
+          0.0,
+          0.115,
+          0.007849
+        ],
+        "rotation": [
+          -0.5,
+          -0.5,
+          -0.5,
+          -0.5
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "Socket_UpperArm_R": {
+        "bone": "RightUpperArm",
+        "position": [
+          -0.0,
+          0.115,
+          0.007725
+        ],
+        "rotation": [
+          -0.5,
+          0.5,
+          0.5,
+          -0.5
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "Socket_Back": {
+        "bone": "UpperChest",
+        "position": [
+          0.0,
+          0.095,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "Socket_Shield": {
+        "bone": "LeftLowerArm",
+        "position": [
+          -0.015044,
+          0.23,
+          -0.147049
+        ],
+        "rotation": [
+          -0.998701,
+          0.0,
+          0.050954,
+          0.0
+        ],
+        "scale": [
+          0.85,
+          0.85,
+          0.85
+        ]
+      },
+      "Socket_Foot_L": {
+        "bone": "LeftFoot",
+        "position": [
+          -0.0,
+          0.122128,
+          0.086803
+        ],
+        "rotation": [
+          -0.861126,
+          -0.0,
+          -0.0,
+          0.508391
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "Socket_Foot_R": {
+        "bone": "RightFoot",
+        "position": [
+          -0.0,
+          0.122128,
+          0.086803
+        ],
+        "rotation": [
+          -0.861126,
+          -0.0,
+          -0.0,
+          0.508391
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "Socket_Hip_L": {
+        "bone": "Hips",
+        "position": [
+          0.161569,
+          0.115,
+          -0.135573
+        ],
+        "rotation": [
+          0.0,
+          0.906308,
+          0.0,
+          0.422618
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "Socket_Hip_R": {
+        "bone": "Hips",
+        "position": [
+          -0.186014,
+          0.115,
+          -0.107395
+        ],
+        "rotation": [
+          0.0,
+          -0.866025,
+          0.0,
+          0.5
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "Socket_Head": {
+        "bone": "Head",
+        "position": [
+          0.0,
+          0.245,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    },
+    "character_vanguard": {
+      "Socket_Chest": {
+        "bone": "UpperChest",
+        "position": [
+          0.0,
+          -0.08,
+          0.002
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.08,
+          1.0,
+          1.19
+        ]
+      },
+      "Socket_UpperArm_L": {
+        "bone": "LeftUpperArm",
+        "position": [
+          0.0,
+          0.095,
+          0.14149
+        ],
+        "rotation": [
+          -0.5,
+          -0.5,
+          -0.5,
+          -0.5
+        ],
+        "scale": [
+          1.2,
+          1.2,
+          1.2
+        ]
+      },
+      "Socket_UpperArm_R": {
+        "bone": "RightUpperArm",
+        "position": [
+          -0.0,
+          0.095,
+          0.141654
+        ],
+        "rotation": [
+          -0.5,
+          0.5,
+          0.5,
+          -0.5
+        ],
+        "scale": [
+          1.2,
+          1.2,
+          1.2
+        ]
+      },
+      "Socket_Back": {
+        "bone": "UpperChest",
+        "position": [
+          0.0,
+          0.095,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "Socket_Shield": {
+        "bone": "LeftLowerArm",
+        "position": [
+          -0.015199,
+          0.23,
+          -0.148564
+        ],
+        "rotation": [
+          -0.998701,
+          0.0,
+          0.050954,
+          0.0
+        ],
+        "scale": [
+          0.85,
+          0.85,
+          0.85
+        ]
+      },
+      "Socket_Foot_L": {
+        "bone": "LeftFoot",
+        "position": [
+          -0.0,
+          0.126681,
+          0.084291
+        ],
+        "rotation": [
+          -0.861126,
+          -0.0,
+          -0.0,
+          0.508391
+        ],
+        "scale": [
+          1.08,
+          1.08,
+          1.08
+        ]
+      },
+      "Socket_Foot_R": {
+        "bone": "RightFoot",
+        "position": [
+          -0.0,
+          0.126681,
+          0.084291
+        ],
+        "rotation": [
+          -0.861126,
+          -0.0,
+          -0.0,
+          0.508391
+        ],
+        "scale": [
+          1.08,
+          1.08,
+          1.08
+        ]
+      },
+      "Socket_Hip_L": {
+        "bone": "Hips",
+        "position": [
+          0.161569,
+          0.115,
+          -0.135573
+        ],
+        "rotation": [
+          0.0,
+          0.906308,
+          0.0,
+          0.422618
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "Socket_Hip_R": {
+        "bone": "Hips",
+        "position": [
+          -0.186014,
+          0.115,
+          -0.107395
+        ],
+        "rotation": [
+          0.0,
+          -0.866025,
+          0.0,
+          0.5
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "Socket_Head": {
+        "bone": "Head",
+        "position": [
+          0.0,
+          0.245,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    },
+    "character_arcanist": {
+      "Socket_Chest": {
+        "bone": "UpperChest",
+        "position": [
+          0.0,
+          -0.08,
+          0.009
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.02,
+          1.0,
+          1.04
+        ]
+      },
+      "Socket_UpperArm_L": {
+        "bone": "LeftUpperArm",
+        "position": [
+          0.0,
+          0.125,
+          0.037587
+        ],
+        "rotation": [
+          -0.5,
+          -0.5,
+          -0.5,
+          -0.5
+        ],
+        "scale": [
+          1.2,
+          1.2,
+          1.2
+        ]
+      },
+      "Socket_UpperArm_R": {
+        "bone": "RightUpperArm",
+        "position": [
+          -0.0,
+          0.125,
+          0.038287
+        ],
+        "rotation": [
+          -0.5,
+          0.5,
+          0.5,
+          -0.5
+        ],
+        "scale": [
+          1.2,
+          1.2,
+          1.2
+        ]
+      },
+      "Socket_Back": {
+        "bone": "UpperChest",
+        "position": [
+          0.0,
+          0.095,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "Socket_Shield": {
+        "bone": "LeftLowerArm",
+        "position": [
+          -0.015044,
+          0.23,
+          -0.147049
+        ],
+        "rotation": [
+          -0.998701,
+          0.0,
+          0.050954,
+          0.0
+        ],
+        "scale": [
+          0.85,
+          0.85,
+          0.85
+        ]
+      },
+      "Socket_Foot_L": {
+        "bone": "LeftFoot",
+        "position": [
+          -0.0,
+          0.122128,
+          0.086803
+        ],
+        "rotation": [
+          -0.861126,
+          -0.0,
+          -0.0,
+          0.508391
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "Socket_Foot_R": {
+        "bone": "RightFoot",
+        "position": [
+          -0.0,
+          0.122128,
+          0.086803
+        ],
+        "rotation": [
+          -0.861126,
+          -0.0,
+          -0.0,
+          0.508391
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "Socket_Hip_L": {
+        "bone": "Hips",
+        "position": [
+          0.176617,
+          0.115,
+          -0.148199
+        ],
+        "rotation": [
+          0.0,
+          0.906308,
+          0.0,
+          0.422618
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "Socket_Hip_R": {
+        "bone": "Hips",
+        "position": [
+          -0.178875,
+          0.115,
+          -0.150094
+        ],
+        "rotation": [
+          0.0,
+          -0.906308,
+          0.0,
+          0.422618
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "Socket_Head": {
+        "bone": "Head",
+        "position": [
+          0.0,
+          0.27,
+          -0.015
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.08,
+          1.08,
+          1.08
+        ]
+      }
+    }
+  }
+}

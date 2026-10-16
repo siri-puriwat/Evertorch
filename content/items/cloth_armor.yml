@@ -12,3 +12,4 @@ server:
 client:
   icon: item_cloth_armor
   model: pickup_cloth_armor
+  worn: worn_cloth_armor

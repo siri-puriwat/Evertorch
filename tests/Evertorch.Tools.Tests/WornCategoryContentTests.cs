@@ -30,7 +30,8 @@ public sealed class WornCategoryContentTests
         + "    defense: 2\n"
         + "client:\n"
         + "  icon: item_cloth_armor\n"
-        + "  model: pickup_cloth_armor\n";
+        + "  model: pickup_trail_cap\n"
+        + "  worn: worn_trail_cap\n";
 
     private const string BucklerText =
         "id: item.shield.wooden_buckler\n"
@@ -46,7 +47,8 @@ public sealed class WornCategoryContentTests
         + "    attackSpeedPenalty: 5\n"
         + "client:\n"
         + "  icon: item_cloth_armor\n"
-        + "  model: pickup_cloth_armor\n";
+        + "  model: pickup_wooden_buckler\n"
+        + "  worn: worn_wooden_buckler\n";
 
     private const string CharmText =
         "id: item.accessory.traveler_charm\n"
@@ -61,7 +63,8 @@ public sealed class WornCategoryContentTests
         + "    bonus: { dex: 1 }\n"
         + "client:\n"
         + "  icon: item_cloth_armor\n"
-        + "  model: pickup_cloth_armor\n";
+        + "  model: pickup_traveler_charm\n"
+        + "  worn: worn_traveler_charm\n";
 
     private const string CardText =
         "id: item.card.spark_wisp_insight\n"
@@ -122,8 +125,11 @@ public sealed class WornCategoryContentTests
     [TestCase(Cap, "    defense: 2\n", "    defense: 2\n    attackSpeedPenalty: 5\n",
         "server.equipment.attackSpeedPenalty", "is only for a weapon or a shield")]
     [TestCase(Cap, "    defense: 2\n", "    defense: 2\n    attack: 5\n", "server.equipment.attack", "unknown field")]
-    [TestCase(Cap, "  model: pickup_cloth_armor\n", "  model: pickup_cloth_armor\n  held: weapon_training_sword\n",
+    [TestCase(Cap, "  model: pickup_trail_cap\n", "  model: pickup_trail_cap\n  held: weapon_training_sword\n",
         "client.held", "is only for a weapon")]
+    [TestCase(Charm, "  worn: worn_traveler_charm\n", "", "client.worn", "required field is missing")]
+    [TestCase(Card, "  model: pickup_slime_gel\n", "  model: pickup_slime_gel\n  worn: worn_traveler_charm\n",
+        "client.worn", "is only for equipment worn on the body")]
     [TestCase(Buckler, "attackSpeedPenalty: 5", "attackSpeedPenalty: 201", "server.equipment.attackSpeedPenalty",
         "between 0 and 200")]
     [TestCase(Charm, "  sellPrice: 20\n", "  sellPrice: 20\n  refine: refine.light_armor\n", "server.refine",

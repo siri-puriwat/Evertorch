@@ -118,6 +118,16 @@ internal static class ItemDefinitionReader
             }
         }
 
+        string? worn = null;
+        if (isEquipment && type != ItemType.Weapon)
+        {
+            worn = client.RequiredAssetKey("worn");
+        }
+        else if (client.Has("worn"))
+        {
+            client.ReportField("worn", "is only for equipment worn on the body");
+        }
+
         string? prefix = null;
         string? description = null;
         if (type == ItemType.Card)
@@ -152,7 +162,7 @@ internal static class ItemDefinitionReader
             refine,
             slots,
             type == ItemType.Card ? new ItemCard(fits!.Value, bonus!, removalFee) : null);
-        return new AuthoredItem(root.ToSource(), definition, icon, model, held, prefix, description);
+        return new AuthoredItem(root.ToSource(), definition, icon, model, held, prefix, description, worn);
     }
 
     // A weapon holds up to four cards and any other piece of equipment one (Content Pipeline §4); 0 when absent.

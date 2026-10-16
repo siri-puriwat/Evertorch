@@ -9,7 +9,7 @@ namespace Evertorch.Client
 /// <summary>
 ///     The drawn body of one entity. It is told where to stand every frame and decides nothing. The body is a prefab
 ///     loaded by its content key, or an explicit placeholder when the key does not resolve. A player's body holds its
-///     weapon and wears its other pieces as stand-ins until their art is delivered.
+///     weapon and wears its other pieces, each a worn model hung on the body's sockets.
 /// </summary>
 public sealed class EntityView : MonoBehaviour
 {
@@ -48,8 +48,9 @@ public sealed class EntityView : MonoBehaviour
     /// </summary>
     public static readonly Color PoisonedTint = new(0.45f, 0.85f, 0.3f);
 
-    // What each position wears, and the stand-in parts drawn for it.
-    private readonly ItemDefinitionId[] m_worn = new ItemDefinitionId[EquipmentPositions.All.Count];
+    // What each position wears: its worn model's key, the prefab once loaded, and the parts hung on the sockets.
+    private readonly string[] m_wornKeys = CreateKeys();
+    private readonly GameObject?[] m_wornPrefabs = new GameObject?[EquipmentPositions.All.Count];
     private readonly List<GameObject>[] m_wornParts = CreatePartLists();
 
     private Color? m_tint;
@@ -67,7 +68,6 @@ public sealed class EntityView : MonoBehaviour
     private GameObject? m_held;
     private Vector3 m_projectileOrigin = DefaultProjectilePoint;
     private Vector3 m_projectileArrival = DefaultProjectilePoint;
-    private IReadOnlyList<StandInPlacement>[]? m_wornPlacements;
 
     /// <summary>
     ///     The Addressables key the body was requested with; empty when the content did not know the entity.
@@ -294,35 +294,58 @@ public sealed class EntityView : MonoBehaviour
     }
 
     /// <summary>
-    ///     Draws what the body wears besides its weapon (owner decision 12 of Milestone 20): each piece a stand-in in its
-    ///     item's colour (<see cref="WornStandIns" />) until its art is delivered. <paramref name="appearance" /> names the
-    ///     item in each of the eight positions in position order, default where none; the weapon is held
-    ///     (<see cref="Hold" />). A body without the shared skeleton's bones, such as a placeholder, wears nothing.
+    ///     Draws what the body wears besides its weapon (Prototype Content §2.1): <paramref name="wornKeys" /> names
+    ///     the worn model of each of the eight positions in position order, empty where it wears nothing; the weapon is
+    ///     held (<see cref="Hold" />). Each piece's parts hang on the body's sockets at no offset, the second
+    ///     accessory's on the right hip. A missing model or socket leaves its position empty over the intact body, with
+    ///     one warning; a placeholder wears nothing.
     /// </summary>
-    public void Wear(IReadOnlyList<ItemDefinitionId> appearance)
+    public void Wear(IReadOnlyList<string> wornKeys)
     {
-        if (appearance == null)
+        if (wornKeys == null)
         {
-            throw new ArgumentNullException(nameof(appearance));
+            throw new ArgumentNullException(nameof(wornKeys));
         }
 
-        for (int index = 1; index < m_worn.Length && index < appearance.Count; index++)
+        for (int index = 1; index < m_wornKeys.Length && index < wornKeys.Count; index++)
         {
-            if (appearance[index] != m_worn[index])
+            string key = wornKeys[index] ?? string.Empty;
+            if (key == m_wornKeys[index])
             {
-                m_worn[index] = appearance[index];
-                ShowWorn(index);
+                continue;
             }
+
+            m_wornKeys[index] = key;
+            m_wornPrefabs[index] = null;
+            if (key.Length == 0 || m_catalog == null)
+            {
+                ClearWorn(index);
+                continue;
+            }
+
+            int position = index;
+            m_catalog.Request(key, prefab => TakeWorn(position, key, prefab));
         }
     }
 
     /// <summary>
-    ///     The stand-in parts drawn for what <paramref name="position" /> holds; none while it holds nothing or the body
-    ///     has not attached.
+    ///     The parts drawn for what <paramref name="position" /> holds; none while it holds nothing, its model has not
+    ///     loaded, or the body has not attached.
     /// </summary>
     public IReadOnlyList<GameObject> WornParts(EquipmentSlot position)
     {
         return m_wornParts[(int)position - 1];
+    }
+
+    private static string[] CreateKeys()
+    {
+        string[] keys = new string[EquipmentPositions.All.Count];
+        for (int index = 0; index < keys.Length; index++)
+        {
+            keys[index] = string.Empty;
+        }
+
+        return keys;
     }
 
     private static List<GameObject>[] CreatePartLists()
@@ -336,52 +359,115 @@ public sealed class EntityView : MonoBehaviour
         return lists;
     }
 
-    // A Trim part takes the player's colour in a block of its material, which an ailment's tint never clears.
-    private void ShowWorn(int index)
+    // A load that finishes after its position changed, or after the view went, is dropped; until a new piece is
+    // placed or fails, the old one stays.
+    private void TakeWorn(int index, string key, GameObject? prefab)
     {
-        List<GameObject> parts = m_wornParts[index];
-        foreach (GameObject part in parts)
-        {
-            Destroy(part);
-        }
-
-        parts.Clear();
-        ItemDefinitionId item = m_worn[index];
-        if (m_wornPlacements == null || m_catalog == null || item.Value.Length == 0)
+        if (this == null || m_wornKeys[index] != key)
         {
             return;
         }
 
-        var position = (EquipmentSlot)(index + 1);
-        Material material = m_catalog.GetStandInMaterial(WornStandIns.ColourOf(item));
-        foreach (StandInPlacement placement in m_wornPlacements[index])
+        m_wornPrefabs[index] = prefab;
+        ShowWorn(index);
+    }
+
+    private void ClearWorn(int index)
+    {
+        foreach (GameObject part in m_wornParts[index])
         {
-            var part = new GameObject(placement.IsTrim ? $"Worn {position} Trim" : $"Worn {position}");
-            part.transform.SetParent(placement.Bone, false);
-            part.transform.localPosition = placement.LocalPosition;
-            part.transform.localRotation = placement.LocalRotation;
-            part.transform.localScale = placement.LocalScale;
-            part.AddComponent<MeshFilter>().sharedMesh = m_catalog.GetStandInMesh(placement.Shape);
-            MeshRenderer renderer = part.AddComponent<MeshRenderer>();
-            renderer.sharedMaterial = placement.IsTrim
-                ? m_catalog.GetStandInMaterial(WornStandIns.TrimColor)
-                : material;
-            var block = new MaterialPropertyBlock();
-            if (placement.IsTrim && m_tint != null)
-            {
-                block.SetColor(BaseColorId, m_tint.Value);
-                renderer.SetPropertyBlock(block, 0);
-            }
-
-            if (m_ailmentTint != null)
-            {
-                block.Clear();
-                block.SetColor(BaseColorId, m_ailmentTint.Value);
-                renderer.SetPropertyBlock(block);
-            }
-
-            parts.Add(part);
+            Destroy(part);
         }
+
+        m_wornParts[index].Clear();
+    }
+
+    // A Trim part takes the player's colour in a block of its material, which an ailment's tint never clears.
+    private void ShowWorn(int index)
+    {
+        GameObject? prefab = m_wornPrefabs[index];
+        string key = m_wornKeys[index];
+        if (m_body == null || m_catalog == null || IsPlaceholder || key.Length == 0)
+        {
+            return;
+        }
+
+        ClearWorn(index);
+        if (prefab == null)
+        {
+            return;
+        }
+
+        if (!prefab.TryGetComponent(out WornPiece model))
+        {
+            m_catalog.WarnOnce($"WornPieceMissing: '{key}' is not a worn piece; its position stays empty.");
+            return;
+        }
+
+        var position = (EquipmentSlot)(index + 1);
+        var sockets = new Transform[model.Parts.Count];
+        for (int part = 0; part < sockets.Length; part++)
+        {
+            string name = SocketOf(position, model.Parts[part].Socket);
+            Transform? socket = FindPart(m_body, name);
+            if (socket == null)
+            {
+                m_catalog.WarnOnce($"WornSocketMissing: '{Key}' has no {name} for '{key}'; its position stays empty.");
+                return;
+            }
+
+            sockets[part] = socket;
+        }
+
+        GameObject instance = Instantiate(prefab);
+        WornPiece piece = instance.GetComponent<WornPiece>();
+        var block = new MaterialPropertyBlock();
+        for (int part = 0; part < sockets.Length; part++)
+        {
+            WornPiece.Part spec = piece.Parts[part];
+            Transform? node = spec.Node;
+            if (node == null)
+            {
+                continue;
+            }
+
+            node.SetParent(sockets[part], false);
+            node.localPosition = Vector3.zero;
+            node.localRotation = Quaternion.identity;
+            node.localScale = Vector3.one;
+            foreach (Collider collider in node.GetComponentsInChildren<Collider>(true))
+            {
+                DestroyImmediate(collider);
+            }
+
+            if (node.TryGetComponent(out Renderer renderer))
+            {
+                if (spec.TrimSlot >= 0 && m_tint != null)
+                {
+                    block.Clear();
+                    block.SetColor(BaseColorId, m_tint.Value);
+                    renderer.SetPropertyBlock(block, spec.TrimSlot);
+                }
+
+                if (m_ailmentTint != null)
+                {
+                    block.Clear();
+                    block.SetColor(BaseColorId, m_ailmentTint.Value);
+                    renderer.SetPropertyBlock(block);
+                }
+            }
+
+            m_wornParts[index].Add(node.gameObject);
+        }
+
+        Destroy(instance);
+    }
+
+    private static string SocketOf(EquipmentSlot position, string socket)
+    {
+        return position == EquipmentSlot.Accessory2 && socket == WornPiece.FirstAccessorySocket
+            ? WornPiece.SecondAccessorySocket
+            : socket;
     }
 
     // A load that finishes after the weapon changed, or after the view went, is dropped.
@@ -491,12 +577,8 @@ public sealed class EntityView : MonoBehaviour
             m_animator = animator;
         }
 
-        // Read now, while the body still stands in its bind pose: its clips start on a later frame.
-        m_wornPlacements = new IReadOnlyList<StandInPlacement>[m_worn.Length];
-        m_wornPlacements[0] = Array.Empty<StandInPlacement>();
-        for (int index = 1; index < m_worn.Length; index++)
+        for (int index = 1; index < m_wornKeys.Length; index++)
         {
-            m_wornPlacements[index] = WornStandIns.Place(body.transform, (EquipmentSlot)(index + 1), anchors?.Overhead);
             ShowWorn(index);
         }
 
