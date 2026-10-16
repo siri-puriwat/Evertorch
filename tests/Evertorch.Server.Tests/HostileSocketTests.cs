@@ -552,6 +552,134 @@ public sealed class HostileSocketTests
         AssertNoSecretIn(lines);
     }
 
+    // Milestone 20's commands from SecretAnna, beside SecretBob of another account, both names words no log may repeat
+    // (session task T12): an equip of Bobby's cap, of her cap into the weapon's position, of her charm into the second
+    // accessory position while the first wears it, and of her worn cap again, and an unequip of the empty shield
+    // position, each refused and audited; an inspection of Bobby answered with his eight positions; a burst of equips
+    // over the item bucket; then equips and unequips naming no position or a ninth, malformed until the connection is
+    // closed. Nothing she holds or wears moves.
+    [Test]
+    public void HostileEquipmentCommands_AreRefusedThrottledAndScored_AndLeaveNoNameInTheLogs()
+    {
+        using var root = new TemporaryDirectory();
+        var logs = new CapturingLoggerProvider();
+        var store = new InMemoryGameStore();
+        const int itemBurst = 8;
+        using IHost host = StartHost(root, logs, store, $"--Abuse:ItemCommandBurst={itemBurst}");
+        int port = host.Services.GetRequiredService<LiteNetLibServerTransport>().LocalPort;
+        ServerContent content = host.Services.GetRequiredService<ServerContent>();
+        int violationsToClose = new AbuseOptions().ViolationThreshold / ViolationScore.Points;
+        byte[][] malformed =
+        {
+            // Equips of row 1 to position 0 and to a ninth, and unequips of position 0 and of a ninth.
+            new byte[] { 0x10, 0x00, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0 },
+            new byte[] { 0x10, 0x00, 1, 0, 0, 0, 0, 0, 0, 0, 9, 1, 0, 0, 0 },
+            new byte[] { 0x11, 0x00, 0, 1, 0, 0, 0 }, new byte[] { 0x11, 0x00, 9, 1, 0, 0, 0 }
+        };
+
+        using var anna = new SocketClient(content, "secret-equip-anna", "SecretAnna");
+        using var bobby = new SocketClient(content, "secret-equip-bobby", "SecretBob");
+        store.NextCharacterId = 81;
+        anna.AfterCreate = () =>
+        {
+            store.GiveItems(81, "item.headgear.trail_cap", 1, 1, 0);
+            store.GiveItems(81, "item.accessory.traveler_charm", 1, 1, 0);
+            store.Wear(81, store.Stored(81).Items.Last().Id, "Accessory1");
+        };
+        anna.EnterWorld(port);
+        store.NextCharacterId = 82;
+        bobby.AfterCreate = () =>
+        {
+            store.GiveItems(82, "item.headgear.trail_cap", 1, 1, 0);
+            store.Wear(82, store.Stored(82).Items.Last().Id, "Headgear");
+        };
+        bobby.EnterWorld(port);
+        var refused = new List<CommandRejectionReason>();
+        anna.World.CommandRejectedReceived += rejection => refused.Add(rejection.Reason);
+        var inspected = new List<InspectedEquipment>();
+        anna.Connection.InspectedEquipmentReceived += inspected.Add;
+        SocketClients.PumpUntil(
+            () => anna.World.Inventory.IsCurrent && bobby.World.Inventory.IsCurrent
+                && anna.World.Remotes.ContainsKey(bobby.World.LocalEntity),
+            anna,
+            bobby);
+        long bobbysCap = bobby.World.Inventory.Rows.Single().InventoryItem;
+        long cap = anna.World.Inventory.Rows.Single(row => row.Item.Value == "item.headgear.trail_cap").InventoryItem;
+        long charm = anna.World.Inventory.Rows.Single(row => row.Item.Value == "item.accessory.traveler_charm")
+            .InventoryItem;
+
+        anna.Connection.SendEquip(bobbysCap, EquipmentSlot.Headgear);
+        anna.Connection.SendEquip(cap, EquipmentSlot.Weapon);
+        anna.Connection.SendEquip(charm, EquipmentSlot.Accessory2);
+        anna.Connection.SendUnequip(EquipmentSlot.Shield);
+        SocketClients.PumpUntil(() => refused.Count >= 4, anna, bobby);
+        var named = refused.ToList();
+        anna.Connection.SendEquip(cap, EquipmentSlot.Headgear);
+        SocketClients.PumpUntil(
+            () => anna.World.Inventory.Rows.Any(row => row.InventoryItem == cap && row.Slot == EquipmentSlot.Headgear),
+            anna,
+            bobby);
+        anna.PumpFor(TimeSpan.FromMilliseconds(1100));
+        refused.Clear();
+        anna.Connection.SendEquip(cap, EquipmentSlot.Headgear);
+        anna.Connection.SendInspectPlayer(bobby.World.LocalEntity);
+        SocketClients.PumpUntil(() => refused.Count >= 1 && inspected.Count >= 1, anna, bobby);
+        var again = refused.ToList();
+        anna.PumpFor(TimeSpan.FromMilliseconds(1100));
+
+        for (int index = 0; index <= itemBurst; index++)
+        {
+            anna.Connection.SendEquip(bobbysCap, EquipmentSlot.Headgear);
+        }
+
+        anna.PumpFor(TimeSpan.FromMilliseconds(1100));
+        for (int index = 0; index < 2 * violationsToClose; index++)
+        {
+            anna.Link.Send(ProtocolChannel.Control, MessageDelivery.ReliableOrdered,
+                malformed[index % malformed.Length]);
+        }
+
+        bool isClosed = anna.PumpUntil(() => anna.Connection.State == ClientConnectionState.Disconnected);
+        host.StopAsync().GetAwaiter().GetResult();
+
+        IReadOnlyList<string> lines = logs.Lines;
+        Assert.That(
+            named,
+            Is.EqualTo(
+                new[]
+                {
+                    CommandRejectionReason.InvalidTarget, CommandRejectionReason.NotAllowedNow,
+                    CommandRejectionReason.NotAllowedNow, CommandRejectionReason.InvalidTarget
+                }),
+            "Bobby's cap; her cap as a weapon; her charm into the other accessory; the empty shield");
+        Assert.That(again, Is.EqualTo(new[] { CommandRejectionReason.NotAllowedNow }), "her worn cap again");
+        InspectedEquipment answer = inspected.Single();
+        Assert.That(
+            (answer.Entity, answer.ItemIn(EquipmentSlot.Headgear).Item.Value),
+            Is.EqualTo((bobby.World.LocalEntity, "item.headgear.trail_cap")),
+            "Bobby inspected");
+        Assert.That(isClosed, Is.True, "the connection was closed");
+        Assert.That(anna.Connection.Notice?.Reason, Is.EqualTo(DisconnectReason.Kicked));
+        Assert.That(
+            store.Stored(81).Items.Select(item => (item.ItemDefinitionId, item.EquippedSlot))
+                .OrderBy(item => item.ItemDefinitionId, StringComparer.Ordinal),
+            Is.EqualTo(
+                new[]
+                {
+                    ("item.accessory.traveler_charm", "Accessory1"), ("item.headgear.trail_cap", (string?)"Headgear")
+                }),
+            "her charm and her cap where she put them");
+        Assert.That(
+            store.Stored(82).Items.Single().EquippedSlot,
+            Is.EqualTo("Headgear"),
+            "Bobby's cap still on his head");
+        Assert.That(lines.Any(line => line.Contains("had Equip refused")), Is.True, "the refusals audited");
+        Assert.That(lines.Any(line => line.Contains("had Unequip refused")), Is.True);
+        Assert.That(lines.Any(line => line.Contains("sent Equip over the session_item limit")), Is.True);
+        Assert.That(lines.Any(line => line.Contains("ViolationDisconnect")), Is.True);
+        AssertNoSecretIn(lines);
+    }
+
     [Test]
     public void HostileInput_LeavesNoTokenIdentityOrConnectionStringInTheLogs()
     {

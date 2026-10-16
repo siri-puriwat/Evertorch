@@ -24,6 +24,15 @@ public sealed class StorageStoreTests
 
     private static readonly DateTime Now = new(2026, 10, 4, 12, 0, 0, DateTimeKind.Utc);
 
+    // A row worn in each of the eight positions, by its stored name (Persistence §5).
+    private static readonly (string Slot, string Item)[] WornEverywhere =
+    {
+        ("Weapon", Sword), ("Armor", "item.armor.cloth"), ("Headgear", "item.headgear.trail_cap"),
+        ("Shield", "item.shield.wooden_buckler"), ("Garment", "item.garment.travel_cape"),
+        ("Footwear", "item.footwear.trail_boots"), ("Accessory1", "item.accessory.traveler_charm"),
+        ("Accessory2", "item.accessory.grotto_charm")
+    };
+
     private PostgresFixture m_database = null!;
     private PostgresGameStore m_store = null!;
     private Sql m_sql = null!;
@@ -183,6 +192,26 @@ public sealed class StorageStoreTests
             "a withdrawal is free");
         Assert.That(Ledger(other), Is.EqualTo("storage_withdraw 5 0"));
         Assert.That((Coins(depositor), Read(account).Items.Single().Quantity), Is.EqualTo((60L, 2)));
+    }
+
+    // A row worn in any of the eight positions stays out of storage (Milestone 20, session task T12): each deposit is
+    // refused, takes no fee, and moves nothing.
+    [Test]
+    public void Deposits_OfARowWornInAnyPosition_AreRefused_AndMoveNothing()
+    {
+        (long account, long character, long _) = NewAccount(10_000);
+        long[] rows = WornEverywhere.Select(worn => Give(character, worn.Item, 1)).ToArray();
+        for (int index = 0; index < rows.Length; index++)
+        {
+            m_sql.Execute(Sql.EquipmentInsert(character, WornEverywhere[index].Slot, rows[index]));
+        }
+
+        StorageResult[] results = rows.Select(row => Deposit(character, row, 1, 1)).ToArray();
+
+        Assert.That(results.Select(result => result.Status), Is.All.EqualTo(InventoryStatus.Refused));
+        Assert.That((Ledger(character), Coins(character)), Is.EqualTo((string.Empty, 10_000L)));
+        Assert.That(Read(account).Items, Is.Empty);
+        Assert.That(m_sql.Scalar($"SELECT count(*) FROM equipment WHERE character_id = {character}"), Is.EqualTo(8));
     }
 
     [Test]

@@ -19,6 +19,11 @@ public sealed class CharacterLoadTests
 
     private static readonly DateTime Now = new(2026, 9, 23, 12, 0, 0, DateTimeKind.Utc);
 
+    private static readonly string[] Positions =
+    {
+        "Weapon", "Armor", "Headgear", "Shield", "Garment", "Footwear", "Accessory1", "Accessory2"
+    };
+
     private PostgresFixture m_database = null!;
     private PostgresGameStore m_store = null!;
     private Sql m_sql = null!;
@@ -338,6 +343,28 @@ public sealed class CharacterLoadTests
         Checkpoint(character, new WorldPosition(2f, 0f, 1f), 50);
 
         Assert.That(m_sql.Scalar($"SELECT version FROM characters WHERE id = {character}"), Is.EqualTo(2));
+    }
+
+    // A checkpoint writes the character's own columns and never what it wears (Milestone 20, session task T12): each of
+    // the eight positions keeps its row through two checkpoints and a load.
+    [Test]
+    public void SaveCheckpoint_LeavesWhatEachOfTheEightPositionsWears()
+    {
+        (AccountId account, long character) = NewCharacter();
+        foreach (string position in Positions)
+        {
+            long row = m_sql.Scalar(
+                "INSERT INTO inventory_items (character_id, item_definition_id, quantity, refine_level, version) "
+                + $"VALUES ({character}, 'item.armor.cloth', 1, 0, 0) RETURNING id");
+            m_sql.Execute(Sql.EquipmentInsert(character, position, row));
+        }
+
+        Checkpoint(character, new WorldPosition(1f, 0f, 1f), 50);
+        Checkpoint(character, new WorldPosition(2f, 0f, 2f), 40);
+        StoredCharacter stored = Load(account, character)!;
+
+        Assert.That(stored.Items.Select(item => item.EquippedSlot), Is.EquivalentTo(Positions));
+        Assert.That(m_sql.Scalar($"SELECT count(*) FROM equipment WHERE character_id = {character}"), Is.EqualTo(8));
     }
 
     [Test]

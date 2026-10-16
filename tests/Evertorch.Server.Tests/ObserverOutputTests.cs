@@ -23,7 +23,9 @@ namespace Evertorch.Server.Tests
 ///     settled bags, and its deposits and withdrawals reach an observer beside it as nothing. Milestone 15 adds the
 ///     market board: another's reads, listings, purchases, sales, and collections reach an observer beside it as nothing.
 ///     Milestone 18 adds the elements: another's converters, the sheet's attack element and the status list they change,
-///     reach an observer beside it and a member of its party as nothing.
+///     reach an observer beside it and a member of its party as nothing. Milestone 20 adds the eight positions: another's
+///     whole outfit, its swaps, its refused burst, and a job change that takes its weapon off reach an observer as its
+///     appearance alone, and a newcomer, a returning observer, and the map it crosses to learn the whole outfit.
 /// </summary>
 [TestFixture]
 public sealed class ObserverOutputTests
@@ -43,6 +45,18 @@ public sealed class ObserverOutputTests
     private const string Guildmaster = "npc.guildmaster";
     private const string NumbingSpark = "skill.numbing_spark";
     private const string QuakeSlam = "skill.quake_slam";
+    private const string Staff = "item.weapon.training_staff";
+    private const string Cloth = "item.armor.cloth";
+    private const string Leather = "item.armor.leather";
+    private const string Cap = "item.headgear.trail_cap";
+    private const string Buckler = "item.shield.wooden_buckler";
+    private const string Cape = "item.garment.travel_cape";
+    private const string Boots = "item.footwear.trail_boots";
+    private const string TravelerCharm = "item.accessory.traveler_charm";
+    private const string GrottoCharm = "item.accessory.grotto_charm";
+
+    // A piece for each of the eight positions, in position order.
+    private static readonly string[] Outfit = { Staff, Cloth, Cap, Buckler, Cape, Boots, TravelerCharm, GrottoCharm };
 
     private static readonly MessageOpcode[] WhatAnyoneNearSees =
     {
@@ -124,6 +138,52 @@ public sealed class ObserverOutputTests
             .Select(message => read(message.Payload)!);
     }
 
+    // The character holds a row of each item, as earlier pickups would have left them, and enters the world.
+    private static ConnectionId EnterHolding(TestServer server, long character, params string[] items)
+    {
+        ConnectionId player = server.Connect();
+        server.SignInWithCharacter(player, character);
+        foreach (string item in items)
+        {
+            server.Store.GiveItems(character, item, 1, 1, 5);
+        }
+
+        server.SendEnterWorld(player, character);
+        server.TickUntil(() => server.SessionOf(player).State == SessionState.InWorld);
+        return player;
+    }
+
+    private static void WearOutfit(TestServer server, ConnectionId actor)
+    {
+        for (int index = 0; index < Outfit.Length; index++)
+        {
+            server.SendEquip(actor, RowOf(server, actor, Outfit[index]), (uint)(index + 1),
+                EquipmentPositions.All[index]);
+            Settle(server, actor);
+        }
+    }
+
+    private static string[] WornBy(TestServer server, ConnectionId actor)
+    {
+        InventoryEntry[] rows = server.SessionOf(actor).Character!.Inventory.Rows.ToArray();
+        return EquipmentPositions.All
+            .Select(position => rows.FirstOrDefault(row => row.Slot == position).Item.Value)
+            .ToArray();
+    }
+
+    private static EquipmentAppearance[] AppearancesOf(TestServer server, ConnectionId connection, EntityId entity)
+    {
+        return Read(server, connection, MessageOpcode.EquipmentAppearance, payload =>
+                EquipmentAppearance.TryRead(payload, out EquipmentAppearance? read) ? read : null)
+            .Where(appearance => appearance.Entity == entity)
+            .ToArray();
+    }
+
+    private static string[] ItemsOf(EquipmentAppearance appearance)
+    {
+        return EquipmentPositions.All.Select(position => appearance.ItemIn(position).Value).ToArray();
+    }
+
     private static ConnectionId EnterBesideTheBroker(
         TestServer server,
         long character,
@@ -140,6 +200,60 @@ public sealed class ObserverOutputTests
         server.Place(player, broker.Position.X - 2f, broker.Position.Z + character - 2);
         server.Tick(2);
         return player;
+    }
+
+    // A whole outfit (Milestone 20, session task T12) reaches a newcomer with the actor's spawn, an observer returning
+    // after a disconnect, and a player on the field when the actor crosses to it; the ground, left behind, hears the
+    // actor go (Network Protocol §6, §9).
+    [Test]
+    public void AWholeOutfit_ReachesANewcomer_AReturningObserver_AndTheMapItCrossesTo()
+    {
+        var server = new TestServer(withEveryMap: true);
+        ConnectionId actor = EnterHolding(server, Actor, Outfit);
+        WearOutfit(server, actor);
+        EntityId entity = server.PlayerOf(actor).Id;
+
+        ConnectionId newcomer = server.EnterWorld(Observer);
+        server.Tick(2);
+        string[] newcomerSaw = ItemsOf(AppearancesOf(server, newcomer, entity).Last());
+        server.Disconnect(newcomer);
+        server.Tick(2);
+        ConnectionId returning = server.EnterWorld(Observer);
+        server.Tick(2);
+        string[] returningSaw = ItemsOf(AppearancesOf(server, returning, entity).Last());
+
+        ConnectionId fielder = server.EnterWorld(3);
+        MapInstance ground = GroundOf(server);
+        MapPortal toTheField = ground.Definition.Portals.Single(portal =>
+            portal.DestinationMap == new MapDefinitionId("map.training_field"));
+        server.PlayerOf(fielder).Position = toTheField.Center;
+        TickUntil(
+            server,
+            () => server.SessionOf(fielder).Character!.Map.Definition.Id != ground.Definition.Id,
+            "the fielder crossed");
+        server.Tick(20);
+        server.Transport.ClearSent();
+        server.PlayerOf(actor).Position = toTheField.Center;
+        TickUntil(
+            server,
+            () => server.SessionOf(actor).Character!.Map.Definition.Id != ground.Definition.Id,
+            "the actor crossed");
+        server.Tick(2);
+
+        Assert.That(newcomerSaw, Is.EqualTo(Outfit), "the newcomer");
+        Assert.That(returningSaw, Is.EqualTo(Outfit), "the returning observer");
+        Assert.That(
+            server.Transport.SentTo(fielder)
+                .Where(message => message.Opcode is MessageOpcode.EntitySpawn or MessageOpcode.EquipmentAppearance)
+                .Select(message => message.Opcode)
+                .Take(2),
+            Is.EqualTo(new[] { MessageOpcode.EntitySpawn, MessageOpcode.EquipmentAppearance }),
+            "the field hears the actor's spawn, then its appearance");
+        Assert.That(ItemsOf(AppearancesOf(server, fielder, entity).Last()), Is.EqualTo(Outfit), "the field");
+        Assert.That(
+            server.Transport.SentTo(returning).Select(message => message.Opcode),
+            Has.Member(MessageOpcode.EntityDespawn),
+            "the ground saw the actor go");
     }
 
     // The build (Milestone 9 verification): the actor raises AGI and VIT, learns Strike, is refused a raise past its
@@ -322,6 +436,67 @@ public sealed class ObserverOutputTests
             server.Transport.SentTo(town).Select(message => message.Opcode),
             Has.No.Member(MessageOpcode.BossAnnouncement).And.No.Member(MessageOpcode.SkillResolved),
             "nothing of the boss in town");
+    }
+
+    // The eight positions (Milestone 20, session task T12): the actor, an Adventurer ready to change job, wears a piece
+    // in each position, swaps its armor once in a burst of four equips, the other three refused while the first is in
+    // flight, then ten times more one after another, and becomes a Vanguard at the Guildmaster, which takes its staff
+    // off. The observer beside it hears an appearance for each committed change, in rising revisions, and nothing of
+    // the actor's rows, levels, cards, or refusals; the last names what the actor wears.
+    [Test]
+    public void AnotherPlayersEightPiecesSwapsAndJobChange_ReachAnObserverAsItsAppearancesAlone()
+    {
+        var server = new TestServer(withNpcs: true);
+        server.Store.SeedOnCreate = BuildSeed.ReadyToChange;
+        ConnectionId actor = EnterHolding(server, Actor, Outfit.Append(Leather).ToArray());
+        ConnectionId observer = server.EnterWorld(Observer);
+        NpcEntity guildmaster = server.NpcOf(Guildmaster);
+        server.Place(actor, guildmaster.Position.X + 2f, guildmaster.Position.Z);
+        server.Place(observer, guildmaster.Position.X + 3f, guildmaster.Position.Z);
+        server.Tick(2);
+        server.Transport.ClearSent();
+        EntityId entity = server.PlayerOf(actor).Id;
+
+        WearOutfit(server, actor);
+        long cloth = RowOf(server, actor, Cloth);
+        long leather = RowOf(server, actor, Leather);
+        for (uint burst = 0; burst < 4; burst++)
+        {
+            server.SendEquip(actor, burst % 2 == 0 ? leather : cloth, 20 + burst, EquipmentSlot.Armor);
+        }
+
+        Settle(server, actor);
+        for (int swap = 0; swap < 10; swap++)
+        {
+            server.SendEquip(actor, swap % 2 == 0 ? cloth : leather, (uint)(30 + swap), EquipmentSlot.Armor);
+            Settle(server, actor);
+        }
+
+        server.SendChangeJob(actor, guildmaster.Id, "job.vanguard", 50);
+        Settle(server, actor);
+        server.Tick(2);
+
+        MessageOpcode[] observerHeard = server.Transport.SentTo(observer).Select(message => message.Opcode).ToArray();
+        EquipmentAppearance[] seen = AppearancesOf(server, observer, entity);
+        CommandRejectionReason[] refused = server.Transport.SentTo(actor)
+            .Where(message => message.Opcode == MessageOpcode.CommandRejected)
+            .Select(message => CommandRejected.TryRead(message.Payload, out CommandRejected read)
+                ? read.Reason
+                : CommandRejectionReason.None)
+            .ToArray();
+        Assert.That(observerHeard.Distinct(), Is.SubsetOf(WhatAnyoneNearSees), "only what anyone near sees");
+        Assert.That(
+            refused,
+            Is.EqualTo(Enumerable.Repeat(CommandRejectionReason.ItemActionInFlight, 3)),
+            "the burst's three while the first was in flight");
+        Assert.That(seen, Has.Length.EqualTo(8 + 1 + 10 + 1), "one for each committed change");
+        Assert.That(seen.Select(appearance => appearance.Revision), Is.Ordered.Ascending, "in rising revisions");
+        Assert.That(seen.Select(appearance => appearance.Revision), Is.Unique, "each revision once");
+        Assert.That(
+            ItemsOf(seen.Last()),
+            Is.EqualTo(new[] { string.Empty, Leather, Cap, Buckler, Cape, Boots, TravelerCharm, GrottoCharm }),
+            "the staff off with the job change, the leather on after the last swap");
+        Assert.That(ItemsOf(seen.Last()), Is.EqualTo(WornBy(server, actor)), "what the actor wears");
     }
 
     // The first jobs (Milestone 10 verification): the actor, at the Adventurer's job level 10, becomes an Arcanist at

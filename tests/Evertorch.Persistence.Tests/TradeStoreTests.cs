@@ -23,6 +23,15 @@ public sealed class TradeStoreTests
 
     private static readonly DateTime Now = new(2026, 10, 4, 12, 0, 0, DateTimeKind.Utc);
 
+    // A row worn in each of the eight positions, by its stored name (Persistence §5).
+    private static readonly (string Slot, string Item)[] WornEverywhere =
+    {
+        ("Weapon", Sword), ("Armor", "item.armor.cloth"), ("Headgear", "item.headgear.trail_cap"),
+        ("Shield", "item.shield.wooden_buckler"), ("Garment", "item.garment.travel_cape"),
+        ("Footwear", "item.footwear.trail_boots"), ("Accessory1", "item.accessory.traveler_charm"),
+        ("Accessory2", "item.accessory.grotto_charm")
+    };
+
     private static readonly IReadOnlyDictionary<string, int> Limits = new Dictionary<string, int>
     {
         [Gel] = GelStack,
@@ -309,6 +318,30 @@ public sealed class TradeStoreTests
         Assert.That(
             (result.First.InventoryRevision, result.First.Coins, result.Second.InventoryRevision, result.Second.Coins),
             Is.EqualTo((1u, 200L, 1u, 150L)));
+    }
+
+    // A row worn in any of the eight positions stays out of a trade (Milestone 20, session task T12): each is refused
+    // on its owner's side and moves nothing.
+    [Test]
+    public void Trades_OfARowWornInAnyPosition_AreRefused_AndMoveNothing()
+    {
+        (long ann, long bob) = NewPair();
+        long[] rows = WornEverywhere.Select(worn => Give(ann, worn.Item, 1)).ToArray();
+        for (int index = 0; index < rows.Length; index++)
+        {
+            m_sql.Execute(Sql.EquipmentInsert(ann, WornEverywhere[index].Slot, rows[index]));
+        }
+
+        TradeResult[] results = rows
+            .Select(row => Trade(Guid.NewGuid(), ann, Lines((row, 1)), 0, bob, Lines(), 0))
+            .ToArray();
+
+        Assert.That(
+            results.Select(result => (result.Status, result.RefusedCharacterId)),
+            Is.All.EqualTo((TradeStatus.Refused, (long?)ann)));
+        Assert.That((Ledger(ann), Ledger(bob)), Is.EqualTo((string.Empty, string.Empty)));
+        Assert.That(m_sql.Scalar($"SELECT count(*) FROM equipment WHERE character_id = {ann}"), Is.EqualTo(8));
+        Assert.That(m_sql.Scalar($"SELECT count(*) FROM inventory_items WHERE character_id = {bob}"), Is.Zero);
     }
 }
 }
