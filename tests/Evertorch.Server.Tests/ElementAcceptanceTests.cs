@@ -559,7 +559,7 @@ public sealed class ElementAcceptanceTests
         using var root = new TemporaryDirectory();
         PackageFixture.WriteTo(
             Path.Combine(root.Path, "content", "server"),
-            PackageFixture.BuildRepositoryPackage());
+            PackageFixture.BuildSeededPackage());
 
         ServerContent content;
         string[] veraBag;

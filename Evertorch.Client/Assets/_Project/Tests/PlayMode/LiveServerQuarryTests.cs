@@ -25,15 +25,19 @@ public sealed class LiveServerQuarryTests
     private const string ActionsAsset = "_Project/Settings/InputSystem_Actions.inputactions";
     private const string ClientName = "LiveQuarryOne";
     private const string FieldScene = "11_TrainingField";
+    private const string QuarryScene = "13_AshenQuarry";
     private const string Smith = "npc.smith";
     private const float StartTimeoutSeconds = 30f;
     private const float StepTimeoutSeconds = 20f;
     private const int TestTimeoutMs = 300_000;
 
-    // The ground's portal before its east gate, and the field under its north wall, two metres in front of the cells
-    // that Milestone 21 makes a gate.
+    // The ground's portal before its east gate; the field under its north wall, two metres in front of its northern
+    // gate, where an arrival from the quarry stands, and the portal before that gate; and the quarry's portal before its
+    // south gate.
     private static readonly WorldPosition GroundEastPortal = new(22.2f, 0f, 0f);
     private static readonly WorldPosition UnderTheNorthWall = new(-12f, 0f, 20.5f);
+    private static readonly WorldPosition FieldNorthPortal = new(-12f, 0f, 22.2f);
+    private static readonly WorldPosition QuarrySouthPortal = new(0f, 0f, -38.2f);
 
     // The balance baseline's Vanguard (owner decision 24) and the complete +0 dungeon set it wears.
     private static readonly string[] VanguardSkills =
@@ -86,10 +90,11 @@ public sealed class LiveServerQuarryTests
     }
 
     // A Vanguard of the balance baseline enters the training ground, where the Smith's fees reach it, crosses to the
-    // field, and walks up under its north wall, where nothing leads on yet (Gameplay Systems §4.2, §11.7).
+    // field, walks up under its north wall, and goes through its northern gate into the quarry, warm and fogged, and
+    // back (Gameplay Systems §4.2, §11.7; Prototype Content §2).
     [UnityTest]
     [Timeout(TestTimeoutMs)]
-    public IEnumerator North_TheRealClientWalksUpToTheFieldsNorthWall()
+    public IEnumerator North_TheRealClientGoesThroughTheFieldsNorthernGateIntoTheQuarryAndBack()
     {
         string actionsPath = RequirePrerequisites();
         yield return StartDatabaseAndServer();
@@ -123,6 +128,40 @@ public sealed class LiveServerQuarryTests
         yield return new WaitForSecondsRealtime(1f);
         Assert.That(client.World, Is.SameAs(field), "still on the field");
         Assert.That(SceneManager.GetActiveScene().name, Is.EqualTo(FieldScene), "the field's scene");
+
+        Assert.That(
+            client.Controller!.TryMoveTo(field.Predictor.Position, FieldNorthPortal),
+            Is.True,
+            "a way into the field's northern portal");
+        yield return WaitUntil(
+            () => client.World != null && client.World != field && client.World.Inventory.IsCurrent,
+            StepTimeoutSeconds);
+        ClientWorld quarry = client.World!;
+        Scene quarryScene = SceneManager.GetActiveScene();
+        Assert.That(quarry.Map.Value, Is.EqualTo("map.ashen_quarry"), $"{client.Status} {server.JoinOutput()}");
+        Assert.That(quarryScene.name, Is.EqualTo(QuarryScene));
+        Assert.That(RenderSettings.fog, Is.True, "the quarry's fog");
+        Assert.That(
+            quarryScene.GetRootGameObjects()
+                .SelectMany(root => root.GetComponentsInChildren<MapLook>())
+                .Select(look => look.Palette.Count),
+            Is.EqualTo(new[] { 6 }),
+            "the quarry's look, a colour for every surface");
+
+        Assert.That(
+            client.Controller!.TryMoveTo(quarry.Predictor.Position, QuarrySouthPortal),
+            Is.True,
+            "a way into the quarry's southern portal");
+        yield return WaitUntil(
+            () => client.World != null && client.World != quarry && client.World.Inventory.IsCurrent,
+            StepTimeoutSeconds);
+        WorldPosition back = client.World!.Predictor.Position;
+        Assert.That(client.World.Map.Value, Is.EqualTo("map.training_field"), client.Status);
+        Assert.That(SceneManager.GetActiveScene().name, Is.EqualTo(FieldScene), "the field's scene again");
+        Assert.That(
+            Math.Abs(back.X - UnderTheNorthWall.X) + Math.Abs(back.Z - UnderTheNorthWall.Z),
+            Is.LessThan(0.5f),
+            $"under the north wall, at {back}");
     }
 
     private void StoreTheVanguard(string name)
@@ -211,7 +250,7 @@ public sealed class LiveServerQuarryTests
         Assert.That(starting.IsFaulted, Is.False, starting.Exception?.GetBaseException().Message);
         m_database = starting.Result;
         LiveServer server = m_server = new LiveServer();
-        server.Start(m_database, "--World:RandomSeed=21", contentPath);
+        server.Start(m_database, "--World:RandomSeed=21", contentPath ?? LiveServer.ContentPath);
         Assert.That(server.IsTiedToEditor || !KillOnCloseJob.IsSupported, Is.True, "the server ends with the editor");
         yield return WaitUntil(() => server.TryReadListeningPort(out int _), StartTimeoutSeconds);
     }

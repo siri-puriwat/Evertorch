@@ -14,12 +14,14 @@ using Object = UnityEngine.Object;
 namespace Evertorch.Client.Tests.PlayMode
 {
 /// <summary>
-///     A map's look (Prototype Content §2): the graybox takes its colours from the scene's <see cref="MapLook" />, and
-///     the Umbral Grotto's scene is dark and fogged, with a colour for every surface.
+///     A map's look (Prototype Content §2): the graybox takes its colours from the scene's <see cref="MapLook" />; the
+///     Umbral Grotto's scene is dark and fogged, and the Ashen Quarry's warm and fogged, each with a colour for every
+///     surface.
 /// </summary>
 public sealed class MapLookTests
 {
     private const string GrottoScene = "12_UmbralGrotto";
+    private const string QuarryScene = "13_AshenQuarry";
 
     private static readonly int SurfaceCount = Enum.GetValues(typeof(GrayboxSurface)).Length;
 
@@ -49,6 +51,26 @@ public sealed class MapLookTests
         }
 
         return new NavigationGrid(size, size, 1f, 0f, 0f, 0.3f, 0.4f, cells);
+    }
+
+    // WCAG's contrast ratio of two colours' relative luminances.
+    private static float Contrast(Color first, Color second)
+    {
+        float lighter = Mathf.Max(Luminance(first), Luminance(second));
+        float darker = Mathf.Min(Luminance(first), Luminance(second));
+        return (lighter + 0.05f) / (darker + 0.05f);
+    }
+
+    private static float Luminance(Color colour)
+    {
+        Color linear = colour.linear;
+        return 0.2126f * linear.r + 0.7152f * linear.g + 0.0722f * linear.b;
+    }
+
+    private static float Saturation(Color colour)
+    {
+        Color.RGBToHSV(colour, out float _, out float saturation, out float _);
+        return saturation;
     }
 
     private Color[] SurfaceColours(IReadOnlyList<Color>? palette)
@@ -112,6 +134,47 @@ public sealed class MapLookTests
         Assert.That(background.maxColorComponent, Is.LessThan(0.1f), "a dark background");
         Assert.That(sunIntensity, Is.LessThan(1f), "a dim light");
         Assert.That(palettes, Is.EqualTo(new[] { SurfaceCount }), "one look, a colour for every surface");
+    }
+
+    // Owner decision 20: a warm, dim light, a warm flat ambient, and a warm fog over ash floors and charcoal walls. The
+    // area telegraph's ring is drawn unlit (Gameplay Systems §9), so it must read on the floor by its luminance and its
+    // hue alike.
+    [UnityTest]
+    public IEnumerator AshenQuarry_Scene_IsWarmAndFogged_AndTheTelegraphReadsOnItsFloor()
+    {
+        Scene runner = SceneManager.GetActiveScene();
+        yield return SceneManager.LoadSceneAsync(QuarryScene, LoadSceneMode.Additive);
+        Scene quarry = SceneManager.GetSceneByName(QuarryScene);
+        SceneManager.SetActiveScene(quarry);
+        bool isFogged = RenderSettings.fog;
+        Color fog = RenderSettings.fogColor;
+        AmbientMode ambientMode = RenderSettings.ambientMode;
+        Color ambient = RenderSettings.ambientLight;
+        GameObject[] roots = quarry.GetRootGameObjects();
+        Light sun = roots.Select(root => root.GetComponent<Light>()).Single(found => found != null);
+        Color sunColour = sun.color;
+        float sunIntensity = sun.intensity;
+        IReadOnlyList<Color>[] palettes = roots
+            .SelectMany(root => root.GetComponentsInChildren<MapLook>())
+            .Select(look => look.Palette)
+            .ToArray();
+        SceneManager.SetActiveScene(runner);
+        yield return SceneManager.UnloadSceneAsync(quarry);
+
+        Assert.That(isFogged, Is.True, "fog");
+        Assert.That(ambientMode, Is.EqualTo(AmbientMode.Flat));
+        Assert.That(
+            new[] { fog, ambient, sunColour }.Select(colour => colour.r > colour.b),
+            Is.All.True,
+            "a warm fog, ambient, and light");
+        Assert.That(sunIntensity, Is.LessThan(1f), "a dim light");
+        Assert.That(palettes.Select(palette => palette.Count), Is.EqualTo(new[] { SurfaceCount }), "one look");
+        Color floor = palettes[0][(int)GrayboxSurface.Floor];
+        Assert.That(Contrast(AreaTelegraphPresenter.RingColor, floor), Is.GreaterThanOrEqualTo(1.8f), "luminance");
+        Assert.That(
+            Saturation(AreaTelegraphPresenter.RingColor) - Saturation(floor),
+            Is.GreaterThanOrEqualTo(0.5f),
+            "a vivid ring on grey ash");
     }
 }
 }

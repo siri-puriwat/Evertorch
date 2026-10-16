@@ -19,8 +19,9 @@ namespace Evertorch.Server.Tests
 ///     networking and gameplay code. Kael and Tarn, Vanguards, and Ilsa, an Arcanist, each stored at base level 25 and
 ///     job level 10 with the balance baseline's build and the complete +0 dungeon set (Prototype Content §6), enter the
 ///     training ground together; the Smith sends its removal fees and the Gate Warden offers its quests; the three
-///     cross to the training field and walk up under its north wall; and after a clean stop a second host on the same
-///     database finds them there with their builds and their gear. Each later line of the milestone adds its steps.
+///     cross to the training field, walk up under its north wall, and go through its northern gate into the Ashen
+///     Quarry and back; and after a clean stop a second host on the same database finds them under the wall with their
+///     builds and their gear. Each later line of the milestone adds its steps.
 /// </summary>
 [TestFixture]
 [NonParallelizable]
@@ -28,6 +29,7 @@ public sealed class QuarryAcceptanceTests
 {
     private const string TrainingGround = "map.training_ground";
     private const string TrainingField = "map.training_field";
+    private const string AshenQuarry = "map.ashen_quarry";
     private const string GateWarden = "npc.gate_warden";
     private const string Smith = "npc.smith";
     private const string Vanguard = "job.vanguard";
@@ -87,7 +89,8 @@ public sealed class QuarryAcceptanceTests
     // East of the training ground's spawn point, where both the Smith and the Gate Warden are in view.
     private static readonly WorldPosition BackInTown = new(4f, 0f, 0f);
 
-    // Under the training field's north wall, two metres in front of the cells that Milestone 21 makes a gate.
+    // Under the training field's north wall, two metres in front of its northern gate, where an arrival from the
+    // quarry stands.
     private static readonly WorldPosition UnderTheNorthWall = new(-12f, 0f, 20.5f);
 
     private PostgresFixture m_database = null!;
@@ -266,7 +269,7 @@ public sealed class QuarryAcceptanceTests
             $"{step}: every member followed its character to the field");
     }
 
-    // The party walks up under the field's north wall; nothing there leads on yet.
+    // The party walks up under the field's north wall, short of the portal before its gate.
     private static void WalkUnderTheNorthWall(params SocketClient[] party)
     {
         const string step = "the north wall";
@@ -291,6 +294,61 @@ public sealed class QuarryAcceptanceTests
                 $"{step}: still on the field");
             Assert.That(client.DistanceTo(UnderTheNorthWall), Is.LessThan(0.5f), $"{step}: under the wall");
         }
+    }
+
+    // Gameplay Systems §4.2: the party walks into the portal before the field's northern gate and follows its
+    // characters into the quarry's arrival yard; then into the portal before the quarry's south gate, and back under
+    // the field's north wall.
+    private static void CrossToTheQuarryAndBack(ServerContent content, params SocketClient[] party)
+    {
+        var field = new MapDefinitionId(TrainingField);
+        var quarry = new MapDefinitionId(AshenQuarry);
+        MapPortal north = content.Maps[field].Portals.Single(portal => portal.DestinationMap == quarry);
+        MapPortal south = content.Maps[quarry].Portals.Single();
+
+        Cross("to the quarry", new WorldPosition(north.Center.X, 0f, north.Center.Z - 0.3f), quarry, party);
+        foreach (SocketClient client in party)
+        {
+            Assert.That(
+                client.DistanceTo(content.Maps[quarry].SpawnPosition),
+                Is.LessThan(0.5f),
+                "to the quarry: in its arrival yard");
+        }
+
+        Cross("back to the field", new WorldPosition(south.Center.X, 0f, south.Center.Z + 0.3f), field, party);
+        SocketClients.PumpFor(TimeSpan.FromSeconds(1), party);
+        foreach (SocketClient client in party)
+        {
+            Assert.That(client.World.Map, Is.EqualTo(field), "back to the field: still there");
+            Assert.That(
+                client.DistanceTo(UnderTheNorthWall),
+                Is.LessThan(0.5f),
+                "back to the field: under the north wall");
+        }
+    }
+
+    private static void Cross(
+        string step,
+        WorldPosition intoThePortal,
+        MapDefinitionId destination,
+        params SocketClient[] party)
+    {
+        foreach (SocketClient client in party)
+        {
+            Assert.That(
+                client.Controller.TryMoveTo(client.World.Predictor.Position, intoThePortal),
+                Is.True,
+                $"{step}: a way into the portal");
+        }
+
+        Assert.That(
+            SocketClients.PumpUntil(
+                () => party.All(client => client.Connection.World?.Map == destination
+                    && client.Connection.World.Inventory.IsCurrent),
+                WalkLimit,
+                party),
+            Is.True,
+            $"{step}: every member followed its character");
     }
 
     private void Store(string name, BuildSeed build, IReadOnlyList<int> stats, string weapon)
@@ -345,10 +403,10 @@ public sealed class QuarryAcceptanceTests
     }
 
     [Test]
-    public void AParty_OverRealSocketsAndPostgres_GoesNorthAcrossTheFieldAndKeepsItsBuildsThroughARestart()
+    public void AParty_OverRealSocketsAndPostgres_GoesIntoTheQuarryAndBackAndKeepsItsBuildsThroughARestart()
     {
         using var root = new TemporaryDirectory();
-        PackageFixture.WriteTo(Path.Combine(root.Path, "content", "server"), PackageFixture.BuildRepositoryPackage());
+        PackageFixture.WriteTo(Path.Combine(root.Path, "content", "server"), PackageFixture.BuildSeededPackage(true));
 
         ServerContent content;
         using (IHost host = StartHost(root.Path))
@@ -369,6 +427,9 @@ public sealed class QuarryAcceptanceTests
 
             WalkUnderTheNorthWall(kael, tarn, ilsa);
             AssertCleanTraffic("the north wall", kael, tarn, ilsa);
+
+            CrossToTheQuarryAndBack(content, kael, tarn, ilsa);
+            AssertCleanTraffic("the quarry and back", kael, tarn, ilsa);
             Stop(host, kael, tarn, ilsa);
         }
 

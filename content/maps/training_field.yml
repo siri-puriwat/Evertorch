@@ -31,6 +31,13 @@ server:
         map: map.umbral_grotto
         position: { x: -29.0, y: 0.0, z: -22.0 }
         facing: { x: 1.0, z: 0.0 }
+    # In front of the north gate; arrivals in the quarry face north before its south gate.
+    - center: { x: -12.0, y: 0.0, z: 22.5 }
+      radius: 1.0
+      destination:
+        map: map.ashen_quarry
+        position: { x: 0.0, y: 0.0, z: -37.0 }
+        facing: { x: 0.0, z: 1.0 }
 navigation:
   # One symbol per cell, northern row first, as on the training ground.
   cellSize: 1.0
@@ -43,7 +50,7 @@ navigation:
     - { symbol: "o", surface: obstacle, height: 0.0 }
     - { symbol: "G", surface: gate, height: 0.0 }
   rows:
-    - "################################################"
+    - "###########GG###################################"
     - "#..............................................#"
     - "#..............................................#"
     - "#..............................................#"

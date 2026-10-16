@@ -31,6 +31,33 @@ internal static class PackageFixture
         return Build(RepositoryContentDirectory);
     }
 
+    /// <summary>
+    ///     The repository's package for a host given a seed (Coding Standards §10). The Ashen Quarry sorts before every
+    ///     other map, so its monsters would spawn first, renumber every other entity, and shift every seeded draw: its
+    ///     spawns are removed unless a test asks for them, and the manifest is signed again with the repository's client
+    ///     content version, so the real client still connects.
+    /// </summary>
+    public static Dictionary<string, byte[]> BuildSeededPackage(bool withQuarrySpawns = false)
+    {
+        Dictionary<string, byte[]> files = BuildRepositoryPackage();
+        if (!withQuarrySpawns)
+        {
+            string clientContentVersion = ClientContentVersionOf(files);
+            WithoutSpawns(files, "map.ashen_quarry");
+            RewriteManifest(files, clientContentVersion);
+        }
+
+        return files;
+    }
+
+    // The loader refuses a spawn of no monster but takes a map with none, so the entries go.
+    private static void WithoutSpawns(Dictionary<string, byte[]> files, string map)
+    {
+        JsonArray definitions = JsonNode.Parse(files["maps.json"])!["definitions"]!.AsArray();
+        definitions.Single(node => (string?)node!["id"] == map)!["monsterSpawns"] = new JsonArray();
+        files["maps.json"] = Encoding.UTF8.GetBytes(definitions.Root.ToJsonString());
+    }
+
     public static Dictionary<string, byte[]> BuildFixturePackage()
     {
         return Build(FixtureContentDirectory);

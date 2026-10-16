@@ -23,6 +23,8 @@ public sealed class ClientProjectWiringTests
     [TestCase("11_TrainingField", true, false)]
     [TestCase("12_UmbralGrotto", false, true)]
     [TestCase("12_UmbralGrotto", true, false)]
+    [TestCase("13_AshenQuarry", false, true)]
+    [TestCase("13_AshenQuarry", true, false)]
     [TestCase("01_MainMenu", false, true)]
     [TestCase("01_MainMenu", true, false)]
     [TestCase("00_Bootstrap", false, false)]
@@ -87,6 +89,7 @@ public sealed class ClientProjectWiringTests
     [TestCase("map_training_ground", "10_TrainingGround")]
     [TestCase("map_training_field", "11_TrainingField")]
     [TestCase("map_umbral_grotto", "12_UmbralGrotto")]
+    [TestCase("map_ashen_quarry", "13_AshenQuarry")]
     public void MapSceneResolver_KnownKey_NamesItsMapScene(string sceneKey, string expected)
     {
         bool found = MapSceneResolver.TryResolve(sceneKey, out string sceneName);
@@ -317,7 +320,7 @@ public sealed class ClientProjectWiringTests
     }
 
     [Test]
-    public void MapScenes_FollowOneAnotherInTheBuild_TheFieldAfterTheGround_AndTheGrottoAfterTheField()
+    public void MapScenes_FollowOneAnotherInTheBuild_TheField_TheGrotto_AndTheQuarryAfterTheGround()
     {
         string[] buildScenes = EditorBuildSettings.scenes
             .Where(scene => scene.enabled)
@@ -327,8 +330,8 @@ public sealed class ClientProjectWiringTests
         int ground = Array.IndexOf(buildScenes, "10_TrainingGround");
         Assert.That(ground, Is.GreaterThan(1));
         Assert.That(
-            buildScenes.Skip(ground).Take(3),
-            Is.EqualTo(new[] { "10_TrainingGround", "11_TrainingField", "12_UmbralGrotto" }));
+            buildScenes.Skip(ground).Take(4),
+            Is.EqualTo(new[] { "10_TrainingGround", "11_TrainingField", "12_UmbralGrotto", "13_AshenQuarry" }));
     }
 }
 }

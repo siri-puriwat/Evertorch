@@ -7,8 +7,8 @@ using NUnit.Framework;
 namespace Evertorch.Server.Tests
 {
 /// <summary>
-///     Crossing between the training ground and the training field (Gameplay Systems §4.2; Network Protocol §3, §10,
-///     §12): who crosses and when, what the crossing ends, what everyone is told, and the map epoch on movement input.
+///     Crossing between the maps (Gameplay Systems §4.2; Network Protocol §3, §10, §12): who crosses and when, what the
+///     crossing ends, what everyone is told, and the map epoch on movement input.
 /// </summary>
 [TestFixture]
 public sealed class MapTransferTests
@@ -16,6 +16,7 @@ public sealed class MapTransferTests
     private static readonly MapDefinitionId Ground = new("map.training_ground");
     private static readonly MapDefinitionId Field = new("map.training_field");
     private static readonly MapDefinitionId Grotto = new("map.umbral_grotto");
+    private static readonly MapDefinitionId Quarry = new("map.ashen_quarry");
 
     private static MapInstance MapOf(TestServer server, MapDefinitionId id)
     {
@@ -143,6 +144,36 @@ public sealed class MapTransferTests
         Assert.That(server.SessionOf(player).MapEpoch, Is.EqualTo(3));
     }
 
+    // The field's northern gate leads into the quarry, and the quarry's south gate back (Gameplay Systems §4.2); each
+    // arrival stands outside every portal, so the character stays where it arrived.
+    [Test]
+    public void Crossing_TheFieldsNorthernGate_LeadsIntoTheQuarryAndBack()
+    {
+        var server = new TestServer(withEveryMap: true, withQuarry: true);
+        ConnectionId player = server.EnterWorld(1);
+        StandIn(server, player, PortalOf(server, Ground, Field));
+        server.Tick(TestServer.TickRate + 1);
+        MapPortal toQuarry = PortalOf(server, Field, Quarry);
+
+        StandIn(server, player, toQuarry);
+        server.Tick();
+        MapDefinitionId inside = CharacterOf(server, player).Map.Definition.Id;
+        WorldPosition arrival = server.PlayerOf(player).Position;
+        server.Tick(TestServer.TickRate);
+        MapDefinitionId stayed = CharacterOf(server, player).Map.Definition.Id;
+        MapPortal toField = PortalOf(server, Quarry, Field);
+        StandIn(server, player, toField);
+        server.Tick();
+        server.Tick(TestServer.TickRate * 2);
+
+        Assert.That((inside, stayed), Is.EqualTo((Quarry, Quarry)), "into the quarry, and still there a second on");
+        Assert.That(arrival, Is.EqualTo(MapOf(server, Quarry).Definition.SpawnPosition), "before its south gate");
+        Assert.That(CharacterOf(server, player).Map.Definition.Id, Is.EqualTo(Field), "back on the field");
+        Assert.That(server.PlayerOf(player).Position, Is.EqualTo(toField.DestinationPosition), "under its north wall");
+        Assert.That(MapOf(server, Field).Definition.IsInPortal(toField.DestinationPosition), Is.False);
+        Assert.That(server.SessionOf(player).MapEpoch, Is.EqualTo(3));
+    }
+
     [Test]
     public void Crossing_WaitsForAPickupInFlight_AndNeverTakesTheDeadOrTheLeaving()
     {
@@ -179,6 +210,25 @@ public sealed class MapTransferTests
         Assert.That(stayed, Is.EqualTo(new[] { true, true, true }));
         Assert.That(CharacterOf(server, waiting).Map.Definition.Id, Is.EqualTo(Field), "once the pickup settled");
         Assert.That(CharacterOf(server, dead).Map.Definition.Id, Is.EqualTo(Ground));
+    }
+
+    [Test]
+    public void Death_InTheQuarry_RespawnsAtTheQuarrysSpawnPoint()
+    {
+        var server = new TestServer(withEveryMap: true, withQuarry: true);
+        ConnectionId player = server.EnterWorld(1);
+        server.CrossIntoTheQuarry(player);
+        PlayerEntity entity = server.PlayerOf(player);
+        entity.Position = new WorldPosition(-28f, 0f, -10f);
+
+        server.Combat.Kill(MapOf(server, Quarry), entity, null, server.CurrentTick);
+        server.Tick();
+        server.SendRespawn(player, 1);
+        server.Tick();
+
+        Assert.That(entity.IsDead, Is.False);
+        Assert.That(CharacterOf(server, player).Map.Definition.Id, Is.EqualTo(Quarry));
+        Assert.That(entity.Position, Is.EqualTo(MapOf(server, Quarry).Definition.SpawnPosition), "in the arrival yard");
     }
 
     [Test]

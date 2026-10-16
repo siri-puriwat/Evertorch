@@ -21,7 +21,7 @@ public sealed class AreaTelegraphPresenter : IDisposable
     private const float RingLift = 0.03f;
     private const int RingSegments = 64;
 
-    private static readonly Color RingColor = new(0.95f, 0.25f, 0.15f);
+    public static readonly Color RingColor = new(0.95f, 0.25f, 0.15f);
 
     private readonly ClientWorld m_world;
     private readonly ClientContent m_content;

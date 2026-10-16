@@ -10,11 +10,15 @@ namespace Evertorch.Client.Tests.PlayMode
 /// <summary>
 ///     A copy of the repository's server package with server-only values of one monster changed, or skills taken off
 ///     monsters, signed again with the same client content version, so the real client still connects to the server
-///     that loads it (Coding Standards §10). The copy lives in a temporary folder until it is disposed.
+///     that loads it (Coding Standards §10). The Ashen Quarry sorts before every other map, so its monsters would spawn
+///     first and shift every seeded draw: a copy leaves its spawns out unless a test asks for them. The copy lives in a
+///     temporary folder until it is disposed.
 /// </summary>
 public sealed class LiveTestPackage : IDisposable
 {
     private const string ManifestFile = "manifest.json";
+    private const string MapsFile = "maps.json";
+    private const string QuarryMap = "map.ashen_quarry";
 
     /// <summary>
     ///     Milestone 19's monster skills, which the classes written before them take off, so their seeded fights draw as
@@ -43,6 +47,14 @@ public sealed class LiveTestPackage : IDisposable
     }
 
     /// <summary>
+    ///     Copies the repository's server package for a host given a seed, without the quarry's spawns.
+    /// </summary>
+    public static LiveTestPackage Seeded()
+    {
+        return WithMonster(null, new Dictionary<string, string>());
+    }
+
+    /// <summary>
     ///     Copies the repository's server package and takes each named skill off its monster's list.
     /// </summary>
     public static LiveTestPackage WithoutSkills(IReadOnlyList<(string Monster, string Skill)> skills)
@@ -52,12 +64,14 @@ public sealed class LiveTestPackage : IDisposable
 
     /// <summary>
     ///     Copies the repository's server package, sets each named field of <paramref name="monster" /> to its new JSON
-    ///     value, and takes each of <paramref name="skills" /> off its monster's list.
+    ///     value, takes each of <paramref name="skills" /> off its monster's list, and the quarry's spawns off its map
+    ///     unless <paramref name="withQuarry" />.
     /// </summary>
     public static LiveTestPackage WithMonster(
         string? monster,
         IReadOnlyDictionary<string, string> fields,
-        IReadOnlyList<(string Monster, string Skill)>? skills = null)
+        IReadOnlyList<(string Monster, string Skill)>? skills = null,
+        bool withQuarry = false)
     {
         string path = System.IO.Path.Combine(
             System.IO.Path.GetTempPath(),
@@ -82,8 +96,44 @@ public sealed class LiveTestPackage : IDisposable
         }
 
         File.WriteAllText(monstersPath, json);
+        if (!withQuarry)
+        {
+            string mapsPath = System.IO.Path.Combine(path, MapsFile);
+            File.WriteAllText(mapsPath, WithoutSpawns(File.ReadAllText(mapsPath), QuarryMap));
+        }
+
         package.Sign();
         return package;
+    }
+
+    // Empties the map's list of spawns, which the loader takes for a map with none. The tools write the list's brackets
+    // on its key's line and its last, and no ID holds a bracket.
+    private static string WithoutSpawns(string json, string map)
+    {
+        const string key = "\"monsterSpawns\": [";
+        int definition = json.IndexOf($"\"id\": \"{map}\"", StringComparison.Ordinal);
+        int start = definition < 0 ? -1 : json.IndexOf(key, definition, StringComparison.Ordinal);
+        int next = definition < 0 ? -1 : json.IndexOf("\"id\": \"map.", definition + 1, StringComparison.Ordinal);
+        if (start < 0 || (next >= 0 && next < start))
+        {
+            throw new InvalidOperationException($"The server package lists no spawns of '{map}'.");
+        }
+
+        int open = start + key.Length - 1;
+        int depth = 0;
+        for (int index = open; index < json.Length; index++)
+        {
+            if (json[index] == '[')
+            {
+                depth++;
+            }
+            else if (json[index] == ']' && --depth == 0)
+            {
+                return json.Remove(open + 1, index - open - 1);
+            }
+        }
+
+        throw new InvalidOperationException($"The spawns of '{map}' have no end.");
     }
 
     // Takes the skill's object out of the monster's list with the comma that joins it to a neighbour.

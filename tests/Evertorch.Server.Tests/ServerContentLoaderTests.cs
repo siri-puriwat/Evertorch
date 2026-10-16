@@ -278,9 +278,9 @@ public sealed class ServerContentLoaderTests
         Assert.That(problems[0], Does.StartWith("maps.json: map.training_ground: ").And.Contain(problem));
     }
 
-    private static bool GateBeside(MapDefinition map, WorldPosition portal, float step)
+    private static bool GateBeside(MapDefinition map, WorldPosition portal, float step, float stepZ = 0f)
     {
-        return map.Navigation.TryGetCellIndex(portal.X + step, portal.Z, out int column, out int row)
+        return map.Navigation.TryGetCellIndex(portal.X + step, portal.Z + stepZ, out int column, out int row)
             && map.Navigation.GetCell(column, row).Surface == NavigationSurface.Gate;
     }
 
@@ -449,6 +449,27 @@ public sealed class ServerContentLoaderTests
         Assert.That((toGrotto.DestinationFacing.X, toField.DestinationFacing.X), Is.EqualTo((1f, -1f)));
         Assert.That(GateBeside(field, toGrotto.Center, 1f), Is.True, "the field's portal lies before its east gate");
         Assert.That(GateBeside(grotto, toField.Center, -1f), Is.True, "the grotto's lies before its west gate");
+    }
+
+    [Test]
+    public void Load_ForRepositoryContent_JoinsTheFieldAndTheQuarryBothWays()
+    {
+        ServerContent content = ServerContentLoader.Load(PackageFixture.BuildRepositoryPackage());
+        MapDefinition field = content.Maps[new MapDefinitionId("map.training_field")];
+        MapDefinition quarry = content.Maps[new MapDefinitionId("map.ashen_quarry")];
+
+        MapPortal toQuarry = field.Portals.Single(portal => portal.DestinationMap == quarry.Id);
+        MapPortal toField = quarry.Portals.Single();
+
+        Assert.That(toField.DestinationMap, Is.EqualTo(field.Id));
+        Assert.That(toQuarry.DestinationPosition, Is.EqualTo(quarry.SpawnPosition), "arrivals by the quarry's gate");
+        Assert.That(quarry.IsInPortal(toQuarry.DestinationPosition), Is.False);
+        Assert.That(field.IsInPortal(toField.DestinationPosition), Is.False);
+        Assert.That(quarry.IsInPortal(quarry.SpawnPosition), Is.False);
+        Assert.That((toQuarry.DestinationFacing.Z, toField.DestinationFacing.Z), Is.EqualTo((1f, -1f)));
+        Assert.That(GateBeside(field, toQuarry.Center, 0f, 1f), Is.True,
+            "the field's portal lies before its north gate");
+        Assert.That(GateBeside(quarry, toField.Center, 0f, -1f), Is.True, "the quarry's lies before its south gate");
     }
 
     [Test]

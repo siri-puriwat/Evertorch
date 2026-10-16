@@ -399,7 +399,7 @@ public sealed class AdventurerBuildAcceptanceTests
         using var root = new TemporaryDirectory();
         PackageFixture.WriteTo(
             Path.Combine(root.Path, "content", "server"),
-            PackageFixture.BuildRepositoryPackage());
+            PackageFixture.BuildSeededPackage());
 
         PlayerSummary stopped;
         using (IHost first = StartHost(root.Path))

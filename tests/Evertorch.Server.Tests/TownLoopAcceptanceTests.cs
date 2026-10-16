@@ -1114,7 +1114,7 @@ public sealed class TownLoopAcceptanceTests
         using var root = new TemporaryDirectory();
         PackageFixture.WriteTo(
             Path.Combine(root.Path, "content", "server"),
-            PackageFixture.BuildRepositoryPackage());
+            PackageFixture.BuildSeededPackage());
 
         var logs = new CapturingLoggerProvider();
         Stopped stopped;

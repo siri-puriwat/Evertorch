@@ -8,9 +8,10 @@ using System.Text.Json.Nodes;
 namespace Evertorch.Server.Tests
 {
 /// <summary>
-///     The server-only test package of Milestone 13 (Coding Standards §10): the repository's content with server-only
-///     values changed, such as a weaker boss and a shorter respawn, and the manifest signed again with the repository's
-///     client content version, so the real client still connects to a server that loads it.
+///     The server-only test package of Milestone 13 (Coding Standards §10): the seeded hosts' repository content
+///     (<see cref="PackageFixture.BuildSeededPackage" />) with server-only values changed, such as a weaker boss and a
+///     shorter respawn, and the manifest signed again with the repository's client content version, so the real client
+///     still connects to a server that loads it.
 /// </summary>
 internal static class DungeonPackage
 {
@@ -20,7 +21,7 @@ internal static class DungeonPackage
 
     public static Dictionary<string, byte[]> Build(params Action<Dictionary<string, byte[]>>[] edits)
     {
-        Dictionary<string, byte[]> files = PackageFixture.BuildRepositoryPackage();
+        Dictionary<string, byte[]> files = PackageFixture.BuildSeededPackage();
         string clientContentVersion = PackageFixture.ClientContentVersionOf(files);
         foreach (Action<Dictionary<string, byte[]>> edit in edits)
         {

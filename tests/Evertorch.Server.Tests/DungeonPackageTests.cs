@@ -54,9 +54,9 @@ public sealed class DungeonPackageTests
     }
 
     [Test]
-    public void Build_WithNoEdit_IsTheRepositoryPackage()
+    public void Build_WithNoEdit_IsTheSeededPackage()
     {
-        Dictionary<string, byte[]> repository = PackageFixture.BuildRepositoryPackage();
+        Dictionary<string, byte[]> repository = PackageFixture.BuildSeededPackage();
         Dictionary<string, byte[]> files = DungeonPackage.Build();
 
         Assert.That(

@@ -456,7 +456,7 @@ public sealed class MarketAcceptanceTests
         using var root = new TemporaryDirectory();
         PackageFixture.WriteTo(
             Path.Combine(root.Path, "content", "server"),
-            PackageFixture.BuildRepositoryPackage());
+            PackageFixture.BuildSeededPackage());
 
         ServerContent content;
         using (IHost host = StartHost(root.Path))

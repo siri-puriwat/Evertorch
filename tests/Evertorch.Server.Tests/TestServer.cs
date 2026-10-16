@@ -31,12 +31,14 @@ internal sealed class TestServer
         new(() => ServerContentLoader.Load(PackageFixture.BuildRepositoryPackage()));
 
     private static readonly MapDefinitionId GrottoMap = new("map.umbral_grotto");
+    private static readonly MapDefinitionId QuarryMap = new("map.ashen_quarry");
 
     // Most server tests are about players on the starting map; without the other maps, monsters, and NPCs their
-    // message counts and entity IDs stay exact. Every map leaves the grotto out unless it is asked for: its monsters
-    // draw from the one random source, which would shift every seeded test on the other maps. Each combination is
-    // built once.
-    private static readonly ConcurrentDictionary<(bool EveryMap, bool Grotto, bool Monsters, bool Npcs), ServerContent>
+    // message counts and entity IDs stay exact. Every map leaves the grotto and the quarry out unless each is asked
+    // for: their monsters draw from the one random source, which would shift every seeded test on the other maps, and
+    // the quarry sorts before every map. Each combination is built once.
+    private static readonly
+        ConcurrentDictionary<(bool EveryMap, bool Grotto, bool Quarry, bool Monsters, bool Npcs), ServerContent>
         Contents = new();
 
     private readonly TickPipeline m_pipeline;
@@ -73,20 +75,17 @@ internal sealed class TestServer
         int bossHealthPercent = 100,
         int cardChanceScale = 1,
         ServerContent? content = null,
-        int ailmentChanceScale = 1)
+        int ailmentChanceScale = 1,
+        bool withQuarry = false)
     {
         // A test's own content, the repository's package edited for one rule, is copied the same way but never shared.
         Content = content != null
-            ? Copy(
-                content,
-                map => map.Id == GrottoMap ? withGrotto : withEveryMap || IsStartingMap(map),
-                withMonsters,
-                withNpcs)
+            ? Copy(content, map => IsKept(map, withEveryMap, withGrotto, withQuarry), withMonsters, withNpcs)
             : Contents.GetOrAdd(
-                (withEveryMap, withGrotto, withMonsters, withNpcs),
+                (withEveryMap, withGrotto, withQuarry, withMonsters, withNpcs),
                 key => Copy(
                     RepositoryContent.Value,
-                    map => map.Id == GrottoMap ? key.Grotto : key.EveryMap || IsStartingMap(map),
+                    map => IsKept(map, key.EveryMap, key.Grotto, key.Quarry),
                     key.Monsters,
                     key.Npcs));
 
@@ -1126,6 +1125,19 @@ internal sealed class TestServer
         Tick();
     }
 
+    /// <summary>
+    ///     Walks the player into the ground's portal and, a second after it arrives on the field, into the field's
+    ///     northern portal, which leads it into the Ashen Quarry; the server must load every map and the quarry.
+    /// </summary>
+    public void CrossIntoTheQuarry(ConnectionId connection)
+    {
+        PlayerEntity player = PlayerOf(connection);
+        player.Position = PortalOf("map.training_ground", "map.training_field").Center;
+        Tick(TickRate + 1);
+        player.Position = PortalOf("map.training_field", "map.ashen_quarry").Center;
+        Tick();
+    }
+
     public void Place(ConnectionId connection, float x, float z)
     {
         PlayerEntity player = PlayerOf(connection);
@@ -1143,6 +1155,16 @@ internal sealed class TestServer
         float dx = to.X - from.X;
         float dz = to.Z - from.Z;
         return (float)Math.Sqrt(dx * dx + dz * dz);
+    }
+
+    private static bool IsKept(MapDefinition map, bool withEveryMap, bool withGrotto, bool withQuarry)
+    {
+        if (map.Id == GrottoMap)
+        {
+            return withGrotto;
+        }
+
+        return map.Id == QuarryMap ? withQuarry : withEveryMap || IsStartingMap(map);
     }
 
     private static bool IsStartingMap(MapDefinition map)

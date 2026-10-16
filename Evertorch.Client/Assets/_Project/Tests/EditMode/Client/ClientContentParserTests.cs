@@ -661,6 +661,9 @@ public sealed class ClientContentParserTests
         Assert.That(content.TryGetMap(new MapDefinitionId("map.umbral_grotto"), out ClientMap? grotto), Is.True);
         Assert.That(MapSceneResolver.TryResolve(grotto!.SceneKey, out string grottoScene), Is.True);
         Assert.That(grottoScene, Is.EqualTo("12_UmbralGrotto"));
+        Assert.That(content.TryGetMap(new MapDefinitionId("map.ashen_quarry"), out ClientMap? quarry), Is.True);
+        Assert.That(MapSceneResolver.TryResolve(quarry!.SceneKey, out string quarryScene), Is.True);
+        Assert.That(quarryScene, Is.EqualTo("13_AshenQuarry"));
         Assert.That(content.TryGetJob(new JobDefinitionId("job.adventurer"), out ClientJob? job), Is.True);
         Assert.That(job!.PrefabKey, Is.EqualTo("character_adventurer"));
         Assert.That(

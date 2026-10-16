@@ -1086,7 +1086,7 @@ public sealed class PrototypeAcceptanceTests
     [Test]
     public void StandableToward_WhereItsLineHasNoPlaceToStand_TurnsUntilOneIsInSight()
     {
-        ServerContent content = ServerContentLoader.Load(PackageFixture.BuildRepositoryPackage());
+        ServerContent content = ServerContentLoader.Load(PackageFixture.BuildSeededPackage());
         NavigationGrid field = content.Maps[new MapDefinitionId("map.training_field")].Navigation;
         var wisp = new WorldPosition(9.19346f, 0f, -7.222365f);
         var staging = new WorldPosition(0.67014027f, 0f, -6.400872f);
@@ -1103,7 +1103,7 @@ public sealed class PrototypeAcceptanceTests
         using var root = new TemporaryDirectory();
         PackageFixture.WriteTo(
             Path.Combine(root.Path, "content", "server"),
-            PackageFixture.BuildRepositoryPackage());
+            PackageFixture.BuildSeededPackage());
 
         var logs = new CapturingLoggerProvider();
         Dictionary<string, PlayerSummary> stopped;

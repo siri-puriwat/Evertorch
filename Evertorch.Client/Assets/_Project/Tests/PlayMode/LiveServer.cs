@@ -33,6 +33,7 @@ internal sealed class LiveServer : IDisposable
     private readonly List<string> m_output = new();
     private Process? m_process;
     private KillOnCloseJob? m_job;
+    private LiveTestPackage? m_package;
     private int m_accounts;
 
     // Kept apart from the output, which a test may clear before it reads a command's answer.
@@ -77,6 +78,8 @@ internal sealed class LiveServer : IDisposable
 
         m_job?.Dispose();
         m_job = null;
+        m_package?.Dispose();
+        m_package = null;
     }
 
     public static bool IsBuilt()
@@ -121,11 +124,18 @@ internal sealed class LiveServer : IDisposable
 
     /// <summary>
     ///     Starts the server on a port it picks itself, so nothing can take one between a probe and the bind, with
-    ///     <paramref name="database" /> as its database, and the repository's server package unless
-    ///     <paramref name="contentPath" /> names another.
+    ///     <paramref name="database" /> as its database, and a copy of the repository's server package without the
+    ///     Ashen Quarry's spawns (<see cref="LiveTestPackage.Seeded" />) unless <paramref name="contentPath" /> names
+    ///     another; the copy goes with the server.
     /// </summary>
     public void Start(LiveDatabase database, string extraArguments = "", string? contentPath = null)
     {
+        if (contentPath == null)
+        {
+            m_package = LiveTestPackage.Seeded();
+            contentPath = m_package.Path;
+        }
+
         var start = new ProcessStartInfo
         {
             FileName = "dotnet",
@@ -133,7 +143,7 @@ internal sealed class LiveServer : IDisposable
             // thumbprint rather than trust. Development sign-in stays on for the bare connections of some tests.
             Arguments = $"\"{DllPath}\" --Network:Port=0 --Health:Port=0 --Gateway:Port=0"
                 + " --Accounts:PasswordIterations=1000 --DevelopmentAuthentication:Enabled=true"
-                + $" --Content:ServerPackagePath=\"{contentPath ?? ContentPath}\" {extraArguments}",
+                + $" --Content:ServerPackagePath=\"{contentPath}\" {extraArguments}",
             WorkingDirectory = Path.GetDirectoryName(DllPath),
             UseShellExecute = false,
             CreateNoWindow = true,
