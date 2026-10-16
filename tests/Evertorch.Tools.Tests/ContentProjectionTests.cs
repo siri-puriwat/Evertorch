@@ -276,6 +276,128 @@ public sealed class ContentProjectionTests
         }
     }
 
+    // The quarry gives the client package only presentation (Milestone 21 line 5): its four monsters their names,
+    // levels, elements, races, sizes, bodies, and the boss's flag; its five skills their names, targets, elements,
+    // areas, and icons; its two quests their names; its four cards what a card shows; and its map its name, scene, and
+    // ground, with no spawn, portal, or arrival.
+    [Test]
+    public void Build_ForRepositoryContent_GivesTheQuarryOnlyItsPresentation()
+    {
+        using (var workspace = new ContentWorkspace())
+        {
+            string[] files = BuildRepositoryClientFiles(workspace);
+
+            JsonElement[] Quarry(string file, params string[] ids)
+            {
+                using (var document = JsonDocument.Parse(File.ReadAllBytes(files.First(path =>
+                           Path.GetFileName(path) == file))))
+                {
+                    return document.RootElement.GetProperty("definitions")
+                        .EnumerateArray()
+                        .Where(definition => ids.Contains(definition.GetProperty("id").GetString()))
+                        .Select(definition => definition.Clone())
+                        .ToArray();
+                }
+            }
+
+            static string Shown(JsonElement definition)
+            {
+                return string.Join(
+                    " ",
+                    definition.EnumerateObject()
+                        .Where(property => property.Name != "navigation")
+                        .Select(property => $"{property.Name}={property.Value}"));
+            }
+
+            Assert.That(
+                Quarry(
+                        "monsters.json",
+                        "monster.cinder_crawler",
+                        "monster.basalt_crawler",
+                        "monster.ash_wisp",
+                        "monster.furnace_heart")
+                    .Select(Shown),
+                Is.EqualTo(
+                    new[]
+                    {
+                        "id=monster.ash_wisp displayName=Ash Wisp level=23 element=wind race=formless size=small "
+                        + "prefab=monster_spark_wisp icon=monster_spark_wisp_icon projectile=projectile_spark scale=1 "
+                        + "tint=#D2CABD",
+                        "id=monster.basalt_crawler displayName=Basalt Crawler level=22 element=earth race=insect "
+                        + "size=large prefab=monster_forest_crawler icon=monster_forest_crawler_icon scale=1.35 "
+                        + "tint=#4F555C",
+                        "id=monster.cinder_crawler displayName=Cinder Crawler level=20 element=fire race=insect "
+                        + "size=medium prefab=monster_forest_crawler icon=monster_forest_crawler_icon scale=1.15 "
+                        + "tint=#9C3D1F",
+                        "id=monster.furnace_heart displayName=Furnace Heart level=25 element=fire race=formless "
+                        + "size=large prefab=monster_training_slime icon=monster_training_slime_icon scale=2.8 "
+                        + "tint=#C4501C boss=True"
+                    }));
+            Assert.That(
+                Quarry(
+                        "skills.json",
+                        "skill.cinder_bite",
+                        "skill.basalt_bash",
+                        "skill.ash_gust",
+                        "skill.furnace_burst",
+                        "skill.ash_cloud")
+                    .Select(Shown),
+                Is.EqualTo(
+                    new[]
+                    {
+                        "id=skill.ash_cloud displayName=Ash Cloud targetType=self area=6 icon=skill_ash_cloud",
+                        "id=skill.ash_gust displayName=Ash Gust targetType=enemy element=wind icon=skill_ash_gust",
+                        "id=skill.basalt_bash displayName=Basalt Bash targetType=enemy element=earth "
+                        + "icon=skill_basalt_bash",
+                        "id=skill.cinder_bite displayName=Cinder Bite targetType=enemy element=fire "
+                        + "icon=skill_cinder_bite",
+                        "id=skill.furnace_burst displayName=Furnace Burst targetType=self element=fire area=5 "
+                        + "icon=skill_furnace_burst"
+                    }));
+            Assert.That(
+                Quarry("quests.json", "quest.quarry_hunt", "quest.furnace_heart").Select(Shown),
+                Is.EqualTo(
+                    new[]
+                    {
+                        "id=quest.furnace_heart displayName=The Furnace Heart",
+                        "id=quest.quarry_hunt displayName=Quarry Hunt"
+                    }));
+            Assert.That(
+                Quarry(
+                        "items.json",
+                        "item.card.cinder_crawler",
+                        "item.card.basalt_crawler",
+                        "item.card.ash_wisp",
+                        "item.card.furnace_heart")
+                    .Select(Shown),
+                Is.EqualTo(
+                    new[]
+                    {
+                        "id=item.card.ash_wisp displayName=Ash Wisp Card type=card stackLimit=999 icon=item_slime_gel "
+                        + "model=pickup_slime_gel fits=weapon prefix=Dousing description=Damage to Fire +20%.",
+                        "id=item.card.basalt_crawler displayName=Basalt Crawler Card type=card stackLimit=999 "
+                        + "icon=item_slime_gel model=pickup_slime_gel fits=shield prefix=Steady "
+                        + "description=Stun resistance +20%.",
+                        "id=item.card.cinder_crawler displayName=Cinder Crawler Card type=card stackLimit=999 "
+                        + "icon=item_slime_gel model=pickup_slime_gel fits=garment prefix=Fireward "
+                        + "description=Damage from Fire -20%.",
+                        "id=item.card.furnace_heart displayName=Furnace Heart Card type=card stackLimit=999 "
+                        + "icon=item_slime_gel model=pickup_slime_gel fits=armor prefix=Molten description=Fire armor."
+                    }));
+            JsonElement map = Quarry("maps.json", "map.ashen_quarry").Single();
+            Assert.That(Shown(map), Is.EqualTo("id=map.ashen_quarry displayName=Ashen Quarry scene=map_ashen_quarry"));
+            Assert.That(
+                map.GetProperty("navigation").EnumerateObject().Select(property => property.Name),
+                Is.EqualTo(
+                    new[]
+                    {
+                        "cellSize", "originX", "originZ", "agentRadius", "maxStepHeight", "columns", "rows", "legend",
+                        "cellRows"
+                    }),
+                "the ground alone");
+        }
+    }
+
     [Test]
     public void Build_ForRepositoryContent_KeepsServerOnlyFieldNamesOutOfEveryClientFile()
     {

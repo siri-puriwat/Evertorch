@@ -26,6 +26,8 @@ namespace Evertorch.Server.Tests
 ///     reach an observer beside it and a member of its party as nothing. Milestone 20 adds the eight positions: another's
 ///     whole outfit, its swaps, its refused burst, and a job change that takes its weapon off reach an observer as its
 ///     appearance alone, and a newcomer, a returning observer, and the map it crosses to learn the whole outfit.
+///     Milestone 21 adds the quarry: its boss's burst and fall reach an observer as what anyone near sees, the fall its
+///     map alone, and the award its most valuable player alone; the Smith's fees reach only whoever newly sees it.
 /// </summary>
 [TestFixture]
 public sealed class ObserverOutputTests
@@ -54,6 +56,8 @@ public sealed class ObserverOutputTests
     private const string Boots = "item.footwear.trail_boots";
     private const string TravelerCharm = "item.accessory.traveler_charm";
     private const string GrottoCharm = "item.accessory.grotto_charm";
+    private const string FurnaceBurst = "skill.furnace_burst";
+    private const string Smith = "npc.smith";
 
     // A piece for each of the eight positions, in position order.
     private static readonly string[] Outfit = { Staff, Cloth, Cap, Buckler, Cape, Boots, TravelerCharm, GrottoCharm };
@@ -76,6 +80,12 @@ public sealed class ObserverOutputTests
     {
         server.World.TryGetMap(new MapDefinitionId("map.umbral_grotto"), out MapInstance? grotto);
         return grotto!;
+    }
+
+    private static MapInstance QuarryOf(TestServer server)
+    {
+        server.World.TryGetMap(new MapDefinitionId("map.ashen_quarry"), out MapInstance? quarry);
+        return quarry!;
     }
 
     private static void StandBeside(TestServer server, ConnectionId player, MonsterEntity monster)
@@ -200,6 +210,34 @@ public sealed class ObserverOutputTests
         server.Place(player, broker.Position.X - 2f, broker.Position.Z + character - 2);
         server.Tick(2);
         return player;
+    }
+
+    // The Smith's fees (Milestone 21 line 5): whoever newly sees the Smith learns its seventeen fees in their two
+    // parts; the actor, who already sees it, hears none of them again, nor the Smith's services or tables.
+    [Test]
+    public void ANewcomer_LearnsTheSmithsFeesInTheirParts_AndWhoeverSeesTheSmithAlreadyHearsNoneAgain()
+    {
+        var server = new TestServer(withNpcs: true);
+        ConnectionId actor = server.EnterWorld(Actor);
+        server.Tick(5);
+        EntityId smith = server.NpcOf(Smith).Id;
+        server.Transport.ClearSent();
+
+        ConnectionId observer = server.EnterWorld(Observer);
+        server.Tick(5);
+
+        Assert.That(
+            Read(server, observer, MessageOpcode.CardRemovalFees, payload =>
+                    CardRemovalFees.TryRead(payload, out CardRemovalFees? read) ? read : null)
+                .Select(part => (part.Npc, part.Part, part.PartCount, part.Entries.Count)),
+            Is.EqualTo(new[] { (smith, (byte)0, (byte)2, 14), (smith, (byte)1, (byte)2, 3) }),
+            "the newcomer learns the fees, once");
+        Assert.That(
+            server.Transport.SentTo(actor).Select(message => message.Opcode),
+            Has.No.Member(MessageOpcode.CardRemovalFees)
+                .And.No.Member(MessageOpcode.NpcServices)
+                .And.No.Member(MessageOpcode.RefineTable),
+            "the actor already knows them");
     }
 
     // A whole outfit (Milestone 20, session task T12) reaches a newcomer with the actor's spawn, an observer returning
@@ -722,6 +760,79 @@ public sealed class ObserverOutputTests
                 .Last(),
             Is.EqualTo(Sword),
             "the sword in the actor's hand, from its appearance");
+    }
+
+    // The quarry (Milestone 21 line 5): the actor fights the Furnace Heart in its arena while the observer stands near
+    // it, a third player waits in the quarry's arrival yard, out of their sight, a fourth stands in the Umbral Grotto,
+    // the other boss's map, and a fifth in town. The Furnace Heart's burst lands on the actor, and the boss falls to it,
+    // its most valuable player. The observer hears what anyone near sees and the fall; the yard hears the fall and
+    // nothing of the burst; the grotto and the town hear nothing of the quarry's boss; and only the actor hears the
+    // award.
+    [Test]
+    public void AnotherPlayersQuarryBoss_ReachesAnObserverAsWhatAnyoneNearSees_AndOnlyItsMapAsTheBossFalls()
+    {
+        var server = new TestServer(
+            withEveryMap: true,
+            withGrotto: true,
+            withQuarry: true,
+            withMonsters: true,
+            withMonsterAi: false,
+            dropRandom: new ScriptedRandom(0));
+        ConnectionId actor = server.EnterWorld(Actor);
+        ConnectionId observer = server.EnterWorld(Observer);
+        ConnectionId yard = server.EnterWorld(3);
+        ConnectionId grotto = server.EnterWorld(4);
+        ConnectionId town = server.EnterWorld(5);
+        foreach (ConnectionId player in new[] { actor, observer, yard })
+        {
+            server.CrossIntoTheQuarry(player);
+        }
+
+        server.CrossIntoTheGrotto(grotto);
+        MapInstance quarry = QuarryOf(server);
+        MonsterEntity boss = quarry.Monsters.Single(monster => monster.Definition.IsBoss);
+        PlayerEntity acting = server.PlayerOf(actor);
+        acting.Position = new WorldPosition(boss.Position.X, 0f, boss.Position.Z - 2.5f);
+        acting.CurrentHealth = 1_000_000;
+        server.PlayerOf(observer).Position = new WorldPosition(boss.Position.X - 6f, 0f, boss.Position.Z - 6f);
+        server.Tick(2);
+        server.Transport.ClearSent();
+
+        server.Combat.BeginMonsterCast(quarry, boss, new SkillDefinitionId(FurnaceBurst), acting, server.CurrentTick);
+        server.Tick(2 * TestServer.TickRate + 1);
+        boss.LogMvpDealt(acting.Character, 500);
+        server.Combat.Kill(quarry, boss, acting, server.CurrentTick);
+        TickUntil(server, () => !server.SessionOf(actor).Character!.HasInventoryWork, "the prize settled");
+
+        MessageOpcode[] observerHeard = server.Transport.SentTo(observer).Select(message => message.Opcode).ToArray();
+        MessageOpcode[] yardHeard = server.Transport.SentTo(yard).Select(message => message.Opcode).ToArray();
+        Assert.That(
+            Read(server, observer, MessageOpcode.SkillResolved, payload =>
+                    SkillResolved.TryRead(payload, out SkillResolved? read) ? read : null)
+                .Where(resolved => resolved.Skill.Value == FurnaceBurst)
+                .Select(resolved => resolved.Target),
+            Is.EqualTo(new[] { acting.Id }),
+            "the burst's result on the actor, whom the observer knows");
+        Assert.That(
+            server.Transport.SentTo(actor).Select(message => message.Opcode),
+            Is.SupersetOf(
+                new[] { MessageOpcode.BossAnnouncement, MessageOpcode.MvpAwarded, MessageOpcode.InventoryChanged }),
+            "the actor was told of the fall and its award");
+        Assert.That(
+            observerHeard.Distinct(),
+            Is.SubsetOf(WhatAnyoneNearSees.Append(MessageOpcode.BossAnnouncement)));
+        Assert.That(observerHeard, Does.Contain(MessageOpcode.BossAnnouncement), "the observer heard the fall");
+        Assert.That(yardHeard, Does.Contain(MessageOpcode.BossAnnouncement), "the yard heard the fall");
+        Assert.That(yardHeard, Has.No.Member(MessageOpcode.SkillResolved), "but nothing of the burst far off");
+        foreach (ConnectionId elsewhere in new[] { grotto, town })
+        {
+            Assert.That(
+                server.Transport.SentTo(elsewhere).Select(message => message.Opcode),
+                Has.No.Member(MessageOpcode.BossAnnouncement)
+                    .And.No.Member(MessageOpcode.SkillResolved)
+                    .And.No.Member(MessageOpcode.MvpAwarded),
+                "nothing of the quarry's boss off its map");
+        }
     }
 
     // The town's play (Milestone 7 verification line V4): the actor buys from the Quartermaster, sells to it, and
