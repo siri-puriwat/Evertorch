@@ -81,14 +81,18 @@ public static class NpcServicesBuilder
     }
 
     /// <summary>
-    ///     What a refiner takes to take each card out (Network Protocol §9), ordered by card ID; null for an NPC that
-    ///     does not refine, or when the content holds no card. The Smith that refines also takes cards out.
+    ///     What a refiner takes to take each card out (Network Protocol §9), ordered by card ID, in the parts that carry
+    ///     it; none for an NPC that does not refine, or when the content holds no card. The Smith that refines also takes
+    ///     cards out.
     /// </summary>
-    public static CardRemovalFees? BuildCardRemovalFees(EntityId entity, NpcDefinition npc, ServerContent content)
+    public static IReadOnlyList<CardRemovalFees> BuildCardRemovalFees(
+        EntityId entity,
+        NpcDefinition npc,
+        ServerContent content)
     {
         if (!npc.Refines)
         {
-            return null;
+            return Array.Empty<CardRemovalFees>();
         }
 
         CardRemovalFee[] fees = content.Items.Values
@@ -96,7 +100,7 @@ public static class NpcServicesBuilder
             .OrderBy(item => item.Id.Value, StringComparer.Ordinal)
             .Select(item => new CardRemovalFee(item.Id, (uint)item.Card!.RemovalFee))
             .ToArray();
-        return fees.Length == 0 ? null : new CardRemovalFees(entity, fees);
+        return fees.Length == 0 ? Array.Empty<CardRemovalFees>() : CardRemovalFees.CreateParts(entity, fees);
     }
 
     /// <summary>

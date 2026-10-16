@@ -170,7 +170,8 @@ public sealed class PositionContentTests
 
     // Two charms with a Poise card each add DEX +2 and LUK +2 beside the charms' own (Gameplay Systems §11.7).
     // Network Protocol §6 and §9: the Smith holds four tables in the order of their IDs, the light one second with its
-    // eight pieces, and the fees of thirteen cards in 412 bytes; the board's thirty-two goods take three messages.
+    // eight pieces, and the fees of thirteen cards in one part of 414 bytes; the board's thirty-two goods take three
+    // messages.
     [Test]
     public void Smith_HoldsFourTables_TheFeesOfThirteenCards_AndTheBoardThirtyTwoGoods()
     {
@@ -178,7 +179,7 @@ public sealed class PositionContentTests
         NpcDefinition smith = content.Npcs[new NpcDefinitionId("npc.smith")];
 
         IReadOnlyList<RefineTable> tables = NpcServicesBuilder.BuildRefineTables(new EntityId(2), smith, content);
-        CardRemovalFees fees = NpcServicesBuilder.BuildCardRemovalFees(new EntityId(2), smith, content)!;
+        CardRemovalFees fees = NpcServicesBuilder.BuildCardRemovalFees(new EntityId(2), smith, content).Single();
         MarketBoardEntry[] goods = content.Items.Values
             .Where(item => item.Market != null)
             .Select(item => new MarketBoardEntry(item.Id, (uint)item.Market!.BasePrice, 0))
@@ -194,7 +195,7 @@ public sealed class PositionContentTests
             {
                 GrottoBoots, TrailBoots, GloomCape, TravelCape, GrottoCirclet, TrailCap, CarapaceShield, WoodenBuckler
             }));
-        Assert.That((fees.Entries.Count, fees.GetEncodedLength()), Is.EqualTo((13, 412)));
+        Assert.That((fees.Entries.Count, fees.GetEncodedLength()), Is.EqualTo((13, 414)));
         Assert.That(
             MarketBoard.CreateParts(goods).Select(part => part.Entries.Count),
             Is.EqualTo(new[] { 13, 13, 6 }));

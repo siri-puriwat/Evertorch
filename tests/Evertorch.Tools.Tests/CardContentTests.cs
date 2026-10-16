@@ -448,22 +448,23 @@ public sealed class CardContentTests
     }
 
     [Test]
-    public void Run_ForFifteenCards_ReportsOneTooMany()
+    public void Run_ForOneHundredThirteenCards_ReportsOneTooMany()
     {
         using (ContentWorkspace workspace = Workspace())
         {
-            for (int index = 0; index < 14; index++)
+            for (int index = 0; index < 112; index++)
             {
                 workspace.Write(
-                    $"items/copy_{index:00}_card.yml",
-                    CardText.Replace("item.card.keen", $"item.card.copy_{index:00}"));
+                    $"items/copy_{index:000}_card.yml",
+                    CardText.Replace("item.card.keen", $"item.card.copy_{index:000}"));
             }
 
             ContentPipelineResult result = ContentPipeline.Run(workspace.ContentRoot);
 
             Assert.That(
                 result.Diagnostics.Select(diagnostic => (diagnostic.FieldPath, diagnostic.Message)),
-                Is.EqualTo(new[] { ("type", "is one more than the 14 cards a list of removal fees carries") }),
+                Is.EqualTo(new[]
+                    { ("type", "is one more than the 112 cards the parts of a list of removal fees carry") }),
                 Describe(result));
         }
     }

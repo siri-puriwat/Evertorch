@@ -80,11 +80,11 @@ public sealed class ServerContentCardTests
 
         Assert.That(
             (withoutCards.Refines, withoutCards.RemovesCards,
-                NpcServicesBuilder.BuildCardRemovalFees(new EntityId(1), quartermaster, fixture)),
-            Is.EqualTo((true, false, (CardRemovalFees?)null)));
+                NpcServicesBuilder.BuildCardRemovalFees(new EntityId(1), quartermaster, fixture).Count),
+            Is.EqualTo((true, false, 0)));
         Assert.That(
             (withCards.RemovesCards,
-                NpcServicesBuilder.BuildCardRemovalFees(new EntityId(2), smith, repository)!.Entries.Count),
+                NpcServicesBuilder.BuildCardRemovalFees(new EntityId(2), smith, repository).Single().Entries.Count),
             Is.EqualTo((true, 13)));
     }
 
@@ -111,15 +111,15 @@ public sealed class ServerContentCardTests
     }
 
     [Test]
-    public void Load_ForFifteenCards_RefusesTheItems()
+    public void Load_ForOneHundredThirteenCards_RefusesTheItems()
     {
         Dictionary<string, byte[]> files = PackageFixture.BuildRepositoryPackage();
         JsonArray definitions = JsonNode.Parse(files[Items])!["definitions"]!.AsArray();
         JsonNode keen = definitions.Single(definition => (string?)definition!["id"] == Keen)!;
-        for (int index = 0; index < 2; index++)
+        for (int index = 0; index < 100; index++)
         {
             JsonObject copy = JsonNode.Parse(keen.ToJsonString())!.AsObject();
-            copy["id"] = $"item.card.copy_{index:00}";
+            copy["id"] = $"item.card.copy_{index:000}";
             definitions.Add(copy);
         }
 
@@ -128,7 +128,7 @@ public sealed class ServerContentCardTests
 
         Assert.That(
             ProblemsOf(files),
-            Has.Member($"{Items}: holds 15 cards, more than the 14 a list of removal fees carries"));
+            Has.Member($"{Items}: holds 113 cards, more than the 112 the parts of a list of removal fees carry"));
     }
 
     [Test]

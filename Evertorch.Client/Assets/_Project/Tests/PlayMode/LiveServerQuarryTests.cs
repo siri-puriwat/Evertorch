@@ -106,6 +106,7 @@ public sealed class LiveServerQuarryTests
             StepTimeoutSeconds);
         Assert.That(smith, Is.Not.Null, "the Smith in view");
         Assert.That(ground.CardRemovalFeesOf(smith!.Entity).Count, Is.EqualTo(13), "the Smith's fees for every card");
+        Assert.That(ground.DroppedFeeLists, Is.Zero, "no list of fees dropped");
 
         Assert.That(
             client.Controller!.TryMoveTo(ground.Predictor.Position, GroundEastPortal),

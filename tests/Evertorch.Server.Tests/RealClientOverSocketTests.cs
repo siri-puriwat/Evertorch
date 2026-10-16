@@ -19,6 +19,35 @@ namespace Evertorch.Server.Tests
 [NonParallelizable]
 public sealed class RealClientOverSocketTests
 {
+    // Network Protocol §9: the client puts the Smith's fees together from their parts and keeps the whole list.
+    [Test]
+    public void Client_InTown_PutsTheSmithsFeesTogetherFromTheirParts()
+    {
+        using var root = new TemporaryDirectory();
+        PackageFixture.WriteTo(Path.Combine(root.Path, "content", "server"), FeePackage.Build(3));
+        var store = new InMemoryGameStore();
+        using IHost host = TestHosts
+            .CreateBuilder(new[] { "--Network:Port=0", "--DevelopmentAuthentication:Enabled=true" }, root.Path, store)
+            .Build();
+        host.Start();
+        int port = host.Services.GetRequiredService<LiteNetLibServerTransport>().LocalPort;
+        ServerContent content = host.Services.GetRequiredService<ServerContent>();
+        using var client = new SocketClient(content, "socket-fees", "Socket24");
+        client.EnterWorld(port);
+        ClientWorld world = client.World;
+        RemoteEntity? smith = null;
+
+        bool isWhole = client.PumpUntil(() =>
+            (smith = world.Remotes.Values.FirstOrDefault(remote => remote.DefinitionId == "npc.smith")) != null
+            && world.CardRemovalFeesOf(smith.Entity).Count > 0);
+
+        Assert.That(isWhole, Is.True, "the Smith's fees");
+        Assert.That(world.CardRemovalFeesOf(smith!.Entity), Has.Count.EqualTo(16), "every card, from two parts");
+        Assert.That(world.DroppedFeeLists, Is.Zero, "nothing dropped");
+        Assert.That(client.Connection.MalformedMessages + client.Connection.UnexpectedMessages, Is.Zero);
+        host.StopAsync().GetAwaiter().GetResult();
+    }
+
     [Test]
     public void Client_ReconnectingOverTheSocket_GetsTheSameEntityAndAFreshBaselineWithoutASecondLoad()
     {

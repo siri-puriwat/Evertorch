@@ -138,7 +138,10 @@ public sealed class RefineTests
             .ToArray();
 
         Assert.That(sent[lastTable + 1].Opcode, Is.EqualTo(MessageOpcode.CardRemovalFees), "right after its tables");
-        Assert.That(fees.Single().Npc, Is.EqualTo(smith));
+        Assert.That(
+            (fees.Single().Npc, fees.Single().Part, fees.Single().PartCount),
+            Is.EqualTo((smith, (byte)0, (byte)1)),
+            "thirteen cards in one part");
         Assert.That(
             fees.Single().Entries.Select(entry => (entry.Card.Value, entry.Fee)),
             Is.EqualTo(
@@ -196,6 +199,32 @@ public sealed class RefineTests
         Assert.That(
             tables[3].Steps.Select(step => (step.Chance, step.Coins)).Skip(6),
             Is.EqualTo(new[] { ((byte)100, 20u), ((byte)60, 20u), ((byte)40, 20u), ((byte)20, 20u) }));
+    }
+
+    // Network Protocol §6, §9: more cards than a part holds go in consecutive parts right after the tables, fourteen in
+    // the first, every card once.
+    [Test]
+    public void Entering_WithMoreCardsThanAPartHolds_TellsTheFeesInConsecutivePartsAfterTheTables()
+    {
+        var server = new TestServer(withNpcs: true, content: ServerContentLoader.Load(FeePackage.Build(3)));
+        ConnectionId player = server.EnterWorld(1);
+        server.Tick(5);
+        EntityId smith = server.NpcOf(Smith).Id;
+        InMemoryServerTransport.SentMessage[] sent = server.Transport.ControlSentTo(player).ToArray();
+        int lastTable = Array.FindLastIndex(sent, message => message.Opcode == MessageOpcode.RefineTable);
+        CardRemovalFees[] parts = sent.Where(message => message.Opcode == MessageOpcode.CardRemovalFees)
+            .Select(message => CardRemovalFees.TryRead(message.Payload, out CardRemovalFees? read) ? read! : null!)
+            .ToArray();
+        string[] cards = parts.SelectMany(part => part.Entries).Select(entry => entry.Card.Value).ToArray();
+
+        Assert.That(
+            sent.Skip(lastTable + 1).Take(2).Select(message => message.Opcode),
+            Is.EqualTo(new[] { MessageOpcode.CardRemovalFees, MessageOpcode.CardRemovalFees }),
+            "two parts, right after the tables");
+        Assert.That(
+            parts.Select(part => (part.Npc, part.Part, part.PartCount, part.Entries.Count)),
+            Is.EqualTo(new[] { (smith, (byte)0, (byte)2, 14), (smith, (byte)1, (byte)2, 2) }));
+        Assert.That(cards, Is.EqualTo(cards.OrderBy(card => card, StringComparer.Ordinal).Distinct()), "by ID, once");
     }
 
     [Test]

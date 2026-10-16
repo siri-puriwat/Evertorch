@@ -218,8 +218,8 @@ public static class ServerContentLoader
         if (cards > ContentLimits.MaxCards)
         {
             problems.Add(
-                $"{ItemsFile}: holds {cards} cards, more than the {ContentLimits.MaxCards} a list of removal fees "
-                + "carries");
+                $"{ItemsFile}: holds {cards} cards, more than the {ContentLimits.MaxCards} the parts of a list of "
+                + "removal fees carry");
         }
 
         if (problems.Count != 0)

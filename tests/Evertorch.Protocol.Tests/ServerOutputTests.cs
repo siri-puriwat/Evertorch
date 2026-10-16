@@ -90,7 +90,7 @@ public sealed class ServerOutputTests
             "Entries", "JobChanges", "KeepsMarket", "KeepsStorage", "Npc", "Offers", "OffersReset", "Refines",
             "RemovesCards"
         },
-        ["CardRemovalFees"] = new[] { "Entries", "Npc" },
+        ["CardRemovalFees"] = new[] { "Entries", "Npc", "Part", "PartCount" },
         ["CardRemovalFee"] = new[] { "Card", "Fee" },
         ["InspectedEquipment"] = new[] { "CommandSequence", "Entity", "Entries", "Part", "PartCount", "Revision" },
         ["InspectedEntry"] = new[] { "Item", "Slot" },

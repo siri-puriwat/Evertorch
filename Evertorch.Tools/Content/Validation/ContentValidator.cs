@@ -73,7 +73,7 @@ public static class ContentValidator
                 "type",
                 string.Format(
                     CultureInfo.InvariantCulture,
-                    "is one more than the {0} cards a list of removal fees carries",
+                    "is one more than the {0} cards the parts of a list of removal fees carry",
                     ContentLimits.MaxCards),
                 diagnostics);
         }

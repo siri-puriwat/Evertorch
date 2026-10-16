@@ -14,7 +14,8 @@ public sealed class ClientWorld
     private readonly Dictionary<EntityId, RemoteEntity> m_remotes = new();
     private readonly Dictionary<EntityId, NpcServices> m_npcServices = new();
     private readonly Dictionary<EntityId, List<RefineTable>> m_refineTables = new();
-    private readonly Dictionary<EntityId, CardRemovalFees> m_cardRemovalFees = new();
+    private readonly Dictionary<EntityId, IReadOnlyList<CardRemovalFee>> m_cardRemovalFees = new();
+    private readonly CardFeeParts m_feeParts = new();
 
     // The tick of each entity's latest death or revival. Snapshots are unreliable and the events reliable, so a
     // snapshot from before either can still arrive afterwards; it must neither raise a corpse nor put a revived body
@@ -229,6 +230,9 @@ public sealed class ClientWorld
     /// </summary>
     public int UnknownEntityEvents { get; private set; }
 
+    /// <summary>The Smith's fee lists, and stray parts, dropped before they were whole (Network Protocol §9).</summary>
+    public int DroppedFeeLists => m_feeParts.Dropped;
+
     /// <summary>
     ///     The local player's target as the server last confirmed it; the default value means none.
     /// </summary>
@@ -341,6 +345,7 @@ public sealed class ClientWorld
             m_npcServices.Remove(spawn.Entity);
             m_refineTables.Remove(spawn.Entity);
             m_cardRemovalFees.Remove(spawn.Entity);
+            m_feeParts.Forget(spawn.Entity);
             RemoteDespawned?.Invoke(replaced);
         }
 
@@ -381,6 +386,7 @@ public sealed class ClientWorld
             m_npcServices.Remove(despawn.Entity);
             m_refineTables.Remove(despawn.Entity);
             m_cardRemovalFees.Remove(despawn.Entity);
+            m_feeParts.Forget(despawn.Entity);
             EndLocalCastAt(despawn.Entity);
             RemoteDespawned?.Invoke(remote);
         }
@@ -508,24 +514,28 @@ public sealed class ClientWorld
     }
 
     /// <summary>
-    ///     Keeps a remover's fees until the NPC despawns (Network Protocol §9); fees of an entity this client has no NPC
-    ///     spawn for are counted and ignored.
+    ///     Puts a remover's fees together from their parts and keeps each whole list until the NPC despawns (Network
+    ///     Protocol §9); a part of an entity this client has no NPC spawn for is counted and ignored, and leaves a list
+    ///     being put together alone.
     /// </summary>
-    public void OnCardRemovalFees(CardRemovalFees fees)
+    public void OnCardRemovalFees(CardRemovalFees part)
     {
-        if (fees == null)
+        if (part == null)
         {
-            throw new ArgumentNullException(nameof(fees));
+            throw new ArgumentNullException(nameof(part));
         }
 
-        if (!m_remotes.TryGetValue(fees.Npc, out RemoteEntity? remote) || remote.Kind != EntityKind.Npc)
+        if (!m_remotes.TryGetValue(part.Npc, out RemoteEntity? remote) || remote.Kind != EntityKind.Npc)
         {
             UnknownEntityEvents++;
             return;
         }
 
-        m_cardRemovalFees[fees.Npc] = fees;
-        RefineTablesVersion++;
+        if (m_feeParts.TryAdd(part, ServerTime.Now, out IReadOnlyList<CardRemovalFee> fees))
+        {
+            m_cardRemovalFees[part.Npc] = fees;
+            RefineTablesVersion++;
+        }
     }
 
     /// <summary>
@@ -533,8 +543,8 @@ public sealed class ClientWorld
     /// </summary>
     public IReadOnlyList<CardRemovalFee> CardRemovalFeesOf(EntityId npc)
     {
-        return m_cardRemovalFees.TryGetValue(npc, out CardRemovalFees? fees)
-            ? fees.Entries
+        return m_cardRemovalFees.TryGetValue(npc, out IReadOnlyList<CardRemovalFee>? fees)
+            ? fees
             : Array.Empty<CardRemovalFee>();
     }
 
@@ -1071,6 +1081,7 @@ public sealed class ClientWorld
     {
         ServerTime.Advance(deltaSeconds);
         Smoother.Advance(deltaSeconds);
+        m_feeParts.Advance(ServerTime.Now);
     }
 }
 }

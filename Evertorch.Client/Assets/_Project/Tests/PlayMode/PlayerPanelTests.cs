@@ -2632,6 +2632,8 @@ public sealed class PlayerPanelTests
         world.OnCardRemovalFees(
             new CardRemovalFees(
                 new EntityId(14),
+                0,
+                1,
                 new[]
                 {
                     new CardRemovalFee(new ItemDefinitionId(Keen), 200),

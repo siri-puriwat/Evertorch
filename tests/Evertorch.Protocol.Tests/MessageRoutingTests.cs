@@ -257,9 +257,9 @@ public sealed class MessageRoutingTests
     }
 
     [Test]
-    public void ProtocolVersion_IsFortyNine()
+    public void ProtocolVersion_IsFifty()
     {
-        Assert.That(ProtocolConstants.ProtocolVersion, Is.EqualTo(49));
+        Assert.That(ProtocolConstants.ProtocolVersion, Is.EqualTo(50));
     }
 
     // Protocol 49 retired the worn weapon's change: its opcode routes nowhere and is never reused (Network Protocol §6).

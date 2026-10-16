@@ -220,6 +220,7 @@ public sealed class QuarryAcceptanceTests
             Is.True,
             $"{step}: the Smith's fees for every card");
         Assert.That(cards, Is.EqualTo(13), $"{step}: the cards in content");
+        Assert.That(world.DroppedFeeLists, Is.Zero, $"{step}: no list of fees dropped");
 
         // Back east of the spawn point, from where the Gate Warden by the east gate is in view.
         Assert.That(kael.Controller.TryMoveTo(world.Predictor.Position, BackInTown), Is.True, $"{step}: a way back");

@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using Evertorch.Game;
 using Evertorch.Protocol;
 using NUnit.Framework;
@@ -132,6 +133,8 @@ public sealed class RefineMessagesTests
         ClientWorld world = ClientWorldFixture.Create(ClientTestGrids.CreateYard(), ClientTestGrids.Center(1, 1));
         var fees = new CardRemovalFees(
             Smith,
+            0,
+            1,
             new[] { new CardRemovalFee(new ItemDefinitionId("item.card.forest_crawler"), 200) });
         world.OnCardRemovalFees(fees);
         int unknown = world.UnknownEntityEvents;
@@ -163,6 +166,45 @@ public sealed class RefineMessagesTests
         Assert.That(kept, Is.Not.Null);
         Assert.That(kept!.Index, Is.EqualTo((byte)1));
         Assert.That(world.RefineTablesOf(Smith), Is.Empty, "gone with the Smith");
+    }
+
+    // Network Protocol §9: a list in parts is kept only whole; a part of an NPC not seen is counted and leaves the list
+    // being put together alone, and a timeout or the Smith's despawn drops a list half put together.
+    [Test]
+    public void TheWorld_PutsTheFeesTogetherFromTheirParts_AndDropsAListHalfPutTogether()
+    {
+        ClientWorld world = ClientWorldFixture.Create(ClientTestGrids.CreateYard(), ClientTestGrids.Center(1, 1));
+        IReadOnlyList<CardRemovalFees> parts = CardRemovalFees.CreateParts(
+            Smith,
+            Enumerable.Range(0, 16)
+                .Select(index => new CardRemovalFee(new ItemDefinitionId($"item.card.c{index:D2}"), 200))
+                .ToArray());
+        var stray = new CardRemovalFees(
+            new EntityId(501),
+            1,
+            2,
+            new[] { new CardRemovalFee(new ItemDefinitionId("item.card.z"), 200) });
+        world.OnSpawn(SmithSpawn());
+        int version = world.RefineTablesVersion;
+        int unknown = world.UnknownEntityEvents;
+
+        world.OnCardRemovalFees(parts[0]);
+        int keptAfterTheFirst = world.CardRemovalFeesOf(Smith).Count;
+        world.OnCardRemovalFees(stray);
+        world.OnCardRemovalFees(parts[1]);
+        int whole = world.CardRemovalFeesOf(Smith).Count;
+        int versions = world.RefineTablesVersion - version;
+        world.OnCardRemovalFees(parts[0]);
+        world.Advance(6f);
+        int droppedByTheTimeout = world.DroppedFeeLists;
+        world.OnCardRemovalFees(parts[0]);
+        world.OnDespawn(new EntityDespawn(Smith, DespawnReason.OutOfRange));
+
+        Assert.That((keptAfterTheFirst, whole, versions), Is.EqualTo((0, 16, 1)), "whole at the second part, once");
+        Assert.That(world.UnknownEntityEvents - unknown, Is.EqualTo(1), "the part of an NPC not seen");
+        Assert.That(droppedByTheTimeout, Is.EqualTo(1), "the list that waited too long");
+        Assert.That(world.DroppedFeeLists, Is.EqualTo(2), "and the list of the Smith that left");
+        Assert.That(world.CardRemovalFeesOf(Smith), Is.Empty);
     }
 }
 }

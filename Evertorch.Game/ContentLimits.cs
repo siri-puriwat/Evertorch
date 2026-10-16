@@ -85,9 +85,10 @@ public static class ContentLimits
     public const int MaxArmorSlots = 1;
 
     /// <summary>
-    ///     The most cards content holds, the room of one list of removal fees (Network Protocol §6).
+    ///     The most cards content holds, the room of the eight parts of fourteen that carry their removal fees (Network
+    ///     Protocol §6).
     /// </summary>
-    public const int MaxCards = 14;
+    public const int MaxCards = 112;
 
     public const int MaxBossDamagePercent = 100;
 

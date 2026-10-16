@@ -8,9 +8,8 @@ namespace Evertorch.Server.Tests
 /// <summary>
 ///     A server-only test package for the eight positions (Coding Standards §10): the repository's content with a test
 ///     piece of each new category beside its own, so the server's equip, statistics, and inspection can be tested apart
-///     from the authored pieces, and a ward card that passes the resistance cap when worn twice, the fourteenth card a
-///     list of removal fees carries. The four light pieces name the armor's refine table. Nothing sells or lists them,
-///     so no NPC changes.
+///     from the authored pieces, and a ward card that passes the resistance cap when worn twice. The four light pieces
+///     name the armor's refine table. Nothing sells or lists them, so no NPC changes.
 /// </summary>
 internal static class GearPackage
 {
