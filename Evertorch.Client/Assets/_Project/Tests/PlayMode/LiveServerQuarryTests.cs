@@ -236,6 +236,7 @@ public sealed class LiveServerQuarryTests
         Vector3 feet = client.RemoteViews[boss.Entity].transform.position;
         Vector3 drawn = ring!.transform.position;
         Assert.That(ring.GetComponent<MeshFilter>().sharedMesh.bounds.extents.x, Is.EqualTo(5f).Within(1e-3f));
+        Assert.That(ring.GetComponent<MeshRenderer>().sharedMaterial.shader.name, Is.EqualTo(Unlit), "unlit");
         Assert.That(new Vector2(drawn.x - feet.x, drawn.z - feet.z).magnitude, Is.LessThan(0.1f), "at its feet");
 
         client.Connection!.SendAttack(boss.Entity);

@@ -823,7 +823,10 @@ public sealed class ObserverOutputTests
             Is.SubsetOf(WhatAnyoneNearSees.Append(MessageOpcode.BossAnnouncement)));
         Assert.That(observerHeard, Does.Contain(MessageOpcode.BossAnnouncement), "the observer heard the fall");
         Assert.That(yardHeard, Does.Contain(MessageOpcode.BossAnnouncement), "the yard heard the fall");
-        Assert.That(yardHeard, Has.No.Member(MessageOpcode.SkillResolved), "but nothing of the burst far off");
+        Assert.That(
+            yardHeard,
+            Has.No.Member(MessageOpcode.SkillResolved).And.No.Member(MessageOpcode.MvpAwarded),
+            "but nothing of the burst far off, nor the award");
         foreach (ConnectionId elsewhere in new[] { grotto, town })
         {
             Assert.That(

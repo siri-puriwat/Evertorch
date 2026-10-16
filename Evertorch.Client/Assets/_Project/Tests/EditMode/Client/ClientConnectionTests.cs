@@ -176,6 +176,54 @@ public sealed class ClientConnectionTests
         Assert.That(outside.Connection.UnexpectedMessages, Is.EqualTo(1));
     }
 
+    // Network Protocol §9: a list of fees half put together goes with the world it came in. After a map change, where
+    // the Smith is seen again, its second part alone is a stray the new world drops, and the whole list sent again is
+    // kept.
+    [Test]
+    public void CardRemovalFees_HalfPutTogether_GoWithTheWorldTheyCameIn()
+    {
+        var harness = new Harness();
+        harness.EnterWorld();
+        var smith = new EntityId(14);
+        var spawn = new EntitySpawn(
+            smith,
+            EntityKind.Npc,
+            "npc.smith",
+            new WorldPosition(2.5f, 0f, 2.5f),
+            new WorldDirection(0f, 1f),
+            EntityStateFlags.None,
+            0);
+        IReadOnlyList<CardRemovalFees> parts = CardRemovalFees.CreateParts(
+            smith,
+            Enumerable.Range(0, 16)
+                .Select(index => new CardRemovalFee(new ItemDefinitionId($"item.card.c{index:D2}"), 200))
+                .ToArray());
+
+        void Send(byte[] payload)
+        {
+            Assert.That(MessageRouting.TryReadOpcode(payload, out MessageOpcode opcode), Is.True);
+            Assert.That(MessageRouting.TryGetRoute(opcode, out ProtocolChannel channel, out MessageDelivery _),
+                Is.True);
+            harness.Deliver(channel, payload);
+        }
+
+        Send(Encode(spawn.GetEncodedLength(), spawn.Write));
+        Send(Encode(parts[0].GetEncodedLength(), parts[0].Write));
+        WorldEntered field = ClientWorldFixture.Entered(Start, mapEpoch: 1, map: "map.training_field");
+        Send(Encode(field.GetEncodedLength(), field.Write));
+        ClientWorld world = harness.Connection.World!;
+        Send(Encode(spawn.GetEncodedLength(), spawn.Write));
+        Send(Encode(parts[1].GetEncodedLength(), parts[1].Write));
+        int keptOfTheHalf = world.CardRemovalFeesOf(smith).Count;
+        int dropped = world.DroppedFeeLists;
+        Send(Encode(parts[0].GetEncodedLength(), parts[0].Write));
+        Send(Encode(parts[1].GetEncodedLength(), parts[1].Write));
+
+        Assert.That((keptOfTheHalf, dropped), Is.EqualTo((0, 1)), "the half list stayed in the world it came in");
+        Assert.That(world.CardRemovalFeesOf(smith).Count, Is.EqualTo(16), "the whole list, sent again, is kept");
+        Assert.That(harness.Connection.MalformedMessages, Is.Zero);
+    }
+
     [Test]
     public void CharacterList_AfterALogout_IsNotTakenForTheAnswerToAnEarlierCreation()
     {

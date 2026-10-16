@@ -59,6 +59,17 @@ public sealed class CardFeePartsTests
     }
 
     [Test]
+    public void APartBeforeAnyPartZero_IsDroppedAlone()
+    {
+        var parts = new CardFeeParts();
+        IReadOnlyList<CardRemovalFees> seventeen = Seventeen(Smith);
+
+        bool isWhole = parts.TryAdd(seventeen[1], 0, out _);
+
+        Assert.That((isWhole, parts.IsAssembling, parts.Dropped), Is.EqualTo((false, false, 1)));
+    }
+
+    [Test]
     public void APartOfAnotherSmithOrCount_DropsTheList()
     {
         var parts = new CardFeeParts();
@@ -77,15 +88,25 @@ public sealed class CardFeePartsTests
         Assert.That((parts.IsAssembling, parts.Dropped), Is.EqualTo((false, 2)));
     }
 
+    // Thirty cards take three parts; the third after the first drops the list, and the second, late, is a stray.
     [Test]
     public void APartOutOfOrder_DropsTheList()
     {
         var parts = new CardFeeParts();
-        IReadOnlyList<CardRemovalFees> seventeen = Seventeen(Smith);
+        IReadOnlyList<CardRemovalFees> thirty = CardRemovalFees.CreateParts(
+            Smith,
+            Enumerable.Range(0, 30)
+                .Select(index => new CardRemovalFee(new ItemDefinitionId($"item.card.c{index:D2}"), 100))
+                .ToArray());
+        parts.TryAdd(thirty[0], 0, out _);
 
-        bool isWhole = parts.TryAdd(seventeen[1], 0, out _);
+        bool isWholeAtTheThird = parts.TryAdd(thirty[2], 0, out _);
+        bool isAssemblingAfter = parts.IsAssembling;
+        bool isWholeAtTheSecond = parts.TryAdd(thirty[1], 0, out _);
 
-        Assert.That((isWhole, parts.IsAssembling, parts.Dropped), Is.EqualTo((false, false, 1)));
+        Assert.That(thirty.Select(part => part.Entries.Count), Is.EqualTo(new[] { 14, 14, 2 }));
+        Assert.That((isWholeAtTheThird, isAssemblingAfter, isWholeAtTheSecond), Is.EqualTo((false, false, false)));
+        Assert.That(parts.Dropped, Is.EqualTo(2));
     }
 
     [Test]

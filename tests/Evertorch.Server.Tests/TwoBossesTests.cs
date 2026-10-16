@@ -64,7 +64,7 @@ public sealed class TwoBossesTests
             if (message.Opcode == MessageOpcode.BossAnnouncement
                 && BossAnnouncement.TryRead(message.Payload, out BossAnnouncement? announcement))
             {
-                heard.Add($"{announcement!.Kind} {announcement.Monster.Value}");
+                heard.Add($"{announcement!.Kind} {announcement.Monster.Value} '{announcement.Name}'");
             }
         }
 
@@ -180,8 +180,8 @@ public sealed class TwoBossesTests
             Is.InRange(50, 70),
             "an hour after its death, give or take ten minutes");
         Assert.That(respawned, Is.EqualTo(new[] { "Brought back: monster.slime_monarch, monster.furnace_heart." }));
-        Assert.That(AnnouncementsHeardBy(server, quarry), Is.EqualTo(new[] { "Appeared monster.furnace_heart" }));
-        Assert.That(AnnouncementsHeardBy(server, grotto), Is.EqualTo(new[] { "Appeared monster.slime_monarch" }));
+        Assert.That(AnnouncementsHeardBy(server, quarry), Is.EqualTo(new[] { "Appeared monster.furnace_heart ''" }));
+        Assert.That(AnnouncementsHeardBy(server, grotto), Is.EqualTo(new[] { "Appeared monster.slime_monarch ''" }));
         Assert.That(AnnouncementsHeardBy(server, town), Is.Empty);
         Assert.That(Console(server, "boss"), Is.EqualTo(alive), "both back");
     }
@@ -201,8 +201,14 @@ public sealed class TwoBossesTests
         server.Combat.Kill(MapOf(server, Grotto), monarch, server.PlayerOf(grotto), server.CurrentTick);
         server.Tick(TestServer.TickRate);
 
-        Assert.That(AnnouncementsHeardBy(server, quarry), Is.EqualTo(new[] { "Fell monster.furnace_heart" }));
-        Assert.That(AnnouncementsHeardBy(server, grotto), Is.EqualTo(new[] { "Fell monster.slime_monarch" }));
+        Assert.That(
+            AnnouncementsHeardBy(server, quarry),
+            Is.EqualTo(new[] { "Fell monster.furnace_heart 'Tester1'" }),
+            "the quarry's player, its most valuable");
+        Assert.That(
+            AnnouncementsHeardBy(server, grotto),
+            Is.EqualTo(new[] { "Fell monster.slime_monarch 'Tester2'" }),
+            "the grotto's player, its own");
         Assert.That(AnnouncementsHeardBy(server, town), Is.Empty);
         foreach ((ConnectionId player, MonsterDefinitionId boss) in new[] { (quarry, FurnaceHeart), (grotto, Monarch) })
         {

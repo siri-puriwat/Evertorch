@@ -154,6 +154,7 @@ public sealed class MapLookTests
         Light sun = roots.Select(root => root.GetComponent<Light>()).Single(found => found != null);
         Color sunColour = sun.color;
         float sunIntensity = sun.intensity;
+        Vector3 towardTheSun = -sun.transform.forward;
         IReadOnlyList<Color>[] palettes = roots
             .SelectMany(root => root.GetComponentsInChildren<MapLook>())
             .Select(look => look.Palette)
@@ -169,12 +170,21 @@ public sealed class MapLookTests
             "a warm fog, ambient, and light");
         Assert.That(sunIntensity, Is.LessThan(1f), "a dim light");
         Assert.That(palettes.Select(palette => palette.Count), Is.EqualTo(new[] { SurfaceCount }), "one look");
+        // The floor as the camera sees it: its colour lit diffusely by the flat ambient and the sun, in linear light;
+        // the ring is unlit and shows its own colour.
         Color floor = palettes[0][(int)GrayboxSurface.Floor];
-        Assert.That(Contrast(AreaTelegraphPresenter.RingColor, floor), Is.GreaterThanOrEqualTo(1.8f), "luminance");
+        float facing = Mathf.Max(0f, Vector3.Dot(Vector3.up, towardTheSun));
+        Color light = ambient.linear + sunColour.linear * sunIntensity * facing;
+        Color litFloor = new Color(
+                floor.linear.r * light.r,
+                floor.linear.g * light.g,
+                floor.linear.b * light.b)
+            .gamma;
+        Assert.That(Contrast(AreaTelegraphPresenter.RingColor, litFloor), Is.GreaterThanOrEqualTo(1.8f), "luminance");
         Assert.That(
-            Saturation(AreaTelegraphPresenter.RingColor) - Saturation(floor),
-            Is.GreaterThanOrEqualTo(0.5f),
-            "a vivid ring on grey ash");
+            Saturation(AreaTelegraphPresenter.RingColor) - Saturation(litFloor),
+            Is.GreaterThanOrEqualTo(0.25f),
+            "a vivid ring on warm-lit ash");
     }
 }
 }

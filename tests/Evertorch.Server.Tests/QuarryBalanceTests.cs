@@ -14,10 +14,12 @@ namespace Evertorch.Server.Tests
 ///     the real path and fight the quarry's monsters on the server with real commands, under abuse control: they walk
 ///     the grid's paths, keep their buffs up, strike with their skills by SP, drink and cure as a player would, and step
 ///     out of the boss's telegraphed casts. No command is refused or throttled and nobody dies; the means meet decision
-///     24's targets, and every boss fight ends within three to five minutes. A fight is timed and costed from its first
-///     strike to its last kill, since the buffs cast before it last a minute: the HP lost is the damage taken over the
-///     maximum HP, and the SP spent a kill is the SP spent over the maximum SP and the kills. Each case writes its
-///     figures to the test output, the loot at the shops' prices and at the board's.
+///     24's targets, as means over the seeds (the session plan's statistic; the output gives the worst fight too), and
+///     every boss fight ends within three to five minutes. A fight is timed and costed from its first strike to its last
+///     kill, since the buffs cast before it last a minute: the HP lost is every hit and skill that struck the fighter,
+///     over its maximum HP at the first strike, and the SP spent a kill is the cost of every cast it finished, over its
+///     maximum SP then and the kills. Each case writes its figures to the test output, the loot at the shops' prices and
+///     at the board's, the MVP's prize aside.
 /// </summary>
 [TestFixture]
 public sealed class QuarryBalanceTests
@@ -211,11 +213,10 @@ public sealed class QuarryBalanceTests
             if (started == 0 && battle.Party.Any(fighter => fighter.HasStruck))
             {
                 started = server.CurrentTick;
-            }
-
-            foreach (Fighter fighter in battle.Party)
-            {
-                fighter.Count(started != 0);
+                foreach (Fighter fighter in battle.Party)
+                {
+                    fighter.BeginCounting();
+                }
             }
 
             if (battle.Prey.All(monster => monster.IsDead))
@@ -471,10 +472,9 @@ public sealed class QuarryBalanceTests
         private uint m_moves;
         private bool m_isMoving;
         private EntityId m_attacking;
-        private long m_healthLost;
-        private long m_spiritSpent;
-        private int m_lastHealth;
-        private int m_lastSpirit;
+        private int m_firstCountedMessage = -1;
+        private int m_maxHealthAtStart;
+        private int m_maxSpiritAtStart;
         private int m_potions;
         private int m_cures;
 
@@ -484,8 +484,6 @@ public sealed class QuarryBalanceTests
             Connection = connection;
             Build = build;
             m_pathfinder = pathfinder;
-            m_lastHealth = Self.CurrentHealth;
-            m_lastSpirit = Self.CurrentSpirit;
         }
 
         public ConnectionId Connection { get; }
@@ -504,25 +502,50 @@ public sealed class QuarryBalanceTests
         private CharacterSession Character => m_server.SessionOf(Connection).Character!;
 
         // What the fight costs, from its first strike: the buffs before it last a minute, several fights.
-        public void Count(bool isFighting)
+        public void BeginCounting()
         {
-            PlayerEntity self = Self;
-            if (isFighting)
-            {
-                m_healthLost += Math.Max(0, m_lastHealth - self.CurrentHealth);
-                m_spiritSpent += Math.Max(0, m_lastSpirit - self.CurrentSpirit);
-            }
-
-            m_lastHealth = self.CurrentHealth;
-            m_lastSpirit = self.CurrentSpirit;
+            m_firstCountedMessage = m_server.Transport.SentTo(Connection).Count;
+            m_maxHealthAtStart = Self.MaxHealth;
+            m_maxSpiritAtStart = Self.MaxSpirit;
         }
 
+        // Every hit and skill that struck the fighter, and the cost of every cast it finished, as its client was told.
         public FighterSummary Summary()
         {
             PlayerEntity self = Self;
+            long struck = 0;
+            long paid = 0;
+            IReadOnlyList<InMemoryServerTransport.SentMessage> sent = m_server.Transport.SentTo(Connection);
+            for (int index = Math.Max(0, m_firstCountedMessage);
+                 m_firstCountedMessage >= 0 && index < sent.Count;
+                 index++)
+            {
+                InMemoryServerTransport.SentMessage message = sent[index];
+                if (message.Opcode == MessageOpcode.Damage
+                    && Damage.TryRead(message.Payload, out Damage damage)
+                    && damage.Target == self.Id)
+                {
+                    struck += damage.Amount;
+                }
+                else if (message.Opcode == MessageOpcode.SkillResolved
+                         && SkillResolved.TryRead(message.Payload, out SkillResolved? resolved))
+                {
+                    if (resolved!.Target == self.Id
+                        && resolved.Caster != self.Id
+                        && (resolved.Outcome == SkillOutcome.Hit || resolved.Outcome == SkillOutcome.Critical))
+                    {
+                        struck += resolved.Amount;
+                    }
+                    else if (resolved.Caster == self.Id && self.Skills.TryGetValue(resolved.Skill, out int level))
+                    {
+                        paid += m_server.Content.Skills[resolved.Skill].ValuesAt(level).SpCost;
+                    }
+                }
+            }
+
             return new FighterSummary(
-                (double)m_healthLost / self.MaxHealth,
-                (double)m_spiritSpent / self.MaxSpirit,
+                m_maxHealthAtStart == 0 ? 0 : (double)struck / m_maxHealthAtStart,
+                m_maxSpiritAtStart == 0 ? 0 : (double)paid / m_maxSpiritAtStart,
                 m_potions,
                 m_cures);
         }
@@ -531,7 +554,7 @@ public sealed class QuarryBalanceTests
         public void Act(Battle battle)
         {
             PlayerEntity self = Self;
-            if (self.IsDead)
+            if (self.IsDead || self.IsHeld)
             {
                 return;
             }
@@ -599,10 +622,10 @@ public sealed class QuarryBalanceTests
             }
 
             Stop();
-            if (m_attacking != target.Id)
+            // A stun, a freeze, or a sleep ends the auto-attack (Gameplay Systems §9.1), so it is asked for again.
+            if (m_attacking != target.Id || !self.Combat.IsAutoAttacking)
             {
                 m_server.SendAttack(Connection, target.Id, ++m_commands);
-
                 m_attacking = target.Id;
                 HasStruck = true;
             }

@@ -1122,6 +1122,7 @@ public sealed class QuarryAcceptanceTests
         string mvpName;
         uint kaelCoins;
         string[] kaelBag;
+        long mvpEmberstones;
         using (IHost host = StartHost(root.Path))
         {
             content = host.Services.GetRequiredService<ServerContent>();
@@ -1172,6 +1173,10 @@ public sealed class QuarryAcceptanceTests
             AssertCleanTraffic("trade, storage, and the board", party);
             kaelCoins = kael.World.Inventory.Coins;
             kaelBag = Bag(kael);
+            mvpEmberstones = party.Single(client =>
+                    client.Connection.Characters.Any(character => character.Name == mvpName))
+                .World.Inventory.Rows.Where(row => row.Item.Value == Emberstone)
+                .Sum(row => row.Quantity);
             Stop(host, party);
         }
 
@@ -1210,8 +1215,8 @@ public sealed class QuarryAcceptanceTests
                 client.Connection.Characters.Any(character => character.Name == mvpName));
             Assert.That(
                 mvp.World.Inventory.Rows.Where(row => row.Item.Value == Emberstone).Sum(row => row.Quantity),
-                Is.GreaterThanOrEqualTo(10u),
-                $"{step}: {mvpName}'s ten Emberstones");
+                Is.EqualTo(mvpEmberstones).And.GreaterThanOrEqualTo(10u),
+                $"{step}: {mvpName}'s ten Emberstones, each once");
 
             var parts = new List<StorageSnapshot>();
             tarn.Connection.StorageSnapshotReceived += parts.Add;

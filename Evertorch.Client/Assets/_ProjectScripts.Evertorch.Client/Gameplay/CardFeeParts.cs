@@ -13,7 +13,7 @@ namespace Evertorch.Client
 /// </summary>
 public sealed class CardFeeParts
 {
-    /// <summary>How long a list may wait for its next part; the server sends every part of one in a single tick.</summary>
+    /// <summary>How long a list may take from its part 0; the server sends every part of one in a single tick.</summary>
     public const double TimeoutSeconds = 5;
 
     private readonly List<CardRemovalFee> m_entries = new();
@@ -81,7 +81,7 @@ public sealed class CardFeeParts
         return true;
     }
 
-    /// <summary>Drops a list that has waited past <see cref="TimeoutSeconds" /> for its next part.</summary>
+    /// <summary>Drops a list not whole <see cref="TimeoutSeconds" /> after its part 0.</summary>
     public void Advance(double now)
     {
         if (m_isAssembling && now - m_startedAt > TimeoutSeconds)

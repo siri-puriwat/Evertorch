@@ -137,6 +137,25 @@ public sealed class SeededPackageTests
             Is.Empty);
     }
 
+    // The packages other tests build on start from the seeded package, so a seeded host on any of them keeps its draws.
+    [Test]
+    public void ThePackagesTestsBuildOn_LeaveTheQuarrysSpawnsOut()
+    {
+        var packages = new Dictionary<string, Dictionary<string, byte[]>>
+        {
+            ["FeePackage"] = FeePackage.Build(12),
+            ["GearPackage"] = GearPackage.Build(),
+            ["DungeonPackage"] = DungeonPackage.Build()
+        };
+
+        Assert.That(
+            packages.Where(package => Maps(package.Value)
+                    .Single(node => (string?)node!["id"] == Quarry)!["monsterSpawns"]!.AsArray()
+                    .Count > 0)
+                .Select(package => package.Key),
+            Is.Empty);
+    }
+
     // The in-memory host keeps the quarry out of every map unless a test asks for it.
     [Test]
     public void TheTestServer_LeavesTheQuarryOutOfEveryMap_UnlessATestAsksForIt()

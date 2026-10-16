@@ -6,8 +6,9 @@ using Evertorch.Game;
 namespace Evertorch.Server.Tests
 {
 /// <summary>
-///     A server-only test package for the eight positions (Coding Standards §10): the repository's content with a test
-///     piece of each new category beside its own, so the server's equip, statistics, and inspection can be tested apart
+///     A server-only test package for the eight positions (Coding Standards §10): the seeded package, the repository's
+///     content without the quarry's spawns, with a test piece of each new category beside its own, so the server's equip,
+///     statistics, and inspection can be tested apart
 ///     from the authored pieces, and a ward card that passes the resistance cap when worn twice. The four light pieces
 ///     name the armor's refine table. Nothing sells or lists them, so no NPC changes.
 /// </summary>
@@ -24,10 +25,10 @@ internal static class GearPackage
     private const string Items = "items.json";
     private const string ArmorTable = "refine.armor";
 
-    /// <summary>The repository's package with the test pieces and the ward, signed again with its client content version.</summary>
+    /// <summary>The seeded package with the test pieces and the ward, signed again with its client content version.</summary>
     public static Dictionary<string, byte[]> Build()
     {
-        Dictionary<string, byte[]> files = PackageFixture.BuildRepositoryPackage();
+        Dictionary<string, byte[]> files = PackageFixture.BuildSeededPackage();
         string clientContentVersion = PackageFixture.ClientContentVersionOf(files);
         // The root is reached through .Root: a local typed JsonNode would turn into var under cleanup (IDE0008).
         JsonArray definitions = JsonNode.Parse(files[Items])!["definitions"]!.AsArray();
